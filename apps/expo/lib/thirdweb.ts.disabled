@@ -1,0 +1,31 @@
+import { createThirdwebClient } from "thirdweb";
+import { inAppWallet } from "thirdweb/wallets";
+import Constants from 'expo-constants';
+
+// Get client ID from environment variable
+const clientId = Constants.expoConfig?.extra?.THIRDWEB_CLIENT_ID || '';
+
+if (!clientId) {
+  console.warn('THIRDWEB_CLIENT_ID is not set. Please add it to your .env file and app.config.ts');
+}
+
+// Create thirdweb client
+export const client = createThirdwebClient({
+  clientId,
+});
+
+// Configure supported wallets
+export const wallets = [
+  inAppWallet({
+    auth: {
+      options: [
+        "email",
+        "phone",
+        "google",
+        "apple",
+        "facebook",
+        "passkey",
+      ],
+    },
+  }),
+];

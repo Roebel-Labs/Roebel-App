@@ -1,0 +1,24 @@
+-- Schwarzes Brett (Community Board) - Documentation Migration
+--
+-- No actual schema changes needed!
+-- The marketplace_listings table uses TEXT columns for listing_type and category,
+-- so the new values work automatically without schema modifications.
+--
+-- New listing_type value: 'schwarzes_brett'
+--
+-- New category values for board posts:
+--   'babysitter'           - Kinderbetreuung
+--   'werkzeug'             - Werkzeug & Geräte
+--   'mitfahrt'             - Mitfahrgelegenheit
+--   'haustier'             - Haustiere
+--   'nachhilfe_brett'      - Nachhilfe & Lernen
+--   'nachbarschaftshilfe'  - Nachbarschaftshilfe
+--   'fundsachen'           - Fundsachen
+--   'tausch_leih'          - Tausch & Leih
+--   'sonstiges_brett'      - Sonstiges
+--
+-- Board posts reuse the existing price_type values: 'free', 'fixed', 'negotiable', 'on_request'
+-- Default price_type for board posts is 'free'
+--
+-- Board posts use status 'sold' to represent 'erledigt' (resolved/done)
+-- The condition column is NULL for board posts (same as services)

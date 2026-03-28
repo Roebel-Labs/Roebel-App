@@ -1,0 +1,199 @@
+import { createClient } from "@/lib/supabase/server"
+import { notFound } from "next/navigation"
+import Image from "next/image"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Calendar, Clock, MapPin, User, DollarSign, Globe, Phone, ArrowLeft } from "lucide-react"
+import Link from "next/link"
+import { DeepLinkRedirect } from "@/components/deep-link-redirect"
+import { EventInterestButton } from "@/components/app/EventInterestButton"
+
+interface Event {
+  id: string
+  title: string
+  description: string | null
+  date: string
+  time: string | null
+  end_time: string | null
+  location: string
+  organizer_name: string
+  organizer_email: string
+  organizer_phone: string | null
+  category: string | null
+  image_url: string | null
+  website_url: string | null
+  ticket_price: number | null
+  max_attendees: number | null
+  created_at: string
+}
+
+async function getEvent(id: string): Promise<Event | null> {
+  const supabase = await createClient()
+
+  const { data: event, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", id)
+    .single()
+
+  if (error || !event) {
+    return null
+  }
+
+  return event
+}
+
+async function getInterestCount(eventId: string): Promise<number> {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("event_interests")
+    .select("id")
+    .eq("event_id", eventId)
+
+  return data?.length || 0
+}
+
+export default async function EventDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const [event, interestCount] = await Promise.all([
+    getEvent(id),
+    getInterestCount(id),
+  ])
+
+  if (!event) {
+    notFound()
+  }
+
+  return (
+    <div className="space-y-6">
+      <DeepLinkRedirect type="event" id={id} />
+
+      <div className="mb-4">
+        <Button variant="ghost" asChild className="gap-2 px-0 hover:bg-transparent text-sm">
+          <Link href="/app/events">
+            <ArrowLeft className="h-4 w-4" />
+            Zurück zu Veranstaltungen
+          </Link>
+        </Button>
+      </div>
+
+      <div className="max-w-4xl">
+        {event.image_url && (
+          <div className="relative aspect-video bg-muted mb-6 overflow-hidden rounded-lg">
+            <Image
+              src={event.image_url || "/placeholder.svg"}
+              alt={event.title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 896px"
+              priority
+            />
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-medium text-foreground mb-3">{event.title}</h1>
+            {event.description && <p className="text-foreground text-base leading-relaxed break-words">{event.description}</p>}
+          </div>
+
+          <Card className="bg-card border border-border shadow-none">
+            <CardHeader>
+              <CardTitle className="text-lg">Event Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                <span className="font-medium text-sm">
+                  {new Date(event.date).toLocaleDateString("de-DE", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
+
+              {event.time && (
+                <div className="flex items-center gap-3">
+                  <Clock className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm">
+                    {event.time}
+                    {event.end_time && ` - ${event.end_time}`}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                <span className="text-sm">{event.location}</span>
+              </div>
+
+              {event.ticket_price !== null && event.ticket_price > 0 && (
+                <div className="flex items-center gap-3">
+                  <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="font-medium text-sm">{event.ticket_price}€</span>
+                </div>
+              )}
+
+              {event.max_attendees && (
+                <div className="flex items-center gap-3">
+                  <User className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm">Max. {event.max_attendees} Teilnehmer</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border border-border shadow-none">
+            <CardHeader>
+              <CardTitle className="text-lg">Veranstalter</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <User className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="font-medium text-sm">{event.organizer_name}</span>
+              </div>
+
+              {event.organizer_phone && (
+                <div className="flex items-center gap-3">
+                  <Phone className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm">{event.organizer_phone}</span>
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2">
+                <EventInterestButton
+                  eventId={event.id}
+                  initialCount={interestCount}
+                  variant="detail"
+                />
+
+                <Button asChild className="w-full" size="sm">
+                  <Link href={`mailto:${event.organizer_email}?subject=Anfrage zu ${event.title}`}>
+                    Kontakt aufnehmen
+                  </Link>
+                </Button>
+
+                {event.website_url && (
+                  <Button variant="outline" asChild className="w-full bg-transparent" size="sm">
+                    <Link href={event.website_url} target="_blank" rel="noopener noreferrer">
+                      <Globe className="h-4 w-4 mr-2" />
+                      Website besuchen
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}

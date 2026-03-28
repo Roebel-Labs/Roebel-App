@@ -1,0 +1,8 @@
+{
+  "name": "@roebel/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "main": "tokens.ts",
+  "types": "tokens.ts",
+  "files": ["tokens.ts", "tailwind.preset.js"]
+}

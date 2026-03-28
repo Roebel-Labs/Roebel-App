@@ -1,0 +1,404 @@
+import { supabase } from "./supabase";
+import type {
+  User,
+  CreateUserInput,
+  UpdateUserProfileInput,
+  UpdateUserNFTStatusInput,
+  PublicProfile,
+} from "./user-types";
+import { DEFAULT_PRIVACY_SETTINGS } from "./user-types";
+
+/**
+ * Create or update user on login
+ * If user exists, updates last_login_at
+ * If user doesn't exist, creates new user
+ */
+export async function createOrUpdateUser(
+  input: CreateUserInput
+): Promise<{ success: boolean; data?: User; error?: string }> {
+  console.log("👤 [Supabase Users] Creating/updating user:", input.wallet_address);
+
+  try {
+    // Check if user exists
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("*")
+      .eq("wallet_address", input.wallet_address.toLowerCase())
+      .single();
+
+    if (existingUser) {
+      // User exists - update last login
+      console.log("✅ [Supabase Users] User exists, updating last login");
+      const { data, error } = await supabase
+        .from("users")
+        .update({
+          last_login_at: new Date().toISOString(),
+          phone_number: input.phone_number || existingUser.phone_number,
+          phone_verified: input.phone_verified ?? existingUser.phone_verified,
+        })
+        .eq("wallet_address", input.wallet_address.toLowerCase())
+        .select()
+        .single();
+
+      if (error) {
+        console.error("❌ [Supabase Users] Error updating user:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, data: data as User };
+    } else {
+      // Create new user
+      console.log("➕ [Supabase Users] Creating new user");
+      const { data, error } = await supabase
+        .from("users")
+        .insert({
+          wallet_address: input.wallet_address.toLowerCase(),
+          phone_number: input.phone_number || null,
+          phone_verified: input.phone_verified || false,
+          last_login_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("❌ [Supabase Users] Error creating user:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log("✅ [Supabase Users] User created successfully");
+      return { success: true, data: data as User };
+    }
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Get user by wallet address
+ */
+export async function getUserByWalletAddress(
+  walletAddress: string
+): Promise<{ success: boolean; data?: User; error?: string }> {
+  console.log("🔍 [Supabase Users] Fetching user:", walletAddress);
+
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("wallet_address", walletAddress.toLowerCase())
+      .single();
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error fetching user:", error);
+      return { success: false, error: error.message };
+    }
+
+    if (!data) {
+      return { success: false, error: "User not found" };
+    }
+
+    console.log("✅ [Supabase Users] User fetched successfully");
+    return { success: true, data: data as User };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Get user by phone number
+ */
+export async function getUserByPhoneNumber(
+  phoneNumber: string
+): Promise<{ success: boolean; data?: User; error?: string }> {
+  console.log("🔍 [Supabase Users] Fetching user by phone:", phoneNumber);
+
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("phone_number", phoneNumber)
+      .single();
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error fetching user:", error);
+      return { success: false, error: error.message };
+    }
+
+    if (!data) {
+      return { success: false, error: "User not found" };
+    }
+
+    console.log("✅ [Supabase Users] User fetched successfully");
+    return { success: true, data: data as User };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Update user profile (username, picture, bio)
+ */
+export async function updateUserProfile(
+  input: UpdateUserProfileInput
+): Promise<{ success: boolean; data?: User; error?: string }> {
+  console.log("✏️ [Supabase Users] Updating profile:", input.wallet_address);
+
+  try {
+    const updateData: Record<string, unknown> = {};
+
+    if (input.username !== undefined) updateData.username = input.username;
+    if (input.profile_picture_url !== undefined)
+      updateData.profile_picture_url = input.profile_picture_url;
+    if (input.cover_image_url !== undefined)
+      updateData.cover_image_url = input.cover_image_url;
+    if (input.bio !== undefined) updateData.bio = input.bio;
+    if (input.role !== undefined) updateData.role = input.role;
+    if (input.neighborhood !== undefined) updateData.neighborhood = input.neighborhood;
+    if (input.interests !== undefined) updateData.interests = input.interests;
+    if (input.vereine !== undefined) updateData.vereine = input.vereine;
+    if (input.privacy_settings !== undefined) {
+      const { data: existing } = await supabase
+        .from("users")
+        .select("privacy_settings")
+        .eq("wallet_address", input.wallet_address.toLowerCase())
+        .single();
+
+      updateData.privacy_settings = {
+        ...DEFAULT_PRIVACY_SETTINGS,
+        ...(existing?.privacy_settings || {}),
+        ...input.privacy_settings,
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .update(updateData)
+      .eq("wallet_address", input.wallet_address.toLowerCase())
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error updating profile:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log("✅ [Supabase Users] Profile updated successfully");
+    return { success: true, data: data as User };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Update cached NFT status (balance, delegation)
+ */
+export async function updateUserNFTStatus(
+  input: UpdateUserNFTStatusInput
+): Promise<{ success: boolean; data?: User; error?: string }> {
+  // Silently update NFT status
+
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        nft_balance: input.nft_balance.toString(),
+        has_delegated: input.has_delegated,
+        delegate_address: input.delegate_address || null,
+      })
+      .eq("wallet_address", input.wallet_address.toLowerCase())
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error updating NFT status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data as User };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Check if username is available
+ */
+export async function checkUsernameAvailable(
+  username: string,
+  currentWalletAddress?: string
+): Promise<{ available: boolean; error?: string }> {
+  console.log("🔎 [Supabase Users] Checking username availability:", username);
+
+  try {
+    let query = supabase
+      .from("users")
+      .select("wallet_address")
+      .eq("username", username);
+
+    // If checking for current user, exclude their own record
+    if (currentWalletAddress) {
+      query = query.neq("wallet_address", currentWalletAddress.toLowerCase());
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error checking username:", error);
+      return { available: false, error: error.message };
+    }
+
+    const available = !data || data.length === 0;
+    console.log(`${available ? "✅" : "❌"} [Supabase Users] Username ${username} is ${available ? "available" : "taken"}`);
+
+    return { available };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      available: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Update last login timestamp
+ */
+export async function updateLastLogin(
+  walletAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from("users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("wallet_address", walletAddress.toLowerCase());
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error updating last login:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Get all users (for admin purposes or leaderboards)
+ */
+export async function getAllUsers(
+  limit = 100,
+  offset = 0
+): Promise<{ success: boolean; data?: User[]; total?: number; error?: string }> {
+  console.log("📋 [Supabase Users] Fetching all users");
+
+  try {
+    const { data, error, count } = await supabase
+      .from("users")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error fetching users:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`✅ [Supabase Users] Fetched ${data?.length || 0} users`);
+    return { success: true, data: (data as User[]) || [], total: count || 0 };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Delete user (for GDPR compliance)
+ */
+export async function deleteUser(
+  walletAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  console.log("🗑️ [Supabase Users] Deleting user:", walletAddress);
+
+  try {
+    const { error } = await supabase
+      .from("users")
+      .delete()
+      .eq("wallet_address", walletAddress.toLowerCase());
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error deleting user:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log("✅ [Supabase Users] User deleted successfully");
+    return { success: true };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+/**
+ * Get privacy-filtered public profile via Supabase RPC
+ */
+export async function getPublicProfile(
+  targetWallet: string,
+  viewerWallet?: string | null
+): Promise<{ success: boolean; data?: PublicProfile; error?: string }> {
+  console.log("🔍 [Supabase Users] Fetching public profile:", targetWallet);
+
+  try {
+    const { data, error } = await supabase.rpc("get_public_profile", {
+      p_target_wallet: targetWallet.toLowerCase(),
+      p_viewer_wallet: viewerWallet?.toLowerCase() || null,
+    });
+
+    if (error) {
+      console.error("❌ [Supabase Users] Error fetching public profile:", error);
+      return { success: false, error: error.message };
+    }
+
+    if (!data) {
+      return { success: false, error: "Profile not found" };
+    }
+
+    console.log("✅ [Supabase Users] Public profile fetched successfully");
+    return { success: true, data: data as PublicProfile };
+  } catch (error) {
+    console.error("❌ [Supabase Users] Unexpected error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}

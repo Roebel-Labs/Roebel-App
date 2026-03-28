@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.maxbrych.roebelonchain",
+      "sha256_cert_fingerprints": [
+        "9A:7C:6B:92:D0:D2:41:71:F2:5F:4C:19:B0:7A:D2:56:52:38:EB:ED:30:A4:52:AC:65:81:1D:98:97:09:CB:AC"
+      ]
+    }
+  }
+]

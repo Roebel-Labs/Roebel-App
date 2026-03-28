@@ -1,0 +1,692 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache"
+import type {
+  Post,
+  PostWithEngagement,
+  PostLink,
+  PostComment,
+  PostCategory,
+  PollWithResults,
+  CreatePostInput,
+  CreateCommentInput,
+} from "@/types/post"
+import { createAppNotification } from "@/app/actions/app-notifications"
+
+// ============================================
+// Helper: build poll results for a set of posts
+// ============================================
+
+async function buildPollMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  postIds: string[],
+  viewerWallet?: string
+): Promise<Map<string, PollWithResults>> {
+  const pollMap = new Map<string, PollWithResults>()
+  if (postIds.length === 0) return pollMap
+
+  const { data: allPolls } = await supabase
+    .from("post_polls")
+    .select("*")
+    .in("post_id", postIds)
+
+  if (!allPolls || allPolls.length === 0) return pollMap
+
+  const pollIds = allPolls.map((p: Record<string, unknown>) => p.id as string)
+
+  const { data: allVotes } = await supabase
+    .from("poll_votes")
+    .select("*")
+    .in("poll_id", pollIds)
+
+  for (const poll of allPolls) {
+    const options = poll.options as string[]
+    const pollVotes = (allVotes || []).filter(
+      (v: Record<string, unknown>) => v.poll_id === poll.id
+    )
+    const voteCounts = new Array(options.length).fill(0)
+
+    for (const vote of pollVotes) {
+      for (const optIdx of vote.selected_options as number[]) {
+        if (optIdx >= 0 && optIdx < voteCounts.length) {
+          voteCounts[optIdx]++
+        }
+      }
+    }
+
+    const viewerVote = viewerWallet
+      ? pollVotes.find(
+          (v: Record<string, unknown>) =>
+            (v.wallet_address as string) === viewerWallet.toLowerCase()
+        )
+      : null
+
+    pollMap.set(poll.post_id as string, {
+      id: poll.id as string,
+      post_id: poll.post_id as string,
+      poll_type: poll.poll_type as "single" | "multi",
+      options,
+      expires_at: poll.expires_at as string,
+      created_at: poll.created_at as string,
+      total_votes: pollVotes.length,
+      vote_counts: voteCounts,
+      viewer_vote: viewerVote ? (viewerVote.selected_options as number[]) : null,
+      is_expired: new Date(poll.expires_at as string) < new Date(),
+    })
+  }
+
+  return pollMap
+}
+
+// ============================================
+// Read operations
+// ============================================
+
+export async function getPostsForFeed(
+  limit = 20,
+  offset = 0,
+  viewerWallet?: string,
+  category?: string
+): Promise<{ success: boolean; data?: PostWithEngagement[]; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    let query = supabase
+      .from("posts")
+      .select("*")
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (category && category !== "all") {
+      query = query.eq("category", category)
+    }
+
+    const { data: posts, error } = await query
+
+    if (error) throw error
+    if (!posts || posts.length === 0) {
+      return { success: true, data: [] }
+    }
+
+    // Batch fetch author info
+    const addresses = [...new Set(posts.map((p: Record<string, unknown>) => p.wallet_address as string))]
+    const authorMap = new Map<string, Record<string, unknown>>()
+
+    if (addresses.length > 0) {
+      const { data: authors } = await supabase
+        .from("users")
+        .select("wallet_address, username, profile_picture_url, neighborhood")
+        .in("wallet_address", addresses)
+
+      for (const a of authors || []) {
+        authorMap.set(a.wallet_address as string, a as Record<string, unknown>)
+      }
+    }
+
+    // Batch fetch post links
+    const postIds = posts.map((p: Record<string, unknown>) => p.id as string)
+    const { data: allLinks } = await supabase
+      .from("post_links")
+      .select("*")
+      .in("post_id", postIds)
+
+    const linksMap = new Map<string, PostLink[]>()
+    for (const link of allLinks || []) {
+      const pid = link.post_id as string
+      if (!linksMap.has(pid)) linksMap.set(pid, [])
+      linksMap.get(pid)!.push({
+        id: link.id as string,
+        post_id: pid,
+        url: link.url as string,
+        og_title: link.og_title as string | null,
+        og_description: link.og_description as string | null,
+        og_image: link.og_image as string | null,
+        og_site_name: link.og_site_name as string | null,
+      })
+    }
+
+    // Batch check viewer likes
+    const likedSet = new Set<string>()
+    if (viewerWallet && postIds.length > 0) {
+      const { data: likes } = await supabase
+        .from("post_likes")
+        .select("post_id")
+        .eq("wallet_address", viewerWallet.toLowerCase())
+        .in("post_id", postIds)
+
+      for (const like of likes || []) {
+        likedSet.add(like.post_id as string)
+      }
+    }
+
+    // Batch check viewer reports
+    const reportedSet = new Set<string>()
+    if (viewerWallet && postIds.length > 0) {
+      const { data: reports } = await supabase
+        .from("post_reports")
+        .select("post_id")
+        .eq("reporter_wallet_address", viewerWallet.toLowerCase())
+        .in("post_id", postIds)
+
+      for (const report of reports || []) {
+        reportedSet.add(report.post_id as string)
+      }
+    }
+
+    // Batch fetch polls
+    const pollMap = await buildPollMap(supabase, postIds, viewerWallet)
+
+    const result: PostWithEngagement[] = posts.map((row: Record<string, unknown>) => {
+      const author = authorMap.get(row.wallet_address as string)
+      return {
+        id: row.id as string,
+        wallet_address: row.wallet_address as string,
+        content: row.content as string,
+        media_urls: (row.media_urls as string[]) || [],
+        video_url: (row.video_url as string) || null,
+        category: ((row.category as string) || "generell") as PostCategory,
+        status: row.status as Post["status"],
+        likes_count: (row.likes_count as number) || 0,
+        comments_count: (row.comments_count as number) || 0,
+        created_at: row.created_at as string,
+        updated_at: row.updated_at as string,
+        author_username: (author?.username as string) || null,
+        author_profile_picture_url: (author?.profile_picture_url as string) || null,
+        author_neighborhood: (author?.neighborhood as string) || null,
+        links: linksMap.get(row.id as string) || [],
+        is_liked_by_viewer: likedSet.has(row.id as string),
+        is_reported_by_viewer: reportedSet.has(row.id as string),
+        poll: pollMap.get(row.id as string) || null,
+      }
+    })
+
+    return { success: true, data: result }
+  } catch (error) {
+    console.error("Error fetching posts:", error)
+    return { success: false, error: "Fehler beim Laden der Beiträge" }
+  }
+}
+
+export async function getPostById(
+  postId: string,
+  viewerWallet?: string
+): Promise<{ success: boolean; data?: PostWithEngagement; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { data: post, error } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("id", postId)
+      .eq("status", "published")
+      .single()
+
+    if (error || !post) return { success: false, error: "Beitrag nicht gefunden" }
+
+    // Fetch author
+    const { data: author } = await supabase
+      .from("users")
+      .select("wallet_address, username, profile_picture_url, neighborhood")
+      .eq("wallet_address", post.wallet_address as string)
+      .single()
+
+    // Fetch links
+    const { data: links } = await supabase
+      .from("post_links")
+      .select("*")
+      .eq("post_id", postId)
+
+    const postLinks: PostLink[] = (links || []).map((link: Record<string, unknown>) => ({
+      id: link.id as string,
+      post_id: link.post_id as string,
+      url: link.url as string,
+      og_title: link.og_title as string | null,
+      og_description: link.og_description as string | null,
+      og_image: link.og_image as string | null,
+      og_site_name: link.og_site_name as string | null,
+    }))
+
+    // Fetch poll
+    const pollMap = await buildPollMap(supabase, [postId], viewerWallet)
+
+    // Check viewer like
+    let isLiked = false
+    let isReported = false
+    if (viewerWallet) {
+      const [likeResult, reportResult] = await Promise.all([
+        supabase
+          .from("post_likes")
+          .select("id")
+          .eq("post_id", postId)
+          .eq("wallet_address", viewerWallet.toLowerCase())
+          .single(),
+        supabase
+          .from("post_reports")
+          .select("id")
+          .eq("post_id", postId)
+          .eq("reporter_wallet_address", viewerWallet.toLowerCase())
+          .single(),
+      ])
+      isLiked = !!likeResult.data
+      isReported = !!reportResult.data
+    }
+
+    return {
+      success: true,
+      data: {
+        id: post.id as string,
+        wallet_address: post.wallet_address as string,
+        content: post.content as string,
+        media_urls: (post.media_urls as string[]) || [],
+        video_url: (post.video_url as string) || null,
+        category: ((post.category as string) || "generell") as PostCategory,
+        status: post.status as Post["status"],
+        likes_count: (post.likes_count as number) || 0,
+        comments_count: (post.comments_count as number) || 0,
+        created_at: post.created_at as string,
+        updated_at: post.updated_at as string,
+        author_username: (author?.username as string) || null,
+        author_profile_picture_url: (author?.profile_picture_url as string) || null,
+        author_neighborhood: (author?.neighborhood as string) || null,
+        links: postLinks,
+        is_liked_by_viewer: isLiked,
+        is_reported_by_viewer: isReported,
+        poll: pollMap.get(postId) || null,
+      },
+    }
+  } catch (error) {
+    console.error("Error fetching post:", error)
+    return { success: false, error: "Fehler beim Laden des Beitrags" }
+  }
+}
+
+// ============================================
+// Write operations
+// ============================================
+
+export async function createPost(
+  input: CreatePostInput
+): Promise<{ success: boolean; data?: Post; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { data: post, error } = await supabase
+      .from("posts")
+      .insert({
+        wallet_address: input.wallet_address.toLowerCase(),
+        content: input.content,
+        category: input.category || "generell",
+        media_urls: input.media_urls || [],
+        video_url: input.video_url || null,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Create poll if provided
+    if (input.poll) {
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + input.poll.duration_days)
+
+      await supabase.from("post_polls").insert({
+        post_id: post.id,
+        poll_type: input.poll.poll_type,
+        options: input.poll.options,
+        expires_at: expiresAt.toISOString(),
+      })
+    }
+
+    // Fetch and store OG metadata for any URLs
+    if (input.link_urls && input.link_urls.length > 0) {
+      const ogPromises = input.link_urls.map(async (url) => {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+          const res = await fetch(`${baseUrl}/api/og-metadata?url=${encodeURIComponent(url)}`)
+          const json = await res.json()
+          if (json.success && json.data) {
+            await supabase.from("post_links").insert({
+              post_id: post.id,
+              url: json.data.url,
+              og_title: json.data.title,
+              og_description: json.data.description,
+              og_image: json.data.image,
+              og_site_name: json.data.siteName,
+            })
+          }
+        } catch (err) {
+          console.error("Error fetching OG metadata for", url, err)
+        }
+      })
+
+      await Promise.allSettled(ogPromises)
+    }
+
+    // Fetch author profile picture for notification
+    const { data: author } = await supabase
+      .from("users")
+      .select("profile_picture_url")
+      .eq("wallet_address", input.wallet_address.toLowerCase())
+      .single()
+
+    // Create activity notification
+    createAppNotification({
+      type: "post_new",
+      title: "Neuer Beitrag",
+      body: post.content?.substring(0, 120) || null,
+      link: `/app/posts/${post.id}`,
+      reference_id: post.id,
+      image_url: author?.profile_picture_url || null,
+    }).catch(console.error)
+
+    revalidatePath("/app")
+
+    return {
+      success: true,
+      data: {
+        id: post.id,
+        wallet_address: post.wallet_address,
+        content: post.content,
+        media_urls: post.media_urls || [],
+        video_url: post.video_url,
+        category: post.category || "generell",
+        status: post.status,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+        created_at: post.created_at,
+        updated_at: post.updated_at,
+      },
+    }
+  } catch (error) {
+    console.error("Error creating post:", error)
+    return { success: false, error: "Fehler beim Erstellen des Beitrags" }
+  }
+}
+
+export async function deletePost(
+  postId: string,
+  walletAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+      .from("posts")
+      .update({ status: "deleted", updated_at: new Date().toISOString() })
+      .eq("id", postId)
+      .eq("wallet_address", walletAddress.toLowerCase())
+
+    if (error) throw error
+
+    revalidatePath("/app")
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting post:", error)
+    return { success: false, error: "Fehler beim Löschen des Beitrags" }
+  }
+}
+
+// ============================================
+// Polls
+// ============================================
+
+export async function votePoll(
+  pollId: string,
+  walletAddress: string,
+  selectedOptions: number[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    const wallet = walletAddress.toLowerCase()
+
+    // Check poll exists and not expired
+    const { data: poll, error: pollError } = await supabase
+      .from("post_polls")
+      .select("*")
+      .eq("id", pollId)
+      .single()
+
+    if (pollError || !poll) return { success: false, error: "Umfrage nicht gefunden" }
+    if (new Date(poll.expires_at as string) < new Date()) {
+      return { success: false, error: "Umfrage ist abgelaufen" }
+    }
+
+    // Validate selection
+    const options = poll.options as string[]
+    if (selectedOptions.length === 0) {
+      return { success: false, error: "Bitte wähle mindestens eine Option" }
+    }
+    if (poll.poll_type === "single" && selectedOptions.length !== 1) {
+      return { success: false, error: "Bitte wähle genau eine Option" }
+    }
+    if (selectedOptions.some((i) => i < 0 || i >= options.length)) {
+      return { success: false, error: "Ungültige Auswahl" }
+    }
+
+    // Insert vote (unique constraint handles duplicates)
+    const { error: voteError } = await supabase.from("poll_votes").insert({
+      poll_id: pollId,
+      wallet_address: wallet,
+      selected_options: selectedOptions,
+    })
+
+    if (voteError) {
+      if (voteError.code === "23505") {
+        return { success: false, error: "Du hast bereits abgestimmt" }
+      }
+      throw voteError
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error voting:", error)
+    return { success: false, error: "Fehler bei der Abstimmung" }
+  }
+}
+
+// ============================================
+// Comments
+// ============================================
+
+export async function getComments(
+  postId: string,
+  limit = 20,
+  offset = 0
+): Promise<{ success: boolean; data?: PostComment[]; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { data: comments, error } = await supabase
+      .from("post_comments")
+      .select("*")
+      .eq("post_id", postId)
+      .eq("status", "published")
+      .order("created_at", { ascending: true })
+      .range(offset, offset + limit - 1)
+
+    if (error) throw error
+    if (!comments || comments.length === 0) {
+      return { success: true, data: [] }
+    }
+
+    // Batch fetch author info
+    const addresses = [...new Set(comments.map((c: Record<string, unknown>) => c.wallet_address as string))]
+    const authorMap = new Map<string, Record<string, unknown>>()
+
+    if (addresses.length > 0) {
+      const { data: authors } = await supabase
+        .from("users")
+        .select("wallet_address, username, profile_picture_url")
+        .in("wallet_address", addresses)
+
+      for (const a of authors || []) {
+        authorMap.set(a.wallet_address as string, a as Record<string, unknown>)
+      }
+    }
+
+    const result: PostComment[] = comments.map((row: Record<string, unknown>) => {
+      const author = authorMap.get(row.wallet_address as string)
+      return {
+        id: row.id as string,
+        post_id: row.post_id as string,
+        wallet_address: row.wallet_address as string,
+        content: row.content as string,
+        media_urls: (row.media_urls as string[]) || [],
+        video_url: (row.video_url as string) || null,
+        status: row.status as PostComment["status"],
+        created_at: row.created_at as string,
+        author_username: (author?.username as string) || null,
+        author_profile_picture_url: (author?.profile_picture_url as string) || null,
+      }
+    })
+
+    return { success: true, data: result }
+  } catch (error) {
+    console.error("Error fetching comments:", error)
+    return { success: false, error: "Fehler beim Laden der Kommentare" }
+  }
+}
+
+export async function createComment(
+  input: CreateCommentInput
+): Promise<{ success: boolean; data?: PostComment; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    const { data: comment, error } = await supabase
+      .from("post_comments")
+      .insert({
+        post_id: input.post_id,
+        wallet_address: input.wallet_address.toLowerCase(),
+        content: input.content,
+        media_urls: input.media_urls || [],
+        video_url: input.video_url || null,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Increment comments count
+    await supabase.rpc("increment_post_comments", { p_post_id: input.post_id })
+
+    // Fetch author info
+    const { data: author } = await supabase
+      .from("users")
+      .select("username, profile_picture_url")
+      .eq("wallet_address", input.wallet_address.toLowerCase())
+      .single()
+
+    return {
+      success: true,
+      data: {
+        id: comment.id,
+        post_id: comment.post_id,
+        wallet_address: comment.wallet_address,
+        content: comment.content,
+        media_urls: comment.media_urls || [],
+        video_url: comment.video_url || null,
+        status: comment.status,
+        created_at: comment.created_at,
+        author_username: author?.username || null,
+        author_profile_picture_url: author?.profile_picture_url || null,
+      },
+    }
+  } catch (error) {
+    console.error("Error creating comment:", error)
+    return { success: false, error: "Fehler beim Erstellen des Kommentars" }
+  }
+}
+
+// ============================================
+// Reports
+// ============================================
+
+export async function reportPost(
+  postId: string,
+  walletAddress: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc("report_post", {
+      p_post_id: postId,
+      p_wallet_address: walletAddress,
+      p_reason: reason || null,
+    })
+
+    if (error) {
+      if (error.code === "23505") {
+        return { success: false, error: "Du hast diesen Beitrag bereits gemeldet" }
+      }
+      throw error
+    }
+
+    revalidatePath("/app")
+    return { success: true }
+  } catch (error) {
+    console.error("Error reporting post:", error)
+    return { success: false, error: "Fehler beim Melden des Beitrags" }
+  }
+}
+
+// ============================================
+// Likes
+// ============================================
+
+export async function toggleLike(
+  postId: string,
+  walletAddress: string
+): Promise<{ success: boolean; data?: { liked: boolean; newCount: number }; error?: string }> {
+  try {
+    const supabase = await createClient()
+    const wallet = walletAddress.toLowerCase()
+
+    // Check if already liked
+    const { data: existing } = await supabase
+      .from("post_likes")
+      .select("id")
+      .eq("post_id", postId)
+      .eq("wallet_address", wallet)
+      .single()
+
+    if (existing) {
+      // Unlike
+      await supabase
+        .from("post_likes")
+        .delete()
+        .eq("post_id", postId)
+        .eq("wallet_address", wallet)
+
+      await supabase.rpc("decrement_post_likes", { p_post_id: postId })
+
+      const { data: post } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single()
+
+      return { success: true, data: { liked: false, newCount: post?.likes_count || 0 } }
+    } else {
+      // Like
+      await supabase
+        .from("post_likes")
+        .insert({ post_id: postId, wallet_address: wallet })
+
+      await supabase.rpc("increment_post_likes", { p_post_id: postId })
+
+      const { data: post } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single()
+
+      return { success: true, data: { liked: true, newCount: post?.likes_count || 0 } }
+    }
+  } catch (error) {
+    console.error("Error toggling like:", error)
+    return { success: false, error: "Fehler beim Liken" }
+  }
+}

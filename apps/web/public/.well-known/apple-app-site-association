@@ -1,0 +1,27 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "88879TXSXK.com.maxbrych.roebelonchain"
+        ],
+        "components": [
+          {
+            "/": "/event/*",
+            "comment": "Open events in app"
+          },
+          {
+            "/": "/news/*",
+            "comment": "Open news articles in app"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "88879TXSXK.com.maxbrych.roebelonchain"
+    ]
+  }
+}

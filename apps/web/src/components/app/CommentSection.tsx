@@ -1,0 +1,444 @@
+"use client";
+
+import { useState, useRef, useEffect, useTransition } from "react";
+import Image from "next/image";
+import { useActiveAccount } from "thirdweb/react";
+import { useVerificationStatus } from "@/hooks/useVerificationStatus";
+import { getComments, createComment } from "@/app/actions/posts";
+import { createClient } from "@/lib/supabase/client";
+import { PostMediaGrid } from "@/components/app/PostMediaGrid";
+import { VideoPlayer } from "@/components/app/VideoPlayer";
+import type { PostComment } from "@/types/post";
+import { Send, ImagePlus, Video, X } from "lucide-react";
+import { toast } from "sonner";
+
+const MAX_COMMENT_IMAGES = 3;
+
+interface CommentSectionProps {
+  postId: string;
+  commentsCount: number;
+  defaultExpanded?: boolean;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHrs = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "gerade eben";
+  if (diffMin < 60) return `vor ${diffMin} Min.`;
+  if (diffHrs < 24) return `vor ${diffHrs} Std.`;
+  if (diffDays < 7) return `vor ${diffDays} T.`;
+  return date.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+}
+
+function CommentItem({ comment }: { comment: PostComment }) {
+  const shortAddress = `${comment.wallet_address.slice(0, 4)}...${comment.wallet_address.slice(-3)}`;
+
+  return (
+    <div className="flex gap-2.5 py-2">
+      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+        {comment.author_profile_picture_url ? (
+          <Image
+            src={comment.author_profile_picture_url}
+            alt=""
+            width={28}
+            height={28}
+            className="object-cover w-full h-full"
+          />
+        ) : (
+          <span className="text-xs font-medium text-muted-foreground">
+            {(comment.author_username || shortAddress).slice(0, 2).toUpperCase()}
+          </span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="bg-muted rounded-lg px-3 py-2">
+          <span className="text-xs font-medium text-foreground">
+            {comment.author_username || shortAddress}
+          </span>
+          <p className="text-sm text-foreground mt-0.5">{comment.content}</p>
+        </div>
+
+        {/* Comment media */}
+        {comment.media_urls && comment.media_urls.length > 0 && (
+          <div className="mt-1.5 rounded-lg overflow-hidden max-w-sm">
+            <PostMediaGrid
+              mediaUrls={comment.media_urls}
+              onImageClick={() => {}}
+            />
+          </div>
+        )}
+        {comment.video_url && (
+          <div className="mt-1.5 rounded-lg overflow-hidden max-w-sm max-h-48">
+            <VideoPlayer url={comment.video_url} />
+          </div>
+        )}
+
+        <span className="text-xs text-muted-foreground ml-3">
+          {formatRelativeTime(comment.created_at)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Upload a file directly to Supabase Storage
+async function uploadToStorage(
+  file: File,
+  type: "image" | "video"
+): Promise<string | null> {
+  const maxSize = type === "video" ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    toast.error(
+      type === "video"
+        ? "Video darf maximal 50MB groß sein"
+        : "Bild darf maximal 5MB groß sein"
+    );
+    return null;
+  }
+
+  const supabase = createClient();
+  const fileExt =
+    file.name.split(".").pop() || (type === "video" ? "mp4" : "jpg");
+  const prefix = type === "video" ? "comment-videos" : "comment-images";
+  const fileName = `${prefix}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("images")
+    .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) {
+    console.error("Upload error:", uploadError);
+    toast.error("Upload fehlgeschlagen. Bitte versuche es erneut.");
+    return null;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("images").getPublicUrl(fileName);
+  return publicUrl;
+}
+
+export function CommentSection({
+  postId,
+  commentsCount,
+  defaultExpanded = false,
+}: CommentSectionProps) {
+  const account = useActiveAccount();
+  const { isVerified } = useVerificationStatus();
+  const [comments, setComments] = useState<PostComment[]>([]);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isLoading, setIsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [totalCount, setTotalCount] = useState(commentsCount);
+
+  // Media state
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const hasMedia = imageFiles.length > 0 || videoFile !== null;
+
+  const loadComments = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
+    const result = await getComments(postId, 50, 0);
+    if (result.success && result.data) {
+      setComments(result.data);
+    }
+    setIsLoading(false);
+    setIsExpanded(true);
+  };
+
+  // Auto-load on default expanded
+  useEffect(() => {
+    if (defaultExpanded && comments.length === 0 && commentsCount > 0) {
+      loadComments();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultExpanded]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = MAX_COMMENT_IMAGES - imageFiles.length;
+    const newFiles = files.slice(0, remaining);
+
+    if (files.length > remaining) {
+      toast.error(`Maximal ${MAX_COMMENT_IMAGES} Bilder erlaubt`);
+    }
+
+    setImageFiles((prev) => [...prev, ...newFiles]);
+
+    for (const file of newFiles) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImagePreviews((prev) => [...prev, ev.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    e.target.value = "";
+  };
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Video darf maximal 50MB groß sein");
+      return;
+    }
+
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+    e.target.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = () => {
+    if (videoPreview) URL.revokeObjectURL(videoPreview);
+    setVideoFile(null);
+    setVideoPreview(null);
+  };
+
+  const resetMedia = () => {
+    setImageFiles([]);
+    setImagePreviews([]);
+    removeVideo();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!account?.address || (!newComment.trim() && !hasMedia) || isPending || isUploading)
+      return;
+
+    const content = newComment.trim() || " ";
+    setNewComment("");
+    setIsUploading(true);
+
+    try {
+      // Upload media
+      const uploadedImageUrls: string[] = [];
+      for (const file of imageFiles) {
+        const url = await uploadToStorage(file, "image");
+        if (url) uploadedImageUrls.push(url);
+      }
+
+      let uploadedVideoUrl: string | null = null;
+      if (videoFile) {
+        uploadedVideoUrl = await uploadToStorage(videoFile, "video");
+      }
+
+      // Optimistic comment
+      const optimisticComment: PostComment = {
+        id: `temp-${Date.now()}`,
+        post_id: postId,
+        wallet_address: account.address,
+        content,
+        media_urls: imagePreviews,
+        video_url: videoPreview,
+        status: "published",
+        created_at: new Date().toISOString(),
+        author_username: null,
+        author_profile_picture_url: null,
+      };
+
+      setComments((prev) => [...prev, optimisticComment]);
+      setTotalCount((prev) => prev + 1);
+      if (!isExpanded) setIsExpanded(true);
+      resetMedia();
+
+      startTransition(async () => {
+        const result = await createComment({
+          post_id: postId,
+          wallet_address: account.address,
+          content,
+          media_urls:
+            uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
+          video_url: uploadedVideoUrl,
+        });
+
+        if (result.success && result.data) {
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === optimisticComment.id ? result.data! : c
+            )
+          );
+        } else {
+          // Rollback
+          setComments((prev) =>
+            prev.filter((c) => c.id !== optimisticComment.id)
+          );
+          setTotalCount((prev) => prev - 1);
+          toast.error(result.error || "Fehler beim Kommentieren");
+        }
+      });
+    } catch {
+      toast.error("Fehler beim Kommentieren");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-border">
+      {/* Show all comments button */}
+      {totalCount > 0 && !isExpanded && (
+        <button
+          onClick={loadComments}
+          className="w-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors text-left"
+        >
+          {totalCount === 1
+            ? "1 Kommentar anzeigen"
+            : `Alle ${totalCount} Kommentare anzeigen`}
+        </button>
+      )}
+
+      {/* Comments list */}
+      {isExpanded && (
+        <div className="px-4 pb-1">
+          {isLoading ? (
+            <div className="py-3 text-center">
+              <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent text-muted-foreground" />
+            </div>
+          ) : (
+            comments.map((comment) => (
+              <CommentItem key={comment.id} comment={comment} />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Comment input */}
+      {account && isVerified ? (
+        <form onSubmit={handleSubmit} className="border-t border-border">
+          {/* Media previews */}
+          {hasMedia && (
+            <div className="px-4 pt-2 flex gap-2 flex-wrap">
+              {imagePreviews.map((preview, i) => (
+                <div
+                  key={i}
+                  className="relative w-14 h-14 rounded-md overflow-hidden"
+                >
+                  <Image
+                    src={preview}
+                    alt={`Vorschau ${i + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="56px"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                    aria-label="Bild entfernen"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+              {videoPreview && (
+                <div className="relative w-20 h-14 rounded-md overflow-hidden bg-black">
+                  <video
+                    src={videoPreview}
+                    className="w-full h-full object-contain"
+                    muted
+                    playsInline
+                  />
+                  <button
+                    type="button"
+                    onClick={removeVideo}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                    aria-label="Video entfernen"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={imageFiles.length >= MAX_COMMENT_IMAGES}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Bild hinzufügen"
+              >
+                <ImagePlus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={!!videoFile}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Video hinzufügen"
+              >
+                <Video className="h-4 w-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Kommentar schreiben..."
+              maxLength={500}
+              className="flex-1 bg-muted rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground"
+            />
+            <button
+              type="submit"
+              disabled={
+                (!newComment.trim() && !hasMedia) || isPending || isUploading
+              }
+              className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Kommentar senden"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Hidden file inputs */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            className="hidden"
+            onChange={handleImageSelect}
+          />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            className="hidden"
+            onChange={handleVideoSelect}
+          />
+        </form>
+      ) : account ? (
+        <div className="px-4 py-2 border-t border-border">
+          <p className="text-xs text-muted-foreground text-center">
+            Nur verifizierte Bürger können kommentieren
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}

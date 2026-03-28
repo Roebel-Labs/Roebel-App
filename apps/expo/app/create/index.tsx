@@ -1,0 +1,607 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
+import { useCreatePost } from '@/context/CreatePostContext';
+import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
+import type { PostCategory } from '@/lib/types/feed';
+import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
+import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+
+import CanvasIcon from '@/assets/icons/canvas.svg';
+import LocationIcon from '@/assets/icons/location-small.svg';
+import MarketsIcon from '@/assets/icons/markets.svg';
+import CalendarIcon from '@/assets/icons/calendar.svg';
+import CommunityIcon from '@/assets/icons/community.svg';
+
+const MAX_CONTENT_LENGTH = 500;
+
+const CATEGORIES: PostCategory[] = [
+  'generell',
+  'frage',
+  'empfehlungen',
+  'verloren_gefunden',
+  'hilfe_gebraucht',
+  'im_angebot',
+];
+
+type BottomOption = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  route: string;
+};
+
+export default function CreateScreen() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    linkedEventId?: string;
+    linkedEventTitle?: string;
+    linkedEventDate?: string;
+    linkedEventTime?: string;
+    linkedEventLocation?: string;
+    linkedEventImageUrl?: string;
+    linkedEventCategory?: string;
+  }>();
+  const { user } = useUser();
+  const walletAddress = user?.wallet_address || '';
+  const draft = useCreatePost();
+
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+
+  // Initialize linked event from route params (coming from event submission success)
+  useEffect(() => {
+    if (params.linkedEventId && !draft.linkedEventId) {
+      draft.setLinkedEvent(params.linkedEventId, {
+        id: params.linkedEventId,
+        title: params.linkedEventTitle || '',
+        date: params.linkedEventDate || '',
+        time: params.linkedEventTime || null,
+        location: params.linkedEventLocation || '',
+        image_url: params.linkedEventImageUrl || null,
+        category: params.linkedEventCategory || null,
+      });
+    }
+  }, [params.linkedEventId]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      setShowMore(false);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
+
+  const canProceed = draft.content.trim().length > 0 || hasLinkedItem;
+
+  const handleClose = () => {
+    if (draft.content.trim() || draft.images.length > 0) {
+      Alert.alert('Verwerfen?', 'Dein Beitrag wird nicht gespeichert.', [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Verwerfen',
+          style: 'destructive',
+          onPress: () => {
+            draft.reset();
+            router.back();
+          },
+        },
+      ]);
+    } else {
+      router.back();
+    }
+  };
+
+  const handleWeiter = () => {
+    if (!canProceed) return;
+    router.push('/create/review' as any);
+  };
+
+  const bottomOptions: BottomOption[] = [
+    {
+      key: 'marketplace',
+      label: 'Verkaufe oder verschenke etwas',
+      icon: <MarketsIcon width={24} height={24} color={colors.textSecondary} />,
+      route: '/create/marketplace',
+    },
+    {
+      key: 'event',
+      label: 'Veranstaltung erstellen',
+      icon: <CalendarIcon width={24} height={24} color={colors.textSecondary} />,
+      route: '/ai-submit',
+    },
+    {
+      key: 'poll',
+      label: 'Befrage deine Nachbarn',
+      icon: <CommunityIcon width={24} height={24} color={colors.textSecondary} />,
+      route: '/create/poll',
+    },
+  ];
+
+  const showBottomCards = (!keyboardVisible || showMore) && !hasLinkedItem;
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={handleClose} hitSlop={8}>
+            <Ionicons name="close" size={24} color={colors.textPrimary} />
+          </Pressable>
+
+          <Pressable
+            style={[styles.audiencePill, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+            onPress={() => {
+              const next = draft.feedType === 'main' ? 'rathaus' : 'main';
+              draft.setFeedType(next as any);
+            }}
+          >
+            <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
+            <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
+              {draft.feedType === 'main' ? 'Alle' : 'Rathaus'}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+          </Pressable>
+
+          <Pressable
+            onPress={handleWeiter}
+            disabled={!canProceed}
+            style={[
+              styles.weiterBtn,
+              { backgroundColor: canProceed ? colors.primary : colors.disabled },
+            ]}
+          >
+            <Text
+              style={[
+                styles.weiterText,
+                { color: canProceed ? colors.onPrimary : colors.disabledText },
+              ]}
+            >
+              Weiter
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Scrollable content */}
+        <ScrollView
+          style={styles.flex}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* Author row */}
+          <View style={styles.authorRow}>
+            <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.avatarText, { color: colors.primary }]}>
+                {user?.username?.charAt(0)?.toUpperCase() || '?'}
+              </Text>
+            </View>
+            <View>
+              <Text style={[styles.authorName, { color: colors.textPrimary }]}>
+                {user?.username || 'Unbekannt'}
+              </Text>
+              <Text style={[styles.authorLocation, { color: colors.textSecondary }]}>
+                Röbel/Müritz
+              </Text>
+            </View>
+          </View>
+
+          {/* Text input */}
+          <TextInput
+            style={[styles.textInput, { color: colors.textPrimary }]}
+            placeholder={hasLinkedItem ? 'Füge einen Kommentar hinzu...' : 'Was geht dir durch den Kopf, Nachbar?'}
+            placeholderTextColor={colors.textTertiary}
+            multiline
+            maxLength={MAX_CONTENT_LENGTH}
+            value={draft.content}
+            onChangeText={draft.setContent}
+            autoFocus
+          />
+
+          {/* Linked event/marketplace preview */}
+          {draft.linkedEventData && (
+            <View style={styles.linkedItemWrapper}>
+              <PostLinkedEventCard event={draft.linkedEventData} />
+              <Pressable
+                onPress={draft.clearLinkedItem}
+                style={[styles.linkedItemRemove, { backgroundColor: colors.error }]}
+              >
+                <Ionicons name="close" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+
+          {draft.linkedMarketplaceData && (
+            <View style={styles.linkedItemWrapper}>
+              <PostLinkedMarketplaceCard listing={draft.linkedMarketplaceData} />
+              <Pressable
+                onPress={draft.clearLinkedItem}
+                style={[styles.linkedItemRemove, { backgroundColor: colors.error }]}
+              >
+                <Ionicons name="close" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Image previews */}
+          {draft.images.length > 0 && (
+            <View style={styles.imageGrid}>
+              {draft.images.map((uri, i) => (
+                <View key={i} style={styles.imagePreviewContainer}>
+                  <Image source={{ uri }} style={styles.imagePreview} contentFit="cover" />
+                  <Pressable
+                    onPress={() => draft.removeImage(i)}
+                    style={[styles.removeImageBtn, { backgroundColor: colors.error }]}
+                  >
+                    <Text style={styles.removeImageText}>✕</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Video preview */}
+          {draft.videoUrl && (
+            <View style={styles.videoPreview}>
+              <View style={[styles.videoBadge, { backgroundColor: colors.surface }]}>
+                <Ionicons name="videocam" size={20} color={colors.primary} />
+                <Text style={[styles.videoText, { color: colors.textPrimary }]}>Video angehängt</Text>
+              </View>
+              <Pressable onPress={draft.removeVideo}>
+                <Ionicons name="close-circle" size={22} color={colors.error} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Upload indicator */}
+          {draft.isUploading && (
+            <View style={styles.uploadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>
+                Wird hochgeladen...
+              </Text>
+            </View>
+          )}
+
+          {/* Category chips */}
+          {draft.feedType === 'main' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScroll}
+              contentContainerStyle={styles.categoryContent}
+            >
+              {CATEGORIES.map((cat) => (
+                <Pressable
+                  key={cat}
+                  onPress={() => draft.setCategory(cat)}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      backgroundColor: draft.category === cat ? colors.primary : colors.surface,
+                      borderColor: draft.category === cat ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      { color: draft.category === cat ? colors.onPrimary : colors.textSecondary },
+                    ]}
+                  >
+                    {POST_CATEGORY_LABELS[cat]}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </ScrollView>
+
+        {/* Toolbar */}
+        <View style={[styles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+          <View style={styles.toolbarLeft}>
+            <Pressable style={styles.toolbarBtn} onPress={() => {}}>
+              <Text style={[styles.toolbarIcon, { color: colors.textSecondary }]}>@</Text>
+            </Pressable>
+            <Pressable
+              style={styles.toolbarBtn}
+              onPress={() => draft.addImages(walletAddress)}
+              disabled={draft.images.length >= 4 || draft.isUploading}
+            >
+              <CanvasIcon
+                width={22}
+                height={22}
+                color={draft.images.length >= 4 ? colors.disabled : colors.textSecondary}
+              />
+            </Pressable>
+            <Pressable style={styles.toolbarBtn} onPress={() => {}}>
+              <LocationIcon width={22} height={22} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          {keyboardVisible && (
+            <Pressable
+              style={[styles.moreBtn, { backgroundColor: colors.surfaceSecondary }]}
+              onPress={() => {
+                setShowMore(!showMore);
+                Keyboard.dismiss();
+              }}
+            >
+              <Ionicons name="grid-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.moreBtnText, { color: colors.textSecondary }]}>Mehr</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Bottom option cards */}
+        {showBottomCards && (
+          <View style={[styles.bottomOptions, { backgroundColor: colors.background }]}>
+            {bottomOptions.map((opt) => (
+              <Pressable
+                key={opt.key}
+                style={[styles.bottomCard, { backgroundColor: colors.surfaceSecondary }]}
+                onPress={() => router.push(opt.route as any)}
+              >
+                {opt.icon}
+                <Text style={[styles.bottomCardLabel, { color: colors.textPrimary }]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  audiencePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  audienceText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  weiterBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  weiterText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  scrollContent: {
+    paddingBottom: 16,
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+  },
+  authorName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  authorLocation: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  textInput: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 24,
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  linkedItemWrapper: {
+    position: 'relative',
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  linkedItemRemove: {
+    position: 'absolute',
+    top: -4,
+    right: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+  },
+  imagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  videoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  videoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  uploadingText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  categoryScroll: {
+    maxHeight: 40,
+    marginTop: 16,
+  },
+  categoryContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  toolbarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toolbarIcon: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+  },
+  moreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  moreBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  bottomOptions: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  bottomCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderRadius: 12,
+  },
+  bottomCardLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+});

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "expo-to-figma": {
+      "source": "burhanusman/expo-to-figma",
+      "sourceType": "github",
+      "computedHash": "43aeca7ee6db51992a2672bdcb78f3eb3ac3c300231cd7d1903aa210c42a0201"
+    }
+  }
+}

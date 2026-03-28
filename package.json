@@ -1,0 +1,19 @@
+{
+  "name": "roebel",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "clean": "turbo clean",
+    "dev:web": "turbo dev --filter=@roebel/web",
+    "dev:expo": "turbo dev --filter=@roebel/expo",
+    "build:web": "turbo build --filter=@roebel/web"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0"
+  }
+}

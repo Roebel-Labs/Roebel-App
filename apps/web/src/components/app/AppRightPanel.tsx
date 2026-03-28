@@ -1,0 +1,161 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { Calendar, ShieldCheck, Tag, ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+interface FeaturedAd {
+  id: string;
+  title: string;
+  dealValue: string | null;
+  businessName: string;
+  businessLogoUrl: string | null;
+  isBoosted: boolean;
+}
+
+export function AppRightPanel() {
+  const [featuredAd, setFeaturedAd] = useState<FeaturedAd | null>(null);
+
+  useEffect(() => {
+    async function fetchFeaturedAd() {
+      const supabase = createClient();
+      const today = new Date().toISOString().split("T")[0];
+      const { data } = await supabase
+        .from("business_deals")
+        .select(
+          `*, businesses!inner (name, slug, logo_url, status)`
+        )
+        .eq("is_active", true)
+        .neq("businesses.status", "rejected")
+        .or(`end_date.is.null,end_date.gte.${today}`)
+        .order("is_boosted", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (data && data.length > 0) {
+        const row = data[0];
+        const biz = row.businesses as Record<string, unknown>;
+        setFeaturedAd({
+          id: String(row.id),
+          title: String(row.title || ""),
+          dealValue: row.deal_value ? String(row.deal_value) : null,
+          businessName: biz.name ? String(biz.name) : "Lokales Gewerbe",
+          businessLogoUrl: biz.logo_url ? String(biz.logo_url) : null,
+          isBoosted: (row.is_boosted as boolean) || false,
+        });
+      }
+    }
+    fetchFeaturedAd();
+  }, []);
+
+  return (
+    <div className="space-y-4 sticky top-24">
+      {/* Event promotion card */}
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
+        <div className="bg-gradient-to-br from-primary to-blue-800 p-6 text-white">
+          <h3 className="font-semibold text-lg leading-tight">
+            Veranstaltung planen oder entdecken
+          </h3>
+          <p className="text-sm text-blue-100 mt-2">
+            Erstelle eine Veranstaltung oder entdecke was in Röbel passiert
+          </p>
+        </div>
+        <div className="p-4">
+          <Link
+            href="/app/submit"
+            className="flex items-center justify-center gap-2 w-full py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
+          >
+            <Calendar className="h-4 w-4" />
+            Veranstaltung erstellen
+          </Link>
+        </div>
+      </div>
+
+      {/* Featured ad */}
+      {featuredAd && (
+        <div
+          className={`bg-card rounded-lg border overflow-hidden ${
+            featuredAd.isBoosted
+              ? "border-yellow-300 dark:border-yellow-700"
+              : "border-border"
+          }`}
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-8 w-8 rounded-full bg-muted overflow-hidden flex items-center justify-center flex-shrink-0">
+                {featuredAd.businessLogoUrl ? (
+                  <Image
+                    src={featuredAd.businessLogoUrl}
+                    alt={featuredAd.businessName}
+                    width={32}
+                    height={32}
+                    className="object-cover w-full h-full"
+                  />
+                ) : (
+                  <Tag className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {featuredAd.businessName}
+                </p>
+                <p className="text-xs text-muted-foreground">Anzeige</p>
+              </div>
+            </div>
+            <h3 className="font-semibold text-sm text-foreground mb-1">
+              {featuredAd.title}
+            </h3>
+            {featuredAd.dealValue && (
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400 mb-2">
+                {featuredAd.dealValue}
+              </p>
+            )}
+            <Link
+              href={`/app/angebote/${featuredAd.id}`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Angebot ansehen
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Verification card */}
+      <div className="bg-card rounded-lg border border-border p-4">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-sm text-foreground">Verifizierter Bürger werden</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Verifiziere dich als Bürger von Röbel/Müritz und erhalte Stimmrecht in der DAO.
+            </p>
+            <Link
+              href="/app/verifizierung"
+              className="text-xs text-primary font-medium mt-2 inline-block hover:underline"
+            >
+              Mehr erfahren
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick links */}
+      <div className="bg-card rounded-lg border border-border p-4">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <Link href="/about" className="hover:text-foreground hover:underline">
+            Über uns
+          </Link>
+          <Link href="/datenschutz" className="hover:text-foreground hover:underline">
+            Datenschutz
+          </Link>
+          <Link href="/impressum" className="hover:text-foreground hover:underline">
+            Impressum
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

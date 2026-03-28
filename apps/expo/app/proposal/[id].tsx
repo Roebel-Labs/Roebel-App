@@ -1,0 +1,340 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useActiveAccount } from 'thirdweb/react';
+import { balanceOf } from 'thirdweb/extensions/erc721';
+import { ArrowLeftIcon } from '@/components/Icons';
+import { citizenNFTContract } from '@/constants/thirdweb';
+import { useProposalDetails } from '@/hooks/useProposalDetails';
+import { useProposalContent } from '@/hooks/useProposalContent';
+import { shortenAddress, calculateReadingTime } from '@/lib/governance-utils';
+import { useTheme } from '@/context/ThemeContext';
+import ProposalStateBadge from '@/components/ProposalStateBadge';
+import ProposalContent from '@/components/ProposalContent';
+import VotingStats from '@/components/VotingStats';
+import VoteButtonsEnhanced from '@/components/VoteButtonsEnhanced';
+import ProposalTimers from '@/components/ProposalTimers';
+import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
+
+export default function ProposalDetailScreen() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const params = useLocalSearchParams();
+  const account = useActiveAccount();
+
+  // Get proposal ID from route params (UUID string from Supabase)
+  const proposalId = params.id as string | null;
+
+  const { proposal, userVoteStatus, loading, error, refetch } = useProposalDetails(
+    proposalId,
+    account?.address
+  );
+
+  const [isCitizen, setIsCitizen] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch Irys content if available
+  const proposalContent = useProposalContent(
+    proposal?.irysUrl || proposal?.summary || proposal?.description || ''
+  );
+
+  // Check if user is a citizen
+  useEffect(() => {
+    async function checkCitizenStatus() {
+      if (!account?.address) {
+        setIsCitizen(false);
+        return;
+      }
+
+      try {
+        const balance = await balanceOf({
+          contract: citizenNFTContract,
+          owner: account.address,
+        });
+        setIsCitizen(balance > 0n);
+      } catch (error) {
+        console.error('Error checking citizen status:', error);
+        setIsCitizen(false);
+      }
+    }
+
+    checkCitizenStatus();
+  }, [account]);
+
+  const handleVoteSuccess = () => {
+    // Refetch proposal data after successful vote
+    refetch();
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const handleShare = async () => {
+    if (!proposal) return;
+
+    try {
+      await Share.share({
+        message: `${proposal.title}\n\nAbstimmen: https://www.roebel.app/proposals/${proposalId}`,
+        title: proposal.title,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  // Format date in German
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleDateString('de-DE', { month: 'short' });
+    const year = date.getFullYear();
+    return `${day}. ${month} ${year}`;
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+            <ArrowLeftIcon size={24} color={colors.textPrimary} />
+          </Pressable>
+          <View style={styles.headerSpacer} />
+        </View>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ProposalDetailSkeleton />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !proposal) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+            <ArrowLeftIcon size={24} color={colors.textPrimary} />
+          </Pressable>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>&#x26A0;&#xFE0F;</Text>
+          <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>Fehler</Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error || 'Vorschlag nicht gefunden'}</Text>
+          <Pressable style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+            <Text style={[styles.retryButtonText, { color: colors.onPrimary }]}>Zurück</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const content = proposalContent.markdownContent || proposal.summary || proposal.description;
+  const readingTime = calculateReadingTime(content);
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <ArrowLeftIcon size={24} color={colors.textPrimary} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+          {proposal.title || 'Vorschlag'}
+        </Text>
+        <Pressable onPress={handleShare} style={[styles.shareButton, { backgroundColor: colors.surface }]}>
+          <Text style={styles.shareIcon}>&#x2197;</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* Status Badge */}
+        <View style={styles.statusContainer}>
+          <ProposalStateBadge state={proposal.state} />
+        </View>
+
+        {/* Title */}
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{proposal.title || proposal.description}</Text>
+
+        {/* Metadata */}
+        <View style={styles.metadataRow}>
+          <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
+            von {shortenAddress(proposal.proposer)}
+          </Text>
+          {proposal.createdAt && (
+            <>
+              <Text style={[styles.separator, { color: colors.textTertiary }]}>&#x2022;</Text>
+              <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
+                {formatDate(proposal.createdAt)}
+              </Text>
+            </>
+          )}
+          <Text style={[styles.separator, { color: colors.textTertiary }]}>&#x2022;</Text>
+          <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
+            {readingTime} min read
+          </Text>
+        </View>
+
+        {/* Proposal Content */}
+        <ProposalContent
+          content={content}
+          isLoading={proposalContent.loading}
+        />
+
+        {/* Voting Statistics */}
+        <VotingStats
+          votes={{
+            forVotes: proposal.forVotes,
+            againstVotes: proposal.againstVotes,
+            abstainVotes: proposal.abstainVotes,
+          }}
+        />
+
+        {/* Enhanced Vote Buttons with Edge Cases */}
+        <VoteButtonsEnhanced
+          proposalId={BigInt(proposal.blockchainProposalId || proposal.proposalId)}
+          proposalState={proposal.state}
+          hasVoted={userVoteStatus?.hasVoted || false}
+          isCitizen={isCitizen}
+          onVoteSuccess={handleVoteSuccess}
+        />
+
+        {/* Voting Timer at bottom */}
+        <ProposalTimers
+          proposalId={BigInt(proposal.blockchainProposalId || proposal.proposalId)}
+          proposalState={proposal.state}
+        />
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+    marginHorizontal: 12,
+  },
+  shareButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareIcon: {
+    fontSize: 20,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  content: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+  },
+  statusContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 32,
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  metadataText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  separator: {
+    fontSize: 13,
+  },
+  bottomSpacer: {
+    height: 40,
+  },
+});

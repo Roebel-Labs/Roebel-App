@@ -1,0 +1,234 @@
+import React from 'react';
+import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useTheme } from '@/context/ThemeContext';
+import { DEAL_TYPE_LABELS } from '@/lib/map/constants';
+import type { BusinessDealWithBusiness } from '@/lib/types';
+import StarIcon from '@/assets/icons/star.svg';
+
+type Props = {
+  deal: BusinessDealWithBusiness;
+  compact?: boolean;
+  style?: ViewStyle;
+};
+
+export default function BusinessDealCard({ deal, compact = true, style }: Props) {
+  const router = useRouter();
+  const { colors } = useTheme();
+
+  const dealTypeLabel = DEAL_TYPE_LABELS[deal.deal_type] || deal.deal_type;
+
+  if (compact) {
+    return (
+      <Pressable
+        onPress={() => router.push(`/deals/${deal.id}` as any)}
+        style={({ pressed }) => [styles.cardCompact, style, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={deal.title}
+      >
+        <View style={styles.imageContainerCompact}>
+          {deal.image_url ? (
+            <Image
+              source={{ uri: deal.image_url }}
+              style={styles.imageCompact}
+              contentFit="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : (
+            <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]}>
+              <Text style={styles.placeholderEmoji}>🏷️</Text>
+            </View>
+          )}
+          {deal.deal_value && (
+            <View style={[styles.dealBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
+            </View>
+          )}
+          {deal.is_boosted && (
+            <View style={[styles.boostedBadge, { backgroundColor: '#FFA500' }]}>
+              <StarIcon width={12} height={12} color="#fff" />
+            </View>
+          )}
+        </View>
+        <View style={styles.contentCompact}>
+          <Text style={[styles.titleCompact, { color: colors.textPrimary }]} numberOfLines={2}>
+            {deal.title}
+          </Text>
+          {deal.business?.name && (
+            <Text style={[styles.businessName, { color: colors.textSecondary }]} numberOfLines={1}>
+              {deal.business.name}
+            </Text>
+          )}
+          <View style={[styles.typeBadge, { backgroundColor: colors.surfaceSecondary }]}>
+            <Text style={[styles.typeBadgeText, { color: colors.textSecondary }]}>{dealTypeLabel}</Text>
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/deals/${deal.id}` as any)}
+      style={({ pressed }) => [styles.card, { backgroundColor: colors.surface }, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={deal.title}
+    >
+      <View style={styles.imageContainer}>
+        {deal.image_url ? (
+          <Image
+            source={{ uri: deal.image_url }}
+            style={styles.image}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : (
+          <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]}>
+            <Text style={styles.placeholderEmoji}>🏷️</Text>
+          </View>
+        )}
+        {deal.deal_value && (
+          <View style={[styles.dealBadge, { backgroundColor: colors.primary }]}>
+            <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
+          </View>
+        )}
+        {deal.is_boosted && (
+          <View style={[styles.boostedBadge, { backgroundColor: '#FFA500' }]}>
+            <StarIcon width={12} height={12} color="#fff" />
+          </View>
+        )}
+      </View>
+      <View style={styles.content}>
+        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+          {deal.title}
+        </Text>
+        {deal.description && (
+          <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
+            {deal.description}
+          </Text>
+        )}
+        <View style={styles.footer}>
+          {deal.business?.name && (
+            <Text style={[styles.businessName, { color: colors.textSecondary }]} numberOfLines={1}>
+              {deal.business.name}
+            </Text>
+          )}
+          <View style={[styles.typeBadge, { backgroundColor: colors.surfaceSecondary }]}>
+            <Text style={[styles.typeBadgeText, { color: colors.textSecondary }]}>{dealTypeLabel}</Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  cardCompact: {
+    width: 260,
+    marginRight: 12,
+  },
+  card: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  imageContainerCompact: {
+    width: '100%',
+    height: 140,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imageContainer: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+  },
+  imageCompact: {
+    width: '100%',
+    height: '100%',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderEmoji: {
+    fontSize: 48,
+  },
+  dealBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  dealBadgeText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  boostedBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contentCompact: {
+    paddingVertical: 10,
+  },
+  content: {
+    padding: 14,
+  },
+  titleCompact: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 22,
+    marginBottom: 6,
+  },
+  description: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  businessName: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 6,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+});

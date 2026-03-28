@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build outputs
+.next/
+.expo/
+dist/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Native builds
+ios/
+android/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / AI tools
+.claude/
+.windsurf/
+.agent/
+.agents/
+.kiro/
+.cursor/
+.vscode/
+.idea/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
+
+# Supabase
+supabase/.temp/
+**/supabase/.temp/
+
+# Firebase / Auth keys
+keys/
+google-services.json
+GoogleService-Info.plist
+*.p8
+*-firebase-adminsdk-*.json
+
+# Large media files
+*.mov
+*.mp4
+
+# EAS (contains env-specific config with secrets)
+# Keep eas.json tracked but ensure no real keys are in it
+
+# Misc
+*.pem
+*.p12
+*.key
+*.mobileprovision

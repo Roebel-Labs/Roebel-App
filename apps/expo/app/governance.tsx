@@ -1,0 +1,138 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useRealtimeProposals } from '@/hooks/useRealtimeProposals';
+import ProposalCard from '@/components/ProposalCard';
+import ProposalSkeleton from '@/components/ProposalSkeleton';
+import BottomNavigation from '@/components/BottomNavigation';
+import { useTheme } from '@/context/ThemeContext';
+
+export default function GovernanceScreen() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { proposals, loading, refreshing, error, refresh } = useRealtimeProposals();
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
+
+  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+    setActiveTab(tab);
+    if (tab === 'home') {
+      router.replace('/');
+    } else if (tab === 'explore') {
+      router.push('/explore');
+    } else if (tab === 'map') {
+      router.push('/location');
+    } else if (tab === 'profile') {
+      router.push('/profile');
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerabstimmungen</Text>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {loading ? (
+          // Loading state - show skeleton loaders
+          <View style={styles.proposalsList}>
+            <ProposalSkeleton />
+            <ProposalSkeleton />
+            <ProposalSkeleton />
+          </View>
+        ) : error ? (
+          // Error state
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>⚠️</Text>
+            <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>Fehler beim Laden</Text>
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>{error}</Text>
+          </View>
+        ) : proposals.length === 0 ? (
+          // Empty state
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>📋</Text>
+            <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>Keine Vorschläge</Text>
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+              Es gibt derzeit keine Bürgerabstimmungen.
+            </Text>
+          </View>
+        ) : (
+          // Proposals list
+          <View style={styles.proposalsList}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              {proposals.length} {proposals.length === 1 ? 'Vorschlag' : 'Vorschläge'}
+            </Text>
+            {proposals.map((proposal) => (
+              <ProposalCard key={proposal.proposalId.toString()} proposal={proposal} />
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-Medium',
+  },
+  content: {
+    flex: 1,
+  },
+  proposalsList: {
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 16,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 100,
+  },
+  emptyStateIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+});
