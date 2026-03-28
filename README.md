@@ -1,88 +1,86 @@
 # Roebel App
 
-Open-Source Civic-Technology-Plattform fuer Roebel/Mueritz, Mecklenburg-Vorpommern -- eine Blaupause fuer Kleinstaedte, die digitale Buergerinfrastruktur aufbauen wollen.
+Open-source civic technology platform for Roebel/Mueritz, Mecklenburg-Vorpommern, Germany — a replicable blueprint for small towns building digital civic infrastructure.
 
-Teil der **Roebel Solarpunk 2035** Vision: Eine kleine Seenstadt in Deutschlands erstes Solarpunk Smart Village verwandeln.
+## What's Inside
 
-## Was steckt drin
-
-Dieses [Turborepo](https://turbo.build/repo)-Monorepo enthaelt:
+This [Turborepo](https://turbo.build/repo) monorepo contains:
 
 ### Apps
 
-| App | Beschreibung | Stack |
+| App | Description | Stack |
 |-----|-------------|-------|
-| **[apps/web](apps/web/)** | Roebel Webseite | Next.js 15, Tailwind CSS, thirdweb v5 |
+| **[apps/web](apps/web/)** | Roebel Website | Next.js 15, Tailwind CSS, thirdweb v5 |
 | **[apps/expo](apps/expo/)** | Roebel Mobile App (iOS + Android) | Expo SDK 55, React Native, thirdweb v5 |
 
-### Pakete
+### Packages
 
-| Paket | Beschreibung |
-|-------|-------------|
-| **[packages/config](packages/config/)** | Geteilte ESLint- und TypeScript-Konfigurationen |
-| **[packages/blockchain](packages/blockchain/)** | Contract ABIs, Adressen, thirdweb-Utilities |
-| **[packages/design-tokens](packages/design-tokens/)** | Geteilte Farben, Abstaende, Typografie-Tokens |
+| Package | Description |
+|---------|-------------|
+| **[packages/config](packages/config/)** | Shared ESLint and TypeScript configs |
+| **[packages/blockchain](packages/blockchain/)** | Contract ABIs, addresses, thirdweb utilities |
+| **[packages/design-tokens](packages/design-tokens/)** | Shared colors, spacing, typography tokens |
 
 ### Smart Contracts
 
-| Contract | Beschreibung |
+| Contract | Description |
 |----------|-------------|
 | **[contracts/governor-contract](contracts/governor-contract/)** | Hardhat Smart Contracts (OpenZeppelin v4.9.6) |
 
-## Erste Schritte
+## Getting Started
 
-### Voraussetzungen
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) v20+
 - [pnpm](https://pnpm.io/) v9+
-- [Expo CLI](https://docs.expo.dev/get-started/installation/) (fuer die Mobile App)
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) (for the mobile app)
 
-### Einrichtung
+### Setup
 
 ```bash
-# Repository klonen
+# Clone the repo
 git clone https://github.com/roebel-app/roebel.git
 cd roebel
 
-# Abhaengigkeiten installieren
+# Install dependencies
 pnpm install
 
-# Umgebungsvariablen kopieren
+# Copy environment variables
 cp apps/web/.env.example apps/web/.env.local
 cp apps/expo/.env.example apps/expo/.env
 
-# API-Keys in den .env-Dateien eintragen, dann:
+# Fill in your API keys in the .env files, then:
 
-# Web-App starten
+# Start web app
 pnpm dev:web
 
-# Mobile App starten
+# Start mobile app
 pnpm dev:expo
 ```
 
-## Architektur
+## Architecture
 
-- **Blockchain**: Base L2 + Thirdweb Smart Wallets (unsichtbares Web3 -- Nutzer sehen kein Wallet)
+- **Blockchain**: Base L2 + Thirdweb Smart Wallets (invisible Web3 — users never see a wallet)
 - **Backend**: Supabase (Postgres, Auth, Realtime, Edge Functions)
 - **Governance**: Soulbound NFT Voting + MACI Privacy-Preserving Voting
-- **KI**: Claude API fuer den Mecky-Chatbot-Assistenten
+- **AI**: Claude API powering the Mecky chatbot assistant
 
-## Fork fuer deine Stadt
+## Fork for Your Town
 
-Diese Plattform ist dafuer gemacht, von jeder Kleinstadt geforkt zu werden:
+This platform is designed to be forked by any small town:
 
-1. Dieses Repository forken
-2. Branding anpassen (Farben, Schriften, Maskottchen) in `packages/design-tokens/`
-3. Eigenes Supabase-Projekt deployen
-4. Web auf Vercel deployen, Mobile mit EAS bauen
-5. Governance Contracts auf Base deployen
+1. Fork this repository
+2. Update branding (colors, fonts, mascot) in `packages/design-tokens/`
+3. Deploy your own Supabase project
+4. Deploy web to Vercel, build mobile with EAS
+5. Deploy governance contracts on Base
 
-Siehe [docs/FORKING_GUIDE.md](docs/FORKING_GUIDE.md) fuer die vollstaendige Anleitung.
+See [docs/FORKING_GUIDE.md](docs/FORKING_GUIDE.md) for the full guide.
 
-## Mitmachen
+## Contributing
 
-Wir freuen uns ueber Beitraege! Siehe [CONTRIBUTING.md](CONTRIBUTING.md) fuer Richtlinien.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Lizenz
+## License
 
-[AGPL-3.0](LICENSE) -- nach dem Vorbild von [Decidim](https://decidim.org/) fuer offene Civic Technology.
+[AGPL-3.0](LICENSE) — following the [Decidim](https://decidim.org/) model for open civic technology.
