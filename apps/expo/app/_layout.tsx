@@ -171,6 +171,7 @@ function ThemedLayout() {
           <Stack.Screen name="games/mecky-portal" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
           <Stack.Screen name="games/speedrun" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
           <Stack.Screen name="games/fortune-cards" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
+          <Stack.Screen name="wallet" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </View>

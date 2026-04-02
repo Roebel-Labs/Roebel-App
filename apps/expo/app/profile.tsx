@@ -35,6 +35,7 @@ import MailIcon from '@/assets/icons/mail.svg';
 import SettingsIcon from '@/assets/icons/profile/settings.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
+import WalletIcon from '@/assets/icons/profile/wallet.svg';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -407,6 +408,20 @@ export default function ProfileScreen() {
                           icon={<QrCodeIcon width={20} height={20} color={colors.textPrimary} />}
                           label="QR-Code scannen"
                           onPress={() => router.push('/verification/scan' as any)}
+                        />
+                      </View>
+                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                    </>
+                  )}
+
+                  {/* Wallet - only in extended mode when connected */}
+                  {isExtendedMode && isConnected && (
+                    <>
+                      <View style={styles.menuGroup}>
+                        <ProfileMenuItem
+                          icon={<WalletIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Wallet"
+                          onPress={() => router.push('/wallet' as any)}
                         />
                       </View>
                       <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
