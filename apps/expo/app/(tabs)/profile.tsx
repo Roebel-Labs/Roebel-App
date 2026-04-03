@@ -21,6 +21,8 @@ import ProfileMenuItem from '@/components/ProfileMenuItem';
 import RoleBadge from '@/components/RoleBadge';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
+import FlippableIdentityCard from '@/components/FlippableIdentityCard';
+import ProfileModeCards from '@/components/profile/ProfileModeCards';
 
 import UploadIcon from '@/assets/icons/profile/upload.svg';
 import SentIcon from '@/assets/icons/profile/sent.svg';
@@ -132,6 +134,23 @@ export default function ProfileTab() {
           />
         }
       >
+        {/* Flippable Identity Card — always shown */}
+        <FlippableIdentityCard
+          user={user}
+          role={role}
+          roleLabel={roleLabel}
+          isCitizen={isCitizen}
+          pointsBalance={0}
+          verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
+          attestedBy={isCitizen ? 3 : 0}
+          votingStreak={user?.voting_streak || 0}
+          badges={[]}
+          businessName={userBusiness?.name}
+        />
+
+        {/* Mode-specific action cards (Airbnb-style) */}
+        <ProfileModeCards />
+
         {!isConnected ? (
           <View style={styles.notConnectedContainer}>
             <View style={[styles.emptyStateContainer, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
