@@ -125,6 +125,7 @@ function ThemedLayout() {
             animationDuration: 0,
           }}
         >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="explore" options={{ headerShown: false }} />
           <Stack.Screen name="location" options={{ headerShown: false }} />
