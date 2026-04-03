@@ -175,6 +175,7 @@ function ThemedLayout() {
           <Stack.Screen name="games/fortune-cards" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
           <Stack.Screen name="wallet" options={{ headerShown: false }} />
           <Stack.Screen name="explorer" options={{ headerShown: false }} />
+          <Stack.Screen name="machs-in-roebel" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </View>

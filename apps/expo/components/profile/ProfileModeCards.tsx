@@ -98,21 +98,29 @@ function TouristCards({ router }: { router: ReturnType<typeof useRouter> }) {
 
 function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
   return (
-    <View style={styles.cardsRow}>
-      <ModeCard
-        emoji="🎴"
-        title="Röbel Card"
-        subtitle="Punkte & Badges"
-        onPress={() => router.push('/wallet' as any)}
+    <>
+      <View style={styles.cardsRow}>
+        <ModeCard
+          emoji="🎴"
+          title="Röbel Card"
+          subtitle="Punkte & Badges"
+          onPress={() => router.push('/wallet' as any)}
+        />
+        <ModeCard
+          emoji="🗳️"
+          title="Rathaus"
+          subtitle="Abstimmungen"
+          onPress={() => router.push('/governance' as any)}
+          highlight
+        />
+      </View>
+      <CTABanner
+        emoji="🚀"
+        title="Mach's in Röbel"
+        subtitle="Gewerbe, Verein, Partei, Freelancer..."
+        onPress={() => router.push('/machs-in-roebel' as any)}
       />
-      <ModeCard
-        emoji="🗳️"
-        title="Rathaus"
-        subtitle="Abstimmungen"
-        onPress={() => router.push('/governance' as any)}
-        highlight
-      />
-    </View>
+    </>
   );
 }
 
