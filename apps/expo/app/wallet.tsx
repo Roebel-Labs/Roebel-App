@@ -23,6 +23,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import RoebelPointsWidget from '@/components/RoebelPointsWidget';
+import { useRoebelCard } from '@/context/RoebelCardContext';
 
 function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -106,6 +108,7 @@ export default function WalletScreen() {
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
 
+  const { pointsBalance, tier, card } = useRoebelCard();
   const [activeTab, setActiveTab] = useState<'tokens' | 'collectibles'>('tokens');
   const [sendVisible, setSendVisible] = useState(false);
   const [receiveVisible, setReceiveVisible] = useState(false);
@@ -220,6 +223,13 @@ export default function WalletScreen() {
       </View>
 
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
+        {/* Röbel Points */}
+        <RoebelPointsWidget
+          balance={pointsBalance}
+          tier={tier}
+          streak={card?.streak_days || 0}
+        />
+
         {/* Balance Section */}
         <View style={styles.balanceSection}>
           <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Guthaben</Text>

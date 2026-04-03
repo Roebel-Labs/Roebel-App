@@ -6,6 +6,7 @@ import { BookmarksProvider } from '@/context/BookmarksContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { AppModeProvider } from '@/context/AppModeContext';
+import { RoebelCardProvider } from '@/context/RoebelCardContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider, useUser } from '@/context/UserContext';
@@ -231,6 +232,7 @@ export default function Layout() {
                     <MeckyProvider>
                     <GovernanceTestProvider>
                     <AppModeWrapper>
+                    <RoebelCardProvider>
                     <BookmarksProvider>
                       <LocationProvider>
                         <SnackbarProvider>
@@ -238,6 +240,7 @@ export default function Layout() {
                         </SnackbarProvider>
                       </LocationProvider>
                     </BookmarksProvider>
+                    </RoebelCardProvider>
                     </AppModeWrapper>
                     </GovernanceTestProvider>
                     </MeckyProvider>
