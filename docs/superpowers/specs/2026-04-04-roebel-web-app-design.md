@@ -583,16 +583,34 @@ The web app currently has no mode system. To align with the mobile super app:
 
 ### 10.2 Web-Specific Mode Implementation
 
-Unlike mobile's 3-tab navigation, the web uses a sidebar + header layout. Mode switching affects:
+Unlike mobile's 3-tab navigation (Feed / Entdecken / Mein Röbel), the web uses a sidebar + header layout. The mobile "Entdecken" tab bundles everything into one screen — on web, each category becomes its own sidebar item for direct access.
 
-1. **Sidebar navigation** — Show/hide menu items based on mode
-   - Tourist: Feed, Events, Map, Businesses, News → no Governance, Marketplace (create), Messages
-   - Citizen: Everything + Governance, Marketplace, Messages, Verification
-   - Org: Everything + Business Dashboard, Deal Management, Analytics
+**Sidebar navigation by mode:**
 
-2. **Feed content** — Same algorithmic ranking as mobile, but rendered in card grid or list
-3. **Right panel** — Mode-aware widgets (tourist tips vs civic stats vs business metrics)
-4. **Profile page** — Mode-specific sections (mirrors mobile's flippable card concept as a card with tabs)
+| Sidebar Item | Icon | Tourist | Citizen | Org |
+|-------------|------|:---:|:---:|:---:|
+| Feed | 📰 | ✅ | ✅ | ✅ |
+| Rathaus | 🏛️ | ✅ (read) | ✅ | ✅ |
+| Events | 📅 | ✅ | ✅ | ✅ |
+| Karte | 🗺️ | ✅ | ✅ | ✅ |
+| News | 📰 | ✅ | ✅ | ✅ |
+| Gewerbe | 🏪 | ✅ | ✅ | ✅ (own profile) |
+| Angebote | 🏷️ | ✅ | ✅ | ✅ |
+| Marktplatz | 🛒 | browse | ✅ | ✅ |
+| Abstimmungen | 🗳️ | browse | ✅ (vote) | ✅ (vote) |
+| Nachrichten | 💬 | ❌ | ✅ | ✅ |
+| Wallet | 💰 | ❌ | ✅ | ✅ |
+| Verifizierung | ✅ | CTA only | ✅ | ✅ |
+| --- divider --- | | | | |
+| Dashboard | 📊 | ❌ | ❌ | ✅ |
+| Verwalten | ⚙️ | ❌ | ❌ | ✅ |
+
+**Key difference from mobile:** The mobile app's "Entdecken" tab shows a category grid (Events, Restaurants, Gewerbe, Deals, Marktplatz, News, Kino) with a map toggle. On web, each of these is a first-class sidebar item — no need for an intermediary "explore" page. The map is also its own sidebar item (`/app/karte`).
+
+**Other mode-aware surfaces:**
+1. **Feed content** — Same algorithmic ranking as mobile, but rendered in card grid or list
+2. **Right panel** — Mode-aware widgets (tourist tips vs civic stats vs business metrics)
+3. **Profile page** — Mode-specific sections (mirrors mobile's flippable card concept as a card with tabs)
 
 ### 10.3 New Context: `AppModeContext` (Web)
 
@@ -689,12 +707,18 @@ Pinned at top of feed (both tabs):
 │  240px │      flex-1                  │     320px        │
 │        │                              │                  │
 │ Feed   │  (page content)              │ Trending         │
-│ Events │                              │ Notifications    │
-│ Map    │                              │ Local Ads        │
-│ Market │                              │ Röbel Card       │
-│ Gov    │                              │ Weather Widget   │
+│ Rathaus│                              │ Notifications    │
+│ Events │                              │ Local Ads        │
+│ Karte  │                              │ Röbel Card       │
+│ News   │                              │ Weather Widget   │
+│ Gewerbe│                              │                  │
+│ Angebote                              │                  │
+│ Markt  │                              │                  │
+│ Abstim.│                              │                  │
 │ Msgs   │                              │                  │
-│ ...    │                              │                  │
+│ Wallet │                              │                  │
+│ ───────│                              │                  │
+│ Dashb. │ (org only)                   │                  │
 │        │                              │                  │
 ├────────┴──────────────────────────────┴──────────────────┤
 │  (no footer on /app/* routes)                            │
@@ -787,10 +811,12 @@ Pinned at top of feed (both tabs):
 - Modify: `src/components/app/AppRightPanel.tsx` (mode-aware widgets)
 
 ### Phase 1: Navigation & Mode Awareness (Week 3-4)
-- Make sidebar navigation mode-aware (show/hide items)
+- Split mobile "Entdecken" into individual sidebar items (Events, Karte, News, Gewerbe, Angebote, Marktplatz)
+- Add Rathaus and Abstimmungen as dedicated sidebar items
+- Make sidebar items mode-aware (show/hide/restrict per mode table in §10.2)
 - Mode-aware right panel widgets
 - Update `AuthGuard` to initialize mode from NFT status
-- Tourist mode restrictions (read-only governance, no marketplace creation)
+- Tourist mode restrictions (read-only governance, no marketplace creation, no messaging)
 
 ### Phase 2: Profile & Identity Card (Week 5-6)
 - Redesign `/app/profile` with card-style identity display (web equivalent of flippable card)
@@ -949,8 +975,8 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=
 
 | Aspect | Mobile (Expo) | Web (Next.js) |
 |--------|--------------|---------------|
-| Navigation | 3-tab bottom bar | Sidebar + header |
-| Mode switching | Tab content adapts | Sidebar items + right panel adapt |
+| Navigation | 3-tab bottom bar (Feed / Entdecken / Mein Röbel) | Sidebar with each category as own item (no "Explore" page) |
+| Mode switching | Tab content adapts | Sidebar items show/hide + right panel adapts |
 | Identity card | Flippable card animation | Tabbed card or expandable card |
 | Feed | FlashList virtualization | react-window or @tanstack/virtual |
 | Explorer/QR | Camera + GPS checkpoints | Not applicable (mobile-only feature) |

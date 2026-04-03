@@ -14,8 +14,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Building2, LogOut, PlusCircle, Store } from "lucide-react";
+import { ChevronDown, Building2, LogOut, PlusCircle, Store, Eye, Landmark, Briefcase } from "lucide-react";
 import Link from "next/link";
+import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
 
 function getInitial(name: string | null | undefined): string {
   if (!name) return "?";
@@ -27,6 +28,7 @@ export function ProfileDropdown() {
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
   const { user } = useUserProfile();
+  const { activeMode, availableModes, setMode, canSwitchModes } = useAppMode();
   const [business, setBusiness] = useState<Business | null>(null);
 
   // Fetch user's business from DB
@@ -95,6 +97,38 @@ export function ProfileDropdown() {
         </div>
 
         <DropdownMenuSeparator className="my-0" />
+
+        {/* Mode switcher */}
+        {canSwitchModes && (
+          <>
+            <div className="p-1">
+              <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Ansicht</p>
+              {availableModes.map((mode) => {
+                const modeConfig: Record<AppMode, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+                  tourist: { label: "Tourist", icon: Eye },
+                  citizen: { label: "Bürger", icon: Landmark },
+                  org: { label: "Organisation", icon: Briefcase },
+                };
+                const { label, icon: ModeIcon } = modeConfig[mode];
+                const isActive = activeMode === mode;
+                return (
+                  <DropdownMenuItem
+                    key={mode}
+                    onClick={() => setMode(mode)}
+                    className={`cursor-pointer ${isActive ? "bg-accent" : ""}`}
+                  >
+                    <ModeIcon className="h-4 w-4" />
+                    <span>{label}</span>
+                    {isActive && (
+                      <span className="ml-auto text-xs text-muted-foreground">aktiv</span>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+            <DropdownMenuSeparator className="my-0" />
+          </>
+        )}
 
         {/* Business account */}
         <div className="p-1">
