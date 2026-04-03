@@ -56,6 +56,7 @@ export default function ExploreTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [fabVisible, setFabVisible] = useState(true);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const lastScrollY = useRef(0);
 
   const fetchAllData = useCallback(async () => {
@@ -163,18 +164,47 @@ export default function ExploreTab() {
       >
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Entdecken</Text>
-          <Pressable
-            style={[styles.actionBtn, { backgroundColor: colors.surfaceSecondary }]}
-            accessibilityLabel="Suchen"
-            onPress={() => setShowSearchModal(true)}
+          <View style={styles.headerActions}>
+            {/* List/Map Toggle */}
+            <View style={[styles.viewToggle, { backgroundColor: colors.surfaceSecondary }]}>
+              <Pressable
+                onPress={() => setViewMode('list')}
+                style={[styles.toggleBtn, viewMode === 'list' && [styles.toggleBtnActive, { backgroundColor: colors.background }]]}
+              >
+                <Text style={[styles.toggleText, { color: viewMode === 'list' ? colors.textPrimary : colors.textSecondary }]}>Liste</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setViewMode('map')}
+                style={[styles.toggleBtn, viewMode === 'map' && [styles.toggleBtnActive, { backgroundColor: colors.background }]]}
+              >
+                <Text style={[styles.toggleText, { color: viewMode === 'map' ? colors.textPrimary : colors.textSecondary }]}>Karte</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceSecondary }]}
+              accessibilityLabel="Suchen"
+              onPress={() => setShowSearchModal(true)}
           >
             <SearchIcon size={20} color={colors.tabIconActive} />
           </Pressable>
+          </View>
         </View>
 
         <ExploreCategoryChips />
 
-        {loading ? (
+        {viewMode === 'map' ? (
+          <View style={styles.mapPlaceholder}>
+            <Pressable
+              onPress={() => router.push('/location' as any)}
+              style={[styles.openMapButton, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.openMapText}>🗺️ Karte öffnen</Text>
+            </Pressable>
+            <Text style={[styles.mapHint, { color: colors.textSecondary }]}>
+              Vollbild-Karte mit allen Orten, Events und Restaurants
+            </Text>
+          </View>
+        ) : loading ? (
           <View style={styles.skeletonContainer}>
             <HeroCardSkeleton />
             <View style={styles.skeletonSection}>
@@ -249,11 +279,61 @@ const styles = StyleSheet.create({
   skeletonRow: {
     flexDirection: 'row',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 3,
+    gap: 2,
+  },
+  toggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 13,
+  },
+  toggleBtnActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   actionBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  mapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    gap: 12,
+  },
+  openMapButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  openMapText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ffffff',
+  },
+  mapHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    maxWidth: 250,
   },
 });
