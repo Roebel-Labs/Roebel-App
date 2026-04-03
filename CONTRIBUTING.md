@@ -2,6 +2,22 @@
 
 Thank you for your interest in contributing! This project is an open-source civic technology blueprint, and we welcome contributions from everyone.
 
+## Git Workflow — Trunk-Based Development
+
+We use **trunk-based development**: `main` is always deployable.
+
+- **Small changes** (single file, bug fix, docs): commit directly to `main`
+- **Larger work** (new feature, multi-app changes, risky refactors): create a short-lived branch → open a PR → let CI pass → merge
+- **Branch naming**: `feat/description`, `fix/description`, `docs/description`, `chore/description`
+- **Delete branches** after merge — no long-lived branches
+
+### When to Use a PR
+
+- Changes span multiple apps (`apps/web` + `apps/expo`)
+- Touching blockchain contracts or shared packages
+- Anything you'd want CI to validate before it hits `main`
+- When you want a clear record of what changed and why
+
 ## Getting Started
 
 1. Fork the repository
@@ -64,6 +80,26 @@ Scope should be one of: `web`, `expo`, `blockchain`, `contracts`, `config`, `tok
 ## Code of Conduct
 
 Be respectful, constructive, and inclusive. We follow the [Contributor Covenant](https://www.contributor-covenant.org/).
+
+## CI/CD
+
+Every push to `main` and every PR triggers automated checks:
+
+- **Lint** — `pnpm lint` across all apps
+- **Typecheck** — `pnpm typecheck` across all apps
+- **Build** — `pnpm build` to verify nothing is broken
+
+When changes to `apps/expo/` are merged to `main`, an OTA update is automatically published to the **preview** channel via EAS Update. Production updates (`pnpm update:production`) are done manually after testing.
+
+Native builds (new SDK, new native modules) are triggered manually via GitHub Actions.
+
+## Changesets
+
+We use [Changesets](https://github.com/changesets/changesets) for version management. When making a notable change:
+
+1. Run `pnpm changeset` and follow the prompts
+2. Commit the generated changeset file with your PR
+3. When merged, a "Version Packages" PR is auto-created with version bumps and changelog updates
 
 ## License
 
