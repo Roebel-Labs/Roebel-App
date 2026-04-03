@@ -18,7 +18,7 @@ import type {
   MarketplaceListingRecord,
 } from '@/lib/types';
 
-import { useExtendedMode } from '@/context/ExtendedModeContext';
+import { useExtendedMode } from '@/context/AppModeContext';
 import MiniGamesSection from '@/components/games/MiniGamesSection';
 import FortuneCardsBanner from '@/components/games/FortuneCardsBanner';
 import HoroscopeBanner from '@/components/games/HoroscopeBanner';

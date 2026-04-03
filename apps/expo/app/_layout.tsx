@@ -5,10 +5,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
-import { ExtendedModeProvider } from '@/context/ExtendedModeContext';
+import { AppModeProvider } from '@/context/AppModeContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { VerificationProvider } from '@/context/VerificationContext';
-import { UserProvider } from '@/context/UserContext';
+import { UserProvider, useUser } from '@/context/UserContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
@@ -180,6 +180,15 @@ function ThemedLayout() {
   );
 }
 
+function AppModeWrapper({ children }: { children: React.ReactNode }) {
+  const { role, isCitizen, isBusinessOwner } = useUser();
+  return (
+    <AppModeProvider role={role} isCitizen={isCitizen} isBusinessOwner={isBusinessOwner}>
+      {children}
+    </AppModeProvider>
+  );
+}
+
 export default function Layout() {
   const { fontsLoaded, fontError } = useInterFonts();
 
@@ -220,7 +229,7 @@ export default function Layout() {
                     <UserProvider>
                     <MeckyProvider>
                     <GovernanceTestProvider>
-                    <ExtendedModeProvider>
+                    <AppModeWrapper>
                     <BookmarksProvider>
                       <LocationProvider>
                         <SnackbarProvider>
@@ -228,7 +237,7 @@ export default function Layout() {
                         </SnackbarProvider>
                       </LocationProvider>
                     </BookmarksProvider>
-                    </ExtendedModeProvider>
+                    </AppModeWrapper>
                     </GovernanceTestProvider>
                     </MeckyProvider>
                     </UserProvider>

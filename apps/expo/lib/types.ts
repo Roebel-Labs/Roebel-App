@@ -301,6 +301,10 @@ export type NotificationLogEntry = {
 // User types
 export type UserRole = 'tourist' | 'resident' | 'business' | 'official';
 
+// App mode types — view layer (what you SEE)
+export type AppMode = 'tourist' | 'citizen' | 'org';
+export type OrgType = 'business' | 'verein' | 'partei' | 'fraktion';
+
 export type UserRecord = {
   id: string;
   wallet_address: string;

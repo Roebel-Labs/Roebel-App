@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { useExtendedMode } from '@/context/ExtendedModeContext';
+import { useExtendedMode } from '@/context/AppModeContext';
 
 // Import SVG icons using react-native-svg-transformer
 import HomeStroke from '../assets/icons/bottom-nav/home.svg';

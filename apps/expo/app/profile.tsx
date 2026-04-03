@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
-import { useExtendedMode } from '@/context/ExtendedModeContext';
+import { useExtendedMode } from '@/context/AppModeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
