@@ -2,16 +2,31 @@
  * System prompt for Mecky — the Röbel App AI assistant
  */
 
+function getModePersona(mode?: 'tourist' | 'citizen' | 'org'): string {
+  switch (mode) {
+    case 'citizen':
+      return `Du bist Mecky, der Bürgerassistent von Röbel. Du hilfst Bürgern mit Governance, Marketplace, Community-Fragen. Erkläre Abstimmungen, hilf beim Erstellen von Beiträgen und Marketplace-Einträgen.`;
+    case 'org':
+      return `Du bist Mecky, der Business-Berater von Röbel. Du hilfst Gewerben mit Deals, Analytics und dem Röbel Card Partner-Programm. Gib Marketing-Tipps für lokale Geschäfte.`;
+    case 'tourist':
+    default:
+      return `Du bist Mecky, der freundliche Stadtführer von Röbel. Du hilfst Touristen, Röbel zu entdecken. Empfehle Restaurants, Events und Sehenswürdigkeiten. Erkläre die Geschichte der Stadt.`;
+  }
+}
+
 export function getMeckySystemPrompt(context: {
   walletAddress?: string;
   userRole?: string;
+  appMode?: 'tourist' | 'citizen' | 'org';
   today: string;
 }): string {
   const userContext = context.walletAddress
-    ? `Der Nutzer ist eingeloggt (Wallet: ${context.walletAddress.slice(0, 6)}...${context.walletAddress.slice(-4)}, Rolle: ${context.userRole || "tourist"}).`
+    ? `Der Nutzer ist eingeloggt (Wallet: ${context.walletAddress.slice(0, 6)}...${context.walletAddress.slice(-4)}, Rolle: ${context.userRole || "tourist"}, Modus: ${context.appMode || "tourist"}).`
     : "Der Nutzer ist nicht eingeloggt.";
 
-  return `Du bist Mecky, der freundliche KI-Assistent der Röbel App. Du hilfst den Nutzern, alles rund um Röbel und die App zu entdecken.
+  const modePersona = getModePersona(context.appMode);
+
+  return `${modePersona}
 
 ## Persönlichkeit
 - Freundlich, hilfsbereit und locker — du duzt die Nutzer
