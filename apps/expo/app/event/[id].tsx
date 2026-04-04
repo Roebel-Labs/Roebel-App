@@ -17,6 +17,7 @@ import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useTheme } from '@/context/ThemeContext';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { SvgXml } from 'react-native-svg';
+import ExperienceSection from '@/components/events/ExperienceSection';
 
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
   const svgXml = `
@@ -423,6 +424,9 @@ export default function EventDetails() {
                 <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Teilen</Text>
               </Pressable>
             </View>
+
+            {/* Event Experiences Section */}
+            <ExperienceSection eventId={id as string} />
 
             {/* More Events Section */}
             {moreEvents.length > 0 && (

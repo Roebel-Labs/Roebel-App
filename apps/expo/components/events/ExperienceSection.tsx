@@ -1,0 +1,220 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
+import { fetchEventExperiences, deleteExperience } from '@/lib/supabase-experiences';
+import ExperienceItem from './ExperienceItem';
+import ExperienceComposer from './ExperienceComposer';
+import type { EventExperience } from '@/lib/types/feed';
+
+type Props = {
+  eventId: string;
+};
+
+export default function ExperienceSection({ eventId }: Props) {
+  const { colors } = useTheme();
+  const { user } = useUser();
+
+  const [experiences, setExperiences] = useState<EventExperience[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [composerVisible, setComposerVisible] = useState(false);
+
+  const loadExperiences = useCallback(async (pageNum: number, append: boolean = false) => {
+    if (pageNum === 0) setLoading(true);
+    else setLoadingMore(true);
+
+    const result = await fetchEventExperiences(eventId, pageNum);
+
+    if (append) {
+      setExperiences((prev) => [...prev, ...result.data]);
+    } else {
+      setExperiences(result.data);
+    }
+    setHasMore(result.hasMore);
+
+    if (pageNum === 0) setLoading(false);
+    else setLoadingMore(false);
+  }, [eventId]);
+
+  useEffect(() => {
+    loadExperiences(0);
+  }, [loadExperiences]);
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadExperiences(nextPage, true);
+  };
+
+  const handleExperienceCreated = () => {
+    setPage(0);
+    loadExperiences(0);
+  };
+
+  const handleDelete = async (experience: EventExperience) => {
+    try {
+      await deleteExperience(experience.id);
+      setExperiences((prev) => prev.filter((e) => e.id !== experience.id));
+    } catch {
+      // Error logged in supabase-experiences.ts
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      {/* Section Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Erlebnisse</Text>
+          {experiences.length > 0 && (
+            <View style={[styles.countBadge, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.countText, { color: colors.primary }]}>{experiences.length}</Text>
+            </View>
+          )}
+        </View>
+        {user && (
+          <Pressable
+            onPress={() => setComposerVisible(true)}
+            style={[styles.shareButton, { backgroundColor: colors.primary }]}
+          >
+            <Ionicons name="add" size={16} color="#ffffff" />
+            <Text style={styles.shareButtonText}>Erlebnis teilen</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Loading State */}
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      )}
+
+      {/* Empty State */}
+      {!loading && experiences.length === 0 && (
+        <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>
+            Noch keine Erlebnisse
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textTertiary }]}>
+            Sei der/die Erste und teile dein Erlebnis!
+          </Text>
+        </View>
+      )}
+
+      {/* Experiences List (using .map, not FlatList) */}
+      {!loading && experiences.length > 0 && (
+        <View style={styles.list}>
+          {experiences.map((experience) => (
+            <ExperienceItem
+              key={experience.id}
+              experience={experience}
+              isOwner={user?.wallet_address === experience.wallet_address}
+              onDelete={handleDelete}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Load More Button */}
+      {hasMore && !loadingMore && (
+        <Pressable onPress={handleLoadMore} style={styles.loadMoreButton}>
+          <Text style={[styles.loadMoreText, { color: colors.primary }]}>Mehr laden</Text>
+        </Pressable>
+      )}
+      {loadingMore && (
+        <ActivityIndicator size="small" color={colors.primary} style={styles.loadingMore} />
+      )}
+
+      {/* Composer */}
+      {user && (
+        <ExperienceComposer
+          visible={composerVisible}
+          onClose={() => setComposerVisible(false)}
+          eventId={eventId}
+          walletAddress={user.wallet_address}
+          onExperienceCreated={handleExperienceCreated}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  section: {
+    marginTop: 24,
+    gap: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  shareButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  loadingContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyState: {
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    gap: 4,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  list: {
+    gap: 12,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  loadingMore: {
+    paddingVertical: 12,
+  },
+});
