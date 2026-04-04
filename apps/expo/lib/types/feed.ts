@@ -1,4 +1,4 @@
-import type { UserRecord, EventRecord, BusinessDealRecord, BusinessRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '../types';
+import type { UserRecord, Account, EventRecord, BusinessDealRecord, BusinessRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '../types';
 
 // ─── Post Types ─────────────────────────────────────────────
 
@@ -15,8 +15,10 @@ export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share';
 
 export type PostAuthor = Pick<
   UserRecord,
-  'wallet_address' | 'username' | 'profile_picture_url' | 'is_verified_citizen' | 'role'
->;
+  'wallet_address' | 'username' | 'profile_picture_url' | 'is_verified_citizen' | 'tier'
+> & {
+  account?: Pick<Account, 'id' | 'account_type' | 'name' | 'avatar_url'> | null;
+};
 
 export type PostLinkRecord = {
   id: string;
@@ -49,6 +51,7 @@ export type PollVoteRecord = {
 export type PostRecord = {
   id: string;
   wallet_address: string;
+  account_id: string | null;
   content: string;
   media_urls: string[] | null;
   video_url: string | null;
@@ -75,6 +78,7 @@ export type PostCommentRecord = {
   id: string;
   post_id: string;
   wallet_address: string;
+  account_id: string | null;
   content: string;
   media_urls: string[] | null;
   video_url: string | null;
@@ -88,6 +92,7 @@ export type PostCommentRecord = {
 
 export type CreatePostInput = {
   wallet_address: string;
+  account_id?: string;
   content: string;
   category?: PostCategory;
   feed_type?: FeedType;
@@ -102,6 +107,7 @@ export type CreatePostInput = {
 export type CreateCommentInput = {
   post_id: string;
   wallet_address: string;
+  account_id?: string;
   content: string;
   media_urls?: string[];
   video_url?: string;

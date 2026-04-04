@@ -3,36 +3,41 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
+import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics, toggleDealBoost } from '@/lib/supabase-deals';
-import type { BusinessDealRecord, DealAnalytics } from '@/lib/types';
+import type { BusinessRecord, BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import AnalyticsCard from '@/components/AnalyticsCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function BusinessAnalyticsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { activeAccount } = useAccount();
-  const userBusiness = activeAccount;
+  const { user } = useUser();
 
+  const [userBusiness, setUserBusiness] = useState<BusinessRecord | null>(null);
   const [analytics, setAnalytics] = useState<DealAnalytics | null>(null);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!userBusiness) return;
+    if (!user?.wallet_address) return;
     try {
-      const [analyticsData, dealsData] = await Promise.all([
-        fetchDealAnalytics(userBusiness.id),
-        fetchDealsByBusiness(userBusiness.id),
-      ]);
-      setAnalytics(analyticsData);
-      // Sort by views descending for performance ranking
-      setDeals(dealsData.sort((a, b) => b.views_count - a.views_count));
+      const businesses = await fetchBusinessesByOwner(user.wallet_address);
+      const primary = businesses.find(b => b.status === 'approved') || businesses[0] || null;
+      setUserBusiness(primary);
+      if (primary) {
+        const [analyticsData, dealsData] = await Promise.all([
+          fetchDealAnalytics(primary.id),
+          fetchDealsByBusiness(primary.id),
+        ]);
+        setAnalytics(analyticsData);
+        setDeals(dealsData.sort((a, b) => b.views_count - a.views_count));
+      }
     } catch (error) {
       console.error('Error loading analytics:', error);
     }
-  }, [userBusiness?.id]);
+  }, [user?.wallet_address]);
 
   useEffect(() => {
     loadData();

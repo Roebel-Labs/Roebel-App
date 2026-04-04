@@ -46,6 +46,9 @@ export type EventRecord = {
   // Livestream
   livestream_url: string | null;
   livestream_active: boolean | null;
+  // Creator account
+  account_id: string | null;
+  account?: Account;
 };
 
 // Extended type for event with all dates loaded
@@ -298,17 +301,41 @@ export type NotificationLogEntry = {
   created_at: string;
 };
 
-// User types
-export type UserRole = 'tourist' | 'resident' | 'business' | 'official';
+// User tiers — unified role system
+export type UserTier = 'guest' | 'tourist' | 'citizen';
 
-// App mode types — view layer (what you SEE)
+// Account types
+export type AccountType = 'personal' | 'unternehmen' | 'verein' | 'partei' | 'fraktion';
+export type OrgType = Exclude<AccountType, 'personal'>;
+
+export type Account = {
+  id: string;
+  account_type: AccountType;
+  name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  cover_url: string | null;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AccountOwner = {
+  account_id: string;
+  wallet_address: string;
+  role: 'owner';
+  invited_by: string | null;
+  joined_at: string;
+};
+
+// Backward compatibility aliases
+export type UserRole = UserTier;
 export type AppMode = 'tourist' | 'citizen' | 'org';
-export type OrgType = 'business' | 'verein' | 'partei' | 'fraktion';
 
 export type UserRecord = {
   id: string;
   wallet_address: string;
-  role: UserRole;
+  tier: UserTier;
   username: string | null;
   bio: string | null;
   profile_picture_url: string | null;
@@ -332,6 +359,7 @@ export type UserRecord = {
   voting_streak: number;
   last_vote_date: string | null;
   achievements: unknown[];
+  active_account_id: string | null;
   privacy_settings: Record<string, string>;
   created_at: string;
   updated_at: string;
@@ -381,7 +409,7 @@ export type DealAnalytics = {
   dealsByType: Record<DealType, number>;
 };
 
-export type AccountMode = 'personal' | 'business';
+export type AccountMode = 'personal' | 'business'; // deprecated — use Account system
 
 // Marketplace listing types
 export type MarketplacePriceType = 'fixed' | 'negotiable' | 'free';

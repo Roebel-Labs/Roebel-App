@@ -32,7 +32,7 @@ export async function fetchFeedPosts(options: {
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
       links:post_links(*),
       poll:post_polls(*),
@@ -64,7 +64,7 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
       links:post_links(*),
       poll:post_polls(*),
@@ -90,6 +90,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
     .from('posts')
     .insert({
       wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
       content: input.content,
       category: input.category || 'generell',
       feed_type: input.feed_type || 'main',
@@ -104,7 +105,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       )
     `)
     .single();
@@ -146,7 +147,7 @@ export async function updatePost(
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
       links:post_links(*),
       poll:post_polls(*),
@@ -281,6 +282,7 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
     .insert({
       post_id: input.post_id,
       wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
       content: input.content,
       media_urls: input.media_urls || [],
       video_url: input.video_url || null,

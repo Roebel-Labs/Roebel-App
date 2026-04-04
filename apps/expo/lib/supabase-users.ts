@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import type { UserRecord, UserRole } from './types';
+import { createPersonalAccount } from './supabase-accounts';
+import type { UserRecord, UserTier } from './types';
 
 /**
  * Fetch user by wallet address
@@ -22,8 +23,8 @@ export async function fetchUserByWallet(walletAddress: string): Promise<UserReco
 
 /**
  * Create or fetch user on login.
- * First login: creates with role='tourist'.
- * Returning login: updates last_login_at and email only (preserves role).
+ * First login: creates with tier='tourist' and a personal account.
+ * Returning login: updates last_login_at and email only (preserves tier).
  */
 export async function upsertUser(walletAddress: string, email?: string): Promise<UserRecord | null> {
   const normalizedAddress = walletAddress.toLowerCase();
@@ -49,12 +50,12 @@ export async function upsertUser(walletAddress: string, email?: string): Promise
     return data as UserRecord;
   }
 
-  // Create new user with default role 'tourist'
+  // Create new user with default tier 'tourist'
   const { data, error } = await supabase
     .from('users')
     .insert({
       wallet_address: normalizedAddress,
-      role: 'tourist' as UserRole,
+      tier: 'tourist' as UserTier,
       ...(email && { email }),
     })
     .select()
@@ -65,7 +66,14 @@ export async function upsertUser(walletAddress: string, email?: string): Promise
     return null;
   }
 
-  return data as UserRecord;
+  const newUser = data as UserRecord;
+
+  // Create personal account for new user
+  const displayName = newUser.username || normalizedAddress.slice(0, 10) + '...';
+  await createPersonalAccount(normalizedAddress, displayName, newUser.profile_picture_url);
+
+  // Re-fetch to get active_account_id
+  return fetchUserByWallet(normalizedAddress);
 }
 
 /**
@@ -91,14 +99,14 @@ export async function updateUserProfile(
 }
 
 /**
- * Update user role (called when verification status changes)
+ * Update user tier (called when verification status changes)
  */
-export async function updateUserRole(
+export async function updateUserTier(
   walletAddress: string,
-  role: UserRole,
+  tier: UserTier,
   isVerifiedCitizen?: boolean
 ): Promise<void> {
-  const updates: Record<string, unknown> = { role };
+  const updates: Record<string, unknown> = { tier };
   if (isVerifiedCitizen !== undefined) {
     updates.is_verified_citizen = isVerifiedCitizen;
     if (isVerifiedCitizen) {
@@ -113,7 +121,10 @@ export async function updateUserRole(
     .eq('wallet_address', walletAddress.toLowerCase());
 
   if (error) {
-    console.error('Error updating user role:', error);
+    console.error('Error updating user tier:', error);
     throw error;
   }
 }
+
+// Backward compatibility alias
+export const updateUserRole = updateUserTier;

@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import type { AccountMode } from '@/lib/types';
+
+type AccountMode = 'personal' | 'business';
 
 type Props = {
   mode: AccountMode;

@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useActiveAccount } from 'thirdweb/react';
+import { createBusiness } from '@/lib/supabase-businesses';
 import type { BusinessCategory } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
@@ -25,7 +27,8 @@ const CATEGORIES: { value: BusinessCategory; label: string }[] = [
 export default function BusinessRegisterScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { createBusinessProfile, refreshBusiness } = useUser();
+  const { user } = useUser();
+  const account = useActiveAccount();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<BusinessCategory>('sonstiges');
@@ -46,9 +49,15 @@ export default function BusinessRegisterScreen() {
       return;
     }
 
+    if (!account?.address) {
+      Alert.alert('Fehler', 'Kein Wallet verbunden.');
+      return;
+    }
+
     setSaving(true);
     try {
-      await createBusinessProfile({
+      await createBusiness({
+        owner_wallet_address: account.address,
         name: name.trim(),
         category,
         description: description.trim() || undefined,
@@ -57,7 +66,6 @@ export default function BusinessRegisterScreen() {
         website_url: website.trim() || undefined,
         address: address.trim() || undefined,
       });
-      await refreshBusiness();
       setSuccess(true);
     } catch (error: any) {
       console.error('Error registering business:', error);

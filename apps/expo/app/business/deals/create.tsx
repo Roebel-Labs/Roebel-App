@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Activi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
+import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { createDeal } from '@/lib/supabase-deals';
-import type { DealType, DealStatus } from '@/lib/types';
+import type { BusinessRecord, DealType, DealStatus } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
@@ -19,8 +20,16 @@ const DEAL_TYPES: { value: DealType; label: string }[] = [
 export default function CreateDealScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount } = useAccount();
-  const userBusiness = activeAccount;
+  const { user } = useUser();
+  const [userBusiness, setUserBusiness] = useState<BusinessRecord | null>(null);
+
+  React.useEffect(() => {
+    if (user?.wallet_address) {
+      fetchBusinessesByOwner(user.wallet_address).then(businesses => {
+        setUserBusiness(businesses.find(b => b.status === 'approved') || businesses[0] || null);
+      });
+    }
+  }, [user?.wallet_address]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

@@ -5,7 +5,8 @@ import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
-import { EventRecord } from '@/lib/types';
+import { EventRecord, BusinessRecord } from '@/lib/types';
+import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
 import { useAccount } from '@/context/AccountContext';
@@ -49,8 +50,9 @@ export default function ProfileScreen() {
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
-  const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal');
-  const userBusiness = ownedAccounts.find(a => a.account_type !== 'personal') ?? null;
+  const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
+  const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal') || !!businessRecord;
+  const userBusiness = businessRecord;
   const isExtendedMode = tier !== 'guest';
   const accountMode = activeAccount?.account_type !== 'personal' && activeAccount !== null ? 'business' : 'personal';
   const { colors } = useTheme();
@@ -69,6 +71,15 @@ export default function ProfileScreen() {
       setShowLoginDrawer(false);
     }
   }, [isConnected]);
+
+  // Fetch business data from businesses table (until business→account migration)
+  useEffect(() => {
+    if (user?.wallet_address) {
+      fetchBusinessesByOwner(user.wallet_address).then(businesses => {
+        setBusinessRecord(businesses.find(b => b.status === 'approved') || businesses[0] || null);
+      });
+    }
+  }, [user?.wallet_address]);
 
   useEffect(() => {
     fetchEvents();
@@ -124,12 +135,15 @@ export default function ProfileScreen() {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
-  const showAccountSwitcher = isBusinessOwner && userBusiness?.status === 'approved';
-  const showBusinessRegister = isCitizen && !isBusinessOwner;
+  const orgAccount = ownedAccounts.find(a => a.account_type !== 'personal');
+  const showAccountSwitcher = !!orgAccount || (isBusinessOwner && userBusiness?.status === 'approved');
+  const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
   const setAccountMode = (mode: string) => {
-    if (mode === 'business' && userBusiness) {
-      switchAccount(userBusiness.id);
-    } else if (mode === 'personal' && user?.wallet_address) {
+    if (mode === 'business') {
+      if (orgAccount) {
+        switchAccount(orgAccount.id);
+      }
+    } else {
       const personalAccount = ownedAccounts.find(a => a.account_type === 'personal');
       if (personalAccount) switchAccount(personalAccount.id);
     }

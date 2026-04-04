@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, FlatList
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
+import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
-import type { BusinessDealRecord, DealAnalytics } from '@/lib/types';
+import type { BusinessRecord, BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import DealCard from '@/components/DealCard';
 import AnalyticsCard from '@/components/AnalyticsCard';
@@ -14,29 +15,34 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function BusinessDashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount } = useAccount();
-  const userBusiness = activeAccount;
+  const { user } = useUser();
 
+  const [userBusiness, setUserBusiness] = useState<BusinessRecord | null>(null);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [analytics, setAnalytics] = useState<DealAnalytics | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    if (!userBusiness) return;
+    if (!user?.wallet_address) return;
     try {
-      const [dealsData, analyticsData] = await Promise.all([
-        fetchDealsByBusiness(userBusiness.id),
-        fetchDealAnalytics(userBusiness.id),
-      ]);
-      setDeals(dealsData);
-      setAnalytics(analyticsData);
+      const businesses = await fetchBusinessesByOwner(user.wallet_address);
+      const primary = businesses.find(b => b.status === 'approved') || businesses[0] || null;
+      setUserBusiness(primary);
+      if (primary) {
+        const [dealsData, analyticsData] = await Promise.all([
+          fetchDealsByBusiness(primary.id),
+          fetchDealAnalytics(primary.id),
+        ]);
+        setDeals(dealsData);
+        setAnalytics(analyticsData);
+      }
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }
-  }, [userBusiness?.id]);
+  }, [user?.wallet_address]);
 
   useEffect(() => {
     loadData();
