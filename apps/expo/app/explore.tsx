@@ -18,7 +18,7 @@ import type {
   MarketplaceListingRecord,
 } from '@/lib/types';
 
-import { useExtendedMode } from '@/context/AppModeContext';
+import { useAppMode } from '@/context/AppModeContext';
 import MiniGamesSection from '@/components/games/MiniGamesSection';
 import FortuneCardsBanner from '@/components/games/FortuneCardsBanner';
 import HoroscopeBanner from '@/components/games/HoroscopeBanner';
@@ -42,8 +42,9 @@ import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { isExtendedMode } = useExtendedMode();
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('explore');
+  const { activeMode } = useAppMode();
+  const isNotTourist = activeMode !== 'tourist';
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
@@ -137,12 +138,10 @@ export default function ExploreScreen() {
     setRefreshing(false);
   };
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') {
       router.replace('/');
-    } else if (tab === 'map') {
-      router.push('/location');
     } else if (tab === 'profile') {
       router.push('/profile');
     }
@@ -237,7 +236,7 @@ export default function ExploreScreen() {
             <NewsSection articles={newsArticles} />
 
             {/* Horoscope Banner (Extended Mode) */}
-            {isExtendedMode && <HoroscopeBanner />}
+            {isNotTourist && <HoroscopeBanner />}
 
             {/* Local Businesses */}
             <BusinessSection businesses={businesses} />
@@ -249,10 +248,10 @@ export default function ExploreScreen() {
             <NearbyEventsSection events={nearbyEvents} />
 
             {/* Fortune Cards Banner (Extended Mode) */}
-            {isExtendedMode && <FortuneCardsBanner />}
+            {isNotTourist && <FortuneCardsBanner />}
 
             {/* Mini Games (Extended Mode) */}
-            {isExtendedMode && <MiniGamesSection />}
+            {isNotTourist && <MiniGamesSection />}
           </>
         )}
 

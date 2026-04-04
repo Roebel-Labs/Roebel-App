@@ -22,7 +22,7 @@ import { EventCategory } from '@/lib/categories';
 import NotificationPromptDrawer from '@/components/NotificationPromptDrawer';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useExtendedMode } from '@/context/AppModeContext';
+import { useAppMode } from '@/context/AppModeContext';
 import FeedHome from '@/components/feed/FeedHome';
 import { useLivestream } from '@/hooks/useLivestream';
 import { useAnnouncements } from '@/hooks/useAnnouncements';
@@ -39,10 +39,10 @@ function useDebounced<T>(value: T, delayMs: number): T {
 }
 
 export default function HomeScreen() {
-  const { isExtendedMode } = useExtendedMode();
+  const { activeMode } = useAppMode();
 
-  // Extended mode: show social feed instead of default home
-  if (isExtendedMode) {
+  // Citizens and orgs see the social feed; tourists see the default home
+  if (activeMode !== 'tourist') {
     return <FeedHome />;
   }
 
@@ -68,7 +68,7 @@ function DefaultHome() {
   const [eventsListLoading, setEventsListLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('home');
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const announcementShownRef = useRef(false);
@@ -553,16 +553,13 @@ function DefaultHome() {
     return eventsForList;
   }, [events, filters.category]);
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'explore') {
       router.push('/explore');
-    } else if (tab === 'map') {
-      router.push('/location');
     } else if (tab === 'profile') {
       router.push('/profile');
     }
-    // Stay on current screen for 'home' tab
   };
 
   return (

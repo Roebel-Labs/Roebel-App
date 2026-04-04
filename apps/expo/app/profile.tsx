@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
-import { useExtendedMode } from '@/context/AppModeContext';
+import { useAppMode } from '@/context/AppModeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -46,13 +46,13 @@ export default function ProfileScreen() {
   const { disconnect } = useDisconnect();
   const { bookmarkedIds } = useBookmarks();
   const { isGovernanceTestEnabled, toggleGovernanceTesting } = useGovernanceTest();
-  const { isExtendedMode, toggleExtendedMode } = useExtendedMode();
+  const { activeMode, isExtendedMode, toggleExtendedMode } = useAppMode();
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
   const { user, role, roleLabel, accountMode, setAccountMode, userBusiness, isCitizen, isBusinessOwner, refreshUser, refreshBusiness } = useUser();
   const { colors } = useTheme();
 
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('profile');
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,14 +100,12 @@ export default function ProfileScreen() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') {
       router.replace('/');
     } else if (tab === 'explore') {
       router.push('/explore');
-    } else if (tab === 'map') {
-      router.push('/location');
     }
   };
 
