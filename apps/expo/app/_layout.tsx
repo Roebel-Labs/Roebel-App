@@ -6,7 +6,6 @@ import { BookmarksProvider } from '@/context/BookmarksContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { AppModeProvider } from '@/context/AppModeContext';
-import { RoebelCardProvider } from '@/context/RoebelCardContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider, useUser } from '@/context/UserContext';
@@ -188,9 +187,7 @@ function AppModeWrapper({ children }: { children: React.ReactNode }) {
   const { role, isCitizen, isBusinessOwner } = useUser();
   return (
     <AppModeProvider role={role} isCitizen={isCitizen} isBusinessOwner={isBusinessOwner}>
-      <RoebelCardProvider>
-        {children}
-      </RoebelCardProvider>
+      {children}
     </AppModeProvider>
   );
 }

@@ -116,10 +116,18 @@ export function RoebelCardProvider({ children }: { children: React.ReactNode }) 
   );
 }
 
+const defaultValue: RoebelCardContextValue = {
+  card: null,
+  pointsBalance: 0,
+  tier: 'besucher',
+  history: [],
+  stampCards: [],
+  isLoading: false,
+  earnPoints: async () => false,
+  refresh: async () => {},
+};
+
 export function useRoebelCard(): RoebelCardContextValue {
   const context = useContext(RoebelCardContext);
-  if (!context) {
-    throw new Error('useRoebelCard must be used within RoebelCardProvider');
-  }
-  return context;
+  return context ?? defaultValue;
 }
