@@ -2,7 +2,11 @@ import { Platform } from "react-native";
 import "react-native-get-random-values";
 
 // Suppress thirdweb HMR error in development (Metro/thirdweb incompatibility)
+// Thirdweb's native-connector.js dynamically loads modules during auth,
+// which triggers Metro's HMR assertion before the client is initialized.
+// This is a dev-only issue — production builds are unaffected.
 if (__DEV__) {
+  // 1. Suppress via global error handler (catches thrown errors)
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
     if (
@@ -10,10 +14,24 @@ if (__DEV__) {
       typeof error?.message === "string" &&
       error.message.includes("Expected HMRClient.setup()")
     ) {
-      return;
+      return; // Silently ignore
     }
     originalHandler(error, isFatal);
   });
+
+  // 2. Suppress via console.error (catches React Native LogBox alerts)
+  const originalConsoleError = console.error;
+  console.error = (...args) => {
+    const msg = typeof args[0] === "string" ? args[0] : "";
+    if (msg.includes("Expected HMRClient.setup()")) return;
+    originalConsoleError(...args);
+  };
+
+  // 3. Suppress via LogBox if available
+  try {
+    const { LogBox } = require("react-native");
+    LogBox.ignoreLogs(["Expected HMRClient.setup()"]);
+  } catch {}
 }
 
 // Add polyfills for Node.js modules
