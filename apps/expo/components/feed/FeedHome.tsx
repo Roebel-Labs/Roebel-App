@@ -21,8 +21,12 @@ import { getUserLikedPostIds, deletePost } from '@/lib/supabase-posts';
 import type { FeedItem, FeedType, PostRecord } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '@/lib/types';
 import type { BusinessDealWithBusiness } from '@/lib/types/feed';
+import BottomNavigation from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
 import ContextBar from './ContextBar';
+import GovernanceNudge from './GovernanceNudge';
+import MeckyTip from './MeckyTip';
+import type { GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
 import FeedPostCard from './FeedPostCard';
 import FeedAlertCard from './FeedAlertCard';
 import FeedMeckyCard from './FeedMeckyCard';
@@ -33,9 +37,6 @@ import FeedNewsSection from './FeedNewsSection';
 import FeedCinemaSection from './FeedCinemaSection';
 import FeedRestaurantSection from './FeedRestaurantSection';
 import FeedSpecialMenuSection from './FeedSpecialMenuSection';
-import GovernanceNudge from './GovernanceNudge';
-import MeckyTip from './MeckyTip';
-import type { GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
 import FeedPostSkeleton from './FeedPostSkeleton';
 import FeedEmptyState from './FeedEmptyState';
 import PostComposer from './PostComposer';
@@ -55,6 +56,7 @@ export default function FeedHome() {
   const { unreadCount } = useNotificationsContext();
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
+  const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
   const [reportDrawerVisible, setReportDrawerVisible] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [optionsDrawerVisible, setOptionsDrawerVisible] = useState(false);
@@ -113,6 +115,17 @@ export default function FeedHome() {
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 50,
   });
+
+  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+    setNavTab(tab);
+    if (tab === 'explore') {
+      router.push('/explore');
+    } else if (tab === 'map') {
+      router.push('/location');
+    } else if (tab === 'profile') {
+      router.push('/profile');
+    }
+  };
 
   const handleCompose = () => {
     if (!walletAddress) return;
@@ -232,15 +245,7 @@ export default function FeedHome() {
 
         case 'governance_nudge': {
           const nudge = item.data as GovernanceNudgeData;
-          return (
-            <GovernanceNudge
-              proposalId={nudge.proposalId}
-              title={nudge.title}
-              forPercentage={nudge.forPercentage}
-              againstPercentage={nudge.againstPercentage}
-              daysRemaining={nudge.daysRemaining}
-            />
-          );
+          return <GovernanceNudge proposalId={nudge.proposalId} title={nudge.title} forPercentage={nudge.forPercentage} againstPercentage={nudge.againstPercentage} daysRemaining={nudge.daysRemaining} />;
         }
 
         case 'mecky_tip': {
@@ -299,6 +304,7 @@ export default function FeedHome() {
             <FeedPostSkeleton key={i} />
           ))}
         </View>
+        <BottomNavigation activeTab={navTab} onTabPress={handleTabPress} />
       </SafeAreaView>
     );
   }
@@ -390,6 +396,8 @@ export default function FeedHome() {
         />
       )}
 
+      {/* Bottom navigation */}
+      <BottomNavigation activeTab={navTab} onTabPress={handleTabPress} />
     </SafeAreaView>
   );
 }

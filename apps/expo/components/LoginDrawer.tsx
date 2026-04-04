@@ -7,26 +7,23 @@ import BottomDrawer from './BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
 import * as Linking from 'expo-linking';
 
-// Lazy-init to avoid module-scope evaluation that triggers HMR errors
-let _wallets: ReturnType<typeof inAppWallet>[] | null = null;
-function getWallets() {
-  if (!_wallets) {
-    const redirectUrl = Linking.createURL('/');
-    _wallets = [
-      inAppWallet({
-        auth: {
-          options: ['email', 'google', 'facebook', 'apple'],
-          redirectUrl,
-        },
-        smartAccount: {
-          chain,
-          sponsorGas: true,
-        },
-      }),
-    ];
-  }
-  return _wallets;
-}
+// Get the app's redirect URL for OAuth
+const redirectUrl = Linking.createURL('/');
+
+// Configure authentication with email and social options
+// Smart Account enables gasless transactions for ALL users automatically
+const wallets = [
+  inAppWallet({
+    auth: {
+      options: ['email', 'google', 'facebook', 'apple'],
+      redirectUrl, // Explicitly set redirect URL for OAuth flows
+    },
+    smartAccount: {
+      chain, // Base mainnet
+      sponsorGas: true, // Enable gasless transactions globally - all txs are FREE for users
+    },
+  }),
+];
 
 type Props = {
   visible: boolean;
@@ -53,7 +50,7 @@ export default function LoginDrawer({ visible, onClose }: Props) {
             client={client}
             theme={isDark ? "dark" : "light"}
             chain={chain}
-            wallets={getWallets()}
+            wallets={wallets}
             showThirdwebBranding={false}
             locale={{
               signInWithEmail: 'Mit E-Mail anmelden',
