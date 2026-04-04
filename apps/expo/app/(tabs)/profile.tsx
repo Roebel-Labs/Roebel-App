@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Switch, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -13,8 +13,10 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import BookmarkedEvents from '@/components/BookmarkedEvents';
-import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
+
+// Lazy-load LoginDrawer to avoid thirdweb module-scope evaluation triggering HMR errors
+const LoginDrawer = lazy(() => import('@/components/LoginDrawer'));
 import GovernanceTestBanner from '@/components/GovernanceTestBanner';
 import VerificationBanner from '@/components/VerificationBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
@@ -441,10 +443,14 @@ export default function ProfileTab() {
         )}
       </ScrollView>
 
-      <LoginDrawer
-        visible={showLoginDrawer}
-        onClose={() => setShowLoginDrawer(false)}
-      />
+      {showLoginDrawer && (
+        <Suspense fallback={null}>
+          <LoginDrawer
+            visible={showLoginDrawer}
+            onClose={() => setShowLoginDrawer(false)}
+          />
+        </Suspense>
+      )}
 
       <LogoutDrawer
         visible={showLogoutDrawer}

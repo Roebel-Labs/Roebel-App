@@ -89,8 +89,8 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   tabsContainer: {
     flexDirection: 'row',
