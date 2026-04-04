@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { ConnectEmbed } from 'thirdweb/react';
 import { client, chain } from '@/constants/thirdweb';
@@ -10,21 +10,6 @@ import * as Linking from 'expo-linking';
 // Get the app's redirect URL for OAuth
 const redirectUrl = Linking.createURL('/');
 
-// Configure authentication with email and social options
-// Smart Account enables gasless transactions for ALL users automatically
-const wallets = [
-  inAppWallet({
-    auth: {
-      options: ['email', 'google', 'facebook', 'apple'],
-      redirectUrl, // Explicitly set redirect URL for OAuth flows
-    },
-    smartAccount: {
-      chain, // Base mainnet
-      sponsorGas: true, // Enable gasless transactions globally - all txs are FREE for users
-    },
-  }),
-];
-
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -32,6 +17,23 @@ type Props = {
 
 export default function LoginDrawer({ visible, onClose }: Props) {
   const { colors, isDark } = useTheme();
+
+  // Deferred to first render to avoid module-scope thirdweb evaluation (HMR warning)
+  const wallets = useMemo(
+    () => [
+      inAppWallet({
+        auth: {
+          options: ['email', 'google', 'facebook', 'apple'],
+          redirectUrl,
+        },
+        smartAccount: {
+          chain,
+          sponsorGas: true,
+        },
+      }),
+    ],
+    [],
+  );
 
   return (
     <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.75}>
@@ -48,6 +50,7 @@ export default function LoginDrawer({ visible, onClose }: Props) {
         <View style={styles.connectContainer}>
           <ConnectEmbed
             client={client}
+            autoConnect={false}
             theme={isDark ? "dark" : "light"}
             chain={chain}
             wallets={wallets}
