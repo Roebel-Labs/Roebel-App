@@ -30,11 +30,13 @@ interface IdentityCardProps {
     cover_image_url?: string | null;
     neighborhood?: string | null;
     role?: string | null;
+    tier?: string | null;
+    is_verified_citizen?: boolean;
     created_at: string;
-    nft_balance?: number | string | null;
-    total_votes_cast?: number | null;
-    voting_streak?: number | null;
-    gamification_points?: number | null;
+    nft_balance?: number | string | bigint | null;
+    total_votes_cast?: number | bigint | null;
+    voting_streak?: number | bigint | null;
+    gamification_points?: number | bigint | null;
   };
   activeMode: AppMode;
   activeAccount?: Account | null;
@@ -129,7 +131,7 @@ export function IdentityCard({
                 )}
               </div>
             </div>
-            <RoleBadge role={user.role || "tourist"} />
+            <RoleBadge role={(user.tier || user.role || "tourist") as import("@/lib/user-types").UserRoleOrTier} />
           </div>
 
           {/* Bottom row */}
