@@ -7,6 +7,20 @@ import type {
   PublicProfile,
 } from "./user-types";
 import { DEFAULT_PRIVACY_SETTINGS } from "./user-types";
+import { createPersonalAccount } from "@/lib/supabase-accounts";
+
+/**
+ * Map a raw DB row (which has `tier` instead of `role`) to a User object
+ * that exposes both `tier` and the deprecated `role` for backward compat.
+ */
+function mapDbRowToUser(row: Record<string, unknown>): User {
+  const tier = (row.tier as string) || "guest";
+  return {
+    ...row,
+    tier,
+    role: tier as User["role"], // backward compat alias
+  } as User;
+}
 
 /**
  * Create or update user on login
@@ -45,7 +59,7 @@ export async function createOrUpdateUser(
         return { success: false, error: error.message };
       }
 
-      return { success: true, data: data as User };
+      return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
     } else {
       // Create new user
       console.log("➕ [Supabase Users] Creating new user");
@@ -65,8 +79,19 @@ export async function createOrUpdateUser(
         return { success: false, error: error.message };
       }
 
+      // Create a personal account for the new user
+      const walletLower = input.wallet_address.toLowerCase();
+      const accountName = walletLower; // Will be updated when user sets a username
+      try {
+        await createPersonalAccount(walletLower, accountName, null);
+        console.log("✅ [Supabase Users] Personal account created for new user");
+      } catch (accountError) {
+        console.error("⚠️ [Supabase Users] Failed to create personal account:", accountError);
+        // Non-fatal: user was still created
+      }
+
       console.log("✅ [Supabase Users] User created successfully");
-      return { success: true, data: data as User };
+      return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
     }
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
@@ -102,7 +127,7 @@ export async function getUserByWalletAddress(
     }
 
     console.log("✅ [Supabase Users] User fetched successfully");
-    return { success: true, data: data as User };
+    return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {
@@ -137,7 +162,7 @@ export async function getUserByPhoneNumber(
     }
 
     console.log("✅ [Supabase Users] User fetched successfully");
-    return { success: true, data: data as User };
+    return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {
@@ -164,7 +189,8 @@ export async function updateUserProfile(
     if (input.cover_image_url !== undefined)
       updateData.cover_image_url = input.cover_image_url;
     if (input.bio !== undefined) updateData.bio = input.bio;
-    if (input.role !== undefined) updateData.role = input.role;
+    // Map deprecated `role` field to the DB `tier` column
+    if (input.role !== undefined) updateData.tier = input.role;
     if (input.neighborhood !== undefined) updateData.neighborhood = input.neighborhood;
     if (input.interests !== undefined) updateData.interests = input.interests;
     if (input.vereine !== undefined) updateData.vereine = input.vereine;
@@ -195,7 +221,7 @@ export async function updateUserProfile(
     }
 
     console.log("✅ [Supabase Users] Profile updated successfully");
-    return { success: true, data: data as User };
+    return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {
@@ -230,7 +256,7 @@ export async function updateUserNFTStatus(
       return { success: false, error: error.message };
     }
 
-    return { success: true, data: data as User };
+    return { success: true, data: mapDbRowToUser(data as Record<string, unknown>) };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {
@@ -329,7 +355,8 @@ export async function getAllUsers(
     }
 
     console.log(`✅ [Supabase Users] Fetched ${data?.length || 0} users`);
-    return { success: true, data: (data as User[]) || [], total: count || 0 };
+    const users = (data || []).map((row) => mapDbRowToUser(row as Record<string, unknown>));
+    return { success: true, data: users, total: count || 0 };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {

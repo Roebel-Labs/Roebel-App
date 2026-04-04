@@ -13,7 +13,8 @@ import {
   getRoleInfo,
 } from "@/lib/user-types";
 import { checkUsernameAvailable } from "@/lib/supabase-users";
-import type { User, UserRole, UpdateUserProfileInput } from "@/lib/user-types";
+import type { User, UpdateUserProfileInput } from "@/lib/user-types";
+import type { UserTier } from "@/types/account";
 
 interface ProfileFormProps {
   user: User;
@@ -21,7 +22,8 @@ interface ProfileFormProps {
   isSaving: boolean;
 }
 
-const ROLES: UserRole[] = ["resident", "business", "tourist", "official"];
+/** New tier values shown in the form */
+const TIERS: UserTier[] = ["citizen", "tourist", "guest"];
 
 export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
   const [username, setUsername] = useState(user.username || "");
@@ -32,7 +34,7 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
   const [coverImageUrl, setCoverImageUrl] = useState(
     user.cover_image_url || ""
   );
-  const [role, setRole] = useState<UserRole>(user.role || "resident");
+  const [tier, setTier] = useState<UserTier>(user.tier || "guest");
   const [neighborhood, setNeighborhood] = useState(user.neighborhood || "");
   const [interests, setInterests] = useState<string[]>(user.interests || []);
   const [vereine, setVereine] = useState<string[]>(user.vereine || []);
@@ -44,7 +46,7 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  const isTourist = role === "tourist";
+  const isTourist = tier === "tourist" || tier === "guest";
 
   // Check if form has changes
   useEffect(() => {
@@ -53,13 +55,13 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
       bio !== (user.bio || "") ||
       profilePictureUrl !== (user.profile_picture_url || "") ||
       coverImageUrl !== (user.cover_image_url || "") ||
-      role !== (user.role || "resident") ||
+      tier !== (user.tier || "guest") ||
       neighborhood !== (user.neighborhood || "") ||
       JSON.stringify(interests) !== JSON.stringify(user.interests || []) ||
       JSON.stringify(vereine) !== JSON.stringify(user.vereine || []);
 
     setHasChanges(changed);
-  }, [username, bio, profilePictureUrl, coverImageUrl, role, neighborhood, interests, vereine, user]);
+  }, [username, bio, profilePictureUrl, coverImageUrl, tier, neighborhood, interests, vereine, user]);
 
   // Validate username as user types
   useEffect(() => {
@@ -123,8 +125,9 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
     if (coverImageUrl !== (user.cover_image_url || "")) {
       updates.cover_image_url = coverImageUrl || null;
     }
-    if (role !== (user.role || "resident")) {
-      updates.role = role;
+    if (tier !== (user.tier || "guest")) {
+      // Send via the `role` field — supabase-users.ts maps it to the DB `tier` column
+      updates.role = tier as any;
     }
     if (neighborhood !== (user.neighborhood || "")) {
       updates.neighborhood = neighborhood || null;
@@ -144,7 +147,7 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
     setBio(user.bio || "");
     setProfilePictureUrl(user.profile_picture_url || "");
     setCoverImageUrl(user.cover_image_url || "");
-    setRole(user.role || "resident");
+    setTier(user.tier || "guest");
     setNeighborhood(user.neighborhood || "");
     setInterests(user.interests || []);
     setVereine(user.vereine || []);
@@ -302,21 +305,21 @@ export function ProfileForm({ user, onSave, isSaving }: ProfileFormProps) {
           </div>
         </div>
 
-        {/* Role */}
+        {/* Tier */}
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">
-            Rolle
+            Status
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {ROLES.map((r) => {
-              const info = getRoleInfo(r);
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {TIERS.map((t) => {
+              const info = getRoleInfo(t);
               return (
                 <button
-                  key={r}
+                  key={t}
                   type="button"
-                  onClick={() => setRole(r)}
+                  onClick={() => setTier(t)}
                   className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    role === r
+                    tier === t
                       ? `${info.bgColor} ${info.textColor} ${info.borderColor}`
                       : "bg-card border-border text-muted-foreground hover:bg-accent"
                   }`}

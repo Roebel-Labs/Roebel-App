@@ -13,6 +13,7 @@ import type {
   CreateCommentInput,
 } from "@/types/post"
 import { createAppNotification } from "@/app/actions/app-notifications"
+import { isAccountOwner } from "@/lib/supabase-accounts"
 
 // ============================================
 // Helper: build poll results for a set of posts
@@ -178,11 +179,32 @@ export async function getPostsForFeed(
     // Batch fetch polls
     const pollMap = await buildPollMap(supabase, postIds, viewerWallet)
 
+    // Batch fetch account info for posts with account_id
+    const accountIds = [...new Set(
+      posts
+        .map((p: Record<string, unknown>) => p.account_id as string | null)
+        .filter(Boolean)
+    )] as string[]
+    const accountMap = new Map<string, Record<string, unknown>>()
+
+    if (accountIds.length > 0) {
+      const { data: accounts } = await supabase
+        .from("accounts")
+        .select("id, name, avatar_url, account_type")
+        .in("id", accountIds)
+
+      for (const acc of accounts || []) {
+        accountMap.set(acc.id as string, acc as Record<string, unknown>)
+      }
+    }
+
     const result: PostWithEngagement[] = posts.map((row: Record<string, unknown>) => {
       const author = authorMap.get(row.wallet_address as string)
+      const account = row.account_id ? accountMap.get(row.account_id as string) : null
       return {
         id: row.id as string,
         wallet_address: row.wallet_address as string,
+        account_id: (row.account_id as string) || null,
         content: row.content as string,
         media_urls: (row.media_urls as string[]) || [],
         video_url: (row.video_url as string) || null,
@@ -195,6 +217,9 @@ export async function getPostsForFeed(
         author_username: (author?.username as string) || null,
         author_profile_picture_url: (author?.profile_picture_url as string) || null,
         author_neighborhood: (author?.neighborhood as string) || null,
+        author_account_name: (account?.name as string) || null,
+        author_account_avatar_url: (account?.avatar_url as string) || null,
+        author_account_type: (account?.account_type as string) || null,
         links: linksMap.get(row.id as string) || [],
         is_liked_by_viewer: likedSet.has(row.id as string),
         is_reported_by_viewer: reportedSet.has(row.id as string),
@@ -251,6 +276,17 @@ export async function getPostById(
     // Fetch poll
     const pollMap = await buildPollMap(supabase, [postId], viewerWallet)
 
+    // Fetch account info if post has account_id
+    let accountData: Record<string, unknown> | null = null
+    if (post.account_id) {
+      const { data: acc } = await supabase
+        .from("accounts")
+        .select("id, name, avatar_url, account_type")
+        .eq("id", post.account_id as string)
+        .single()
+      accountData = acc as Record<string, unknown> | null
+    }
+
     // Check viewer like
     let isLiked = false
     let isReported = false
@@ -278,6 +314,7 @@ export async function getPostById(
       data: {
         id: post.id as string,
         wallet_address: post.wallet_address as string,
+        account_id: (post.account_id as string) || null,
         content: post.content as string,
         media_urls: (post.media_urls as string[]) || [],
         video_url: (post.video_url as string) || null,
@@ -290,6 +327,9 @@ export async function getPostById(
         author_username: (author?.username as string) || null,
         author_profile_picture_url: (author?.profile_picture_url as string) || null,
         author_neighborhood: (author?.neighborhood as string) || null,
+        author_account_name: (accountData?.name as string) || null,
+        author_account_avatar_url: (accountData?.avatar_url as string) || null,
+        author_account_type: (accountData?.account_type as string) || null,
         links: postLinks,
         is_liked_by_viewer: isLiked,
         is_reported_by_viewer: isReported,
@@ -316,6 +356,7 @@ export async function createPost(
       .from("posts")
       .insert({
         wallet_address: input.wallet_address.toLowerCase(),
+        account_id: input.account_id || null,
         content: input.content,
         category: input.category || "generell",
         media_urls: input.media_urls || [],
@@ -388,6 +429,7 @@ export async function createPost(
       data: {
         id: post.id,
         wallet_address: post.wallet_address,
+        account_id: post.account_id || null,
         content: post.content,
         media_urls: post.media_urls || [],
         video_url: post.video_url,
@@ -411,12 +453,33 @@ export async function deletePost(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = await createClient()
+    const wallet = walletAddress.toLowerCase()
+
+    // Fetch the post to check ownership
+    const { data: post } = await supabase
+      .from("posts")
+      .select("id, wallet_address, account_id")
+      .eq("id", postId)
+      .single()
+
+    if (!post) {
+      return { success: false, error: "Beitrag nicht gefunden" }
+    }
+
+    // Allow deletion if caller owns the wallet OR is an owner of the post's account
+    let canDelete = post.wallet_address === wallet
+    if (!canDelete && post.account_id) {
+      canDelete = await isAccountOwner(post.account_id, wallet)
+    }
+
+    if (!canDelete) {
+      return { success: false, error: "Keine Berechtigung zum Löschen" }
+    }
 
     const { error } = await supabase
       .from("posts")
       .update({ status: "deleted", updated_at: new Date().toISOString() })
       .eq("id", postId)
-      .eq("wallet_address", walletAddress.toLowerCase())
 
     if (error) throw error
 
@@ -532,6 +595,7 @@ export async function getComments(
         id: row.id as string,
         post_id: row.post_id as string,
         wallet_address: row.wallet_address as string,
+        account_id: (row.account_id as string) || null,
         content: row.content as string,
         media_urls: (row.media_urls as string[]) || [],
         video_url: (row.video_url as string) || null,
@@ -560,6 +624,7 @@ export async function createComment(
       .insert({
         post_id: input.post_id,
         wallet_address: input.wallet_address.toLowerCase(),
+        account_id: input.account_id || null,
         content: input.content,
         media_urls: input.media_urls || [],
         video_url: input.video_url || null,
@@ -585,6 +650,7 @@ export async function createComment(
         id: comment.id,
         post_id: comment.post_id,
         wallet_address: comment.wallet_address,
+        account_id: comment.account_id || null,
         content: comment.content,
         media_urls: comment.media_urls || [],
         video_url: comment.video_url || null,

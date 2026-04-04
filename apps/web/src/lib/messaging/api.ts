@@ -12,12 +12,20 @@ function canonicalize(a: string, b: string): [string, string] {
 
 /**
  * Find or create a 1:1 conversation between two wallet addresses.
+ * Optionally attach account IDs to the conversation.
  */
 export async function getOrCreateConversation(
   addressA: string,
-  addressB: string
+  addressB: string,
+  accountIdA?: string | null,
+  accountIdB?: string | null
 ): Promise<Conversation> {
   const [participantOne, participantTwo] = canonicalize(addressA, addressB);
+
+  // Determine which account ID corresponds to which canonical participant
+  const laA = addressA.toLowerCase();
+  const participantOneAccount = laA === participantOne ? (accountIdA || null) : (accountIdB || null);
+  const participantTwoAccount = laA === participantOne ? (accountIdB || null) : (accountIdA || null);
 
   // Try to find existing
   const { data: existing } = await supabase
@@ -30,9 +38,16 @@ export async function getOrCreateConversation(
   if (existing) return existing as Conversation;
 
   // Create new conversation
+  const insertData: Record<string, unknown> = {
+    participant_one: participantOne,
+    participant_two: participantTwo,
+  };
+  if (participantOneAccount) insertData.participant_one_account = participantOneAccount;
+  if (participantTwoAccount) insertData.participant_two_account = participantTwoAccount;
+
   const { data: created, error } = await supabase
     .from("conversations")
-    .insert({ participant_one: participantOne, participant_two: participantTwo })
+    .insert(insertData)
     .select()
     .single();
 
@@ -153,15 +168,19 @@ export async function getMessages(
 export async function sendMessage(
   conversationId: string,
   senderAddress: string,
-  content: string
+  content: string,
+  senderAccountId?: string | null
 ): Promise<Message> {
+  const insertData: Record<string, unknown> = {
+    conversation_id: conversationId,
+    sender_address: senderAddress.toLowerCase(),
+    content,
+  };
+  if (senderAccountId) insertData.sender_account_id = senderAccountId;
+
   const { data, error } = await supabase
     .from("direct_messages")
-    .insert({
-      conversation_id: conversationId,
-      sender_address: senderAddress.toLowerCase(),
-      content,
-    })
+    .insert(insertData)
     .select()
     .single();
 

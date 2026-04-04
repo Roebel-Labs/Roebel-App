@@ -1,10 +1,11 @@
 "use client";
 
-import type { UserRole } from "@/lib/user-types";
+import type { UserRoleOrTier } from "@/lib/user-types";
 import { getRoleInfo } from "@/lib/user-types";
 
 interface RoleBadgeProps {
-  role: UserRole;
+  /** Accepts new tier values ('citizen', 'tourist', 'guest') and legacy role values */
+  role: UserRoleOrTier;
   size?: "sm" | "md";
 }
 
