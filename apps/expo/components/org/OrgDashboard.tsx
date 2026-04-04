@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
 import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
 
@@ -56,7 +56,8 @@ function QuickAction({ emoji, label, onPress, colors }: QuickActionProps) {
 export default function OrgDashboard() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { userBusiness } = useUser();
+  const { activeAccount } = useAccount();
+  const userBusiness = activeAccount;
   const { pointsBalance } = useRoebelCard();
 
   const [dealCount, setDealCount] = useState(0);

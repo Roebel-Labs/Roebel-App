@@ -18,7 +18,7 @@ import type {
   MarketplaceListingRecord,
 } from '@/lib/types';
 
-import { useAppMode } from '@/context/AppModeContext';
+import { useUser } from '@/context/UserContext';
 import MiniGamesSection from '@/components/games/MiniGamesSection';
 import FortuneCardsBanner from '@/components/games/FortuneCardsBanner';
 import HoroscopeBanner from '@/components/games/HoroscopeBanner';
@@ -42,8 +42,8 @@ import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeMode } = useAppMode();
-  const isNotTourist = activeMode !== 'tourist';
+  const { tier } = useUser();
+  const isNotTourist = tier !== 'tourist' && tier !== 'guest';
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [events, setEvents] = useState<EventRecord[]>([]);

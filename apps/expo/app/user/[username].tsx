@@ -5,7 +5,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import RoleBadge from '@/components/RoleBadge';
+import TierBadge from '@/components/RoleBadge';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
@@ -118,7 +118,7 @@ export default function PublicProfileScreen() {
             )}
           </View>
 
-          <RoleBadge role={user.role} size="medium" />
+          <TierBadge tier={user.tier} size="medium" />
         </View>
 
         {/* Bio */}

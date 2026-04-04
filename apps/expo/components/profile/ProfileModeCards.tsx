@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useAppMode } from '@/context/AppModeContext';
-import type { AppMode } from '@/lib/types';
+import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 
 interface ModeCardProps {
   emoji: string;
@@ -58,13 +58,15 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
 
 export default function ProfileModeCards() {
   const router = useRouter();
-  const { activeMode } = useAppMode();
+  const { tier, isCitizen } = useUser();
+  const { activeAccount } = useAccount();
+  const isOrg = activeAccount?.account_type !== 'personal' && activeAccount !== null;
 
   return (
     <View style={styles.container}>
-      {activeMode === 'tourist' && <TouristCards router={router} />}
-      {activeMode === 'citizen' && <CitizenCards router={router} />}
-      {activeMode === 'org' && <OrgCards router={router} />}
+      {(tier === 'tourist' || tier === 'guest') && !isOrg && <TouristCards router={router} />}
+      {isCitizen && !isOrg && <CitizenCards router={router} />}
+      {isOrg && <OrgCards router={router} />}
     </View>
   );
 }

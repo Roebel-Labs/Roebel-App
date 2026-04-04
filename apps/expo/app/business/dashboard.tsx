@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, FlatList
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
 import type { BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
@@ -14,7 +14,8 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function BusinessDashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { userBusiness } = useUser();
+  const { activeAccount } = useAccount();
+  const userBusiness = activeAccount;
 
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [analytics, setAnalytics] = useState<DealAnalytics | null>(null);

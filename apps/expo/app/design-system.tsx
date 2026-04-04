@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useExtendedMode } from '@/context/AppModeContext';
+import { useUser } from '@/context/UserContext';
 import {
   lightColors,
   darkColors,
@@ -92,7 +92,8 @@ const dsSectionStyles = StyleSheet.create({
 export default function DesignSystemScreen() {
   const router = useRouter();
   const { colors, isDark, preference, setPreference, effectiveTheme } = useTheme();
-  const { isExtendedMode } = useExtendedMode();
+  const { tier } = useUser();
+  const isExtendedMode = tier !== 'guest';
 
   useEffect(() => {
     if (!isExtendedMode) {

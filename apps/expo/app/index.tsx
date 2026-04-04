@@ -22,7 +22,7 @@ import { EventCategory } from '@/lib/categories';
 import NotificationPromptDrawer from '@/components/NotificationPromptDrawer';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useAppMode } from '@/context/AppModeContext';
+import { useUser } from '@/context/UserContext';
 import FeedHome from '@/components/feed/FeedHome';
 import { useLivestream } from '@/hooks/useLivestream';
 import { useAnnouncements } from '@/hooks/useAnnouncements';

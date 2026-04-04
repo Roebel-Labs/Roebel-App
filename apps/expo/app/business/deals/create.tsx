@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Activi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { createDeal } from '@/lib/supabase-deals';
 import type { DealType, DealStatus } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -19,7 +19,8 @@ const DEAL_TYPES: { value: DealType; label: string }[] = [
 export default function CreateDealScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { userBusiness } = useUser();
+  const { activeAccount } = useAccount();
+  const userBusiness = activeAccount;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

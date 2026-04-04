@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import RoleBadge from './RoleBadge';
+import TierBadge from './RoleBadge';
 import UserIcon from '@/assets/icons/user.svg';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
 import type { UserRecord } from '@/lib/types';
@@ -56,7 +56,7 @@ export default function UserSearchCard({ user, onPress }: Props) {
           {user.is_verified_citizen && (
             <Text style={[styles.verifiedCheck, { color: colors.success }]}>✓</Text>
           )}
-          <RoleBadge role={user.role} />
+          <TierBadge tier={user.tier} />
         </View>
         {user.bio && (
           <Text style={[styles.bio, { color: colors.textSecondary }]} numberOfLines={1}>

@@ -8,8 +8,9 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
-import { useAppMode } from '@/context/AppModeContext';
-import type { AppMode, UserRole } from '@/lib/types';
+import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
+import type { UserTier } from '@/lib/types';
 
 interface FlippableIdentityCardProps {
   user: {
@@ -18,7 +19,7 @@ interface FlippableIdentityCardProps {
     bio: string | null;
     wallet_address: string;
   } | null;
-  role: UserRole;
+  role: UserTier;
   roleLabel: string;
   isCitizen: boolean;
   pointsBalance?: number;
@@ -29,19 +30,21 @@ interface FlippableIdentityCardProps {
   businessName?: string;
 }
 
-const ROLE_EMOJI: Record<AppMode, string> = {
+type CardMode = 'tourist' | 'citizen' | 'org';
+
+const ROLE_EMOJI: Record<CardMode, string> = {
   tourist: '🗺️',
   citizen: '🏛️',
   org: '🏢',
 };
 
-const MODE_LABELS: Record<AppMode, string> = {
+const MODE_LABELS: Record<CardMode, string> = {
   tourist: 'Besucher',
   citizen: 'Bürger',
   org: 'Partner',
 };
 
-const CARD_BACK_LABELS: Record<AppMode, string> = {
+const CARD_BACK_LABELS: Record<CardMode, string> = {
   tourist: 'Tourist Card',
   citizen: 'Bürgerausweis',
   org: 'Partner Card',
@@ -60,7 +63,11 @@ export default function FlippableIdentityCard({
   businessName,
 }: FlippableIdentityCardProps) {
   const { colors } = useTheme();
-  const { activeMode } = useAppMode();
+  const { tier } = useUser();
+  const { activeAccount } = useAccount();
+  const activeMode: CardMode = activeAccount?.account_type !== 'personal' && activeAccount !== null
+    ? 'org'
+    : tier === 'citizen' ? 'citizen' : 'tourist';
   const rotation = useSharedValue(0);
   const [isFlipped, setIsFlipped] = useState(false);
 

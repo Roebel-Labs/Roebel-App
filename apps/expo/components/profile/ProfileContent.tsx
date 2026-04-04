@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
-import { useExtendedMode } from '@/context/AppModeContext';
+import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -19,7 +19,7 @@ const LoginDrawer = lazy(() => import('@/components/LoginDrawer'));
 import GovernanceTestBanner from '@/components/GovernanceTestBanner';
 import VerificationBanner from '@/components/VerificationBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
-import RoleBadge from '@/components/RoleBadge';
+import TierBadge from '@/components/RoleBadge';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
@@ -43,9 +43,22 @@ export default function ProfileContent() {
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
   const { isGovernanceTestEnabled, toggleGovernanceTesting } = useGovernanceTest();
-  const { isExtendedMode, toggleExtendedMode } = useExtendedMode();
   const { hasAnyNFT, refresh } = useVerificationContext();
-  const { user, role, roleLabel, accountMode, setAccountMode, userBusiness, isCitizen, isBusinessOwner, refreshUser, refreshBusiness } = useUser();
+  const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
+  const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
+  const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal');
+  const userBusiness = ownedAccounts.find(a => a.account_type !== 'personal') ?? null;
+  const isExtendedMode = tier !== 'guest';
+  const accountMode = activeAccount?.account_type !== 'personal' && activeAccount !== null ? 'business' : 'personal';
+  const setAccountMode = (mode: string) => {
+    if (mode === 'business' && userBusiness) {
+      switchAccount(userBusiness.id);
+    } else {
+      const personalAccount = ownedAccounts.find(a => a.account_type === 'personal');
+      if (personalAccount) switchAccount(personalAccount.id);
+    }
+  };
+  const toggleExtendedMode = () => {};
   const { colors } = useTheme();
 
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -97,7 +110,7 @@ export default function ProfileContent() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refresh(), refreshUser(), refreshBusiness()]);
+    await Promise.all([refresh(), refreshUser(), refreshAccounts()]);
     setRefreshing(false);
   };
 
@@ -120,8 +133,8 @@ export default function ProfileContent() {
       >
         <FlippableIdentityCard
           user={user}
-          role={role}
-          roleLabel={roleLabel}
+          role={tier}
+          roleLabel={tierLabel}
           isCitizen={isCitizen}
           pointsBalance={0}
           verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
@@ -211,7 +224,7 @@ export default function ProfileContent() {
                   )}
                   <View style={styles.userTextContainer}>
                     <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{userBusiness.name}</Text>
-                    <RoleBadge role="business" />
+                    <TierBadge tier={tier} />
                   </View>
                   <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>
                     <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
@@ -242,7 +255,7 @@ export default function ProfileContent() {
                   )}
                   <View style={styles.userTextContainer}>
                     <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
-                    <RoleBadge role={role} />
+                    <TierBadge tier={tier} />
                     {user?.bio && <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>}
                   </View>
                   <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>

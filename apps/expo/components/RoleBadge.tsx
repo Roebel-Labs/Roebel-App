@@ -1,47 +1,40 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import type { UserRole } from '@/lib/types';
+import type { UserTier } from '@/lib/types';
 
 type Props = {
-  role: UserRole;
+  tier: UserTier;
   size?: 'small' | 'medium';
 };
 
-const ROLE_CONFIG: Record<UserRole, { label: string; bgLight: string; bgDark: string; textLight: string; textDark: string }> = {
-  tourist: {
+const TIER_CONFIG: Record<UserTier, { label: string; bgLight: string; bgDark: string; textLight: string; textDark: string }> = {
+  guest: {
     label: 'Gast',
     bgLight: '#E5E7EB',
     bgDark: '#374151',
     textLight: '#4B5563',
     textDark: '#9CA3AF',
   },
-  resident: {
+  tourist: {
+    label: 'Tourist',
+    bgLight: '#DBEAFE',
+    bgDark: '#1E3A5F',
+    textLight: '#1E40AF',
+    textDark: '#93C5FD',
+  },
+  citizen: {
     label: 'Bürger',
     bgLight: '#D1FAE5',
     bgDark: '#064E3B',
     textLight: '#065F46',
     textDark: '#6EE7B7',
   },
-  business: {
-    label: 'Gewerbetreibender',
-    bgLight: '#DBEAFE',
-    bgDark: '#1E3A5F',
-    textLight: '#1E40AF',
-    textDark: '#93C5FD',
-  },
-  official: {
-    label: 'Offiziell',
-    bgLight: '#FEF3C7',
-    bgDark: '#78350F',
-    textLight: '#92400E',
-    textDark: '#FCD34D',
-  },
 };
 
-export default function RoleBadge({ role, size = 'small' }: Props) {
+export default function TierBadge({ tier, size = 'small' }: Props) {
   const { isDark } = useTheme();
-  const config = ROLE_CONFIG[role];
+  const config = TIER_CONFIG[tier];
 
   return (
     <View
