@@ -1,6 +1,21 @@
 import { Platform } from "react-native";
 import "react-native-get-random-values";
 
+// Suppress thirdweb HMR error in development (Metro/thirdweb incompatibility)
+if (__DEV__) {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    if (
+      !isFatal &&
+      typeof error?.message === "string" &&
+      error.message.includes("Expected HMRClient.setup()")
+    ) {
+      return;
+    }
+    originalHandler(error, isFatal);
+  });
+}
+
 // Add polyfills for Node.js modules
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = require('buffer').Buffer;

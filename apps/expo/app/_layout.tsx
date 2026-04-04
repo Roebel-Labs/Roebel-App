@@ -13,16 +13,13 @@ import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
-import { StatusBar, View, StyleSheet, Text, Platform, LogBox } from 'react-native';
+import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ThirdwebProvider } from 'thirdweb/react';
 import { client } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
-
-// Suppress thirdweb HMR warning in development
-LogBox.ignoreLogs(['Expected HMRClient.setup() call']);
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
