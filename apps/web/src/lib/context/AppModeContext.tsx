@@ -1,19 +1,25 @@
 "use client";
 
+/**
+ * AppModeContext — backward-compatible bridge
+ *
+ * Derives the old AppMode/UserRole values from the new AccountContext + user tier.
+ * All 9 consumers of useAppMode() continue working without changes.
+ */
+
 import {
   createContext,
   useContext,
-  useState,
-  useEffect,
   useMemo,
   type ReactNode,
 } from "react";
-import { useActiveAccount } from "thirdweb/react";
-import { useVerificationStatus } from "@/hooks/useVerificationStatus";
-import { getBusinessesByOwner } from "@/app/actions/businesses";
+import { useAccount } from "./AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrgAccount } from "@/types/account";
 
-// --- Types ---
+// --- Types (kept for backward compat) ---
 
+/** @deprecated Use UserTier from types/account instead */
 export type UserRole = "tourist" | "resident" | "business" | "official";
 export type AppMode = "tourist" | "citizen" | "org";
 
@@ -34,118 +40,53 @@ interface AppModeContextValue {
   isLoading: boolean;
 }
 
-// --- Helpers ---
-
-const STORAGE_KEY = "roebel-app-mode";
-
-function getStoredMode(): AppMode | null {
-  if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "tourist" || stored === "citizen" || stored === "org") {
-    return stored;
-  }
-  return null;
-}
-
-function storeMode(mode: AppMode) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, mode);
-}
-
-function deriveUserRole(
-  isCitizen: boolean,
-  isAttester: boolean,
-  isBusinessOwner: boolean
-): UserRole {
-  if (isBusinessOwner) return "business";
-  if (isAttester) return "official";
-  if (isCitizen) return "resident";
-  return "tourist";
-}
-
-function getAvailableModes(role: UserRole): AppMode[] {
-  switch (role) {
-    case "tourist":
-      return ["tourist"];
-    case "resident":
-      return ["tourist", "citizen"];
-    case "business":
-      return ["tourist", "citizen", "org"];
-    case "official":
-      return ["tourist", "citizen", "org"];
-  }
-}
-
-function getDefaultMode(role: UserRole): AppMode {
-  switch (role) {
-    case "tourist":
-      return "tourist";
-    case "resident":
-      return "citizen";
-    case "business":
-      return "org";
-    case "official":
-      return "citizen";
-  }
-}
-
 // --- Context ---
 
 const AppModeContext = createContext<AppModeContextValue | null>(null);
 
 export function AppModeProvider({ children }: { children: ReactNode }) {
-  const account = useActiveAccount();
-  const { isCitizen, isAttester, isLoading: isNftLoading } = useVerificationStatus();
-  const [isBusinessOwner, setIsBusinessOwner] = useState(false);
-  const [isBusinessLoading, setIsBusinessLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState<AppMode>("tourist");
-  const [initialized, setInitialized] = useState(false);
+  const { activeAccount, ownedAccounts, switchAccount, isLoading: accountLoading } = useAccount();
+  const { user, isLoading: userLoading } = useUserProfile();
 
-  // Fetch business ownership
-  useEffect(() => {
-    async function checkBusiness() {
-      if (!account?.address) {
-        setIsBusinessOwner(false);
-        return;
-      }
-      setIsBusinessLoading(true);
-      try {
-        const result = await getBusinessesByOwner(account.address);
-        setIsBusinessOwner(
-          result.success && !!result.data && result.data.length > 0
-        );
-      } catch {
-        setIsBusinessOwner(false);
-      } finally {
-        setIsBusinessLoading(false);
-      }
-    }
-    checkBusiness();
-  }, [account?.address]);
+  const isLoading = accountLoading || userLoading;
 
-  const isLoading = isNftLoading || isBusinessLoading;
-  const userRole = deriveUserRole(isCitizen, isAttester, isBusinessOwner);
-  const availableModes = useMemo(() => getAvailableModes(userRole), [userRole]);
+  // Derive tier from user (DB column renamed from role → tier in migration 005)
+  const tier = user?.tier || user?.role || "tourist";
+  const isCitizen = tier === "citizen" || user?.is_verified_citizen;
 
-  // Initialize mode from localStorage or derive default
-  useEffect(() => {
-    if (isLoading) return;
+  // Map tier → old UserRole for backward compat
+  const userRole: UserRole = isCitizen ? "resident" : "tourist";
 
-    const stored = getStoredMode();
-    if (stored && availableModes.includes(stored)) {
-      setActiveMode(stored);
-    } else {
-      const defaultMode = getDefaultMode(userRole);
-      setActiveMode(defaultMode);
-      storeMode(defaultMode);
-    }
-    setInitialized(true);
-  }, [isLoading, userRole, availableModes]);
+  // Derive activeMode from active account
+  const activeMode: AppMode = (() => {
+    if (!activeAccount) return isCitizen ? "citizen" : "tourist";
+    if (isOrgAccount(activeAccount)) return "org";
+    return isCitizen ? "citizen" : "tourist";
+  })();
 
+  // Derive available modes
+  const availableModes: AppMode[] = useMemo(() => {
+    const modes: AppMode[] = ["tourist"];
+    if (isCitizen) modes.push("citizen");
+    if (ownedAccounts.some(isOrgAccount)) modes.push("org");
+    return modes;
+  }, [isCitizen, ownedAccounts]);
+
+  // Map setMode to switchAccount
   const setMode = (mode: AppMode) => {
     if (!availableModes.includes(mode)) return;
-    setActiveMode(mode);
-    storeMode(mode);
+
+    if (mode === "org") {
+      // Switch to first org account
+      const orgAccount = ownedAccounts.find(isOrgAccount);
+      if (orgAccount) switchAccount(orgAccount.id);
+    } else {
+      // Switch to personal account
+      const personalAccount = ownedAccounts.find(
+        (a) => a.account_type === "personal"
+      );
+      if (personalAccount) switchAccount(personalAccount.id);
+    }
   };
 
   const value = useMemo<AppModeContextValue>(
@@ -156,9 +97,10 @@ export function AppModeProvider({ children }: { children: ReactNode }) {
       canSwitchModes: availableModes.length > 1,
       userRole,
       isExtendedMode: activeMode !== "tourist",
-      isLoading: isLoading || !initialized,
+      isLoading,
     }),
-    [activeMode, availableModes, userRole, isLoading, initialized]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeMode, availableModes, userRole, isLoading]
   );
 
   return (

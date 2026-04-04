@@ -3,9 +3,16 @@
  * Matches Supabase users table schema
  */
 
+import type { UserTier } from "@/types/account";
+export type { UserTier } from "@/types/account";
+
 // --- Role & Privacy Types ---
 
+/** @deprecated Use UserTier instead */
 export type UserRole = "resident" | "business" | "tourist" | "official";
+
+/** Combined type for backward compat: accepts both old roles and new tiers */
+export type UserRoleOrTier = UserRole | UserTier;
 
 export type VisibilityLevel = "public" | "citizens" | "private";
 
@@ -31,10 +38,14 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   gamification_points: "public",
 };
 
-export const ROLE_DEFAULT_PRIVACY: Record<UserRole, Partial<PrivacySettings>> = {
+export const ROLE_DEFAULT_PRIVACY: Record<string, Partial<PrivacySettings>> = {
+  // New tier values
+  citizen: {},
+  tourist: { neighborhood: "private", vereine: "private", voting_history: "private" },
+  guest: { neighborhood: "private", vereine: "private", voting_history: "private" },
+  // Legacy role values (backward compat)
   resident: {},
   business: { vereine: "public", interests: "public" },
-  tourist: { neighborhood: "private", vereine: "private", voting_history: "private" },
   official: { bio: "public", voting_history: "public" },
 };
 
@@ -43,7 +54,9 @@ export interface PublicProfile {
   username: string | null;
   profile_picture_url: string | null;
   cover_image_url: string | null;
+  /** @deprecated Use tier instead */
   role: UserRole;
+  tier: UserTier;
   is_verified_citizen: boolean;
   nft_balance: number;
   created_at: string;
@@ -93,7 +106,7 @@ export const INTEREST_TAGS: string[] = [
 
 // --- Role Helpers ---
 
-export function getRoleInfo(role: UserRole): {
+export function getRoleInfo(role: UserRoleOrTier): {
   label: string;
   labelDe: string;
   bgColor: string;
@@ -101,10 +114,11 @@ export function getRoleInfo(role: UserRole): {
   borderColor: string;
 } {
   switch (role) {
+    case "citizen":
     case "resident":
       return {
-        label: "Resident",
-        labelDe: "Einwohner",
+        label: "Citizen",
+        labelDe: "Bürger",
         bgColor: "bg-blue-50",
         textColor: "text-blue-700",
         borderColor: "border-blue-200",
@@ -117,6 +131,7 @@ export function getRoleInfo(role: UserRole): {
         textColor: "text-amber-700",
         borderColor: "border-amber-200",
       };
+    case "guest":
     case "tourist":
       return {
         label: "Tourist",
@@ -132,6 +147,14 @@ export function getRoleInfo(role: UserRole): {
         bgColor: "bg-purple-50",
         textColor: "text-purple-700",
         borderColor: "border-purple-200",
+      };
+    default:
+      return {
+        label: "Tourist",
+        labelDe: "Gast",
+        bgColor: "bg-green-50",
+        textColor: "text-green-700",
+        borderColor: "border-green-200",
       };
   }
 }
@@ -173,7 +196,10 @@ export interface User {
   profile_picture_url: string | null;
   cover_image_url: string | null;
   bio: string | null;
+  /** @deprecated Use tier instead — DB column renamed in migration 005 */
   role: UserRole;
+  tier: UserTier;
+  active_account_id: string | null;
   neighborhood: string | null;
   interests: string[];
   vereine: string[];
