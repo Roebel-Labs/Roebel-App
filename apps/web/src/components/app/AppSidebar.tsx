@@ -28,6 +28,7 @@ import {
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationDot } from "@/components/ui/notification-dot";
 import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
+import { RoebelCardWidget } from "@/components/app/RoebelCardWidget";
 
 // --- Navigation item definition ---
 
@@ -172,6 +173,11 @@ export function AppSidebar() {
             <Plus className="h-4 w-4" />
             <span className="hidden lg:inline">Beitragen</span>
           </Link>
+        </div>
+
+        {/* Röbel Card widget — desktop expanded only */}
+        <div className="mt-4 px-0 lg:px-3 hidden lg:block">
+          <RoebelCardWidget />
         </div>
       </nav>
 
