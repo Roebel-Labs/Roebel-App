@@ -22,7 +22,7 @@ import {
   Landmark,
   Wallet,
   LayoutDashboard,
-  Cog,
+  CreditCard,
   Users,
   Compass,
 } from "lucide-react";
@@ -61,8 +61,9 @@ const mainNavItems: NavItem[] = [
 ];
 
 const orgNavItems: NavItem[] = [
-  { href: "/app/gewerbe/bearbeiten", label: "Dashboard", icon: LayoutDashboard, modes: ["org"] },
-  { href: "/app/gewerbe/angebote", label: "Verwalten", icon: Cog, modes: ["org"] },
+  { href: "/app/org-dashboard", label: "Dashboard", icon: LayoutDashboard, modes: ["org"] },
+  { href: "/app/gewerbe/angebote", label: "Angebote", icon: Tag, modes: ["org"] },
+  { href: "/app/org-dashboard/partner", label: "Röbel Card", icon: CreditCard, modes: ["org"] },
 ];
 
 const bottomNavItems: NavItem[] = [
