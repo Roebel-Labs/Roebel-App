@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { formatWalletAddress, getDaysSinceJoined } from "@/lib/user-types";
 import { RoleBadge } from "@/components/profile/RoleBadge";
@@ -13,7 +13,12 @@ import {
   Vote,
   QrCode,
   Award,
+  CreditCard,
+  TrendingUp,
 } from "lucide-react";
+import { getRoebelCard } from "@/app/actions/roebel-card";
+import type { RoebelCard } from "@/types/roebel-card";
+import { TIER_THRESHOLDS } from "@/types/roebel-card";
 
 interface IdentityCardProps {
   user: {
@@ -43,8 +48,20 @@ export function IdentityCard({
   onShowQR,
 }: IdentityCardProps) {
   const [showBack, setShowBack] = useState(false);
+  const [roebelCard, setRoebelCard] = useState<RoebelCard | null>(null);
   const hasCitizen = Number(user.nft_balance || 0) > 0;
   const daysSinceJoined = getDaysSinceJoined(user.created_at);
+
+  // Fetch Röbel Card data
+  useEffect(() => {
+    getRoebelCard(user.wallet_address).then((res) => {
+      if (res.success && res.data) setRoebelCard(res.data);
+    });
+  }, [user.wallet_address]);
+
+  const pointsBalance = roebelCard?.points_balance ?? Number(user.gamification_points || 0);
+  const tier = roebelCard?.tier ?? "besucher";
+  const tierLabel = TIER_THRESHOLDS[tier]?.label ?? "Besucher";
 
   // Mode-colored gradient
   const gradientClass =
@@ -116,8 +133,8 @@ export function IdentityCard({
               )}
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold">{Number(user.gamification_points || 0)}</p>
-              <p className="text-xs text-white/70">Punkte</p>
+              <p className="text-2xl font-bold">{pointsBalance}</p>
+              <p className="text-xs text-white/70">Punkte · {tierLabel}</p>
             </div>
           </div>
 
@@ -153,11 +170,11 @@ export function IdentityCard({
               <p className="text-xs text-muted-foreground">Abstimmungen</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-foreground">{Number(user.voting_streak || 0)}</p>
+              <p className="text-xl font-bold text-foreground">{roebelCard?.streak_days ?? Number(user.voting_streak || 0)}</p>
               <p className="text-xs text-muted-foreground">Streak</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-foreground">{Number(user.gamification_points || 0)}</p>
+              <p className="text-xl font-bold text-foreground">{pointsBalance}</p>
               <p className="text-xs text-muted-foreground">Punkte</p>
             </div>
           </div>
