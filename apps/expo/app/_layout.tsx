@@ -189,7 +189,9 @@ function AppModeWrapper({ children }: { children: React.ReactNode }) {
   const { role, isCitizen, isBusinessOwner } = useUser();
   return (
     <AppModeProvider role={role} isCitizen={isCitizen} isBusinessOwner={isBusinessOwner}>
-      {children}
+      <RoebelCardProvider>
+        {children}
+      </RoebelCardProvider>
     </AppModeProvider>
   );
 }
@@ -235,7 +237,6 @@ export default function Layout() {
                     <MeckyProvider>
                     <GovernanceTestProvider>
                     <AppModeWrapper>
-                    <RoebelCardProvider>
                     <BookmarksProvider>
                       <LocationProvider>
                         <SnackbarProvider>
@@ -243,7 +244,6 @@ export default function Layout() {
                         </SnackbarProvider>
                       </LocationProvider>
                     </BookmarksProvider>
-                    </RoebelCardProvider>
                     </AppModeWrapper>
                     </GovernanceTestProvider>
                     </MeckyProvider>
