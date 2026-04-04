@@ -23,6 +23,8 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 
 interface DashboardStats {
   totalViews: number;
@@ -37,6 +39,8 @@ interface DashboardStats {
 export default function OrgDashboardPage() {
   const account = useActiveAccount();
   const { activeMode } = useAppMode();
+  const { activeAccount } = useAccount();
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
   const [business, setBusiness] = useState<Business | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,19 +127,27 @@ export default function OrgDashboardPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {/* Business header */}
+      {/* Org account header */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center flex-shrink-0">
-            {business.logo_url ? (
+            {isOrg && activeAccount?.avatar_url ? (
+              <Image src={activeAccount.avatar_url} alt={activeAccount.name} width={48} height={48} className="object-cover w-full h-full" />
+            ) : business.logo_url ? (
               <Image src={business.logo_url} alt={business.name} width={48} height={48} className="object-cover w-full h-full" />
             ) : (
               <Store className="h-6 w-6 text-muted-foreground" />
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-foreground truncate">{business.name}</h1>
-            <p className="text-xs text-muted-foreground">{business.address || "Röbel/Müritz"}</p>
+            <h1 className="text-lg font-semibold text-foreground truncate">
+              {isOrg && activeAccount ? activeAccount.name : business.name}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {isOrg && activeAccount
+                ? ACCOUNT_TYPE_LABELS[activeAccount.account_type]
+                : (business.address || "Röbel/Müritz")}
+            </p>
           </div>
           <Link
             href="/app/gewerbe/bearbeiten"
@@ -245,10 +257,10 @@ export default function OrgDashboardPage() {
       <div className="bg-card border border-border rounded-lg p-4">
         <h2 className="text-sm font-semibold text-foreground mb-3">Organisationstyp</h2>
         <div className="grid grid-cols-2 gap-2">
-          <OrgTypeCard label="Gewerbe" description="Geschäft, Laden, Gastro" active={true} />
-          <OrgTypeCard label="Verein" description="Sport, Kultur, Soziales" active={false} />
-          <OrgTypeCard label="Partei / Fraktion" description="Politische Organisation" active={false} />
-          <OrgTypeCard label="Freelancer" description="Freiberufler, Kreative" active={false} />
+          <OrgTypeCard label="Gewerbe" description="Geschäft, Laden, Gastro" active={activeAccount?.account_type === "unternehmen"} />
+          <OrgTypeCard label="Verein" description="Sport, Kultur, Soziales" active={activeAccount?.account_type === "verein"} />
+          <OrgTypeCard label="Partei" description="Politische Partei" active={activeAccount?.account_type === "partei"} />
+          <OrgTypeCard label="Fraktion" description="Parlamentarische Fraktion" active={activeAccount?.account_type === "fraktion"} />
         </div>
       </div>
     </div>

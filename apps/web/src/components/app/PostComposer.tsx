@@ -6,6 +6,8 @@ import { useActiveAccount } from "thirdweb/react";
 import { useVerificationStatus } from "@/hooks/useVerificationStatus";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { createPost } from "@/app/actions/posts";
+import { useAccount } from "@/lib/context/AccountContext";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -26,6 +28,9 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
   const account = useActiveAccount();
   const { isVerified, isLoading: verificationLoading } = useVerificationStatus();
   const { user } = useUserProfile();
+  const { activeAccount } = useAccount();
+
+  const isPostingAsOrg = activeAccount ? isOrgAccount(activeAccount) : false;
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [content, setContent] = useState("");
@@ -198,6 +203,7 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
       startTransition(async () => {
         const result = await createPost({
           wallet_address: account.address,
+          account_id: activeAccount?.id,
           content: content.trim(),
           category: category || "generell",
           media_urls: uploadedImageUrls,
@@ -294,7 +300,15 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
       {/* Header */}
       <div className="flex items-center gap-3 p-4 pb-2">
         <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-muted-foreground flex-shrink-0 overflow-hidden">
-          {user?.profile_picture_url ? (
+          {isPostingAsOrg && activeAccount?.avatar_url ? (
+            <Image
+              src={activeAccount.avatar_url}
+              alt=""
+              width={40}
+              height={40}
+              className="object-cover w-full h-full"
+            />
+          ) : user?.profile_picture_url ? (
             <Image
               src={user.profile_picture_url}
               alt=""
@@ -306,7 +320,16 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
             displayName.slice(0, 2).toUpperCase()
           )}
         </div>
-        <span className="text-sm font-medium text-foreground">{displayName}</span>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-foreground">
+            {isPostingAsOrg ? activeAccount?.name : displayName}
+          </span>
+          {isPostingAsOrg && activeAccount && (
+            <span className="text-[10px] text-muted-foreground">
+              Posting als {ACCOUNT_TYPE_LABELS[activeAccount.account_type]}
+            </span>
+          )}
+        </div>
         <button
           onClick={() => {
             if (!content && imageFiles.length === 0 && !videoFile && !pollInput) {

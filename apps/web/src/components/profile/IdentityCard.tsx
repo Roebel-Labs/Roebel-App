@@ -5,6 +5,8 @@ import Image from "next/image";
 import { formatWalletAddress, getDaysSinceJoined } from "@/lib/user-types";
 import { RoleBadge } from "@/components/profile/RoleBadge";
 import type { AppMode } from "@/lib/context/AppModeContext";
+import type { Account } from "@/types/account";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import {
   CheckCircle,
   MapPin,
@@ -35,6 +37,7 @@ interface IdentityCardProps {
     gamification_points?: number | null;
   };
   activeMode: AppMode;
+  activeAccount?: Account | null;
   isAttester?: boolean;
   votingPower?: number;
   onShowQR?: () => void;
@@ -43,6 +46,7 @@ interface IdentityCardProps {
 export function IdentityCard({
   user,
   activeMode,
+  activeAccount,
   isAttester,
   votingPower,
   onShowQR,
@@ -63,20 +67,30 @@ export function IdentityCard({
   const tier = roebelCard?.tier ?? "besucher";
   const tierLabel = TIER_THRESHOLDS[tier]?.label ?? "Besucher";
 
-  // Mode-colored gradient
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
+
+  // Mode-colored gradient — account-aware
   const gradientClass =
-    activeMode === "citizen"
-      ? "from-[#194383] to-blue-700"
-      : activeMode === "org"
-        ? "from-gray-800 to-gray-900"
+    isOrg
+      ? "from-gray-800 to-gray-900"
+      : activeMode === "citizen"
+        ? "from-[#194383] to-blue-700"
         : "from-slate-500 to-slate-600";
 
   const cardLabel =
-    activeMode === "citizen"
-      ? "Bürgerausweis"
-      : activeMode === "org"
-        ? "Partner Card"
+    isOrg && activeAccount
+      ? `${ACCOUNT_TYPE_LABELS[activeAccount.account_type]} Card`
+      : activeMode === "citizen"
+        ? "Bürgerausweis"
         : "Tourist Card";
+
+  // Show account name on card if org
+  const cardDisplayName = isOrg && activeAccount
+    ? activeAccount.name
+    : (user.username || formatWalletAddress(user.wallet_address));
+  const cardDisplayAvatar = isOrg && activeAccount?.avatar_url
+    ? activeAccount.avatar_url
+    : user.profile_picture_url;
 
   return (
     <div
@@ -90,22 +104,22 @@ export function IdentityCard({
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-full border-2 border-white/30 bg-white/10 overflow-hidden relative flex-shrink-0">
-                {user.profile_picture_url ? (
+                {cardDisplayAvatar ? (
                   <Image
-                    src={user.profile_picture_url}
-                    alt={user.username || "Profile"}
+                    src={cardDisplayAvatar}
+                    alt={cardDisplayName}
                     fill
                     className="object-cover"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-white/60 text-xl font-bold">
-                    {(user.username || "?").charAt(0).toUpperCase()}
+                    {cardDisplayName.charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
               <div>
                 <h2 className="text-lg font-semibold leading-tight">
-                  {user.username || formatWalletAddress(user.wallet_address)}
+                  {cardDisplayName}
                 </h2>
                 {user.neighborhood && (
                   <p className="text-white/70 text-xs flex items-center gap-1 mt-0.5">

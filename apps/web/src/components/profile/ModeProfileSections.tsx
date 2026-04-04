@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrgAccount } from "@/types/account";
 import {
   CreditCard,
   Compass,
@@ -47,11 +50,17 @@ function ProfileCard({ href, icon, title, subtitle }: ProfileCardProps) {
 
 export function ModeProfileSections() {
   const { activeMode } = useAppMode();
+  const { activeAccount } = useAccount();
+  const { user } = useUserProfile();
+
+  const isCitizen = user?.tier === "citizen" || user?.is_verified_citizen;
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
+  const isTouristOrGuest = !isCitizen;
 
   return (
     <div className="space-y-3">
       {/* Mode-specific cards */}
-      {activeMode === "tourist" && (
+      {isTouristOrGuest && (
         <>
           <ProfileCard
             href="/app/events"
@@ -83,7 +92,7 @@ export function ModeProfileSections() {
         </>
       )}
 
-      {activeMode === "citizen" && (
+      {isCitizen && !isOrg && (
         <>
           <ProfileCard
             href="/app/proposals"
@@ -106,7 +115,7 @@ export function ModeProfileSections() {
         </>
       )}
 
-      {activeMode === "org" && (
+      {isOrg && (
         <>
           <ProfileCard
             href="/app/gewerbe/bearbeiten"

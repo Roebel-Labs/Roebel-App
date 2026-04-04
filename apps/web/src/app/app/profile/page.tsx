@@ -20,6 +20,8 @@ import { ModeProfileSections } from "@/components/profile/ModeProfileSections";
 import { BusinessProfileSection } from "@/components/business/BusinessProfileSection";
 import { SavedEventsSection } from "@/components/app/SavedEventsSection";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import QRCode from "qrcode";
 import { useRequests } from "@/hooks/useRequests";
 
@@ -28,6 +30,8 @@ export default function ProfilePage() {
   const account = useActiveAccount();
   const { isAttester, isCitizen, votingPower } = useVerificationStatus();
   const { activeMode } = useAppMode();
+  const { activeAccount, ownedAccounts } = useAccount();
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
 
   // Fetch user's verification requests
   const { requests: attesterRequests, isLoading: loadingAttester } = useRequests("attester");
@@ -260,11 +264,43 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Active org account info */}
+          {isOrg && activeAccount && (
+            <div className="bg-card border border-border rounded-lg p-4 mb-3 sm:mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden flex items-center justify-center flex-shrink-0">
+                  {activeAccount.avatar_url ? (
+                    <Image
+                      src={activeAccount.avatar_url}
+                      alt={activeAccount.name}
+                      width={40}
+                      height={40}
+                      className="object-cover w-full h-full"
+                    />
+                  ) : (
+                    <span className="text-sm font-bold text-muted-foreground">
+                      {activeAccount.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{activeAccount.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {ACCOUNT_TYPE_LABELS[activeAccount.account_type]}
+                    {" · "}
+                    Verwaltet von {ownedAccounts.filter(a => a.id === activeAccount.id).length > 0 ? "dir" : "?"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Identity Card */}
           <div className="mb-3 sm:mb-4">
             <IdentityCard
               user={user}
               activeMode={activeMode}
+              activeAccount={activeAccount}
               isAttester={isAttester}
               votingPower={votingPower ? Number(votingPower) : 0}
               onShowQR={() => handleShowQR()}

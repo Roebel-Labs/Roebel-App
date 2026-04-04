@@ -76,6 +76,9 @@ export function PostCard({
   author_username,
   author_profile_picture_url,
   author_neighborhood,
+  author_account_name,
+  author_account_avatar_url,
+  author_account_type,
   links,
   is_liked_by_viewer,
   is_reported_by_viewer,
@@ -95,7 +98,9 @@ export function PostCard({
   const isMecky = wallet_address === "mecky_bot";
   const isAuthor = account?.address?.toLowerCase() === wallet_address.toLowerCase();
   const shortAddress = `${wallet_address.slice(0, 4)}...${wallet_address.slice(-3)}`;
-  const displayName = author_username || shortAddress;
+  const isOrgPost = author_account_type && author_account_type !== "personal" && author_account_name;
+  const displayName = isOrgPost ? author_account_name! : (author_username || shortAddress);
+  const displayAvatar = isOrgPost && author_account_avatar_url ? author_account_avatar_url : author_profile_picture_url;
 
   const handleCardClick = (e: React.MouseEvent) => {
     if (mode === "detail") return;
@@ -160,9 +165,9 @@ export function PostCard({
             href={`/app/profile/${wallet_address}`}
             className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden"
           >
-            {author_profile_picture_url ? (
+            {displayAvatar ? (
               <Image
-                src={author_profile_picture_url}
+                src={displayAvatar}
                 alt={displayName}
                 width={40}
                 height={40}
@@ -182,6 +187,14 @@ export function PostCard({
               >
                 {displayName}
               </Link>
+              {isOrgPost && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-medium">
+                  {author_account_type === "unternehmen" ? "Gewerbe" :
+                   author_account_type === "verein" ? "Verein" :
+                   author_account_type === "partei" ? "Partei" :
+                   author_account_type === "fraktion" ? "Fraktion" : ""}
+                </span>
+              )}
               {isMecky && (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-medium">
                   <Crown className="h-2.5 w-2.5" />
