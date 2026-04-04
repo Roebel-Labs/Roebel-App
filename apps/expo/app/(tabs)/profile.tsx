@@ -53,7 +53,6 @@ export default function ProfileTab() {
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [easterEggTaps, setEasterEggTaps] = useState(0);
 
   const isConnected = !!account;
 
@@ -101,12 +100,6 @@ export default function ProfileTab() {
     await toggleGovernanceTesting();
   };
 
-  const handleLoginButtonPress = () => {
-    if (isExtendedMode) {
-      setShowLoginDrawer(true);
-    }
-  };
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([refresh(), refreshUser(), refreshBusiness()]);
@@ -114,8 +107,8 @@ export default function ProfileTab() {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
-  const showAccountSwitcher = isExtendedMode && isBusinessOwner && userBusiness?.status === 'approved';
-  const showBusinessRegister = isExtendedMode && isCitizen && !isBusinessOwner;
+  const showAccountSwitcher = isBusinessOwner && userBusiness?.status === 'approved';
+  const showBusinessRegister = isCitizen && !isBusinessOwner;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -160,17 +153,11 @@ export default function ProfileTab() {
               </Text>
 
               <Pressable
-                style={[styles.primaryButton, { backgroundColor: colors.primary }, !isExtendedMode && { backgroundColor: colors.disabled, opacity: 0.6 }]}
-                onPress={() => {
-                  if (isExtendedMode) {
-                    handleLoginButtonPress();
-                  } else {
-                    setEasterEggTaps(prev => prev + 1);
-                  }
-                }}
+                style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+                onPress={() => setShowLoginDrawer(true)}
               >
-                <Text style={[styles.primaryButtonText, { color: colors.onPrimary }, !isExtendedMode && { color: colors.disabledText }]}>
-                  {isExtendedMode ? 'Jetzt Anmelden' : 'Noch nicht möglich'}
+                <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>
+                  Jetzt Anmelden
                 </Text>
               </Pressable>
             </View>
@@ -212,13 +199,11 @@ export default function ProfileTab() {
               <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
               <View style={styles.menuGroup}>
-                {isExtendedMode && (
-                  <ProfileMenuItem
-                    icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
-                    label="Benachrichtigungen"
-                    onPress={() => router.push('/notifications' as any)}
-                  />
-                )}
+                <ProfileMenuItem
+                  icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Benachrichtigungen"
+                  onPress={() => router.push('/notifications' as any)}
+                />
                 <ProfileMenuItem
                   icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Einstellungen"
@@ -316,12 +301,8 @@ export default function ProfileTab() {
                   )}
                   <View style={styles.userTextContainer}>
                     <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
-                    {isExtendedMode ? (
-                      <RoleBadge role={role} />
-                    ) : (
-                      <Text style={[styles.userLabel, { color: colors.textSecondary }]}>{roleLabel} in Röbel/Müritz</Text>
-                    )}
-                    {isExtendedMode && user?.bio && (
+                    <RoleBadge role={role} />
+                    {user?.bio && (
                       <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>
                     )}
                   </View>
@@ -345,18 +326,14 @@ export default function ProfileTab() {
                 </View>
 
                 <View style={styles.menuSection}>
-                  {isExtendedMode && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Profil bearbeiten"
-                          onPress={() => router.push('/edit-profile' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
+                  <View style={styles.menuGroup}>
+                    <ProfileMenuItem
+                      icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="Profil bearbeiten"
+                      onPress={() => router.push('/edit-profile' as any)}
+                    />
+                  </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
                   {showBusinessRegister && (
                     <>
@@ -371,7 +348,7 @@ export default function ProfileTab() {
                     </>
                   )}
 
-                  {isExtendedMode && isBusinessOwner && userBusiness?.status === 'pending' && (
+                  {isBusinessOwner && userBusiness?.status === 'pending' && (
                     <>
                       <View style={styles.menuGroup}>
                         <ProfileMenuItem
@@ -397,26 +374,13 @@ export default function ProfileTab() {
                     </>
                   )}
 
-                  {isExtendedMode && isConnected && (
+                  {isConnected && (
                     <>
                       <View style={styles.menuGroup}>
                         <ProfileMenuItem
                           icon={<WalletIcon width={20} height={20} color={colors.textPrimary} />}
                           label="Wallet"
                           onPress={() => router.push('/wallet' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
-
-                  {isExtendedMode && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Design System"
-                          onPress={() => router.push('/design-system' as any)}
                         />
                       </View>
                       <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
@@ -461,7 +425,7 @@ export default function ProfileTab() {
           </View>
         )}
 
-        {(isExtendedMode || easterEggTaps >= 5) && (
+        {isExtendedMode && (
           <View style={styles.extendedModeSection}>
             <View style={[styles.extendedModeDivider, { backgroundColor: colors.border }]} />
             <View style={styles.extendedModeRow}>
