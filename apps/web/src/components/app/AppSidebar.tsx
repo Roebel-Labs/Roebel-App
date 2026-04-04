@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   Cog,
   Users,
+  Compass,
 } from "lucide-react";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationDot } from "@/components/ui/notification-dot";
@@ -48,6 +49,7 @@ const mainNavItems: NavItem[] = [
   { href: "/app/proposals", label: "Rathaus", icon: Landmark },
   { href: "/app/events", label: "Veranstaltungen", icon: Calendar },
   { href: "/app/karte", label: "Karte", icon: MapPin },
+  { href: "/app/entdecken", label: "Entdecken", icon: Compass },
   { href: "/app/news", label: "Neuigkeiten", icon: Newspaper },
   { href: "/app/gewerbe", label: "Gewerbe", icon: Store },
   { href: "/app/angebote", label: "Angebote", icon: Tag },

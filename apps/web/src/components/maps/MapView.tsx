@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import Map, { Marker, NavigationControl } from "react-map-gl/mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
-import { Calendar, Store, UtensilsCrossed, MapPin, Phone, Clock, X, ArrowRight } from "lucide-react"
+import { Calendar, Store, UtensilsCrossed, MapPin, Phone, Clock, X, ArrowRight, Compass, Award } from "lucide-react"
 import { MAPBOX_TOKEN, ROEBEL_CENTER, DEFAULT_ZOOM, MARKER_COLORS } from "@/lib/maps/mapbox"
 import Link from "next/link"
 import Image from "next/image"
@@ -52,7 +52,19 @@ export interface MapRestaurant {
   phone: string | null
 }
 
-type MarkerType = "event" | "business" | "restaurant"
+export interface MapCheckpoint {
+  id: string
+  name: string
+  description: string | null
+  latitude: number
+  longitude: number
+  points_reward: number
+  badge_image_url: string | null
+  category: string | null
+  is_completed?: boolean
+}
+
+type MarkerType = "event" | "business" | "restaurant" | "checkpoint"
 
 interface SelectedMarker {
   type: MarkerType
@@ -65,6 +77,7 @@ interface MapViewProps {
   events: MapEvent[]
   businesses: MapBusiness[]
   restaurants: MapRestaurant[]
+  checkpoints?: MapCheckpoint[]
   isAuthenticated?: boolean
 }
 
@@ -82,11 +95,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   sonstiges: "Sonstiges",
 }
 
-export function MapView({ events, businesses, restaurants, isAuthenticated = false }: MapViewProps) {
+export function MapView({ events, businesses, restaurants, checkpoints = [], isAuthenticated = false }: MapViewProps) {
   const [filters, setFilters] = useState({
     events: true,
     businesses: true,
     restaurants: true,
+    checkpoints: checkpoints.length > 0,
   })
   const [selected, setSelected] = useState<SelectedMarker | null>(null)
 
@@ -110,6 +124,7 @@ export function MapView({ events, businesses, restaurants, isAuthenticated = fal
   const selectedEvent = selected?.type === "event" ? events.find((e) => e.id === selected.id) : null
   const selectedBusiness = selected?.type === "business" ? businesses.find((b) => b.id === selected.id) : null
   const selectedRestaurant = selected?.type === "restaurant" ? restaurants.find((r) => r.id === selected.id) : null
+  const selectedCheckpoint = selected?.type === "checkpoint" ? checkpoints.find((c) => c.id === selected.id) : null
 
   return (
     <div className="relative w-full h-full">
@@ -157,6 +172,22 @@ export function MapView({ events, businesses, restaurants, isAuthenticated = fal
           />
           Restaurants
         </button>
+        {checkpoints.length > 0 && (
+          <button
+            onClick={() => toggleFilter("checkpoints")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-medium transition-all ${
+              filters.checkpoints
+                ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                : "bg-white/70 text-gray-400 border border-gray-100"
+            }`}
+          >
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: filters.checkpoints ? "#f59e0b" : "#d1d5db" }}
+            />
+            Entdecken
+          </button>
+        )}
       </div>
 
       <Map
@@ -249,10 +280,39 @@ export function MapView({ events, businesses, restaurants, isAuthenticated = fal
               </Marker>
             )
           })}
+        {/* Checkpoint markers */}
+        {filters.checkpoints &&
+          checkpoints.map((cp) => {
+            const isSelected = selected?.type === "checkpoint" && selected.id === cp.id
+            return (
+              <Marker
+                key={`cp-${cp.id}`}
+                latitude={cp.latitude}
+                longitude={cp.longitude}
+                anchor="bottom"
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation()
+                  handleMarkerClick("checkpoint", cp.id, cp.latitude, cp.longitude)
+                }}
+              >
+                <div
+                  className={`flex items-center justify-center w-8 h-8 rounded-full cursor-pointer transition-all ${
+                    cp.is_completed ? "bg-green-500" : "bg-amber-400"
+                  } ${isSelected ? "scale-125 ring-2 ring-white shadow-xl" : "shadow-lg hover:scale-110"}`}
+                >
+                  {cp.is_completed ? (
+                    <Award className="h-4 w-4 text-white" />
+                  ) : (
+                    <Compass className="h-4 w-4 text-white" />
+                  )}
+                </div>
+              </Marker>
+            )
+          })}
       </Map>
 
       {/* Detail card overlay */}
-      {selected && (selectedEvent || selectedBusiness || selectedRestaurant) && (
+      {selected && (selectedEvent || selectedBusiness || selectedRestaurant || selectedCheckpoint) && (
         <div className="absolute bottom-4 left-4 right-4 md:right-auto md:w-[360px] z-20 animate-in slide-in-from-bottom-4 duration-200">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
             {/* Close button */}
@@ -433,6 +493,49 @@ export function MapView({ events, businesses, restaurants, isAuthenticated = fal
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Checkpoint detail card */}
+            {selectedCheckpoint && (
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className={`flex items-center justify-center w-10 h-10 rounded-full flex-shrink-0 ${
+                    selectedCheckpoint.is_completed ? "bg-green-100" : "bg-amber-100"
+                  }`}>
+                    {selectedCheckpoint.is_completed ? (
+                      <Award className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <Compass className="h-5 w-5 text-amber-600" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">{selectedCheckpoint.name}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {selectedCheckpoint.category && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                          {selectedCheckpoint.category}
+                        </span>
+                      )}
+                      <span className="text-xs font-medium text-green-600">
+                        +{selectedCheckpoint.points_reward} Punkte
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {selectedCheckpoint.description && (
+                  <p className="text-sm text-gray-500">{selectedCheckpoint.description}</p>
+                )}
+                {selectedCheckpoint.is_completed ? (
+                  <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+                    <Award className="h-4 w-4" />
+                    Checkpoint besucht!
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    Besuche diesen Ort und scanne den QR-Code, um Punkte zu sammeln.
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Restaurant detail card */}
