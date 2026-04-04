@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useExtendedMode } from '@/context/ExtendedModeContext';
+import { useExtendedMode } from '@/context/AppModeContext';
 import {
   lightColors,
   darkColors,

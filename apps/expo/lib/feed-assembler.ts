@@ -4,6 +4,8 @@ import type {
   PostRecord,
   ServiceAlertRecord,
   BusinessDealWithBusiness,
+  GovernanceNudgeData,
+  MeckyTipData,
 } from './types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from './types';
 
@@ -12,6 +14,8 @@ const SPONSORED_INTERVAL = 5;
 const EVENT_POSITIONS = [2, 7, 14];
 const MARKETPLACE_INTERVAL = 10;
 const MAX_MARKETPLACE_ITEMS = 3;
+const GOVERNANCE_NUDGE_POSITION = 4;
+const MECKY_TIP_POSITION = 8;
 
 // Positions for section cards (injected once)
 const SPECIAL_MENU_POSITION = 1;
@@ -42,6 +46,8 @@ export function assembleFeed(params: {
   movies?: MovieRecord[];
   restaurants?: RestaurantRecord[];
   specialMenus?: SpecialMenuRecord[];
+  governanceNudges?: GovernanceNudgeData[];
+  meckyTips?: MeckyTipData[];
   feedType: FeedType;
 }): FeedItem[] {
   const {
@@ -54,6 +60,8 @@ export function assembleFeed(params: {
     movies = [],
     restaurants = [],
     specialMenus = [],
+    governanceNudges = [],
+    meckyTips = [],
     feedType,
   } = params;
   const items: FeedItem[] = [];
@@ -84,6 +92,8 @@ export function assembleFeed(params: {
     news: false,
     cinema: false,
     restaurants: false,
+    governance: false,
+    meckyTip: false,
   };
 
   let postPointer = 0;
@@ -142,6 +152,30 @@ export function assembleFeed(params: {
     ) {
       items.push({ type: 'restaurant_section', data: restaurants, id: 'section-restaurants' });
       sectionInjected.restaurants = true;
+      feedPosition++;
+      continue;
+    }
+
+    // Inject governance nudge (active proposals)
+    if (
+      !sectionInjected.governance &&
+      governanceNudges.length > 0 &&
+      feedPosition >= GOVERNANCE_NUDGE_POSITION
+    ) {
+      items.push({ type: 'governance_nudge', data: governanceNudges[0], id: 'governance-nudge-0' });
+      sectionInjected.governance = true;
+      feedPosition++;
+      continue;
+    }
+
+    // Inject Mecky tip
+    if (
+      !sectionInjected.meckyTip &&
+      meckyTips.length > 0 &&
+      feedPosition >= MECKY_TIP_POSITION
+    ) {
+      items.push({ type: 'mecky_tip', data: meckyTips[0], id: 'mecky-tip-0' });
+      sectionInjected.meckyTip = true;
       feedPosition++;
       continue;
     }

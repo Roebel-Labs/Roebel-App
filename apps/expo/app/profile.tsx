@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
-import { useExtendedMode } from '@/context/ExtendedModeContext';
+import { useAppMode } from '@/context/AppModeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,6 +22,8 @@ import ProfileMenuItem from '@/components/ProfileMenuItem';
 import RoleBadge from '@/components/RoleBadge';
 import AccountSwitcher from '@/components/AccountSwitcher';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
+import FlippableIdentityCard from '@/components/FlippableIdentityCard';
+import ProfileModeCards from '@/components/profile/ProfileModeCards';
 
 // Import SVG icons
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -44,17 +46,16 @@ export default function ProfileScreen() {
   const { disconnect } = useDisconnect();
   const { bookmarkedIds } = useBookmarks();
   const { isGovernanceTestEnabled, toggleGovernanceTesting } = useGovernanceTest();
-  const { isExtendedMode, toggleExtendedMode } = useExtendedMode();
+  const { activeMode, isExtendedMode, toggleExtendedMode } = useAppMode();
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
   const { user, role, roleLabel, accountMode, setAccountMode, userBusiness, isCitizen, isBusinessOwner, refreshUser, refreshBusiness } = useUser();
   const { colors } = useTheme();
 
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('profile');
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [easterEggTaps, setEasterEggTaps] = useState(0);
 
   const isConnected = !!account;
 
@@ -99,25 +100,17 @@ export default function ProfileScreen() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') {
       router.replace('/');
     } else if (tab === 'explore') {
       router.push('/explore');
-    } else if (tab === 'map') {
-      router.push('/location');
     }
   };
 
   const handleGovernanceTestToggle = async () => {
     await toggleGovernanceTesting();
-  };
-
-  const handleLoginButtonPress = () => {
-    if (isExtendedMode) {
-      setShowLoginDrawer(true);
-    }
   };
 
   const handleRefresh = async () => {
@@ -127,14 +120,14 @@ export default function ProfileScreen() {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
-  const showAccountSwitcher = isExtendedMode && isBusinessOwner && userBusiness?.status === 'approved';
-  const showBusinessRegister = isExtendedMode && isCitizen && !isBusinessOwner;
+  const showAccountSwitcher = isBusinessOwner && userBusiness?.status === 'approved';
+  const showBusinessRegister = isCitizen && !isBusinessOwner;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Profil</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Röbel</Text>
       </View>
 
       <ScrollView
@@ -148,6 +141,23 @@ export default function ProfileScreen() {
           />
         }
       >
+        {/* Flippable Identity Card */}
+        <FlippableIdentityCard
+          user={user}
+          role={role}
+          roleLabel={roleLabel}
+          isCitizen={isCitizen}
+          pointsBalance={0}
+          verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
+          attestedBy={isCitizen ? 3 : 0}
+          votingStreak={user?.voting_streak || 0}
+          badges={[]}
+          businessName={userBusiness?.name}
+        />
+
+        {/* Mode-specific action cards */}
+        <ProfileModeCards />
+
         {!isConnected ? (
           // ============= NOT LOGGED IN STATE =============
           <View style={styles.notConnectedContainer}>
@@ -159,17 +169,11 @@ export default function ProfileScreen() {
               </Text>
 
               <Pressable
-                style={[styles.primaryButton, { backgroundColor: colors.primary }, !isExtendedMode && { backgroundColor: colors.disabled, opacity: 0.6 }]}
-                onPress={() => {
-                  if (isExtendedMode) {
-                    handleLoginButtonPress();
-                  } else {
-                    setEasterEggTaps(prev => prev + 1);
-                  }
-                }}
+                style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+                onPress={() => setShowLoginDrawer(true)}
               >
-                <Text style={[styles.primaryButtonText, { color: colors.onPrimary }, !isExtendedMode && { color: colors.disabledText }]}>
-                  {isExtendedMode ? 'Jetzt Anmelden' : 'Noch nicht möglich'}
+                <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>
+                  Jetzt Anmelden
                 </Text>
               </Pressable>
             </View>
@@ -213,13 +217,11 @@ export default function ProfileScreen() {
               <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
               <View style={styles.menuGroup}>
-                {isExtendedMode && (
-                  <ProfileMenuItem
-                    icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
-                    label="Benachrichtigungen"
-                    onPress={() => router.push('/notifications' as any)}
-                  />
-                )}
+                <ProfileMenuItem
+                  icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Benachrichtigungen"
+                  onPress={() => router.push('/notifications' as any)}
+                />
                 <ProfileMenuItem
                   icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Einstellungen"
@@ -325,12 +327,8 @@ export default function ProfileScreen() {
                   )}
                   <View style={styles.userTextContainer}>
                     <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
-                    {isExtendedMode ? (
-                      <RoleBadge role={role} />
-                    ) : (
-                      <Text style={[styles.userLabel, { color: colors.textSecondary }]}>{roleLabel} in Röbel/Müritz</Text>
-                    )}
-                    {isExtendedMode && user?.bio && (
+                    <RoleBadge role={role} />
+                    {user?.bio && (
                       <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>
                     )}
                   </View>
@@ -358,19 +356,14 @@ export default function ProfileScreen() {
 
                 {/* Menu Items */}
                 <View style={styles.menuSection}>
-                  {/* Profile Edit - extended mode only */}
-                  {isExtendedMode && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Profil bearbeiten"
-                          onPress={() => router.push('/edit-profile' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
+                  <View style={styles.menuGroup}>
+                    <ProfileMenuItem
+                      icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="Profil bearbeiten"
+                      onPress={() => router.push('/edit-profile' as any)}
+                    />
+                  </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
                   {/* Business Registration - for verified citizens without a business */}
                   {showBusinessRegister && (
@@ -387,7 +380,7 @@ export default function ProfileScreen() {
                   )}
 
                   {/* Business Dashboard - for business owners with pending business */}
-                  {isExtendedMode && isBusinessOwner && userBusiness?.status === 'pending' && (
+                  {isBusinessOwner && userBusiness?.status === 'pending' && (
                     <>
                       <View style={styles.menuGroup}>
                         <ProfileMenuItem
@@ -414,8 +407,8 @@ export default function ProfileScreen() {
                     </>
                   )}
 
-                  {/* Wallet - only in extended mode when connected */}
-                  {isExtendedMode && isConnected && (
+                  {/* Wallet */}
+                  {isConnected && (
                     <>
                       <View style={styles.menuGroup}>
                         <ProfileMenuItem
@@ -482,7 +475,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Extended Mode Toggle - hidden unless already enabled or 5-tap easter egg */}
-        {(isExtendedMode || easterEggTaps >= 5) && (
+        {isExtendedMode && (
           <View style={styles.extendedModeSection}>
             <View style={[styles.extendedModeDivider, { backgroundColor: colors.border }]} />
             <View style={styles.extendedModeRow}>

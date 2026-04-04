@@ -23,6 +23,10 @@ import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, R
 import type { BusinessDealWithBusiness } from '@/lib/types/feed';
 import BottomNavigation from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
+import ContextBar from './ContextBar';
+import GovernanceNudge from './GovernanceNudge';
+import MeckyTip from './MeckyTip';
+import type { GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
 import FeedPostCard from './FeedPostCard';
 import FeedAlertCard from './FeedAlertCard';
 import FeedMeckyCard from './FeedMeckyCard';
@@ -239,6 +243,16 @@ export default function FeedHome() {
         case 'special_menu_section':
           return <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />;
 
+        case 'governance_nudge': {
+          const nudge = item.data as GovernanceNudgeData;
+          return <GovernanceNudge proposalId={nudge.proposalId} title={nudge.title} forPercentage={nudge.forPercentage} againstPercentage={nudge.againstPercentage} daysRemaining={nudge.daysRemaining} />;
+        }
+
+        case 'mecky_tip': {
+          const tip = item.data as MeckyTipData;
+          return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
+        }
+
         default:
           return null;
       }
@@ -277,6 +291,7 @@ export default function FeedHome() {
         </View>
       </View>
       <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <ContextBar />
     </View>
   );
 

@@ -57,7 +57,7 @@ export default function LocationScreen() {
   const [selectedEntity, setSelectedEntity] = useState<MapPreviewData | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('map');
+  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
   const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(null);
   const [mapFilter, setMapFilter] = useState<MapFilter>({
     events: true,
@@ -181,7 +181,7 @@ export default function LocationScreen() {
     }
   };
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
     setActiveTab(tab);
     if (tab === 'home') router.replace('/');
     else if (tab === 'explore') router.push('/explore');

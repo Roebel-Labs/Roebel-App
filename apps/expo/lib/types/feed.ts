@@ -159,7 +159,23 @@ export type FeedItem =
   | { type: 'news_section'; data: NewsArticle[]; id: string }
   | { type: 'cinema_section'; data: MovieRecord[]; id: string }
   | { type: 'restaurant_section'; data: RestaurantRecord[]; id: string }
-  | { type: 'special_menu_section'; data: SpecialMenuRecord[]; id: string };
+  | { type: 'special_menu_section'; data: SpecialMenuRecord[]; id: string }
+  | { type: 'governance_nudge'; data: GovernanceNudgeData; id: string }
+  | { type: 'mecky_tip'; data: MeckyTipData; id: string };
+
+export type GovernanceNudgeData = {
+  proposalId: string;
+  title: string;
+  forPercentage: number;
+  againstPercentage: number;
+  daysRemaining: number;
+};
+
+export type MeckyTipData = {
+  text: string;
+  actionLabel?: string;
+  actionRoute?: string;
+};
 
 // ─── Poll With Votes (computed client-side) ─────────────────
 

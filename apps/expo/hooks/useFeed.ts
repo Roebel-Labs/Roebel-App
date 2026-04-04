@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { FeedItem, FeedType, PostRecord, ServiceAlertRecord, BusinessDealWithBusiness } from '@/lib/types/feed';
+import type { FeedItem, FeedType, PostRecord, ServiceAlertRecord, BusinessDealWithBusiness, GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '@/lib/types';
 import { fetchFeedPosts, fetchActiveServiceAlerts, fetchUpcomingEventsForFeed } from '@/lib/supabase-posts';
 import { fetchActiveDeals } from '@/lib/supabase-deals';
@@ -7,7 +7,42 @@ import { fetchMarketplaceListings } from '@/lib/supabase-marketplace';
 import { fetchRecentNews } from '@/lib/supabase-news';
 import { fetchUpcomingMovies } from '@/lib/supabase-cinema';
 import { fetchFeaturedRestaurants, fetchActiveSpecialMenus } from '@/lib/supabase-restaurants';
+import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
 import { assembleFeed } from '@/lib/feed-assembler';
+
+function buildGovernanceNudges(proposals: SupabaseProposal[]): GovernanceNudgeData[] {
+  // Filter to active proposals (state === 1)
+  const active = proposals.filter(p => p.state === 1);
+  return active.map(p => {
+    const forVotes = parseInt(p.for_votes) || 0;
+    const againstVotes = parseInt(p.against_votes) || 0;
+    const total = forVotes + againstVotes || 1;
+    return {
+      proposalId: p.proposal_id,
+      title: p.title,
+      forPercentage: Math.round((forVotes / total) * 100),
+      againstPercentage: Math.round((againstVotes / total) * 100),
+      daysRemaining: 7, // TODO: calculate from deadline_block
+    };
+  });
+}
+
+function generateMeckyTips(): MeckyTipData[] {
+  const hour = new Date().getHours();
+  const tips: MeckyTipData[] = [];
+
+  if (hour >= 6 && hour < 10) {
+    tips.push({ text: 'Guten Morgen! Wie wäre es mit einem Spaziergang am Müritzufer? 🌅', actionLabel: 'Karte öffnen', actionRoute: '/location' });
+  } else if (hour >= 11 && hour < 14) {
+    tips.push({ text: 'Mittagszeit! Schau dir die Restaurants in Röbel an. 🍽️', actionLabel: 'Restaurants', actionRoute: '/restaurant' });
+  } else if (hour >= 14 && hour < 18) {
+    tips.push({ text: 'Perfekte Zeit für den Röbel Explorer! Entdecke Checkpoints und sammle Punkte. 🧭', actionLabel: 'Explorer starten', actionRoute: '/explorer' });
+  } else if (hour >= 18) {
+    tips.push({ text: 'Schau was heute Abend in Röbel los ist! 🌙', actionLabel: 'Events', actionRoute: '/(tabs)/explore' });
+  }
+
+  return tips;
+}
 
 export function useFeed(feedType: FeedType) {
   const [items, setItems] = useState<FeedItem[]>([]);
@@ -26,6 +61,8 @@ export function useFeed(feedType: FeedType) {
   const moviesRef = useRef<MovieRecord[]>([]);
   const restaurantsRef = useRef<RestaurantRecord[]>([]);
   const specialMenusRef = useRef<SpecialMenuRecord[]>([]);
+  const governanceRef = useRef<GovernanceNudgeData[]>([]);
+  const meckyTipsRef = useRef<MeckyTipData[]>([]);
   const allPostsRef = useRef<PostRecord[]>([]);
 
   const buildFeed = useCallback(
@@ -40,6 +77,8 @@ export function useFeed(feedType: FeedType) {
         movies: moviesRef.current,
         restaurants: restaurantsRef.current,
         specialMenus: specialMenusRef.current,
+        governanceNudges: governanceRef.current,
+        meckyTips: meckyTipsRef.current,
         feedType,
       }),
     [feedType]
@@ -49,7 +88,7 @@ export function useFeed(feedType: FeedType) {
     const isMain = feedType === 'main';
     const emptyArr = Promise.resolve([] as any[]);
 
-    const [postsResult, alerts, deals, marketplace, events, news, movies, restaurants, specialMenus] =
+    const [postsResult, alerts, deals, marketplace, events, news, movies, restaurants, specialMenus, proposals] =
       await Promise.all([
         fetchFeedPosts({ feedType, page: 0 }),
         fetchActiveServiceAlerts(),
@@ -60,6 +99,7 @@ export function useFeed(feedType: FeedType) {
         isMain ? fetchUpcomingMovies(6) : emptyArr,
         isMain ? fetchFeaturedRestaurants() : emptyArr,
         isMain ? fetchActiveSpecialMenus(3) : emptyArr,
+        isMain ? fetchProposals().catch(() => []) : emptyArr,
       ]);
 
     alertsRef.current = alerts;
@@ -70,6 +110,8 @@ export function useFeed(feedType: FeedType) {
     moviesRef.current = movies as MovieRecord[];
     restaurantsRef.current = restaurants as RestaurantRecord[];
     specialMenusRef.current = specialMenus as SpecialMenuRecord[];
+    governanceRef.current = buildGovernanceNudges(proposals as SupabaseProposal[]);
+    meckyTipsRef.current = generateMeckyTips();
     allPostsRef.current = postsResult.data;
 
     return postsResult;

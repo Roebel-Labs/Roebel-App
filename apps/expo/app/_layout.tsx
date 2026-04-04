@@ -5,10 +5,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
-import { ExtendedModeProvider } from '@/context/ExtendedModeContext';
+import { AppModeProvider } from '@/context/AppModeContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { VerificationProvider } from '@/context/VerificationContext';
-import { UserProvider } from '@/context/UserContext';
+import { UserProvider, useUser } from '@/context/UserContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
@@ -172,11 +172,23 @@ function ThemedLayout() {
           <Stack.Screen name="games/speedrun" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
           <Stack.Screen name="games/fortune-cards" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
           <Stack.Screen name="wallet" options={{ headerShown: false }} />
+          <Stack.Screen name="explorer" options={{ headerShown: false }} />
+          <Stack.Screen name="machs-in-roebel" options={{ headerShown: false }} />
+          <Stack.Screen name="stamp-scan" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </View>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
     </>
+  );
+}
+
+function AppModeWrapper({ children }: { children: React.ReactNode }) {
+  const { role, isCitizen, isBusinessOwner } = useUser();
+  return (
+    <AppModeProvider role={role} isCitizen={isCitizen} isBusinessOwner={isBusinessOwner}>
+      {children}
+    </AppModeProvider>
   );
 }
 
@@ -220,7 +232,7 @@ export default function Layout() {
                     <UserProvider>
                     <MeckyProvider>
                     <GovernanceTestProvider>
-                    <ExtendedModeProvider>
+                    <AppModeWrapper>
                     <BookmarksProvider>
                       <LocationProvider>
                         <SnackbarProvider>
@@ -228,7 +240,7 @@ export default function Layout() {
                         </SnackbarProvider>
                       </LocationProvider>
                     </BookmarksProvider>
-                    </ExtendedModeProvider>
+                    </AppModeWrapper>
                     </GovernanceTestProvider>
                     </MeckyProvider>
                     </UserProvider>

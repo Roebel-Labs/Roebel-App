@@ -12,6 +12,8 @@ import { FeedCard } from "@/components/app/FeedCard";
 import { PostCard } from "@/components/app/PostCard";
 import { HorizontalRow } from "@/components/app/HorizontalRow";
 import { AlertCard } from "@/components/app/AlertCard";
+import { ContextBar } from "@/components/app/ContextBar";
+import { RathausFeed } from "@/components/app/RathausFeed";
 import type { ServiceAlert } from "@/app/actions/alerts";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { BusinessCard } from "@/components/business/BusinessCard";
@@ -22,6 +24,8 @@ import {
   Film,
   Newspaper,
   ClipboardList,
+  Landmark,
+  Home,
 } from "lucide-react";
 import type { ListingWithSeller } from "@/types/marketplace";
 import type { Business } from "@/types/business";
@@ -221,6 +225,7 @@ function buildFeedWithRows(
 
 export default function AppHomePage() {
   const account = useActiveAccount();
+  const [activeTab, setActiveTab] = useState<"feed" | "rathaus">("feed");
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
@@ -575,6 +580,40 @@ export default function AppHomePage() {
 
   return (
     <div className="space-y-4">
+      {/* Context bar */}
+      <ContextBar />
+
+      {/* Top tabs: Für Dich / Rathaus */}
+      <div className="flex gap-1 bg-card rounded-lg border border-border p-1">
+        <button
+          onClick={() => setActiveTab("feed")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "feed"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+          }`}
+        >
+          <Home className="h-4 w-4" />
+          Für Dich
+        </button>
+        <button
+          onClick={() => setActiveTab("rathaus")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "rathaus"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+          }`}
+        >
+          <Landmark className="h-4 w-4" />
+          Rathaus
+        </button>
+      </div>
+
+      {/* Rathaus tab */}
+      {activeTab === "rathaus" ? (
+        <RathausFeed />
+      ) : (
+      <>
       <PostComposer onPostCreated={handlePostCreated} />
       <FeedFilters
         activeFilter={activeFilter}
@@ -925,6 +964,8 @@ export default function AppHomePage() {
             return null;
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -15,8 +15,11 @@ import Image from "next/image";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { RoleBadge } from "@/components/profile/RoleBadge";
 import { PrivacySettingsForm } from "@/components/profile/PrivacySettingsForm";
+import { IdentityCard } from "@/components/profile/IdentityCard";
+import { ModeProfileSections } from "@/components/profile/ModeProfileSections";
 import { BusinessProfileSection } from "@/components/business/BusinessProfileSection";
 import { SavedEventsSection } from "@/components/app/SavedEventsSection";
+import { useAppMode } from "@/lib/context/AppModeContext";
 import QRCode from "qrcode";
 import { useRequests } from "@/hooks/useRequests";
 
@@ -24,6 +27,7 @@ export default function ProfilePage() {
   const { user, isLoading, error, refreshUser, isConnected } = useUserProfile();
   const account = useActiveAccount();
   const { isAttester, isCitizen, votingPower } = useVerificationStatus();
+  const { activeMode } = useAppMode();
 
   // Fetch user's verification requests
   const { requests: attesterRequests, isLoading: loadingAttester } = useRequests("attester");
@@ -254,6 +258,22 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Identity Card */}
+          <div className="mb-3 sm:mb-4">
+            <IdentityCard
+              user={user}
+              activeMode={activeMode}
+              isAttester={isAttester}
+              votingPower={votingPower ? Number(votingPower) : 0}
+              onShowQR={() => handleShowQR()}
+            />
+          </div>
+
+          {/* Mode-specific sections */}
+          <div className="mb-3 sm:mb-4">
+            <ModeProfileSections />
           </div>
 
           {/* Interests & Vereine */}

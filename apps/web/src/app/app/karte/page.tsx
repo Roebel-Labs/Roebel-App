@@ -1,13 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { MapView } from "@/components/maps/MapView"
-import type { MapEvent, MapBusiness, MapRestaurant } from "@/components/maps/MapView"
+import type { MapEvent, MapBusiness, MapRestaurant, MapCheckpoint } from "@/components/maps/MapView"
 
 export const dynamic = "force-dynamic"
 
 export default async function AppKartePage() {
   const supabase = await createClient()
 
-  const [eventsRes, businessesRes, restaurantsRes] = await Promise.all([
+  const [eventsRes, businessesRes, restaurantsRes, checkpointsRes] = await Promise.all([
     supabase
       .from("events")
       .select("id, title, description, date, time, end_time, location, category, latitude, longitude, image_url, organizer_name")
@@ -27,6 +27,10 @@ export default async function AppKartePage() {
       .in("status", ["approved", "published"])
       .not("latitude", "is", null)
       .not("longitude", "is", null),
+    supabase
+      .from("explorer_checkpoints")
+      .select("id, name, description, latitude, longitude, points_reward, badge_image_url, category")
+      .eq("is_active", true),
   ])
 
   const events: MapEvent[] = (eventsRes.data || []).map((e) => ({
@@ -72,12 +76,24 @@ export default async function AppKartePage() {
     phone: r.phone,
   }))
 
+  const checkpoints: MapCheckpoint[] = (checkpointsRes.data || []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    latitude: Number(c.latitude),
+    longitude: Number(c.longitude),
+    points_reward: c.points_reward,
+    badge_image_url: c.badge_image_url,
+    category: c.category,
+  }))
+
   return (
     <div className="h-[calc(100vh-4rem)] -m-6">
       <MapView
         events={events}
         businesses={businesses}
         restaurants={restaurants}
+        checkpoints={checkpoints}
         isAuthenticated
       />
     </div>
