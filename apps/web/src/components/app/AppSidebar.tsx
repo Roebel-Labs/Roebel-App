@@ -25,6 +25,7 @@ import {
   CreditCard,
   Users,
   Compass,
+  Bot,
 } from "lucide-react";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationDot } from "@/components/ui/notification-dot";
@@ -57,6 +58,7 @@ const mainNavItems: NavItem[] = [
   { href: "/app/graph", label: "Bürger-Netzwerk", icon: Users, modes: ["citizen", "org"] },
   { href: "/app/verifizierung", label: "Verifizierung", icon: ShieldCheck, modes: ["citizen", "org"] },
   { href: "/app/messages", label: "Nachrichten", icon: MessageSquare, modes: ["citizen", "org"] },
+  { href: "/app/mecky", label: "Mecky", icon: Bot },
   { href: "/app/profile", label: "Profil", icon: User },
 ];
 
