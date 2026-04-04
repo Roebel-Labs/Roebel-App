@@ -4,7 +4,7 @@
 
 Restaurant owners (citizens with Unternehmen accounts) need a digital ordering system. Visitors scan a QR code on their table, browse the menu, and submit orders from their phone. The kitchen sees incoming orders in real-time and moves them through states (New → In Progress → Done). Multiple guests at the same table share one session, and all orders merge into one view per table for the kitchen.
 
-This spec covers the **core ordering loop**: table sessions, guest ordering, and kitchen ticket management. Deferred to future specs: AI menu generation (photo → menu items), in-app payment, and manual order entry by staff.
+This spec covers the **core ordering loop**: table sessions, guest ordering, kitchen ticket management, and staff-side manual ordering. Deferred to future specs: AI menu generation (photo → menu items) and in-app payment.
 
 ---
 
@@ -12,7 +12,7 @@ This spec covers the **core ordering loop**: table sessions, guest ordering, and
 
 | Decision | Choice |
 |---|---|
-| Scope | Sessions + ordering flow + kitchen tickets |
+| Scope | Sessions + ordering flow + kitchen tickets + staff ordering |
 | Restaurant link | Add `account_id` FK to existing `restaurants` table |
 | Auth for ordering | No login required (anonymous guest token) |
 | Kitchen view | Mobile app only (Expo), shown when acting as restaurant account |
@@ -70,7 +70,7 @@ CREATE POLICY "table_sessions_update" ON table_sessions FOR UPDATE USING (true);
 ```
 
 #### `orders`
-One order = one person's submission at a table.
+One order = one person's submission at a table. Can be placed by the guest (via QR scan) or by restaurant staff (manual entry).
 
 ```sql
 CREATE TABLE orders (
@@ -78,6 +78,7 @@ CREATE TABLE orders (
   session_id    UUID NOT NULL REFERENCES table_sessions(id) ON DELETE CASCADE,
   guest_name    TEXT,
   guest_token   TEXT NOT NULL,
+  placed_by     TEXT NOT NULL DEFAULT 'guest' CHECK (placed_by IN ('guest', 'staff')),
   items         JSONB NOT NULL,
   status        TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'in_progress', 'done')),
   total         NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -130,11 +131,14 @@ export type OrderItem = {
   notes: string | null;
 };
 
+export type OrderPlacedBy = 'guest' | 'staff';
+
 export type Order = {
   id: string;
   session_id: string;
   guest_name: string | null;
   guest_token: string;
+  placed_by: OrderPlacedBy;
   items: OrderItem[];
   status: OrderStatus;
   total: number;
@@ -190,12 +194,32 @@ export type CartItem = {
 
 1. Restaurant owner/staff switches to their Unternehmen account in the app
 2. Navigates to "Küche" (Kitchen) screen
-3. Sees orders grouped by table, sorted by time:
-   - **New orders** highlighted at top
-   - Each order shows: table number, guest name, items list, time since ordered
-4. Chef taps order status to advance: New → In Progress → Done
-5. Status change pushed to guest via Supabase Realtime
-6. Can close a table session when guests leave (archives all orders)
+3. Sees **live session overview**: all active tables with status indicators
+   - Table 3: 2 orders (1 new, 1 in progress)
+   - Table 7: 1 order (done)
+   - + button to create a session for an unoccupied table
+4. Taps a table → sees all orders for that session:
+   - Each order shows: guest name, items list, placed_by badge (guest/staff), time since ordered
+   - **New orders** highlighted
+5. Chef taps order status to advance: New → In Progress → Done
+6. Chef can tap "Bestellung aufnehmen" to place an order for a guest at that table (→ Flow D)
+7. Status change pushed to guest via Supabase Realtime
+8. Can close a table session when guests leave (archives all orders)
+
+### Flow D: Staff Places Order for Guest
+
+1. Restaurant staff opens the Kitchen screen (acting as restaurant account)
+2. Sees **live view of all active table sessions** with order counts
+3. Selects a table (e.g., "Tisch 3") — or creates a new session if the table has no active session
+4. Taps "Bestellung aufnehmen" (Take order)
+5. Sees the same menu as guests, **but with a search bar** for quick item lookup
+6. Searches and adds items to a staff-side cart (e.g., types "Schni" → finds "Schnitzel")
+7. Optionally enters guest name (e.g., "Gast 3")
+8. Submits → order created with `placed_by: 'staff'`
+9. Order appears in the kitchen ticket queue alongside guest-placed orders
+10. Guest-placed and staff-placed orders for the same table are visible together
+
+**Key difference from guest flow:** Staff has **search** for speed. Guests do **not** have search so they browse the full menu.
 
 ### Flow C: Restaurant Configures Tables
 
@@ -212,10 +236,11 @@ export type CartItem = {
 
 | Screen | Route | Access | Purpose |
 |---|---|---|---|
-| Order Menu | `/order/[slug]/[table]` | Anyone | Browse menu, add to cart |
+| Order Menu | `/order/[slug]/[table]` | Anyone | Browse menu, add to cart (no search) |
 | Order Cart | `/order/cart` | Anyone (in session) | Review cart, enter name, submit |
 | Order Status | `/order/status` | Anyone (in session) | Track order status in real-time |
-| Kitchen Dashboard | `/kitchen` | Restaurant account owners | View/manage all active orders |
+| Kitchen Dashboard | `/kitchen` | Restaurant account owners | Live view of sessions + order tickets |
+| Staff Order | `/kitchen/order/[sessionId]` | Restaurant account owners | Place order for guest (with search) |
 | Table Management | `/kitchen/tables` | Restaurant account owners | Add tables, generate QR codes |
 
 ### New Context: `OrderSessionContext`
@@ -260,8 +285,8 @@ interface OrderSessionContextValue {
 findOrCreateSession(restaurantId, tableNumber) → TableSession
 closeSession(sessionId) → void
 
-// Order CRUD
-submitOrder(sessionId, guestToken, guestName, items) → Order
+// Order CRUD (guest + staff)
+submitOrder(sessionId, guestToken, guestName, items, placedBy: 'guest' | 'staff') → Order
 fetchSessionOrders(sessionId) → Order[]
 fetchGuestOrders(sessionId, guestToken) → Order[]
 updateOrderStatus(orderId, status: OrderStatus) → void
@@ -275,6 +300,9 @@ fetchRestaurantTables(restaurantId) → RestaurantTable[]
 createTable(restaurantId, tableNumber) → RestaurantTable
 deleteTable(tableId) → void
 updateTable(tableId, updates) → RestaurantTable
+
+// Menu search (staff only)
+searchMenuItems(restaurantId, query) → MenuItemRecord[]
 
 // Realtime subscriptions
 subscribeToSessionOrders(sessionId, callback) → RealtimeChannel
@@ -309,7 +337,8 @@ subscribeToKitchenOrders(restaurantId, callback) → RealtimeChannel
 | `apps/expo/app/order/[slug]/[table].tsx` | Order menu screen |
 | `apps/expo/app/order/cart.tsx` | Cart review + submit |
 | `apps/expo/app/order/status.tsx` | Real-time order tracking |
-| `apps/expo/app/kitchen/index.tsx` | Kitchen dashboard |
+| `apps/expo/app/kitchen/index.tsx` | Kitchen dashboard (live sessions + tickets) |
+| `apps/expo/app/kitchen/order/[sessionId].tsx` | Staff order screen (menu with search) |
 | `apps/expo/app/kitchen/tables.tsx` | Table management + QR generation |
 | `apps/expo/components/order/MenuBrowser.tsx` | Menu browsing with "Add" buttons |
 | `apps/expo/components/order/CartSheet.tsx` | Cart bottom sheet |
@@ -346,12 +375,24 @@ subscribeToKitchenOrders(restaurantId, callback) → RealtimeChannel
 - [ ] Guest can submit multiple orders in same session
 
 ### Kitchen Flow
-- [ ] Kitchen screen shows orders grouped by table
+- [ ] Kitchen screen shows live view of active table sessions
+- [ ] Each session shows order count, latest status
 - [ ] New orders appear in real-time (no refresh needed)
 - [ ] Status transitions: New → In Progress → Done
 - [ ] Status change reflected to guest in real-time
 - [ ] Can close a table session
 - [ ] Only restaurant account owners can access kitchen
+
+### Staff Ordering Flow
+- [ ] Staff can select an active table session and tap "Bestellung aufnehmen"
+- [ ] Staff can create a new session for a table directly from kitchen view
+- [ ] Staff sees menu with **search bar** (type to filter items)
+- [ ] Search filters by item name across all categories
+- [ ] Staff can add items to cart, set quantity, add notes
+- [ ] Staff enters optional guest name
+- [ ] Submitted order has `placed_by: 'staff'`
+- [ ] Staff-placed and guest-placed orders appear together in kitchen view
+- [ ] Guest ordering screen does NOT have search functionality
 
 ### Table Management
 - [ ] Add/remove tables for a restaurant
