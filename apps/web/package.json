@@ -53,6 +53,7 @@
     "@vercel/analytics": "^1.6.1",
     "ai": "^6.0.89",
     "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "ethers": "^6.15.0",
     "firebase-admin": "^13.6.0",
     "geist": "^1.5.1",
@@ -79,7 +80,9 @@
     "tiptap-markdown": "^0.9.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "viem": "^2.47.6",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/google.maps": "^3.58.1",
