@@ -33,6 +33,9 @@ import FeedNewsSection from './FeedNewsSection';
 import FeedCinemaSection from './FeedCinemaSection';
 import FeedRestaurantSection from './FeedRestaurantSection';
 import FeedSpecialMenuSection from './FeedSpecialMenuSection';
+import GovernanceNudge from './GovernanceNudge';
+import MeckyTip from './MeckyTip';
+import type { GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
 import FeedPostSkeleton from './FeedPostSkeleton';
 import FeedEmptyState from './FeedEmptyState';
 import PostComposer from './PostComposer';
@@ -226,6 +229,24 @@ export default function FeedHome() {
 
         case 'special_menu_section':
           return <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />;
+
+        case 'governance_nudge': {
+          const nudge = item.data as GovernanceNudgeData;
+          return (
+            <GovernanceNudge
+              proposalId={nudge.proposalId}
+              title={nudge.title}
+              forPercentage={nudge.forPercentage}
+              againstPercentage={nudge.againstPercentage}
+              daysRemaining={nudge.daysRemaining}
+            />
+          );
+        }
+
+        case 'mecky_tip': {
+          const tip = item.data as MeckyTipData;
+          return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
+        }
 
         default:
           return null;

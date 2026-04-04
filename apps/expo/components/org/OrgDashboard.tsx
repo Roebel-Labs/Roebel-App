@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
+import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
 
 interface StatCardProps {
   label: string;
@@ -58,6 +59,30 @@ export default function OrgDashboard() {
   const { userBusiness } = useUser();
   const { pointsBalance } = useRoebelCard();
 
+  const [dealCount, setDealCount] = useState(0);
+  const [totalViews, setTotalViews] = useState(0);
+
+  useEffect(() => {
+    if (!userBusiness?.id) return;
+
+    async function loadStats() {
+      try {
+        const [deals, analytics] = await Promise.all([
+          fetchDealsByBusiness(userBusiness!.id),
+          fetchDealAnalytics(userBusiness!.id).catch(() => null),
+        ]);
+        setDealCount(deals.length);
+        if (analytics) {
+          setTotalViews(analytics.totalViews);
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+
+    loadStats();
+  }, [userBusiness?.id]);
+
   return (
     <View style={styles.container}>
       {/* Business Name */}
@@ -67,8 +92,8 @@ export default function OrgDashboard() {
 
       {/* Stats Row */}
       <View style={styles.statsRow}>
-        <StatCard emoji="👁️" label="Aufrufe" value="—" colors={colors} />
-        <StatCard emoji="🏷️" label="Deals" value="—" colors={colors} />
+        <StatCard emoji="👁️" label="Aufrufe" value={totalViews} colors={colors} />
+        <StatCard emoji="🏷️" label="Deals" value={dealCount} colors={colors} />
         <StatCard emoji="🎴" label="Punkte" value={pointsBalance} colors={colors} />
       </View>
 
