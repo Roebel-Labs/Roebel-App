@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 // Import SVG icons
@@ -15,6 +16,7 @@ export const BOTTOM_NAV_HEIGHT = 56;
 
 function CustomTabBar({ state, navigation }: any) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const iconColor = colors.textPrimary;
 
   const tabs = [
@@ -39,7 +41,7 @@ function CustomTabBar({ state, navigation }: any) {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
       <View style={styles.tabsContainer}>
         {tabs.map((tab, index) => {
           const isActive = state.index === index;
