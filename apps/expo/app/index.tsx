@@ -39,14 +39,9 @@ function useDebounced<T>(value: T, delayMs: number): T {
 }
 
 export default function HomeScreen() {
-  const { activeMode } = useAppMode();
-
-  // Citizens and orgs see the social feed; tourists see the default home
-  if (activeMode !== 'tourist') {
-    return <FeedHome />;
-  }
-
-  return <DefaultHome />;
+  // Feed is the home screen for ALL modes (spec section 2)
+  // Content adapts per mode via the feed algorithm
+  return <FeedHome />;
 }
 
 function DefaultHome() {
