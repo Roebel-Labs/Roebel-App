@@ -21,7 +21,6 @@ export async function getRoebelCard(walletAddress: string): Promise<{
     .single();
 
   if (error && error.code !== "PGRST116") {
-    // PGRST116 = no rows found, which is OK
     return { success: false, error: error.message };
   }
 
@@ -29,7 +28,8 @@ export async function getRoebelCard(walletAddress: string): Promise<{
     return { success: true, data: data as RoebelCard };
   }
 
-  // No card yet — create one
+  // No card yet — create one via the increment function (auto-creates)
+  // or insert directly
   const { data: newCard, error: insertError } = await supabase
     .from("roebel_card")
     .insert({
@@ -44,32 +44,6 @@ export async function getRoebelCard(walletAddress: string): Promise<{
     .single();
 
   if (insertError) {
-    // Table might not exist yet — fallback to gamification_points from users table
-    const { data: user } = await supabase
-      .from("users")
-      .select("wallet_address, gamification_points, created_at, updated_at")
-      .eq("wallet_address", walletAddress)
-      .single();
-
-    if (user) {
-      const points = Number(user.gamification_points || 0);
-      const tier = computeTier(points);
-      return {
-        success: true,
-        data: {
-          wallet_address: walletAddress,
-          points_balance: points,
-          total_earned: points,
-          total_spent: 0,
-          tier,
-          streak_days: 0,
-          last_activity_at: null,
-          created_at: user.created_at,
-          updated_at: user.updated_at || user.created_at,
-        },
-      };
-    }
-
     return { success: false, error: insertError.message };
   }
 
@@ -97,8 +71,7 @@ export async function getPointsHistory(
     .range(offset, offset + limit - 1);
 
   if (error) {
-    // Table might not exist yet — return empty
-    return { success: true, data: [] };
+    return { success: false, error: error.message };
   }
 
   return { success: true, data: (data || []) as PointsLedgerEntry[] };
@@ -125,8 +98,7 @@ export async function getStampCards(walletAddress: string): Promise<{
     .order("created_at", { ascending: false });
 
   if (error) {
-    // Table might not exist yet
-    return { success: true, data: [] };
+    return { success: false, error: error.message };
   }
 
   const mapped = (data || []).map((row: Record<string, unknown>) => {
@@ -148,6 +120,64 @@ export async function getStampCards(walletAddress: string): Promise<{
   });
 
   return { success: true, data: mapped };
+}
+
+// --- Award Points ---
+
+export async function awardPoints(
+  walletAddress: string,
+  action: PointsAction,
+  amount: number,
+  description: string,
+  referenceType?: string,
+  referenceId?: string
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  const supabase = await createClient();
+
+  // 1. Use the atomic increment function
+  const { data: newBalance, error: rpcError } = await supabase.rpc(
+    "increment_roebel_points",
+    { p_wallet_address: walletAddress, p_amount: amount }
+  );
+
+  if (rpcError) {
+    return { success: false, error: rpcError.message };
+  }
+
+  // 2. Insert ledger entry
+  const { error: ledgerError } = await supabase
+    .from("roebel_points_ledger")
+    .insert({
+      wallet_address: walletAddress,
+      amount,
+      action,
+      reference_type: referenceType,
+      reference_id: referenceId,
+      description,
+    });
+
+  if (ledgerError) {
+    return { success: false, error: ledgerError.message };
+  }
+
+  // 3. Update tier if needed
+  const { data: card } = await supabase
+    .from("roebel_card")
+    .select("total_earned, tier")
+    .eq("wallet_address", walletAddress)
+    .single();
+
+  if (card) {
+    const newTier = computeTier(card.total_earned);
+    if (newTier !== card.tier) {
+      await supabase
+        .from("roebel_card")
+        .update({ tier: newTier, updated_at: new Date().toISOString() })
+        .eq("wallet_address", walletAddress);
+    }
+  }
+
+  return { success: true, newBalance: newBalance as number };
 }
 
 // --- Helpers ---
