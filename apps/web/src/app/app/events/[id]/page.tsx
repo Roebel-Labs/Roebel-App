@@ -8,6 +8,14 @@ import { Calendar, Clock, MapPin, User, DollarSign, Globe, Phone, ArrowLeft } fr
 import Link from "next/link"
 import { DeepLinkRedirect } from "@/components/deep-link-redirect"
 import { EventInterestButton } from "@/components/app/EventInterestButton"
+import { EventOwnerActions } from "@/components/app/EventOwnerActions"
+
+interface EventAccount {
+  id: string
+  name: string
+  avatar_url: string | null
+  account_type: string
+}
 
 interface Event {
   id: string
@@ -26,6 +34,8 @@ interface Event {
   ticket_price: number | null
   max_attendees: number | null
   created_at: string
+  account_id: string | null
+  accounts: EventAccount | null
 }
 
 async function getEvent(id: string): Promise<Event | null> {
@@ -33,7 +43,7 @@ async function getEvent(id: string): Promise<Event | null> {
 
   const { data: event, error } = await supabase
     .from("events")
-    .select("*")
+    .select("*, accounts:account_id(id, name, avatar_url, account_type)")
     .eq("id", id)
     .single()
 
@@ -156,10 +166,27 @@ export default async function EventDetailPage({
               <CardTitle className="text-lg">Veranstalter</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-3">
-                <User className="h-4 w-4 text-primary flex-shrink-0" />
-                <span className="font-medium text-sm">{event.organizer_name}</span>
-              </div>
+              {event.accounts ? (
+                <div className="flex items-center gap-3">
+                  {event.accounts.avatar_url ? (
+                    <Image
+                      src={event.accounts.avatar_url}
+                      alt={event.accounts.name}
+                      width={24}
+                      height={24}
+                      className="rounded-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-4 w-4 text-primary flex-shrink-0" />
+                  )}
+                  <span className="font-medium text-sm">{event.accounts.name}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <User className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="font-medium text-sm">{event.organizer_name}</span>
+                </div>
+              )}
 
               {event.organizer_phone && (
                 <div className="flex items-center gap-3">
@@ -189,6 +216,12 @@ export default async function EventDetailPage({
                     </Link>
                   </Button>
                 )}
+
+                <EventOwnerActions
+                  eventId={event.id}
+                  eventTitle={event.title}
+                  accountId={event.account_id}
+                />
               </div>
             </CardContent>
           </Card>

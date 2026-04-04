@@ -8,7 +8,7 @@ export default async function AppEventsPage() {
 
   const { data: events } = await supabase
     .from("events")
-    .select("*")
+    .select("*, accounts:account_id(id, name, avatar_url, account_type)")
     .eq("status", "approved")
     .order("date", { ascending: true });
 
