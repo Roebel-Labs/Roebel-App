@@ -10,40 +10,89 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import ErrorDrawer from './ErrorDrawer';
 
+export type QRScanResult = {
+  type: 'verification' | 'checkpoint' | 'stamp' | 'unknown';
+  data: string;
+  id?: string;
+  nftType?: string;
+};
+
 interface QRScannerProps {
-  onScan?: (data: string) => void;
+  onScan?: (result: QRScanResult) => void;
+  /** Restrict to specific QR types. If omitted, all types are handled. */
+  allowedTypes?: QRScanResult['type'][];
 }
 
-export default function QRScanner({ onScan }: QRScannerProps) {
+function parseQRCode(data: string): QRScanResult {
+  // Verification: hometownevents://verification/request/{id}?type=citizen
+  const verificationMatch = data.match(/hometownevents:\/\/verification\/request\/(\d+)\?type=(\w+)/);
+  if (verificationMatch) {
+    return { type: 'verification', data, id: verificationMatch[1], nftType: verificationMatch[2] };
+  }
+
+  // Explorer checkpoint: roebel-checkpoint:<qr_code>
+  if (data.startsWith('roebel-checkpoint:')) {
+    return { type: 'checkpoint', data, id: data.replace('roebel-checkpoint:', '') };
+  }
+
+  // Stamp card: roebel-stamp:<partner_id>
+  if (data.startsWith('roebel-stamp:')) {
+    return { type: 'stamp', data, id: data.replace('roebel-stamp:', '') };
+  }
+
+  return { type: 'unknown', data };
+}
+
+export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
     if (scanned) return;
-
     setScanned(true);
 
-    // Parse the QR code data
-    // Expected format: hometownevents://verification/request/{id}?type=citizen
-    const match = data.match(/hometownevents:\/\/verification\/request\/(\d+)\?type=(\w+)/);
+    const result = parseQRCode(data);
 
-    if (match) {
-      const requestId = match[1];
-      const nftType = match[2];
-
-      if (onScan) {
-        onScan(data);
-      } else {
-        // Navigate to request details
-        router.push(`/verification/request/${requestId}?type=${nftType}` as any);
-      }
-    } else {
+    // Check if this type is allowed
+    if (allowedTypes && !allowedTypes.includes(result.type)) {
+      const typeLabels: Record<string, string> = {
+        verification: 'Verifizierung',
+        checkpoint: 'Explorer-Checkpoint',
+        stamp: 'Stempelkarte',
+      };
+      const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
         visible: true,
-        message: 'Dieser QR-Code gehört nicht zu einem Verifizierungsantrag.'
+        message: `Dieser QR-Code ist kein ${expected}-Code.`,
       });
+      setScanned(false);
+      return;
+    }
+
+    if (result.type === 'unknown') {
+      setErrorDrawer({
+        visible: true,
+        message: 'Dieser QR-Code wird nicht erkannt.',
+      });
+      setScanned(false);
+      return;
+    }
+
+    if (onScan) {
+      onScan(result);
+      return;
+    }
+
+    // Default navigation based on type
+    if (result.type === 'verification' && result.id) {
+      router.push(`/verification/request/${result.id}?type=${result.nftType}` as any);
+    } else if (result.type === 'checkpoint') {
+      // Handled by parent via onScan
+      setScanned(false);
+    } else if (result.type === 'stamp') {
+      // Handled by parent via onScan
       setScanned(false);
     }
   };

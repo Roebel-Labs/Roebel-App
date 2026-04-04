@@ -1,22 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
-import { fetchCheckpoints, fetchCompletions, type ExplorerCheckpoint } from '@/lib/supabase-explorer';
+import { useSnackbar } from '@/context/SnackbarContext';
+import { fetchCheckpoints, fetchCompletions, completeCheckpoint, type ExplorerCheckpoint } from '@/lib/supabase-explorer';
+import QRScanner, { type QRScanResult } from '@/components/QRScanner';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import QrCodeIcon from '@/assets/icons/qr-code.svg';
 
 export default function ExplorerScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user } = useUser();
   const { earnPoints } = useRoebelCard();
+  const { showSnackbar } = useSnackbar();
 
   const [checkpoints, setCheckpoints] = useState<ExplorerCheckpoint[]>([]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -32,6 +37,36 @@ export default function ExplorerScreen() {
     load();
   }, [user?.wallet_address]);
 
+  const handleQRScan = useCallback(async (result: QRScanResult) => {
+    setScannerVisible(false);
+
+    if (result.type !== 'checkpoint' || !result.id || !user?.wallet_address) {
+      showSnackbar('Kein gültiger Checkpoint-QR-Code');
+      return;
+    }
+
+    // Find matching checkpoint by qr_code
+    const checkpoint = checkpoints.find(cp => cp.qr_code === result.id);
+    if (!checkpoint) {
+      showSnackbar('Checkpoint nicht gefunden');
+      return;
+    }
+
+    if (completedIds.has(checkpoint.id)) {
+      showSnackbar('Checkpoint bereits besucht!');
+      return;
+    }
+
+    const { success } = await completeCheckpoint(user.wallet_address, checkpoint.id);
+    if (success) {
+      await earnPoints('checkpoint', 'checkpoint', checkpoint.id, `Checkpoint: ${checkpoint.name}`);
+      setCompletedIds(prev => new Set([...prev, checkpoint.id]));
+      showSnackbar(`✅ ${checkpoint.name} — +${checkpoint.points_reward} Punkte!`);
+    } else {
+      showSnackbar('Fehler beim Abschließen des Checkpoints');
+    }
+  }, [checkpoints, completedIds, user?.wallet_address, earnPoints, showSnackbar]);
+
   const completedCount = completedIds.size;
   const totalCount = checkpoints.length;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
@@ -43,7 +78,9 @@ export default function ExplorerScreen() {
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel Explorer</Text>
-        <View style={{ width: 40 }} />
+        <Pressable onPress={() => setScannerVisible(true)} style={styles.scanButton}>
+          <QrCodeIcon width={22} height={22} color={colors.textPrimary} />
+        </Pressable>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -111,6 +148,20 @@ export default function ExplorerScreen() {
           })
         )}
       </ScrollView>
+
+      {/* QR Scanner Modal */}
+      <Modal visible={scannerVisible} animationType="slide" onRequestClose={() => setScannerVisible(false)}>
+        <SafeAreaView style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <Pressable onPress={() => setScannerVisible(false)} style={styles.backButton}>
+              <ChevronLeftIcon width={24} height={24} color="#ffffff" />
+            </Pressable>
+            <Text style={styles.scannerTitle}>Checkpoint scannen</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <QRScanner onScan={handleQRScan} allowedTypes={['checkpoint']} />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -126,7 +177,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { padding: 8 },
+  scanButton: { padding: 8 },
   headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  scannerContainer: { flex: 1, backgroundColor: '#000' },
+  scannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  scannerTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold', color: '#ffffff' },
   content: { padding: 16, gap: 16 },
   progressCard: {
     borderRadius: 20,

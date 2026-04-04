@@ -176,6 +176,7 @@ function ThemedLayout() {
           <Stack.Screen name="wallet" options={{ headerShown: false }} />
           <Stack.Screen name="explorer" options={{ headerShown: false }} />
           <Stack.Screen name="machs-in-roebel" options={{ headerShown: false }} />
+          <Stack.Screen name="stamp-scan" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </View>
