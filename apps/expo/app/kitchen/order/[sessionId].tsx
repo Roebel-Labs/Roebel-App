@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -114,7 +114,7 @@ export default function StaffOrderScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
@@ -123,74 +123,74 @@ export default function StaffOrderScreen() {
   const categories = restaurant?.menu_categories || [];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.headerBack}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={{ fontSize: 18, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
           Bestellung — Tisch {session?.table_number}
         </Text>
       </View>
 
       {/* Search bar (staff only feature) */}
-      <View style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
+      <View style={styles.searchBar}>
         <TextInput
           placeholder="Gericht suchen..."
           placeholderTextColor={colors.textTertiary}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, fontFamily: 'Inter-Regular', color: colors.textPrimary }}
+          style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
           autoFocus
         />
       </View>
 
       {/* Search results dropdown */}
       {searchResults.length > 0 && (
-        <View style={{ paddingHorizontal: 16, maxHeight: 200 }}>
-          <ScrollView style={{ backgroundColor: colors.surface, borderRadius: 12 }}>
+        <View style={styles.searchResults}>
+          <ScrollView style={[styles.searchResultsInner, { backgroundColor: colors.surface }]}>
             {searchResults.map(item => (
               <Pressable
                 key={item.id}
                 onPress={() => addToCart(item)}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }}
+                style={[styles.searchResultItem, { borderBottomColor: colors.borderSecondary }]}
               >
-                <Text style={{ fontSize: 14, color: colors.textPrimary, flex: 1 }}>{item.name}</Text>
-                <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textSecondary }}>{formatMenuPrice(item.price)}</Text>
+                <Text style={[styles.searchResultName, { color: colors.textPrimary }]}>{item.name}</Text>
+                <Text style={[styles.searchResultPrice, { color: colors.textSecondary }]}>{formatMenuPrice(item.price)}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
       )}
 
-      <ScrollView style={{ flex: 1, padding: 16 }}>
+      <ScrollView style={styles.scrollContent}>
         {/* Full menu browse (when not searching) */}
         {!searchQuery.trim() && categories.map(cat => (
-          <View key={cat.id} style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 16, fontFamily: 'Inter-Medium', color: colors.textPrimary, marginBottom: 6 }}>{cat.name}</Text>
+          <View key={cat.id} style={styles.menuCategory}>
+            <Text style={[styles.categoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
             {(cat.menu_items || []).filter((i: any) => i.is_available !== false).map((item: any) => (
               <Pressable
                 key={item.id}
                 onPress={() => addToCart(item)}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }}
+                style={[styles.menuItem, { borderBottomColor: colors.borderSecondary }]}
               >
-                <Text style={{ fontSize: 14, color: colors.textPrimary, flex: 1 }}>{item.name}</Text>
-                <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textSecondary }}>{formatMenuPrice(item.price)}</Text>
+                <Text style={[styles.menuItemName, { color: colors.textPrimary }]}>{item.name}</Text>
+                <Text style={[styles.menuItemPrice, { color: colors.textSecondary }]}>{formatMenuPrice(item.price)}</Text>
               </Pressable>
             ))}
           </View>
         ))}
-        <View style={{ height: 200 }} />
+        <View style={styles.scrollSpacer} />
       </ScrollView>
 
       {/* Cart + submit */}
       {cart.length > 0 && (
-        <View style={{ backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, padding: 16 }}>
+        <View style={[styles.cartPanel, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
           {cart.map((c, i) => (
-            <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}>
-              <Text style={{ fontSize: 14, color: colors.textPrimary }}>{c.quantity}x {c.menuItem.name}</Text>
+            <View key={i} style={styles.cartRow}>
+              <Text style={[styles.cartItemName, { color: colors.textPrimary }]}>{c.quantity}x {c.menuItem.name}</Text>
               <Pressable onPress={() => removeFromCart(i)}>
-                <Text style={{ fontSize: 13, color: '#DC2626' }}>Entfernen</Text>
+                <Text style={styles.removeText}>Entfernen</Text>
               </Pressable>
             </View>
           ))}
@@ -199,17 +199,17 @@ export default function StaffOrderScreen() {
             placeholderTextColor={colors.textTertiary}
             value={guestName}
             onChangeText={setGuestName}
-            style={{ backgroundColor: colors.background, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.textPrimary, marginTop: 10 }}
+            style={[styles.guestInput, { backgroundColor: colors.background, color: colors.textPrimary }]}
           />
           <Pressable
             onPress={handleSubmit}
             disabled={isSubmitting}
-            style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10, opacity: isSubmitting ? 0.6 : 1 }}
+            style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: isSubmitting ? 0.6 : 1 }]}
           >
             {isSubmitting ? (
               <ActivityIndicator color={colors.onPrimary} />
             ) : (
-              <Text style={{ color: colors.onPrimary, fontSize: 15, fontFamily: 'Inter-Medium' }}>
+              <Text style={[styles.submitBtnText, { color: colors.onPrimary }]}>
                 Bestellung aufgeben ({formatMenuPrice(cartTotal)})
               </Text>
             )}
@@ -219,3 +219,125 @@ export default function StaffOrderScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerBack: {
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Medium',
+  },
+  searchBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+  },
+  searchResults: {
+    paddingHorizontal: 16,
+    maxHeight: 200,
+  },
+  searchResultsInner: {
+    borderRadius: 12,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  searchResultName: {
+    fontSize: 14,
+    flex: 1,
+  },
+  searchResultPrice: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  scrollContent: {
+    flex: 1,
+    padding: 16,
+  },
+  menuCategory: {
+    marginBottom: 16,
+  },
+  categoryName: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 6,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  menuItemName: {
+    fontSize: 14,
+    flex: 1,
+  },
+  menuItemPrice: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  scrollSpacer: {
+    height: 200,
+  },
+  cartPanel: {
+    borderTopWidth: 1,
+    padding: 16,
+  },
+  cartRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  cartItemName: {
+    fontSize: 14,
+  },
+  removeText: {
+    fontSize: 13,
+    color: '#DC2626',
+  },
+  guestInput: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginTop: 10,
+  },
+  submitBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  submitBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+});

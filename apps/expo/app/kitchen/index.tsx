@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -106,12 +106,15 @@ export default function KitchenDashboardScreen() {
 
   if (!restaurantId && !loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <Text style={{ fontSize: 16, color: colors.textTertiary, textAlign: 'center', padding: 32 }}>
+      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
           Kein Restaurant mit diesem Konto verknüpft
         </Text>
-        <Pressable onPress={() => router.back()} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 }}>
-          <Text style={{ color: colors.onPrimary, fontFamily: 'Inter-Medium' }}>Zurück</Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backBtn, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.backBtnText, { color: colors.onPrimary }]}>Zurück</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -119,7 +122,7 @@ export default function KitchenDashboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
@@ -128,26 +131,29 @@ export default function KitchenDashboardScreen() {
   const selected = selectedSession ? sessionsWithOrders.find(s => s.session.id === selectedSession) : null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <Pressable onPress={() => selectedSession ? setSelectedSession(null) : router.back()} style={{ marginRight: 12 }}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Pressable onPress={() => selectedSession ? setSelectedSession(null) : router.back()} style={styles.headerBack}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={{ fontSize: 18, fontFamily: 'Inter-Medium', color: colors.textPrimary, flex: 1 }}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
           {selectedSession ? `Tisch ${selected?.session.table_number}` : 'Küche'}
         </Text>
-        <Pressable onPress={() => router.push('/kitchen/tables')} style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.surface, borderRadius: 8 }}>
-          <Text style={{ fontSize: 13, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Tische</Text>
+        <Pressable
+          onPress={() => router.push('/kitchen/tables')}
+          style={[styles.tablesBtn, { backgroundColor: colors.surface }]}
+        >
+          <Text style={[styles.tablesBtnText, { color: colors.textPrimary }]}>Tische</Text>
         </Pressable>
       </View>
 
       {!selectedSession ? (
         <ScrollView
-          style={{ flex: 1, padding: 16 }}
+          style={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         >
           {sessionsWithOrders.length === 0 && (
-            <Text style={{ color: colors.textTertiary, textAlign: 'center', marginTop: 40 }}>Keine aktiven Tische</Text>
+            <Text style={[styles.noSessionsText, { color: colors.textTertiary }]}>Keine aktiven Tische</Text>
           )}
           {sessionsWithOrders.map(({ session, orders }) => {
             const newCount = orders.filter(o => o.status === 'new').length;
@@ -157,31 +163,34 @@ export default function KitchenDashboardScreen() {
               <Pressable
                 key={session.id}
                 onPress={() => setSelectedSession(session.id)}
-                style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 10, borderLeftWidth: newCount > 0 ? 4 : 0, borderLeftColor: '#F59E0B' }}
+                style={[
+                  styles.sessionCard,
+                  { backgroundColor: colors.surface, borderLeftWidth: newCount > 0 ? 4 : 0, borderLeftColor: '#F59E0B' },
+                ]}
               >
-                <Text style={{ fontSize: 17, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Tisch {session.table_number}</Text>
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
-                  {newCount > 0 && <Text style={{ fontSize: 13, color: '#92400E' }}>{newCount} neu</Text>}
-                  {inProgressCount > 0 && <Text style={{ fontSize: 13, color: '#1E40AF' }}>{inProgressCount} in Bearbeitung</Text>}
-                  <Text style={{ fontSize: 13, color: colors.textTertiary }}>{orders.length} gesamt</Text>
+                <Text style={[styles.sessionTitle, { color: colors.textPrimary }]}>Tisch {session.table_number}</Text>
+                <View style={styles.sessionMeta}>
+                  {newCount > 0 && <Text style={styles.newCount}>{newCount} neu</Text>}
+                  {inProgressCount > 0 && <Text style={styles.inProgressCount}>{inProgressCount} in Bearbeitung</Text>}
+                  <Text style={[styles.totalCount, { color: colors.textTertiary }]}>{orders.length} gesamt</Text>
                 </View>
               </Pressable>
             );
           })}
 
           {tables.filter(t => t.is_active && !sessionsWithOrders.some(s => s.session.table_number === t.table_number)).length > 0 && (
-            <View style={{ marginTop: 20 }}>
-              <Text style={{ fontSize: 14, fontFamily: 'Inter-Medium', color: colors.textSecondary, marginBottom: 8 }}>Neue Sitzung starten</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <View style={styles.newSessionSection}>
+              <Text style={[styles.newSessionLabel, { color: colors.textSecondary }]}>Neue Sitzung starten</Text>
+              <View style={styles.tableButtonRow}>
                 {tables
                   .filter(t => t.is_active && !sessionsWithOrders.some(s => s.session.table_number === t.table_number))
                   .map(t => (
                     <Pressable
                       key={t.id}
                       onPress={() => handleCreateSession(t.table_number)}
-                      style={{ backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 }}
+                      style={[styles.tableButton, { backgroundColor: colors.surface }]}
                     >
-                      <Text style={{ fontSize: 14, color: colors.textPrimary }}>+ Tisch {t.table_number}</Text>
+                      <Text style={[styles.tableButtonText, { color: colors.textPrimary }]}>+ Tisch {t.table_number}</Text>
                     </Pressable>
                   ))}
               </View>
@@ -189,26 +198,150 @@ export default function KitchenDashboardScreen() {
           )}
         </ScrollView>
       ) : (
-        <ScrollView style={{ flex: 1, padding: 16 }}>
+        <ScrollView style={styles.scrollContent}>
           {selected?.orders.map(order => (
             <KitchenOrderCard key={order.id} order={order} onStatusChange={handleStatusChange} />
           ))}
 
           <Pressable
             onPress={() => router.push(`/kitchen/order/${selectedSession}` as any)}
-            style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 }}
+            style={[styles.orderBtn, { backgroundColor: colors.primary }]}
           >
-            <Text style={{ color: colors.onPrimary, fontSize: 15, fontFamily: 'Inter-Medium' }}>Bestellung aufnehmen</Text>
+            <Text style={[styles.orderBtnText, { color: colors.onPrimary }]}>Bestellung aufnehmen</Text>
           </Pressable>
 
           <Pressable
             onPress={() => handleCloseSession(selectedSession)}
-            style={{ borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8 }}
+            style={styles.closeSessionBtn}
           >
-            <Text style={{ color: '#DC2626', fontSize: 14, fontFamily: 'Inter-Regular' }}>Tisch schließen</Text>
+            <Text style={styles.closeSessionText}>Tisch schließen</Text>
           </Pressable>
         </ScrollView>
       )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    textAlign: 'center',
+    padding: 32,
+  },
+  backBtn: {
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  backBtnText: {
+    fontFamily: 'Inter-Medium',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerBack: {
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Medium',
+    flex: 1,
+  },
+  tablesBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  tablesBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  scrollContent: {
+    flex: 1,
+    padding: 16,
+  },
+  noSessionsText: {
+    textAlign: 'center',
+    marginTop: 40,
+  },
+  sessionCard: {
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+  },
+  sessionTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-Medium',
+  },
+  sessionMeta: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 6,
+  },
+  newCount: {
+    fontSize: 13,
+    color: '#92400E',
+  },
+  inProgressCount: {
+    fontSize: 13,
+    color: '#1E40AF',
+  },
+  totalCount: {
+    fontSize: 13,
+  },
+  newSessionSection: {
+    marginTop: 20,
+  },
+  newSessionLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+  },
+  tableButtonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tableButton: {
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  tableButtonText: {
+    fontSize: 14,
+  },
+  orderBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  orderBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+  closeSessionBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  closeSessionText: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+  },
+});

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, Pressable, Share } from 'react-native';
+import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -25,7 +25,7 @@ export default function TableQRCode({ slug, tableNumber }: Props) {
   };
 
   return (
-    <View style={{ alignItems: 'center', padding: 20 }}>
+    <View style={styles.container}>
       <QRCode
         value={url}
         size={200}
@@ -33,16 +33,42 @@ export default function TableQRCode({ slug, tableNumber }: Props) {
         color="black"
         getRef={(ref: any) => (qrRef.current = ref)}
       />
-      <Text style={{ fontSize: 16, fontFamily: 'Inter-Medium', color: colors.textPrimary, marginTop: 16 }}>
+      <Text style={[styles.tableLabel, { color: colors.textPrimary }]}>
         Tisch {tableNumber}
       </Text>
-      <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 4 }}>{url}</Text>
+      <Text style={[styles.urlText, { color: colors.textTertiary }]}>{url}</Text>
       <Pressable
         onPress={handleShare}
-        style={{ backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10, marginTop: 16 }}
+        style={[styles.shareBtn, { backgroundColor: colors.primary }]}
       >
-        <Text style={{ color: colors.onPrimary, fontSize: 14, fontFamily: 'Inter-Medium' }}>Teilen / Drucken</Text>
+        <Text style={[styles.shareBtnText, { color: colors.onPrimary }]}>Teilen / Drucken</Text>
       </Pressable>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  tableLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    marginTop: 16,
+  },
+  urlText: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  shareBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+  shareBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+});
