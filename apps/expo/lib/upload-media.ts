@@ -22,8 +22,10 @@ export async function uploadMediaFile(
     const fileName = `${folder}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const filePath = `${folder}/${walletAddress}/${fileName}`;
 
-    const { error } = await supabase.storage.from('post-media').upload(filePath, blob, {
+    const { error } = await supabase.storage.from('images').upload(filePath, blob, {
       contentType: type === 'video' ? 'video/mp4' : 'image/jpeg',
+      cacheControl: '3600',
+      upsert: false,
     });
 
     if (error) {
@@ -31,7 +33,7 @@ export async function uploadMediaFile(
       return null;
     }
 
-    const { data } = supabase.storage.from('post-media').getPublicUrl(filePath);
+    const { data } = supabase.storage.from('images').getPublicUrl(filePath);
     return data.publicUrl;
   } catch (err) {
     console.error('Upload failed:', err);
