@@ -217,6 +217,49 @@ export function EventDetailSkeleton() {
   );
 }
 
+export function RestaurantDetailSkeleton() {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Hero Image */}
+      <Skeleton height={220} />
+
+      {/* Content */}
+      <View style={{ padding: 16 }}>
+        {/* Name + Status */}
+        <Skeleton width="70%" height={26} style={{ marginBottom: 8 }} />
+        <Skeleton width={80} height={24} borderRadius={12} style={{ marginBottom: 16 }} />
+
+        {/* Description */}
+        <Skeleton width="100%" height={16} style={{ marginBottom: 6 }} />
+        <Skeleton width="90%" height={16} style={{ marginBottom: 6 }} />
+        <Skeleton width="75%" height={16} style={{ marginBottom: 24 }} />
+
+        {/* Contact info */}
+        <View style={{ gap: 12, marginBottom: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Skeleton width={20} height={20} borderRadius={10} />
+            <Skeleton width="60%" height={16} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Skeleton width={20} height={20} borderRadius={10} />
+            <Skeleton width="50%" height={16} />
+          </View>
+        </View>
+
+        {/* Menu categories */}
+        <Skeleton width={120} height={22} style={{ marginBottom: 16 }} />
+        {[1, 2, 3].map(i => (
+          <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Skeleton width="60%" height={16} />
+            <Skeleton width={60} height={16} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function MovieDetailSkeleton() {
   const { colors } = useTheme();
   return (
