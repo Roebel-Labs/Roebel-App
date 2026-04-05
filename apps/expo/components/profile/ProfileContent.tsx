@@ -243,7 +243,10 @@ export default function ProfileContent() {
                     <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
                   </Pressable>
                 </View>
-                <BusinessStatusBanner business={userBusiness} />
+                <BusinessStatusBanner
+                  business={userBusiness}
+                  onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
+                />
                 <View style={styles.menuSection}>
                   <View style={styles.menuGroup}>
                     <ProfileMenuItem icon={<StarIcon width={20} height={20} color={colors.textPrimary} />} label="Dashboard" onPress={() => router.push('/business/dashboard' as any)} />

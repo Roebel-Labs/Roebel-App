@@ -1,85 +1,56 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
+import { View, Text, Pressable } from 'react-native';
 import type { BusinessRecord } from '@/lib/types';
+
+const ORG_TYPE_EMOJI: Record<string, string> = {
+  gastronomie: '🍽️',
+  einzelhandel: '🏪',
+  handwerk: '🔧',
+  dienstleistung: '💼',
+  gesundheit: '🏥',
+  bildung: '📚',
+  kultur: '🎭',
+  sport: '⚽',
+  tourismus: '🏖️',
+  immobilien: '🏠',
+  sonstiges: '🏢',
+};
+
+const STATUS_CONFIG: Record<string, { label: string; bgClass: string; textClass: string }> = {
+  pending: { label: 'In Prüfung', bgClass: 'bg-amber-50 dark:bg-amber-950', textClass: 'text-amber-700 dark:text-amber-300' },
+  approved: { label: 'Freigegeben', bgClass: 'bg-green-50 dark:bg-green-950', textClass: 'text-green-700 dark:text-green-300' },
+  rejected: { label: 'Abgelehnt', bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-700 dark:text-red-300' },
+};
 
 type Props = {
   business: BusinessRecord;
-  onRetry?: () => void;
+  onPress?: () => void;
 };
 
-export default function BusinessStatusBanner({ business, onRetry }: Props) {
-  const { colors, isDark } = useTheme();
+export default function BusinessStatusBanner({ business, onPress }: Props) {
+  const emoji = ORG_TYPE_EMOJI[business.category || ''] || '🏢';
+  const status = STATUS_CONFIG[business.status] || STATUS_CONFIG.pending;
 
-  if (business.status === 'approved') {
-    return (
-      <View style={[styles.banner, { backgroundColor: isDark ? '#064E3B' : '#D1FAE5' }]}>
-        <Text style={[styles.bannerText, { color: isDark ? '#6EE7B7' : '#065F46' }]}>
-          Unternehmen aktiv
-        </Text>
-      </View>
-    );
-  }
-
-  if (business.status === 'pending') {
-    return (
-      <View style={[styles.banner, { backgroundColor: isDark ? '#78350F' : '#FEF3C7' }]}>
-        <Text style={[styles.bannerText, { color: isDark ? '#FCD34D' : '#92400E' }]}>
-          Antrag wird geprüft
-        </Text>
-        <Text style={[styles.bannerSubtext, { color: isDark ? '#D97706' : '#B45309' }]}>
-          Ihr Unternehmensprofil wird von der Verwaltung geprüft.
-        </Text>
-      </View>
-    );
-  }
-
-  // Rejected
   return (
-    <View style={[styles.banner, { backgroundColor: isDark ? '#7F1D1D' : '#FEE2E2' }]}>
-      <Text style={[styles.bannerText, { color: isDark ? '#FCA5A5' : '#991B1B' }]}>
-        Antrag abgelehnt
-      </Text>
-      {business.admin_notes && (
-        <Text style={[styles.bannerSubtext, { color: isDark ? '#F87171' : '#B91C1C' }]}>
-          {business.admin_notes}
-        </Text>
-      )}
-      {onRetry && (
-        <Pressable style={[styles.retryButton, { borderColor: isDark ? '#FCA5A5' : '#991B1B' }]} onPress={onRetry}>
-          <Text style={[styles.retryText, { color: isDark ? '#FCA5A5' : '#991B1B' }]}>Erneut beantragen</Text>
-        </Pressable>
-      )}
-    </View>
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center justify-between border border-border rounded-2xl p-4 mx-4 mb-4"
+    >
+      <View className="flex-row items-center gap-3 flex-1">
+        <View className="w-11 h-11 rounded-xl bg-surface items-center justify-center">
+          <Text className="text-xl">{emoji}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-base font-inter-semibold text-text-primary" numberOfLines={1}>{business.name}</Text>
+          <Text className="text-xs font-inter-regular text-text-secondary">{business.category || 'Organisation'}</Text>
+        </View>
+      </View>
+      <View className="flex-row items-center gap-2">
+        <View className={`px-2.5 py-1 rounded-full ${status.bgClass}`}>
+          <Text className={`text-xs font-inter-medium ${status.textClass}`}>{status.label}</Text>
+        </View>
+        <Text className="text-text-tertiary text-base">›</Text>
+      </View>
+    </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: {
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  bannerText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
-  bannerSubtext: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
-  },
-  retryButton: {
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  retryText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-});

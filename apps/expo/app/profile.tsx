@@ -298,7 +298,10 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Business Status */}
-                <BusinessStatusBanner business={userBusiness} />
+                <BusinessStatusBanner
+                  business={userBusiness}
+                  onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
+                />
 
                 {/* Business Menu */}
                 <View style={styles.menuSection}>
@@ -405,18 +408,12 @@ export default function ProfileScreen() {
                     </>
                   )}
 
-                  {/* Business Dashboard - for business owners with pending business */}
-                  {isBusinessOwner && userBusiness?.status === 'pending' && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Mein Unternehmen"
-                          onPress={() => router.push('/business/dashboard' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
+                  {/* Business Status Banner - for business owners with pending/rejected business */}
+                  {isBusinessOwner && userBusiness && userBusiness.status !== 'approved' && (
+                    <BusinessStatusBanner
+                      business={userBusiness}
+                      onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
+                    />
                   )}
 
                   {/* Verification Menu Group - Only show for verified users */}
