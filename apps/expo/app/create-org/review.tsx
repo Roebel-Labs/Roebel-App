@@ -213,8 +213,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  title: { fontSize: 20, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginBottom: 32 },
+  title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
+  subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   sectionCard: {
     borderRadius: 16,
     padding: 16,

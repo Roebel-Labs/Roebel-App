@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 20,
+    fontSize: 26,
     fontFamily: 'Inter-Bold',
     textAlign: 'center',
     marginBottom: 12,

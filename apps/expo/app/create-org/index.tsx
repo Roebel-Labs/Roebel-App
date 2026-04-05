@@ -59,12 +59,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heading: {
-    fontSize: 22,
+    fontSize: 28,
     fontFamily: 'Inter-Bold',
     marginBottom: 8,
   },
   subheading: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
     marginBottom: 40,
   },
@@ -87,11 +87,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
   },
   stepDesc: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
     marginTop: 2,
   },

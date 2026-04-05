@@ -138,12 +138,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   title: {
-    fontSize: 20,
+    fontSize: 26,
     fontFamily: 'Inter-Bold',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
     marginBottom: 32,
   },
