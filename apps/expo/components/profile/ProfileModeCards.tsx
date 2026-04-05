@@ -45,12 +45,12 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.ctaBanner, { backgroundColor: colors.primary }]}
+      style={[styles.ctaBanner, { backgroundColor: colors.surface }]}
     >
       <Text style={styles.ctaEmoji}>{emoji}</Text>
       <View style={styles.ctaTextContainer}>
-        <Text style={styles.ctaTitle}>{title}</Text>
-        <Text style={styles.ctaSubtitle}>{subtitle}</Text>
+        <Text style={[styles.ctaTitle, { color: colors.textPrimary }]}>{title}</Text>
+        <Text style={[styles.ctaSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
       </View>
     </Pressable>
   );
@@ -120,7 +120,7 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
         emoji="🚀"
         title="Mach's in Röbel"
         subtitle="Gewerbe, Verein, Partei, Freelancer..."
-        onPress={() => router.push('/machs-in-roebel' as any)}
+        onPress={() => router.push('/create-org' as any)}
       />
     </>
   );
@@ -191,12 +191,10 @@ const styles = StyleSheet.create({
   ctaTitle: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
   },
   ctaSubtitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.7)',
     marginTop: 2,
   },
 });

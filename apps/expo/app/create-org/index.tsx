@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import ExitWizardSheet from '@/components/ExitWizardSheet';
+import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 
 const STEPS = [
   { emoji: '🏪', title: 'Wähle deinen Typ', desc: 'Restaurant, Verein, Partei oder Unternehmen' },
@@ -13,9 +15,27 @@ const STEPS = [
 export default function CreateOrgIntroScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const [showExit, setShowExit] = useState(false);
+  const { dispatch } = useCreateOrgWizard();
+
+  const handleDelete = () => {
+    dispatch({ type: 'RESET' });
+    setShowExit(false);
+    router.back();
+  };
+
+  const handleSaveAndExit = () => {
+    setShowExit(false);
+    router.back();
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={styles.headerRow}>
+        <Pressable onPress={() => setShowExit(true)} style={styles.closeButton}>
+          <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>✕</Text>
+        </Pressable>
+      </View>
       <View style={styles.content}>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Werde sichtbar{'\n'}in Röbel
@@ -45,6 +65,13 @@ export default function CreateOrgIntroScreen() {
           <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
         </Pressable>
       </View>
+
+      <ExitWizardSheet
+        visible={showExit}
+        onDelete={handleDelete}
+        onSaveAndExit={handleSaveAndExit}
+        onCancel={() => setShowExit(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -52,6 +79,20 @@ export default function CreateOrgIntroScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+  },
+  headerRow: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIcon: {
+    fontSize: 20,
+    fontFamily: 'Inter-Regular',
   },
   content: {
     flex: 1,
