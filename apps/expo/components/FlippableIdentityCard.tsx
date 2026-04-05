@@ -7,12 +7,10 @@ import Animated, {
   interpolate,
   Easing,
 } from 'react-native-reanimated';
-import { openBrowserAsync } from 'expo-web-browser';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import type { UserTier } from '@/lib/types';
-import ArrowLeftIcon from '@/assets/icons/arrow-left.svg';
 
 interface FlippableIdentityCardProps {
   user: {
@@ -27,7 +25,16 @@ interface FlippableIdentityCardProps {
   attestedBy?: number;
   votingStreak?: number;
   isPending?: boolean;
+  businessName?: string;
 }
+
+type CardMode = 'tourist' | 'citizen' | 'org';
+
+const CARD_BACK_LABELS: Record<CardMode, string> = {
+  tourist: 'Tourist Card',
+  citizen: 'Bürgerausweis',
+  org: 'Partner Card',
+};
 
 const ORG_TYPE_LABELS: Record<string, string> = {
   unternehmen: 'Unternehmen',
@@ -41,12 +48,16 @@ export default function FlippableIdentityCard({
   role,
   isCitizen,
   verifiedSince,
+  attestedBy = 0,
+  votingStreak = 0,
   isPending,
+  businessName,
 }: FlippableIdentityCardProps) {
   const { colors, isDark } = useTheme();
   const { tier } = useUser();
   const { activeAccount } = useAccount();
   const isOrg = activeAccount?.account_type !== 'personal' && activeAccount !== null;
+  const activeMode: CardMode = isOrg ? 'org' : tier === 'citizen' ? 'citizen' : 'tourist';
 
   const rotation = useSharedValue(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -93,12 +104,12 @@ export default function FlippableIdentityCard({
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: isDark ? 0.3 : 0.08,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDark ? 0.4 : 0.12,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 3,
+        elevation: 4,
       },
     }),
   };
@@ -138,7 +149,7 @@ export default function FlippableIdentityCard({
             {/* Badge overlay */}
             {isCitizen && !isOrg && (
               <View style={styles.badgeContainer}>
-                <View style={[styles.verifiedBadge, { borderColor: colors.surface }]}>
+                <View style={[styles.verifiedBadge, { borderColor: colors.surface, backgroundColor: colors.primary }]}>
                   <Text style={styles.verifiedCheckmark}>✓</Text>
                 </View>
               </View>
@@ -164,25 +175,56 @@ export default function FlippableIdentityCard({
 
       {/* BACK */}
       <Animated.View style={[styles.card, styles.cardBack, backStyle, { backgroundColor: colors.surface }, cardShadow]}>
-        {/* Back button */}
-        <Pressable onPress={handleFlip} style={styles.backButton} hitSlop={12}>
-          <ArrowLeftIcon width={20} height={20} color={colors.textPrimary} />
-        </Pressable>
+        <Text style={styles.flipHint}>↻</Text>
 
         <View style={styles.backContent}>
-          <Text style={[styles.backHeading, { color: colors.textPrimary }]}>
-            {isOrg ? 'Über uns' : 'Bürgerverifizierung'}
-          </Text>
+          <Text style={[styles.backTitle, { color: colors.textPrimary }]}>{CARD_BACK_LABELS[activeMode]}</Text>
 
-          <Text style={[styles.backBody, { color: colors.textSecondary }]}>
-            {isOrg
-              ? 'Lokale Organisationen in Röbel können sich als verifizierte Partner registrieren und ihre Angebote direkt in der App verwalten.'
-              : 'Bürger von Röbel werden durch bestehende Mitbürger verifiziert. Die Verifizierung basiert auf Soulbound NFTs auf der Base L2 Blockchain — nicht übertragbar und einzigartig pro Person.\n\nUnser Ziel: Transparente, digitale Bürgerbeteiligung für Röbel/Müritz — von Abstimmungen bis Vereinsleben.'}
-          </Text>
+          <View style={styles.backBody}>
+            <View style={styles.backInfoColumn}>
+              {verifiedSince && (
+                <>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary }]}>Verifiziert seit</Text>
+                  <Text style={[styles.backValue, { color: colors.textPrimary }]}>{verifiedSince}</Text>
+                </>
+              )}
 
-          <Pressable onPress={() => openBrowserAsync('https://www.roebel.app')}>
-            <Text style={[styles.backLink, { color: colors.primary }]}>roebel.app →</Text>
-          </Pressable>
+              {attestedBy > 0 && (
+                <>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary, marginTop: 8 }]}>Attestiert durch</Text>
+                  <Text style={[styles.backValue, { color: colors.textPrimary }]}>{attestedBy} Bürger</Text>
+                </>
+              )}
+
+              {votingStreak > 0 && (
+                <>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary, marginTop: 8 }]}>Voting Streak</Text>
+                  <Text style={[styles.backValue, { color: colors.textPrimary }]}>{votingStreak} Wochen 🔥</Text>
+                </>
+              )}
+
+              {businessName && (
+                <>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary, marginTop: 8 }]}>Organisation</Text>
+                  <Text style={[styles.backValue, { color: colors.textPrimary }]}>{businessName}</Text>
+                </>
+              )}
+
+              {!verifiedSince && !businessName && (
+                <>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary }]}>Status</Text>
+                  <Text style={[styles.backValue, { color: colors.textPrimary }]}>Nicht verifiziert</Text>
+                  <Text style={[styles.backLabel, { color: colors.textTertiary, marginTop: 12 }]}>
+                    Werde Bürger, um alle{'\n'}Funktionen freizuschalten
+                  </Text>
+                </>
+              )}
+            </View>
+
+            <View style={[styles.qrPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
+              <Text style={[styles.qrText, { color: colors.textTertiary }]}>QR</Text>
+            </View>
+          </View>
         </View>
       </Animated.View>
     </Pressable>
@@ -198,7 +240,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     marginHorizontal: 16,
     marginTop: 16,
-    height: 240,
+    height: 200,
   },
   card: {
     position: 'absolute',
@@ -215,7 +257,7 @@ const styles = StyleSheet.create({
 
   // --- Cover image (org) ---
   coverContainer: {
-    height: 100,
+    height: 80,
     width: '100%',
     overflow: 'hidden',
   },
@@ -249,11 +291,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 6,
+    paddingVertical: 16,
+    gap: 4,
   },
   frontContentWithCover: {
-    marginTop: -40,
+    marginTop: -36,
   },
 
   // --- Avatar ---
@@ -262,19 +304,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
   },
   avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: 'Inter-SemiBold',
   },
 
@@ -285,77 +327,88 @@ const styles = StyleSheet.create({
     right: -2,
   },
   verifiedBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#E91E63',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
   verifiedCheckmark: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-Bold',
   },
 
   // --- Store badge (org) ---
   storeBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#194383',
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
   storeIcon: {
-    fontSize: 13,
+    fontSize: 12,
   },
 
   // --- Name & subtitle ---
   cardName: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
   },
   cardSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
 
   // --- Back side ---
-  backButton: {
+  flipHint: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    top: 14,
+    right: 16,
+    fontSize: 14,
+    color: 'rgba(0,0,0,0.25)',
   },
   backContent: {
     flex: 1,
-    padding: 24,
-    paddingTop: 56,
-    justifyContent: 'flex-start',
-    gap: 12,
+    padding: 20,
+    justifyContent: 'space-between',
   },
-  backHeading: {
-    fontSize: 18,
+  backTitle: {
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
   },
   backBody: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  backLink: {
+  backInfoColumn: {
+    flex: 1,
+  },
+  backLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+  },
+  backValue: {
     fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    marginTop: 1,
+  },
+  qrPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qrText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
-    marginTop: 4,
   },
 });

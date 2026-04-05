@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -14,14 +14,27 @@ interface ModeCardProps {
 }
 
 function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+
+  const cardShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.12,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 4,
+    },
+  });
 
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.borderSecondary },
+        { backgroundColor: colors.surface },
+        cardShadow,
         highlight && { borderColor: colors.primary, borderWidth: 2 },
       ]}
     >
@@ -40,12 +53,24 @@ interface CTABannerProps {
 }
 
 function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+
+  const cardShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.12,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 4,
+    },
+  });
 
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.ctaBanner, { backgroundColor: colors.surface }]}
+      style={[styles.ctaBanner, { backgroundColor: colors.surface }, cardShadow]}
     >
       <Text style={styles.ctaEmoji}>{emoji}</Text>
       <View style={styles.ctaTextContainer}>
@@ -169,7 +194,6 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
     alignItems: 'center',
     gap: 4,
   },

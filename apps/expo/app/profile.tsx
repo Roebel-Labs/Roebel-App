@@ -4,15 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
-import { supabase } from '@/lib/supabase';
-import { EventRecord, BusinessRecord } from '@/lib/types';
+import { BusinessRecord } from '@/lib/types';
 import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
-import { useBookmarks } from '@/context/BookmarksContext';
 import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
-import BookmarkedEvents from '@/components/BookmarkedEvents';
 import BottomNavigation from '@/components/BottomNavigation';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
@@ -39,7 +36,6 @@ export default function ProfileScreen() {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
-  const { bookmarkedIds } = useBookmarks();
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
@@ -49,7 +45,6 @@ export default function ProfileScreen() {
   const isExtendedMode = tier !== 'guest';
   const { colors } = useTheme();
 
-  const [events, setEvents] = useState<EventRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
@@ -73,28 +68,6 @@ export default function ProfileScreen() {
       });
     }
   }, [user?.wallet_address]);
-
-  useEffect(() => {
-    fetchEvents();
-  }, []);
-
-  async function fetchEvents() {
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('status', 'approved')
-        .order('date', { ascending: true })
-        .order('time', { ascending: true, nullsFirst: true });
-
-      if (error) throw error;
-      if (data) {
-        setEvents(data as EventRecord[]);
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    }
-  }
 
   const handleDisconnect = async () => {
     if (wallet) {
@@ -170,14 +143,6 @@ const handleRefresh = async () => {
               </Pressable>
             </View>
 
-            {/* Always show bookmarked section */}
-            <View style={styles.bookmarkedSection}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gemerkte Veranstaltungen</Text>
-              <View style={styles.bookmarkedContainer}>
-                <BookmarkedEvents events={events} />
-              </View>
-            </View>
-
             {/* Menu Items */}
             <View style={styles.menuSection}>
               {isExtendedMode && (
@@ -241,19 +206,14 @@ const handleRefresh = async () => {
               role={tier}
               isCitizen={isCitizen}
               verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
+              attestedBy={isCitizen ? 3 : 0}
+              votingStreak={user?.voting_streak || 0}
               isPending={isBusinessOwner && userBusiness?.status === 'pending'}
+              businessName={userBusiness?.name}
             />
 
             {/* Mode-specific action cards */}
             <ProfileModeCards />
-
-            {/* Bookmarked Events */}
-            <View style={styles.bookmarkedSection}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gemerkte Veranstaltungen</Text>
-              <View style={styles.bookmarkedContainer}>
-                <BookmarkedEvents events={events} />
-              </View>
-            </View>
 
             {/* Menu Items */}
             <View style={styles.menuSection}>
@@ -412,7 +372,7 @@ const handleRefresh = async () => {
               const isActive = activeAccount?.id === acc.id;
               const emoji = acc.account_type === 'personal' ? '👤' : acc.account_type === 'verein' ? '🤝' : acc.account_type === 'partei' ? '🏛️' : acc.account_type === 'fraktion' ? '⚖️' : '🏢';
               const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : acc.account_type === 'unternehmen' ? 'Unternehmen' : acc.account_type === 'verein' ? 'Verein' : acc.account_type === 'partei' ? 'Partei' : 'Fraktion';
-              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : acc.avatar_url;
+              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.cover_url || acc.avatar_url);
               const accIsPending = acc.account_type !== 'personal' && !acc.is_verified;
 
               return (
@@ -506,68 +466,6 @@ const styles = StyleSheet.create({
   },
   connectedContainer: {
     paddingTop: 0,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  profilePlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profilePlaceholderText: {
-    fontSize: 20,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
-  },
-  userTextContainer: {
-    flex: 1,
-    gap: 2,
-  },
-  userAddress: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    textAlign: 'left',
-  },
-  userLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'left',
-  },
-  userBio: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    marginTop: 2,
-  },
-  logoutIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bookmarkedSection: {
-    marginBottom: 32,
-  },
-  bookmarkedContainer: {
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 16,
-    paddingHorizontal: 16,
   },
   menuSection: {
     paddingHorizontal: 16,
