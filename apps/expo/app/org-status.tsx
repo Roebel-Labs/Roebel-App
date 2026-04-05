@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -57,45 +57,71 @@ function getTimelineSteps(business: BusinessRecord): TimelineStep[] {
 }
 
 function TimelineItem({ step, isLast }: { step: TimelineStep; isLast: boolean }) {
-  const dotStyles = {
-    done: 'bg-primary',
-    active: 'bg-amber-50 dark:bg-amber-950 border-2 border-amber-600 dark:border-amber-400',
-    pending: 'border-2 border-border bg-background',
-    rejected: 'bg-red-50 dark:bg-red-950 border-2 border-red-600 dark:border-red-400',
-  };
+  const { colors } = useTheme();
 
-  const titleStyles = {
-    done: 'text-text-primary',
-    active: 'text-amber-700 dark:text-amber-300',
-    pending: 'text-text-tertiary',
-    rejected: 'text-red-700 dark:text-red-300',
-  };
+  const dotStyle = (() => {
+    switch (step.status) {
+      case 'done':
+        return { backgroundColor: colors.primary };
+      case 'active':
+        return { backgroundColor: colors.warningBackground, borderWidth: 2, borderColor: colors.warning };
+      case 'rejected':
+        return { backgroundColor: colors.errorBackground, borderWidth: 2, borderColor: colors.error };
+      case 'pending':
+      default:
+        return { backgroundColor: colors.background, borderWidth: 2, borderColor: colors.border };
+    }
+  })();
 
-  const subtitleStyles = {
-    done: 'text-text-tertiary',
-    active: 'text-text-secondary',
-    pending: 'text-text-tertiary',
-    rejected: 'text-red-600 dark:text-red-400',
-  };
+  const titleColor = (() => {
+    switch (step.status) {
+      case 'done': return colors.textPrimary;
+      case 'active': return colors.warning;
+      case 'rejected': return colors.error;
+      case 'pending':
+      default: return colors.textTertiary;
+    }
+  })();
+
+  const subtitleColor = (() => {
+    switch (step.status) {
+      case 'done': return colors.textTertiary;
+      case 'active': return colors.textSecondary;
+      case 'rejected': return colors.error;
+      case 'pending':
+      default: return colors.textTertiary;
+    }
+  })();
+
+  const innerDotColor = (() => {
+    if (step.status === 'active') return colors.warning;
+    if (step.status === 'rejected') return colors.error;
+    return undefined;
+  })();
+
+  const lineColor = step.status === 'done' ? colors.primary : colors.border;
 
   return (
-    <View className="flex-row gap-3.5">
+    <View style={styles.timelineRow}>
       {/* Dot + Line */}
-      <View className="items-center">
-        <View className={`w-7 h-7 rounded-full items-center justify-center ${dotStyles[step.status]}`}>
-          {step.status === 'done' && <Text className="text-on-primary text-xs">✓</Text>}
-          {step.status === 'active' && <View className="w-2.5 h-2.5 rounded-full bg-amber-600 dark:bg-amber-400" />}
-          {step.status === 'rejected' && <View className="w-2.5 h-2.5 rounded-full bg-red-600 dark:bg-red-400" />}
+      <View style={styles.dotCol}>
+        <View style={[styles.dot, dotStyle]}>
+          {step.status === 'done' && (
+            <Text style={[styles.checkmark, { color: colors.onPrimary }]}>✓</Text>
+          )}
+          {(step.status === 'active' || step.status === 'rejected') && innerDotColor && (
+            <View style={[styles.innerDot, { backgroundColor: innerDotColor }]} />
+          )}
         </View>
         {!isLast && (
-          <View className={`w-0.5 h-8 ${step.status === 'done' ? 'bg-primary' : 'bg-border'}`} />
+          <View style={[styles.line, { backgroundColor: lineColor }]} />
         )}
       </View>
 
       {/* Content */}
-      <View className={isLast ? '' : 'pb-4'}>
-        <Text className={`text-sm font-inter-semibold ${titleStyles[step.status]}`}>{step.title}</Text>
-        <Text className={`text-xs font-inter-regular mt-0.5 ${subtitleStyles[step.status]}`}>{step.subtitle}</Text>
+      <View style={isLast ? styles.contentLast : styles.content}>
+        <Text style={[styles.stepTitle, { color: titleColor }]}>{step.title}</Text>
+        <Text style={[styles.stepSubtitle, { color: subtitleColor }]}>{step.subtitle}</Text>
       </View>
     </View>
   );
@@ -125,7 +151,7 @@ export default function OrgStatusScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
+      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
@@ -133,10 +159,10 @@ export default function OrgStatusScreen() {
 
   if (!business) {
     return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center px-6">
-        <Text className="text-base font-inter-regular text-text-secondary text-center">Keine Organisation gefunden.</Text>
-        <Pressable onPress={() => router.back()} className="mt-4">
-          <Text className="text-base font-inter-medium text-primary">Zurück</Text>
+      <SafeAreaView style={[styles.centeredPadded, { backgroundColor: colors.background }]}>
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Organisation gefunden.</Text>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={[styles.backText, { color: colors.primary }]}>Zurück</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -146,24 +172,24 @@ export default function OrgStatusScreen() {
   const steps = getTimelineSteps(business);
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View className="flex-row items-center gap-3 px-6 pt-4 pb-6 border-b border-border">
-          <Pressable onPress={() => router.back()} className="mr-1">
-            <Text className="text-2xl text-text-secondary">‹</Text>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={() => router.back()} style={styles.backChevronWrapper}>
+            <Text style={[styles.backChevron, { color: colors.textSecondary }]}>‹</Text>
           </Pressable>
-          <View className="w-11 h-11 rounded-xl bg-surface items-center justify-center">
-            <Text className="text-xl">{emoji}</Text>
+          <View style={[styles.iconBox, { backgroundColor: colors.surface }]}>
+            <Text style={styles.emoji}>{emoji}</Text>
           </View>
-          <View className="flex-1">
-            <Text className="text-lg font-inter-bold text-text-primary">{business.name}</Text>
-            <Text className="text-xs font-inter-regular text-text-secondary">{business.category || 'Organisation'} — Registrierungsstatus</Text>
+          <View style={styles.headerText}>
+            <Text style={[styles.orgName, { color: colors.textPrimary }]}>{business.name}</Text>
+            <Text style={[styles.orgMeta, { color: colors.textSecondary }]}>{business.category || 'Organisation'} — Registrierungsstatus</Text>
           </View>
         </View>
 
         {/* Timeline */}
-        <View className="px-6 pt-6">
+        <View style={styles.timeline}>
           {steps.map((step, i) => (
             <TimelineItem key={i} step={step} isLast={i === steps.length - 1} />
           ))}
@@ -172,3 +198,114 @@ export default function OrgStatusScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centeredPadded: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  backButton: {
+    marginTop: 16,
+  },
+  backText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    borderBottomWidth: 1,
+  },
+  backChevronWrapper: {
+    marginRight: 4,
+  },
+  backChevron: {
+    fontSize: 24,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emoji: {
+    fontSize: 18,
+  },
+  headerText: {
+    flex: 1,
+  },
+  orgName: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+  },
+  orgMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  timeline: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  dotCol: {
+    alignItems: 'center',
+  },
+  dot: {
+    width: 28,
+    height: 28,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmark: {
+    fontSize: 12,
+  },
+  innerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 9999,
+  },
+  line: {
+    width: 2,
+    height: 32,
+  },
+  content: {
+    paddingBottom: 16,
+  },
+  contentLast: {},
+  stepTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  stepSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+});

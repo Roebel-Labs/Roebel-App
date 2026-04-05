@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
 import type { BusinessRecord } from '@/lib/types';
 
 const ORG_TYPE_EMOJI: Record<string, string> = {
@@ -16,10 +17,13 @@ const ORG_TYPE_EMOJI: Record<string, string> = {
   sonstiges: '🏢',
 };
 
-const STATUS_CONFIG: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  pending: { label: 'In Prüfung', bgClass: 'bg-amber-50 dark:bg-amber-950', textClass: 'text-amber-700 dark:text-amber-300' },
-  approved: { label: 'Freigegeben', bgClass: 'bg-green-50 dark:bg-green-950', textClass: 'text-green-700 dark:text-green-300' },
-  rejected: { label: 'Abgelehnt', bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-700 dark:text-red-300' },
+const getStatusColors = (status: string, colors: any) => {
+  const configs: Record<string, { label: string; bg: string; text: string }> = {
+    pending: { label: 'In Prüfung', bg: colors.warningBackground, text: colors.warning },
+    approved: { label: 'Freigegeben', bg: colors.successBackground, text: colors.success },
+    rejected: { label: 'Abgelehnt', bg: colors.errorBackground, text: colors.error },
+  };
+  return configs[status] || configs.pending;
 };
 
 type Props = {
@@ -28,29 +32,87 @@ type Props = {
 };
 
 export default function BusinessStatusBanner({ business, onPress }: Props) {
+  const { colors } = useTheme();
   const emoji = ORG_TYPE_EMOJI[business.category || ''] || '🏢';
-  const status = STATUS_CONFIG[business.status] || STATUS_CONFIG.pending;
+  const status = getStatusColors(business.status, colors);
 
   return (
     <Pressable
       onPress={onPress}
-      className="flex-row items-center justify-between border border-border rounded-2xl p-4 mx-4 mb-4"
+      style={[styles.card, { borderColor: colors.border, backgroundColor: colors.background }]}
     >
-      <View className="flex-row items-center gap-3 flex-1">
-        <View className="w-11 h-11 rounded-xl bg-surface items-center justify-center">
-          <Text className="text-xl">{emoji}</Text>
+      <View style={styles.leftRow}>
+        <View style={[styles.iconBox, { backgroundColor: colors.surface }]}>
+          <Text style={styles.emoji}>{emoji}</Text>
         </View>
-        <View className="flex-1">
-          <Text className="text-base font-inter-semibold text-text-primary" numberOfLines={1}>{business.name}</Text>
-          <Text className="text-xs font-inter-regular text-text-secondary">{business.category || 'Organisation'}</Text>
+        <View style={styles.nameCol}>
+          <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>{business.name}</Text>
+          <Text style={[styles.category, { color: colors.textSecondary }]}>{business.category || 'Organisation'}</Text>
         </View>
       </View>
-      <View className="flex-row items-center gap-2">
-        <View className={`px-2.5 py-1 rounded-full ${status.bgClass}`}>
-          <Text className={`text-xs font-inter-medium ${status.textClass}`}>{status.label}</Text>
+      <View style={styles.rightRow}>
+        <View style={[styles.badge, { backgroundColor: status.bg }]}>
+          <Text style={[styles.badgeText, { color: status.text }]}>{status.label}</Text>
         </View>
-        <Text className="text-text-tertiary text-base">›</Text>
+        <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
       </View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  leftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emoji: {
+    fontSize: 18,
+  },
+  nameCol: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  category: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  rightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 9999,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  chevron: {
+    fontSize: 14,
+  },
+});
