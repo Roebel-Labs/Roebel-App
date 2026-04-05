@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Switch, Image, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -21,7 +21,6 @@ import GovernanceTestBanner from '@/components/GovernanceTestBanner';
 import VerificationBanner from '@/components/VerificationBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import TierBadge from '@/components/RoleBadge';
-import AccountSwitcher from '@/components/AccountSwitcher';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
 import ProfileModeCards from '@/components/profile/ProfileModeCards';
@@ -54,13 +53,13 @@ export default function ProfileScreen() {
   const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal') || !!businessRecord;
   const userBusiness = businessRecord;
   const isExtendedMode = tier !== 'guest';
-  const accountMode = activeAccount?.account_type !== 'personal' && activeAccount !== null ? 'business' : 'personal';
   const { colors } = useTheme();
 
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
+  const [showAccountSheet, setShowAccountSheet] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const isConnected = !!account;
@@ -136,24 +135,18 @@ export default function ProfileScreen() {
 
   const displayName = user?.username || shortenAddress(account?.address);
   const orgAccount = ownedAccounts.find(a => a.account_type !== 'personal');
-  const showAccountSwitcher = !!orgAccount || (isBusinessOwner && userBusiness?.status === 'approved');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
-  const setAccountMode = (mode: string) => {
-    if (mode === 'business') {
-      if (orgAccount) {
-        switchAccount(orgAccount.id);
-      }
-    } else {
-      const personalAccount = ownedAccounts.find(a => a.account_type === 'personal');
-      if (personalAccount) switchAccount(personalAccount.id);
-    }
-  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Röbel</Text>
+        {ownedAccounts.length > 1 && (
+          <Pressable onPress={() => setShowAccountSheet(true)} style={styles.switchButton}>
+            <Text style={[styles.switchButtonText, { color: colors.textSecondary }]}>Account wechseln</Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -269,231 +262,151 @@ export default function ProfileScreen() {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            {/* Account Switcher (only for business owners in extended mode) */}
-            {showAccountSwitcher && (
-              <AccountSwitcher mode={accountMode} onModeChange={setAccountMode} />
-            )}
+            {/* User Info */}
+            <View style={styles.userInfo}>
+              {user?.profile_picture_url ? (
+                <Image source={{ uri: user.profile_picture_url }} style={styles.profileImage} />
+              ) : (
+                <View style={[styles.profilePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
+              )}
+              <View style={styles.userTextContainer}>
+                <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
+                <TierBadge tier={tier} />
+                {user?.bio && (
+                  <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>
+                )}
+              </View>
+              <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>
+                <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
 
-            {accountMode === 'business' && userBusiness ? (
-              // ============= BUSINESS MODE =============
-              <>
-                {/* Business Info */}
-                <View style={styles.userInfo}>
-                  {userBusiness.logo_url ? (
-                    <Image source={{ uri: userBusiness.logo_url }} style={styles.profileImage} />
-                  ) : (
-                    <View style={[styles.profilePlaceholder, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.profilePlaceholderText}>
-                        {userBusiness.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.userTextContainer}>
-                    <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{userBusiness.name}</Text>
-                    <TierBadge tier={tier} />
+            {/* Verification Banner */}
+            <VerificationBanner />
+
+            {/* Governance Test Banner */}
+            <GovernanceTestBanner
+              isTestingEnabled={isGovernanceTestEnabled}
+              onPress={handleGovernanceTestToggle}
+            />
+
+            {/* Bookmarked Events */}
+            <View style={styles.bookmarkedSection}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gemerkte Veranstaltungen</Text>
+              <View style={styles.bookmarkedContainer}>
+                <BookmarkedEvents events={events} />
+              </View>
+            </View>
+
+            {/* Menu Items */}
+            <View style={styles.menuSection}>
+              <View style={styles.menuGroup}>
+                <ProfileMenuItem
+                  icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Profil bearbeiten"
+                  onPress={() => router.push('/edit-profile' as any)}
+                />
+              </View>
+              <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+
+              {/* Business Registration - for verified citizens without a business */}
+              {showBusinessRegister && (
+                <>
+                  <View style={styles.menuGroup}>
+                    <ProfileMenuItem
+                      icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="Organisation erstellen"
+                      onPress={() => router.push('/create-org' as any)}
+                    />
                   </View>
-                  <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>
-                    <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
 
-                {/* Business Status */}
+              {/* Business Status Banner - for business owners with pending/rejected business */}
+              {isBusinessOwner && userBusiness && userBusiness.status !== 'approved' && (
                 <BusinessStatusBanner
                   business={userBusiness}
                   onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
                 />
+              )}
 
-                {/* Business Menu */}
-                <View style={styles.menuSection}>
+              {/* Verification Menu Group - Only show for verified users */}
+              {hasAnyNFT && (
+                <>
                   <View style={styles.menuGroup}>
                     <ProfileMenuItem
-                      icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Dashboard"
-                      onPress={() => router.push('/business/dashboard' as any)}
+                      icon={<QrCodeIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="QR-Code scannen"
+                      onPress={() => router.push('/verification/scan' as any)}
                     />
+                  </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
+
+              {/* Wallet */}
+              {isConnected && (
+                <>
+                  <View style={styles.menuGroup}>
                     <ProfileMenuItem
-                      icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Angebote verwalten"
-                      onPress={() => router.push('/business/dashboard' as any)}
+                      icon={<WalletIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="Wallet"
+                      onPress={() => router.push('/wallet' as any)}
                     />
+                  </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
+
+              {/* Design System - only in extended mode */}
+              {isExtendedMode && (
+                <>
+                  <View style={styles.menuGroup}>
                     <ProfileMenuItem
                       icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Statistiken"
-                      onPress={() => router.push('/business/analytics' as any)}
+                      label="Design System"
+                      onPress={() => router.push('/design-system' as any)}
                     />
                   </View>
-
                   <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
 
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Einstellungen"
-                      onPress={() => router.push('/settings' as any)}
-                    />
-                    <ProfileMenuItem
-                      icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Über die App"
-                      onPress={() => openBrowserAsync('https://www.roebel.app/about')}
-                    />
-                    <ProfileMenuItem
-                      icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Datenschutz"
-                      onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
-                    />
-                  </View>
-                </View>
-              </>
-            ) : (
-              // ============= PERSONAL MODE =============
-              <>
-                {/* User Info */}
-                <View style={styles.userInfo}>
-                  {user?.profile_picture_url ? (
-                    <Image source={{ uri: user.profile_picture_url }} style={styles.profileImage} />
-                  ) : (
-                    <View style={[styles.profilePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.userTextContainer}>
-                    <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
-                    <TierBadge tier={tier} />
-                    {user?.bio && (
-                      <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>
-                    )}
-                  </View>
-                  <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>
-                    <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-
-                {/* Verification Banner */}
-                <VerificationBanner />
-
-                {/* Governance Test Banner */}
-                <GovernanceTestBanner
-                  isTestingEnabled={isGovernanceTestEnabled}
-                  onPress={handleGovernanceTestToggle}
+              {/* Regular Menu Items */}
+              <View style={styles.menuGroup}>
+                <ProfileMenuItem
+                  icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Veranstaltung einsenden"
+                  onPress={() => router.push('/submit-event')}
                 />
+                <ProfileMenuItem
+                  icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Feedback geben"
+                  onPress={() => router.push('/feedback')}
+                />
+              </View>
 
-                {/* Bookmarked Events */}
-                <View style={styles.bookmarkedSection}>
-                  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Gemerkte Veranstaltungen</Text>
-                  <View style={styles.bookmarkedContainer}>
-                    <BookmarkedEvents events={events} />
-                  </View>
-                </View>
+              <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
-                {/* Menu Items */}
-                <View style={styles.menuSection}>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Profil bearbeiten"
-                      onPress={() => router.push('/edit-profile' as any)}
-                    />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-
-                  {/* Business Registration - for verified citizens without a business */}
-                  {showBusinessRegister && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Organisation erstellen"
-                          onPress={() => router.push('/create-org' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
-
-                  {/* Business Status Banner - for business owners with pending/rejected business */}
-                  {isBusinessOwner && userBusiness && userBusiness.status !== 'approved' && (
-                    <BusinessStatusBanner
-                      business={userBusiness}
-                      onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
-                    />
-                  )}
-
-                  {/* Verification Menu Group - Only show for verified users */}
-                  {hasAnyNFT && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<QrCodeIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="QR-Code scannen"
-                          onPress={() => router.push('/verification/scan' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
-
-                  {/* Wallet */}
-                  {isConnected && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<WalletIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Wallet"
-                          onPress={() => router.push('/wallet' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
-
-                  {/* Design System - only in extended mode */}
-                  {isExtendedMode && (
-                    <>
-                      <View style={styles.menuGroup}>
-                        <ProfileMenuItem
-                          icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Design System"
-                          onPress={() => router.push('/design-system' as any)}
-                        />
-                      </View>
-                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                    </>
-                  )}
-
-                  {/* Regular Menu Items */}
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Veranstaltung einsenden"
-                      onPress={() => router.push('/submit-event')}
-                    />
-                    <ProfileMenuItem
-                      icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Feedback geben"
-                      onPress={() => router.push('/feedback')}
-                    />
-                  </View>
-
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Einstellungen"
-                      onPress={() => router.push('/settings' as any)}
-                    />
-                    <ProfileMenuItem
-                      icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Über die App"
-                      onPress={() => openBrowserAsync('https://www.roebel.app/about')}
-                    />
-                    <ProfileMenuItem
-                      icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Datenschutz"
-                      onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
-                    />
-                  </View>
-                </View>
-              </>
-            )}
+              <View style={styles.menuGroup}>
+                <ProfileMenuItem
+                  icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Einstellungen"
+                  onPress={() => router.push('/settings' as any)}
+                />
+                <ProfileMenuItem
+                  icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Über die App"
+                  onPress={() => openBrowserAsync('https://www.roebel.app/about')}
+                />
+                <ProfileMenuItem
+                  icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Datenschutz"
+                  onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
+                />
+              </View>
+            </View>
           </View>
         )}
 
@@ -531,6 +444,42 @@ export default function ProfileScreen() {
         onClose={() => setShowLogoutDrawer(false)}
         onLogout={handleDisconnect}
       />
+
+      {/* Account Switcher Sheet */}
+      <Modal visible={showAccountSheet} transparent animationType="fade" onRequestClose={() => setShowAccountSheet(false)}>
+        <Pressable style={accountSheetStyles.backdrop} onPress={() => setShowAccountSheet(false)}>
+          <Pressable style={[accountSheetStyles.sheet, { backgroundColor: colors.background }]} onPress={e => e.stopPropagation()}>
+            <Text style={[accountSheetStyles.title, { color: colors.textPrimary }]}>Account wechseln</Text>
+
+            {ownedAccounts.map((acc) => {
+              const isActive = activeAccount?.id === acc.id;
+              const emoji = acc.account_type === 'personal' ? '👤' : acc.account_type === 'verein' ? '🤝' : acc.account_type === 'partei' ? '🏛️' : acc.account_type === 'fraktion' ? '⚖️' : '🏢';
+              const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : acc.account_type === 'unternehmen' ? 'Unternehmen' : acc.account_type === 'verein' ? 'Verein' : acc.account_type === 'partei' ? 'Partei' : 'Fraktion';
+
+              return (
+                <Pressable
+                  key={acc.id}
+                  onPress={() => { switchAccount(acc.id); setShowAccountSheet(false); }}
+                  style={[
+                    accountSheetStyles.accountRow,
+                    { borderColor: isActive ? colors.primary : colors.border },
+                    isActive && { backgroundColor: colors.primaryLight },
+                  ]}
+                >
+                  <View style={[accountSheetStyles.accountIcon, { backgroundColor: colors.surface }]}>
+                    <Text style={accountSheetStyles.accountEmoji}>{emoji}</Text>
+                  </View>
+                  <View style={accountSheetStyles.accountInfo}>
+                    <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{acc.name}</Text>
+                    <Text style={[accountSheetStyles.accountType, { color: colors.textSecondary }]}>{typeLabel}</Text>
+                  </View>
+                  {isActive && <Text style={[accountSheetStyles.checkmark, { color: colors.primary }]}>✓</Text>}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -679,5 +628,70 @@ const styles = StyleSheet.create({
   extendedModeLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
+  },
+  switchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  switchButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+});
+
+const accountSheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 16,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 12,
+  },
+  accountIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountEmoji: {
+    fontSize: 20,
+  },
+  accountInfo: {
+    flex: 1,
+  },
+  accountName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  accountType: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  checkmark: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
   },
 });
