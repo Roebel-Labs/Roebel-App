@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -39,28 +39,32 @@ export default function CreateOrgInfoScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 2</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Erzähl uns mehr</Text>
-        <Text className="text-sm font-inter-regular text-text-secondary mb-8">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2</Text>
+        <Text style={[styles.heading, { color: colors.textPrimary }]}>Erzähl uns mehr</Text>
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wie heißt deine Organisation und was macht sie aus?
         </Text>
 
         {/* Name */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Name *</Text>
+        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Name *</Text>
         <TextInput
           value={name}
           onChangeText={setName}
           placeholder="Name deiner Organisation"
           placeholderTextColor={colors.textTertiary}
           maxLength={100}
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-1"
+          style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
-        <Text className="text-xs font-inter-regular text-text-tertiary text-right mb-5">{name.length}/100</Text>
+        <Text style={[styles.counter, { color: colors.textTertiary }]}>{name.length}/100</Text>
 
         {/* Description */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Beschreibung</Text>
+        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Beschreibung</Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
@@ -70,32 +74,38 @@ export default function CreateOrgInfoScreen() {
           numberOfLines={4}
           maxLength={500}
           textAlignVertical="top"
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-1 min-h-[120px]"
+          style={[styles.input, styles.inputMultiline, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
-        <Text className="text-xs font-inter-regular text-text-tertiary text-right mb-5">{description.length}/500</Text>
+        <Text style={[styles.counter, { color: colors.textTertiary }]}>{description.length}/500</Text>
 
         {/* Category (conditional) */}
         {needsCategory && (
           <>
-            <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Kategorie</Text>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Kategorie</Text>
             <Pressable
               onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-              className="bg-surface rounded-xl px-4 py-3.5 mb-2"
+              style={[styles.pickerButton, { backgroundColor: colors.surface }]}
             >
-              <Text className={`text-base font-inter-regular ${category ? 'text-text-primary' : 'text-text-tertiary'}`}>
+              <Text style={[styles.pickerButtonText, { color: category ? colors.textPrimary : colors.textTertiary }]}>
                 {selectedLabel}
               </Text>
             </Pressable>
             {showCategoryPicker && (
-              <View className="bg-surface rounded-xl overflow-hidden mb-5">
+              <View style={[styles.pickerList, { backgroundColor: colors.surface }]}>
                 {CATEGORIES.map(cat => (
                   <Pressable
                     key={cat.value}
                     onPress={() => { setCategory(cat.value); setShowCategoryPicker(false); }}
-                    className={`flex-row items-center justify-between px-4 py-3 border-b border-border ${category === cat.value ? 'bg-primary/10' : ''}`}
+                    style={[
+                      styles.pickerItem,
+                      { borderBottomColor: colors.border },
+                      category === cat.value ? { backgroundColor: colors.primaryLight } : undefined,
+                    ]}
                   >
-                    <Text className="text-base font-inter-regular text-text-primary">{cat.label}</Text>
-                    {category === cat.value && <Text className="text-primary text-sm font-inter-medium">✓</Text>}
+                    <Text style={[styles.pickerItemText, { color: colors.textPrimary }]}>{cat.label}</Text>
+                    {category === cat.value && (
+                      <Text style={[styles.checkmark, { color: colors.primary }]}>✓</Text>
+                    )}
                   </Pressable>
                 ))}
               </View>
@@ -104,18 +114,129 @@ export default function CreateOrgInfoScreen() {
         )}
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
-        <Pressable onPress={() => router.back()} className="py-4 px-6">
-          <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
         </Pressable>
         <Pressable
           onPress={handleNext}
           disabled={!canProceed}
-          className={`bg-primary rounded-xl py-4 px-8 ${!canProceed ? 'opacity-50' : ''}`}
+          style={[styles.nextButton, { backgroundColor: colors.primary }, !canProceed && styles.disabled]}
         >
-          <Text className="text-on-primary text-base font-inter-medium">Weiter</Text>
+          <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Weiter</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  stepLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  heading: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 8,
+  },
+  subheading: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 32,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 4,
+  },
+  inputMultiline: {
+    minHeight: 120,
+  },
+  counter: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'right',
+    marginBottom: 20,
+  },
+  pickerButton: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  pickerButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+  },
+  pickerList: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  pickerItemText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+  },
+  checkmark: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  backButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  nextButton: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+  },
+  nextButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+});

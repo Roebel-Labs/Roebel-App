@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Switch } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Switch, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -51,27 +51,31 @@ export default function CreateOrgContactScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 4</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Wie erreicht man euch?</Text>
-        <Text className="text-sm font-inter-regular text-text-secondary mb-8">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 4</Text>
+        <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie erreicht man euch?</Text>
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wie können Besucher dich erreichen?
         </Text>
 
         {/* Phone */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Telefon</Text>
+        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Telefon</Text>
         <TextInput
           value={phone}
           onChangeText={setPhone}
           placeholder="z.B. 039931 12345"
           placeholderTextColor={colors.textTertiary}
           keyboardType="phone-pad"
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-5"
+          style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
 
         {/* Email */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">E-Mail</Text>
+        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>E-Mail</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -79,25 +83,25 @@ export default function CreateOrgContactScreen() {
           placeholderTextColor={colors.textTertiary}
           keyboardType="email-address"
           autoCapitalize="none"
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-5"
+          style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
 
         {/* Website */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Website</Text>
+        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Website</Text>
         <TextInput
           value={website}
           onChangeText={setWebsite}
           placeholder="www.beispiel.de"
           placeholderTextColor={colors.textTertiary}
           autoCapitalize="none"
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-5"
+          style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
 
         {/* Opening hours (conditional) */}
         {needsCategory && (
           <>
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-base font-inter-medium text-text-primary">Öffnungszeiten angeben</Text>
+            <View style={styles.hoursToggleRow}>
+              <Text style={[styles.hoursToggleLabel, { color: colors.textPrimary }]}>Öffnungszeiten angeben</Text>
               <Switch
                 value={showHours}
                 onValueChange={setShowHours}
@@ -110,33 +114,37 @@ export default function CreateOrgContactScreen() {
               const isClosed = day?.closed ?? false;
 
               return (
-                <View key={key} className="flex-row items-center justify-between py-3 border-b border-border">
-                  <View className="w-24">
-                    <Text className={`text-sm font-inter-regular ${isClosed ? 'text-text-tertiary' : 'text-text-primary'}`}>{label}</Text>
+                <View key={key} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
+                  <View style={styles.dayLabelContainer}>
+                    <Text style={[styles.dayLabel, { color: isClosed ? colors.textTertiary : colors.textPrimary }]}>
+                      {label}
+                    </Text>
                   </View>
                   {isClosed ? (
-                    <Text className="text-sm font-inter-regular text-text-tertiary flex-1 text-center">Geschlossen</Text>
+                    <Text style={[styles.closedText, { color: colors.textTertiary }]}>Geschlossen</Text>
                   ) : (
-                    <View className="flex-row items-center gap-2 flex-1 justify-center">
+                    <View style={styles.timeInputRow}>
                       <TextInput
                         value={day?.open || DEFAULT_OPEN}
                         onChangeText={(v) => updateDay(key, 'open', v)}
                         placeholder="09:00"
                         placeholderTextColor={colors.textTertiary}
-                        className="bg-surface rounded-lg px-3 py-2 text-sm font-inter-regular text-text-primary w-16 text-center"
+                        style={[styles.timeInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
                       />
-                      <Text className="text-text-secondary text-sm">–</Text>
+                      <Text style={[styles.timeSeparator, { color: colors.textSecondary }]}>–</Text>
                       <TextInput
                         value={day?.close || DEFAULT_CLOSE}
                         onChangeText={(v) => updateDay(key, 'close', v)}
                         placeholder="18:00"
                         placeholderTextColor={colors.textTertiary}
-                        className="bg-surface rounded-lg px-3 py-2 text-sm font-inter-regular text-text-primary w-16 text-center"
+                        style={[styles.timeInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
                       />
                     </View>
                   )}
-                  <Pressable onPress={() => updateDay(key, 'closed', !isClosed)} className="ml-2">
-                    <Text className="text-xs font-inter-medium text-primary">{isClosed ? 'Öffnen' : 'Zu'}</Text>
+                  <Pressable onPress={() => updateDay(key, 'closed', !isClosed)} style={styles.toggleClosedButton}>
+                    <Text style={[styles.toggleClosedText, { color: colors.primary }]}>
+                      {isClosed ? 'Öffnen' : 'Zu'}
+                    </Text>
                   </Pressable>
                 </View>
               );
@@ -144,17 +152,144 @@ export default function CreateOrgContactScreen() {
           </>
         )}
 
-        <View className="h-24" />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
-        <Pressable onPress={() => router.back()} className="py-4 px-6">
-          <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
         </Pressable>
-        <Pressable onPress={handleNext} className="bg-primary rounded-xl py-4 px-8">
-          <Text className="text-on-primary text-base font-inter-medium">Weiter</Text>
+        <Pressable onPress={handleNext} style={[styles.nextButton, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Weiter</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  stepLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  heading: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 8,
+  },
+  subheading: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 32,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 20,
+  },
+  hoursToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  hoursToggleLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  dayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dayLabelContainer: {
+    width: 96,
+  },
+  dayLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  closedText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    flex: 1,
+    textAlign: 'center',
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  timeInput: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    width: 64,
+    textAlign: 'center',
+  },
+  timeSeparator: {
+    fontSize: 13,
+  },
+  toggleClosedButton: {
+    marginLeft: 8,
+  },
+  toggleClosedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  bottomSpacer: {
+    height: 96,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  backButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  nextButton: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+  },
+  nextButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+});
