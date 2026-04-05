@@ -397,8 +397,8 @@ export default function ProfileScreen() {
                       <View style={styles.menuGroup}>
                         <ProfileMenuItem
                           icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
-                          label="Unternehmen registrieren"
-                          onPress={() => router.push('/business/register' as any)}
+                          label="Organisation erstellen"
+                          onPress={() => router.push('/create-org' as any)}
                         />
                       </View>
                       <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />

@@ -57,21 +57,21 @@ export default function MachsInRoebelScreen() {
             emoji="🏪"
             title="Gewerbe gründen"
             subtitle="Registriere dein Unternehmen in Röbel"
-            onPress={() => router.push('/business/register' as any)}
+            onPress={() => router.push('/create-org' as any)}
             colors={colors}
           />
           <OptionCard
             emoji="🤝"
             title="Verein gründen"
             subtitle="Starte einen Sportverein, Kulturverein, oder mehr"
-            onPress={() => router.push('/business/register' as any)}
+            onPress={() => router.push('/create-org' as any)}
             colors={colors}
           />
           <OptionCard
             emoji="🏛️"
             title="Politisch engagieren"
             subtitle="Partei oder Fraktion beitreten"
-            onPress={() => router.push('/governance' as any)}
+            onPress={() => router.push('/create-org' as any)}
             colors={colors}
           />
           <OptionCard
