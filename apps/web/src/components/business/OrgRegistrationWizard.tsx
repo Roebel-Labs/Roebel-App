@@ -76,6 +76,44 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
   const needsCategory =
     state.orgType === "restaurant" || state.orgType === "unternehmen"
 
+  const handleSubmit = async () => {
+    if (!state.name.trim() || !state.orgType) {
+      setError("Name und Organisationstyp sind erforderlich.")
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.set("owner_wallet_address", walletAddress)
+      formData.set("name", state.name)
+      formData.set("description", state.description)
+      formData.set("category", state.category || (state.orgType === "restaurant" ? "gastronomie" : "sonstiges"))
+      formData.set("phone", state.phone)
+      formData.set("email", state.email)
+      formData.set("website_url", state.website)
+      formData.set("address", state.address)
+      formData.set("opening_hours", JSON.stringify(state.openingHours))
+
+      if (state.logoFile) formData.set("logo_file", state.logoFile)
+      if (state.coverFile) formData.set("cover_file", state.coverFile)
+
+      const result = await submitBusiness(formData)
+
+      if (result.success) {
+        setStep(8)
+      } else {
+        setError(result.error || "Ein Fehler ist aufgetreten.")
+      }
+    } catch {
+      setError("Ein unerwarteter Fehler ist aufgetreten.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   // ── Step 1: Intro ──
   if (step === 1) {
     return (
@@ -411,7 +449,195 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
     )
   }
 
-  // Placeholder for steps 7-8 (implemented in Task 5)
+  // ── Step 7: Review ──
+  if (step === 7) {
+    const orgTypeInfo = ORG_TYPES.find((t) => t.value === state.orgType)
+    const sections = [
+      {
+        title: "Art",
+        step: 2,
+        content: orgTypeInfo
+          ? `${orgTypeInfo.emoji} ${orgTypeInfo.label}`
+          : "Nicht angegeben",
+      },
+      {
+        title: "Informationen",
+        step: 3,
+        content: [
+          state.name,
+          needsCategory && state.category ? getCategoryLabel(state.category) : null,
+          state.description || null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      },
+      {
+        title: "Standort",
+        step: 4,
+        content: state.address || "Nicht angegeben",
+      },
+      {
+        title: "Kontakt",
+        step: 5,
+        content:
+          [state.phone, state.email, state.website].filter(Boolean).join(" · ") ||
+          "Nicht angegeben",
+      },
+    ]
+
+    return (
+      <WizardShell
+        step={step}
+        setStep={setStep}
+        canAdvance={!isSubmitting}
+        onNext={handleSubmit}
+        nextLabel={isSubmitting ? "Wird eingereicht..." : "Gewerbe einreichen"}
+        isLoading={isSubmitting}
+      >
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Überprüfe dein Gewerbe
+        </h2>
+        <p className="text-gray-500 mb-8">Schau dir alles nochmal an, bevor du einreichst.</p>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {sections.map((section) => (
+            <div
+              key={section.title}
+              className="flex items-start justify-between p-4 bg-gray-50 rounded-xl"
+            >
+              <div>
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+                  {section.title}
+                </div>
+                <div className="text-sm text-gray-900">{section.content}</div>
+              </div>
+              <button
+                onClick={() => setStep(section.step)}
+                className="text-sm font-medium text-[#194383] hover:underline flex-shrink-0 ml-4"
+              >
+                Bearbeiten
+              </button>
+            </div>
+          ))}
+
+          {/* Photos preview */}
+          <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+            <div>
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+                Fotos
+              </div>
+              <div className="flex gap-3 mt-2">
+                {state.logoPreview ? (
+                  <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200">
+                    <img src={state.logoPreview} alt="Logo" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-400">
+                    Logo
+                  </div>
+                )}
+                {state.coverPreview ? (
+                  <div className="w-28 h-16 rounded-lg overflow-hidden border border-gray-200">
+                    <img src={state.coverPreview} alt="Cover" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-28 h-16 rounded-lg bg-gray-200 flex items-center justify-center text-xs text-gray-400">
+                    Titelbild
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setStep(6)}
+              className="text-sm font-medium text-[#194383] hover:underline flex-shrink-0 ml-4"
+            >
+              Bearbeiten
+            </button>
+          </div>
+        </div>
+      </WizardShell>
+    )
+  }
+
+  // ── Step 8: CTA ──
+  if (step === 8) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col">
+        {/* Progress bar — 100% */}
+        <div className="h-1 bg-gray-100">
+          <div className="h-1 bg-[#194383] w-full" />
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col lg:flex-row items-center px-6 md:px-16 lg:px-20">
+          {/* Left: CTA content */}
+          <div className="flex-1 flex flex-col justify-center py-12 lg:py-0">
+            <div className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">
+              Geschafft!
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">
+              Erreiche mehr als
+              <br />
+              200 Röbeler
+            </h2>
+            <p className="text-base text-gray-600 leading-relaxed mb-2">
+              Dein Gewerbe ist registriert! Erstelle jetzt deine erste Anzeige und
+              werde sofort in der Community sichtbar.
+            </p>
+            <p className="text-sm text-gray-400 mb-8">
+              Anzeigen erscheinen im Feed und auf der Karte — kostenlos für Röbeler
+              Gewerbe.
+            </p>
+            <div className="flex flex-col gap-3 items-start">
+              <button
+                onClick={() => router.push("/app/gewerbe/angebote")}
+                className="bg-[#194383] hover:bg-[#143a72] text-white px-8 py-3.5 rounded-lg font-semibold text-base transition-colors"
+              >
+                Jetzt erste Anzeige erstellen
+              </button>
+              <button
+                onClick={() => router.push("/app/gewerbe/status")}
+                className="text-gray-500 text-sm underline underline-offset-2 hover:text-gray-700 transition-colors"
+              >
+                Überspringen
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Image placeholder */}
+          <div className="flex-1 hidden lg:flex items-center justify-center">
+            <div className="w-full max-w-md h-80 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl flex items-center justify-center">
+              <div className="text-center text-gray-400">
+                <div className="text-6xl mb-3">📣</div>
+                <div className="text-sm">Bild / Illustration</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 px-6 md:px-10 py-5 flex items-center justify-between">
+          <button
+            onClick={() => setStep(7)}
+            className="text-sm font-medium text-gray-600 hover:text-gray-900 underline underline-offset-2 transition-colors"
+          >
+            Zurück
+          </button>
+          <span className="text-sm text-gray-400">
+            Schritt {step} von {TOTAL_STEPS}
+          </span>
+          <div />
+        </div>
+      </div>
+    )
+  }
+
   return null
 }
 
