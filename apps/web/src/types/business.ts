@@ -15,6 +15,8 @@ export type BusinessCategory =
   | "immobilien"
   | "sonstiges"
 
+export type OrgTypeChoice = "restaurant" | "unternehmen" | "verein" | "partei" | "fraktion"
+
 export type DealType = "discount" | "special" | "event" | "new_product" | "promotion"
 
 export type DealStatus = "draft" | "active" | "paused" | "expired"
@@ -180,6 +182,14 @@ export const DAYS_OF_WEEK: { value: string; label: string }[] = [
   { value: "freitag", label: "Freitag" },
   { value: "samstag", label: "Samstag" },
   { value: "sonntag", label: "Sonntag" },
+]
+
+export const ORG_TYPES: { value: OrgTypeChoice; label: string; description: string; emoji: string }[] = [
+  { value: "restaurant", label: "Restaurant", description: "Gastronomie mit Speisekarte", emoji: "🍽️" },
+  { value: "unternehmen", label: "Unternehmen", description: "Gewerbe & Dienstleistungen", emoji: "🏢" },
+  { value: "verein", label: "Verein", description: "Sport, Kultur, Soziales", emoji: "🤝" },
+  { value: "partei", label: "Partei", description: "Politische Parteien", emoji: "🏛️" },
+  { value: "fraktion", label: "Fraktion", description: "Fraktionen im Stadtrat", emoji: "🗳️" },
 ]
 
 // ============================================
