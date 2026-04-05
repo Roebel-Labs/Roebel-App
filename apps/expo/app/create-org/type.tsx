@@ -20,7 +20,7 @@ export default function CreateOrgTypeScreen() {
   const { colors } = useTheme();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>

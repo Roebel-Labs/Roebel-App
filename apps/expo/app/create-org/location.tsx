@@ -81,7 +81,7 @@ export default function CreateOrgLocationScreen() {
       : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['bottom']} style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 3</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wo befindet ihr euch?</Text>

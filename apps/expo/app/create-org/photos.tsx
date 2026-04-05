@@ -75,7 +75,7 @@ export default function CreateOrgPhotosScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 5</Text>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Zeigt euch von eurer besten Seite</Text>
