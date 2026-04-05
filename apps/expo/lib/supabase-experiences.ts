@@ -19,7 +19,7 @@ export async function fetchEventExperiences(
     .select(`
       *,
       author:users!event_experiences_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       )
     `)
     .eq('event_id', eventId)
@@ -58,7 +58,7 @@ export async function createExperience(
     .select(`
       *,
       author:users!event_experiences_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, role
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier
       )
     `)
     .single();
