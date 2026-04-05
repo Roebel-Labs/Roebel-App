@@ -130,16 +130,16 @@ function OrgCards({ router }: { router: ReturnType<typeof useRouter> }) {
   return (
     <View style={styles.cardsRow}>
       <ModeCard
-        emoji="📊"
-        title="Dashboard"
-        subtitle="Statistiken"
-        onPress={() => router.push('/business/dashboard' as any)}
+        emoji="🍽️"
+        title="Tische"
+        subtitle="Live-Ansicht"
+        onPress={() => router.push('/kitchen' as any)}
       />
       <ModeCard
         emoji="⚙️"
         title="Verwalten"
-        subtitle="Deals & Events"
-        onPress={() => router.push('/business/dashboard' as any)}
+        subtitle="Tische & QR-Codes"
+        onPress={() => router.push('/kitchen/tables' as any)}
       />
     </View>
   );
