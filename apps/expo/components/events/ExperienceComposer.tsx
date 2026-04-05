@@ -316,7 +316,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   inputArea: {
-    marginTop: 'auto',
     gap: 8,
   },
   mediaRow: {
@@ -338,18 +337,21 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     gap: 8,
+    paddingBottom: 16,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 20,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    maxHeight: 100,
+    minHeight: 100,
+    maxHeight: 160,
+    textAlignVertical: 'top',
   },
   sendButton: {
     width: 40,
@@ -357,6 +359,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 6,
   },
   sendButtonDisabled: {
     opacity: 0.5,
