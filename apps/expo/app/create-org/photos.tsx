@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { supabase } from '@/lib/supabase';
+import WizardFooter from '@/components/WizardFooter';
 
 async function uploadImage(uri: string, folder: string): Promise<string | null> {
   try {
@@ -117,14 +118,11 @@ export default function CreateOrgPhotosScreen() {
         </Pressable>
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
-        </Pressable>
-        <Pressable onPress={handleNext} style={[styles.nextButton, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Weiter</Text>
-        </Pressable>
-      </View>
+      <WizardFooter
+        step={5}
+        onBack={() => router.back()}
+        onNext={handleNext}
+      />
     </SafeAreaView>
   );
 }
@@ -181,16 +179,4 @@ const styles = StyleSheet.create({
   },
   coverImage: { width: '100%', height: 176, borderRadius: 16 },
   coverPlaceholderText: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 8 },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  backButton: { paddingVertical: 16, paddingHorizontal: 24 },
-  backButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  nextButton: { borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32 },
-  nextButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
 });

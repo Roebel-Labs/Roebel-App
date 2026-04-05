@@ -10,6 +10,7 @@ import { useAccount } from '@/context/AccountContext';
 import { createBusiness } from '@/lib/supabase-businesses';
 import { createRestaurant } from '@/lib/supabase-restaurants';
 import type { OrgType } from '@/lib/types';
+import WizardFooter from '@/components/WizardFooter';
 
 const ORG_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   restaurant: { emoji: '🍽️', label: 'Restaurant' },
@@ -77,7 +78,6 @@ export default function CreateOrgReviewScreen() {
           address: state.formattedAddress || state.address.trim() || null,
           phone: state.phone.trim() || null,
           website_url: state.website.trim() || null,
-          opening_hours: state.openingHours,
           latitude: state.latitude,
           longitude: state.longitude,
         });
@@ -167,22 +167,14 @@ export default function CreateOrgReviewScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-          style={[styles.submitButton, { backgroundColor: colors.primary, opacity: isSubmitting ? 0.6 : 1 }]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color={colors.onPrimary} />
-          ) : (
-            <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>Antrag einreichen</Text>
-          )}
-        </Pressable>
-      </View>
+      <WizardFooter
+        step={6}
+        onBack={() => router.back()}
+        onNext={handleSubmit}
+        nextLabel="Antrag einreichen"
+        nextDisabled={isSubmitting}
+        nextContent={isSubmitting ? <ActivityIndicator color={colors.onPrimary} /> : undefined}
+      />
     </SafeAreaView>
   );
 }
@@ -252,16 +244,4 @@ const styles = StyleSheet.create({
   photoCover: { flex: 1, height: 64, borderRadius: 16 },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   bottomSpacer: { height: 96 },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  backButton: { paddingVertical: 16, paddingHorizontal: 24 },
-  backButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
-  submitButton: { borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24 },
-  submitButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
 });

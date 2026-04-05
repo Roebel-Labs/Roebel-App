@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCreateOrgWizard, OrgTypeChoice } from '@/context/CreateOrgWizardContext';
 import { useTheme } from '@/context/ThemeContext';
+import WizardFooter from '@/components/WizardFooter';
 
 const ORG_TYPES: { value: OrgTypeChoice; emoji: string; label: string; desc: string }[] = [
   { value: 'restaurant', emoji: '🍽️', label: 'Restaurant', desc: 'Gastronomie mit Speisekarte' },
@@ -52,22 +53,12 @@ export default function CreateOrgTypeScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => state.orgType && router.push('/create-org/info')}
-          disabled={!state.orgType}
-          style={[
-            styles.nextButton,
-            { backgroundColor: colors.primary },
-            !state.orgType && styles.nextButtonDisabled,
-          ]}
-        >
-          <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Weiter</Text>
-        </Pressable>
-      </View>
+      <WizardFooter
+        step={1}
+        onBack={() => router.back()}
+        onNext={() => state.orgType && router.push('/create-org/info')}
+        nextDisabled={!state.orgType}
+      />
     </SafeAreaView>
   );
 }
@@ -120,33 +111,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     marginTop: 4,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  backButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  backButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  nextButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-  },
-  nextButtonDisabled: {
-    opacity: 0.5,
-  },
-  nextButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
   },
 });
