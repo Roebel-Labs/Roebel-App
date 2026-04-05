@@ -170,6 +170,7 @@ function ThemedLayout() {
           <Stack.Screen name="businesses/index" options={{ headerShown: false }} />
           <Stack.Screen name="user/[username]" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
+          <Stack.Screen name="create-org" options={{ headerShown: false }} />
           <Stack.Screen name="ai-submit" options={{ headerShown: false }} />
           <Stack.Screen name="messages/mecky" options={{ headerShown: false }} />
           <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
