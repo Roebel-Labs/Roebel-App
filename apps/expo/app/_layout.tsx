@@ -141,6 +141,12 @@ function ThemedLayout() {
           <Stack.Screen name="restaurant/index" options={{ headerShown: false }} />
           <Stack.Screen name="restaurant/[slug]" options={{ headerShown: false }} />
           <Stack.Screen name="restaurant/menu/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="order/[slug]/[table]" options={{ headerShown: false }} />
+          <Stack.Screen name="order/cart" options={{ headerShown: false }} />
+          <Stack.Screen name="order/status" options={{ headerShown: false }} />
+          <Stack.Screen name="kitchen/index" options={{ headerShown: false }} />
+          <Stack.Screen name="kitchen/order/[sessionId]" options={{ headerShown: false }} />
+          <Stack.Screen name="kitchen/tables" options={{ headerShown: false }} />
           <Stack.Screen name="submit" options={{ title: 'Veranstaltung einreichen' }} />
           <Stack.Screen name="submit-event" options={{ headerShown: false }} />
           <Stack.Screen name="feedback" options={{ headerShown: false }} />
