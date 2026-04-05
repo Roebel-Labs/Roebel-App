@@ -11,10 +11,12 @@ import { useRouter } from 'expo-router';
 import ErrorDrawer from './ErrorDrawer';
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
+  slug?: string;
+  tableNumber?: string;
 };
 
 interface QRScannerProps {
@@ -40,6 +42,12 @@ function parseQRCode(data: string): QRScanResult {
     return { type: 'stamp', data, id: data.replace('roebel-stamp:', '') };
   }
 
+  // Restaurant order: https://roebel.app/order/{slug}/{tableNumber}
+  const orderMatch = data.match(/roebel\.app\/order\/([^/]+)\/([^/?#]+)/);
+  if (orderMatch) {
+    return { type: 'order', data, slug: orderMatch[1], tableNumber: decodeURIComponent(orderMatch[2]) };
+  }
+
   return { type: 'unknown', data };
 }
 
@@ -61,6 +69,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         verification: 'Verifizierung',
         checkpoint: 'Explorer-Checkpoint',
         stamp: 'Stempelkarte',
+        order: 'Bestellung',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
@@ -86,7 +95,10 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
     }
 
     // Default navigation based on type
-    if (result.type === 'verification' && result.id) {
+    if (result.type === 'order' && result.slug && result.tableNumber) {
+      router.push(`/order/${result.slug}/${result.tableNumber}` as any);
+      return;
+    } else if (result.type === 'verification' && result.id) {
       router.push(`/verification/request/${result.id}?type=${result.nftType}` as any);
     } else if (result.type === 'checkpoint') {
       // Handled by parent via onScan
