@@ -141,9 +141,10 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
     gap: 12,
   },
   input: {

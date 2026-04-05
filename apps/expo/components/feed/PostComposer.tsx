@@ -20,6 +20,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { createPost, createPoll, updatePost } from '@/lib/supabase-posts';
 import type { PostRecord } from '@/lib/types/feed';
 import { supabase } from '@/lib/supabase';
+import { uploadMediaFile } from '@/lib/upload-media';
 import type { FeedType, PostCategory } from '@/lib/types/feed';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { UserRecord } from '@/lib/types';
@@ -107,7 +108,7 @@ export default function PostComposer({
       const newUrls: string[] = [];
       for (const asset of result.assets) {
         try {
-          const uploaded = await uploadImage(asset.uri);
+          const uploaded = await uploadImage(asset.uri, asset.mimeType || undefined);
           if (uploaded) newUrls.push(uploaded);
         } catch (err) {
           console.error('Error uploading image:', err);
@@ -117,28 +118,8 @@ export default function PostComposer({
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string | null> => {
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const fileName = `post-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-      const filePath = `posts/${walletAddress}/${fileName}`;
-
-      const { error } = await supabase.storage.from('post-media').upload(filePath, blob, {
-        contentType: 'image/jpeg',
-      });
-
-      if (error) {
-        console.error('Upload error:', error);
-        return null;
-      }
-
-      const { data } = supabase.storage.from('post-media').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (err) {
-      console.error('Upload failed:', err);
-      return null;
-    }
+  const uploadImage = async (uri: string, mimeType?: string): Promise<string | null> => {
+    return uploadMediaFile(uri, walletAddress || '', 'image', 'posts', mimeType);
   };
 
   const removeImage = (index: number) => {
