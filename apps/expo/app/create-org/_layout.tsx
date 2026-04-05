@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { CreateOrgWizardProvider, useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -10,6 +11,7 @@ const STEP_SCREENS = ['type', 'info', 'location', 'contact', 'photos', 'review']
 function WizardHeader() {
   const { colors } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const segments = useSegments();
   const lastSegment = segments[segments.length - 1] || '';
   const { dispatch } = useCreateOrgWizard();
@@ -19,7 +21,7 @@ function WizardHeader() {
 
   return (
     <>
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background, paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => setShowExit(true)} style={styles.cancelButton}>
           <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Abbrechen</Text>
         </Pressable>
