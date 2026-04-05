@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Linking, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, Pressable, Alert } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import { Ionicons } from '@expo/vector-icons';
 import type { EventExperience } from '@/lib/types/feed';
 
 type Props = {
@@ -29,110 +30,66 @@ export default function ExperienceItem({ experience, isOwner, onDelete }: Props)
   const imageUrls = experience.media_urls?.filter(Boolean) ?? [];
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface }]}>
+    <View className="bg-surface rounded-xl overflow-hidden">
+      {/* Emoji banner */}
       {experience.emoji && (
-        <Text style={styles.emoji}>{experience.emoji}</Text>
+        <View className="items-center py-3 bg-primary/5">
+          <Text className="text-4xl">{experience.emoji}</Text>
+        </View>
       )}
 
-      <View style={styles.headerRow}>
-        <View style={styles.authorContainer}>
-          <PostAuthorRow
-            author={experience.author}
-            createdAt={experience.created_at}
-          />
+      <View className="p-4 gap-3">
+        {/* Author + menu */}
+        <View className="flex-row items-center">
+          <View className="flex-1">
+            <PostAuthorRow
+              author={experience.author}
+              createdAt={experience.created_at}
+            />
+          </View>
+          {isOwner && (
+            <Pressable
+              onPress={() => setMenuVisible(!menuVisible)}
+              hitSlop={8}
+              className="pl-2 py-1"
+            >
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.textTertiary} />
+            </Pressable>
+          )}
         </View>
-        {isOwner && (
+
+        {/* Delete option */}
+        {menuVisible && isOwner && (
           <Pressable
-            onPress={() => setMenuVisible(!menuVisible)}
-            hitSlop={8}
-            style={styles.menuButton}
+            onPress={handleDelete}
+            className="self-end bg-surface-secondary px-3 py-2 rounded-lg"
           >
-            <Text style={[styles.menuDots, { color: colors.textTertiary }]}>···</Text>
+            <Text className="text-xs font-inter-medium" style={{ color: colors.error }}>
+              Löschen
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Content text */}
+        <Text className="text-sm font-inter-regular leading-5 text-text-primary">
+          {experience.content}
+        </Text>
+
+        {/* Images — same grid as feed posts */}
+        {imageUrls.length > 0 && (
+          <PostImageGrid imageUrls={imageUrls} />
+        )}
+
+        {/* Video */}
+        {experience.video_url && (
+          <Pressable className="flex-row items-center justify-center gap-2 bg-surface-secondary p-4 rounded-xl">
+            <Ionicons name="play-circle" size={24} color={colors.primary} />
+            <Text className="text-sm font-inter-medium text-text-secondary">
+              Video abspielen
+            </Text>
           </Pressable>
         )}
       </View>
-
-      {menuVisible && isOwner && (
-        <Pressable onPress={handleDelete} style={[styles.deleteOption, { backgroundColor: colors.surfaceSecondary }]}>
-          <Text style={[styles.deleteText, { color: colors.error }]}>Löschen</Text>
-        </Pressable>
-      )}
-
-      <Text style={[styles.content, { color: colors.textPrimary }]}>
-        {experience.content}
-      </Text>
-
-      {imageUrls.length > 0 && (
-        <PostImageGrid imageUrls={imageUrls} />
-      )}
-
-      {experience.video_url && (
-        <Pressable
-          onPress={() => Linking.openURL(experience.video_url!)}
-          style={[styles.videoPlaceholder, { backgroundColor: colors.surfaceSecondary }]}
-        >
-          <Text style={[styles.videoIcon]}>▶</Text>
-          <Text style={[styles.videoLabel, { color: colors.textSecondary }]}>Video abspielen</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  emoji: {
-    fontSize: 48,
-    textAlign: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  authorContainer: {
-    flex: 1,
-  },
-  menuButton: {
-    paddingLeft: 8,
-    paddingVertical: 4,
-  },
-  menuDots: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 1,
-  },
-  deleteOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignSelf: 'flex-end',
-  },
-  deleteText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  content: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-  },
-  videoPlaceholder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 16,
-    borderRadius: 12,
-  },
-  videoIcon: {
-    fontSize: 20,
-  },
-  videoLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-});

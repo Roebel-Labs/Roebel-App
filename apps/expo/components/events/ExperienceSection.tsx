@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, Pressable, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -65,50 +65,66 @@ export default function ExperienceSection({ eventId }: Props) {
   };
 
   return (
-    <View style={styles.section}>
+    <View className="mt-6 gap-3">
       {/* Section Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Erlebnisse</Text>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <Text className="text-lg font-inter-semibold text-text-primary">Erlebnisse</Text>
           {experiences.length > 0 && (
-            <View style={[styles.countBadge, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.countText, { color: colors.primary }]}>{experiences.length}</Text>
+            <View className="bg-primary/10 px-2 py-0.5 rounded-full">
+              <Text className="text-xs font-inter-semibold text-primary">{experiences.length}</Text>
             </View>
           )}
         </View>
-        {user && (
-          <Pressable
-            onPress={() => setComposerVisible(true)}
-            style={[styles.shareButton, { backgroundColor: colors.primary }]}
-          >
-            <Ionicons name="add" size={16} color="#ffffff" />
-            <Text style={styles.shareButtonText}>Erlebnis teilen</Text>
-          </Pressable>
-        )}
       </View>
+
+      {/* Comment-input style bar — tapping opens the composer */}
+      {user && (
+        <Pressable
+          onPress={() => setComposerVisible(true)}
+          className="flex-row items-center gap-3 bg-surface rounded-xl px-4 py-3"
+        >
+          {user.profile_picture_url ? (
+            <Image
+              source={{ uri: user.profile_picture_url }}
+              className="w-8 h-8 rounded-full"
+            />
+          ) : (
+            <View className="w-8 h-8 rounded-full bg-primary/10 items-center justify-center">
+              <Text className="text-sm font-inter-semibold text-primary">
+                {(user.username || '?').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text className="flex-1 text-sm text-text-tertiary font-inter-regular">
+            Teile dein Erlebnis...
+          </Text>
+          <Ionicons name="camera-outline" size={20} color={colors.textTertiary} />
+        </Pressable>
+      )}
 
       {/* Loading State */}
       {loading && (
-        <View style={styles.loadingContainer}>
+        <View className="py-6 items-center">
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
       )}
 
       {/* Empty State */}
       {!loading && experiences.length === 0 && (
-        <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>
+        <View className="bg-surface rounded-xl p-6 items-center gap-1">
+          <Text className="text-sm font-inter-medium text-text-secondary">
             Noch keine Erlebnisse
           </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textTertiary }]}>
+          <Text className="text-xs font-inter-regular text-text-tertiary">
             Sei der/die Erste und teile dein Erlebnis!
           </Text>
         </View>
       )}
 
-      {/* Experiences List (using .map, not FlatList) */}
+      {/* Experiences List */}
       {!loading && experiences.length > 0 && (
-        <View style={styles.list}>
+        <View className="gap-3">
           {experiences.map((experience) => (
             <ExperienceItem
               key={experience.id}
@@ -122,12 +138,12 @@ export default function ExperienceSection({ eventId }: Props) {
 
       {/* Load More Button */}
       {hasMore && !loadingMore && (
-        <Pressable onPress={handleLoadMore} style={styles.loadMoreButton}>
-          <Text style={[styles.loadMoreText, { color: colors.primary }]}>Mehr laden</Text>
+        <Pressable onPress={handleLoadMore} className="items-center py-3">
+          <Text className="text-sm font-inter-medium text-primary">Mehr laden</Text>
         </Pressable>
       )}
       {loadingMore && (
-        <ActivityIndicator size="small" color={colors.primary} style={styles.loadingMore} />
+        <ActivityIndicator size="small" color={colors.primary} className="py-3" />
       )}
 
       {/* Composer */}
@@ -143,78 +159,3 @@ export default function ExperienceSection({ eventId }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  section: {
-    marginTop: 24,
-    gap: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-  },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  countText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  shareButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  loadingContainer: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
-  emptyState: {
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    gap: 4,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-  },
-  list: {
-    gap: 12,
-  },
-  loadMoreButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  loadMoreText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  loadingMore: {
-    paddingVertical: 12,
-  },
-});
