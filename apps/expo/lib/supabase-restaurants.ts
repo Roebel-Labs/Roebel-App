@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type {
   RestaurantRecord,
   RestaurantWithMenus,
+  OpeningHours,
   SpecialMenuRecord,
   SpecialMenuWithDetails,
 } from './types';
@@ -141,4 +142,48 @@ export async function fetchFeaturedRestaurants(): Promise<RestaurantRecord[]> {
   }
 
   return data as RestaurantRecord[];
+}
+
+/**
+ * Create a new restaurant (status = 'pending', linked to account)
+ */
+export async function createRestaurant(input: {
+  name: string;
+  account_id: string;
+  description?: string | null;
+  logo_url?: string | null;
+  cover_image_url?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  website_url?: string | null;
+  opening_hours?: OpeningHours | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}): Promise<RestaurantRecord> {
+  const slug = input.name
+    .toLowerCase()
+    .replace(/[äÄ]/g, 'ae')
+    .replace(/[öÖ]/g, 'oe')
+    .replace(/[üÜ]/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  const { data, error } = await supabase
+    .from('restaurants')
+    .insert({
+      ...input,
+      slug: `${slug}-${Date.now().toString(36)}`,
+      status: 'pending',
+      background_color: '#194383',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating restaurant:', error);
+    throw error;
+  }
+
+  return data as RestaurantRecord;
 }
