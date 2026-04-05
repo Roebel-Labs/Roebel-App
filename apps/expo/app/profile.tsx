@@ -8,7 +8,6 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord, BusinessRecord } from '@/lib/types';
 import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { useBookmarks } from '@/context/BookmarksContext';
-import { useGovernanceTest } from '@/context/GovernanceTestContext';
 import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
@@ -17,7 +16,6 @@ import BookmarkedEvents from '@/components/BookmarkedEvents';
 import BottomNavigation from '@/components/BottomNavigation';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
-import GovernanceTestBanner from '@/components/GovernanceTestBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
@@ -42,7 +40,6 @@ export default function ProfileScreen() {
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
   const { bookmarkedIds } = useBookmarks();
-  const { isGovernanceTestEnabled, toggleGovernanceTesting } = useGovernanceTest();
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
@@ -120,11 +117,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleGovernanceTestToggle = async () => {
-    await toggleGovernanceTesting();
-  };
-
-  const handleRefresh = async () => {
+const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([refresh(), refreshUser(), refreshAccounts()]);
     setRefreshing(false);
@@ -140,7 +133,7 @@ export default function ProfileScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Röbel</Text>
         {ownedAccounts.length > 1 && (
-          <Pressable onPress={() => setShowAccountSheet(true)} style={styles.switchButton}>
+          <Pressable onPress={() => setShowAccountSheet(true)} style={[styles.switchButton, { borderColor: colors.border }]}>
             <Text style={[styles.switchButtonText, { color: colors.textSecondary }]}>Account wechseln</Text>
           </Pressable>
         )}
@@ -157,23 +150,6 @@ export default function ProfileScreen() {
           />
         }
       >
-        {/* Flippable Identity Card */}
-        <FlippableIdentityCard
-          user={user}
-          role={tier}
-          roleLabel={tierLabel}
-          isCitizen={isCitizen}
-          pointsBalance={0}
-          verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
-          attestedBy={isCitizen ? 3 : 0}
-          votingStreak={user?.voting_streak || 0}
-          badges={[]}
-          businessName={userBusiness?.name}
-        />
-
-        {/* Mode-specific action cards */}
-        <ProfileModeCards />
-
         {!isConnected ? (
           // ============= NOT LOGGED IN STATE =============
           <View style={styles.notConnectedContainer}>
@@ -259,13 +235,17 @@ export default function ProfileScreen() {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            {/* Governance Test Banner — only on personal accounts */}
-            {(!activeAccount || activeAccount.account_type === 'personal') && (
-              <GovernanceTestBanner
-                isTestingEnabled={isGovernanceTestEnabled}
-                onPress={() => router.push('/governance' as any)}
-              />
-            )}
+            {/* Flippable Identity Card */}
+            <FlippableIdentityCard
+              user={user}
+              role={tier}
+              isCitizen={isCitizen}
+              verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
+              isPending={isBusinessOwner && userBusiness?.status === 'pending'}
+            />
+
+            {/* Mode-specific action cards */}
+            <ProfileModeCards />
 
             {/* Bookmarked Events */}
             <View style={styles.bookmarkedSection}>
@@ -432,6 +412,8 @@ export default function ProfileScreen() {
               const isActive = activeAccount?.id === acc.id;
               const emoji = acc.account_type === 'personal' ? '👤' : acc.account_type === 'verein' ? '🤝' : acc.account_type === 'partei' ? '🏛️' : acc.account_type === 'fraktion' ? '⚖️' : '🏢';
               const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : acc.account_type === 'unternehmen' ? 'Unternehmen' : acc.account_type === 'verein' ? 'Verein' : acc.account_type === 'partei' ? 'Partei' : 'Fraktion';
+              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : acc.avatar_url;
+              const accIsPending = acc.account_type !== 'personal' && !acc.is_verified;
 
               return (
                 <Pressable
@@ -443,13 +425,22 @@ export default function ProfileScreen() {
                     isActive && { backgroundColor: colors.primaryLight },
                   ]}
                 >
-                  <View style={[accountSheetStyles.accountIcon, { backgroundColor: colors.surface }]}>
-                    <Text style={accountSheetStyles.accountEmoji}>{emoji}</Text>
-                  </View>
+                  {avatarSource ? (
+                    <Image source={{ uri: avatarSource }} style={accountSheetStyles.accountAvatar} />
+                  ) : (
+                    <View style={[accountSheetStyles.accountIcon, { backgroundColor: colors.surfaceSecondary }]}>
+                      <Text style={accountSheetStyles.accountEmoji}>{emoji}</Text>
+                    </View>
+                  )}
                   <View style={accountSheetStyles.accountInfo}>
                     <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{acc.name}</Text>
                     <Text style={[accountSheetStyles.accountType, { color: colors.textSecondary }]}>{typeLabel}</Text>
                   </View>
+                  {accIsPending && (
+                    <View style={[accountSheetStyles.statusPill, { backgroundColor: colors.warningBackground }]}>
+                      <Text style={[accountSheetStyles.statusPillText, { color: colors.warning }]}>In Prüfung</Text>
+                    </View>
+                  )}
                   {isActive && <Text style={[accountSheetStyles.checkmark, { color: colors.primary }]}>✓</Text>}
                 </Pressable>
               );
@@ -514,7 +505,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   connectedContainer: {
-    paddingTop: 24,
+    paddingTop: 0,
   },
   userInfo: {
     flexDirection: 'row',
@@ -611,7 +602,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   switchButtonText: {
     fontSize: 13,
@@ -645,15 +638,29 @@ const accountSheetStyles = StyleSheet.create({
     marginBottom: 8,
     gap: 12,
   },
+  accountAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
   accountIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   accountEmoji: {
     fontSize: 20,
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
   },
   accountInfo: {
     flex: 1,
