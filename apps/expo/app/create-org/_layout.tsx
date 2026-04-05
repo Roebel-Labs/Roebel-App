@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Animated } from 'react-native';
 import { Stack, useSegments } from 'expo-router';
 import { CreateOrgWizardProvider } from '@/context/CreateOrgWizardContext';
+import { useTheme } from '@/context/ThemeContext';
 
 const STEP_MAP: Record<string, number> = {
   type: 1, info: 2, location: 3, contact: 4, photos: 5, review: 6,
@@ -9,6 +10,7 @@ const STEP_MAP: Record<string, number> = {
 const TOTAL_STEPS = 6;
 
 function ProgressBar() {
+  const { colors } = useTheme();
   const segments = useSegments();
   const lastSegment = segments[segments.length - 1] || '';
   const step = STEP_MAP[lastSegment] || 0;
@@ -27,10 +29,13 @@ function ProgressBar() {
   if (step === 0) return null; // Hide on intro and success
 
   return (
-    <View className="h-[3px] bg-surface">
+    <View style={{ height: 3, backgroundColor: colors.surface }}>
       <Animated.View
-        className="h-full bg-primary"
-        style={{ width: widthAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) }}
+        style={{
+          height: '100%',
+          backgroundColor: colors.primary,
+          width: widthAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+        }}
       />
     </View>
   );

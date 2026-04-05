@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -74,57 +74,123 @@ export default function CreateOrgPhotosScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 5</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Zeigt euch von eurer besten Seite</Text>
-        <Text className="text-sm font-inter-regular text-text-secondary mb-8">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 5</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Zeigt euch von eurer besten Seite</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Ein gutes Profilbild und Cover machen den Unterschied.
         </Text>
 
         {/* Logo */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-3 uppercase tracking-wider">Logo</Text>
-        <Pressable onPress={() => pickAndUpload('logo')} className="items-center mb-8">
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Logo</Text>
+        <Pressable onPress={() => pickAndUpload('logo')} style={styles.logoPressable}>
           {uploadingLogo ? (
-            <View className="w-28 h-28 rounded-full bg-surface items-center justify-center">
+            <View style={[styles.logoPlaceholder, { backgroundColor: colors.surface }]}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : logoUrl ? (
-            <Image source={{ uri: logoUrl }} className="w-28 h-28 rounded-full" contentFit="cover" />
+            <Image source={{ uri: logoUrl }} style={styles.logoImage} contentFit="cover" />
           ) : (
-            <View className="w-28 h-28 rounded-full bg-surface items-center justify-center border-2 border-dashed border-border">
-              <Text className="text-3xl">📷</Text>
-              <Text className="text-xs font-inter-regular text-text-tertiary mt-1">Logo wählen</Text>
+            <View style={[styles.logoPlaceholder, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.placeholderIcon}>📷</Text>
+              <Text style={[styles.placeholderText, { color: colors.textTertiary }]}>Logo wählen</Text>
             </View>
           )}
         </Pressable>
 
         {/* Cover */}
-        <Text className="text-xs font-inter-medium text-text-secondary mb-3 uppercase tracking-wider">Titelbild</Text>
-        <Pressable onPress={() => pickAndUpload('cover')} className="mb-8">
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Titelbild</Text>
+        <Pressable onPress={() => pickAndUpload('cover')} style={styles.coverPressable}>
           {uploadingCover ? (
-            <View className="w-full h-44 rounded-2xl bg-surface items-center justify-center">
+            <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface }]}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : coverUrl ? (
-            <Image source={{ uri: coverUrl }} className="w-full h-44 rounded-2xl" contentFit="cover" />
+            <Image source={{ uri: coverUrl }} style={styles.coverImage} contentFit="cover" />
           ) : (
-            <View className="w-full h-44 rounded-2xl bg-surface items-center justify-center border-2 border-dashed border-border">
-              <Text className="text-3xl">🖼️</Text>
-              <Text className="text-sm font-inter-regular text-text-tertiary mt-2">Titelbild wählen</Text>
+            <View style={[styles.coverPlaceholder, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.placeholderIcon}>🖼️</Text>
+              <Text style={[styles.coverPlaceholderText, { color: colors.textTertiary }]}>Titelbild wählen</Text>
             </View>
           )}
         </Pressable>
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
-        <Pressable onPress={() => router.back()} className="py-4 px-6">
-          <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
         </Pressable>
-        <Pressable onPress={handleNext} className="bg-primary rounded-xl py-4 px-8">
-          <Text className="text-on-primary text-base font-inter-medium">Weiter</Text>
+        <Pressable onPress={handleNext} style={[styles.nextButton, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Weiter</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
+  scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  stepLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 32,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  logoPressable: { alignItems: 'center', marginBottom: 32 },
+  logoPlaceholder: {
+    width: 112,
+    height: 112,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  logoImage: { width: 112, height: 112, borderRadius: 9999 },
+  placeholderIcon: { fontSize: 22 },
+  placeholderText: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 4 },
+  coverPressable: { marginBottom: 32 },
+  coverPlaceholder: {
+    width: '100%',
+    height: 176,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  coverImage: { width: '100%', height: 176, borderRadius: 16 },
+  coverPlaceholderText: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 8 },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  backButton: { paddingVertical: 16, paddingHorizontal: 24 },
+  backButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  nextButton: { borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32 },
+  nextButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+});

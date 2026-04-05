@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -95,94 +95,91 @@ export default function CreateOrgReviewScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 6</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Alles richtig?</Text>
-        <Text className="text-sm font-inter-regular text-text-secondary mb-8">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 6</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Prüfe deine Angaben bevor du den Antrag einreichst.
         </Text>
 
         {/* Type */}
-        <SectionCard
-          title="Typ"
-          onEdit={() => router.push('/create-org/type')}
-        >
-          <View className="flex-row items-center gap-3">
-            <Text className="text-2xl">{orgInfo?.emoji}</Text>
-            <Text className="text-base font-inter-medium text-text-primary">{orgInfo?.label}</Text>
+        <SectionCard title="Typ" onEdit={() => router.push('/create-org/type')} colors={colors}>
+          <View style={styles.typeRow}>
+            <Text style={styles.typeEmoji}>{orgInfo?.emoji}</Text>
+            <Text style={[styles.typeLabel, { color: colors.textPrimary }]}>{orgInfo?.label}</Text>
           </View>
         </SectionCard>
 
         {/* Info */}
-        <SectionCard title="Informationen" onEdit={() => router.push('/create-org/info')}>
-          <Text className="text-base font-inter-medium text-text-primary">{state.name || '—'}</Text>
+        <SectionCard title="Informationen" onEdit={() => router.push('/create-org/info')} colors={colors}>
+          <Text style={[styles.infoName, { color: colors.textPrimary }]}>{state.name || '—'}</Text>
           {state.description ? (
-            <Text className="text-sm font-inter-regular text-text-secondary mt-1">{state.description}</Text>
+            <Text style={[styles.infoDescription, { color: colors.textSecondary }]}>{state.description}</Text>
           ) : null}
           {state.category ? (
-            <Text className="text-xs font-inter-regular text-text-tertiary mt-2">
+            <Text style={[styles.infoCategory, { color: colors.textTertiary }]}>
               Kategorie: {CATEGORY_LABELS[state.category] || state.category}
             </Text>
           ) : null}
         </SectionCard>
 
         {/* Location */}
-        <SectionCard title="Adresse" onEdit={() => router.push('/create-org/location')}>
-          <Text className="text-sm font-inter-regular text-text-primary">
+        <SectionCard title="Adresse" onEdit={() => router.push('/create-org/location')} colors={colors}>
+          <Text style={[styles.infoDescription, { color: colors.textPrimary }]}>
             {state.formattedAddress || state.address || 'Keine Adresse angegeben'}
           </Text>
         </SectionCard>
 
         {/* Contact */}
-        <SectionCard title="Kontakt" onEdit={() => router.push('/create-org/contact')}>
-          {state.phone ? <Text className="text-sm font-inter-regular text-text-primary">Tel: {state.phone}</Text> : null}
-          {state.email ? <Text className="text-sm font-inter-regular text-text-primary">E-Mail: {state.email}</Text> : null}
-          {state.website ? <Text className="text-sm font-inter-regular text-text-primary">Web: {state.website}</Text> : null}
+        <SectionCard title="Kontakt" onEdit={() => router.push('/create-org/contact')} colors={colors}>
+          {state.phone ? <Text style={[styles.infoDescription, { color: colors.textPrimary }]}>Tel: {state.phone}</Text> : null}
+          {state.email ? <Text style={[styles.infoDescription, { color: colors.textPrimary }]}>E-Mail: {state.email}</Text> : null}
+          {state.website ? <Text style={[styles.infoDescription, { color: colors.textPrimary }]}>Web: {state.website}</Text> : null}
           {!state.phone && !state.email && !state.website && (
-            <Text className="text-sm font-inter-regular text-text-tertiary">Keine Kontaktdaten</Text>
+            <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>Keine Kontaktdaten</Text>
           )}
           {state.openingHours && (
-            <Text className="text-xs font-inter-regular text-text-tertiary mt-2">Öffnungszeiten angegeben</Text>
+            <Text style={[styles.infoCategory, { color: colors.textTertiary }]}>Öffnungszeiten angegeben</Text>
           )}
         </SectionCard>
 
         {/* Photos */}
-        <SectionCard title="Fotos" onEdit={() => router.push('/create-org/photos')}>
-          <View className="flex-row gap-4">
+        <SectionCard title="Fotos" onEdit={() => router.push('/create-org/photos')} colors={colors}>
+          <View style={styles.photosRow}>
             {state.logoUrl ? (
-              <Image source={{ uri: state.logoUrl }} className="w-16 h-16 rounded-full" contentFit="cover" />
+              <Image source={{ uri: state.logoUrl }} style={styles.photoLogo} contentFit="cover" />
             ) : (
-              <View className="w-16 h-16 rounded-full bg-border items-center justify-center">
-                <Text className="text-xs font-inter-regular text-text-tertiary">Logo</Text>
+              <View style={[styles.photoLogo, styles.photoPlaceholder, { backgroundColor: colors.border }]}>
+                <Text style={[styles.infoCategory, { color: colors.textTertiary }]}>Logo</Text>
               </View>
             )}
             {state.coverImageUrl ? (
-              <Image source={{ uri: state.coverImageUrl }} className="flex-1 h-16 rounded-xl" contentFit="cover" />
+              <Image source={{ uri: state.coverImageUrl }} style={styles.photoCover} contentFit="cover" />
             ) : (
-              <View className="flex-1 h-16 rounded-xl bg-border items-center justify-center">
-                <Text className="text-xs font-inter-regular text-text-tertiary">Titelbild</Text>
+              <View style={[styles.photoCover, styles.photoPlaceholder, { backgroundColor: colors.border }]}>
+                <Text style={[styles.infoCategory, { color: colors.textTertiary }]}>Titelbild</Text>
               </View>
             )}
           </View>
         </SectionCard>
 
-        <View className="h-24" />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
-        <Pressable onPress={() => router.back()} className="py-4 px-6">
-          <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
+      <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Text style={[styles.backButtonText, { color: colors.textSecondary }]}>Zurück</Text>
         </Pressable>
         <Pressable
           onPress={handleSubmit}
           disabled={isSubmitting}
-          className={`bg-primary rounded-xl py-4 px-6 ${isSubmitting ? 'opacity-60' : ''}`}
+          style={[styles.submitButton, { backgroundColor: colors.primary, opacity: isSubmitting ? 0.6 : 1 }]}
         >
           {isSubmitting ? (
             <ActivityIndicator color={colors.onPrimary} />
           ) : (
-            <Text className="text-on-primary text-base font-inter-medium">Antrag einreichen</Text>
+            <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>Antrag einreichen</Text>
           )}
         </Pressable>
       </View>
@@ -190,16 +187,81 @@ export default function CreateOrgReviewScreen() {
   );
 }
 
-function SectionCard({ title, children, onEdit }: { title: string; children: React.ReactNode; onEdit: () => void }) {
+function SectionCard({
+  title,
+  children,
+  onEdit,
+  colors,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onEdit: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
   return (
-    <View className="bg-surface rounded-2xl p-4 mb-3">
-      <View className="flex-row justify-between items-center mb-3">
-        <Text className="text-xs font-inter-medium text-text-secondary uppercase tracking-wider">{title}</Text>
+    <View style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+      <View style={styles.sectionCardHeader}>
+        <Text style={[styles.sectionCardTitle, { color: colors.textSecondary }]}>{title}</Text>
         <Pressable onPress={onEdit}>
-          <Text className="text-sm font-inter-medium text-primary">Bearbeiten</Text>
+          <Text style={[styles.sectionCardEdit, { color: colors.primary }]}>Bearbeiten</Text>
         </Pressable>
       </View>
       {children}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
+  scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  stepLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  title: { fontSize: 20, fontFamily: 'Inter-Bold', marginBottom: 8 },
+  subtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginBottom: 32 },
+  sectionCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  sectionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionCardTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  sectionCardEdit: { fontSize: 13, fontFamily: 'Inter-Medium' },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  typeEmoji: { fontSize: 20 },
+  typeLabel: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  infoName: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  infoDescription: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4 },
+  infoCategory: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
+  photosRow: { flexDirection: 'row', gap: 16 },
+  photoLogo: { width: 64, height: 64, borderRadius: 9999 },
+  photoCover: { flex: 1, height: 64, borderRadius: 16 },
+  photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  bottomSpacer: { height: 96 },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  backButton: { paddingVertical: 16, paddingHorizontal: 24 },
+  backButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  submitButton: { borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24 },
+  submitButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+});
