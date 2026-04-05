@@ -259,11 +259,13 @@ export default function ProfileScreen() {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            {/* Governance Test Banner */}
-            <GovernanceTestBanner
-              isTestingEnabled={isGovernanceTestEnabled}
-              onPress={handleGovernanceTestToggle}
-            />
+            {/* Governance Test Banner — only on personal accounts */}
+            {(!activeAccount || activeAccount.account_type === 'personal') && (
+              <GovernanceTestBanner
+                isTestingEnabled={isGovernanceTestEnabled}
+                onPress={() => router.push('/governance' as any)}
+              />
+            )}
 
             {/* Bookmarked Events */}
             <View style={styles.bookmarkedSection}>
