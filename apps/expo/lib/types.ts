@@ -175,6 +175,7 @@ export type RestaurantRecord = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  account_id: string | null;
 };
 
 export type BusinessCategory =
