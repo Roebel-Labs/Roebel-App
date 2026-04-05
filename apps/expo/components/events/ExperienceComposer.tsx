@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   Pressable,
+  TouchableOpacity,
   ScrollView,
   StyleSheet,
   ActivityIndicator,
@@ -128,12 +129,8 @@ export default function ExperienceComposer({
   };
 
   return (
-    <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.75}>
-      <ScrollView
-        style={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+    <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.55}>
+      <View style={styles.container}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Erlebnis teilen</Text>
 
         {/* Emoji Picker Row */}
@@ -152,57 +149,8 @@ export default function ExperienceComposer({
           ))}
         </ScrollView>
 
-        {/* Text Input */}
-        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
-          <TextInput
-            value={content}
-            onChangeText={setContent}
-            placeholder="Wie war dein Erlebnis?"
-            placeholderTextColor={colors.textTertiary}
-            multiline
-            maxLength={MAX_CONTENT_LENGTH}
-            style={[styles.textInput, { color: colors.textPrimary }]}
-          />
-          <Text style={[styles.charCount, { color: colors.textTertiary }]}>
-            {content.length}/{MAX_CONTENT_LENGTH}
-          </Text>
-        </View>
-
-        {/* Media Toolbar */}
-        <View style={styles.mediaToolbar}>
-          <Pressable
-            onPress={handlePickImages}
-            disabled={images.length >= MAX_IMAGES || isUploading}
-            style={[styles.mediaButton, { backgroundColor: colors.surfaceSecondary }]}
-          >
-            <Ionicons name="image-outline" size={20} color={images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary} />
-            <Text style={[styles.mediaButtonText, { color: images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary }]}>
-              Bilder {images.length > 0 ? `(${images.length}/${MAX_IMAGES})` : ''}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handlePickVideo}
-            disabled={!!videoUrl || isUploading}
-            style={[styles.mediaButton, { backgroundColor: colors.surfaceSecondary }]}
-          >
-            <Ionicons name="videocam-outline" size={20} color={videoUrl ? colors.disabled : colors.textSecondary} />
-            <Text style={[styles.mediaButtonText, { color: videoUrl ? colors.disabled : colors.textSecondary }]}>
-              Video
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Upload indicator */}
-        {isUploading && (
-          <View style={styles.uploadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>Wird hochgeladen...</Text>
-          </View>
-        )}
-
-        {/* Image Previews */}
-        {images.length > 0 && (
+        {/* Image/Video Previews */}
+        {(images.length > 0 || videoUrl) && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewRow}>
             {images.map((uri, i) => (
               <View key={i} style={styles.previewItem}>
@@ -212,122 +160,131 @@ export default function ExperienceComposer({
                 </Pressable>
               </View>
             ))}
+            {videoUrl && (
+              <View style={[styles.videoChip, { backgroundColor: colors.surfaceSecondary }]}>
+                <Ionicons name="videocam" size={16} color={colors.textSecondary} />
+                <Text style={[styles.videoChipText, { color: colors.textSecondary }]}>Video</Text>
+                <Pressable onPress={handleRemoveVideo} hitSlop={8}>
+                  <Ionicons name="close-circle" size={16} color={colors.error} />
+                </Pressable>
+              </View>
+            )}
           </ScrollView>
         )}
 
-        {/* Video Preview */}
-        {videoUrl && (
-          <View style={[styles.videoPreview, { backgroundColor: colors.surfaceSecondary }]}>
-            <Ionicons name="videocam" size={20} color={colors.textSecondary} />
-            <Text style={[styles.videoPreviewText, { color: colors.textSecondary }]} numberOfLines={1}>
-              Video hinzugefügt
-            </Text>
-            <Pressable onPress={handleRemoveVideo} hitSlop={8}>
-              <Ionicons name="close-circle" size={20} color={colors.error} />
-            </Pressable>
+        {/* Upload indicator */}
+        {isUploading && (
+          <View style={styles.uploadingRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>Wird hochgeladen...</Text>
           </View>
         )}
 
-        {/* Submit Button */}
-        <Pressable
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-          style={[
-            styles.submitButton,
-            { backgroundColor: canSubmit ? colors.primary : colors.disabled },
-          ]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <Text style={styles.submitText}>Teilen</Text>
-          )}
-        </Pressable>
-      </ScrollView>
+        {/* Input area — same pattern as AI event submission */}
+        <View style={styles.inputArea}>
+          {/* Media buttons row (like ImageUploadButton in AI chat) */}
+          <View style={styles.mediaRow}>
+            <TouchableOpacity
+              onPress={handlePickImages}
+              disabled={images.length >= MAX_IMAGES || isUploading}
+              style={[
+                styles.mediaChip,
+                { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+                (images.length >= MAX_IMAGES || isUploading) && { opacity: 0.5 },
+              ]}
+            >
+              <Ionicons name="image-outline" size={18} color={colors.primary} />
+              <Text style={[styles.mediaChipText, { color: colors.primary }]}>
+                {images.length > 0 ? `Bilder (${images.length}/${MAX_IMAGES})` : 'Bild'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handlePickVideo}
+              disabled={!!videoUrl || isUploading}
+              style={[
+                styles.mediaChip,
+                { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+                (!!videoUrl || isUploading) && { opacity: 0.5 },
+              ]}
+            >
+              <Ionicons name="videocam-outline" size={18} color={colors.primary} />
+              <Text style={[styles.mediaChipText, { color: colors.primary }]}>Video</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Text input + send button row (matching AI chat layout) */}
+          <View style={styles.inputRow}>
+            <TextInput
+              value={content}
+              onChangeText={setContent}
+              placeholder="Wie war dein Erlebnis?"
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              maxLength={MAX_CONTENT_LENGTH}
+              style={[styles.textInput, {
+                backgroundColor: colors.pressedOverlay,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              }]}
+            />
+            <TouchableOpacity
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={[
+                styles.sendButton,
+                { backgroundColor: colors.primary },
+                !canSubmit && styles.sendButtonDisabled,
+              ]}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Ionicons name="send" size={18} color="#ffffff" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
     </BottomDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
+  container: {
     flex: 1,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emojiRow: {
-    marginBottom: 16,
+    marginBottom: 12,
+    flexGrow: 0,
   },
   emojiButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 6,
   },
   emojiText: {
-    fontSize: 24,
-  },
-  inputContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    minHeight: 100,
-  },
-  textInput: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  charCount: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  mediaToolbar: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  mediaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  mediaButtonText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  uploadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  uploadingText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontSize: 22,
   },
   previewRow: {
-    marginBottom: 12,
+    marginBottom: 8,
+    flexGrow: 0,
   },
   previewItem: {
     position: 'relative',
     marginRight: 8,
   },
   previewImage: {
-    width: 72,
-    height: 72,
+    width: 64,
+    height: 64,
     borderRadius: 8,
   },
   removeButton: {
@@ -335,30 +292,73 @@ const styles = StyleSheet.create({
     top: -6,
     right: -6,
   },
-  videoPreview: {
+  videoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  videoChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  uploadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  videoPreviewText: {
-    flex: 1,
+  uploadingText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
   },
-  submitButton: {
-    height: 48,
-    borderRadius: 12,
+  inputArea: {
+    marginTop: 'auto',
+    gap: 8,
+  },
+  mediaRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  mediaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  mediaChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    maxHeight: 100,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 24,
   },
-  submitText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
 });
