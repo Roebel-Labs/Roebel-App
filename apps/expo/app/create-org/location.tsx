@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,8 +19,8 @@ export default function CreateOrgLocationScreen() {
 
   const apiKey = (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  const handleGeocode = async () => {
-    if (!address.trim()) return;
+  const handleGeocode = useCallback(async () => {
+    if (!address.trim() || isGeocoding) return;
     setIsGeocoding(true);
     setGeocodeError(null);
 
@@ -45,7 +45,7 @@ export default function CreateOrgLocationScreen() {
     } finally {
       setIsGeocoding(false);
     }
-  };
+  }, [address, apiKey, isGeocoding, dispatch]);
 
   const handleAddressChange = (text: string) => {
     setAddress(text);
@@ -55,7 +55,6 @@ export default function CreateOrgLocationScreen() {
 
   const handleNext = () => {
     if (!geocoded) {
-      // Allow skipping for non-business orgs
       dispatch({ type: 'SET_LOCATION', payload: { address: address.trim(), latitude: null, longitude: null, formattedAddress: null } });
     }
     router.push('/create-org/contact');
@@ -64,57 +63,73 @@ export default function CreateOrgLocationScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text className="text-sm font-inter-medium text-text-secondary mb-2">SCHRITT 3</Text>
+        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 3</Text>
         <Text className="text-2xl font-inter-bold text-text-primary mb-2">Wo befindet ihr euch?</Text>
         <Text className="text-sm font-inter-regular text-text-secondary mb-8">
-          Die Adresse wird nur nach Freigabe mit Gästen geteilt.
+          Gib eure Adresse ein — wir finden die genauen Koordinaten automatisch.
         </Text>
 
-        <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Adresse</Text>
-        <TextInput
-          value={address}
-          onChangeText={handleAddressChange}
-          placeholder="Straße, Hausnummer, PLZ Ort"
-          placeholderTextColor={colors.textTertiary}
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-3"
-        />
+        <Text className={`text-xs font-inter-medium mb-2 uppercase tracking-wider ${geocoded ? 'text-green-600 dark:text-green-400' : 'text-text-secondary'}`}>
+          {geocoded ? 'Adresse ✓' : 'Adresse'}
+        </Text>
 
-        <Pressable
-          onPress={handleGeocode}
-          disabled={isGeocoding || !address.trim()}
-          className={`bg-surface rounded-xl py-3.5 items-center mb-4 border border-border ${!address.trim() ? 'opacity-50' : ''}`}
-        >
-          {isGeocoding ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Text className="text-base font-inter-medium text-primary">Adresse prüfen</Text>
-          )}
-        </Pressable>
-
-        {/* Success card */}
-        {geocoded && state.formattedAddress && (
-          <View className="bg-green-50 dark:bg-green-950 rounded-xl p-4 mb-4">
-            <Text className="text-sm font-inter-medium text-green-800 dark:text-green-200 mb-1">Adresse gefunden</Text>
-            <Text className="text-base font-inter-regular text-green-700 dark:text-green-300">{state.formattedAddress}</Text>
+        {/* Address input — changes to success state when geocoded */}
+        <View className={`rounded-xl px-4 py-3.5 flex-row items-center gap-3 ${
+          geocoded
+            ? 'bg-green-50 dark:bg-green-950 border-2 border-green-500 dark:border-green-400'
+            : geocodeError
+              ? 'bg-red-50 dark:bg-red-950 border-2 border-red-500 dark:border-red-400'
+              : 'bg-surface border border-border'
+        }`}>
+          <Text className="text-base">📍</Text>
+          <View className="flex-1">
+            {geocoded && state.formattedAddress ? (
+              <>
+                <Text className="text-sm font-inter-medium text-text-primary">{state.formattedAddress}</Text>
+                <Text className="text-xs font-inter-regular text-text-tertiary mt-0.5">
+                  {state.latitude?.toFixed(4)}° N, {state.longitude?.toFixed(4)}° O
+                </Text>
+              </>
+            ) : (
+              <TextInput
+                value={address}
+                onChangeText={handleAddressChange}
+                onBlur={handleGeocode}
+                onSubmitEditing={handleGeocode}
+                placeholder="z.B. Marktplatz 1, Röbel..."
+                placeholderTextColor={colors.textTertiary}
+                returnKeyType="search"
+                className="text-base font-inter-regular text-text-primary p-0"
+              />
+            )}
           </View>
-        )}
+          {isGeocoding && <ActivityIndicator size="small" color={colors.primary} />}
+          {geocoded && <Text className="text-green-600 dark:text-green-400 text-lg">✓</Text>}
+        </View>
 
         {/* Error message */}
         {geocodeError && (
-          <View className="bg-red-50 dark:bg-red-950 rounded-xl p-4 mb-4">
-            <Text className="text-sm font-inter-regular text-red-700 dark:text-red-300">{geocodeError}</Text>
-          </View>
+          <Text className="text-xs font-inter-regular text-red-600 dark:text-red-400 mt-2">{geocodeError}</Text>
         )}
+
+        {/* Tap to edit when geocoded */}
+        {geocoded && (
+          <Pressable onPress={() => { setGeocoded(false); setAddress(state.formattedAddress || address); }} className="mt-3">
+            <Text className="text-xs font-inter-medium text-primary text-center">Adresse ändern</Text>
+          </Pressable>
+        )}
+
+        {/* Skip option */}
+        <Pressable onPress={handleNext} className="mt-6">
+          <Text className="text-sm font-inter-regular text-text-tertiary text-center underline">Adresse später hinzufügen</Text>
+        </Pressable>
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3">
+      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
         <Pressable onPress={() => router.back()} className="py-4 px-6">
           <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
         </Pressable>
-        <Pressable
-          onPress={handleNext}
-          className="bg-primary rounded-xl py-4 px-8"
-        >
+        <Pressable onPress={handleNext} className="bg-primary rounded-xl py-4 px-8">
           <Text className="text-on-primary text-base font-inter-medium">Weiter</Text>
         </Pressable>
       </View>
