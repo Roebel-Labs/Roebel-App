@@ -39,7 +39,6 @@ export default function KitchenDashboardScreen() {
         .from('restaurants')
         .select('id')
         .eq('account_id', activeAccount!.id)
-        .eq('status', 'published')
         .maybeSingle();
 
       if (data) setRestaurantId(data.id);
