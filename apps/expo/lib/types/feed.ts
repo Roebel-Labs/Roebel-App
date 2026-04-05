@@ -88,6 +88,30 @@ export type PostCommentRecord = {
   author?: PostAuthor;
 };
 
+// ─── Event Experience Types ─────────────────────────────────
+
+export type EventExperience = {
+  id: string;
+  event_id: string;
+  wallet_address: string;
+  content: string;
+  media_urls: string[] | null;
+  video_url: string | null;
+  emoji: string | null;
+  status: 'published' | 'deleted';
+  created_at: string;
+  author?: PostAuthor;
+};
+
+export type CreateExperienceInput = {
+  event_id: string;
+  wallet_address: string;
+  content: string;
+  media_urls?: string[];
+  video_url?: string;
+  emoji?: string;
+};
+
 // ─── Create Inputs ──────────────────────────────────────────
 
 export type CreatePostInput = {
