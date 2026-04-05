@@ -197,7 +197,221 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
     )
   }
 
-  // Placeholder for steps 3-8 (implemented in subsequent tasks)
+  // ── Step 3: Info ──
+  if (step === 3) {
+    const canProceed = state.name.trim().length > 0 && (!needsCategory || !!state.category)
+
+    return (
+      <WizardShell step={step} setStep={setStep} canAdvance={canProceed} onNext={() => setStep(4)}>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Erzähl uns von deinem Gewerbe
+        </h2>
+        <p className="text-gray-500 mb-8">Grundlegende Informationen zu deiner Organisation.</p>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Name *
+            </label>
+            <input
+              type="text"
+              value={state.name}
+              onChange={(e) => update({ name: e.target.value.slice(0, 100) })}
+              placeholder="z.B. Bäckerei Müller"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+            />
+            <div className="text-xs text-gray-400 mt-1 text-right">
+              {state.name.length}/100
+            </div>
+          </div>
+
+          {needsCategory && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Kategorie *
+              </label>
+              <select
+                value={state.category || ""}
+                onChange={(e) => update({ category: e.target.value as BusinessCategory })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+              >
+                <option value="">Kategorie wählen...</option>
+                {BUSINESS_CATEGORIES.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Beschreibung
+            </label>
+            <textarea
+              value={state.description}
+              onChange={(e) => update({ description: e.target.value.slice(0, 500) })}
+              placeholder="Beschreibe dein Gewerbe in ein paar Sätzen..."
+              rows={4}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent resize-none"
+            />
+            <div className="text-xs text-gray-400 mt-1 text-right">
+              {state.description.length}/500
+            </div>
+          </div>
+        </div>
+      </WizardShell>
+    )
+  }
+
+  // ── Step 4: Location ──
+  if (step === 4) {
+    return (
+      <WizardShell step={step} setStep={setStep} canAdvance={true} onNext={() => setStep(5)}>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Wo befindet sich dein Gewerbe?
+        </h2>
+        <p className="text-gray-500 mb-8">Damit Röbeler dich auf der Karte finden können.</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Adresse
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                value={state.address}
+                onChange={(e) =>
+                  update({
+                    address: e.target.value,
+                    latitude: null,
+                    longitude: null,
+                    formattedAddress: null,
+                  })
+                }
+                placeholder="Marktplatz 1, 17207 Röbel/Müritz"
+                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent ${
+                  state.formattedAddress
+                    ? "border-green-400 bg-green-50/30"
+                    : "border-gray-300"
+                }`}
+              />
+              {state.formattedAddress && (
+                <Check className="absolute right-3.5 top-3.5 h-5 w-5 text-green-500" />
+              )}
+            </div>
+            {state.formattedAddress && (
+              <p className="text-sm text-green-600 mt-1.5">
+                ✓ {state.formattedAddress}
+              </p>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400">
+            Die Adresse wird beim Einreichen automatisch geocodiert. Du kannst diesen Schritt auch überspringen.
+          </p>
+        </div>
+      </WizardShell>
+    )
+  }
+
+  // ── Step 5: Contact ──
+  if (step === 5) {
+    return (
+      <WizardShell step={step} setStep={setStep} canAdvance={true} onNext={() => setStep(6)}>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Wie kann man dich erreichen?
+        </h2>
+        <p className="text-gray-500 mb-8">Kontaktdaten sind optional, helfen aber Röbelern dich zu finden.</p>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefon</label>
+              <input
+                type="tel"
+                value={state.phone}
+                onChange={(e) => update({ phone: e.target.value })}
+                placeholder="+49 ..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">E-Mail</label>
+              <input
+                type="email"
+                value={state.email}
+                onChange={(e) => update({ email: e.target.value })}
+                placeholder="info@example.de"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Website</label>
+            <input
+              type="url"
+              value={state.website}
+              onChange={(e) => update({ website: e.target.value })}
+              placeholder="https://www.example.de"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+            />
+          </div>
+
+          {needsCategory && (
+            <OpeningHoursEditor
+              value={state.openingHours}
+              onChange={(hours) => update({ openingHours: hours })}
+            />
+          )}
+        </div>
+      </WizardShell>
+    )
+  }
+
+  // ── Step 6: Photos ──
+  if (step === 6) {
+    return (
+      <WizardShell step={step} setStep={setStep} canAdvance={true} onNext={() => setStep(7)}>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          Zeig dein Gewerbe
+        </h2>
+        <p className="text-gray-500 mb-8">Lade ein Logo und Titelbild hoch. Beides ist optional.</p>
+
+        <div className="space-y-6">
+          <BusinessImageUpload
+            label="Logo"
+            currentUrl={null}
+            onFileSelect={(file) => {
+              update({
+                logoFile: file,
+                logoPreview: file ? URL.createObjectURL(file) : null,
+              })
+            }}
+            previewUrl={state.logoPreview}
+          />
+
+          <BusinessImageUpload
+            label="Titelbild"
+            currentUrl={null}
+            onFileSelect={(file) => {
+              update({
+                coverFile: file,
+                coverPreview: file ? URL.createObjectURL(file) : null,
+              })
+            }}
+            previewUrl={state.coverPreview}
+          />
+        </div>
+      </WizardShell>
+    )
+  }
+
+  // Placeholder for steps 7-8 (implemented in Task 5)
   return null
 }
 
