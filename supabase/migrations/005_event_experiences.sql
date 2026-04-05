@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.event_experiences (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
-  wallet_address TEXT NOT NULL,
+  wallet_address TEXT NOT NULL REFERENCES public.users(wallet_address) ON DELETE CASCADE,
   content TEXT NOT NULL CHECK (char_length(content) <= 500),
   media_urls TEXT[] DEFAULT '{}',
   video_url TEXT DEFAULT NULL,
