@@ -3,13 +3,11 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft, Loader2, MapPin, Check } from "lucide-react"
+import { Loader2, MapPin, Check } from "lucide-react"
 import { submitBusiness } from "@/app/actions/submit-business"
 import {
   BUSINESS_CATEGORIES,
   ORG_TYPES,
-  DAYS_OF_WEEK,
   getCategoryLabel,
 } from "@/types/business"
 import type {
@@ -425,6 +423,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
             label="Logo"
             currentUrl={null}
             onFileSelect={(file) => {
+              if (state.logoPreview) URL.revokeObjectURL(state.logoPreview)
               update({
                 logoFile: file,
                 logoPreview: file ? URL.createObjectURL(file) : null,
@@ -437,6 +436,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
             label="Titelbild"
             currentUrl={null}
             onFileSelect={(file) => {
+              if (state.coverPreview) URL.revokeObjectURL(state.coverPreview)
               update({
                 coverFile: file,
                 coverPreview: file ? URL.createObjectURL(file) : null,
@@ -632,19 +632,6 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-6 md:px-10 py-5 flex items-center justify-between">
-          <button
-            onClick={() => setStep(7)}
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 underline underline-offset-2 transition-colors"
-          >
-            Zurück
-          </button>
-          <span className="text-sm text-gray-400">
-            Schritt {step} von {TOTAL_STEPS}
-          </span>
-          <div />
-        </div>
       </div>
     )
   }
