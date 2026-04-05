@@ -1,24 +1,13 @@
 # Project Instructions
 
-## Styling: NativeWind v5
+## Styling: StyleSheet + useTheme()
 
-- **All styling uses NativeWind v5 `className`** with Tailwind CSS v4
-- **Single source of truth for design tokens:** `global.css` (`@theme` block)
-- **Dark mode:** CSS variables auto-switch via `@variant dark` in `global.css`. ThemeContext calls `Appearance.setColorScheme()` to bridge. No `dark:` prefix needed for themed tokens.
-- **`useTheme()` only for programmatic access:** SVG icon `color` props, Reanimated, `android_ripple`, `ActivityIndicator`, `TextInput.placeholderTextColor`, `Switch.trackColor`, Mapbox
-- **No new `StyleSheet.create`** — use `className` for all new components
-- **View does NOT cascade text color** — every `<Text>` must have its own `text-*` class
-
-### Token Quick Reference
-| CSS Variable | Tailwind Class | Use |
-|---|---|---|
-| `--color-background` | `bg-background` | Screen/card backgrounds |
-| `--color-surface` | `bg-surface` | Elevated surfaces |
-| `--color-text-primary` | `text-text-primary` | Primary text |
-| `--color-text-secondary` | `text-text-secondary` | Secondary text |
-| `--color-primary` | `bg-primary` / `text-primary` | Brand color |
-| `--font-inter-medium` | `font-inter-medium` | Medium weight text |
-| `--text-lg` (16px) | `text-lg` | Body text |
+- **All styling uses `StyleSheet.create()` + `useTheme()` hook** — NO NativeWind
+- **Token source of truth:** `constants/theme.ts` (lightColors / darkColors)
+- **Theme context:** `context/ThemeContext.tsx`
+- **Dark mode:** ThemeContext provides `colors` object that auto-switches between light/dark palettes
+- **Font families:** `Inter-Regular`, `Inter-Medium`, `Inter-SemiBold`, `Inter-Bold`
+- A previous NativeWind migration attempt broke the app and was reverted. Do NOT attempt NativeWind migration.
 
 ## Figma
 - **fileKey:** gy9pkojEQ4pktQhubjI57e

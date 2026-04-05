@@ -5,6 +5,7 @@ import {
   TextInput,
   Pressable,
   ScrollView,
+  StyleSheet,
   ActivityIndicator,
   Image,
 } from 'react-native';
@@ -129,32 +130,30 @@ export default function ExperienceComposer({
   return (
     <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.75}>
       <ScrollView
-        className="flex-1"
+        style={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <Text className="text-lg font-inter-semibold text-text-primary mb-4">
-          Erlebnis teilen
-        </Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Erlebnis teilen</Text>
 
         {/* Emoji Picker Row */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiRow}>
           {CURATED_EMOJIS.map((emoji) => (
             <Pressable
               key={emoji}
               onPress={() => handleEmojiToggle(emoji)}
-              className={`w-11 h-11 rounded-full items-center justify-center mr-2 ${
-                selectedEmoji === emoji ? 'bg-primary/15' : ''
-              }`}
+              style={[
+                styles.emojiButton,
+                selectedEmoji === emoji && { backgroundColor: colors.primaryLight },
+              ]}
             >
-              <Text className="text-2xl">{emoji}</Text>
+              <Text style={styles.emojiText}>{emoji}</Text>
             </Pressable>
           ))}
         </ScrollView>
 
         {/* Text Input */}
-        <View className="border border-border rounded-xl p-3 mb-3" style={{ minHeight: 100 }}>
+        <View style={[styles.inputContainer, { borderColor: colors.border }]}>
           <TextInput
             value={content}
             onChangeText={setContent}
@@ -162,30 +161,22 @@ export default function ExperienceComposer({
             placeholderTextColor={colors.textTertiary}
             multiline
             maxLength={MAX_CONTENT_LENGTH}
-            className="text-sm font-inter-regular text-text-primary"
-            style={{ minHeight: 60, textAlignVertical: 'top', lineHeight: 20 }}
+            style={[styles.textInput, { color: colors.textPrimary }]}
           />
-          <Text className="text-[11px] font-inter-regular text-text-tertiary text-right mt-1">
+          <Text style={[styles.charCount, { color: colors.textTertiary }]}>
             {content.length}/{MAX_CONTENT_LENGTH}
           </Text>
         </View>
 
         {/* Media Toolbar */}
-        <View className="flex-row gap-2 mb-3">
+        <View style={styles.mediaToolbar}>
           <Pressable
             onPress={handlePickImages}
             disabled={images.length >= MAX_IMAGES || isUploading}
-            className="flex-row items-center gap-1.5 bg-surface-secondary px-3 py-2 rounded-lg"
+            style={[styles.mediaButton, { backgroundColor: colors.surfaceSecondary }]}
           >
-            <Ionicons
-              name="image-outline"
-              size={20}
-              color={images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary}
-            />
-            <Text
-              className="text-xs font-inter-medium"
-              style={{ color: images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary }}
-            >
+            <Ionicons name="image-outline" size={20} color={images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary} />
+            <Text style={[styles.mediaButtonText, { color: images.length >= MAX_IMAGES ? colors.disabled : colors.textSecondary }]}>
               Bilder {images.length > 0 ? `(${images.length}/${MAX_IMAGES})` : ''}
             </Text>
           </Pressable>
@@ -193,17 +184,10 @@ export default function ExperienceComposer({
           <Pressable
             onPress={handlePickVideo}
             disabled={!!videoUrl || isUploading}
-            className="flex-row items-center gap-1.5 bg-surface-secondary px-3 py-2 rounded-lg"
+            style={[styles.mediaButton, { backgroundColor: colors.surfaceSecondary }]}
           >
-            <Ionicons
-              name="videocam-outline"
-              size={20}
-              color={videoUrl ? colors.disabled : colors.textSecondary}
-            />
-            <Text
-              className="text-xs font-inter-medium"
-              style={{ color: videoUrl ? colors.disabled : colors.textSecondary }}
-            >
+            <Ionicons name="videocam-outline" size={20} color={videoUrl ? colors.disabled : colors.textSecondary} />
+            <Text style={[styles.mediaButtonText, { color: videoUrl ? colors.disabled : colors.textSecondary }]}>
               Video
             </Text>
           </Pressable>
@@ -211,24 +195,19 @@ export default function ExperienceComposer({
 
         {/* Upload indicator */}
         {isUploading && (
-          <View className="flex-row items-center gap-2 mb-3">
+          <View style={styles.uploadingRow}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text className="text-xs font-inter-regular text-text-secondary">
-              Wird hochgeladen...
-            </Text>
+            <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>Wird hochgeladen...</Text>
           </View>
         )}
 
         {/* Image Previews */}
         {images.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewRow}>
             {images.map((uri, i) => (
-              <View key={i} className="relative mr-2">
-                <Image source={{ uri }} className="w-[72px] h-[72px] rounded-lg" />
-                <Pressable
-                  onPress={() => handleRemoveImage(i)}
-                  className="absolute -top-1.5 -right-1.5"
-                >
+              <View key={i} style={styles.previewItem}>
+                <Image source={{ uri }} style={styles.previewImage} />
+                <Pressable onPress={() => handleRemoveImage(i)} style={styles.removeButton}>
                   <Ionicons name="close-circle" size={20} color={colors.error} />
                 </Pressable>
               </View>
@@ -238,9 +217,9 @@ export default function ExperienceComposer({
 
         {/* Video Preview */}
         {videoUrl && (
-          <View className="flex-row items-center gap-2 bg-surface-secondary p-3 rounded-lg mb-3">
+          <View style={[styles.videoPreview, { backgroundColor: colors.surfaceSecondary }]}>
             <Ionicons name="videocam" size={20} color={colors.textSecondary} />
-            <Text className="flex-1 text-xs font-inter-regular text-text-secondary" numberOfLines={1}>
+            <Text style={[styles.videoPreviewText, { color: colors.textSecondary }]} numberOfLines={1}>
               Video hinzugefügt
             </Text>
             <Pressable onPress={handleRemoveVideo} hitSlop={8}>
@@ -253,17 +232,133 @@ export default function ExperienceComposer({
         <Pressable
           onPress={handleSubmit}
           disabled={!canSubmit}
-          className={`h-12 rounded-xl items-center justify-center mt-1 ${
-            canSubmit ? 'bg-primary' : 'bg-disabled'
-          }`}
+          style={[
+            styles.submitButton,
+            { backgroundColor: canSubmit ? colors.primary : colors.disabled },
+          ]}
         >
           {isSubmitting ? (
             <ActivityIndicator size="small" color="#ffffff" />
           ) : (
-            <Text className="text-base font-inter-semibold text-white">Teilen</Text>
+            <Text style={styles.submitText}>Teilen</Text>
           )}
         </Pressable>
       </ScrollView>
     </BottomDrawer>
   );
 }
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 16,
+  },
+  emojiRow: {
+    marginBottom: 16,
+  },
+  emojiButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  emojiText: {
+    fontSize: 24,
+  },
+  inputContainer: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    minHeight: 100,
+  },
+  textInput: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  mediaToolbar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  mediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  mediaButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  uploadingText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  previewRow: {
+    marginBottom: 12,
+  },
+  previewItem: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  previewImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+  },
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  videoPreviewText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  submitButton: {
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  submitText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+  },
+});

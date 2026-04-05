@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -65,14 +65,14 @@ export default function ExperienceSection({ eventId }: Props) {
   };
 
   return (
-    <View className="mt-6 gap-3">
+    <View style={styles.section}>
       {/* Section Header */}
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2">
-          <Text className="text-lg font-inter-semibold text-text-primary">Erlebnisse</Text>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Erlebnisse</Text>
           {experiences.length > 0 && (
-            <View className="bg-primary/10 px-2 py-0.5 rounded-full">
-              <Text className="text-xs font-inter-semibold text-primary">{experiences.length}</Text>
+            <View style={[styles.countBadge, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.countText, { color: colors.primary }]}>{experiences.length}</Text>
             </View>
           )}
         </View>
@@ -82,21 +82,21 @@ export default function ExperienceSection({ eventId }: Props) {
       {user && (
         <Pressable
           onPress={() => setComposerVisible(true)}
-          className="flex-row items-center gap-3 bg-surface rounded-xl px-4 py-3"
+          style={[styles.inputBar, { backgroundColor: colors.surface }]}
         >
           {user.profile_picture_url ? (
             <Image
               source={{ uri: user.profile_picture_url }}
-              className="w-8 h-8 rounded-full"
+              style={styles.inputAvatar}
             />
           ) : (
-            <View className="w-8 h-8 rounded-full bg-primary/10 items-center justify-center">
-              <Text className="text-sm font-inter-semibold text-primary">
+            <View style={[styles.inputAvatarFallback, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.inputAvatarText, { color: colors.primary }]}>
                 {(user.username || '?').charAt(0).toUpperCase()}
               </Text>
             </View>
           )}
-          <Text className="flex-1 text-sm text-text-tertiary font-inter-regular">
+          <Text style={[styles.inputPlaceholder, { color: colors.textTertiary }]}>
             Teile dein Erlebnis...
           </Text>
           <Ionicons name="camera-outline" size={20} color={colors.textTertiary} />
@@ -105,18 +105,18 @@ export default function ExperienceSection({ eventId }: Props) {
 
       {/* Loading State */}
       {loading && (
-        <View className="py-6 items-center">
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
       )}
 
       {/* Empty State */}
       {!loading && experiences.length === 0 && (
-        <View className="bg-surface rounded-xl p-6 items-center gap-1">
-          <Text className="text-sm font-inter-medium text-text-secondary">
+        <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>
             Noch keine Erlebnisse
           </Text>
-          <Text className="text-xs font-inter-regular text-text-tertiary">
+          <Text style={[styles.emptySubtitle, { color: colors.textTertiary }]}>
             Sei der/die Erste und teile dein Erlebnis!
           </Text>
         </View>
@@ -124,7 +124,7 @@ export default function ExperienceSection({ eventId }: Props) {
 
       {/* Experiences List */}
       {!loading && experiences.length > 0 && (
-        <View className="gap-3">
+        <View style={styles.list}>
           {experiences.map((experience) => (
             <ExperienceItem
               key={experience.id}
@@ -138,12 +138,12 @@ export default function ExperienceSection({ eventId }: Props) {
 
       {/* Load More Button */}
       {hasMore && !loadingMore && (
-        <Pressable onPress={handleLoadMore} className="items-center py-3">
-          <Text className="text-sm font-inter-medium text-primary">Mehr laden</Text>
+        <Pressable onPress={handleLoadMore} style={styles.loadMoreButton}>
+          <Text style={[styles.loadMoreText, { color: colors.primary }]}>Mehr laden</Text>
         </Pressable>
       )}
       {loadingMore && (
-        <ActivityIndicator size="small" color={colors.primary} className="py-3" />
+        <ActivityIndicator size="small" color={colors.primary} style={styles.loadingMore} />
       )}
 
       {/* Composer */}
@@ -159,3 +159,94 @@ export default function ExperienceSection({ eventId }: Props) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  section: {
+    marginTop: 24,
+    gap: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  inputAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  inputAvatarFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputAvatarText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  inputPlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+  },
+  loadingContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyState: {
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    gap: 4,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  list: {
+    gap: 12,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  loadingMore: {
+    paddingVertical: 12,
+  },
+});
