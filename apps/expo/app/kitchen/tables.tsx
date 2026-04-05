@@ -30,7 +30,6 @@ export default function TableManagementScreen() {
         .from('restaurants')
         .select('id, slug')
         .eq('account_id', activeAccount!.id)
-        .eq('status', 'published')
         .maybeSingle();
 
       if (data) {
