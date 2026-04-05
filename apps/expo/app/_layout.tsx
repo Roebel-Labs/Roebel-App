@@ -147,6 +147,8 @@ function ThemedLayout() {
           <Stack.Screen name="kitchen/index" options={{ headerShown: false }} />
           <Stack.Screen name="kitchen/order/[sessionId]" options={{ headerShown: false }} />
           <Stack.Screen name="kitchen/tables" options={{ headerShown: false }} />
+          <Stack.Screen name="menu/index" options={{ headerShown: false }} />
+          <Stack.Screen name="menu/[categoryId]" options={{ headerShown: false }} />
           <Stack.Screen name="submit" options={{ title: 'Veranstaltung einreichen' }} />
           <Stack.Screen name="submit-event" options={{ headerShown: false }} />
           <Stack.Screen name="feedback" options={{ headerShown: false }} />

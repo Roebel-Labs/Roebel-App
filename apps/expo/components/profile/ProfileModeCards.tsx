@@ -128,20 +128,30 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
 
 function OrgCards({ router }: { router: ReturnType<typeof useRouter> }) {
   return (
-    <View style={styles.cardsRow}>
-      <ModeCard
-        emoji="🍽️"
-        title="Tische"
-        subtitle="Live-Ansicht"
-        onPress={() => router.push('/kitchen' as any)}
-      />
-      <ModeCard
-        emoji="⚙️"
-        title="Verwalten"
-        subtitle="Tische & QR-Codes"
-        onPress={() => router.push('/kitchen/tables' as any)}
-      />
-    </View>
+    <>
+      <View style={styles.cardsRow}>
+        <ModeCard
+          emoji="🍽️"
+          title="Tische"
+          subtitle="Live-Ansicht"
+          onPress={() => router.push('/kitchen' as any)}
+        />
+        <ModeCard
+          emoji="⚙️"
+          title="Verwalten"
+          subtitle="Tische & QR-Codes"
+          onPress={() => router.push('/kitchen/tables' as any)}
+        />
+      </View>
+      <View style={styles.cardsRow}>
+        <ModeCard
+          emoji="📋"
+          title="Speisekarte"
+          subtitle="Kategorien & Gerichte"
+          onPress={() => router.push('/menu' as any)}
+        />
+      </View>
+    </>
   );
 }
 
