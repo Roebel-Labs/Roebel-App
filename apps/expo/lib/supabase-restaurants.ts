@@ -41,7 +41,6 @@ export async function fetchRestaurantBySlug(slug: string): Promise<RestaurantWit
       special_menus (*)
     `)
     .eq('slug', slug)
-    .eq('status', 'published')
     .single();
 
   if (error) {
