@@ -1,15 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { geocodeLocation } from '@/lib/utils/geocoding';
+import WizardFooter from '@/components/WizardFooter';
 
 export default function CreateOrgLocationScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { state, dispatch } = useCreateOrgWizard();
 
   const [address, setAddress] = useState(state.address);
@@ -18,6 +19,7 @@ export default function CreateOrgLocationScreen() {
   const [geocoded, setGeocoded] = useState(!!state.formattedAddress);
 
   const apiKey = (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const mapboxToken = (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
   const handleGeocode = useCallback(async () => {
     if (!address.trim() || isGeocoding) return;
@@ -53,12 +55,24 @@ export default function CreateOrgLocationScreen() {
     setGeocodeError(null);
   };
 
+  const handleSaveLocation = () => {
+    if (!geocoded && address.trim()) {
+      handleGeocode();
+    }
+  };
+
   const handleNext = () => {
     if (!geocoded) {
       dispatch({ type: 'SET_LOCATION', payload: { address: address.trim(), latitude: null, longitude: null, formattedAddress: null } });
     }
     router.push('/create-org/contact');
   };
+
+  // Build static map URL when geocoded
+  const mapStyle = isDark ? 'dark-v11' : 'light-v11';
+  const staticMapUrl = geocoded && state.latitude && state.longitude && mapboxToken
+    ? `https://api.mapbox.com/styles/v1/mapbox/${mapStyle}/static/pin-s+194383(${state.longitude},${state.latitude})/${state.longitude},${state.latitude},14,0/600x300@2x?access_token=${mapboxToken}`
+    : null;
 
   const inputBoxStyle = geocoded
     ? { backgroundColor: colors.successBackground, borderWidth: 2, borderColor: colors.success }
@@ -94,7 +108,6 @@ export default function CreateOrgLocationScreen() {
               <TextInput
                 value={address}
                 onChangeText={handleAddressChange}
-                onBlur={handleGeocode}
                 onSubmitEditing={handleGeocode}
                 placeholder="z.B. Marktplatz 1, Röbel..."
                 placeholderTextColor={colors.textTertiary}
@@ -119,20 +132,40 @@ export default function CreateOrgLocationScreen() {
           </Pressable>
         )}
 
+        {/* Map preview */}
+        <View style={styles.mapContainer}>
+          {staticMapUrl ? (
+            <View style={[styles.mapWrapper, { borderColor: colors.border }]}>
+              <Image
+                source={{ uri: staticMapUrl }}
+                style={styles.mapImage}
+                resizeMode="cover"
+              />
+            </View>
+          ) : (
+            <View style={[styles.mapFallback, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.mapFallbackEmoji}>🗺️</Text>
+              <Text style={[styles.mapFallbackText, { color: colors.textTertiary }]}>
+                Kartenvorschau erscheint nach Adresseingabe
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* Skip option */}
         <Pressable onPress={handleNext} style={styles.skipButton}>
           <Text style={[styles.skipText, { color: colors.textTertiary }]}>Adresse später hinzufügen</Text>
         </Pressable>
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopWidth: 1, borderTopColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: colors.textSecondary }]}>Zurück</Text>
-        </Pressable>
-        <Pressable onPress={handleNext} style={[styles.nextButton, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.nextText, { color: colors.onPrimary }]}>Weiter</Text>
-        </Pressable>
-      </View>
+      <WizardFooter
+        step={3}
+        onBack={() => router.back()}
+        onNext={geocoded ? handleNext : handleSaveLocation}
+        nextLabel={geocoded ? 'Weiter' : 'Ort speichern'}
+        nextDisabled={!address.trim() && !geocoded}
+        nextContent={isGeocoding ? <ActivityIndicator color={colors.onPrimary} /> : undefined}
+      />
     </SafeAreaView>
   );
 }
@@ -214,37 +247,41 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
   },
+  mapContainer: {
+    marginTop: 20,
+  },
+  mapWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  mapImage: {
+    width: '100%',
+    height: 180,
+  },
+  mapFallback: {
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapFallbackEmoji: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  mapFallbackText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
   skipButton: {
-    marginTop: 24,
+    marginTop: 20,
+    marginBottom: 24,
   },
   skipText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     textDecorationLine: 'underline',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 12,
-  },
-  backButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  backText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  nextButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-  },
-  nextText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
   },
 });

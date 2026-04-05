@@ -156,7 +156,6 @@ export async function createRestaurant(input: {
   address?: string | null;
   phone?: string | null;
   website_url?: string | null;
-  opening_hours?: OpeningHours | null;
   latitude?: number | null;
   longitude?: number | null;
 }): Promise<RestaurantRecord> {
