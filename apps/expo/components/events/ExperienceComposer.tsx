@@ -70,7 +70,7 @@ export default function ExperienceComposer({
     setIsUploading(true);
     const newUrls: string[] = [];
     for (const asset of result.assets) {
-      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'experiences');
+      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'experiences', asset.mimeType || undefined);
       if (url) newUrls.push(url);
     }
     setImages((prev) => [...prev, ...newUrls].slice(0, MAX_IMAGES));
@@ -87,7 +87,7 @@ export default function ExperienceComposer({
     if (result.canceled) return;
 
     setIsUploading(true);
-    const url = await uploadMediaFile(result.assets[0].uri, walletAddress, 'video', 'experiences');
+    const url = await uploadMediaFile(result.assets[0].uri, walletAddress, 'video', 'experiences', result.assets[0].mimeType || undefined);
     setVideoUrl(url);
     setIsUploading(false);
   };
