@@ -569,6 +569,17 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
   if (step === 8) {
     return (
       <div className="fixed inset-0 z-50 bg-white flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 md:px-10 py-3 border-b border-gray-100">
+          <span className="text-xl font-bold text-[#194383]">Röbel</span>
+          <Link
+            href="/app/gewerbe"
+            className="border border-gray-300 rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Beenden
+          </Link>
+        </div>
+
         {/* Progress bar — 100% */}
         <div className="h-1 bg-gray-100">
           <div className="h-1 bg-[#194383] w-full" />
@@ -663,6 +674,17 @@ function WizardShell({
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-center px-6 md:px-10 py-3 border-b border-gray-100">
+        <span className="text-xl font-bold text-[#194383]">Röbel</span>
+        <Link
+          href="/app/gewerbe"
+          className="border border-gray-300 rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Beenden
+        </Link>
+      </div>
+
       {/* Progress bar */}
       <div className="h-1 bg-gray-100">
         <div
