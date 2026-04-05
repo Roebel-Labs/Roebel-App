@@ -19,12 +19,12 @@ export default function CreateOrgTypeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        <Text className="text-sm font-inter-medium text-text-secondary mb-2">SCHRITT 1</Text>
+        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 1</Text>
         <Text className="text-2xl font-inter-bold text-text-primary mb-2">
-          Welcher Typ beschreibt dich am besten?
+          Welcher Typ passt?
         </Text>
         <Text className="text-sm font-inter-regular text-text-secondary mb-8">
-          Wähle den passenden Typ für deine Organisation.
+          Wähle die Kategorie, die deine Organisation am besten beschreibt.
         </Text>
 
         <View className="flex-row flex-wrap gap-3">
@@ -45,7 +45,7 @@ export default function CreateOrgTypeScreen() {
         </View>
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3">
+      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
         <Pressable onPress={() => router.back()} className="py-4 px-6">
           <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
         </Pressable>

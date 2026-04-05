@@ -41,8 +41,8 @@ export default function CreateOrgInfoScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text className="text-sm font-inter-medium text-text-secondary mb-2">SCHRITT 2</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Erzähl uns von dir</Text>
+        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 2</Text>
+        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Erzähl uns mehr</Text>
         <Text className="text-sm font-inter-regular text-text-secondary mb-8">
           Wie heißt deine Organisation und was macht sie aus?
         </Text>
@@ -55,8 +55,9 @@ export default function CreateOrgInfoScreen() {
           placeholder="Name deiner Organisation"
           placeholderTextColor={colors.textTertiary}
           maxLength={100}
-          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-5"
+          className="bg-surface rounded-xl px-4 py-3.5 text-base font-inter-regular text-text-primary mb-1"
         />
+        <Text className="text-xs font-inter-regular text-text-tertiary text-right mb-5">{name.length}/100</Text>
 
         {/* Description */}
         <Text className="text-xs font-inter-medium text-text-secondary mb-2 uppercase tracking-wider">Beschreibung</Text>
@@ -103,7 +104,7 @@ export default function CreateOrgInfoScreen() {
         )}
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3">
+      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
         <Pressable onPress={() => router.back()} className="py-4 px-6">
           <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
         </Pressable>

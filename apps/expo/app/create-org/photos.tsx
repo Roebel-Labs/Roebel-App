@@ -76,8 +76,8 @@ export default function CreateOrgPhotosScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        <Text className="text-sm font-inter-medium text-text-secondary mb-2">SCHRITT 5</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Fotos hinzufügen</Text>
+        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 5</Text>
+        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Zeigt euch von eurer besten Seite</Text>
         <Text className="text-sm font-inter-regular text-text-secondary mb-8">
           Ein gutes Profilbild und Cover machen den Unterschied.
         </Text>
@@ -117,7 +117,7 @@ export default function CreateOrgPhotosScreen() {
         </Pressable>
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3">
+      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
         <Pressable onPress={() => router.back()} className="py-4 px-6">
           <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
         </Pressable>

@@ -53,8 +53,8 @@ export default function CreateOrgContactScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text className="text-sm font-inter-medium text-text-secondary mb-2">SCHRITT 4</Text>
-        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Kontakt & Öffnungszeiten</Text>
+        <Text className="text-xs font-inter-medium text-text-tertiary mb-2 uppercase tracking-wider">Schritt 4</Text>
+        <Text className="text-2xl font-inter-bold text-text-primary mb-2">Wie erreicht man euch?</Text>
         <Text className="text-sm font-inter-regular text-text-secondary mb-8">
           Wie können Besucher dich erreichen?
         </Text>
@@ -147,7 +147,7 @@ export default function CreateOrgContactScreen() {
         <View className="h-24" />
       </ScrollView>
 
-      <View className="flex-row justify-between px-6 pb-6 pt-3">
+      <View className="flex-row justify-between px-6 pb-6 pt-3 border-t border-border">
         <Pressable onPress={() => router.back()} className="py-4 px-6">
           <Text className="text-base font-inter-medium text-text-secondary">Zurück</Text>
         </Pressable>
