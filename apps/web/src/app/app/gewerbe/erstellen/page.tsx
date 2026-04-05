@@ -1,43 +1,25 @@
 "use client"
 
-import Link from "next/link"
-import { ArrowLeft, Store } from "lucide-react"
 import { useActiveAccount } from "thirdweb/react"
-import { BusinessSubmissionForm } from "@/components/business/BusinessSubmissionForm"
+import { OrgRegistrationWizard } from "@/components/business/OrgRegistrationWizard"
+import { Store } from "lucide-react"
 
 export default function CreateBusinessPage() {
   const account = useActiveAccount()
 
   if (!account?.address) {
     return (
-      <div className="text-center py-12">
-        <Store className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-        <p className="text-muted-foreground font-medium">Wallet nicht verbunden</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Bitte verbinden Sie Ihre Wallet, um ein Gewerbe anzumelden.
-        </p>
+      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+        <div className="text-center">
+          <Store className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-600 font-medium">Wallet nicht verbunden</p>
+          <p className="text-sm text-gray-400 mt-1">
+            Bitte verbinde deine Wallet, um ein Gewerbe zu registrieren.
+          </p>
+        </div>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-6">
-      <Link
-        href="/app/gewerbe"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Zurück zum Verzeichnis
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Gewerbe anmelden</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Registrieren Sie Ihr Unternehmen im Gewerbe-Verzeichnis von Röbel/Müritz.
-        </p>
-      </div>
-
-      <BusinessSubmissionForm walletAddress={account.address} />
-    </div>
-  )
+  return <OrgRegistrationWizard walletAddress={account.address} />
 }
