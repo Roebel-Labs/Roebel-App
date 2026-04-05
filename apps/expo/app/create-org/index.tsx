@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/context/ThemeContext';
 
 const STEPS = [
   { emoji: '🏪', title: 'Wähle deinen Typ', desc: 'Restaurant, Verein, Partei oder Unternehmen' },
@@ -11,38 +12,100 @@ const STEPS = [
 
 export default function CreateOrgIntroScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 px-6 justify-center">
-        <Text className="text-3xl font-inter-bold text-text-primary mb-2">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={styles.content}>
+        <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Werde sichtbar{'\n'}in Röbel
         </Text>
-        <Text className="text-base font-inter-regular text-text-secondary mb-10">
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           In wenigen Schritten erstellst du dein Profil.
         </Text>
 
-        <View className="gap-3 mb-12">
+        <View style={styles.stepsContainer}>
           {STEPS.map((step, i) => (
-            <View key={i} className="flex-row items-center gap-4 border border-border rounded-2xl p-4">
-              <Text className="text-3xl">{step.emoji}</Text>
-              <View className="flex-1">
-                <Text className="text-sm font-inter-semibold text-text-primary">{`${i + 1}. ${step.title}`}</Text>
-                <Text className="text-xs font-inter-regular text-text-secondary mt-0.5">{step.desc}</Text>
+            <View key={i} style={[styles.stepCard, { borderColor: colors.border }]}>
+              <Text style={styles.stepEmoji}>{step.emoji}</Text>
+              <View style={styles.stepText}>
+                <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{`${i + 1}. ${step.title}`}</Text>
+                <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
               </View>
             </View>
           ))}
         </View>
       </View>
 
-      <View className="px-6 pb-6">
+      <View style={styles.footer}>
         <Pressable
           onPress={() => router.push('/create-org/type')}
-          className="bg-primary rounded-xl py-4 items-center"
+          style={[styles.button, { backgroundColor: colors.primary }]}
         >
-          <Text className="text-on-primary text-base font-inter-medium">Los geht's</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+  },
+  heading: {
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 8,
+  },
+  subheading: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 40,
+  },
+  stepsContainer: {
+    gap: 12,
+    marginBottom: 48,
+  },
+  stepCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+  },
+  stepEmoji: {
+    fontSize: 22,
+  },
+  stepText: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  stepDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  button: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+});
