@@ -18,9 +18,7 @@ import BottomNavigation from '@/components/BottomNavigation';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import GovernanceTestBanner from '@/components/GovernanceTestBanner';
-import VerificationBanner from '@/components/VerificationBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
-import TierBadge from '@/components/RoleBadge';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
 import ProfileModeCards from '@/components/profile/ProfileModeCards';
@@ -31,7 +29,6 @@ import SentIcon from '@/assets/icons/profile/sent.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import HelpCircleIcon from '@/assets/icons/profile/help-circle.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
-import LogoutCircleIcon from '@/assets/icons/profile/logout-circle.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import MailIcon from '@/assets/icons/mail.svg';
 import SettingsIcon from '@/assets/icons/profile/settings.svg';
@@ -262,28 +259,6 @@ export default function ProfileScreen() {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            {/* User Info */}
-            <View style={styles.userInfo}>
-              {user?.profile_picture_url ? (
-                <Image source={{ uri: user.profile_picture_url }} style={styles.profileImage} />
-              ) : (
-                <View style={[styles.profilePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-              )}
-              <View style={styles.userTextContainer}>
-                <Text style={[styles.userAddress, { color: colors.textPrimary }]}>{displayName}</Text>
-                <TierBadge tier={tier} />
-                {user?.bio && (
-                  <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={2}>{user.bio}</Text>
-                )}
-              </View>
-              <Pressable onPress={() => setShowLogoutDrawer(true)} style={[styles.logoutIconButton, { backgroundColor: colors.surface }]}>
-                <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            {/* Verification Banner */}
-            <VerificationBanner />
-
             {/* Governance Test Banner */}
             <GovernanceTestBanner
               isTestingEnabled={isGovernanceTestEnabled}
