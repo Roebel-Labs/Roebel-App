@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useAppMode } from "@/lib/context/AppModeContext";
 import { useAccount } from "@/lib/context/AccountContext";
@@ -62,10 +62,10 @@ export default function MeckyPage() {
     messages: [
       {
         id: "greeting",
-        role: "assistant" as const,
+        role: "assistant",
         parts: [{ type: "text" as const, text: MODE_GREETINGS[effectiveMode] }],
       },
-    ],
+    ] as UIMessage[],
   });
 
   const isLoading = status !== "ready";
