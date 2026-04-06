@@ -58,7 +58,7 @@ export const borderRadius = {
 export const lightColors = {
   // Backgrounds
   background: '#ffffff',
-  surface: '#FFFFFF',
+  surface: '#F7F7F7',
   surfaceSecondary: '#f5f5f5',
   feedBackground: '#F0F0F0',
 

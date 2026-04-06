@@ -33,7 +33,7 @@ function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps)
       onPress={onPress}
       style={[
         styles.card,
-        { backgroundColor: colors.surface },
+        { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
         cardShadow,
         highlight && { borderColor: colors.primary, borderWidth: 2 },
       ]}
@@ -59,7 +59,7 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
       onPress={onPress}
       style={[
         styles.ctaBanner,
-        { backgroundColor: colors.surface },
+        { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
         Platform.select({
           ios: {
             shadowColor: '#000',
