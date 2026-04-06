@@ -1,7 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { DefaultChatTransport } from "ai";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useAppMode } from "@/lib/context/AppModeContext";
 import { useAccount } from "@/lib/context/AccountContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -51,10 +52,14 @@ export default function MeckyPage() {
 
   const [input, setInput] = useState("");
 
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/chat/mecky", body: { mode: effectiveMode } }),
+    [effectiveMode]
+  );
+
   const { messages, sendMessage, status } = useChat({
-    api: "/api/chat/mecky",
-    body: { mode: effectiveMode },
-    initialMessages: [
+    transport,
+    messages: [
       {
         id: "greeting",
         role: "assistant" as const,
@@ -76,7 +81,7 @@ export default function MeckyPage() {
     sendMessage({ text: prompt });
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
     sendMessage({ text: input });
