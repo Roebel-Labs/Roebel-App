@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
+import { compressImageForVisionAPI } from './utils/image-compression';
 
 /**
  * Upload a media file (image or video) to Supabase Storage.
@@ -21,8 +22,14 @@ export async function uploadMediaFile(
   mimeType?: string
 ): Promise<string | null> {
   try {
+    // Compress images before upload (converts HEIC→JPEG, resizes large photos)
+    let fileUri = uri;
+    if (type === 'image') {
+      fileUri = await compressImageForVisionAPI(uri);
+    }
+
     // Read file as base64, then convert to ArrayBuffer for reliable upload
-    const base64Data = await FileSystem.readAsStringAsync(uri, {
+    const base64Data = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
 
@@ -33,13 +40,11 @@ export async function uploadMediaFile(
 
     const arrayBuffer = decode(base64Data);
 
-    const fileExtension = uri.split('.').pop()?.toLowerCase() || (type === 'video' ? 'mp4' : 'jpg');
+    // Compression outputs JPEG for images; videos keep original extension
+    const fileExtension = type === 'video' ? (uri.split('.').pop()?.toLowerCase() || 'mp4') : 'jpg';
     const fileName = `${folder}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExtension}`;
     const filePath = `${folder}/${fileName}`;
-
-    let contentType = mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg');
-    if (fileExtension === 'png') contentType = 'image/png';
-    else if (fileExtension === 'heic' || fileExtension === 'heif') contentType = 'image/jpeg';
+    const contentType = type === 'video' ? (mimeType || 'video/mp4') : 'image/jpeg';
 
     const { error } = await supabase.storage.from('images').upload(filePath, arrayBuffer, {
       contentType,
