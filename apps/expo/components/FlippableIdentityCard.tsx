@@ -102,9 +102,7 @@ export default function FlippableIdentityCard({
   const avatarUrl = isOrg
     ? (activeAccount?.avatar_url || activeAccount?.cover_url)
     : user?.profile_picture_url;
-  const coverUrl = isOrg
-    ? (activeAccount?.cover_url || businessCoverUrl)
-    : null;
+  const coverUrl = null;
 
   const cardBg = isDark ? colors.surface : '#FFFFFF';
 
