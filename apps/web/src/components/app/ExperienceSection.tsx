@@ -1,0 +1,592 @@
+"use client";
+
+import { useState, useRef, useTransition } from "react";
+import Image from "next/image";
+import { useActiveAccount } from "thirdweb/react";
+import {
+  getExperiences,
+  createExperience,
+  deleteExperience,
+} from "@/app/actions/experiences";
+import { PostMediaGrid } from "@/components/app/PostMediaGrid";
+import { VideoPlayer } from "@/components/app/VideoPlayer";
+import { MediaLightbox } from "@/components/app/MediaLightbox";
+import type { EventExperience } from "@/types/event-experience";
+import { Send, ImagePlus, Video, X, Trash2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+
+const CURATED_EMOJIS = ["😍", "🎉", "😂", "👍", "🤩", "❤️", "🙏", "🌟"];
+const MAX_IMAGES = 4;
+const PAGE_SIZE = 15;
+
+interface ExperienceSectionProps {
+  eventId: string;
+  initialExperiences: EventExperience[];
+  initialCount: number;
+}
+
+// ============================================
+// Helpers
+// ============================================
+
+function formatRelativeTime(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHrs = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "gerade eben";
+  if (diffMin < 60) return `vor ${diffMin} Min.`;
+  if (diffHrs < 24) return `vor ${diffHrs} Std.`;
+  if (diffDays < 7) return `vor ${diffDays} T.`;
+  return date.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+}
+
+async function uploadToStorage(
+  file: File,
+  type: "image" | "video"
+): Promise<string | null> {
+  const maxSize = type === "video" ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    toast.error(
+      type === "video"
+        ? "Video darf maximal 50MB groß sein"
+        : "Bild darf maximal 5MB groß sein"
+    );
+    return null;
+  }
+
+  const supabase = createClient();
+  const fileExt =
+    file.name.split(".").pop() || (type === "video" ? "mp4" : "jpg");
+  const prefix =
+    type === "video" ? "experience-videos" : "experience-images";
+  const fileName = `${prefix}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("images")
+    .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) {
+    console.error("Upload error:", uploadError);
+    toast.error("Upload fehlgeschlagen. Bitte versuche es erneut.");
+    return null;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("images").getPublicUrl(fileName);
+  return publicUrl;
+}
+
+// ============================================
+// ExperienceItem
+// ============================================
+
+function ExperienceItem({
+  experience,
+  currentWallet,
+  onDelete,
+}: {
+  experience: EventExperience;
+  currentWallet?: string;
+  onDelete: (id: string) => void;
+}) {
+  const shortAddress = `${experience.wallet_address.slice(0, 4)}...${experience.wallet_address.slice(-3)}`;
+  const isAuthor =
+    currentWallet &&
+    experience.wallet_address.toLowerCase() === currentWallet.toLowerCase();
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      {experience.emoji && (
+        <div className="text-3xl mb-2">{experience.emoji}</div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {experience.author_profile_picture_url ? (
+              <Image
+                src={experience.author_profile_picture_url}
+                alt=""
+                width={28}
+                height={28}
+                className="object-cover w-full h-full"
+              />
+            ) : (
+              <span className="text-xs font-medium text-muted-foreground">
+                {(experience.author_username || shortAddress)
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">
+              {experience.author_username || shortAddress}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              · {formatRelativeTime(experience.created_at)}
+            </span>
+          </div>
+        </div>
+
+        {isAuthor && (
+          <button
+            onClick={() => onDelete(experience.id)}
+            className="p-1.5 text-muted-foreground hover:text-destructive rounded-full hover:bg-destructive/10 transition-colors"
+            aria-label="Erlebnis löschen"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">
+        {experience.content}
+      </p>
+
+      {experience.media_urls && experience.media_urls.length > 0 && (
+        <div className="mt-3 rounded-lg overflow-hidden">
+          <PostMediaGrid
+            mediaUrls={experience.media_urls}
+            onImageClick={(index) => {
+              setLightboxIndex(index);
+              setLightboxOpen(true);
+            }}
+          />
+        </div>
+      )}
+
+      {experience.video_url && (
+        <div className="mt-3 rounded-lg overflow-hidden max-h-64">
+          <VideoPlayer url={experience.video_url} />
+        </div>
+      )}
+
+      <MediaLightbox
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        mediaUrls={experience.media_urls}
+        videoUrl={experience.video_url}
+        initialIndex={lightboxIndex}
+        mode="image"
+      />
+    </div>
+  );
+}
+
+// ============================================
+// ExperienceComposer
+// ============================================
+
+function ExperienceComposer({
+  eventId,
+  onCreated,
+}: {
+  eventId: string;
+  onCreated: (experience: EventExperience) => void;
+}) {
+  const account = useActiveAccount();
+  const [content, setContent] = useState("");
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const hasMedia = imageFiles.length > 0 || videoFile !== null;
+  const canSubmit =
+    account?.address && (content.trim() || hasMedia) && !isPending && !isUploading;
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = MAX_IMAGES - imageFiles.length;
+    const newFiles = files.slice(0, remaining);
+
+    if (files.length > remaining) {
+      toast.error(`Maximal ${MAX_IMAGES} Bilder erlaubt`);
+    }
+
+    setImageFiles((prev) => [...prev, ...newFiles]);
+
+    for (const file of newFiles) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImagePreviews((prev) => [...prev, ev.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    e.target.value = "";
+  };
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Video darf maximal 50MB groß sein");
+      return;
+    }
+
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+    e.target.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = () => {
+    if (videoPreview) URL.revokeObjectURL(videoPreview);
+    setVideoFile(null);
+    setVideoPreview(null);
+  };
+
+  const resetForm = () => {
+    setContent("");
+    setSelectedEmoji(null);
+    setImageFiles([]);
+    setImagePreviews([]);
+    removeVideo();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    const submitContent = content.trim() || " ";
+    setIsUploading(true);
+
+    try {
+      // Upload media
+      const uploadedImageUrls: string[] = [];
+      for (const file of imageFiles) {
+        const url = await uploadToStorage(file, "image");
+        if (url) uploadedImageUrls.push(url);
+      }
+
+      let uploadedVideoUrl: string | null = null;
+      if (videoFile) {
+        uploadedVideoUrl = await uploadToStorage(videoFile, "video");
+      }
+
+      // Optimistic experience
+      const optimistic: EventExperience = {
+        id: `temp-${Date.now()}`,
+        event_id: eventId,
+        wallet_address: account!.address,
+        content: submitContent,
+        media_urls: uploadedImageUrls.length > 0 ? uploadedImageUrls : imagePreviews,
+        video_url: uploadedVideoUrl || videoPreview,
+        emoji: selectedEmoji,
+        status: "published",
+        created_at: new Date().toISOString(),
+        author_username: null,
+        author_profile_picture_url: null,
+      };
+
+      onCreated(optimistic);
+      resetForm();
+
+      startTransition(async () => {
+        const result = await createExperience({
+          event_id: eventId,
+          wallet_address: account!.address,
+          content: submitContent,
+          media_urls:
+            uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
+          video_url: uploadedVideoUrl,
+          emoji: selectedEmoji,
+        });
+
+        if (result.success && result.data) {
+          onCreated(result.data);
+        } else {
+          toast.error(result.error || "Fehler beim Teilen des Erlebnisses");
+        }
+      });
+    } catch {
+      toast.error("Fehler beim Teilen des Erlebnisses");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (!account) return null;
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-lg border border-border bg-card p-4 space-y-3"
+    >
+      {/* Emoji picker */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {CURATED_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() =>
+              setSelectedEmoji((prev) => (prev === emoji ? null : emoji))
+            }
+            className={`text-xl p-1.5 rounded-lg transition-colors ${
+              selectedEmoji === emoji
+                ? "bg-primary/10 ring-2 ring-primary/30"
+                : "hover:bg-muted"
+            }`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
+      {/* Text input */}
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Erzähl von deinem Erlebnis..."
+        maxLength={500}
+        rows={3}
+        className="w-full bg-muted rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground resize-none"
+      />
+      {content.length > 400 && (
+        <p className="text-xs text-muted-foreground text-right">
+          {content.length}/500
+        </p>
+      )}
+
+      {/* Media previews */}
+      {hasMedia && (
+        <div className="flex gap-2 flex-wrap">
+          {imagePreviews.map((preview, i) => (
+            <div
+              key={i}
+              className="relative w-16 h-16 rounded-md overflow-hidden"
+            >
+              <Image
+                src={preview}
+                alt={`Vorschau ${i + 1}`}
+                fill
+                className="object-cover"
+                sizes="64px"
+              />
+              <button
+                type="button"
+                onClick={() => removeImage(i)}
+                className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                aria-label="Bild entfernen"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {videoPreview && (
+            <div className="relative w-24 h-16 rounded-md overflow-hidden bg-black">
+              <video
+                src={videoPreview}
+                className="w-full h-full object-contain"
+                muted
+                playsInline
+              />
+              <button
+                type="button"
+                onClick={removeVideo}
+                className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                aria-label="Video entfernen"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={imageFiles.length >= MAX_IMAGES}
+            className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Bilder hinzufügen"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            disabled={!!videoFile}
+            className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Video hinzufügen"
+          >
+            <Video className="h-4 w-4" />
+          </button>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Send className="h-3.5 w-3.5" />
+          Teilen
+        </button>
+      </div>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        multiple
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        className="hidden"
+        onChange={handleVideoSelect}
+      />
+    </form>
+  );
+}
+
+// ============================================
+// ExperienceSection (Main Export)
+// ============================================
+
+export function ExperienceSection({
+  eventId,
+  initialExperiences,
+  initialCount,
+}: ExperienceSectionProps) {
+  const account = useActiveAccount();
+  const [experiences, setExperiences] =
+    useState<EventExperience[]>(initialExperiences);
+  const [totalCount, setTotalCount] = useState(initialCount);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initialCount > initialExperiences.length);
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+
+    const result = await getExperiences(eventId, PAGE_SIZE, experiences.length);
+    if (result.success && result.data) {
+      setExperiences((prev) => [...prev, ...result.data!]);
+      if (result.data.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+    }
+
+    setIsLoadingMore(false);
+  };
+
+  const handleCreated = (experience: EventExperience) => {
+    setExperiences((prev) => {
+      // Replace optimistic entry if server response arrived
+      const tempIdx = prev.findIndex((e) => e.id.startsWith("temp-"));
+      if (tempIdx !== -1 && !experience.id.startsWith("temp-")) {
+        const updated = [...prev];
+        updated[tempIdx] = experience;
+        return updated;
+      }
+      // Add optimistic entry at the top
+      return [experience, ...prev];
+    });
+    setTotalCount((prev) => {
+      // Only increment for optimistic (temp) entries
+      if (experience.id.startsWith("temp-")) return prev + 1;
+      return prev;
+    });
+  };
+
+  const handleDelete = async (experienceId: string) => {
+    if (!account?.address) return;
+
+    // Optimistic remove
+    setExperiences((prev) => prev.filter((e) => e.id !== experienceId));
+    setTotalCount((prev) => prev - 1);
+
+    const result = await deleteExperience(experienceId, account.address);
+    if (!result.success) {
+      toast.error(result.error || "Fehler beim Löschen");
+      // Reload to restore state
+      const reload = await getExperiences(eventId, PAGE_SIZE, 0);
+      if (reload.success && reload.data) {
+        setExperiences(reload.data);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Section header */}
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-medium text-foreground">
+          Erlebnisse{totalCount > 0 ? ` (${totalCount})` : ""}
+        </h2>
+      </div>
+
+      {/* Composer */}
+      <ExperienceComposer eventId={eventId} onCreated={handleCreated} />
+
+      {/* Experience list */}
+      {experiences.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">
+          Noch keine Erlebnisse — sei der Erste!
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {experiences.map((experience) => (
+            <ExperienceItem
+              key={experience.id}
+              experience={experience}
+              currentWallet={account?.address}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Load more */}
+      {hasMore && (
+        <button
+          onClick={handleLoadMore}
+          disabled={isLoadingMore}
+          className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+        >
+          {isLoadingMore ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Laden...
+            </span>
+          ) : (
+            "Mehr laden"
+          )}
+        </button>
+      )}
+    </div>
+  );
+}

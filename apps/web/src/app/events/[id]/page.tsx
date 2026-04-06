@@ -9,6 +9,8 @@ import { Calendar, Clock, MapPin, User, DollarSign, Globe, Phone, ArrowLeft } fr
 import Link from "next/link"
 import { EventsHeader } from "@/components/events/events-header"
 import { DeepLinkRedirect } from "@/components/deep-link-redirect"
+import { ExperienceSection } from "@/components/app/ExperienceSection"
+import { getExperiences, getExperienceCount } from "@/app/actions/experiences"
 
 interface Event {
   id: string
@@ -77,7 +79,11 @@ export default async function EventDetailPage({
   const { id } = await params
   const search = await searchParams
   const from = search?.from || '/'
-  const event = await getEvent(id)
+  const [event, experiencesResult, experienceCountResult] = await Promise.all([
+    getEvent(id),
+    getExperiences(id),
+    getExperienceCount(id),
+  ])
 
   if (!event) {
     notFound()
@@ -211,6 +217,15 @@ export default async function EventDetailPage({
                 </CardContent>
               </Card>
             </div>
+          </div>
+
+          {/* Experiences Section */}
+          <div className="mt-8">
+            <ExperienceSection
+              eventId={id}
+              initialExperiences={experiencesResult.data || []}
+              initialCount={experienceCountResult.count || 0}
+            />
           </div>
         </div>
       </div>
