@@ -25,7 +25,7 @@ export default function VerificationQRCode({
   // Generate web URL for roebel.app
   const webUrl = `https://www.roebel.app/verifizierung/nachweis/${requestId}?contract=${nftType}`;
   // Generate deep link URL for QR code
-  const deepLink = `hometownevents://verification/request/${requestId}?type=${nftType}`;
+  const deepLink = `roebel://verification/request/${requestId}?type=${nftType}`;
 
   const handleShare = async () => {
     try {

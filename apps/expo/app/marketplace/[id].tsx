@@ -83,7 +83,7 @@ export default function ListingDetailScreen() {
   const handleShare = async () => {
     if (!listing) return;
     try {
-      await Share.share({ message: `${listing.title} - ${formatPrice(listing.price, listing.price_type)}` });
+      await Share.share({ message: `${listing.title} - ${formatPrice(listing.price, listing.price_type)}\nhttps://www.roebel.app/app/marktplatz/${listing.id}` });
     } catch {}
   };
 

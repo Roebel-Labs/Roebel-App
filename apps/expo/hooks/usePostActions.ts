@@ -86,8 +86,7 @@ export function usePostActions(walletAddress: string | undefined) {
   const sharePost = useCallback(async (postId: string, content: string) => {
     try {
       await Share.share({
-        message: content,
-        // Could add a deep link URL here in the future
+        message: `${content}\nhttps://www.roebel.app/app/posts/${postId}`,
       });
     } catch (err) {
       console.error('Error sharing post:', err);

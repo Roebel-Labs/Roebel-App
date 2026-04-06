@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
+import type { Metadata } from "next"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, User, Eye, ArrowLeft, Share2 } from "lucide-react"
@@ -11,6 +12,31 @@ export const dynamic = "force-dynamic"
 
 interface NewsArticlePageProps {
   params: Promise<{ slug: string }>
+}
+
+export async function generateMetadata({ params }: NewsArticlePageProps): Promise<Metadata> {
+  const { slug } = await params
+  const supabase = await createClient()
+  const { data: article } = await supabase
+    .from("news_articles")
+    .select("title, excerpt, cover_image_url")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .single()
+
+  if (!article) return { title: "Artikel nicht gefunden | Röbel App" }
+
+  const description = article.excerpt?.slice(0, 160) || article.title
+  return {
+    title: `${article.title} | Röbel App`,
+    description,
+    openGraph: {
+      title: article.title,
+      description,
+      ...(article.cover_image_url ? { images: [{ url: article.cover_image_url }] } : {}),
+      type: "article",
+    },
+  }
 }
 
 export default async function NewsArticlePage({ params }: NewsArticlePageProps) {

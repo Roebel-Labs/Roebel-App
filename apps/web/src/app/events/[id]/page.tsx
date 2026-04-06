@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
+import type { Metadata } from "next"
 import Image from "next/image"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -42,6 +43,28 @@ async function getEvent(id: string): Promise<Event | null> {
   }
 
   return event
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const { id } = await params
+  const event = await getEvent(id)
+  if (!event) return { title: "Event nicht gefunden | Röbel App" }
+
+  const description = event.description?.slice(0, 160) || `Veranstaltung in ${event.location}`
+  return {
+    title: `${event.title} | Röbel App`,
+    description,
+    openGraph: {
+      title: event.title,
+      description,
+      ...(event.image_url ? { images: [{ url: event.image_url }] } : {}),
+      type: "website",
+    },
+  }
 }
 
 export default async function EventDetailPage({ 

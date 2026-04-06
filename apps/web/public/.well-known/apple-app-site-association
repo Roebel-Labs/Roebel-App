@@ -7,14 +7,30 @@
           "88879TXSXK.com.maxbrych.roebelonchain"
         ],
         "components": [
-          {
-            "/": "/event/*",
-            "comment": "Open events in app"
-          },
-          {
-            "/": "/news/*",
-            "comment": "Open news articles in app"
-          }
+          { "/": "/login", "exclude": true, "comment": "Exclude login" },
+          { "/": "/admin/*", "exclude": true, "comment": "Exclude admin" },
+          { "/": "/api/*", "exclude": true, "comment": "Exclude API routes" },
+
+          { "/": "/event/*", "comment": "Events (expo native path)" },
+          { "/": "/events/*", "comment": "Events (web plural path)" },
+          { "/": "/app/events/*", "comment": "Events (authenticated)" },
+
+          { "/": "/news/*", "comment": "News articles" },
+          { "/": "/app/news/*", "comment": "News (authenticated)" },
+
+          { "/": "/app/posts/*", "comment": "Posts with comments" },
+
+          { "/": "/proposals/*", "comment": "Governance proposals" },
+          { "/": "/app/proposals/*", "comment": "Proposals (authenticated)" },
+
+          { "/": "/app/gewerbe/*", "comment": "Business profiles" },
+          { "/": "/app/angebote/*", "comment": "Deals" },
+          { "/": "/app/marktplatz/*", "comment": "Marketplace listings" },
+
+          { "/": "/profile/*", "comment": "User profiles" },
+          { "/": "/app/profile/*", "comment": "User profiles (authenticated)" },
+
+          { "/": "/order/*", "comment": "Restaurant table ordering" }
         ]
       }
     ]

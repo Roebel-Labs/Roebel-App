@@ -5,11 +5,15 @@ import { Smartphone, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface DeepLinkRedirectProps {
-  type: "event" | "news"
-  id: string
+  /** Direct Expo route path, e.g. "/event/123" or "/order/slug/table" */
+  path?: string
+  /** Legacy: content type */
+  type?: "event" | "news"
+  /** Legacy: content ID */
+  id?: string
 }
 
-export function DeepLinkRedirect({ type, id }: DeepLinkRedirectProps) {
+export function DeepLinkRedirect({ path, type, id }: DeepLinkRedirectProps) {
   const [dismissed, setDismissed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -19,11 +23,14 @@ export function DeepLinkRedirect({ type, id }: DeepLinkRedirectProps) {
 
   if (!isMobile || dismissed) return null
 
-  // Use hometownevents scheme (configured in app.config.ts)
-  const deepLink =
-    type === "event"
-      ? `hometownevents://event/${id}`
-      : `hometownevents://news/${id}`
+  // Build the deep link URL
+  let appPath = path
+  if (!appPath && type && id) {
+    appPath = type === "event" ? `/event/${id}` : `/news/${id}`
+  }
+  if (!appPath) return null
+
+  const deepLink = `roebel://${appPath}`
 
   const handleOpenApp = () => {
     window.location.href = deepLink

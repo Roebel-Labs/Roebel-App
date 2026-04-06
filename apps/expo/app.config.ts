@@ -144,46 +144,168 @@ const config: ExpoConfig = {
         },
         category: ['BROWSABLE', 'DEFAULT']
       },
+      // Event deep links
       {
         autoVerify: true,
         action: 'VIEW',
-        data: {
-          scheme: 'https',
-          host: 'roebel.app',
-          pathPrefix: '/event'
-        },
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/event' },
         category: ['BROWSABLE', 'DEFAULT']
       },
       {
         autoVerify: true,
         action: 'VIEW',
-        data: {
-          scheme: 'https',
-          host: 'roebel.app',
-          pathPrefix: '/news'
-        },
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/events' },
         category: ['BROWSABLE', 'DEFAULT']
       },
       {
         autoVerify: true,
         action: 'VIEW',
-        data: {
-          scheme: 'https',
-          host: 'www.roebel.app',
-          pathPrefix: '/event'
-        },
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/event' },
         category: ['BROWSABLE', 'DEFAULT']
       },
       {
         autoVerify: true,
         action: 'VIEW',
-        data: {
-          scheme: 'https',
-          host: 'www.roebel.app',
-          pathPrefix: '/news'
-        },
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/events' },
         category: ['BROWSABLE', 'DEFAULT']
-      }
+      },
+      // News deep links
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/news' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/news' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // Proposals
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/proposals' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/proposals' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // Restaurant table ordering (QR codes)
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/order' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/order' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // User profiles
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/profile' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/profile' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // Authenticated web routes (/app/*)
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/events' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/news' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/posts' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/proposals' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/gewerbe' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/angebote' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/app/marktplatz' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/events' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/news' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/posts' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/proposals' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/gewerbe' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/angebote' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/app/marktplatz' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
     ]
   },
   updates: {

@@ -27,7 +27,7 @@ interface QRScannerProps {
 
 function parseQRCode(data: string): QRScanResult {
   // Verification: hometownevents://verification/request/{id}?type=citizen
-  const verificationMatch = data.match(/hometownevents:\/\/verification\/request\/(\d+)\?type=(\w+)/);
+  const verificationMatch = data.match(/(?:hometownevents|roebel):\/\/verification\/request\/(\d+)\?type=(\w+)/);
   if (verificationMatch) {
     return { type: 'verification', data, id: verificationMatch[1], nftType: verificationMatch[2] };
   }

@@ -91,7 +91,7 @@ export default function BusinessDetailScreen() {
   const handleShare = async () => {
     if (!business) return;
     try {
-      await Share.share({ message: `${business.name}${business.address ? ` - ${business.address}` : ''}` });
+      await Share.share({ message: `${business.name}${business.address ? ` - ${business.address}` : ''}\nhttps://www.roebel.app/app/gewerbe/${business.slug}` });
     } catch {}
   };
 
