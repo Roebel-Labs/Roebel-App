@@ -39,8 +39,8 @@ This [Turborepo](https://turbo.build/repo) monorepo contains:
 
 ```bash
 # Clone the repo
-git clone https://github.com/roebel-app/roebel.git
-cd roebel
+git clone https://github.com/Roebel-Labs/Roebel-App.git
+cd Roebel-App
 
 # Install dependencies
 pnpm install
