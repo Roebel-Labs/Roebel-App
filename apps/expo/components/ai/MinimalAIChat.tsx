@@ -155,20 +155,20 @@ async function callAnthropicAPI(
   return response.json();
 }
 
-// Helper function to convert image to base64 for API
+// Helper function to compress and convert image to base64 JPEG for API
 async function imageToBase64(uri: string): Promise<{ base64: string; mediaType: string } | null> {
   try {
-    const base64 = await FileSystem.readAsStringAsync(uri, {
+    // Compress and convert to JPEG to ensure Anthropic API compatibility
+    // (raw HEIC or oversized images cause "Could not process image")
+    const { compressImageForVisionAPI } = require('@/lib/utils/image-compression');
+    const compressedUri = await compressImageForVisionAPI(uri);
+
+    const base64 = await FileSystem.readAsStringAsync(compressedUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
 
-    const extension = uri.split('.').pop()?.toLowerCase() || 'jpg';
-    let mediaType = 'image/jpeg';
-    if (extension === 'png') mediaType = 'image/png';
-    else if (extension === 'webp') mediaType = 'image/webp';
-    else if (extension === 'gif') mediaType = 'image/gif';
-
-    return { base64, mediaType };
+    // Compression always outputs JPEG
+    return { base64, mediaType: 'image/jpeg' };
   } catch (error) {
     console.error('Error converting image to base64:', error);
     return null;

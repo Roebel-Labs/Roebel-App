@@ -1,11 +1,13 @@
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
 /**
  * Upload a media file (image or video) to Supabase Storage.
- * Uses fetch → blob (same pattern as the working ImageUploadButton).
+ * Uses FileSystem → base64 → ArrayBuffer (proven reliable in RN).
  *
  * @param uri      Local file URI from image/video picker
- * @param walletAddress  User wallet for path namespacing
+ * @param walletAddress  User wallet (unused, kept for API compat)
  * @param type     'image' or 'video'
  * @param folder   Storage subfolder (e.g. 'posts', 'experiences')
  * @param mimeType Actual MIME type from the picker (e.g. 'image/heic')
@@ -19,20 +21,27 @@ export async function uploadMediaFile(
   mimeType?: string
 ): Promise<string | null> {
   try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    // Read file as base64, then convert to ArrayBuffer for reliable upload
+    const base64Data = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
 
-    if (blob.size === 0) {
-      console.error('[upload-media] Blob is empty for URI:', uri);
+    if (!base64Data || base64Data.length === 0) {
+      console.error('[upload-media] File is empty:', uri);
       return null;
     }
 
+    const arrayBuffer = decode(base64Data);
+
     const fileExtension = uri.split('.').pop()?.toLowerCase() || (type === 'video' ? 'mp4' : 'jpg');
     const fileName = `${folder}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExtension}`;
-    const filePath = `${folder}/${walletAddress || 'anonymous'}/${fileName}`;
-    const contentType = mimeType || blob.type || (type === 'video' ? 'video/mp4' : 'image/jpeg');
+    const filePath = `${folder}/${fileName}`;
 
-    const { error } = await supabase.storage.from('images').upload(filePath, blob, {
+    let contentType = mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg');
+    if (fileExtension === 'png') contentType = 'image/png';
+    else if (fileExtension === 'heic' || fileExtension === 'heif') contentType = 'image/jpeg';
+
+    const { error } = await supabase.storage.from('images').upload(filePath, arrayBuffer, {
       contentType,
       cacheControl: '3600',
       upsert: false,

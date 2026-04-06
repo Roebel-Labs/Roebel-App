@@ -1,4 +1,5 @@
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 
 /**
  * Compress and resize image to fit within size limit
@@ -15,22 +16,20 @@ export async function compressImageForVisionAPI(
     let quality = 0.8;
     let maxWidth = 2048;
 
-    // First attempt: resize with good quality
     let compressed = await ImageManipulator.manipulateAsync(
       localUri,
       [{ resize: { width: maxWidth } }],
       { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
     );
 
-    // Check file size (rough estimate: base64 will be ~33% larger)
-    // If still too large, compress more aggressively
+    // Check actual file size on disk (not URI string length)
     let attempts = 0;
     while (attempts < 3) {
-      // Check approximate base64 size
-      const estimatedBase64Size = compressed.uri.length * 1.33;
+      const fileInfo = await FileSystem.getInfoAsync(compressed.uri);
+      const fileSize = (fileInfo as any).size || 0;
 
-      if (estimatedBase64Size < maxSizeBytes) {
-        console.log(`Image compressed successfully to ~${Math.round(estimatedBase64Size / 1024 / 1024 * 10) / 10} MB`);
+      if (fileSize > 0 && fileSize < maxSizeBytes) {
+        console.log(`Image compressed successfully to ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
         return compressed.uri;
       }
 
@@ -39,7 +38,7 @@ export async function compressImageForVisionAPI(
       quality = Math.max(0.5, quality - 0.15);
       maxWidth = Math.max(1024, maxWidth - 512);
 
-      console.log(`Attempt ${attempts}: Reducing to quality ${quality}, width ${maxWidth}`);
+      console.log(`Attempt ${attempts}: file ${(fileSize / 1024 / 1024).toFixed(2)} MB, reducing to quality ${quality}, width ${maxWidth}`);
 
       compressed = await ImageManipulator.manipulateAsync(
         localUri,
