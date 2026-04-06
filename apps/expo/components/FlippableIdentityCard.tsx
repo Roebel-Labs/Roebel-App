@@ -104,7 +104,7 @@ export default function FlippableIdentityCard({
       : 'Besucher';
 
   const avatarUrl = isOrg
-    ? (activeAccount?.avatar_url || businessLogoUrl || businessCoverUrl)
+    ? (activeAccount?.avatar_url || businessLogoUrl)
     : user?.profile_picture_url;
   const coverUrl = isOrg
     ? (activeAccount?.cover_url || businessCoverUrl)
