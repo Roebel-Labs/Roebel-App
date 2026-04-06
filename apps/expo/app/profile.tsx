@@ -210,6 +210,8 @@ const handleRefresh = async () => {
               votingStreak={user?.voting_streak || 0}
               isPending={isBusinessOwner && userBusiness?.status === 'pending'}
               businessName={userBusiness?.name}
+              businessLogoUrl={userBusiness?.logo_url}
+              businessCoverUrl={userBusiness?.cover_image_url}
             />
 
             {/* Mode-specific action cards */}
