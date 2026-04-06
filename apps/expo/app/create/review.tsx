@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { createPost, createPoll } from '@/lib/supabase-posts';
@@ -32,6 +33,7 @@ export default function ReviewScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
   const draft = useCreatePost();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,6 +49,7 @@ export default function ReviewScreen() {
       const content = draft.content.trim() || (draft.linkedEventId ? 'Schaut euch dieses Event an!' : draft.linkedMarketplaceId ? 'Schaut euch diese Anzeige an!' : '');
       const post = await createPost({
         wallet_address: walletAddress,
+        account_id: activeAccount?.id,
         content,
         category: draft.category,
         feed_type: draft.feedType,

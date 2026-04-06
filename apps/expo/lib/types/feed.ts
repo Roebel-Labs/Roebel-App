@@ -106,6 +106,7 @@ export type EventExperience = {
 export type CreateExperienceInput = {
   event_id: string;
   wallet_address: string;
+  account_id?: string;
   content: string;
   media_urls?: string[];
   video_url?: string;

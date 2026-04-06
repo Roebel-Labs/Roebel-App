@@ -3,6 +3,13 @@ import type { EventExperience, CreateExperienceInput } from './types/feed';
 
 const PAGE_SIZE = 10;
 
+function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: T): T {
+  if (row.account && row.author) {
+    row.author = { ...row.author, account: row.account };
+  }
+  return row;
+}
+
 /**
  * Fetch paginated experiences for an event with author data joined
  */
@@ -20,7 +27,8 @@ export async function fetchEventExperiences(
       *,
       author:users!event_experiences_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .eq('event_id', eventId)
     .eq('status', 'published')
@@ -33,7 +41,7 @@ export async function fetchEventExperiences(
   }
 
   return {
-    data: data as EventExperience[],
+    data: (data as EventExperience[]).map(mergeAccountIntoAuthor),
     hasMore: data.length === pageSize,
   };
 }
@@ -49,6 +57,7 @@ export async function createExperience(
     .insert({
       event_id: input.event_id,
       wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
       content: input.content,
       media_urls: input.media_urls || [],
       video_url: input.video_url || null,
@@ -59,7 +68,8 @@ export async function createExperience(
       *,
       author:users!event_experiences_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .single();
 
@@ -68,7 +78,7 @@ export async function createExperience(
     return null;
   }
 
-  return data as EventExperience;
+  return mergeAccountIntoAuthor(data as EventExperience);
 }
 
 /**

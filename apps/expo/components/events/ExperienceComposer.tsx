@@ -13,6 +13,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
+import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import BottomDrawer from '@/components/BottomDrawer';
 import { uploadMediaFile } from '@/lib/upload-media';
@@ -39,6 +40,7 @@ export default function ExperienceComposer({
   onExperienceCreated,
 }: Props) {
   const { colors } = useTheme();
+  const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
 
   const [content, setContent] = useState('');
@@ -107,6 +109,7 @@ export default function ExperienceComposer({
     const result = await createExperience({
       event_id: eventId,
       wallet_address: walletAddress,
+      account_id: activeAccount?.id,
       content: content.trim(),
       media_urls: images.length > 0 ? images : undefined,
       video_url: videoUrl || undefined,

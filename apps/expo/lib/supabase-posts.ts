@@ -13,6 +13,14 @@ import type {
 
 const PAGE_SIZE = 15;
 
+/** Merge top-level `account` join into `author.account` for PostAuthorRow */
+function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: T): T {
+  if (row.account && row.author) {
+    row.author = { ...row.author, account: row.account };
+  }
+  return row;
+}
+
 // ─── Posts ──────────────────────────────────────────────────
 
 /**
@@ -34,6 +42,7 @@ export async function fetchFeedPosts(options: {
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
+      account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -50,7 +59,7 @@ export async function fetchFeedPosts(options: {
   }
 
   return {
-    data: data as PostRecord[],
+    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
     hasMore: data.length === size,
   };
 }
@@ -66,6 +75,7 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
+      account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -79,7 +89,7 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
     return null;
   }
 
-  return data as PostRecord;
+  return mergeAccountIntoAuthor(data as PostRecord);
 }
 
 /**
@@ -106,7 +116,8 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       *,
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .single();
 
@@ -115,7 +126,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
     return null;
   }
 
-  return data as PostRecord;
+  return mergeAccountIntoAuthor(data as PostRecord);
 }
 
 /**
@@ -149,6 +160,7 @@ export async function updatePost(
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier
       ),
+      account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -161,7 +173,7 @@ export async function updatePost(
     throw error;
   }
 
-  return data as PostRecord;
+  return mergeAccountIntoAuthor(data as PostRecord);
 }
 
 // ─── Likes ──────────────────────────────────────────────────
@@ -255,7 +267,8 @@ export async function fetchPostComments(
       *,
       author:users!post_comments_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .eq('post_id', postId)
     .eq('status', 'published')
@@ -268,7 +281,7 @@ export async function fetchPostComments(
   }
 
   return {
-    data: data as PostCommentRecord[],
+    data: (data as PostCommentRecord[]).map(mergeAccountIntoAuthor),
     hasMore: data.length === pageSize,
   };
 }
@@ -291,7 +304,8 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
       *,
       author:users!post_comments_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .single();
 
@@ -314,7 +328,7 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
       .eq('id', input.post_id);
   }
 
-  return data as PostCommentRecord;
+  return mergeAccountIntoAuthor(data as PostCommentRecord);
 }
 
 /**
@@ -361,7 +375,8 @@ export async function updateComment(
       *,
       author:users!post_comments_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen
-      )
+      ),
+      account:accounts(id, account_type, name, avatar_url)
     `)
     .single();
 
@@ -370,7 +385,7 @@ export async function updateComment(
     throw error;
   }
 
-  return data as PostCommentRecord;
+  return mergeAccountIntoAuthor(data as PostCommentRecord);
 }
 
 // ─── Polls ──────────────────────────────────────────────────

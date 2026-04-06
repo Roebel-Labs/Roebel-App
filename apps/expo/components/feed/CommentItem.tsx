@@ -19,8 +19,9 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
   const [showActions, setShowActions] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
-  const displayName = comment.author?.username || 'Unbekannt';
-  const avatarUri = comment.author?.profile_picture_url;
+  const isOrgComment = comment.author?.account?.account_type === 'organisation';
+  const displayName = (isOrgComment ? comment.author!.account!.name : comment.author?.username) || 'Unbekannt';
+  const avatarUri = isOrgComment ? comment.author!.account!.avatar_url : comment.author?.profile_picture_url;
   const isVerified = comment.author?.is_verified_citizen ?? false;
   const initial = displayName.charAt(0).toUpperCase();
 

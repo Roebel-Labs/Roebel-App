@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { usePostActions } from '@/hooks/usePostActions';
 import {
@@ -49,6 +50,7 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
 
@@ -121,6 +123,7 @@ export default function PostDetailScreen() {
       const newComment = await createComment({
         post_id: id,
         wallet_address: walletAddress,
+        account_id: activeAccount?.id,
         content,
       });
 

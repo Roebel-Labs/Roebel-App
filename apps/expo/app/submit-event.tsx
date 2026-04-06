@@ -31,6 +31,7 @@ import { format } from 'date-fns';
 import { geocodeLocation } from '@/lib/utils/geocoding';
 import { logEventSubmission } from '@/lib/firebase';
 import { useTheme } from '@/context/ThemeContext';
+import { useAccount } from '@/context/AccountContext';
 import type { ColorTokens } from '@/constants/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -112,6 +113,7 @@ const validateEndTimeAfterStart = (startTime: string, endTime: string): string |
 export default function SubmitEventScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { activeAccount } = useAccount();
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -576,6 +578,7 @@ export default function SubmitEventScreen() {
         max_attendees: form.max_attendees ? Number(form.max_attendees) : null,
         status: 'pending',
         is_recurring: isRecurring,
+        account_id: activeAccount?.id || null,
       }).select().single();
 
       if (eventError) {

@@ -36,6 +36,7 @@ export async function fetchMarketplaceListings(options?: {
  */
 export async function createMarketplaceListing(listing: {
   seller_wallet_address: string;
+  account_id?: string;
   title: string;
   description: string;
   price: number;

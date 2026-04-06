@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { supabase } from '@/lib/supabase';
 import { createMarketplaceListing } from '@/lib/supabase-marketplace';
@@ -61,6 +62,7 @@ export default function CreateMarketplaceScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
   const draft = useCreatePost();
   const walletAddress = user?.wallet_address;
@@ -134,6 +136,7 @@ export default function CreateMarketplaceScreen() {
     try {
       const listing = await createMarketplaceListing({
         seller_wallet_address: walletAddress,
+        account_id: activeAccount?.id,
         title: title.trim(),
         description: description.trim(),
         price: priceType === 'free' ? 0 : parseFloat(price) || 0,

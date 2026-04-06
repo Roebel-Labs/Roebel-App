@@ -29,10 +29,12 @@ export default function PostAuthorRow({
 }: Props) {
   const { colors } = useTheme();
 
-  const displayName = nameOverride || author?.username || 'Unbekannt';
+  // When the post was made from an org account, show the org's name and avatar
+  const isOrgPost = !nameOverride && author?.account?.account_type === 'organisation';
+  const displayName = nameOverride || (isOrgPost ? author!.account!.name : author?.username) || 'Unbekannt';
   const avatarUri = typeof avatarOverride === 'string' ? avatarOverride : undefined;
   const avatarSource = typeof avatarOverride === 'object' ? avatarOverride : undefined;
-  const profilePic = avatarUri || author?.profile_picture_url;
+  const profilePic = avatarUri || (isOrgPost ? author!.account!.avatar_url : author?.profile_picture_url);
   const isVerified = author?.is_verified_citizen ?? false;
   const initial = displayName.charAt(0).toUpperCase();
 
