@@ -210,7 +210,6 @@ const handleRefresh = async () => {
               votingStreak={user?.voting_streak || 0}
               isPending={isBusinessOwner && userBusiness?.status === 'pending'}
               businessName={userBusiness?.name}
-              businessLogoUrl={userBusiness?.logo_url}
             />
 
             {/* Mode-specific action cards */}
@@ -375,7 +374,7 @@ const handleRefresh = async () => {
               const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
               const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
               const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
-              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url || userBusiness?.logo_url || userBusiness?.cover_image_url);
+              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url);
               const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
 
               return (

@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useAccount } from '@/context/AccountContext';
 import { createBusiness } from '@/lib/supabase-businesses';
+import { updateAccount } from '@/lib/supabase-accounts';
 import { createRestaurant } from '@/lib/supabase-restaurants';
 import type { OrgSubType } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
@@ -50,10 +51,18 @@ export default function CreateOrgReviewScreen() {
       // 1. Create account with sub_type
       const orgAccount = await createOrgAccount(state.orgType as OrgSubType, state.name.trim());
 
-      // 2. Store new account ID for success screen
+      // 2. Store images on the account itself
+      if (state.logoUrl || state.coverImageUrl) {
+        await updateAccount(orgAccount.id, {
+          avatar_url: state.logoUrl || null,
+          cover_url: state.coverImageUrl || null,
+        });
+      }
+
+      // 3. Store new account ID for success screen
       dispatch({ type: 'SET_NEW_ACCOUNT_ID', payload: orgAccount.id });
 
-      // 3. Create business record
+      // 4. Create business record
       await createBusiness({
         owner_wallet_address: account.address,
         name: state.name.trim(),
@@ -67,7 +76,7 @@ export default function CreateOrgReviewScreen() {
         cover_image_url: state.coverImageUrl || undefined,
       });
 
-      // 4. For restaurants: also create restaurant record
+      // 5. For restaurants: also create restaurant record
       if (state.orgType === 'restaurant') {
         await createRestaurant({
           name: state.name.trim(),
@@ -83,7 +92,7 @@ export default function CreateOrgReviewScreen() {
         });
       }
 
-      // 5. Navigate to success
+      // 6. Navigate to success
       router.replace('/create-org/success');
     } catch (error: any) {
       console.error('Org creation error:', error);
