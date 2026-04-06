@@ -11,6 +11,7 @@ import { AlertCard } from "@/components/app/AlertCard";
 import type { ServiceAlert } from "@/app/actions/alerts";
 import type { PostWithEngagement } from "@/types/post";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { Landmark, Vote, ArrowRight, ShieldCheck } from "lucide-react";
 
 interface RathausProposal {
@@ -24,6 +25,7 @@ interface RathausProposal {
 export function RathausFeed() {
   const account = useActiveAccount();
   const { activeMode } = useAppMode();
+  const { user } = useUserProfile();
   const [posts, setPosts] = useState<PostWithEngagement[]>([]);
   const [proposals, setProposals] = useState<RathausProposal[]>([]);
   const [alerts, setAlerts] = useState<ServiceAlert[]>([]);
@@ -31,7 +33,8 @@ export function RathausFeed() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const canPost = activeMode === "citizen" || activeMode === "org";
+  const isCitizen = user?.tier === "citizen" || user?.is_verified_citizen;
+  const canPost = isCitizen || activeMode === "org";
 
   const handlePostCreated = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
@@ -91,8 +94,8 @@ export function RathausFeed() {
 
   return (
     <div className="space-y-4">
-      {/* Tourist CTA */}
-      {activeMode === "tourist" && (
+      {/* Tourist/guest CTA */}
+      {!isCitizen && (
         <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-start gap-3">
           <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
           <div>

@@ -10,10 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { submitEvent } from "@/app/actions/submit-event"
-import { Loader2, Upload, X, CheckCircle } from "lucide-react"
+import { Loader2, Upload, X, CheckCircle, AlertTriangle } from "lucide-react"
 import { CATEGORIES } from "@/lib/constants"
 import { MultiDatePicker } from "@/components/ui/multi-date-picker"
 import { formatDateToString } from "@/lib/utils/recurring-events"
+import { useAccount } from "@/lib/context/AccountContext"
+import { useUserProfile } from "@/hooks/useUserProfile"
 
 export function EventSubmissionForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -24,6 +26,11 @@ export function EventSubmissionForm() {
   const [isRecurring, setIsRecurring] = useState(false)
   const [selectedDates, setSelectedDates] = useState<string[]>([])
   const { toast } = useToast()
+  const { activeAccount } = useAccount()
+  const { user } = useUserProfile()
+
+  // Gate: only verified citizens can submit events
+  const canSubmit = user?.tier === "citizen" || user?.is_verified_citizen
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -76,6 +83,11 @@ export function EventSubmissionForm() {
       }
 
       // Location is now a simple text field - geocoding happens server-side
+
+      // Add account_id from active account
+      if (activeAccount?.id) {
+        formData.append("account_id", activeAccount.id)
+      }
 
       // Add recurring event data
       formData.append("is_recurring", isRecurring.toString())
@@ -134,6 +146,22 @@ export function EventSubmissionForm() {
             <Button onClick={() => setIsSuccess(false)} variant="outline" className="rounded-lg">
               Weiteres Event einreichen
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (user && !canSubmit) {
+    return (
+      <Card className="max-w-4xl mx-auto rounded-xl bg-card border border-border shadow-none">
+        <CardContent className="p-8 md:p-12">
+          <div className="text-center py-12">
+            <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-medium text-foreground mb-2">Verifizierung erforderlich</h2>
+            <p className="text-muted-foreground">
+              Nur verifizierte Bürger können Veranstaltungen erstellen.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -345,6 +373,7 @@ export function EventSubmissionForm() {
                 id="organizer_name"
                 name="organizer_name"
                 placeholder="Ihr vollständiger Name"
+                defaultValue={activeAccount?.name ?? ""}
                 required
                 className="mt-2 bg-card border-border rounded-lg"
               />

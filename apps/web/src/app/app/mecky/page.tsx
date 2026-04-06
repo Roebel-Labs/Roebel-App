@@ -3,6 +3,9 @@
 import { useChat } from "@ai-sdk/react";
 import { useState, useRef, useEffect } from "react";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrgAccount } from "@/types/account";
 import { Send, Bot, User, Sparkles, RefreshCw } from "lucide-react";
 import type { AppMode } from "@/lib/context/AppModeContext";
 
@@ -35,16 +38,25 @@ const QUICK_PROMPTS: Record<AppMode, string[]> = {
 
 export default function MeckyPage() {
   const { activeMode } = useAppMode();
+  const { activeAccount } = useAccount();
+  const { user } = useUserProfile();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Derive effective mode from account type for Mecky context
+  const effectiveMode: AppMode = activeAccount && isOrgAccount(activeAccount)
+    ? "org"
+    : (user?.tier === "citizen" || user?.is_verified_citizen)
+      ? "citizen"
+      : "tourist";
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, reload } = useChat({
     api: "/api/chat/mecky",
-    body: { mode: activeMode },
+    body: { mode: effectiveMode },
     initialMessages: [
       {
         id: "greeting",
         role: "assistant",
-        content: MODE_GREETINGS[activeMode],
+        content: MODE_GREETINGS[effectiveMode],
       },
     ],
   });
@@ -75,8 +87,8 @@ export default function MeckyPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">Mecky</h1>
           <p className="text-xs text-muted-foreground">
-            {activeMode === "tourist" ? "Dein Stadtführer" :
-             activeMode === "citizen" ? "Dein Bürgerassistent" :
+            {effectiveMode === "tourist" ? "Dein Stadtführer" :
+             effectiveMode === "citizen" ? "Dein Bürgerassistent" :
              "Dein Business-Berater"}
           </p>
         </div>
@@ -128,7 +140,7 @@ export default function MeckyPage() {
         {/* Quick prompts — only show when few messages */}
         {messages.length <= 1 && (
           <div className="flex flex-wrap gap-2">
-            {QUICK_PROMPTS[activeMode].map((prompt) => (
+            {QUICK_PROMPTS[effectiveMode].map((prompt) => (
               <button
                 key={prompt}
                 onClick={() => handleQuickPrompt(prompt)}

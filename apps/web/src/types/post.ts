@@ -22,6 +22,7 @@ export const POST_CATEGORIES: { id: PostCategory; label: string }[] = [
 export interface Post {
   id: string;
   wallet_address: string;
+  account_id?: string | null;
   content: string;
   media_urls: string[];
   video_url: string | null;
@@ -37,6 +38,9 @@ export interface PostWithAuthor extends Post {
   author_username: string | null;
   author_profile_picture_url: string | null;
   author_neighborhood: string | null;
+  author_account_name?: string | null;
+  author_account_avatar_url?: string | null;
+  author_account_type?: string | null;
 }
 
 export interface PostWithEngagement extends PostWithAuthor {
@@ -60,6 +64,7 @@ export interface PostComment {
   id: string;
   post_id: string;
   wallet_address: string;
+  account_id?: string | null;
   content: string;
   media_urls: string[];
   video_url: string | null;
@@ -101,6 +106,7 @@ export interface CreatePollInput {
 
 export interface CreatePostInput {
   wallet_address: string;
+  account_id?: string;
   content: string;
   category: PostCategory;
   media_urls?: string[];
@@ -112,6 +118,7 @@ export interface CreatePostInput {
 export interface CreateCommentInput {
   post_id: string;
   wallet_address: string;
+  account_id?: string;
   content: string;
   media_urls?: string[];
   video_url?: string | null;

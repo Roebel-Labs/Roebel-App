@@ -6,6 +6,9 @@ import Image from "next/image";
 import { Calendar, ShieldCheck, Tag, ArrowRight, Landmark, Vote, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrgAccount } from "@/types/account";
 
 interface FeaturedAd {
   id: string;
@@ -25,6 +28,15 @@ interface ActiveProposal {
 
 export function AppRightPanel() {
   const { activeMode } = useAppMode();
+  const { activeAccount } = useAccount();
+  const { user } = useUserProfile();
+
+  const tier = user?.tier || "tourist";
+  const isCitizen = tier === "citizen" || user?.is_verified_citizen;
+  const isTouristOrGuest = tier === "tourist" || tier === "guest" || !isCitizen;
+  const isCitizenPersonal = isCitizen && activeAccount?.account_type === "personal";
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
+
   const [featuredAd, setFeaturedAd] = useState<FeaturedAd | null>(null);
   const [activeProposals, setActiveProposals] = useState<ActiveProposal[]>([]);
 
@@ -62,7 +74,7 @@ export function AppRightPanel() {
 
   // Fetch active proposals for citizen/org mode
   useEffect(() => {
-    if (activeMode === "tourist") return;
+    if (isTouristOrGuest) return;
     async function fetchProposals() {
       const supabase = createClient();
       const { data } = await supabase
@@ -74,12 +86,12 @@ export function AppRightPanel() {
       if (data) setActiveProposals(data);
     }
     fetchProposals();
-  }, [activeMode]);
+  }, [isTouristOrGuest]);
 
   return (
     <div className="space-y-4 sticky top-24">
-      {/* Tourist mode: Event discovery CTA */}
-      {activeMode === "tourist" && (
+      {/* Tourist/guest: Event discovery CTA */}
+      {isTouristOrGuest && (
         <div className="bg-card rounded-lg border border-border overflow-hidden">
           <div className="bg-gradient-to-br from-primary to-blue-800 p-6 text-white">
             <h3 className="font-semibold text-lg leading-tight">
@@ -107,8 +119,8 @@ export function AppRightPanel() {
         </div>
       )}
 
-      {/* Citizen mode: Governance widget */}
-      {activeMode === "citizen" && (
+      {/* Citizen personal: Governance widget */}
+      {isCitizenPersonal && (
         <div className="bg-card rounded-lg border border-border overflow-hidden">
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <Vote className="h-5 w-5 text-primary" />
@@ -143,8 +155,8 @@ export function AppRightPanel() {
         </div>
       )}
 
-      {/* Citizen mode: event creation CTA */}
-      {activeMode === "citizen" && (
+      {/* Citizen personal: event creation CTA */}
+      {isCitizenPersonal && (
         <div className="bg-card rounded-lg border border-border overflow-hidden">
           <div className="bg-gradient-to-br from-primary to-blue-800 p-6 text-white">
             <h3 className="font-semibold text-lg leading-tight">
@@ -166,8 +178,8 @@ export function AppRightPanel() {
         </div>
       )}
 
-      {/* Org mode: Business stats teaser */}
-      {activeMode === "org" && (
+      {/* Org account: Business stats teaser */}
+      {isOrg && (
         <div className="bg-card rounded-lg border border-border p-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-5 w-5 text-primary" />
@@ -235,8 +247,8 @@ export function AppRightPanel() {
         </div>
       )}
 
-      {/* Verification CTA — tourist mode only */}
-      {activeMode === "tourist" && (
+      {/* Verification CTA — tourist/guest only */}
+      {isTouristOrGuest && (
         <div className="bg-card rounded-lg border border-border p-4">
           <div className="flex items-start gap-3">
             <ShieldCheck className="h-6 w-6 text-green-600 flex-shrink-0 mt-0.5" />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveAccount } from "thirdweb/react";
+import { useAccount } from "@/lib/context/AccountContext";
 import { AppEventCard } from "./AppEventCard";
 import { EventsFilters } from "@/components/events/events-filters";
 import Link from "next/link";
@@ -26,6 +27,13 @@ interface Event {
   ticket_price: number | null;
   max_attendees: number | null;
   created_at: string;
+  account_id: string | null;
+  accounts: {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    account_type: string;
+  } | null;
 }
 
 interface InterestData {
@@ -40,6 +48,7 @@ interface AppEventsContentProps {
 
 export function AppEventsContent({ initialEvents }: AppEventsContentProps) {
   const account = useActiveAccount();
+  const { isOwnerOf } = useAccount();
   const [events, setEvents] = useState<Event[]>(initialEvents);
   const [loading, setLoading] = useState(false);
   const [currentCategory, setCurrentCategory] = useState("All Events");
@@ -106,7 +115,7 @@ export function AppEventsContent({ initialEvents }: AppEventsContentProps) {
     try {
       let query = supabase
         .from("events")
-        .select("*")
+        .select("*, accounts:account_id(id, name, avatar_url, account_type)")
         .eq("status", "approved")
         .order("date", { ascending: true });
 
@@ -200,6 +209,8 @@ export function AppEventsContent({ initialEvents }: AppEventsContentProps) {
               initialIsInterested={
                 interestMap[event.id]?.isInterested || false
               }
+              accountName={event.accounts?.name ?? null}
+              isOwner={isOwnerOf(event.account_id)}
             />
           ))}
         </div>

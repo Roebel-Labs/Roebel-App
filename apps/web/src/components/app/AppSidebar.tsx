@@ -30,6 +30,9 @@ import {
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationDot } from "@/components/ui/notification-dot";
 import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { isOrgAccount } from "@/types/account";
 import { RoebelCardWidget } from "@/components/app/RoebelCardWidget";
 
 // --- Navigation item definition ---
@@ -78,6 +81,11 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { unreadCount: unreadMessages } = useUnreadMessages();
   const { activeMode } = useAppMode();
+  const { activeAccount } = useAccount();
+  const { user } = useUserProfile();
+
+  const isCitizen = user?.tier === "citizen" || user?.is_verified_citizen;
+  const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href;
@@ -86,11 +94,24 @@ export function AppSidebar() {
 
   const isVisible = (item: NavItem) => {
     if (!item.modes) return true;
+    // citizen/org modes: visible when user is citizen or active account is org
+    if (item.modes.includes("citizen") || item.modes.includes("org")) {
+      return isCitizen || isOrg;
+    }
+    if (item.modes.includes("org") && !item.modes.includes("citizen")) {
+      return isOrg;
+    }
+    return item.modes.includes(activeMode);
+  };
+
+  const isOrgItemVisible = (item: NavItem) => {
+    if (!item.modes) return true;
+    if (item.modes.includes("org")) return isOrg;
     return item.modes.includes(activeMode);
   };
 
   const visibleMainItems = mainNavItems.filter(isVisible);
-  const visibleOrgItems = orgNavItems.filter(isVisible);
+  const visibleOrgItems = orgNavItems.filter(isOrgItemVisible);
 
   return (
     <div className="flex flex-col h-full bg-card">

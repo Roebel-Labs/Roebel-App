@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { createAppNotification } from "@/app/actions/app-notifications"
+import { isAccountOwner } from "@/lib/supabase-accounts"
 
 export async function approveEvent(eventId: string) {
   try {
@@ -86,10 +87,29 @@ export async function rejectEvent(eventId: string) {
   }
 }
 
-export async function deleteEvent(eventId: string) {
+export async function deleteEvent(
+  eventId: string,
+  callerWallet?: string
+) {
   try {
 
     const supabase = await createClient()
+
+    // If callerWallet is provided, verify ownership via account
+    if (callerWallet) {
+      const { data: event } = await supabase
+        .from("events")
+        .select("id, account_id")
+        .eq("id", eventId)
+        .single()
+
+      if (event?.account_id) {
+        const isOwner = await isAccountOwner(event.account_id, callerWallet)
+        if (!isOwner) {
+          return { success: false, error: "No permission to delete this event." }
+        }
+      }
+    }
 
     // Delete the event
     const { error } = await supabase.from("events").delete().eq("id", eventId)
@@ -110,9 +130,29 @@ export async function deleteEvent(eventId: string) {
   }
 }
 
-export async function updateEvent(eventId: string, formData: FormData) {
+export async function updateEvent(
+  eventId: string,
+  formData: FormData,
+  callerWallet?: string
+) {
   try {
     const supabase = await createClient()
+
+    // If callerWallet is provided, verify ownership via account
+    if (callerWallet) {
+      const { data: event } = await supabase
+        .from("events")
+        .select("id, account_id")
+        .eq("id", eventId)
+        .single()
+
+      if (event?.account_id) {
+        const isOwner = await isAccountOwner(event.account_id, callerWallet)
+        if (!isOwner) {
+          return { success: false, error: "No permission to update this event." }
+        }
+      }
+    }
 
     const title = formData.get("title") as string
     const description = formData.get("description") as string

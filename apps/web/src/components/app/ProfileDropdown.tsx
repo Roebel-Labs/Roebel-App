@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useActiveAccount, useActiveWallet, useDisconnect } from "thirdweb/react";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { getUserDisplayName } from "@/lib/user-types";
-import { getBusinessesByOwner } from "@/app/actions/businesses";
-import type { Business } from "@/types/business";
+import { useAccount } from "@/lib/context/AccountContext";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -14,9 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Building2, LogOut, PlusCircle, Store, Eye, Landmark, Briefcase } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
 import Link from "next/link";
-import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
+import { AccountSwitcher } from "@/components/app/AccountSwitcher";
 
 function getInitial(name: string | null | undefined): string {
   if (!name) return "?";
@@ -28,25 +27,7 @@ export function ProfileDropdown() {
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
   const { user } = useUserProfile();
-  const { activeMode, availableModes, setMode, canSwitchModes } = useAppMode();
-  const [business, setBusiness] = useState<Business | null>(null);
-
-  // Fetch user's business from DB
-  useEffect(() => {
-    async function fetchBusiness() {
-      if (!account?.address) {
-        setBusiness(null);
-        return;
-      }
-      const result = await getBusinessesByOwner(account.address);
-      if (result.success && result.data && result.data.length > 0) {
-        setBusiness(result.data[0]);
-      } else {
-        setBusiness(null);
-      }
-    }
-    fetchBusiness();
-  }, [account?.address]);
+  const { activeAccount: currentAccount } = useAccount();
 
   if (!account) return null;
 
@@ -98,63 +79,19 @@ export function ProfileDropdown() {
 
         <DropdownMenuSeparator className="my-0" />
 
-        {/* Mode switcher */}
-        {canSwitchModes && (
-          <>
-            <div className="p-1">
-              <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Ansicht</p>
-              {availableModes.map((mode) => {
-                const modeConfig: Record<AppMode, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-                  tourist: { label: "Tourist", icon: Eye },
-                  citizen: { label: "Bürger", icon: Landmark },
-                  org: { label: "Organisation", icon: Briefcase },
-                };
-                const { label, icon: ModeIcon } = modeConfig[mode];
-                const isActive = activeMode === mode;
-                return (
-                  <DropdownMenuItem
-                    key={mode}
-                    onClick={() => setMode(mode)}
-                    className={`cursor-pointer ${isActive ? "bg-accent" : ""}`}
-                  >
-                    <ModeIcon className="h-4 w-4" />
-                    <span>{label}</span>
-                    {isActive && (
-                      <span className="ml-auto text-xs text-muted-foreground">aktiv</span>
-                    )}
-                  </DropdownMenuItem>
-                );
-              })}
-            </div>
-            <DropdownMenuSeparator className="my-0" />
-          </>
+        {/* Active account indicator + Account switcher */}
+        {currentAccount && isOrgAccount(currentAccount) && (
+          <div className="px-4 py-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Aktives Konto</p>
+            <p className="text-sm font-medium text-foreground truncate">{currentAccount.name}</p>
+            <span className="text-[10px] text-muted-foreground">
+              {ACCOUNT_TYPE_LABELS[currentAccount.account_type]}
+            </span>
+          </div>
         )}
 
-        {/* Business account */}
         <div className="p-1">
-          {business ? (
-            <DropdownMenuItem asChild className="cursor-pointer">
-              <Link href={`/app/gewerbe/${business.slug}`} className="flex items-center gap-2">
-                {business.logo_url ? (
-                  <img
-                    src={business.logo_url}
-                    alt={business.name}
-                    className="h-4 w-4 rounded object-cover"
-                  />
-                ) : (
-                  <Store className="h-4 w-4" />
-                )}
-                <span>{business.name}</span>
-              </Link>
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem asChild className="cursor-pointer">
-              <Link href="/app/gewerbe/erstellen" className="flex items-center gap-2">
-                <PlusCircle className="h-4 w-4" />
-                <span>Unternehmensseite hinzufügen</span>
-              </Link>
-            </DropdownMenuItem>
-          )}
+          <AccountSwitcher />
         </div>
 
         <DropdownMenuSeparator className="my-0" />

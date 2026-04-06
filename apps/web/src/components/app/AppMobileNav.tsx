@@ -6,23 +6,28 @@ import { Home, Calendar, PlusCircle, MessageSquare, User, Landmark, MapPin } fro
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationDot } from "@/components/ui/notification-dot";
 import { useAppMode } from "@/lib/context/AppModeContext";
+import { useAccount } from "@/lib/context/AccountContext";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export function AppMobileNav() {
   const pathname = usePathname();
   const { unreadCount: unreadMessages } = useUnreadMessages();
   const { activeMode } = useAppMode();
+  const { user } = useUserProfile();
+
+  const isCitizen = user?.tier === "citizen" || user?.is_verified_citizen;
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href;
     return pathname === href || pathname?.startsWith(href + "/");
   };
 
-  // Build items based on mode
+  // Build items based on tier + account type
   const items = [
     { href: "/app", label: "Feed", icon: Home, exact: true },
     { href: "/app/events", label: "Events", icon: Calendar },
     { href: "/app/submit", label: "Beitragen", icon: PlusCircle, highlight: true },
-    ...(activeMode !== "tourist"
+    ...(isCitizen
       ? [{ href: "/app/messages", label: "Chat", icon: MessageSquare }]
       : [{ href: "/app/karte", label: "Karte", icon: MapPin }]),
     { href: "/app/profile", label: "Profil", icon: User },

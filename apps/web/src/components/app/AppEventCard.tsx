@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { Pencil } from "lucide-react";
 import { EventInterestButton } from "./EventInterestButton";
 
 interface Event {
@@ -21,12 +22,16 @@ interface AppEventCardProps {
   event: Event;
   initialInterestCount?: number;
   initialIsInterested?: boolean;
+  accountName?: string | null;
+  isOwner?: boolean;
 }
 
 export function AppEventCard({
   event,
   initialInterestCount = 0,
   initialIsInterested = false,
+  accountName,
+  isOwner = false,
 }: AppEventCardProps) {
   const eventDate = new Date(event.date);
   const day = eventDate.getDate();
@@ -79,6 +84,12 @@ export function AppEventCard({
           </h3>
         </Link>
 
+        {accountName && (
+          <p className="text-xs text-muted-foreground truncate">
+            von {accountName}
+          </p>
+        )}
+
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {event.time && (
             <span>
@@ -89,6 +100,18 @@ export function AppEventCard({
           {event.time && event.location && <span>&middot;</span>}
           <span className="truncate">{event.location}</span>
         </div>
+
+        {isOwner && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <Link
+              href={`/app/events/${event.id}?edit=true`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Pencil className="h-3 w-3" />
+              Bearbeiten
+            </Link>
+          </div>
+        )}
 
         <EventInterestButton
           eventId={event.id}

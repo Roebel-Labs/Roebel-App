@@ -75,6 +75,9 @@ export async function submitEvent(formData: FormData) {
     // Determine primary date
     const primaryDate = dates.length > 0 ? dates[0] : (formData.get("date") as string)
 
+    // Extract account_id if provided
+    const accountId = (formData.get("account_id") as string) || null
+
     // Extract form data
     const eventData = {
       title: formData.get("title") as string,
@@ -93,6 +96,7 @@ export async function submitEvent(formData: FormData) {
       max_attendees: formData.get("max_attendees") ? Number.parseInt(formData.get("max_attendees") as string) : null,
       status: "pending",
       is_recurring: isRecurring,
+      account_id: accountId,
       // Geographical data from server-side geocoding
       latitude,
       longitude,
