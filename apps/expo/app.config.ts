@@ -74,6 +74,7 @@ const config: ExpoConfig = {
     '@react-native-community/datetimepicker',
     'expo-image',
     './plugins/withExcludeBouncyCastle',
+    './plugins/withRemoveJcenter',
     [
       'expo-build-properties',
       {
