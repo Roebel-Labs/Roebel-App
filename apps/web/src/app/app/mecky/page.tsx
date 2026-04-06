@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, FormEvent } from "react";
 import { useAppMode } from "@/lib/context/AppModeContext";
 import { useAccount } from "@/lib/context/AccountContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -49,17 +49,21 @@ export default function MeckyPage() {
       ? "citizen"
       : "tourist";
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, reload } = useChat({
+  const [input, setInput] = useState("");
+
+  const { messages, sendMessage, status } = useChat({
     api: "/api/chat/mecky",
     body: { mode: effectiveMode },
     initialMessages: [
       {
         id: "greeting",
-        role: "assistant",
-        content: MODE_GREETINGS[effectiveMode],
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: MODE_GREETINGS[effectiveMode] }],
       },
     ],
   });
+
+  const isLoading = status !== "ready";
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -69,12 +73,14 @@ export default function MeckyPage() {
   }, [messages]);
 
   const handleQuickPrompt = (prompt: string) => {
-    setInput(prompt);
-    // Submit on next tick after state update
-    setTimeout(() => {
-      const form = document.getElementById("mecky-form") as HTMLFormElement;
-      form?.requestSubmit();
-    }, 0);
+    sendMessage({ text: prompt });
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    sendMessage({ text: input });
+    setInput("");
   };
 
   return (
@@ -117,7 +123,12 @@ export default function MeckyPage() {
                 ? "bg-primary text-primary-foreground rounded-tr-sm"
                 : "bg-card border border-border text-foreground rounded-tl-sm"
             }`}>
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="whitespace-pre-wrap">
+                {message.parts
+                  .filter((part) => part.type === "text")
+                  .map((part) => part.text)
+                  .join("")}
+              </p>
             </div>
           </div>
         ))}
@@ -161,7 +172,7 @@ export default function MeckyPage() {
       >
         <input
           value={input}
-          onChange={handleInputChange}
+          onChange={(e) => setInput(e.target.value)}
           placeholder="Frag Mecky..."
           className="flex-1 px-4 py-2.5 bg-card border border-border rounded-full text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           disabled={isLoading}
