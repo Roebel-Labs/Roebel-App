@@ -18,31 +18,26 @@ interface ModeCardProps {
 function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps) {
   const { colors, isDark } = useTheme();
 
-  const cardShadow = Platform.select({
-    ios: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 12,
-    },
-    android: {
-      elevation: 4,
-    },
-  });
-
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.card,
         { backgroundColor: colors.surface },
-        cardShadow,
+        Platform.select({
+          ios: {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.35 : 0.08,
+            shadowRadius: 6,
+          },
+          android: { elevation: 3 },
+        }),
         highlight && { borderColor: colors.primary, borderWidth: 2 },
       ]}
     >
       <Text style={styles.cardEmoji}>{emoji}</Text>
       <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{title}</Text>
-      <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>{subtitle}</Text>
     </Pressable>
   );
 }
@@ -57,22 +52,22 @@ interface CTABannerProps {
 function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
   const { colors, isDark } = useTheme();
 
-  const cardShadow = Platform.select({
-    ios: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 12,
-    },
-    android: {
-      elevation: 4,
-    },
-  });
-
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.ctaBanner, { backgroundColor: colors.surface }, cardShadow]}
+      style={[
+        styles.ctaBanner,
+        { backgroundColor: colors.surface },
+        Platform.select({
+          ios: {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.35 : 0.08,
+            shadowRadius: 6,
+          },
+          android: { elevation: 3 },
+        }),
+      ]}
     >
       <Text style={styles.ctaEmoji}>{emoji}</Text>
       <View style={styles.ctaTextContainer}>
@@ -189,6 +184,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     marginTop: 16,
+    marginBottom: 12,
     gap: 12,
   },
   cardsRow: {
@@ -209,10 +205,6 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
   },
   ctaBanner: {
     flexDirection: 'row',

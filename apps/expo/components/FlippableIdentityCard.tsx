@@ -37,6 +37,7 @@ const CARD_BACK_LABELS: Record<CardMode, string> = {
 };
 
 const ORG_TYPE_LABELS: Record<string, string> = {
+  restaurant: 'Restaurant',
   unternehmen: 'Unternehmen',
   verein: 'Verein',
   partei: 'Partei',
@@ -63,7 +64,8 @@ export default function FlippableIdentityCard({
   const [isFlipped, setIsFlipped] = useState(false);
 
   const handleFlip = () => {
-    const newValue = isFlipped ? 0 : 180;
+    // Always rotate forward: 0→180, 180→360 (same direction)
+    const newValue = rotation.value + 180;
     rotation.value = withTiming(newValue, {
       duration: 500,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
@@ -74,7 +76,7 @@ export default function FlippableIdentityCard({
   const frontStyle = useAnimatedStyle(() => ({
     transform: [
       { perspective: 1200 },
-      { rotateY: `${interpolate(rotation.value, [0, 180], [0, 180])}deg` },
+      { rotateY: `${rotation.value}deg` },
     ],
     backfaceVisibility: 'hidden' as const,
   }));
@@ -82,7 +84,7 @@ export default function FlippableIdentityCard({
   const backStyle = useAnimatedStyle(() => ({
     transform: [
       { perspective: 1200 },
-      { rotateY: `${interpolate(rotation.value, [0, 180], [180, 360])}deg` },
+      { rotateY: `${rotation.value + 180}deg` },
     ],
     backfaceVisibility: 'hidden' as const,
   }));
@@ -92,7 +94,7 @@ export default function FlippableIdentityCard({
     : user?.username || shortenAddress(user?.wallet_address);
 
   const subtitle = isOrg
-    ? ORG_TYPE_LABELS[activeAccount?.account_type || ''] || 'Organisation'
+    ? ORG_TYPE_LABELS[activeAccount?.sub_type || ''] || 'Organisation'
     : isCitizen
       ? 'Röbeler Bürger'
       : 'Besucher';
@@ -100,24 +102,27 @@ export default function FlippableIdentityCard({
   const avatarUrl = isOrg ? activeAccount?.avatar_url : user?.profile_picture_url;
   const coverUrl = isOrg ? activeAccount?.cover_url : null;
 
-  const cardShadow = {
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: isDark ? 0.4 : 0.12,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  };
+  const cardBg = isDark ? colors.surface : '#FFFFFF';
+
+  const cardShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: isDark ? 0.4 : 0.10,
+      shadowRadius: 16,
+    },
+    android: {
+      elevation: 6,
+    },
+  });
 
   return (
     <Pressable onPress={handleFlip} style={styles.cardContainer}>
       {/* FRONT */}
-      <Animated.View style={[styles.card, frontStyle, { backgroundColor: colors.surface }, cardShadow]}>
+      <Animated.View style={[styles.card, frontStyle, { backgroundColor: cardBg }, cardShadow]}>
+        {/* Flip hint on front */}
+        <Text style={styles.flipHint}>↻</Text>
+
         {/* Org cover image header */}
         {isOrg && coverUrl && (
           <View style={styles.coverContainer}>
@@ -174,7 +179,7 @@ export default function FlippableIdentityCard({
       </Animated.View>
 
       {/* BACK */}
-      <Animated.View style={[styles.card, styles.cardBack, backStyle, { backgroundColor: colors.surface }, cardShadow]}>
+      <Animated.View style={[styles.card, styles.cardBack, backStyle, { backgroundColor: cardBg }, cardShadow]}>
         <Text style={styles.flipHint}>↻</Text>
 
         <View style={styles.backContent}>
