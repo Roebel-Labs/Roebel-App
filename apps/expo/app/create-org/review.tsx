@@ -9,7 +9,7 @@ import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useAccount } from '@/context/AccountContext';
 import { createBusiness } from '@/lib/supabase-businesses';
 import { createRestaurant } from '@/lib/supabase-restaurants';
-import type { OrgType } from '@/lib/types';
+import type { OrgSubType } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
 
 const ORG_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
@@ -47,11 +47,11 @@ export default function CreateOrgReviewScreen() {
     dispatch({ type: 'SET_SUBMITTING', payload: true });
 
     try {
-      // 1. Map orgType to AccountType (restaurant → unternehmen)
-      const accountType: OrgType = state.orgType === 'restaurant' ? 'unternehmen' : state.orgType as OrgType;
+      // 1. Create account with sub_type
+      const orgAccount = await createOrgAccount(state.orgType as OrgSubType, state.name.trim());
 
-      // 2. Create account
-      const orgAccount = await createOrgAccount(accountType, state.name.trim());
+      // 2. Store new account ID for success screen
+      dispatch({ type: 'SET_NEW_ACCOUNT_ID', payload: orgAccount.id });
 
       // 3. Create business record
       await createBusiness({

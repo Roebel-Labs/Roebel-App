@@ -56,7 +56,7 @@ export default function FlippableIdentityCard({
   const { colors, isDark } = useTheme();
   const { tier } = useUser();
   const { activeAccount } = useAccount();
-  const isOrg = activeAccount?.account_type !== 'personal' && activeAccount !== null;
+  const isOrg = activeAccount?.account_type === 'organisation';
   const activeMode: CardMode = isOrg ? 'org' : tier === 'citizen' ? 'citizen' : 'tourist';
 
   const rotation = useSharedValue(0);

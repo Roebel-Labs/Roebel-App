@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Account, AccountOwner, AccountType, OrgType } from './types';
+import type { Account, AccountOwner, AccountType, OrgSubType } from './types';
 
 // ── Fetch ────────────────────────────────────────────────────
 
@@ -109,7 +109,7 @@ export async function createPersonalAccount(
 
 export async function createOrgAccount(
   walletAddress: string,
-  orgType: OrgType,
+  subType: OrgSubType,
   name: string
 ): Promise<Account | null> {
   const normalized = walletAddress.toLowerCase();
@@ -117,7 +117,8 @@ export async function createOrgAccount(
   const { data: account, error: accError } = await supabase
     .from('accounts' as any)
     .insert({
-      account_type: orgType,
+      account_type: 'organisation' as AccountType,
+      sub_type: subType,
       name,
     })
     .select()

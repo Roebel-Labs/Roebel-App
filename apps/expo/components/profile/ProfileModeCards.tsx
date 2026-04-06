@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
+import { getOrgFeatures } from '@/lib/org-features';
+import type { OrgSubType } from '@/lib/types';
 
 interface ModeCardProps {
   emoji: string;
@@ -85,7 +87,7 @@ export default function ProfileModeCards() {
   const router = useRouter();
   const { tier, isCitizen } = useUser();
   const { activeAccount } = useAccount();
-  const isOrg = activeAccount?.account_type !== 'personal' && activeAccount !== null;
+  const isOrg = activeAccount?.account_type === 'organisation';
 
   return (
     <View style={styles.container}>
@@ -152,30 +154,33 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
 }
 
 function OrgCards({ router }: { router: ReturnType<typeof useRouter> }) {
+  const { activeAccount } = useAccount();
+  const subType = activeAccount?.sub_type;
+
+  if (!subType) return null;
+
+  const features = getOrgFeatures(subType);
+  const rows: typeof features[] = [];
+  for (let i = 0; i < features.length; i += 2) {
+    rows.push(features.slice(i, i + 2));
+  }
+
   return (
     <>
-      <View style={styles.cardsRow}>
-        <ModeCard
-          emoji="🍽️"
-          title="Tische"
-          subtitle="Live-Ansicht"
-          onPress={() => router.push('/kitchen' as any)}
-        />
-        <ModeCard
-          emoji="⚙️"
-          title="Verwalten"
-          subtitle="Tische & QR-Codes"
-          onPress={() => router.push('/kitchen/tables' as any)}
-        />
-      </View>
-      <View style={styles.cardsRow}>
-        <ModeCard
-          emoji="📋"
-          title="Speisekarte"
-          subtitle="Kategorien & Gerichte"
-          onPress={() => router.push('/menu' as any)}
-        />
-      </View>
+      {rows.map((row, index) => (
+        <View key={index} style={styles.cardsRow}>
+          {row.map((feature) => (
+            <ModeCard
+              key={feature.id}
+              emoji={feature.emoji}
+              title={feature.title}
+              subtitle={feature.subtitle}
+              onPress={() => router.push(feature.route as any)}
+              highlight={feature.highlight}
+            />
+          ))}
+        </View>
+      ))}
     </>
   );
 }

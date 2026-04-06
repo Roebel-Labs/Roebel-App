@@ -19,6 +19,7 @@ export type WizardState = {
   logoUrl: string | null;
   coverImageUrl: string | null;
   isSubmitting: boolean;
+  newAccountId: string | null;
 };
 
 type WizardAction =
@@ -28,13 +29,14 @@ type WizardAction =
   | { type: 'SET_CONTACT'; payload: { phone: string; email: string; website: string; openingHours: OpeningHours | null } }
   | { type: 'SET_PHOTOS'; payload: { logoUrl: string | null; coverImageUrl: string | null } }
   | { type: 'SET_SUBMITTING'; payload: boolean }
+  | { type: 'SET_NEW_ACCOUNT_ID'; payload: string }
   | { type: 'RESET' };
 
 const initialState: WizardState = {
   orgType: null, name: '', description: '', category: null,
   address: '', latitude: null, longitude: null, formattedAddress: null,
   phone: '', email: '', website: '', openingHours: null,
-  logoUrl: null, coverImageUrl: null, isSubmitting: false,
+  logoUrl: null, coverImageUrl: null, isSubmitting: false, newAccountId: null,
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -45,6 +47,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case 'SET_CONTACT': return { ...state, ...action.payload };
     case 'SET_PHOTOS': return { ...state, ...action.payload };
     case 'SET_SUBMITTING': return { ...state, isSubmitting: action.payload };
+    case 'SET_NEW_ACCOUNT_ID': return { ...state, newAccountId: action.payload };
     case 'RESET': return initialState;
     default: return state;
   }

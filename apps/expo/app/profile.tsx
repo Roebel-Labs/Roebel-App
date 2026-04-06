@@ -40,7 +40,7 @@ export default function ProfileScreen() {
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
   const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
-  const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal') || !!businessRecord;
+  const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
   const userBusiness = businessRecord;
   const isExtendedMode = tier !== 'guest';
   const { colors } = useTheme();
@@ -97,7 +97,7 @@ const handleRefresh = async () => {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
-  const orgAccount = ownedAccounts.find(a => a.account_type !== 'personal');
+  const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
 
   return (
@@ -370,10 +370,12 @@ const handleRefresh = async () => {
 
             {ownedAccounts.map((acc) => {
               const isActive = activeAccount?.id === acc.id;
-              const emoji = acc.account_type === 'personal' ? '👤' : acc.account_type === 'verein' ? '🤝' : acc.account_type === 'partei' ? '🏛️' : acc.account_type === 'fraktion' ? '⚖️' : '🏢';
-              const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : acc.account_type === 'unternehmen' ? 'Unternehmen' : acc.account_type === 'verein' ? 'Verein' : acc.account_type === 'partei' ? 'Partei' : 'Fraktion';
+              const SUB_TYPE_EMOJI: Record<string, string> = { restaurant: '🍽️', unternehmen: '🏢', verein: '🤝', partei: '🏛️', fraktion: '⚖️' };
+              const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
+              const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
+              const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
               const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.cover_url || acc.avatar_url);
-              const accIsPending = acc.account_type !== 'personal' && !acc.is_verified;
+              const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
 
               return (
                 <Pressable

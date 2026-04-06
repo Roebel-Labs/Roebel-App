@@ -48,13 +48,13 @@ export default function ProfileContent() {
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
   const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
-  const isBusinessOwner = ownedAccounts.some(a => a.account_type !== 'personal') || !!businessRecord;
+  const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
   const userBusiness = businessRecord;
   const isExtendedMode = tier !== 'guest';
-  const accountMode = activeAccount?.account_type !== 'personal' && activeAccount !== null ? 'business' : 'personal';
+  const accountMode = activeAccount?.account_type === 'organisation' ? 'business' : 'personal';
   const setAccountMode = (mode: string) => {
     if (mode === 'business') {
-      const orgAcc = ownedAccounts.find(a => a.account_type !== 'personal');
+      const orgAcc = ownedAccounts.find(a => a.account_type === 'organisation');
       if (orgAcc) switchAccount(orgAcc.id);
     } else {
       const personalAcc = ownedAccounts.find(a => a.account_type === 'personal');
@@ -127,7 +127,7 @@ export default function ProfileContent() {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
-  const orgAccount = ownedAccounts.find(a => a.account_type !== 'personal');
+  const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showAccountSwitcher = !!orgAccount || (isBusinessOwner && userBusiness?.status === 'approved');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
 

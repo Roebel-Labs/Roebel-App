@@ -306,12 +306,15 @@ export type NotificationLogEntry = {
 export type UserTier = 'guest' | 'tourist' | 'citizen';
 
 // Account types
-export type AccountType = 'personal' | 'unternehmen' | 'verein' | 'partei' | 'fraktion';
-export type OrgType = Exclude<AccountType, 'personal'>;
+export type AccountType = 'personal' | 'organisation';
+export type OrgSubType = 'restaurant' | 'unternehmen' | 'verein' | 'partei' | 'fraktion';
+/** @deprecated Use OrgSubType instead */
+export type OrgType = OrgSubType;
 
 export type Account = {
   id: string;
   account_type: AccountType;
+  sub_type: OrgSubType | null;
   name: string;
   bio: string | null;
   avatar_url: string | null;
@@ -420,6 +423,7 @@ export type MarketplaceListingType = 'product' | 'service';
 export type MarketplaceListingRecord = {
   id: string;
   seller_wallet_address: string;
+  account_id: string | null;
   title: string;
   description: string | null;
   price: number;

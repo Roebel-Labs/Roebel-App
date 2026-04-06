@@ -4,10 +4,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
+import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
+import { useAccount } from '@/context/AccountContext';
 
 export default function CreateOrgSuccessScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { state } = useCreateOrgWizard();
+  const { switchAccount } = useAccount();
+
+  const handleGoToProfile = async () => {
+    if (state.newAccountId) {
+      await switchAccount(state.newAccountId);
+    }
+    router.replace('/profile');
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -25,10 +36,10 @@ export default function CreateOrgSuccessScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.replace('/profile')}
+          onPress={handleGoToProfile}
           style={[styles.button, { backgroundColor: colors.primary }]}
         >
-          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zurück zum Profil</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zum Profil</Text>
         </Pressable>
       </View>
     </SafeAreaView>

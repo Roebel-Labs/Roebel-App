@@ -9,7 +9,7 @@ import {
   inviteOwner as inviteOwnerDB,
   removeOwner as removeOwnerDB,
 } from '@/lib/supabase-accounts';
-import type { Account, OrgType } from '@/lib/types';
+import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
 
@@ -17,7 +17,7 @@ interface AccountContextValue {
   activeAccount: Account | null;
   ownedAccounts: Account[];
   switchAccount: (accountId: string) => Promise<void>;
-  createOrgAccount: (type: OrgType, name: string) => Promise<Account>;
+  createOrgAccount: (subType: OrgSubType, name: string) => Promise<Account>;
   inviteCitizen: (accountId: string, walletAddress: string) => Promise<void>;
   removeCitizen: (accountId: string, walletAddress: string) => Promise<void>;
   isOwnerOf: (accountId: string | null) => boolean;
@@ -56,7 +56,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Fallback: try fetching directly (might be an account not yet in local list)
           const fetched = await fetchAccountById(user.active_account_id);
-          setActiveAccount(fetched || accounts.find((a) => a.account_type === 'personal') || null);
+          setActiveAccount(fetched || accounts.find((a: Account) => a.account_type === 'personal') || null);
         }
       } else {
         // Default to personal account
@@ -101,10 +101,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createOrgAccount = useCallback(
-    async (type: OrgType, name: string): Promise<Account> => {
+    async (subType: OrgSubType, name: string): Promise<Account> => {
       if (!walletAddress) throw new Error('No wallet connected');
 
-      const account = await createOrgAccountDB(walletAddress, type, name);
+      const account = await createOrgAccountDB(walletAddress, subType, name);
       if (!account) throw new Error('Failed to create organization');
 
       setOwnedAccounts((prev) => [...prev, account]);
