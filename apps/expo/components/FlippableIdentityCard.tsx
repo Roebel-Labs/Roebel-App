@@ -4,9 +4,9 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  interpolate,
   Easing,
 } from 'react-native-reanimated';
+import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
@@ -26,6 +26,7 @@ interface FlippableIdentityCardProps {
   votingStreak?: number;
   isPending?: boolean;
   businessName?: string;
+  verificationRequestId?: number | null;
 }
 
 type CardMode = 'tourist' | 'citizen' | 'org';
@@ -53,6 +54,7 @@ export default function FlippableIdentityCard({
   votingStreak = 0,
   isPending,
   businessName,
+  verificationRequestId,
 }: FlippableIdentityCardProps) {
   const { colors, isDark } = useTheme();
   const { tier } = useUser();
@@ -228,8 +230,17 @@ export default function FlippableIdentityCard({
               )}
             </View>
 
-            <View style={[styles.qrPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.qrText, { color: colors.textTertiary }]}>QR</Text>
+            <View style={[styles.qrPlaceholder, { backgroundColor: verificationRequestId ? '#FFFFFF' : colors.surfaceSecondary }]}>
+              {verificationRequestId ? (
+                <QRCode
+                  value={`roebel://verification/request/${verificationRequestId}?type=citizen`}
+                  size={56}
+                  backgroundColor="white"
+                  color="black"
+                />
+              ) : (
+                <Text style={[styles.qrText, { color: colors.textTertiary }]}>QR</Text>
+              )}
             </View>
           </View>
         </View>

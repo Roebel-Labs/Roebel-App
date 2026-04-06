@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
-  const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, refresh } = useVerificationContext();
+  const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
   const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
@@ -97,6 +97,7 @@ const handleRefresh = async () => {
   };
 
   const displayName = user?.username || shortenAddress(account?.address);
+  const citizenRequest = userRequests.find((r: any) => r.contract_type === 'citizen') || null;
   const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
 
@@ -210,6 +211,7 @@ const handleRefresh = async () => {
               votingStreak={user?.voting_streak || 0}
               isPending={isBusinessOwner && userBusiness?.status === 'pending'}
               businessName={userBusiness?.name}
+              verificationRequestId={citizenRequest?.id}
             />
 
             {/* Mode-specific action cards */}
