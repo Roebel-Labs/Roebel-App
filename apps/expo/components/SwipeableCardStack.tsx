@@ -347,7 +347,7 @@ function SwiperSlide({
               </Text>
 
               <Pressable
-                style={[styles.moreButton, { backgroundColor: colors.surface }]}
+                style={[styles.moreButton, { backgroundColor: colors.surfaceSecondary }]}
                 onPress={(e) => {
                   e.stopPropagation();
                   router.push({

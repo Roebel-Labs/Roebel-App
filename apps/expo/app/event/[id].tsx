@@ -315,8 +315,8 @@ export default function EventDetails() {
             </View>
 
             <View style={styles.infoCards}>
-              <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
+              <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                   <CalendarIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
                 <View style={styles.infoContent}>
@@ -342,12 +342,12 @@ export default function EventDetails() {
               <Pressable
                 style={({ pressed }) => [
                   styles.infoCard,
-                  { backgroundColor: colors.surface },
+                  { backgroundColor: colors.surface, borderColor: colors.border },
                   pressed && [styles.infoCardPressed, { backgroundColor: colors.cardPlaceholder }]
                 ]}
                 onPress={() => router.push(`/location?selectedEventId=${event.id}`)}
               >
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                   <LocationIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
                 <View style={styles.infoContent}>
@@ -361,8 +361,8 @@ export default function EventDetails() {
                 </View>
               </Pressable>
 
-              <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
+              <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                   <TicketIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
                 <View style={styles.infoContent}>
@@ -385,9 +385,9 @@ export default function EventDetails() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstalter</Text>
-              <View style={[styles.organizerCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.organizerHeader}>
-                  <View style={[styles.organizerIcon, { backgroundColor: colors.background }]}>
+                  <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
                     <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                   </View>
                   <Text style={[styles.organizerName, { color: colors.textPrimary }]}>{event.organizer_name}</Text>
@@ -670,6 +670,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     alignItems: 'center',
+    borderWidth: 1,
   },
   infoCardPressed: {
     opacity: 0.8,
@@ -730,6 +731,7 @@ const styles = StyleSheet.create({
   organizerCard: {
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
   },
   organizerHeader: {
     flexDirection: 'row',

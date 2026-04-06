@@ -32,7 +32,7 @@ export default function ExperienceItem({ experience, isOwner, onDelete }: Props)
   const imageUrls = experience.media_urls?.filter(Boolean) ?? [];
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface }]}>
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Emoji banner */}
       {experience.emoji && (
         <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
@@ -105,6 +105,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   emojiBanner: {
     alignItems: 'center',
