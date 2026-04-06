@@ -107,12 +107,12 @@ export default function FlippableIdentityCard({
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: isDark ? 0.4 : 0.10,
-      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.12,
+      shadowRadius: 12,
     },
     android: {
-      elevation: 6,
+      elevation: 4,
     },
   });
 

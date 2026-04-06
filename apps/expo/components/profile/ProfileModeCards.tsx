@@ -18,21 +18,23 @@ interface ModeCardProps {
 function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps) {
   const { colors, isDark } = useTheme();
 
+  const cardShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.12,
+      shadowRadius: 12,
+    },
+    android: { elevation: 4 },
+  });
+
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.card,
         { backgroundColor: colors.surface },
-        Platform.select({
-          ios: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 6,
-          },
-          android: { elevation: 3 },
-        }),
+        cardShadow,
         highlight && { borderColor: colors.primary, borderWidth: 2 },
       ]}
     >
@@ -61,11 +63,11 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
         Platform.select({
           ios: {
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: isDark ? 0.35 : 0.08,
-            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: isDark ? 0.4 : 0.12,
+            shadowRadius: 12,
           },
-          android: { elevation: 3 },
+          android: { elevation: 4 },
         }),
       ]}
     >
@@ -184,7 +186,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     marginTop: 16,
-    marginBottom: 12,
+    marginBottom: 24,
     gap: 12,
   },
   cardsRow: {
