@@ -1,3 +1,6 @@
+// Uses cookies() via getBusinessLandingStats — cannot be statically rendered
+export const dynamic = "force-dynamic";
+
 import { EventsHeader } from "@/components/events/events-header"
 import { BusinessLandingHero } from "@/components/business/landing/BusinessLandingHero"
 import { BusinessLandingBenefits } from "@/components/business/landing/BusinessLandingBenefits"

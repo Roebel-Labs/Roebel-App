@@ -1,8 +1,14 @@
-import { EventSubmissionForm } from "@/components/events/event-submission-form"
+import dynamic from "next/dynamic"
 import { EventsHeader } from "@/components/events/events-header"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
+
+// EventSubmissionForm uses useAccount() which requires AccountProvider (only in /app/app layout)
+const EventSubmissionForm = dynamic(
+  () => import("@/components/events/event-submission-form").then(m => m.EventSubmissionForm),
+  { ssr: false }
+)
 
 export default function SubmitEventPage() {
   return (
