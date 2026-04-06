@@ -64,8 +64,8 @@ export default function FlippableIdentityCard({
   const [isFlipped, setIsFlipped] = useState(false);
 
   const handleFlip = () => {
-    // Always rotate forward: 0→180, 180→360 (same direction)
-    const newValue = rotation.value + 180;
+    // Always rotate in negative direction (right-to-left)
+    const newValue = rotation.value - 180;
     rotation.value = withTiming(newValue, {
       duration: 500,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
