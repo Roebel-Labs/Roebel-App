@@ -13,6 +13,12 @@
     "dev:expo": "turbo dev --filter=@roebel/expo",
     "build:web": "turbo build --filter=@roebel/web"
   },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19.1.0",
+      "@types/react-dom": "^19.1.0"
+    }
+  },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",
     "prettier": "^3.5.0",
