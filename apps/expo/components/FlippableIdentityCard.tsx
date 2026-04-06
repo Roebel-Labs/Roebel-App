@@ -117,9 +117,9 @@ export default function FlippableIdentityCard({
   });
 
   return (
-    <Pressable onPress={handleFlip} style={styles.cardContainer}>
+    <Pressable onPress={handleFlip} style={[styles.cardContainer, cardShadow]}>
       {/* FRONT */}
-      <Animated.View style={[styles.card, frontStyle, { backgroundColor: cardBg }, cardShadow]}>
+      <Animated.View style={[styles.card, frontStyle, { backgroundColor: cardBg }]}>
         {/* Flip hint on front */}
         <Text style={styles.flipHint}>↻</Text>
 
@@ -179,7 +179,7 @@ export default function FlippableIdentityCard({
       </Animated.View>
 
       {/* BACK */}
-      <Animated.View style={[styles.card, styles.cardBack, backStyle, { backgroundColor: cardBg }, cardShadow]}>
+      <Animated.View style={[styles.card, styles.cardBack, backStyle, { backgroundColor: cardBg }]}>
         <Text style={styles.flipHint}>↻</Text>
 
         <View style={styles.backContent}>
