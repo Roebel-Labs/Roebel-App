@@ -26,6 +26,8 @@ interface FlippableIdentityCardProps {
   votingStreak?: number;
   isPending?: boolean;
   businessName?: string;
+  businessLogoUrl?: string | null;
+  businessCoverUrl?: string | null;
 }
 
 type CardMode = 'tourist' | 'citizen' | 'org';
@@ -53,6 +55,8 @@ export default function FlippableIdentityCard({
   votingStreak = 0,
   isPending,
   businessName,
+  businessLogoUrl,
+  businessCoverUrl,
 }: FlippableIdentityCardProps) {
   const { colors, isDark } = useTheme();
   const { tier } = useUser();
@@ -99,8 +103,12 @@ export default function FlippableIdentityCard({
       ? 'Röbeler Bürger'
       : 'Besucher';
 
-  const avatarUrl = isOrg ? activeAccount?.avatar_url : user?.profile_picture_url;
-  const coverUrl = isOrg ? activeAccount?.cover_url : null;
+  const avatarUrl = isOrg
+    ? (activeAccount?.avatar_url || businessLogoUrl)
+    : user?.profile_picture_url;
+  const coverUrl = isOrg
+    ? (activeAccount?.cover_url || businessCoverUrl)
+    : null;
 
   const cardBg = isDark ? colors.surface : '#FFFFFF';
 

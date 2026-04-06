@@ -155,6 +155,8 @@ export default function ProfileContent() {
           votingStreak={user?.voting_streak || 0}
           badges={[]}
           businessName={userBusiness?.name}
+          businessLogoUrl={userBusiness?.logo_url}
+          businessCoverUrl={userBusiness?.cover_image_url}
         />
 
         <ProfileModeCards />

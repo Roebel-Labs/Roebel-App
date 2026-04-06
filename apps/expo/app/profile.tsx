@@ -374,7 +374,7 @@ const handleRefresh = async () => {
               const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
               const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
               const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
-              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.cover_url || acc.avatar_url);
+              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url || userBusiness?.logo_url || userBusiness?.cover_image_url);
               const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
 
               return (
@@ -407,6 +407,17 @@ const handleRefresh = async () => {
                 </Pressable>
               );
             })}
+
+            <View style={[accountSheetStyles.divider, { backgroundColor: colors.border }]} />
+            <Pressable
+              onPress={() => {
+                setShowAccountSheet(false);
+                if (wallet) disconnect(wallet);
+              }}
+              style={accountSheetStyles.logoutButton}
+            >
+              <Text style={accountSheetStyles.logoutText}>Ausloggen</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -577,5 +588,20 @@ const accountSheetStyles = StyleSheet.create({
   checkmark: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
+  },
+  divider: {
+    height: 1,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  logoutButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  logoutText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#EF4444',
   },
 });
