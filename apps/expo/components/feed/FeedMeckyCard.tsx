@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -7,6 +7,7 @@ import PostAuthorRow from './PostAuthorRow';
 import PostImageGrid from './PostImageGrid';
 import PostLinkPreview from './PostLinkPreview';
 import PostActions from './PostActions';
+import ImageZoomModal from '@/components/ImageZoomModal';
 
 const MECKY_AVATAR = require('@/assets/images/icon.png');
 
@@ -31,6 +32,7 @@ export default function FeedMeckyCard({
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const handlePress = () => {
     router.push(`/post/${post.id}` as any);
@@ -65,7 +67,9 @@ export default function FeedMeckyCard({
 
       <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
 
-      {mediaUrls.length > 0 && <PostImageGrid imageUrls={mediaUrls} />}
+      {mediaUrls.length > 0 && (
+        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+      )}
 
       {firstLink && <PostLinkPreview link={firstLink} />}
 
@@ -77,6 +81,12 @@ export default function FeedMeckyCard({
         onComment={handleComment}
         onShare={onShare}
         onMore={onMore}
+      />
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl || ''}
+        onClose={() => setZoomImageUrl(null)}
       />
     </Pressable>
   );

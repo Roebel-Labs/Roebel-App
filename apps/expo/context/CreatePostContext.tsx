@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
+import { uploadMediaFile } from '@/lib/upload-media';
 import type { PostCategory, FeedType, PostType } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 
@@ -64,35 +64,6 @@ const initialState: CreatePostState = {
   linkedMarketplaceData: null,
 };
 
-async function uploadFile(
-  uri: string,
-  walletAddress: string,
-  type: 'image' | 'video'
-): Promise<string | null> {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const ext = type === 'video' ? 'mp4' : 'jpg';
-    const fileName = `post-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const filePath = `posts/${walletAddress}/${fileName}`;
-
-    const { error } = await supabase.storage.from('post-media').upload(filePath, blob, {
-      contentType: type === 'video' ? 'video/mp4' : 'image/jpeg',
-    });
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data } = supabase.storage.from('post-media').getPublicUrl(filePath);
-    return data.publicUrl;
-  } catch (err) {
-    console.error('Upload failed:', err);
-    return null;
-  }
-}
-
 export function CreatePostProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<CreatePostState>(initialState);
 
@@ -125,7 +96,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
 
     const newUrls: string[] = [];
     for (const asset of result.assets) {
-      const url = await uploadFile(asset.uri, walletAddress, 'image');
+      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'posts', asset.mimeType || undefined);
       if (url) newUrls.push(url);
     }
 
@@ -154,7 +125,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
 
     setState((prev) => ({ ...prev, isUploading: true }));
 
-    const url = await uploadFile(result.assets[0].uri, walletAddress, 'video');
+    const url = await uploadMediaFile(result.assets[0].uri, walletAddress, 'video', 'posts', result.assets[0].mimeType || undefined);
 
     setState((prev) => ({
       ...prev,

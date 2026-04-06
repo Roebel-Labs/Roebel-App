@@ -1,6 +1,6 @@
 import { eventSchemaBase } from "@/lib/schemas/event-schema"
 import { z } from "zod"
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { compressImageForVisionAPI } from './image-compression'
 
 /**

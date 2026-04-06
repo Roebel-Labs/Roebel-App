@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -10,6 +10,7 @@ import PostPollView from './PostPollView';
 import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import PostActions from './PostActions';
+import ImageZoomModal from '@/components/ImageZoomModal';
 
 type Props = {
   post: PostRecord;
@@ -32,6 +33,7 @@ export default function FeedPostCard({
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const handlePress = () => {
     router.push(`/post/${post.id}` as any);
@@ -70,7 +72,7 @@ export default function FeedPostCard({
       )}
 
       {mediaUrls.length > 0 && (
-        <PostImageGrid imageUrls={mediaUrls} />
+        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
       )}
 
       {firstLink && <PostLinkPreview link={firstLink} />}
@@ -87,6 +89,12 @@ export default function FeedPostCard({
         onComment={handleComment}
         onShare={onShare}
         onMore={onMore}
+      />
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl || ''}
+        onClose={() => setZoomImageUrl(null)}
       />
     </Pressable>
   );

@@ -4,6 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import ImageZoomModal from '@/components/ImageZoomModal';
 import type { EventExperience } from '@/lib/types/feed';
 
 type Props = {
@@ -15,6 +16,7 @@ type Props = {
 export default function ExperienceItem({ experience, isOwner, onDelete }: Props) {
   const { colors } = useTheme();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const handleDelete = () => {
     Alert.alert('Erlebnis löschen', 'Möchtest du dieses Erlebnis wirklich löschen?', [
@@ -75,8 +77,14 @@ export default function ExperienceItem({ experience, isOwner, onDelete }: Props)
 
         {/* Images — same grid as feed posts */}
         {imageUrls.length > 0 && (
-          <PostImageGrid imageUrls={imageUrls} />
+          <PostImageGrid imageUrls={imageUrls} onPress={(i) => setZoomImageUrl(imageUrls[i])} />
         )}
+
+        <ImageZoomModal
+          visible={!!zoomImageUrl}
+          imageUrl={zoomImageUrl || ''}
+          onClose={() => setZoomImageUrl(null)}
+        />
 
         {/* Video */}
         {experience.video_url && (

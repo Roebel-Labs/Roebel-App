@@ -28,6 +28,7 @@ import {
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
 import PostPollView from '@/components/feed/PostPollView';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
@@ -66,6 +67,7 @@ export default function PostDetailScreen() {
   const [editingComment, setEditingComment] = useState<PostCommentRecord | null>(null);
   const [deletingComment, setDeletingComment] = useState<PostCommentRecord | null>(null);
   const [deleteCommentConfirmVisible, setDeleteCommentConfirmVisible] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
@@ -275,7 +277,9 @@ export default function PostDetailScreen() {
       {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
       {post.linked_marketplace && <PostLinkedMarketplaceCard listing={post.linked_marketplace} />}
 
-      {mediaUrls.length > 0 && <PostImageGrid imageUrls={mediaUrls} />}
+      {mediaUrls.length > 0 && (
+        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+      )}
 
       {firstLink && <PostLinkPreview link={firstLink} />}
 
@@ -432,6 +436,12 @@ export default function PostDetailScreen() {
           onPostUpdated={handlePostUpdated}
         />
       )}
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl || ''}
+        onClose={() => setZoomImageUrl(null)}
+      />
     </SafeAreaView>
   );
 }

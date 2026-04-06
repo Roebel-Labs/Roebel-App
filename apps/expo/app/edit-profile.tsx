@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Activi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';

@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
+import ImageZoomModal from '@/components/ImageZoomModal';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Props) {
   const { colors } = useTheme();
   const [showActions, setShowActions] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const displayName = comment.author?.username || 'Unbekannt';
   const avatarUri = comment.author?.profile_picture_url;
@@ -72,16 +74,23 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
         {comment.media_urls && comment.media_urls.length > 0 && (
           <View style={styles.imageRow}>
             {comment.media_urls.map((url, i) => (
-              <Image
-                key={i}
-                source={{ uri: url }}
-                style={styles.commentImage}
-                contentFit="cover"
-                accessibilityIgnoresInvertColors
-              />
+              <Pressable key={i} onPress={() => setZoomImageUrl(url)}>
+                <Image
+                  source={{ uri: url }}
+                  style={styles.commentImage}
+                  contentFit="cover"
+                  accessibilityIgnoresInvertColors
+                />
+              </Pressable>
             ))}
           </View>
         )}
+
+        <ImageZoomModal
+          visible={!!zoomImageUrl}
+          imageUrl={zoomImageUrl || ''}
+          onClose={() => setZoomImageUrl(null)}
+        />
       </View>
     </View>
   );

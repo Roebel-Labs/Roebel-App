@@ -22,10 +22,15 @@ export async function uploadMediaFile(
     const response = await fetch(uri);
     const blob = await response.blob();
 
+    if (blob.size === 0) {
+      console.error('[upload-media] Blob is empty for URI:', uri);
+      return null;
+    }
+
     const fileExtension = uri.split('.').pop()?.toLowerCase() || (type === 'video' ? 'mp4' : 'jpg');
     const fileName = `${folder}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExtension}`;
-    const filePath = `${folder}/${walletAddress}/${fileName}`;
-    const contentType = mimeType || (type === 'video' ? 'video/mp4' : 'image/jpeg');
+    const filePath = `${folder}/${walletAddress || 'anonymous'}/${fileName}`;
+    const contentType = mimeType || blob.type || (type === 'video' ? 'video/mp4' : 'image/jpeg');
 
     const { error } = await supabase.storage.from('images').upload(filePath, blob, {
       contentType,
@@ -34,14 +39,14 @@ export async function uploadMediaFile(
     });
 
     if (error) {
-      console.error('Upload error:', error);
+      console.error('[upload-media] Upload error:', error);
       return null;
     }
 
     const { data } = supabase.storage.from('images').getPublicUrl(filePath);
     return data.publicUrl;
   } catch (err) {
-    console.error('Upload failed:', err);
+    console.error('[upload-media] Upload failed:', err);
     return null;
   }
 }
