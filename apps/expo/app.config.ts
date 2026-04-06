@@ -107,7 +107,7 @@ const config: ExpoConfig = {
   ],
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
-    googleServicesFile: './keys/GoogleService-Info.plist',
+    googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
     buildNumber: '22',
     supportsTablet: true,
     associatedDomains: [
@@ -123,7 +123,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.maxbrych.roebelonchain',
-    googleServicesFile: './keys/google-services.json',
+    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
     versionCode: 30,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
