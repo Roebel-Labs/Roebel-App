@@ -29,12 +29,6 @@
       "ios": {
         "simulator": false
       },
-      "env": {
-        "EXPO_PUBLIC_THIRDWEB_CLIENT_ID": "your_thirdweb_client_id",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "your_google_maps_api_key",
-        "EXPO_PUBLIC_ANTHROPIC_API_KEY": "your_anthropic_api_key",
-        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "your_mapbox_access_token"
-      }
     },
     "production": {
       "channel": "production",
@@ -44,14 +38,6 @@
       "ios": {
         "autoIncrement": true,
         "simulator": false
-      },
-      "env": {
-        "NODE_ENV": "production",
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EXPO_PUBLIC_THIRDWEB_CLIENT_ID": "your_thirdweb_client_id",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "your_google_maps_api_key",
-        "EXPO_PUBLIC_ANTHROPIC_API_KEY": "your_anthropic_api_key",
-        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "your_mapbox_access_token"
       }
     }
   },
