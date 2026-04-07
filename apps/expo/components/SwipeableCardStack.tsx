@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -70,10 +70,17 @@ export default function SwipeableCardStack({
     transform: [{ translateY: containerTranslateY.value }],
   }));
 
+  const prevActiveIndexRef = useRef(activeIndex);
+
   const slideNext = () => {
     setActiveIndex((prev) => (prev + 1) % events.length);
-    progress.value = withTiming(0, { duration: 1 });
   };
+
+  // Reset progress in the render body so it syncs with slideIndex prop updates
+  if (prevActiveIndexRef.current !== activeIndex) {
+    progress.value = 0;
+    prevActiveIndexRef.current = activeIndex;
+  }
 
   if (events.length === 0) return null;
 
@@ -141,6 +148,10 @@ function SwiperSlide({
   const translateY = useSharedValue(0);
   const isSwipedOut = useSharedValue(false);
 
+  // Sync slideIndex to a shared value so the worklet reacts immediately
+  const slideIndexSV = useSharedValue(slideIndex);
+  slideIndexSV.value = slideIndex;
+
   // Derive day name from event date
   const dayName = event.date
     ? format(parseISO(event.date), 'EEEE', { locale: de })
@@ -203,6 +214,8 @@ function SwiperSlide({
     });
 
   const animatedStyle = useAnimatedStyle(() => {
+    const si = slideIndexSV.value;
+
     if (isSwipedOut.value) {
       return {
         transform: [
@@ -215,7 +228,7 @@ function SwiperSlide({
       };
     }
 
-    if (slideIndex === 0) {
+    if (si === 0) {
       const rotate = (translateX.value / CARD_WIDTH) * 20;
       const swipeDistance = Math.sqrt(translateX.value ** 2 + translateY.value ** 2);
       const scale = interpolate(swipeDistance, [0, 200], [1, 0.8], 'clamp');
@@ -230,10 +243,10 @@ function SwiperSlide({
         zIndex: 10,
         opacity: 1,
       };
-    } else if (slideIndex === 1) {
-      const offsetY = slideIndex * SLIDE_OFFSET_Y;
+    } else if (si === 1) {
+      const offsetY = si * SLIDE_OFFSET_Y;
       const offsetX = -SLIDE_OFFSET_X;
-      const rotateOffset = -slideIndex * ROTATE_SLIDE_OFFSET;
+      const rotateOffset = -si * ROTATE_SLIDE_OFFSET;
 
       const currentOffsetY = interpolate(progress.value, [0, 1], [-offsetY, 0]);
       const currentOffsetX = interpolate(progress.value, [0, 1], [offsetX, 0]);
@@ -251,9 +264,9 @@ function SwiperSlide({
         opacity: 1,
       };
     } else {
-      const offsetY = slideIndex * SLIDE_OFFSET_Y;
+      const offsetY = si * SLIDE_OFFSET_Y;
       const offsetX = SLIDE_OFFSET_X;
-      const rotateOffset = slideIndex * ROTATE_SLIDE_OFFSET;
+      const rotateOffset = si * ROTATE_SLIDE_OFFSET;
 
       const currentOffsetY = interpolate(progress.value, [0, 1], [-offsetY, -SLIDE_OFFSET_Y]);
       const currentOffsetX = interpolate(progress.value, [0, 1], [offsetX, -SLIDE_OFFSET_X]);
