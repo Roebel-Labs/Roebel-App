@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { supabase } from '@/lib/supabase';
 import { fetchRestaurantTables, createRestaurantTable, deleteRestaurantTable } from '@/lib/supabase-orders';
+import { createRestaurant } from '@/lib/supabase-restaurants';
 import type { RestaurantTable } from '@/lib/types/orders';
 import TableQRCode from '@/components/kitchen/TableQRCode';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -22,26 +23,43 @@ export default function TableManagementScreen() {
   const [newTableNumber, setNewTableNumber] = useState('');
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRestaurant = async () => {
+    if (!activeAccount?.id) return;
+    setError(null);
+    setLoading(true);
+
+    const { data } = await supabase
+      .from('restaurants')
+      .select('id, slug')
+      .eq('account_id', activeAccount.id)
+      .maybeSingle();
+
+    if (data) {
+      setRestaurantId(data.id);
+      setRestaurantSlug(data.slug);
+      const tbl = await fetchRestaurantTables(data.id);
+      setTables(tbl);
+    } else {
+      // Auto-create restaurant record if missing
+      try {
+        const restaurant = await createRestaurant({
+          name: activeAccount.name,
+          account_id: activeAccount.id,
+        });
+        setRestaurantId(restaurant.id);
+        setRestaurantSlug(restaurant.slug);
+      } catch (e) {
+        console.error('Failed to create restaurant:', e);
+        setError('Restaurant konnte nicht eingerichtet werden.');
+      }
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    if (!activeAccount?.id) return;
-
-    async function load() {
-      const { data } = await supabase
-        .from('restaurants')
-        .select('id, slug')
-        .eq('account_id', activeAccount!.id)
-        .maybeSingle();
-
-      if (data) {
-        setRestaurantId(data.id);
-        setRestaurantSlug(data.slug);
-        const tbl = await fetchRestaurantTables(data.id);
-        setTables(tbl);
-      }
-      setLoading(false);
-    }
-    load();
+    loadRestaurant();
   }, [activeAccount?.id]);
 
   const handleAdd = async () => {
@@ -50,6 +68,8 @@ export default function TableManagementScreen() {
     if (table) {
       setTables(prev => [...prev, table]);
       setNewTableNumber('');
+    } else {
+      Alert.alert('Fehler', 'Tisch konnte nicht erstellt werden.');
     }
   };
 
@@ -72,6 +92,20 @@ export default function TableManagementScreen() {
     return (
       <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{error}</Text>
+        <Pressable
+          onPress={loadRestaurant}
+          style={[styles.addBtn, { backgroundColor: colors.primary, marginTop: 16, paddingVertical: 12 }]}
+        >
+          <Text style={[styles.addBtnText, { color: colors.onPrimary }]}>Erneut versuchen</Text>
+        </Pressable>
       </SafeAreaView>
     );
   }
