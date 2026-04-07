@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Switch, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -10,7 +10,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
-import BottomNavigation from '@/components/BottomNavigation';
+import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
@@ -24,12 +24,11 @@ import SentIcon from '@/assets/icons/profile/sent.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import HelpCircleIcon from '@/assets/icons/profile/help-circle.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
-import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import MailIcon from '@/assets/icons/mail.svg';
 import SettingsIcon from '@/assets/icons/profile/settings.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
-import WalletIcon from '@/assets/icons/profile/wallet.svg';
+import QrCodeIcon from '@/assets/icons/qr-code.svg';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -42,7 +41,6 @@ export default function ProfileScreen() {
   const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
   const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
   const userBusiness = businessRecord;
-  const isExtendedMode = tier !== 'guest';
   const { colors } = useTheme();
 
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
@@ -146,19 +144,6 @@ const handleRefresh = async () => {
 
             {/* Menu Items */}
             <View style={styles.menuSection}>
-              {isExtendedMode && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Design System"
-                      onPress={() => router.push('/design-system' as any)}
-                    />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
-
               <View style={styles.menuGroup}>
                 <ProfileMenuItem
                   icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
@@ -250,48 +235,6 @@ const handleRefresh = async () => {
                 />
               )}
 
-              {/* Verification Menu Group - Only show for verified users */}
-              {hasAnyNFT && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<QrCodeIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="QR-Code scannen"
-                      onPress={() => router.push('/verification/scan' as any)}
-                    />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
-
-              {/* Wallet */}
-              {isConnected && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<WalletIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Wallet"
-                      onPress={() => router.push('/wallet' as any)}
-                    />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
-
-              {/* Design System - only in extended mode */}
-              {isExtendedMode && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Design System"
-                      onPress={() => router.push('/design-system' as any)}
-                    />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
-
               {/* Regular Menu Items */}
               <View style={styles.menuGroup}>
                 <ProfileMenuItem
@@ -329,22 +272,19 @@ const handleRefresh = async () => {
           </View>
         )}
 
-        {/* Extended Mode Toggle - hidden unless already enabled or 5-tap easter egg */}
-        {isExtendedMode && (
-          <View style={styles.extendedModeSection}>
-            <View style={[styles.extendedModeDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.extendedModeRow}>
-              <Text style={[styles.extendedModeLabel, { color: colors.textSecondary }]}>Erweiterte Version</Text>
-              <Switch
-                value={isExtendedMode}
-                onValueChange={() => {}}
-                trackColor={{ false: colors.switchTrackOff, true: colors.primary }}
-                thumbColor="#ffffff"
-              />
-            </View>
-          </View>
-        )}
       </ScrollView>
+
+      {/* QR Code Scanner FAB - only for verified users */}
+      {hasAnyNFT && (
+        <Pressable
+          onPress={() => router.push('/verification/scan' as any)}
+          style={[styles.qrFab, { backgroundColor: colors.primary }]}
+          accessibilityRole="button"
+          accessibilityLabel="QR-Code scannen"
+        >
+          <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
+        </Pressable>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation
@@ -492,23 +432,27 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: 16,
   },
-  extendedModeSection: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 32,
-  },
-  extendedModeDivider: {
-    height: 1,
-    marginBottom: 16,
-  },
-  extendedModeRow: {
-    flexDirection: 'row',
+  qrFab: {
+    position: 'absolute',
+    bottom: BOTTOM_NAV_HEIGHT + 40,
+    right: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  extendedModeLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    zIndex: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   switchButton: {
     flexDirection: 'row',

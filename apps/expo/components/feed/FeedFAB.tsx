@@ -49,7 +49,7 @@ export default function FeedFAB({ onPress }: Props) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: BOTTOM_NAV_HEIGHT + 16,
+    bottom: BOTTOM_NAV_HEIGHT + 40,
     right: 16,
     zIndex: 10,
   },

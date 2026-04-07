@@ -76,7 +76,7 @@ export default function MapFAB({ visible = true }: Props) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: BOTTOM_NAV_HEIGHT + 24,
+    bottom: BOTTOM_NAV_HEIGHT + 40,
     left: 0,
     right: 0,
     alignItems: 'center',
