@@ -59,6 +59,14 @@ export default function CreateScreen() {
     linkedEventLocation?: string;
     linkedEventImageUrl?: string;
     linkedEventCategory?: string;
+    linkedListingId?: string;
+    linkedListingTitle?: string;
+    linkedListingPrice?: string;
+    linkedListingPriceType?: string;
+    linkedListingCategory?: string;
+    linkedListingCondition?: string;
+    linkedListingMediaUrls?: string;
+    linkedListingNeighborhood?: string;
   }>();
   const { user } = useUser();
   const walletAddress = user?.wallet_address || '';
@@ -81,6 +89,22 @@ export default function CreateScreen() {
       });
     }
   }, [params.linkedEventId]);
+
+  useEffect(() => {
+    if (params.linkedListingId && !draft.linkedMarketplaceId) {
+      const mediaUrls = params.linkedListingMediaUrls ? JSON.parse(params.linkedListingMediaUrls) : null;
+      draft.setLinkedMarketplace(params.linkedListingId, {
+        id: params.linkedListingId,
+        title: params.linkedListingTitle || '',
+        price: parseFloat(params.linkedListingPrice || '0'),
+        price_type: (params.linkedListingPriceType as any) || 'fixed',
+        category: params.linkedListingCategory || 'sonstiges',
+        condition: (params.linkedListingCondition as any) || null,
+        media_urls: mediaUrls,
+        neighborhood: params.linkedListingNeighborhood || null,
+      });
+    }
+  }, [params.linkedListingId]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -126,7 +150,7 @@ export default function CreateScreen() {
       key: 'marketplace',
       label: 'Verkaufe oder verschenke etwas',
       icon: <MarketsIcon width={24} height={24} color={colors.textSecondary} />,
-      route: '/create/marketplace',
+      route: '/create-listing',
     },
     {
       key: 'event',

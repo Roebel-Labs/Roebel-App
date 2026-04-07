@@ -109,7 +109,7 @@ export default function BusinessDashboardScreen() {
             {userBusiness.status === 'approved' && (
               <Pressable
                 style={[styles.addButton, { backgroundColor: colors.primary }]}
-                onPress={() => router.push('/business/deals/create' as any)}
+                onPress={() => router.push('/create-deal' as any)}
               >
                 <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neues Angebot</Text>
               </Pressable>

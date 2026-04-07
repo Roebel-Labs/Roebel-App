@@ -78,7 +78,7 @@ export default function MachsInRoebelScreen() {
             emoji="💼"
             title="Freelancer werden"
             subtitle="Biete deine Dienste auf dem Marktplatz an"
-            onPress={() => router.push('/create/marketplace' as any)}
+            onPress={() => router.push('/create-listing' as any)}
             colors={colors}
           />
           <OptionCard

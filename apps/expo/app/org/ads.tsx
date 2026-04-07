@@ -86,7 +86,7 @@ export default function OrgAdsScreen() {
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Angebote & Werbung</Text>
             <Pressable
               style={[styles.addButton, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/business/deals/create' as any)}
+              onPress={() => router.push('/create-deal' as any)}
             >
               <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neue Anzeige</Text>
             </Pressable>

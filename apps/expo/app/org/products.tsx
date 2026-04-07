@@ -72,7 +72,7 @@ export default function OrgProductsScreen() {
         <View style={styles.addSection}>
           <Pressable
             style={[styles.addButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.push({ pathname: '/create/marketplace', params: { listingType: 'product', accountId: activeAccount?.id } } as any)}
+            onPress={() => router.push({ pathname: '/create-listing', params: { listingType: 'product', accountId: activeAccount?.id } } as any)}
           >
             <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neues Produkt</Text>
           </Pressable>
