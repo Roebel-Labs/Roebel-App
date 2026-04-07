@@ -4,10 +4,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
 import { formatEventCardDateSplit, formatLocation, formatTime } from '@/lib/utils';
-import { LocationSmallIcon, BookmarkIcon } from './Icons';
-import { BookmarkActiveSvg } from './AssetIcons';
-import { useBookmarks } from '@/context/BookmarksContext';
-import { useSnackbar } from '@/context/SnackbarContext';
+import { LocationSmallIcon } from './Icons';
 import { useTheme } from '@/context/ThemeContext';
 import InterestButton from './InterestButton';
 
@@ -17,31 +14,9 @@ type Props = {
 
 export default function HorizontalEventCard({ event }: Props) {
   const router = useRouter();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
-  const { showSnackbar } = useSnackbar();
   const { colors } = useTheme();
-  const bookmarked = isBookmarked(event.id);
   const time = formatTime(event.time);
   const dateDisplay = formatEventCardDateSplit(event.date);
-
-  const handleBookmarkToggle = async (e: any) => {
-    e.stopPropagation();
-    const action = await toggleBookmark(event.id);
-
-    if (action === 'added') {
-      showSnackbar({
-        message: 'Veranstaltung gespeichert',
-        actionLabel: 'Zum Profil',
-        onAction: () => router.push('/profile'),
-        duration: 4000,
-      });
-    } else {
-      showSnackbar({
-        message: 'Veranstaltung entfernt',
-        duration: 4000,
-      });
-    }
-  };
 
   return (
     <Pressable
@@ -72,25 +47,7 @@ export default function HorizontalEventCard({ event }: Props) {
           <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
             {event.title}
           </Text>
-          <Pressable
-            onPress={handleBookmarkToggle}
-            accessibilityRole="button"
-            accessibilityLabel={bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'}
-            style={({ pressed }) => [
-              styles.bookmarkBtn,
-              pressed && styles.bookmarkPressed
-            ]}
-          >
-            {bookmarked ? (
-              <BookmarkActiveSvg size={16} color={colors.primary} />
-            ) : (
-              <BookmarkIcon
-                size={16}
-                color={colors.textTertiary}
-                strokeWidth={1.5}
-              />
-            )}
-          </Pressable>
+          <InterestButton eventId={event.id} iconOnly compact />
         </View>
 
         <View style={styles.metaRow}>
@@ -104,8 +61,6 @@ export default function HorizontalEventCard({ event }: Props) {
             <Text style={[styles.timeText, { color: colors.textPrimary }]}>{time}</Text>
           )}
         </View>
-
-        <InterestButton eventId={event.id} compact />
       </View>
     </Pressable>
   );
@@ -200,12 +155,6 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
-    opacity: 0.7,
-  },
-  bookmarkBtn: {
-    padding: 2,
-  },
-  bookmarkPressed: {
     opacity: 0.7,
   },
 });

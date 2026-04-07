@@ -3,23 +3,22 @@ import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
-import { ArrowLeftIcon, LocationIcon, CalendarIcon, UserIcon, MailIcon, CallIcon, TicketIcon, BookmarkIcon, LocationSmallIcon, ShareIcon, ChevronRight } from '@/components/Icons';
-import { BookmarkActiveSvg } from '@/components/AssetIcons';
+import { ArrowLeftIcon, LocationIcon, CalendarIcon, UserIcon, MailIcon, CallIcon, TicketIcon, LocationSmallIcon, ShareIcon, ChevronRight } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { EventRecord, EventDateRecord } from '@/lib/types';
 import { currency, formatDate, formatTime, formatLocationFull, formatEventCardDateSplit, formatLocation, getNextUpcomingDate } from '@/lib/utils';
-import { useBookmarks } from '@/context/BookmarksContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { EventDetailSkeleton } from '@/components/SkeletonLoader';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
 import ImageZoomModal from '@/components/ImageZoomModal';
-import { logEventView, logBookmarkEvent, logEvent, logCalendarSave } from '@/lib/firebase';
+import { logEventView, logEvent, logCalendarSave } from '@/lib/firebase';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useTheme } from '@/context/ThemeContext';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { SvgXml } from 'react-native-svg';
 import ExperienceSection from '@/components/events/ExperienceSection';
 import InterestCTA from '@/components/InterestCTA';
+import InterestButton from '@/components/InterestButton';
 import { recordView } from '@/lib/supabase-event-views';
 import { useActiveAccount } from 'thirdweb/react';
 
@@ -42,30 +41,9 @@ export default function EventDetails() {
   const [eventDates, setEventDates] = useState<EventDateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
-  const { isBookmarked, toggleBookmark } = useBookmarks();
   const { showSnackbar } = useSnackbar();
   const activeAccount = useActiveAccount();
   const scrollRef = useRef<ScrollView>(null);
-
-  const handleBookmarkToggle = async () => {
-    if (!event) return;
-    const action = await toggleBookmark(event.id);
-    logBookmarkEvent(event.id, action === 'added' ? 'add' : 'remove');
-
-    if (action === 'added') {
-      showSnackbar({
-        message: 'Veranstaltung gespeichert',
-        actionLabel: 'Zum Profil',
-        onAction: () => router.push('/profile'),
-        duration: 4000,
-      });
-    } else {
-      showSnackbar({
-        message: 'Veranstaltung entfernt',
-        duration: 4000,
-      });
-    }
-  };
 
   const handleShare = async () => {
     if (!event) return;
@@ -247,13 +225,7 @@ export default function EventDetails() {
             <Pressable onPress={goBack} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
               <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
             </Pressable>
-            <Pressable onPress={handleBookmarkToggle} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
-              {isBookmarked(event.id) ? (
-                <BookmarkActiveSvg size={24} color={colors.tabIconActive} />
-              ) : (
-                <BookmarkIcon size={24} color={colors.textTertiary} strokeWidth={1.5} />
-              )}
-            </Pressable>
+            <View style={styles.navBtn} />
           </View>
           <YouTubeEmbed youtubeUrl={event.livestream_url} height={Dimensions.get('window').width * 9 / 16} borderRadius={0} />
         </View>
@@ -282,17 +254,6 @@ export default function EventDetails() {
             <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
           </Pressable>
 
-          <Pressable
-            onPress={handleBookmarkToggle}
-            style={[styles.bookmarkBtn, { backgroundColor: colors.background }]}
-          >
-            {isBookmarked(event.id) ? (
-              <BookmarkActiveSvg size={24} color={colors.tabIconActive} />
-            ) : (
-              <BookmarkIcon size={24} color={colors.textTertiary} strokeWidth={1.5} />
-            )}
-          </Pressable>
-
           <View style={styles.pageIndicator} />
         </View>
       )}
@@ -319,6 +280,18 @@ export default function EventDetails() {
             )}
 
             <InterestCTA eventId={id as string} />
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtonsRow}>
+              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleSaveToCalendar}>
+                <CalendarIcon size={18} color={colors.textSecondary} strokeWidth={1.5} />
+                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Zum Kalender</Text>
+              </Pressable>
+              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleShare}>
+                <ShareIcon size={18} color={colors.textSecondary} />
+                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Teilen</Text>
+              </Pressable>
+            </View>
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über die Veranstaltung</Text>
@@ -426,18 +399,6 @@ export default function EventDetails() {
               </View>
             </View>
 
-            {/* Action Buttons */}
-            <View style={styles.actionButtonsRow}>
-              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleSaveToCalendar}>
-                <CalendarIcon size={18} color={colors.textSecondary} strokeWidth={1.5} />
-                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Zum Kalender</Text>
-              </Pressable>
-              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleShare}>
-                <ShareIcon size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Teilen</Text>
-              </Pressable>
-            </View>
-
             {/* Event Experiences Section */}
             <ExperienceSection eventId={id as string} />
 
@@ -471,34 +432,12 @@ export default function EventDetails() {
   );
 }
 
-// Compact Event Card Component for horizontal list (similar to BookmarkedEvents)
+// Compact Event Card Component for horizontal list
 function CompactEventCard({ event }: { event: EventRecord }) {
   const router = useRouter();
   const { colors } = useTheme();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
-  const { showSnackbar } = useSnackbar();
-  const bookmarked = isBookmarked(event.id);
   const time = formatTime(event.time);
   const dateDisplay = formatEventCardDateSplit(event.date);
-
-  const handleBookmarkToggle = async (e: any) => {
-    e.stopPropagation();
-    const action = await toggleBookmark(event.id);
-
-    if (action === 'added') {
-      showSnackbar({
-        message: 'Veranstaltung gespeichert',
-        actionLabel: 'Zum Profil',
-        onAction: () => router.push('/profile'),
-        duration: 4000,
-      });
-    } else {
-      showSnackbar({
-        message: 'Veranstaltung entfernt',
-        duration: 4000,
-      });
-    }
-  };
 
   return (
     <Pressable
@@ -531,25 +470,7 @@ function CompactEventCard({ event }: { event: EventRecord }) {
           <Text style={[styles.compactEventTitle, { color: colors.textPrimary }]} numberOfLines={2}>
             {event.title}
           </Text>
-          <Pressable
-            onPress={handleBookmarkToggle}
-            accessibilityRole="button"
-            accessibilityLabel={bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'}
-            style={({ pressed }) => [
-              styles.compactBookmarkBtn,
-              pressed && styles.compactBookmarkPressed
-            ]}
-          >
-            {bookmarked ? (
-              <BookmarkActiveSvg size={16} color={colors.primary} />
-            ) : (
-              <BookmarkIcon
-                size={16}
-                color={colors.textTertiary}
-                strokeWidth={1.5}
-              />
-            )}
-          </Pressable>
+          <InterestButton eventId={event.id} iconOnly compact />
         </View>
 
         <View style={styles.compactMetaRow}>
@@ -595,21 +516,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     left: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  bookmarkBtn: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -905,12 +811,6 @@ const styles = StyleSheet.create({
   compactTimeText: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
-    opacity: 0.7,
-  },
-  compactBookmarkBtn: {
-    padding: 2,
-  },
-  compactBookmarkPressed: {
     opacity: 0.7,
   },
   chevronContainer: {

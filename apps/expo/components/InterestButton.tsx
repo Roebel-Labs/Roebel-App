@@ -11,11 +11,13 @@ import { InterestedUser } from '@/lib/supabase-interests';
 type InterestButtonProps = {
   eventId: string;
   compact?: boolean;
+  /** Icon-only mode: just the heart icon, no avatar stack or text. Replaces bookmark. */
+  iconOnly?: boolean;
 };
 
 const HEART_PNG = require('@/assets/icons/Heart.png');
 
-export default function InterestButton({ eventId, compact = false }: InterestButtonProps) {
+export default function InterestButton({ eventId, compact = false, iconOnly = false }: InterestButtonProps) {
   const account = useActiveAccount();
   const { colors } = useTheme();
   const { isInterested, toggleInterest, getCount, refreshCount, getInterestedUsers } = useInterest();
@@ -35,8 +37,10 @@ export default function InterestButton({ eventId, compact = false }: InterestBut
   // Fetch count + users on mount
   useEffect(() => {
     refreshCount(eventId);
-    getInterestedUsers(eventId, compact ? 2 : 3).then(setUsers);
-  }, [eventId]);
+    if (!iconOnly) {
+      getInterestedUsers(eventId, compact ? 2 : 3).then(setUsers);
+    }
+  }, [eventId, iconOnly]);
 
   const handleToggle = useCallback(async () => {
     if (!account?.address || toggling) return;
@@ -147,6 +151,60 @@ export default function InterestButton({ eventId, compact = false }: InterestBut
       : 'Du bist interessiert'
     : `${displayCount} interessiert`;
 
+  const heartButton = (
+    <Pressable
+      onPress={handleToggle}
+      disabled={!account?.address}
+      style={({ pressed }) => [
+        styles.heartBtn,
+        pressed && styles.heartBtnPressed,
+        !account?.address && styles.heartBtnDisabled,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
+    >
+      <View style={styles.heartIconWrap}>
+        {/* Outline heart */}
+        <Animated.View style={[styles.iconAbsolute, { opacity: outlineOpacity }]}>
+          <HeartIcon size={iconSize} color={colors.primary} />
+        </Animated.View>
+
+        {/* Heart.png (plop animation) */}
+        <Animated.View
+          style={[
+            styles.iconAbsolute,
+            {
+              opacity: pngOpacity,
+              transform: [
+                { scale: pngScale },
+                { rotate: rotateInterpolation },
+              ],
+            },
+          ]}
+        >
+          <Image source={HEART_PNG} style={{ width: pngSize, height: pngSize }} contentFit="contain" />
+        </Animated.View>
+
+        {/* Filled heart */}
+        <Animated.View
+          style={[
+            styles.iconAbsolute,
+            {
+              opacity: interested ? 1 : 0,
+              transform: [{ scale: filledScale }],
+            },
+          ]}
+        >
+          <HeartFilledIcon size={iconSize} />
+        </Animated.View>
+      </View>
+    </Pressable>
+  );
+
+  if (iconOnly) {
+    return heartButton;
+  }
+
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
       <View style={styles.leftSection}>
@@ -170,53 +228,7 @@ export default function InterestButton({ eventId, compact = false }: InterestBut
         </Text>
       </View>
 
-      <Pressable
-        onPress={handleToggle}
-        disabled={!account?.address}
-        style={({ pressed }) => [
-          styles.heartBtn,
-          pressed && styles.heartBtnPressed,
-          !account?.address && styles.heartBtnDisabled,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
-      >
-        <View style={styles.heartIconWrap}>
-          {/* Outline heart */}
-          <Animated.View style={[styles.iconAbsolute, { opacity: outlineOpacity }]}>
-            <HeartIcon size={iconSize} color={colors.primary} />
-          </Animated.View>
-
-          {/* Heart.png (plop animation) */}
-          <Animated.View
-            style={[
-              styles.iconAbsolute,
-              {
-                opacity: pngOpacity,
-                transform: [
-                  { scale: pngScale },
-                  { rotate: rotateInterpolation },
-                ],
-              },
-            ]}
-          >
-            <Image source={HEART_PNG} style={{ width: pngSize, height: pngSize }} contentFit="contain" />
-          </Animated.View>
-
-          {/* Filled heart */}
-          <Animated.View
-            style={[
-              styles.iconAbsolute,
-              {
-                opacity: interested ? 1 : 0,
-                transform: [{ scale: filledScale }],
-              },
-            ]}
-          >
-            <HeartFilledIcon size={iconSize} />
-          </Animated.View>
-        </View>
-      </Pressable>
+      {heartButton}
     </View>
   );
 }

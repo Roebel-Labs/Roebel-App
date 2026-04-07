@@ -2,11 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { BookmarkIcon, LocationSmallIcon, TicketSmallIcon } from './Icons';
-import { BookmarkActiveSvg } from './AssetIcons';
+import { LocationSmallIcon, TicketSmallIcon } from './Icons';
 import { EventRecord } from '@/lib/types';
-import { useBookmarks } from '@/context/BookmarksContext';
-import { useSnackbar } from '@/context/SnackbarContext';
 import { useTheme } from '@/context/ThemeContext';
 import { currency, formatDate, formatTime, formatEventCardDateSplit, formatLocation } from '@/lib/utils';
 import InterestButton from './InterestButton';
@@ -19,29 +16,7 @@ export default function EventCard({ event }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const time = formatTime(event.time);
-  const { isBookmarked, toggleBookmark } = useBookmarks();
-  const { showSnackbar } = useSnackbar();
-  const bookmarked = isBookmarked(event.id);
   const dateDisplay = formatEventCardDateSplit(event.date);
-
-  const handleBookmarkToggle = async (e: any) => {
-    e.stopPropagation();
-    const action = await toggleBookmark(event.id);
-
-    if (action === 'added') {
-      showSnackbar({
-        message: 'Veranstaltung gespeichert',
-        actionLabel: 'Zum Profil',
-        onAction: () => router.push('/profile'),
-        duration: 4000,
-      });
-    } else {
-      showSnackbar({
-        message: 'Veranstaltung entfernt',
-        duration: 4000,
-      });
-    }
-  };
 
   return (
     <Pressable
@@ -72,26 +47,7 @@ export default function EventCard({ event }: Props) {
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
-          <Pressable
-            onPress={handleBookmarkToggle}
-            accessibilityRole="button"
-            accessibilityLabel={bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'}
-            style={({ pressed }) => [
-              styles.bookmarkBtn,
-              pressed && styles.bookmarkPressed
-            ]}
-            android_ripple={{ color: '#19438320', borderless: false, radius: 20 }}
-          >
-            {bookmarked ? (
-              <BookmarkActiveSvg size={20} color={colors.primary} />
-            ) : (
-              <BookmarkIcon
-                size={20}
-                color={colors.textTertiary}
-                strokeWidth={1.5}
-              />
-            )}
-          </Pressable>
+          <InterestButton eventId={event.id} iconOnly />
         </View>
 
         <Text style={[styles.description, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -108,8 +64,6 @@ export default function EventCard({ event }: Props) {
             <Text style={[styles.location, { color: colors.textPrimary }]}>{formatLocation(event.location)}</Text>
           </View>
         </View>
-
-        <InterestButton eventId={event.id} />
       </View>
     </Pressable>
   );
@@ -208,12 +162,6 @@ const styles = StyleSheet.create({
   location: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-  },
-  bookmarkBtn: {
-    padding: 4,
-  },
-  bookmarkPressed: {
-    opacity: 0.7,
   },
   pressed: { opacity: 0.9 },
 });
