@@ -21,9 +21,9 @@ function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps)
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: 0, height: 3 },
       shadowOpacity: isDark ? 0.2 : 0.12,
-      shadowRadius: 12,
+      shadowRadius: 10,
     },
     android: { elevation: 4 },
   });
