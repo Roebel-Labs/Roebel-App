@@ -9,6 +9,7 @@ import { BookmarkActiveSvg } from './AssetIcons';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useTheme } from '@/context/ThemeContext';
+import InterestButton from './InterestButton';
 
 type Props = {
   event: EventRecord;
@@ -103,6 +104,8 @@ export default function HorizontalEventCard({ event }: Props) {
             <Text style={[styles.timeText, { color: colors.textPrimary }]}>{time}</Text>
           )}
         </View>
+
+        <InterestButton eventId={event.id} compact />
       </View>
     </Pressable>
   );

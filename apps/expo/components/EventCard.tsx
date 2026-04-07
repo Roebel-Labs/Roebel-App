@@ -9,6 +9,7 @@ import { useBookmarks } from '@/context/BookmarksContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useTheme } from '@/context/ThemeContext';
 import { currency, formatDate, formatTime, formatEventCardDateSplit, formatLocation } from '@/lib/utils';
+import InterestButton from './InterestButton';
 
 type Props = {
   event: EventRecord;
@@ -107,6 +108,8 @@ export default function EventCard({ event }: Props) {
             <Text style={[styles.location, { color: colors.textPrimary }]}>{formatLocation(event.location)}</Text>
           </View>
         </View>
+
+        <InterestButton eventId={event.id} />
       </View>
     </Pressable>
   );

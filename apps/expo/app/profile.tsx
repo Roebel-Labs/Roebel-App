@@ -29,6 +29,7 @@ import SettingsIcon from '@/assets/icons/profile/settings.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
+import { ListIcon } from '@/components/Icons';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -151,6 +152,11 @@ const handleRefresh = async () => {
                   onPress={() => router.push('/submit-event')}
                 />
                 <ProfileMenuItem
+                  icon={<ListIcon size={20} color={colors.textPrimary} />}
+                  label="Meine Veranstaltungen"
+                  onPress={() => router.push('/my-events')}
+                />
+                <ProfileMenuItem
                   icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Feedback geben"
                   onPress={() => router.push('/feedback')}
@@ -241,6 +247,11 @@ const handleRefresh = async () => {
                   icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Veranstaltung einsenden"
                   onPress={() => router.push('/submit-event')}
+                />
+                <ProfileMenuItem
+                  icon={<ListIcon size={20} color={colors.textPrimary} />}
+                  label="Meine Veranstaltungen"
+                  onPress={() => router.push('/my-events')}
                 />
                 <ProfileMenuItem
                   icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}

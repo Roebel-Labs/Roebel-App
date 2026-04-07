@@ -3,6 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BookmarksProvider } from '@/context/BookmarksContext';
+import { InterestProvider } from '@/context/InterestContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { AccountProvider } from '@/context/AccountContext';
@@ -190,6 +191,7 @@ export default function Layout() {
                     <AccountProvider>
                     <MeckyProvider>
                     <GovernanceTestProvider>
+                    <InterestProvider>
                     <BookmarksProvider>
                       <LocationProvider>
                         <SnackbarProvider>
@@ -197,6 +199,7 @@ export default function Layout() {
                         </SnackbarProvider>
                       </LocationProvider>
                     </BookmarksProvider>
+                    </InterestProvider>
                     </GovernanceTestProvider>
                     </MeckyProvider>
                     </AccountProvider>

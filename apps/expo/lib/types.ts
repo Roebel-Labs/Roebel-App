@@ -327,7 +327,7 @@ export type Account = {
 export type AccountOwner = {
   account_id: string;
   wallet_address: string;
-  role: 'owner';
+  role: 'owner' | 'admin' | 'member';
   invited_by: string | null;
   joined_at: string;
 };

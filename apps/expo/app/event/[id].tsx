@@ -19,6 +19,9 @@ import { useTheme } from '@/context/ThemeContext';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { SvgXml } from 'react-native-svg';
 import ExperienceSection from '@/components/events/ExperienceSection';
+import InterestCTA from '@/components/InterestCTA';
+import { recordView } from '@/lib/supabase-event-views';
+import { useActiveAccount } from 'thirdweb/react';
 
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
   const svgXml = `
@@ -41,6 +44,7 @@ export default function EventDetails() {
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const { showSnackbar } = useSnackbar();
+  const activeAccount = useActiveAccount();
   const scrollRef = useRef<ScrollView>(null);
 
   const handleBookmarkToggle = async () => {
@@ -134,6 +138,11 @@ export default function EventDetails() {
         } else {
           setEvent(data as EventRecord);
           logEventView(data.id, data.title, data.category || undefined);
+
+          // Record unique view in Supabase
+          if (activeAccount?.address) {
+            recordView(data.id, activeAccount.address).catch(() => {});
+          }
 
           // Fetch event dates for recurring events
           const today = new Date();
@@ -308,6 +317,8 @@ export default function EventDetails() {
                 <Text style={[styles.livestreamCtaText, { color: colors.onPrimary }]}>Livestream ansehen</Text>
               </Pressable>
             )}
+
+            <InterestCTA eventId={id as string} />
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über die Veranstaltung</Text>

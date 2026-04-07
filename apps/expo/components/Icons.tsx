@@ -1,5 +1,5 @@
 import React from 'react';
-import { SvgProps } from 'react-native-svg';
+import { SvgProps, SvgXml } from 'react-native-svg';
 
 // Import local SVG files
 import SportSvg from '@/assets/icons/sport.svg';
@@ -104,3 +104,39 @@ export const ChevronRight = ({ size = 24, ...props }: IconProps) => <ArrowRightS
 export const ClockIcon = ({ size = 24, ...props }: IconProps) => <ClockSvg width={size} height={size} {...props} />;
 export const ShareIcon = ({ size = 24, ...props }: IconProps) => <ShareSvg width={size} height={size} {...props} />;
 export const BookIcon = ({ size = 24, ...props }: IconProps) => <BookSvg width={size} height={size} {...props} />;
+
+// Heart icons (inline SVG for dynamic color support)
+export const HeartIcon: React.FC<{ size?: number; color?: string; strokeWidth?: number }> = ({
+  size = 24,
+  color = '#194383',
+  strokeWidth = 1.8,
+}) => {
+  const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return <SvgXml xml={xml} />;
+};
+
+export const HeartFilledIcon: React.FC<{ size?: number; color?: string }> = ({
+  size = 24,
+  color = '#E53935',
+}) => {
+  const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="${color}" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return <SvgXml xml={xml} />;
+};
+
+// Eye icon for view counts
+export const EyeIcon: React.FC<{ size?: number; color?: string }> = ({
+  size = 24,
+  color = '#666',
+}) => {
+  const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="${color}" stroke-width="1.5"/></svg>`;
+  return <SvgXml xml={xml} />;
+};
+
+// List icon for "Meine Veranstaltungen"
+export const ListIcon: React.FC<{ size?: number; color?: string }> = ({
+  size = 24,
+  color = '#333',
+}) => {
+  const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="8" y1="6" x2="21" y2="6" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="12" x2="21" y2="12" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><line x1="8" y1="18" x2="21" y2="18" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/><circle cx="4" cy="6" r="1" fill="${color}"/><circle cx="4" cy="12" r="1" fill="${color}"/><circle cx="4" cy="18" r="1" fill="${color}"/></svg>`;
+  return <SvgXml xml={xml} />;
+};
