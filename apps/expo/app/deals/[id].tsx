@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchDealById, incrementDealViews } from '@/lib/supabase-deals';
@@ -13,6 +14,7 @@ import type { BusinessDealRecord, BusinessRecord } from '@/lib/types';
 
 export default function DealDetailScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
 
@@ -55,7 +57,7 @@ export default function DealDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={goBack} style={styles.backButton}>
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
@@ -70,7 +72,7 @@ export default function DealDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={goBack} style={styles.backButton}>
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
@@ -88,7 +90,7 @@ export default function DealDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Pressable onPress={goBack} style={styles.backButton}>
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>

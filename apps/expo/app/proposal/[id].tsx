@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/hooks/useGoBack';
 import { useActiveAccount } from 'thirdweb/react';
 import { balanceOf } from 'thirdweb/extensions/erc721';
 import { ArrowLeftIcon } from '@/components/Icons';
@@ -18,7 +19,7 @@ import ProposalTimers from '@/components/ProposalTimers';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 
 export default function ProposalDetailScreen() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const { colors } = useTheme();
   const params = useLocalSearchParams();
   const account = useActiveAccount();
@@ -99,7 +100,7 @@ export default function ProposalDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
             <ArrowLeftIcon size={24} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerSpacer} />
@@ -115,7 +116,7 @@ export default function ProposalDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
             <ArrowLeftIcon size={24} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerSpacer} />
@@ -124,7 +125,7 @@ export default function ProposalDetailScreen() {
           <Text style={styles.errorIcon}>&#x26A0;&#xFE0F;</Text>
           <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>Fehler</Text>
           <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error || 'Vorschlag nicht gefunden'}</Text>
-          <Pressable style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+          <Pressable style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={goBack}>
             <Text style={[styles.retryButtonText, { color: colors.onPrimary }]}>Zurück</Text>
           </Pressable>
         </View>
@@ -139,7 +140,7 @@ export default function ProposalDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+        <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
           <ArrowLeftIcon size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>

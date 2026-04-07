@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useGoBack } from '@/hooks/useGoBack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
@@ -27,6 +28,7 @@ import { useTheme } from '@/context/ThemeContext';
 export default function NewsDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const { colors } = useTheme();
   const [article, setArticle] = useState<NewsArticle | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<NewsArticle[]>([]);
@@ -115,7 +117,7 @@ export default function NewsDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Artikel</Text>
@@ -133,7 +135,7 @@ export default function NewsDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Artikel nicht gefunden</Text>
@@ -144,7 +146,7 @@ export default function NewsDetailScreen() {
           <Text style={[styles.errorText, { color: colors.textSecondary }]}>Artikel nicht gefunden</Text>
           <Pressable
             style={[styles.returnButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.back()}
+            onPress={goBack}
           >
             <Text style={[styles.returnButtonText, { color: colors.onPrimary }]}>Zurück zur Übersicht</Text>
           </Pressable>
@@ -160,7 +162,7 @@ export default function NewsDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
+        <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
           <ArrowLeftIcon size={24} color={colors.tabIconActive} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}></Text>

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useActiveAccount } from 'thirdweb/react';
@@ -52,6 +53,7 @@ function getCurrentDayKey(): DayOfWeek {
 
 export default function BusinessDetailScreen() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { colors } = useTheme();
   const account = useActiveAccount();
@@ -116,7 +118,7 @@ export default function BusinessDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.headerAbsolute}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.background }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
         </View>
@@ -132,7 +134,7 @@ export default function BusinessDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.headerAbsolute}>
-          <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.background }]}>
+          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
         </View>
@@ -178,7 +180,7 @@ export default function BusinessDetailScreen() {
 
           {/* Back button */}
           <View style={styles.headerAbsolute}>
-            <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.background }]}>
+            <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.background }]}>
               <ArrowLeftIcon size={24} color={colors.tabIconActive} />
             </Pressable>
           </View>

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Platform, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useGoBack } from '@/hooks/useGoBack';
 import { ArrowLeftIcon, LocationIcon, CalendarIcon, UserIcon, MailIcon, CallIcon, TicketIcon, BookmarkIcon, LocationSmallIcon, ShareIcon, ChevronRight } from '@/components/Icons';
 import { BookmarkActiveSvg } from '@/components/AssetIcons';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +32,7 @@ const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, colo
 export default function EventDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const { colors } = useTheme();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
@@ -233,7 +235,7 @@ export default function EventDetails() {
       {event.livestream_active && event.livestream_url ? (
         <View style={[styles.livestreamSection, { backgroundColor: colors.background }]}>
           <View style={styles.livestreamNavRow}>
-            <Pressable onPress={() => router.back()} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
+            <Pressable onPress={goBack} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
               <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
             </Pressable>
             <Pressable onPress={handleBookmarkToggle} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
@@ -267,7 +269,7 @@ export default function EventDetails() {
             <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
           )}
 
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.background }]}>
+          <Pressable onPress={goBack} style={[styles.backBtn, { backgroundColor: colors.background }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
           </Pressable>
 
