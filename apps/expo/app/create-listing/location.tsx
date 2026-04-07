@@ -33,7 +33,7 @@ export default function CreateListingLocationScreen() {
         <TextInput
           value={neighborhood}
           onChangeText={setNeighborhood}
-          placeholder="z.B. R\u00F6bel Zentrum"
+          placeholder="z.B. Röbel Zentrum"
           placeholderTextColor={colors.textTertiary}
           style={[
             styles.input,

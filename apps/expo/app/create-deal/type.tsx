@@ -8,10 +8,10 @@ import WizardFooter from '@/components/WizardFooter';
 import type { DealTypeChoice } from '@/context/CreateDealWizardContext';
 
 const DEAL_TYPES: { value: DealTypeChoice; emoji: string; label: string; desc: string }[] = [
-  { value: 'discount', emoji: '\u{1F3F7}\u{FE0F}', label: 'Rabatt', desc: 'Prozentual oder fester Betrag' },
-  { value: 'special', emoji: '\u2B50', label: 'Spezial', desc: 'Besonderes Angebot' },
-  { value: 'event', emoji: '\u{1F389}', label: 'Event', desc: 'Veranstaltung oder Aktion' },
-  { value: 'new_product', emoji: '\u{1F195}', label: 'Neues Produkt', desc: 'Neuheit vorstellen' },
+  { value: 'discount', emoji: '🏷️', label: 'Rabatt', desc: 'Prozentual oder fester Betrag' },
+  { value: 'special', emoji: '⭐', label: 'Spezial', desc: 'Besonderes Angebot' },
+  { value: 'event', emoji: '🎉', label: 'Event', desc: 'Veranstaltung oder Aktion' },
+  { value: 'new_product', emoji: '🆕', label: 'Neues Produkt', desc: 'Neuheit vorstellen' },
 ];
 
 export default function CreateDealTypeScreen() {
@@ -32,10 +32,10 @@ export default function CreateDealTypeScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 1</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          Was f\u00FCr ein Angebot?
+          Was für ein Angebot?
         </Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-          W\u00E4hle die Art deines Angebots.
+          Wähle die Art deines Angebots.
         </Text>
 
         <View style={styles.grid}>

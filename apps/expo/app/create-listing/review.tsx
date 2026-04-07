@@ -10,12 +10,12 @@ import { createMarketplaceListing, createOrgListing } from '@/lib/supabase-marke
 import WizardFooter from '@/components/WizardFooter';
 
 const LISTING_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
-  product: { emoji: '\u{1F4E6}', label: 'Produkt' },
-  service: { emoji: '\u{1F6E0}\u{FE0F}', label: 'Dienstleistung' },
+  product: { emoji: '📦', label: 'Produkt' },
+  service: { emoji: '🛠️', label: 'Dienstleistung' },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  moebel: 'M\u00F6bel',
+  moebel: 'Möbel',
   elektronik: 'Elektronik',
   kleidung: 'Kleidung',
   fahrzeuge: 'Fahrzeuge',
@@ -23,7 +23,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   garten: 'Garten',
   haushalt: 'Haushalt',
   spielzeug: 'Spielzeug',
-  buecher: 'B\u00FCcher',
+  buecher: 'Bücher',
   dienstleistungen: 'Dienstleistungen',
   immobilien: 'Immobilien',
   sonstiges: 'Sonstiges',
@@ -99,7 +99,7 @@ export default function CreateListingReviewScreen() {
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 6</Text>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Pr\u00FCfe deine Angaben bevor du die Anzeige erstellst.
+          Prüfe deine Angaben bevor du die Anzeige erstellst.
         </Text>
 
         {/* Typ */}
@@ -117,7 +117,7 @@ export default function CreateListingReviewScreen() {
 
         {/* Details */}
         <SectionCard title="Details" onEdit={() => router.push('/create-listing/details')} colors={colors}>
-          <Text style={[styles.infoName, { color: colors.textPrimary }]}>{state.title || '\u2014'}</Text>
+          <Text style={[styles.infoName, { color: colors.textPrimary }]}>{state.title || '—'}</Text>
           {state.description ? (
             <Text style={[styles.infoDescription, { color: colors.textSecondary }]} numberOfLines={3}>
               {state.description}
@@ -132,7 +132,7 @@ export default function CreateListingReviewScreen() {
           </Text>
           {state.priceType !== 'free' && state.price ? (
             <Text style={[styles.infoDescription, { color: colors.textSecondary }]}>
-              {state.price} \u20AC
+              {state.price} €
             </Text>
           ) : null}
           {state.listingType === 'product' && state.condition ? (

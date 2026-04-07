@@ -8,23 +8,23 @@ import WizardFooter from '@/components/WizardFooter';
 import type { ListingTypeChoice } from '@/context/CreateListingWizardContext';
 
 const LISTING_TYPES: { value: ListingTypeChoice; emoji: string; label: string; desc: string }[] = [
-  { value: 'product', emoji: '\u{1F4E6}', label: 'Produkt', desc: 'Artikel zum Verkauf oder Verschenken' },
-  { value: 'service', emoji: '\u{1F6E0}\u{FE0F}', label: 'Dienstleistung', desc: 'Service oder Hilfe anbieten' },
+  { value: 'product', emoji: '📦', label: 'Produkt', desc: 'Artikel zum Verkauf oder Verschenken' },
+  { value: 'service', emoji: '🛠️', label: 'Dienstleistung', desc: 'Service oder Hilfe anbieten' },
 ];
 
 const CATEGORIES: { key: string; emoji: string; label: string }[] = [
-  { key: 'moebel', emoji: '\u{1F6CB}\u{FE0F}', label: 'M\u00F6bel' },
-  { key: 'elektronik', emoji: '\u{1F4BB}', label: 'Elektronik' },
-  { key: 'kleidung', emoji: '\u{1F455}', label: 'Kleidung' },
-  { key: 'fahrzeuge', emoji: '\u{1F697}', label: 'Fahrzeuge' },
-  { key: 'sport', emoji: '\u26BD', label: 'Sport' },
-  { key: 'garten', emoji: '\u{1F33F}', label: 'Garten' },
-  { key: 'haushalt', emoji: '\u{1F3E0}', label: 'Haushalt' },
-  { key: 'spielzeug', emoji: '\u{1F9F8}', label: 'Spielzeug' },
-  { key: 'buecher', emoji: '\u{1F4DA}', label: 'B\u00FCcher' },
-  { key: 'dienstleistungen', emoji: '\u{1F91D}', label: 'Dienstleistungen' },
-  { key: 'immobilien', emoji: '\u{1F3D8}\u{FE0F}', label: 'Immobilien' },
-  { key: 'sonstiges', emoji: '\u{1F4CB}', label: 'Sonstiges' },
+  { key: 'moebel', emoji: '🛋️', label: 'Möbel' },
+  { key: 'elektronik', emoji: '💻', label: 'Elektronik' },
+  { key: 'kleidung', emoji: '👕', label: 'Kleidung' },
+  { key: 'fahrzeuge', emoji: '🚗', label: 'Fahrzeuge' },
+  { key: 'sport', emoji: '⚽', label: 'Sport' },
+  { key: 'garten', emoji: '🌿', label: 'Garten' },
+  { key: 'haushalt', emoji: '🏠', label: 'Haushalt' },
+  { key: 'spielzeug', emoji: '🧸', label: 'Spielzeug' },
+  { key: 'buecher', emoji: '📚', label: 'Bücher' },
+  { key: 'dienstleistungen', emoji: '🤝', label: 'Dienstleistungen' },
+  { key: 'immobilien', emoji: '🏘️', label: 'Immobilien' },
+  { key: 'sonstiges', emoji: '📋', label: 'Sonstiges' },
 ];
 
 export default function CreateListingTypeScreen() {
@@ -49,7 +49,7 @@ export default function CreateListingTypeScreen() {
           Was bietest du an?
         </Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-          W\u00E4hle den Typ und eine Kategorie f\u00FCr deine Anzeige.
+          Wähle den Typ und eine Kategorie für deine Anzeige.
         </Text>
 
         {/* Listing type selection */}

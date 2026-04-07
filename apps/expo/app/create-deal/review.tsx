@@ -9,10 +9,10 @@ import { createDeal } from '@/lib/supabase-deals';
 import WizardFooter from '@/components/WizardFooter';
 
 const DEAL_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
-  discount: { emoji: '\u{1F3F7}\u{FE0F}', label: 'Rabatt' },
-  special: { emoji: '\u2B50', label: 'Spezial' },
-  event: { emoji: '\u{1F389}', label: 'Event' },
-  new_product: { emoji: '\u{1F195}', label: 'Neues Produkt' },
+  discount: { emoji: '🏷️', label: 'Rabatt' },
+  special: { emoji: '⭐', label: 'Spezial' },
+  event: { emoji: '🎉', label: 'Event' },
+  new_product: { emoji: '🆕', label: 'Neues Produkt' },
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -70,7 +70,7 @@ export default function CreateDealReviewScreen() {
 
         {/* Details */}
         <SectionCard title="Details" onEdit={() => router.push('/create-deal/details')} colors={colors}>
-          <Text style={[styles.infoName, { color: colors.textPrimary }]}>{state.title || '\u2014'}</Text>
+          <Text style={[styles.infoName, { color: colors.textPrimary }]}>{state.title || '—'}</Text>
           {state.dealValue ? (
             <Text style={[styles.infoDescription, { color: colors.textSecondary }]}>
               Wert: {state.dealValue}
@@ -99,7 +99,7 @@ export default function CreateDealReviewScreen() {
         {/* Zeitraum */}
         <SectionCard title="Zeitraum" onEdit={() => router.push('/create-deal/schedule')} colors={colors}>
           <Text style={[styles.infoName, { color: state.startDate || state.endDate ? colors.textPrimary : colors.textTertiary }]}>
-            {state.startDate || 'Kein Start'} \u2013 {state.endDate || 'Kein Ende'}
+            {state.startDate || 'Kein Start'} – {state.endDate || 'Kein Ende'}
           </Text>
           <Text style={[styles.infoDescription, { color: colors.textSecondary }]}>
             {STATUS_LABELS[state.status] || state.status}

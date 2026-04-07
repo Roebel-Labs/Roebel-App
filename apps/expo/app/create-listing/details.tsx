@@ -32,10 +32,10 @@ export default function CreateListingDetailsScreen() {
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 2</Text>
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
-            Erz\u00E4hl uns mehr
+            Erzähl uns mehr
           </Text>
           <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-            Beschreibe dein Angebot so gut wie m\u00F6glich.
+            Beschreibe dein Angebot so gut wie möglich.
           </Text>
 
           {/* Title field */}

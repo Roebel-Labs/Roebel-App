@@ -44,7 +44,7 @@ export default function CreateDealImageScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 3</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          F\u00FCge ein Bild hinzu
+          Füge ein Bild hinzu
         </Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Optional: Ein Bild macht dein Angebot attraktiver.
@@ -75,7 +75,7 @@ export default function CreateDealImageScreen() {
           >
             <Ionicons name="camera-outline" size={32} color={colors.textTertiary} />
             <Text style={[styles.placeholderText, { color: colors.textTertiary }]}>
-              Bild ausw\u00E4hlen
+              Bild auswählen
             </Text>
           </Pressable>
         )}

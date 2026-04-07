@@ -80,7 +80,7 @@ export default function CreateDealDetailsScreen() {
             ]}
             value={dealValue}
             onChangeText={setDealValue}
-            placeholder="z.B. 20%, 2-f\u00FCr-1, Gratis Dessert"
+            placeholder="z.B. 20%, 2-für-1, Gratis Dessert"
             placeholderTextColor={colors.textTertiary}
             returnKeyType="next"
           />

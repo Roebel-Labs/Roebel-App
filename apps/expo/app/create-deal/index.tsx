@@ -9,9 +9,9 @@ import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
 
 const STEPS = [
-  { emoji: '\u{1F3F7}\u{FE0F}', title: 'W\u00E4hle die Art', desc: 'Rabatt, Event oder Neues Produkt' },
-  { emoji: '\u270F\u{FE0F}', title: 'Beschreibe dein Angebot', desc: 'Titel, Details und Bild' },
-  { emoji: '\u{1F4C5}', title: 'Sofort oder sp\u00E4ter', desc: 'Entwurf speichern oder direkt aktiv' },
+  { emoji: '🏷️', title: 'Wähle die Art', desc: 'Rabatt, Event oder Neues Produkt' },
+  { emoji: '✏️', title: 'Beschreibe dein Angebot', desc: 'Titel, Details und Bild' },
+  { emoji: '📅', title: 'Sofort oder später', desc: 'Entwurf speichern oder direkt aktiv' },
 ];
 
 export default function CreateDealIntroScreen() {
@@ -35,7 +35,7 @@ export default function CreateDealIntroScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => setShowExit(true)} style={styles.closeButton}>
-          <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>{'\u2715'}</Text>
+          <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>{'✕'}</Text>
         </Pressable>
       </View>
       <View style={styles.content}>
@@ -43,7 +43,7 @@ export default function CreateDealIntroScreen() {
           Erstelle ein{'\n'}Angebot
         </Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-          Erreiche deine Kunden in R\u00F6bel mit einem Angebot.
+          Erreiche deine Kunden in Röbel mit einem Angebot.
         </Text>
 
         <View style={styles.stepsContainer}>
