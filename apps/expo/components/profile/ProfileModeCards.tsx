@@ -22,8 +22,8 @@ function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps)
     ios: {
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.15 : 0.08,
-      shadowRadius: 12,
+      shadowOpacity: isDark ? 0.2 : 0.12,
+      shadowRadius: 16,
     },
     android: { elevation: 4 },
   });
@@ -64,8 +64,8 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
           ios: {
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: isDark ? 0.15 : 0.08,
-            shadowRadius: 12,
+            shadowOpacity: isDark ? 0.2 : 0.12,
+            shadowRadius: 16,
           },
           android: { elevation: 4 },
         }),
