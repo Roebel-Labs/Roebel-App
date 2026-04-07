@@ -112,19 +112,19 @@ export default function FlippableIdentityCard({
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.12 : 0.05,
-      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.15 : 0.08,
+      shadowRadius: 12,
     },
     android: {
-      elevation: 3,
+      elevation: 4,
     },
   });
 
   return (
-    <Pressable onPress={handleFlip} style={styles.cardContainer}>
+    <Pressable onPress={handleFlip} style={[styles.cardContainer, cardShadow, { backgroundColor: cardBg }]}>
       {/* FRONT */}
-      <Animated.View style={[styles.card, frontStyle, cardShadow, { backgroundColor: cardBg }]}>
+      <Animated.View style={[styles.card, frontStyle, { backgroundColor: cardBg }]}>
         {/* Flip hint on front */}
         <Text style={styles.flipHint}>↻</Text>
 
@@ -184,7 +184,7 @@ export default function FlippableIdentityCard({
       </Animated.View>
 
       {/* BACK — Passport style */}
-      <Animated.View style={[styles.card, styles.cardBack, backStyle, cardShadow]}>
+      <Animated.View style={[styles.card, styles.cardBack, backStyle]}>
         {/* Gradient background */}
         <View style={StyleSheet.absoluteFill}>
           <Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none">
@@ -275,6 +275,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     height: 240,
+    borderRadius: 20,
   },
   card: {
     position: 'absolute',

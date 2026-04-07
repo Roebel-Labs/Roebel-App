@@ -21,11 +21,11 @@ function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps)
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.12 : 0.05,
-      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.15 : 0.08,
+      shadowRadius: 12,
     },
-    android: { elevation: 3 },
+    android: { elevation: 4 },
   });
 
   return (
@@ -63,11 +63,11 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
         Platform.select({
           ios: {
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: isDark ? 0.12 : 0.05,
-            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.15 : 0.08,
+            shadowRadius: 12,
           },
-          android: { elevation: 3 },
+          android: { elevation: 4 },
         }),
       ]}
     >
