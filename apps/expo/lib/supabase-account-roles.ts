@@ -22,6 +22,11 @@ export function canEditEvents(role: AccountRole | null): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+/** Check if a role can edit/delete listings and deals (owner or admin). */
+export function canEditListings(role: AccountRole | null): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
 /** Check if a role can manage members (invite/remove/change roles). */
 export function canManageMembers(role: AccountRole | null): boolean {
   return role === 'owner';
