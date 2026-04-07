@@ -114,7 +114,7 @@ export default function FlippableIdentityCard({
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: isDark ? 0.2 : 0.12,
-      shadowRadius: 16,
+      shadowRadius: 12,
     },
     android: {
       elevation: 4,
