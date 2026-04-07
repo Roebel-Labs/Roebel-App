@@ -1,14 +1,10 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { ConnectEmbed } from 'thirdweb/react';
 import { client, chain } from '@/constants/thirdweb';
-import { inAppWallet } from 'thirdweb/wallets/in-app';
+import { wallets } from '@/constants/wallets';
 import BottomDrawer from './BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
-import * as Linking from 'expo-linking';
-
-// Get the app's redirect URL for OAuth
-const redirectUrl = Linking.createURL('/');
 
 type Props = {
   visible: boolean;
@@ -17,23 +13,6 @@ type Props = {
 
 export default function LoginDrawer({ visible, onClose }: Props) {
   const { colors, isDark } = useTheme();
-
-  // Deferred to first render to avoid module-scope thirdweb evaluation (HMR warning)
-  const wallets = useMemo(
-    () => [
-      inAppWallet({
-        auth: {
-          options: ['email', 'google', 'facebook', 'apple'],
-          redirectUrl,
-        },
-        smartAccount: {
-          chain,
-          sponsorGas: true,
-        },
-      }),
-    ],
-    [],
-  );
 
   return (
     <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.75}>

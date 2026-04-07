@@ -17,9 +17,10 @@ import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { ThirdwebProvider } from 'thirdweb/react';
-import { client } from '../constants/thirdweb';
+import { ThirdwebProvider, useAutoConnect } from 'thirdweb/react';
+import { client, chain } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
+import { wallets } from '@/constants/wallets';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -111,6 +112,15 @@ function AnalyticsTracker() {
 /**
  * Inner layout that can access ThemeContext
  */
+function AutoConnectHandler() {
+  useAutoConnect({
+    client,
+    wallets,
+    chain,
+  });
+  return null;
+}
+
 function ThemedLayout() {
   const { colors, isDark } = useTheme();
 
@@ -118,6 +128,7 @@ function ThemedLayout() {
     <>
       <NotificationHandler />
       <AnalyticsTracker />
+      <AutoConnectHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <Stack
           screenOptions={{
