@@ -93,7 +93,7 @@ export default function MeckyScreen() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
         {/* Messages */}
@@ -186,7 +186,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: 32,
-    transform: [{ scaleY: -1 }],
     gap: 12,
   },
   emptyAvatar: {
