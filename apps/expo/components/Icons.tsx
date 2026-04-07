@@ -103,3 +103,4 @@ export const ChevronLeft = ({ size = 24, ...props }: IconProps) => <ArrowLeftSvg
 export const ChevronRight = ({ size = 24, ...props }: IconProps) => <ArrowRightSvg width={size} height={size} {...props} />;
 export const ClockIcon = ({ size = 24, ...props }: IconProps) => <ClockSvg width={size} height={size} {...props} />;
 export const ShareIcon = ({ size = 24, ...props }: IconProps) => <ShareSvg width={size} height={size} {...props} />;
+export const BookIcon = ({ size = 24, ...props }: IconProps) => <BookSvg width={size} height={size} {...props} />;
