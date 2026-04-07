@@ -21,11 +21,11 @@ function ModeCard({ emoji, title, subtitle, onPress, highlight }: ModeCardProps)
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 16,
     },
-    android: { elevation: 4 },
+    android: { elevation: 6 },
   });
 
   return (
@@ -63,11 +63,11 @@ function CTABanner({ emoji, title, subtitle, onPress }: CTABannerProps) {
         Platform.select({
           ios: {
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: isDark ? 0.4 : 0.12,
-            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.2 : 0.08,
+            shadowRadius: 16,
           },
-          android: { elevation: 4 },
+          android: { elevation: 6 },
         }),
       ]}
     >
@@ -142,7 +142,7 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
       </View>
       <CTABanner
         emoji="🚀"
-        title="Mach's in Röbel"
+        title="Starte durch in Röbel"
         subtitle="Gewerbe, Verein, Partei, Freelancer..."
         onPress={() => router.push('/create-org' as any)}
       />

@@ -5,7 +5,8 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -120,7 +121,7 @@ export default function RequestCitizenScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
         {/* Info Box */}
         <View style={[styles.infoBox, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
           <Text style={styles.infoTitle}>&#x1F4DD; Informationen</Text>
@@ -201,7 +202,7 @@ export default function RequestCitizenScreen() {
             )}
           </Pressable>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Success Modal */}
       <RequestSuccessModal

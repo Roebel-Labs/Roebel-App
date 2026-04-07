@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -89,34 +91,39 @@ export default function ChatScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      {/* Messages */}
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          inverted
-          contentContainerStyle={styles.messageList}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Text style={[styles.emptyChatText, { color: colors.textTertiary }]}>
-                Schreiben Sie die erste Nachricht
-              </Text>
-            </View>
-          }
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.3}
-        />
-      )}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        {/* Messages */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            inverted
+            contentContainerStyle={styles.messageList}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Text style={[styles.emptyChatText, { color: colors.textTertiary }]}>
+                  Schreiben Sie die erste Nachricht
+                </Text>
+              </View>
+            }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.3}
+          />
+        )}
 
-      {/* Input */}
-      <SafeAreaView edges={['bottom']} style={[styles.inputSafe, { backgroundColor: colors.background }]}>
-        <ChatInput onSend={sendMessage} isSending={isSending} />
-      </SafeAreaView>
+        {/* Input */}
+        <SafeAreaView edges={['bottom']} style={[styles.inputSafe, { backgroundColor: colors.background }]}>
+          <ChatInput onSend={sendMessage} isSending={isSending} />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -187,6 +194,9 @@ const styles = StyleSheet.create({
   emptyChatText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
+  },
+  flex: {
+    flex: 1,
   },
   inputSafe: {
   },

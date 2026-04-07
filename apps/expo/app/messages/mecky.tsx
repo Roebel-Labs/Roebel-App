@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -90,38 +92,43 @@ export default function MeckyScreen() {
         </Pressable>
       </View>
 
-      {/* Messages */}
-      <FlatList
-        ref={listRef}
-        data={displayData}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        inverted
-        contentContainerStyle={styles.messageList}
-        ListEmptyComponent={
-          <View style={styles.emptyChat}>
-            <Image
-              source={require('@/assets/games/mecky/mecky_main.png')}
-              style={styles.emptyAvatar}
-              contentFit="cover"
-            />
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              Hallo! Ich bin Mecky 👋
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Frag mich nach Events, Restaurants, Nachrichten oder was auch immer du über Röbel wissen willst!
-            </Text>
-          </View>
-        }
-      />
-
-      {/* Input */}
-      <SafeAreaView
-        edges={['bottom']}
-        style={[styles.inputSafe, { backgroundColor: colors.background }]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
       >
-        <ChatInput onSend={sendMessage} isSending={isStreaming} />
-      </SafeAreaView>
+        {/* Messages */}
+        <FlatList
+          ref={listRef}
+          data={displayData}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          inverted
+          contentContainerStyle={styles.messageList}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              <Image
+                source={require('@/assets/games/mecky/mecky_main.png')}
+                style={styles.emptyAvatar}
+                contentFit="cover"
+              />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                Hallo! Ich bin Mecky 👋
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Frag mich nach Events, Restaurants, Nachrichten oder was auch immer du über Röbel wissen willst!
+              </Text>
+            </View>
+          }
+        />
+
+        {/* Input */}
+        <SafeAreaView
+          edges={['bottom']}
+          style={[styles.inputSafe, { backgroundColor: colors.background }]}
+        >
+          <ChatInput onSend={sendMessage} isSending={isStreaming} />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -226,6 +233,9 @@ const styles = StyleSheet.create({
   },
   dots: {
     paddingVertical: 4,
+  },
+  flex: {
+    flex: 1,
   },
   inputSafe: {},
 });

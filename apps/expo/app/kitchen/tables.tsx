@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -86,7 +87,7 @@ export default function TableManagementScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Tische verwalten</Text>
       </View>
 
-      <ScrollView style={styles.scrollContent}>
+      <KeyboardAwareScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
         {/* Add new table */}
         <View style={styles.addRow}>
           <TextInput
@@ -133,7 +134,7 @@ export default function TableManagementScreen() {
             Noch keine Tische angelegt
           </Text>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

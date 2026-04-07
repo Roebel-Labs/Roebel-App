@@ -5,8 +5,6 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Platform,
-  KeyboardAvoidingView,
   Text,
 } from 'react-native';
 import ArrowRightIcon from '@/assets/icons/arrow-right.svg';
@@ -38,10 +36,7 @@ export default function ChatInput({ onSend, isSending }: Props) {
   const canSend = text.trim().length > 0 && !isSending;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View>
       {showEmoji && (
         <EmojiPicker
           onSelect={handleEmojiSelect}
@@ -84,7 +79,7 @@ export default function ChatInput({ onSend, isSending }: Props) {
           )}
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

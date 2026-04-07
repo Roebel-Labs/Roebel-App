@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -82,7 +83,7 @@ export default function CreateOrgLocationScreen() {
 
   return (
     <SafeAreaView edges={['bottom']} style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 3</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wo befindet ihr euch?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
@@ -156,7 +157,7 @@ export default function CreateOrgLocationScreen() {
         <Pressable onPress={handleNext} style={styles.skipButton}>
           <Text style={[styles.skipText, { color: colors.textTertiary }]}>Adresse später hinzufügen</Text>
         </Pressable>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <WizardFooter
         step={3}

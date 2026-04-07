@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
@@ -41,10 +42,14 @@ export default function CreateOrgInfoScreen() {
 
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={100}
+        extraHeight={150}
       >
         <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Erzähl uns mehr</Text>
@@ -113,7 +118,7 @@ export default function CreateOrgInfoScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <WizardFooter
         step={2}

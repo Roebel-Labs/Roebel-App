@@ -39,7 +39,7 @@ export default function MachsInRoebelScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mach's in Röbel</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Starte durch in Röbel</Text>
         <View style={{ width: 40 }} />
       </View>
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -34,7 +35,7 @@ export default function OrderCartScreen() {
         <Text style={{ fontSize: 18, fontFamily: 'Inter-Medium', color: colors.textPrimary }}>Warenkorb</Text>
       </View>
 
-      <ScrollView style={{ flex: 1, padding: 16 }}>
+      <KeyboardAwareScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
         {cart.length === 0 ? (
           <Text style={{ color: colors.textTertiary, textAlign: 'center', marginTop: 40 }}>Dein Warenkorb ist leer</Text>
         ) : (
@@ -70,7 +71,7 @@ export default function OrderCartScreen() {
         </View>
 
         <View style={{ height: 120 }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {cart.length > 0 && (
         <View style={{ position: 'absolute', bottom: 32, left: 16, right: 16 }}>

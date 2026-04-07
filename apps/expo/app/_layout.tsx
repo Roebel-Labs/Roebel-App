@@ -132,70 +132,16 @@ function ThemedLayout() {
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <Stack
           screenOptions={{
+            headerShown: false,
             animation: 'fade',
             animationDuration: 0,
           }}
         >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="explore" options={{ headerShown: false }} />
-          <Stack.Screen name="location" options={{ headerShown: false }} />
-          <Stack.Screen name="governance" options={{ headerShown: false }} />
-          <Stack.Screen name="profile" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="settings" options={{ headerShown: false }} />
-          <Stack.Screen name="design-system" options={{ headerShown: false }} />
-          <Stack.Screen name="event/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="category/[slug]" options={{ headerShown: false }} />
-          <Stack.Screen name="proposal/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="news/index" options={{ headerShown: false }} />
-          <Stack.Screen name="news/[slug]" options={{ headerShown: false }} />
-          <Stack.Screen name="restaurant/index" options={{ headerShown: false }} />
-          <Stack.Screen name="restaurant/[slug]" options={{ headerShown: false }} />
-          <Stack.Screen name="restaurant/menu/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="order/[slug]/[table]" options={{ headerShown: false }} />
-          <Stack.Screen name="order/cart" options={{ headerShown: false }} />
-          <Stack.Screen name="order/status" options={{ headerShown: false }} />
-          <Stack.Screen name="kitchen/index" options={{ headerShown: false }} />
-          <Stack.Screen name="kitchen/order/[sessionId]" options={{ headerShown: false }} />
-          <Stack.Screen name="kitchen/tables" options={{ headerShown: false }} />
-          <Stack.Screen name="menu/index" options={{ headerShown: false }} />
-          <Stack.Screen name="menu/[categoryId]" options={{ headerShown: false }} />
-          <Stack.Screen name="submit" options={{ title: 'Veranstaltung einreichen' }} />
-          <Stack.Screen name="submit-event" options={{ headerShown: false }} />
-          <Stack.Screen name="feedback" options={{ headerShown: false }} />
-          <Stack.Screen name="verification/my-request" options={{ headerShown: false }} />
-          <Stack.Screen name="verification/request-citizen" options={{ headerShown: false }} />
-          <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
-          <Stack.Screen name="notifications/settings" options={{ headerShown: false }} />
-          <Stack.Screen name="messages/index" options={{ headerShown: false }} />
-          <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
-          <Stack.Screen name="messages/new" options={{ headerShown: false }} />
-          <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
-          <Stack.Screen name="business/register" options={{ headerShown: false }} />
-          <Stack.Screen name="business/dashboard" options={{ headerShown: false }} />
-          <Stack.Screen name="business/analytics" options={{ headerShown: false }} />
-          <Stack.Screen name="business/deals/create" options={{ headerShown: false }} />
-          <Stack.Screen name="business/deals/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="deals/index" options={{ headerShown: false }} />
-          <Stack.Screen name="deals/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="marketplace/index" options={{ headerShown: false }} />
-          <Stack.Screen name="marketplace/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="businesses/index" options={{ headerShown: false }} />
-          <Stack.Screen name="user/[username]" options={{ headerShown: false }} />
-          <Stack.Screen name="create" options={{ headerShown: false }} />
-          <Stack.Screen name="create-org" options={{ headerShown: false }} />
-          <Stack.Screen name="ai-submit" options={{ headerShown: false }} />
-          <Stack.Screen name="messages/mecky" options={{ headerShown: false }} />
-          <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="games/mecky-jump" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/mecky-portal" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/speedrun" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/fortune-cards" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="wallet" options={{ headerShown: false }} />
-          <Stack.Screen name="explorer" options={{ headerShown: false }} />
-          <Stack.Screen name="machs-in-roebel" options={{ headerShown: false }} />
-          <Stack.Screen name="stamp-scan" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
+          <Stack.Screen name="submit" options={{ headerShown: true, title: 'Veranstaltung einreichen' }} />
+          <Stack.Screen name="games/mecky-jump" options={{ gestureEnabled: false, animation: 'fade' }} />
+          <Stack.Screen name="games/mecky-portal" options={{ gestureEnabled: false, animation: 'fade' }} />
+          <Stack.Screen name="games/speedrun" options={{ gestureEnabled: false, animation: 'fade' }} />
+          <Stack.Screen name="games/fortune-cards" options={{ gestureEnabled: false, animation: 'fade' }} />
         </Stack>
       </View>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />

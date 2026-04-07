@@ -109,11 +109,10 @@ export default function MeckyResultCard({ type, item }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 180,
+    width: '48%',
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
-    marginRight: 8,
   },
   image: {
     width: '100%',

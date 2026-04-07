@@ -6,6 +6,8 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -114,6 +116,10 @@ export default function NewConversationScreen() {
       </View>
 
       {/* Content */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
       <View style={styles.content}>
         <Text style={[styles.label, { color: colors.textPrimary }]}>Empfänger</Text>
         <TextInput
@@ -154,6 +160,7 @@ export default function NewConversationScreen() {
           )}
         </Pressable>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -182,6 +189,9 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+  },
+  flex: {
+    flex: 1,
   },
   content: {
     padding: 16,

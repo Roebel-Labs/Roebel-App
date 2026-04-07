@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable, Alert } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import type { ColorTokens } from '@/constants/theme';
@@ -66,7 +67,7 @@ export default function SubmitEventScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
       <Text style={styles.title}>Veranstaltung einreichen</Text>
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Dein Event wird vor der Veröffentlichung geprüft.</Text>
 
@@ -144,7 +145,7 @@ export default function SubmitEventScreen() {
       </Pressable>
 
       <Text style={[styles.hint, { color: colors.textSecondary }]}>Mit dem Absenden bestätigst du die Richtigkeit der Angaben. Wir können dich zur Verifizierung kontaktieren.</Text>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

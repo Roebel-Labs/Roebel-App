@@ -112,17 +112,17 @@ export default function FlippableIdentityCard({
   const cardShadow = Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 16,
     },
     android: {
-      elevation: 4,
+      elevation: 6,
     },
   });
 
   return (
-    <Pressable onPress={handleFlip} style={[styles.cardContainer, cardShadow]}>
+    <Pressable onPress={handleFlip} style={[styles.cardContainer, cardShadow, { backgroundColor: cardBg }]}>
       {/* FRONT */}
       <Animated.View style={[styles.card, frontStyle, { backgroundColor: cardBg }]}>
         {/* Flip hint on front */}
@@ -250,7 +250,7 @@ export default function FlippableIdentityCard({
               {verificationRequestId ? (
                 <QRCode
                   value={`roebel://verification/request/${verificationRequestId}?type=citizen`}
-                  size={56}
+                  size={76}
                   backgroundColor="white"
                   color="#194383"
                 />
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     marginHorizontal: 16,
     marginTop: 16,
-    height: 200,
+    height: 240,
   },
   card: {
     position: 'absolute',
@@ -458,8 +458,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   passportQR: {
-    width: 64,
-    height: 64,
+    width: 84,
+    height: 84,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',

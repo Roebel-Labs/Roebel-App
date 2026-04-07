@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
@@ -10,6 +9,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -102,7 +102,7 @@ export default function MenuCategoriesScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Speisekarte</Text>
       </View>
 
-      <ScrollView style={styles.scrollContent}>
+      <KeyboardAwareScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
         {/* Add new category */}
         <View style={styles.addRow}>
           <TextInput
@@ -152,7 +152,7 @@ export default function MenuCategoriesScreen() {
             Noch keine Kategorien
           </Text>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

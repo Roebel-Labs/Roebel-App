@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -57,12 +57,7 @@ export default function MeckyChatBubble({ message }: Props) {
 
         {/* Rich cards */}
         {message.richCards && message.richCards.items.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.cardsScroll}
-            contentContainerStyle={styles.cardsContent}
-          >
+          <View style={styles.cardsGrid}>
             {message.richCards.items.map((item: any, idx: number) => (
               <MeckyResultCard
                 key={item.id || item.slug || idx}
@@ -70,7 +65,7 @@ export default function MeckyChatBubble({ message }: Props) {
                 item={item}
               />
             ))}
-          </ScrollView>
+          </View>
         )}
 
         {/* Navigation links */}
@@ -149,11 +144,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 21,
   },
-  cardsScroll: {
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 8,
-  },
-  cardsContent: {
-    paddingRight: 8,
   },
   navLinks: {
     marginTop: 8,
