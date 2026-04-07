@@ -3,13 +3,13 @@ import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useRestaurantDetail } from '@/hooks/useRestaurantDetail';
-import { OrderSessionProvider, useOrderSession } from '@/context/OrderSessionContext';
+import { useOrderSession } from '@/context/OrderSessionContext';
 import OrderableMenuItemCard from '@/components/order/OrderableMenuItemCard';
 import { formatMenuPrice } from '@/lib/utils';
 
-function OrderMenuContent() {
+export default function OrderMenuScreen() {
   const router = useRouter();
+  const { slug, table } = useLocalSearchParams<{ slug: string; table: string }>();
   const { colors } = useTheme();
   const { restaurant, cart, addToCart, cartTotal, isLoading } = useOrderSession();
 
@@ -52,7 +52,7 @@ function OrderMenuContent() {
 
       {cart.length > 0 && (
         <Pressable
-          onPress={() => router.push('/order/cart')}
+          onPress={() => router.push(`/order/${slug}/${table}/cart` as any)}
           style={{ position: 'absolute', bottom: 32, left: 16, right: 16, backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}
         >
           <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 2 }}>
@@ -63,25 +63,5 @@ function OrderMenuContent() {
         </Pressable>
       )}
     </SafeAreaView>
-  );
-}
-
-export default function OrderMenuScreen() {
-  const { slug, table } = useLocalSearchParams<{ slug: string; table: string }>();
-  const { restaurant, loading } = useRestaurantDetail(slug || '');
-  const { colors } = useTheme();
-
-  if (loading || !restaurant) {
-    return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <OrderSessionProvider restaurant={restaurant} tableNumber={table || '1'}>
-      <OrderMenuContent />
-    </OrderSessionProvider>
   );
 }

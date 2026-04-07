@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useOrderSession } from '@/context/OrderSessionContext';
 import { formatMenuPrice } from '@/lib/utils';
@@ -10,6 +10,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function OrderCartScreen() {
   const router = useRouter();
+  const { slug, table } = useLocalSearchParams<{ slug: string; table: string }>();
   const { colors } = useTheme();
   const { cart, removeFromCart, updateCartItem, cartTotal, guestName, setGuestName, submitOrder, isSubmitting } = useOrderSession();
 
@@ -20,7 +21,7 @@ export default function OrderCartScreen() {
     }
     try {
       await submitOrder();
-      router.replace('/order/status');
+      router.replace(`/order/${slug}/${table}/status` as any);
     } catch {
       Alert.alert('Fehler', 'Bestellung konnte nicht gesendet werden.');
     }
