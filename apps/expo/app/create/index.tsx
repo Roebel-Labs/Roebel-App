@@ -165,7 +165,7 @@ export default function CreateScreen() {
           >
             <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
             <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
-              {draft.feedType === 'main' ? 'Alle' : 'Rathaus'}
+              {draft.feedType === 'main' ? 'Alle' : 'Stadt'}
             </Text>
             <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
           </Pressable>

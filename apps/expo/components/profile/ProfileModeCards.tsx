@@ -134,10 +134,9 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
         />
         <ModeCard
           emoji="🗳️"
-          title="Rathaus"
+          title="Bürgerbefragung"
           subtitle="Abstimmungen"
           onPress={() => router.push('/governance' as any)}
-          highlight
         />
       </View>
       <CTABanner

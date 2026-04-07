@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { useRealtimeProposals } from '@/hooks/useRealtimeProposals';
 import ProposalCard from '@/components/ProposalCard';
 import ProposalSkeleton from '@/components/ProposalSkeleton';
@@ -31,7 +32,11 @@ export default function GovernanceScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerabstimmungen</Text>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerbefragungen</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Content */}
@@ -93,9 +98,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   headerTitle: {
     fontSize: 22,

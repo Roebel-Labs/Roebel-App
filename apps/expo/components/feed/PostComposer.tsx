@@ -249,7 +249,7 @@ export default function PostComposer({
               <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Abbrechen</Text>
             </Pressable>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              {isEditMode ? 'Beitrag bearbeiten' : feedType === 'rathaus' ? 'Rathaus-Beitrag' : 'Neuer Beitrag'}
+              {isEditMode ? 'Beitrag bearbeiten' : feedType === 'rathaus' ? 'Stadt-Beitrag' : 'Neuer Beitrag'}
             </Text>
             <Pressable
               onPress={handleSubmit}

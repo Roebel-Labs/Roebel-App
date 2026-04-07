@@ -28,7 +28,7 @@ export default function FeedEmptyState({ feedType, isCitizen, onCompose }: Props
           Nur für verifizierte Bürger
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Verifiziere dich als Bürger von Röbel, um im Rathaus mitzureden.
+          Verifiziere dich als Bürger von Röbel, um in der Stadt mitzureden.
         </Text>
         <Pressable
           onPress={() => router.push('/verification/request-citizen' as any)}
@@ -49,7 +49,7 @@ export default function FeedEmptyState({ feedType, isCitizen, onCompose }: Props
         </View>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Noch keine Diskussionen</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Starte die erste Diskussion im Rathaus!
+          Starte die erste Diskussion in der Stadt!
         </Text>
         <Pressable onPress={onCompose} style={[styles.button, { backgroundColor: colors.primary }]}>
           <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Beitrag erstellen</Text>
