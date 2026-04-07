@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ScrollView, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Pressable, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
+import { getAccountRole, canEditListings, type AccountRole } from '@/lib/supabase-account-roles';
 import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
-import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
+import { fetchDealsByBusiness, fetchDealAnalytics, deleteDeal } from '@/lib/supabase-deals';
 import type { BusinessDealRecord, DealAnalytics } from '@/lib/types';
 import AnalyticsCard from '@/components/AnalyticsCard';
 import DealCard from '@/components/DealCard';
@@ -20,6 +21,15 @@ export default function OrgAdsScreen() {
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [analytics, setAnalytics] = useState<DealAnalytics | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [userRole, setUserRole] = useState<AccountRole | null>(null);
+
+  useEffect(() => {
+    if (activeAccount?.id && user?.wallet_address) {
+      getAccountRole(activeAccount.id, user.wallet_address).then(setUserRole);
+    }
+  }, [activeAccount?.id, user?.wallet_address]);
+
+  const canEdit = canEditListings(userRole);
 
   const loadData = useCallback(async () => {
     if (!user?.wallet_address) return;
@@ -48,6 +58,28 @@ export default function OrgAdsScreen() {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
+  };
+
+  const handleDeleteDeal = (dealId: string) => {
+    Alert.alert(
+      'Angebot löschen',
+      'Möchtest du dieses Angebot wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDeal(dealId);
+              setDeals(prev => prev.filter(d => d.id !== dealId));
+            } catch (error) {
+              console.error('Error deleting deal:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -84,12 +116,14 @@ export default function OrgAdsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Angebote & Werbung</Text>
-            <Pressable
-              style={[styles.addButton, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/create-deal' as any)}
-            >
-              <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neue Anzeige</Text>
-            </Pressable>
+            {canEdit && (
+              <Pressable
+                style={[styles.addButton, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/create-deal' as any)}
+              >
+                <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neue Anzeige</Text>
+              </Pressable>
+            )}
           </View>
 
           {deals.length === 0 ? (
@@ -101,11 +135,28 @@ export default function OrgAdsScreen() {
           ) : (
             <View style={styles.dealsList}>
               {deals.map(deal => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
-                  onPress={() => router.push(`/business/deals/${deal.id}` as any)}
-                />
+                <View key={deal.id}>
+                  <DealCard
+                    deal={deal}
+                    onPress={() => router.push(`/business/deals/${deal.id}` as any)}
+                  />
+                  {canEdit && (
+                    <View style={styles.dealActions}>
+                      <Pressable
+                        style={[styles.dealActionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => router.push(`/business/deals/${deal.id}` as any)}
+                      >
+                        <Text style={[styles.dealActionText, { color: colors.primary }]}>Bearbeiten</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.dealActionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => handleDeleteDeal(deal.id)}
+                      >
+                        <Text style={[styles.dealActionText, { color: colors.error }]}>Löschen</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
               ))}
             </View>
           )}
@@ -184,6 +235,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  dealActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  dealActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  dealActionText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   bottomPadding: { height: 40 },
 });

@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ScrollView, View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Pressable, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import { fetchOrgListings, deleteListing } from '@/lib/supabase-marketplace';
+import { getAccountRole, canEditListings, type AccountRole } from '@/lib/supabase-account-roles';
 import type { MarketplaceListingRecord } from '@/lib/types';
 import MarketplaceCard from '@/components/MarketplaceCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -13,9 +15,19 @@ export default function OrgProductsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
+  const { user } = useUser();
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<AccountRole | null>(null);
+
+  useEffect(() => {
+    if (activeAccount?.id && user?.wallet_address) {
+      getAccountRole(activeAccount.id, user.wallet_address).then(setUserRole);
+    }
+  }, [activeAccount?.id, user?.wallet_address]);
+
+  const canEdit = canEditListings(userRole);
 
   const loadListings = useCallback(async () => {
     if (!activeAccount?.id) return;
@@ -48,6 +60,17 @@ export default function OrgProductsScreen() {
     }
   };
 
+  const confirmDelete = (id: string) => {
+    Alert.alert(
+      'Anzeige löschen',
+      'Möchtest du diese Anzeige wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => handleDelete(id) },
+      ]
+    );
+  };
+
   const activeListings = listings.filter(l => l.status === 'active');
   const inactiveListings = listings.filter(l => l.status !== 'active');
 
@@ -69,14 +92,16 @@ export default function OrgProductsScreen() {
         }
       >
         {/* Add button */}
-        <View style={styles.addSection}>
-          <Pressable
-            style={[styles.addButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.push({ pathname: '/create-listing', params: { listingType: 'product', accountId: activeAccount?.id } } as any)}
-          >
-            <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neues Produkt</Text>
-          </Pressable>
-        </View>
+        {canEdit && (
+          <View style={styles.addSection}>
+            <Pressable
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push({ pathname: '/create-listing', params: { listingType: 'product', accountId: activeAccount?.id } } as any)}
+            >
+              <Text style={[styles.addButtonText, { color: colors.onPrimary }]}>+ Neues Produkt</Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Active listings */}
         {activeListings.length > 0 && (
@@ -87,7 +112,25 @@ export default function OrgProductsScreen() {
             <View style={styles.listingsGrid}>
               {activeListings.map(listing => (
                 <View key={listing.id} style={styles.listingWrapper}>
-                  <MarketplaceCard listing={listing} compact={false} />
+                  <Pressable onPress={() => router.push(`/marketplace/${listing.id}` as any)}>
+                    <MarketplaceCard listing={listing} compact={false} />
+                  </Pressable>
+                  {canEdit && (
+                    <View style={styles.listingActions}>
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => router.push(`/marketplace/edit/${listing.id}` as any)}
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.primary }]}>Bearbeiten</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => confirmDelete(listing.id)}
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.error }]}>Löschen</Text>
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -103,7 +146,25 @@ export default function OrgProductsScreen() {
             <View style={styles.listingsGrid}>
               {inactiveListings.map(listing => (
                 <View key={listing.id} style={[styles.listingWrapper, { opacity: 0.6 }]}>
-                  <MarketplaceCard listing={listing} compact={false} />
+                  <Pressable onPress={() => router.push(`/marketplace/${listing.id}` as any)}>
+                    <MarketplaceCard listing={listing} compact={false} />
+                  </Pressable>
+                  {canEdit && (
+                    <View style={styles.listingActions}>
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => router.push(`/marketplace/edit/${listing.id}` as any)}
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.primary }]}>Bearbeiten</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: colors.surface }]}
+                        onPress={() => confirmDelete(listing.id)}
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.error }]}>Löschen</Text>
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -179,6 +240,21 @@ const styles = StyleSheet.create({
   listingWrapper: {
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  listingActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   emptyState: {
     marginHorizontal: 16,

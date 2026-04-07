@@ -4,6 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
+import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { fetchDealById, updateDeal, deleteDeal, toggleDealBoost } from '@/lib/supabase-deals';
 import type { BusinessDealRecord, DealStatus } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -19,11 +22,14 @@ export default function DealDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, isDark } = useTheme();
+  const { user } = useUser();
+  const { activeAccount } = useAccount();
 
   const [deal, setDeal] = useState<BusinessDealRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
 
   // Edit state
   const [title, setTitle] = useState('');
@@ -34,6 +40,20 @@ export default function DealDetailScreen() {
   useEffect(() => {
     if (id) loadDeal();
   }, [id]);
+
+  useEffect(() => {
+    if (!deal || !user?.wallet_address) return;
+
+    const checkPermission = async () => {
+      if (activeAccount?.id) {
+        const role = await getAccountRole(activeAccount.id, user.wallet_address);
+        setCanEdit(canEditListings(role));
+      } else {
+        setCanEdit(true);
+      }
+    };
+    checkPermission();
+  }, [deal, user?.wallet_address, activeAccount?.id]);
 
   const loadDeal = async () => {
     try {
@@ -140,15 +160,19 @@ export default function DealDetailScreen() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
           {editMode ? 'Bearbeiten' : 'Angebot'}
         </Text>
-        <Pressable onPress={() => editMode ? handleSave() : setEditMode(true)} style={styles.headerAction}>
-          {saving ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Text style={[styles.headerActionText, { color: colors.primary }]}>
-              {editMode ? 'Speichern' : 'Bearbeiten'}
-            </Text>
-          )}
-        </Pressable>
+        {canEdit ? (
+          <Pressable onPress={() => editMode ? handleSave() : setEditMode(true)} style={styles.headerAction}>
+            {saving ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={[styles.headerActionText, { color: colors.primary }]}>
+                {editMode ? 'Speichern' : 'Bearbeiten'}
+              </Text>
+            )}
+          </Pressable>
+        ) : (
+          <View style={styles.headerAction} />
+        )}
       </View>
 
       <KeyboardAwareScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
@@ -207,9 +231,11 @@ export default function DealDetailScreen() {
               </View>
             </View>
 
-            <Pressable style={[styles.deleteButton, { borderColor: '#EF4444' }]} onPress={handleDelete}>
-              <Text style={styles.deleteButtonText}>Angebot löschen</Text>
-            </Pressable>
+            {canEdit && (
+              <Pressable style={[styles.deleteButton, { borderColor: '#EF4444' }]} onPress={handleDelete}>
+                <Text style={styles.deleteButtonText}>Angebot löschen</Text>
+              </Pressable>
+            )}
           </>
         ) : (
           // View Mode
