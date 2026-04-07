@@ -8,13 +8,16 @@ import {
   ActivityIndicator,
   Dimensions,
   Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
-import { fetchListingById, fetchMarketplaceListings } from '@/lib/supabase-marketplace';
+import { useUser } from '@/context/UserContext';
+import { fetchListingById, fetchMarketplaceListings, deleteListing } from '@/lib/supabase-marketplace';
+import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
@@ -55,16 +58,34 @@ export default function ListingDetailScreen() {
   const goBack = useGoBack();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
+  const { user } = useUser();
 
   const [listing, setListing] = useState<MarketplaceListingRecord | null>(null);
   const [moreListings, setMoreListings] = useState<MarketplaceListingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [canEdit, setCanEdit] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     loadData();
   }, [id]);
+
+  useEffect(() => {
+    if (!listing || !user?.wallet_address) return;
+
+    const checkPermission = async () => {
+      if (listing.account_id) {
+        // Org listing: check role in the account
+        const role = await getAccountRole(listing.account_id, user.wallet_address);
+        setCanEdit(canEditListings(role));
+      } else {
+        // Personal listing: check if user is the seller
+        setCanEdit(listing.seller_wallet_address.toLowerCase() === user.wallet_address.toLowerCase());
+      }
+    };
+    checkPermission();
+  }, [listing, user?.wallet_address]);
 
   const loadData = async () => {
     try {
@@ -101,6 +122,29 @@ export default function ListingDetailScreen() {
     if (listing.media_urls?.[0]) params.set('listingImage', listing.media_urls[0]);
     if (listing.condition) params.set('listingCondition', listing.condition);
     router.push(`/messages/new?${params.toString()}` as any);
+  };
+
+  const handleDelete = () => {
+    if (!listing) return;
+    Alert.alert(
+      'Anzeige löschen',
+      'Möchtest du diese Anzeige wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteListing(listing.id);
+              router.back();
+            } catch (error: any) {
+              Alert.alert('Fehler', error?.message || 'Löschen fehlgeschlagen.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -330,7 +374,25 @@ export default function ListingDetailScreen() {
               <ShareIcon size={18} color={colors.textPrimary} />
               <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Teilen</Text>
             </Pressable>
+            {canEdit && (
+              <Pressable
+                style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                onPress={() => router.push(`/marketplace/edit/${listing.id}` as any)}
+              >
+                <Text style={[styles.actionButtonText, { color: colors.primary }]}>Bearbeiten</Text>
+              </Pressable>
+            )}
           </View>
+
+          {/* Delete button for owners */}
+          {canEdit && (
+            <Pressable
+              style={[styles.deleteButton, { borderColor: '#EF4444' }]}
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>Anzeige löschen</Text>
+            </Pressable>
+          )}
 
           {/* More Listings */}
           {moreListings.length > 0 && (
@@ -571,6 +633,18 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
+  },
+  deleteButton: {
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#EF4444',
   },
   // More Listings
   moreSection: {
