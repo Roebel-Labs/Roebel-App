@@ -222,6 +222,19 @@ const config: ExpoConfig = {
         data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/profile' },
         category: ['BROWSABLE', 'DEFAULT']
       },
+      // Invite deep links
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/invite' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/invite' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
       // Authenticated web routes (/app/*)
       {
         autoVerify: true,

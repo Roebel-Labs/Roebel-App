@@ -32,6 +32,13 @@ export function canManageMembers(role: AccountRole | null): boolean {
   return role === 'owner';
 }
 
+/** Check if a user can leave an org (not the sole owner). */
+export function canLeaveOrg(role: AccountRole | null, ownerCount: number): boolean {
+  if (!role) return false;
+  if (role === 'owner' && ownerCount <= 1) return false;
+  return true;
+}
+
 /** Update a member's role in an account. */
 export async function updateMemberRole(
   accountId: string,

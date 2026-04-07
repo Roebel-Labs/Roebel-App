@@ -9,6 +9,7 @@ import {
   inviteOwner as inviteOwnerDB,
   removeOwner as removeOwnerDB,
 } from '@/lib/supabase-accounts';
+import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
 import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
@@ -16,6 +17,7 @@ const ACTIVE_ACCOUNT_KEY = '@active_account_id';
 interface AccountContextValue {
   activeAccount: Account | null;
   ownedAccounts: Account[];
+  roleInActiveAccount: AccountRole | null;
   switchAccount: (accountId: string) => Promise<void>;
   createOrgAccount: (subType: OrgSubType, name: string) => Promise<Account>;
   inviteCitizen: (accountId: string, walletAddress: string) => Promise<void>;
@@ -33,6 +35,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [ownedAccounts, setOwnedAccounts] = useState<Account[]>([]);
+  const [roleInActiveAccount, setRoleInActiveAccount] = useState<AccountRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Load accounts when user connects
@@ -74,11 +77,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     refreshAccounts();
   }, [refreshAccounts]);
 
+  // Fetch role when active account changes
+  useEffect(() => {
+    if (activeAccount && walletAddress) {
+      getAccountRole(activeAccount.id, walletAddress).then(setRoleInActiveAccount);
+    } else {
+      setRoleInActiveAccount(null);
+    }
+  }, [activeAccount?.id, walletAddress]);
+
   // Reset on disconnect
   useEffect(() => {
     if (!walletAddress) {
       setActiveAccount(null);
       setOwnedAccounts([]);
+      setRoleInActiveAccount(null);
     }
   }, [walletAddress]);
 
@@ -140,6 +153,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     () => ({
       activeAccount,
       ownedAccounts,
+      roleInActiveAccount,
       switchAccount,
       createOrgAccount,
       inviteCitizen,
@@ -148,7 +162,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       refreshAccounts,
     }),
-    [activeAccount, ownedAccounts, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, isOwnerOf, isLoading, refreshAccounts]
+    [activeAccount, ownedAccounts, roleInActiveAccount, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, isOwnerOf, isLoading, refreshAccounts]
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

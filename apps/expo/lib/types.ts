@@ -415,6 +415,48 @@ export type DealAnalytics = {
 
 export type AccountMode = 'personal' | 'business'; // deprecated — use Account system
 
+// ── Org member management & invites ─────────────────────────────────
+
+export type OrgRole = 'owner' | 'admin' | 'member';
+
+export type InviteTokenStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked';
+
+export type InviteToken = {
+  id: string;
+  account_id: string;
+  role: 'admin' | 'member';
+  invited_by: string;
+  invited_wallet: string | null;
+  token: string;
+  status: InviteTokenStatus;
+  expires_at: string;
+  created_at: string;
+};
+
+export type InviteTokenWithUser = InviteToken & {
+  invited_user?: Pick<UserRecord, 'username' | 'profile_picture_url' | 'tier'>;
+};
+
+export type InviteTokenWithAccount = InviteToken & {
+  account: Account;
+  inviter?: Pick<UserRecord, 'username' | 'profile_picture_url'>;
+};
+
+export type UserNotification = {
+  id: string;
+  recipient_wallet: string;
+  type: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type MemberWithProfile = AccountOwner & {
+  user: Pick<UserRecord, 'username' | 'profile_picture_url' | 'tier'>;
+};
+
 // Marketplace listing types
 export type MarketplacePriceType = 'fixed' | 'negotiable' | 'free';
 export type MarketplaceCondition = 'neu' | 'wie_neu' | 'gut' | 'akzeptabel';

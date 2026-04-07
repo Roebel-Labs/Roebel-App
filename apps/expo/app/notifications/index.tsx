@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,40 +11,84 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useNotificationInbox } from '@/hooks/useNotificationInbox';
+import useUserNotifications from '@/hooks/useUserNotifications';
 import NotificationCard from '@/components/NotificationCard';
+import InviteNotificationCard from '@/components/InviteNotificationCard';
 import { NotificationCardSkeleton } from '@/components/SkeletonLoader';
-import type { NotificationLogEntry } from '@/lib/types';
+import type { NotificationLogEntry, UserNotification } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 
+type MergedItem =
+  | { kind: 'push'; data: NotificationLogEntry }
+  | { kind: 'user'; data: UserNotification };
+
 export default function NotificationsInboxScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const {
-    notifications,
-    readIds,
-    isLoading,
-    isRefreshing,
-    isLoadingMore,
-    hasMore,
-    refresh,
-    loadMore,
-    markAsRead,
-  } = useNotificationInbox();
+  const pushInbox = useNotificationInbox();
+  const userNotifs = useUserNotifications();
 
-  const handleNotificationPress = (notification: NotificationLogEntry) => {
-    markAsRead(notification.id);
+  const isLoading = pushInbox.isLoading || userNotifs.isLoading;
+  const isRefreshing = pushInbox.isRefreshing || userNotifs.isRefreshing;
+
+  // Merge both notification sources chronologically
+  const merged = useMemo<MergedItem[]>(() => {
+    const pushItems: MergedItem[] = pushInbox.notifications.map((n) => ({ kind: 'push', data: n }));
+    const userItems: MergedItem[] = userNotifs.notifications.map((n) => ({ kind: 'user', data: n }));
+    return [...pushItems, ...userItems].sort(
+      (a, b) => new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime()
+    );
+  }, [pushInbox.notifications, userNotifs.notifications]);
+
+  const handleRefresh = async () => {
+    await Promise.all([pushInbox.refresh(), userNotifs.refresh()]);
   };
 
-  const renderItem = ({ item }: { item: NotificationLogEntry }) => (
-    <NotificationCard
-      notification={item}
-      isRead={readIds.has(item.id)}
-      onPress={handleNotificationPress}
-    />
-  );
+  const handleLoadMore = () => {
+    if (pushInbox.hasMore) pushInbox.loadMore();
+    if (userNotifs.hasMore) userNotifs.loadMore();
+  };
+
+  const handlePushNotificationPress = (notification: NotificationLogEntry) => {
+    pushInbox.markAsRead(notification.id);
+  };
+
+  const renderItem = ({ item }: { item: MergedItem }) => {
+    if (item.kind === 'push') {
+      return (
+        <NotificationCard
+          notification={item.data}
+          isRead={pushInbox.readIds.has(item.data.id)}
+          onPress={handlePushNotificationPress}
+        />
+      );
+    }
+
+    // User notification
+    if (item.data.type === 'org_invite') {
+      return (
+        <InviteNotificationCard
+          notification={item.data}
+          onAccept={userNotifs.acceptInvite}
+          onDecline={userNotifs.declineInvite}
+        />
+      );
+    }
+
+    // Generic user notification (future types)
+    return (
+      <Pressable
+        onPress={() => userNotifs.markAsRead(item.data.id)}
+        style={[styles.genericCard, { backgroundColor: colors.surface }]}
+      >
+        <Text style={[styles.genericTitle, { color: colors.textPrimary }]}>{item.data.title}</Text>
+        <Text style={[styles.genericBody, { color: colors.textSecondary }]}>{item.data.body}</Text>
+      </Pressable>
+    );
+  };
 
   const renderHeader = () => (
     <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -78,13 +122,13 @@ export default function NotificationsInboxScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {renderHeader()}
       <FlatList
-        data={notifications}
-        keyExtractor={(item) => item.id}
+        data={merged}
+        keyExtractor={(item) => `${item.kind}-${item.data.id}`}
         renderItem={renderItem}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.primary} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
         }
-        onEndReached={hasMore ? loadMore : undefined}
+        onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -95,13 +139,13 @@ export default function NotificationsInboxScreen() {
           </View>
         }
         ListFooterComponent={
-          isLoadingMore ? (
+          pushInbox.isLoadingMore || userNotifs.isLoadingMore ? (
             <ActivityIndicator style={styles.loader} color={colors.primary} />
           ) : (
             <View style={styles.footerSpacer} />
           )
         }
-        contentContainerStyle={notifications.length === 0 ? { flex: 1 } : undefined}
+        contentContainerStyle={merged.length === 0 ? { flex: 1 } : undefined}
       />
     </SafeAreaView>
   );
@@ -119,4 +163,12 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
   loader: { padding: 20 },
   footerSpacer: { height: 100 },
+  genericCard: {
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginVertical: 4,
+  },
+  genericTitle: { fontSize: 14, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
+  genericBody: { fontSize: 13, fontFamily: 'Inter-Regular' },
 });

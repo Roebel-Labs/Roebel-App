@@ -30,6 +30,7 @@ import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { ListIcon } from '@/components/Icons';
+import UserIcon from '@/assets/icons/user.svg';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -216,6 +217,13 @@ const handleRefresh = async () => {
                   label="Profil bearbeiten"
                   onPress={() => router.push('/edit-profile' as any)}
                 />
+                {activeAccount?.account_type === 'organisation' && (
+                  <ProfileMenuItem
+                    icon={<UserIcon width={20} height={20} color={colors.textPrimary} />}
+                    label="Verwalten"
+                    onPress={() => router.push('/org/manage' as any)}
+                  />
+                )}
               </View>
               <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
