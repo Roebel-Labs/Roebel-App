@@ -121,6 +121,7 @@ export default function StaffOrderScreen() {
   }
 
   const categories = restaurant?.menu_categories || [];
+  const totalItems = categories.reduce((sum, cat) => sum + (cat.menu_items || []).filter((i: any) => i.is_available !== false).length, 0);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -133,17 +134,19 @@ export default function StaffOrderScreen() {
         </Text>
       </View>
 
-      {/* Search bar (staff only feature) */}
-      <View style={styles.searchBar}>
-        <TextInput
-          placeholder="Gericht suchen..."
-          placeholderTextColor={colors.textTertiary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
-          autoFocus
-        />
-      </View>
+      {/* Search bar (staff only feature) - only show when items exist */}
+      {totalItems > 0 && (
+        <View style={styles.searchBar}>
+          <TextInput
+            placeholder="Gericht suchen..."
+            placeholderTextColor={colors.textTertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
+            autoFocus
+          />
+        </View>
+      )}
 
       {/* Search results dropdown */}
       {searchResults.length > 0 && (
@@ -164,22 +167,47 @@ export default function StaffOrderScreen() {
       )}
 
       <ScrollView style={styles.scrollContent}>
-        {/* Full menu browse (when not searching) */}
-        {!searchQuery.trim() && categories.map(cat => (
-          <View key={cat.id} style={styles.menuCategory}>
-            <Text style={[styles.categoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
-            {(cat.menu_items || []).filter((i: any) => i.is_available !== false).map((item: any) => (
-              <Pressable
-                key={item.id}
-                onPress={() => addToCart(item)}
-                style={[styles.menuItem, { borderBottomColor: colors.borderSecondary }]}
-              >
-                <Text style={[styles.menuItemName, { color: colors.textPrimary }]}>{item.name}</Text>
-                <Text style={[styles.menuItemPrice, { color: colors.textSecondary }]}>{formatMenuPrice(item.price)}</Text>
-              </Pressable>
-            ))}
+        {/* Empty state when no menu items exist */}
+        {totalItems === 0 && !searchQuery.trim() && (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>Keine Gerichte vorhanden</Text>
+            <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+              Füge zuerst Gerichte über die Speisekarte hinzu, um Bestellungen aufnehmen zu können.
+            </Text>
+            <Pressable
+              onPress={() => router.push('/menu' as any)}
+              style={[styles.emptyStateBtn, { backgroundColor: colors.primary }]}
+            >
+              <Text style={[styles.emptyStateBtnText, { color: colors.onPrimary }]}>Speisekarte bearbeiten</Text>
+            </Pressable>
           </View>
-        ))}
+        )}
+
+        {/* Full menu browse (when not searching) */}
+        {!searchQuery.trim() && categories.map(cat => {
+          const items = (cat.menu_items || []).filter((i: any) => i.is_available !== false);
+          if (items.length === 0) return null;
+          return (
+            <View key={cat.id} style={styles.menuCategory}>
+              <Text style={[styles.categoryName, { color: colors.textSecondary }]}>{cat.name}</Text>
+              {items.map((item: any) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => addToCart(item)}
+                  style={[styles.menuItem, { borderBottomColor: colors.borderSecondary }]}
+                >
+                  <Text style={[styles.menuItemName, { color: colors.textPrimary }]}>{item.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text style={[styles.menuItemPrice, { color: colors.textSecondary }]}>{formatMenuPrice(item.price)}</Text>
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: colors.onPrimary, fontSize: 16, fontFamily: 'Inter-Medium' }}>+</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          );
+        })}
         <View style={styles.scrollSpacer} />
       </ScrollView>
 
@@ -281,13 +309,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-Medium',
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyStateBtn: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 12,
+  },
+  emptyStateBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
   menuCategory: {
     marginBottom: 16,
   },
   categoryName: {
-    fontSize: 16,
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
     marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   menuItem: {
     flexDirection: 'row',
