@@ -113,7 +113,7 @@ export default function OrgDashboard() {
         <QuickAction
           emoji="🏷️"
           label="Neues Angebot erstellen"
-          onPress={() => router.push('/business/deals/create' as any)}
+          onPress={() => router.push('/create-deal' as any)}
           colors={colors}
         />
         <QuickAction
