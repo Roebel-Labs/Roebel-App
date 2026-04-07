@@ -21,7 +21,7 @@ export async function getBusinessLandingStats(): Promise<{
       supabase
         .from("businesses")
         .select("id", { count: "exact", head: true })
-        .eq("status", "approved"),
+        .eq("status", "published"),
 
       supabase
         .from("business_deals")

@@ -90,7 +90,7 @@ export default function AdminBusinessDetailPage() {
 
   const statusConfig = {
     pending: { icon: Clock, label: "In Prüfung", color: "text-amber-700 bg-amber-50" },
-    approved: { icon: CheckCircle, label: "Genehmigt", color: "text-green-700 bg-green-50" },
+    published: { icon: CheckCircle, label: "Veröffentlicht", color: "text-green-700 bg-green-50" },
     rejected: { icon: XCircle, label: "Abgelehnt", color: "text-red-700 bg-red-50" },
   }
 

@@ -464,7 +464,7 @@ export default function AppHomePage() {
           supabase
             .from("businesses")
             .select("*")
-            .eq("status", "approved")
+            .eq("status", "published")
             .order("is_featured", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(10),

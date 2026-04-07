@@ -90,7 +90,7 @@ export function BusinessProfileSection({ walletAddress }: BusinessProfileSection
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-foreground text-sm sm:text-base">{business.name}</h3>
-                  {business.status === "approved" && (
+                  {business.status === "published" && (
                     <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                       <CheckCircle className="h-3 w-3" />
                       Aktiv
@@ -112,7 +112,7 @@ export function BusinessProfileSection({ walletAddress }: BusinessProfileSection
                 <p className="text-xs text-muted-foreground mt-0.5">{getCategoryLabel(business.category)}</p>
 
                 {/* Description */}
-                {business.description && business.status === "approved" && (
+                {business.description && business.status === "published" && (
                   <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{business.description}</p>
                 )}
 
@@ -126,7 +126,7 @@ export function BusinessProfileSection({ walletAddress }: BusinessProfileSection
             </div>
 
             {/* Contact info row (approved only) */}
-            {business.status === "approved" && (business.address || business.phone || business.website_url) && (
+            {business.status === "published" && (business.address || business.phone || business.website_url) && (
               <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
                 {business.address && (
                   <span className="flex items-center gap-1">
@@ -151,7 +151,7 @@ export function BusinessProfileSection({ walletAddress }: BusinessProfileSection
           </div>
 
           {/* Action buttons (approved only) */}
-          {business.status === "approved" && (
+          {business.status === "published" && (
             <div className="flex border-t border-border">
               <Link
                 href={`/app/gewerbe/${business.slug}`}

@@ -100,13 +100,13 @@ export default function BusinessStatusPage() {
     {
       label: "In Prüfung",
       sublabel: business.status === "pending" ? "Ausstehend" : "Abgeschlossen",
-      done: business.status === "approved" || business.status === "rejected",
+      done: business.status === "published" || business.status === "rejected",
       active: business.status === "pending",
     },
     {
       label: "Freigeschaltet",
-      sublabel: business.status === "approved" ? "Aktiv" : "Ausstehend",
-      done: business.status === "approved",
+      sublabel: business.status === "published" ? "Aktiv" : "Ausstehend",
+      done: business.status === "published",
     },
   ]
 
@@ -127,7 +127,7 @@ export default function BusinessStatusPage() {
       </div>
 
       {/* Approved: link to profile */}
-      {business.status === "approved" && business.slug && (
+      {business.status === "published" && business.slug && (
         <Link
           href={`/app/gewerbe/${business.slug}`}
           className="block text-center bg-[#194383] hover:bg-[#143a72] text-white py-3 rounded-xl font-semibold transition-colors"

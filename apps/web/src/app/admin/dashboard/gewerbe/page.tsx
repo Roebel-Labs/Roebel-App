@@ -43,13 +43,13 @@ export default function AdminGewerbePage() {
 
   const statusIcons = {
     pending: <Clock className="h-4 w-4 text-amber-500" />,
-    approved: <CheckCircle className="h-4 w-4 text-green-500" />,
+    published: <CheckCircle className="h-4 w-4 text-green-500" />,
     rejected: <XCircle className="h-4 w-4 text-red-500" />,
   }
 
   const statusLabels = {
     pending: "In Prüfung",
-    approved: "Genehmigt",
+    published: "Veröffentlicht",
     rejected: "Abgelehnt",
   }
 
@@ -67,7 +67,7 @@ export default function AdminGewerbePage() {
 
       {/* Status Filter Tabs */}
       <div className="flex gap-2 border-b border-border pb-2">
-        {(["all", "pending", "approved", "rejected"] as const).map((status) => (
+        {(["all", "pending", "published", "rejected"] as const).map((status) => (
           <button
             key={status}
             onClick={() => setStatusFilter(status)}

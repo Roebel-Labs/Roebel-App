@@ -208,7 +208,7 @@ export type BusinessRecord = {
   cover_image_url: string | null;
   logo_url: string | null;
   gallery_images: string[] | null;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'published' | 'rejected';
   admin_notes: string | null;
   is_featured: boolean;
   created_at: string;

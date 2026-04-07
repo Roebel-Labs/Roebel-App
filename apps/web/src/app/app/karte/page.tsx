@@ -18,7 +18,7 @@ export default async function AppKartePage() {
     supabase
       .from("businesses")
       .select("id, name, slug, category, description, address, latitude, longitude, logo_url, cover_image_url, phone, is_featured")
-      .eq("status", "approved")
+      .eq("status", "published")
       .not("latitude", "is", null)
       .not("longitude", "is", null),
     supabase

@@ -1,6 +1,6 @@
 // Business Account Types
 
-export type BusinessStatus = "pending" | "approved" | "rejected"
+export type BusinessStatus = "pending" | "published" | "rejected"
 
 export type BusinessCategory =
   | "gastronomie"

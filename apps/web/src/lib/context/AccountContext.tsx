@@ -18,16 +18,21 @@ import {
   inviteOwner as inviteOwnerDB,
   removeOwner as removeOwnerDB,
 } from "@/lib/supabase-accounts";
+import {
+  getAccountRole,
+  type AccountRole,
+} from "@/lib/supabase-account-roles";
 import { supabase } from "@/lib/supabase";
-import type { Account, OrgType } from "@/types/account";
+import type { Account, OrgSubType } from "@/types/account";
 
 const STORAGE_KEY = "roebel-active-account-id";
 
 interface AccountContextValue {
   activeAccount: Account | null;
   ownedAccounts: Account[];
+  roleInActiveAccount: AccountRole | null;
   switchAccount: (accountId: string) => Promise<void>;
-  createOrgAccount: (type: OrgType, name: string) => Promise<Account>;
+  createOrgAccount: (subType: OrgSubType, name: string) => Promise<Account>;
   inviteCitizen: (accountId: string, walletAddress: string) => Promise<void>;
   removeCitizen: (accountId: string, walletAddress: string) => Promise<void>;
   isOwnerOf: (accountId: string | null) => boolean;
@@ -43,6 +48,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [ownedAccounts, setOwnedAccounts] = useState<Account[]>([]);
+  const [roleInActiveAccount, setRoleInActiveAccount] =
+    useState<AccountRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Load accounts when wallet connects
@@ -100,11 +107,23 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     refreshAccounts();
   }, [refreshAccounts]);
 
+  // Fetch role when active account changes
+  useEffect(() => {
+    if (activeAccount && walletAddress) {
+      getAccountRole(activeAccount.id, walletAddress).then(
+        setRoleInActiveAccount
+      );
+    } else {
+      setRoleInActiveAccount(null);
+    }
+  }, [activeAccount?.id, walletAddress]);
+
   // Reset on disconnect
   useEffect(() => {
     if (!walletAddress) {
       setActiveAccount(null);
       setOwnedAccounts([]);
+      setRoleInActiveAccount(null);
     }
   }, [walletAddress]);
 
@@ -127,10 +146,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   );
 
   const createOrgAccount = useCallback(
-    async (type: OrgType, name: string): Promise<Account> => {
+    async (subType: OrgSubType, name: string): Promise<Account> => {
       if (!walletAddress) throw new Error("No wallet connected");
 
-      const account = await createOrgAccountDB(walletAddress, type, name);
+      const account = await createOrgAccountDB(walletAddress, subType, name);
       if (!account) throw new Error("Failed to create organization");
 
       setOwnedAccounts((prev) => [...prev, account]);
@@ -166,6 +185,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     () => ({
       activeAccount,
       ownedAccounts,
+      roleInActiveAccount,
       switchAccount,
       createOrgAccount,
       inviteCitizen,
@@ -177,6 +197,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     [
       activeAccount,
       ownedAccounts,
+      roleInActiveAccount,
       switchAccount,
       createOrgAccount,
       inviteCitizen,

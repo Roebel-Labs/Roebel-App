@@ -77,11 +77,11 @@ export function BusinessDetailHeader({ business, isOwner }: BusinessDetailHeader
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
-    case "approved":
+    case "published":
       return (
         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
           <CheckCircle className="h-3 w-3" />
-          Genehmigt
+          Veröffentlicht
         </span>
       )
     case "pending":

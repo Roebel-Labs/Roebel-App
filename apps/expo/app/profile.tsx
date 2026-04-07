@@ -64,7 +64,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (user?.wallet_address) {
       fetchBusinessesByOwner(user.wallet_address).then(businesses => {
-        setBusinessRecord(businesses.find(b => b.status === 'approved') || businesses[0] || null);
+        setBusinessRecord(businesses.find(b => b.status === 'published') || businesses[0] || null);
       });
     }
   }, [user?.wallet_address]);
@@ -242,7 +242,7 @@ const handleRefresh = async () => {
               )}
 
               {/* Business Status Banner - for business owners with pending/rejected business */}
-              {isBusinessOwner && userBusiness && userBusiness.status !== 'approved' && (
+              {isBusinessOwner && userBusiness && userBusiness.status !== 'published' && (
                 <BusinessStatusBanner
                   business={userBusiness}
                   onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}

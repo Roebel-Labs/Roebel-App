@@ -61,7 +61,7 @@ export async function getApprovedBusinesses(
     let query = supabase
       .from("businesses")
       .select("*")
-      .eq("status", "approved")
+      .eq("status", "published")
       .order("is_featured", { ascending: false })
       .order("name", { ascending: true })
 

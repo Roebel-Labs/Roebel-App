@@ -50,7 +50,7 @@ export async function approveBusiness(id: string) {
     const { data, error } = await supabase
       .from("businesses")
       .update({
-        status: "approved",
+        status: "published",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)

@@ -49,7 +49,7 @@ export async function globalSearch(
       supabase
         .from("businesses")
         .select("id, name, slug, description, logo_url, category")
-        .eq("status", "approved")
+        .eq("status", "published")
         .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
         .order("is_featured", { ascending: false })
         .limit(limit),
