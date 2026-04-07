@@ -705,7 +705,6 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 24,
     marginBottom: 24,
   },
   actionButton: {

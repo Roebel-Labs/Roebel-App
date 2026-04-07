@@ -95,19 +95,20 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
         }).start();
       }, 500);
     } else {
-      Animated.sequence([
-        Animated.spring(filledScale, {
-          toValue: 0,
-          damping: 12,
-          stiffness: 300,
+      // Smooth fade transition — no shrink animation
+      Animated.parallel([
+        Animated.timing(filledScale, {
+          toValue: 1,
+          duration: 0,
           useNativeDriver: true,
         }),
         Animated.timing(outlineOpacity, {
           toValue: 1,
-          duration: 150,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
+      filledScale.setValue(0);
     }
 
     try {
@@ -149,7 +150,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
         style={({ pressed }) => [
           styles.button,
           isActive
-            ? [styles.buttonActive, { borderColor: '#E53935' }]
+            ? [styles.buttonActive, { borderColor: colors.primary }]
             : { backgroundColor: colors.primary },
           pressed && styles.buttonPressed,
           !account?.address && styles.buttonDisabled,
@@ -160,7 +161,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
         <View style={styles.buttonIconWrap}>
           {/* Outline heart (default) */}
           <Animated.View style={[styles.iconAbsolute, { opacity: outlineOpacity }]}>
-            <HeartIcon size={20} color={isActive ? '#E53935' : '#fff'} />
+            <HeartIcon size={20} color={isActive ? colors.primary : '#fff'} />
           </Animated.View>
 
           {/* Heart.png plop */}
@@ -189,14 +190,14 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
               },
             ]}
           >
-            <HeartFilledIcon size={20} />
+            <HeartFilledIcon size={20} color={colors.primary} />
           </Animated.View>
         </View>
 
         <Text
           style={[
             styles.buttonText,
-            isActive ? styles.buttonTextActive : { color: '#fff' },
+            isActive ? { color: colors.primary } : { color: '#fff' },
           ]}
         >
           Interessiert
@@ -224,7 +225,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 8,
     gap: 10,
   },
   button: {
@@ -260,7 +261,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   buttonTextActive: {
-    color: '#E53935',
+    // Color set dynamically via inline style using colors.primary
   },
   socialRow: {
     flexDirection: 'row',

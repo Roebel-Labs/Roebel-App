@@ -105,20 +105,13 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
         }).start();
       }, 500);
     } else {
-      // Deactivate: shrink filled, show outline
-      Animated.sequence([
-        Animated.spring(filledScale, {
-          toValue: 0,
-          damping: 12,
-          stiffness: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(outlineOpacity, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      // Deactivate: smooth fade transition, no shrink
+      filledScale.setValue(0);
+      Animated.timing(outlineOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
     }
 
     try {
@@ -195,7 +188,7 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
             },
           ]}
         >
-          <HeartFilledIcon size={iconSize} />
+          <HeartFilledIcon size={iconSize} color={colors.primary} />
         </Animated.View>
       </View>
     </Pressable>
