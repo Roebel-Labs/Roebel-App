@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { formatMenuPrice } from '@/lib/utils';
 import type { MenuItemRecord } from '@/lib/types';
+import PlusSignIcon from '@/assets/icons/plus-sign.svg';
 
 type Props = {
   item: MenuItemRecord;
@@ -54,7 +55,7 @@ export default function OrderMenuItemGrid({ item, quantity, onAdd }: Props) {
           <Text style={[styles.quantity, { color: colors.primary }]}>{quantity}</Text>
         )}
         <View style={[styles.addButton, { backgroundColor: '#FFFFFF' }]}>
-          <Text style={[styles.addIcon, { color: colors.primary }]}>+</Text>
+          <PlusSignIcon width={20} height={20} color={colors.primary} />
         </View>
       </View>
     </Pressable>

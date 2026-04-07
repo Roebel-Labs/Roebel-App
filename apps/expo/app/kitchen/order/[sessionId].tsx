@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -9,7 +9,13 @@ import { fetchRestaurantBySlug } from '@/lib/supabase-restaurants';
 import { formatMenuPrice } from '@/lib/utils';
 import type { MenuItemRecord, RestaurantWithMenus } from '@/lib/types';
 import type { CartItem, OrderItem, TableSession } from '@/lib/types/orders';
+import OrderMenuItemGrid from '@/components/order/OrderMenuItemGrid';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const GRID_GAP = 12;
+const GRID_PAD = 16;
+const ITEM_WIDTH = (SCREEN_WIDTH - GRID_PAD * 2 - GRID_GAP) / 2;
 
 export default function StaffOrderScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -123,6 +129,14 @@ export default function StaffOrderScreen() {
   const categories = restaurant?.menu_categories || [];
   const totalItems = categories.reduce((sum, cat) => sum + (cat.menu_items || []).filter((i: any) => i.is_available !== false).length, 0);
 
+  const cartQuantities = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of cart) {
+      map[c.menuItem.id] = (map[c.menuItem.id] || 0) + c.quantity;
+    }
+    return map;
+  }, [cart]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -190,21 +204,18 @@ export default function StaffOrderScreen() {
           return (
             <View key={cat.id} style={styles.menuCategory}>
               <Text style={[styles.categoryName, { color: colors.textSecondary }]}>{cat.name}</Text>
-              {items.map((item: any) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => addToCart(item)}
-                  style={[styles.menuItem, { borderBottomColor: colors.borderSecondary }]}
-                >
-                  <Text style={[styles.menuItemName, { color: colors.textPrimary }]}>{item.name}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Text style={[styles.menuItemPrice, { color: colors.textSecondary }]}>{formatMenuPrice(item.price)}</Text>
-                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' }}>
-                      <Text style={{ color: colors.onPrimary, fontSize: 16, fontFamily: 'Inter-Medium' }}>+</Text>
-                    </View>
+              <View style={styles.grid}>
+                {items.map((item: any) => (
+                  <View key={item.id} style={{ width: ITEM_WIDTH }}>
+                    <OrderMenuItemGrid
+                      item={item}
+                      quantity={cartQuantities[item.id] || 0}
+                      onAdd={(i) => addToCart(i)}
+                    />
                   </View>
-                </Pressable>
-              ))}
+                ))}
+                {items.length % 2 !== 0 && <View style={{ width: ITEM_WIDTH }} />}
+              </View>
             </View>
           );
         })}
@@ -336,28 +347,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   menuCategory: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   categoryName: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
-    marginBottom: 6,
+    marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  menuItem: {
+  grid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  menuItemName: {
-    fontSize: 14,
-    flex: 1,
-  },
-  menuItemPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    flexWrap: 'wrap',
+    gap: GRID_GAP,
   },
   scrollSpacer: {
     height: 200,

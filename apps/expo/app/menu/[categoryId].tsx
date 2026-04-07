@@ -11,6 +11,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -21,8 +22,16 @@ import {
   updateMenuItem,
   deleteMenuItem,
 } from '@/lib/supabase-menu';
+import { formatMenuPrice } from '@/lib/utils';
 import type { MenuItemRecord } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
+import PlusSignIcon from '@/assets/icons/plus-sign.svg';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const GRID_GAP = 12;
+const GRID_PAD = 16;
+const ITEM_WIDTH = (SCREEN_WIDTH - GRID_PAD * 2 - GRID_GAP) / 2;
 
 type EditingItem = {
   id: string;
@@ -180,18 +189,6 @@ export default function MenuItemsScreen() {
         </View>
 
         <ScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {/* New item button */}
-          {!showForm && (
-            <Pressable
-              onPress={openNewForm}
-              style={[styles.newItemBtn, { backgroundColor: colors.primary }]}
-            >
-              <Text style={[styles.newItemBtnText, { color: colors.onPrimary }]}>
-                + Neues Gericht
-              </Text>
-            </Pressable>
-          )}
-
           {/* Inline form */}
           {showForm && (
             <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
@@ -279,60 +276,70 @@ export default function MenuItemsScreen() {
             </View>
           )}
 
-          {/* Item list */}
-          {items.map(item => (
-            <Pressable
-              key={item.id}
-              onPress={() => openEditForm(item)}
-              style={[styles.itemCard, { backgroundColor: colors.surface }]}
-            >
-              <View style={styles.itemMain}>
-                <View style={styles.itemHeader}>
-                  <Text style={[styles.itemName, { color: colors.textPrimary }]}>{item.name}</Text>
-                  <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>
-                    {item.price.toFixed(2)} €
-                  </Text>
+          {/* Item grid */}
+          {!showForm && (
+            <View style={styles.grid}>
+              {items.map(item => (
+                <View key={item.id} style={{ width: ITEM_WIDTH }}>
+                  <Pressable
+                    onPress={() => openEditForm(item)}
+                    onLongPress={() => handleDelete(item.id)}
+                    style={[styles.gridCard, { backgroundColor: colors.surface }]}
+                  >
+                    <View style={styles.gridCardContent}>
+                      <Text style={[styles.gridCardName, { color: colors.textPrimary }]} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      {(item.is_vegetarian || item.is_vegan) && (
+                        <View style={styles.badgeRow}>
+                          {item.is_vegetarian && (
+                            <View style={[styles.badge, styles.badgeVeg]}>
+                              <Text style={styles.badgeText}>V</Text>
+                            </View>
+                          )}
+                          {item.is_vegan && (
+                            <View style={[styles.badge, styles.badgeVegan]}>
+                              <Text style={styles.badgeText}>VG</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      <Text style={[styles.gridCardPrice, { color: colors.textSecondary }]}>
+                        {formatMenuPrice(item.price)}
+                      </Text>
+                    </View>
+                    <View style={styles.gridCardFooter}>
+                      {!item.is_available && (
+                        <Text style={styles.unavailableLabel}>Aus</Text>
+                      )}
+                      <View style={styles.gridCardAction}>
+                        <PencilEditIcon width={20} height={20} color={colors.primary} />
+                      </View>
+                    </View>
+                  </Pressable>
                 </View>
+              ))}
 
-                {item.description ? (
-                  <Text style={[styles.itemDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {item.description}
+              {/* "Neues Gericht" add card */}
+              <View style={{ width: ITEM_WIDTH }}>
+                <Pressable
+                  onPress={openNewForm}
+                  style={[styles.gridCard, styles.gridCardDashed, { borderColor: colors.border }]}
+                >
+                  <Text style={[styles.gridCardAddLabel, { color: colors.textSecondary }]}>
+                    Neues Gericht
                   </Text>
-                ) : null}
-
-                {(item.is_vegetarian || item.is_vegan) && (
-                  <View style={styles.badgeRow}>
-                    {item.is_vegetarian && (
-                      <View style={[styles.badge, styles.badgeVeg]}>
-                        <Text style={styles.badgeText}>V</Text>
-                      </View>
-                    )}
-                    {item.is_vegan && (
-                      <View style={[styles.badge, styles.badgeVegan]}>
-                        <Text style={styles.badgeText}>VG</Text>
-                      </View>
-                    )}
+                  <View style={[styles.gridCardActionFilled, { backgroundColor: colors.primary }]}>
+                    <PlusSignIcon width={20} height={20} color={colors.onPrimary} />
                   </View>
-                )}
-              </View>
-
-              <View style={styles.itemActions}>
-                <Switch
-                  value={item.is_available}
-                  onValueChange={() => handleToggleAvailable(item)}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={colors.onPrimary}
-                />
-                <Pressable onPress={() => handleDelete(item.id)}>
-                  <Text style={styles.deleteText}>Entfernen</Text>
                 </Pressable>
               </View>
-            </Pressable>
-          ))}
+            </View>
+          )}
 
-          {items.length === 0 && !showForm && (
-            <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-              Noch keine Gerichte in dieser Kategorie
+          {items.length === 0 && showForm && (
+            <Text style={[styles.emptyText, { color: colors.textTertiary, marginTop: 8 }]}>
+              Erstelle dein erstes Gericht
             </Text>
           )}
         </ScrollView>
@@ -368,16 +375,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     padding: 16,
-  },
-  newItemBtn: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  newItemBtnText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
   },
   formCard: {
     borderRadius: 14,
@@ -468,47 +465,84 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Regular',
   },
-  itemCard: {
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: GRID_GAP,
+  },
+  gridCard: {
     borderRadius: 12,
     padding: 14,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flex: 1,
+    justifyContent: 'space-between',
+    minHeight: 140,
+  },
+  gridCardDashed: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 12,
   },
-  itemMain: {
-    flex: 1,
+  gridCardContent: {
     gap: 4,
   },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  itemName: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    flex: 1,
-    marginRight: 8,
-  },
-  itemPrice: {
-    fontSize: 15,
+  gridCardName: {
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
+    lineHeight: 21,
   },
-  itemDescription: {
-    fontSize: 13,
+  gridCardPrice: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    marginTop: 2,
+    marginTop: 4,
+  },
+  gridCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  gridCardAction: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gridCardActionFilled: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridCardAddLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+  },
+  unavailableLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#DC2626',
   },
   badgeRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 2,
   },
   badge: {
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
   badgeVeg: {
     backgroundColor: '#16a34a',
@@ -517,18 +551,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#15803d',
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Inter-Bold',
     color: '#ffffff',
-  },
-  itemActions: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  deleteText: {
-    fontSize: 13,
-    color: '#DC2626',
-    fontFamily: 'Inter-Regular',
   },
   emptyText: {
     textAlign: 'center',
