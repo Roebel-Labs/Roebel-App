@@ -185,27 +185,27 @@ export default function Layout() {
           <SafeAreaProvider>
             <ThemeProvider>
               <MessagingProvider>
-                <NotificationsProvider>
-                  <VerificationProvider>
-                    <UserProvider>
-                    <AccountProvider>
-                    <MeckyProvider>
-                    <GovernanceTestProvider>
-                    <InterestProvider>
-                    <BookmarksProvider>
-                      <LocationProvider>
-                        <SnackbarProvider>
-                          <ThemedLayout />
-                        </SnackbarProvider>
-                      </LocationProvider>
-                    </BookmarksProvider>
-                    </InterestProvider>
-                    </GovernanceTestProvider>
-                    </MeckyProvider>
-                    </AccountProvider>
-                    </UserProvider>
-                  </VerificationProvider>
-                </NotificationsProvider>
+                <VerificationProvider>
+                  <UserProvider>
+                  <AccountProvider>
+                  <NotificationsProvider>
+                  <MeckyProvider>
+                  <GovernanceTestProvider>
+                  <InterestProvider>
+                  <BookmarksProvider>
+                    <LocationProvider>
+                      <SnackbarProvider>
+                        <ThemedLayout />
+                      </SnackbarProvider>
+                    </LocationProvider>
+                  </BookmarksProvider>
+                  </InterestProvider>
+                  </GovernanceTestProvider>
+                  </MeckyProvider>
+                  </NotificationsProvider>
+                  </AccountProvider>
+                  </UserProvider>
+                </VerificationProvider>
               </MessagingProvider>
             </ThemeProvider>
           </SafeAreaProvider>
