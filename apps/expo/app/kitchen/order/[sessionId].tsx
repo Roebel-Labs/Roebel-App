@@ -95,6 +95,17 @@ export default function StaffOrderScreen() {
 
   const cartTotal = cart.reduce((sum, c) => sum + c.menuItem.price * c.quantity, 0);
 
+  const cartQuantities = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of cart) {
+      map[c.menuItem.id] = (map[c.menuItem.id] || 0) + c.quantity;
+    }
+    return map;
+  }, [cart]);
+
+  const categories = restaurant?.menu_categories || [];
+  const totalItems = categories.reduce((sum, cat) => sum + (cat.menu_items || []).filter((i: any) => i.is_available !== false).length, 0);
+
   const handleSubmit = async () => {
     if (cart.length === 0 || !session) return;
 
@@ -125,17 +136,6 @@ export default function StaffOrderScreen() {
       </SafeAreaView>
     );
   }
-
-  const categories = restaurant?.menu_categories || [];
-  const totalItems = categories.reduce((sum, cat) => sum + (cat.menu_items || []).filter((i: any) => i.is_available !== false).length, 0);
-
-  const cartQuantities = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const c of cart) {
-      map[c.menuItem.id] = (map[c.menuItem.id] || 0) + c.quantity;
-    }
-    return map;
-  }, [cart]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
