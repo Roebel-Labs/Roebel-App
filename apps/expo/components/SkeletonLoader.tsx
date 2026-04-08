@@ -260,6 +260,20 @@ export function RestaurantDetailSkeleton() {
   );
 }
 
+export function NotificationCardSkeleton() {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.notificationCardSkeleton, { backgroundColor: colors.surface }]}>
+      <Skeleton width={40} height={40} borderRadius={20} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <Skeleton width="60%" height={14} />
+        <Skeleton width="90%" height={12} />
+        <Skeleton width={80} height={10} />
+      </View>
+    </View>
+  );
+}
+
 export function MovieDetailSkeleton() {
   const { colors } = useTheme();
   return (
@@ -409,5 +423,14 @@ const styles = StyleSheet.create({
   },
   movieDetailSkeleton: {
     flex: 1,
+  },
+  notificationCardSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
 });
