@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+
 import { useTheme } from '@/context/ThemeContext';
 import { fetchHelpItems } from '@/lib/supabase-help';
 import type { HelpItem } from '@/lib/types-help';
@@ -80,23 +80,13 @@ export default function ItemDetailScreen() {
         {/* Hero Media */}
         {currentItem.hero_media_url && (
           <View style={styles.heroContainer}>
-            {currentItem.hero_media_type === 'video' ? (
-              <Video
+            <View style={[styles.heroCard, { backgroundColor: colors.surface }]}>
+              <Image
                 source={{ uri: currentItem.hero_media_url }}
                 style={styles.heroMedia}
-                resizeMode={ResizeMode.CONTAIN}
-                useNativeControls
-                isLooping={false}
+                contentFit="cover"
               />
-            ) : (
-              <View style={[styles.heroCard, { backgroundColor: colors.surface }]}>
-                <Image
-                  source={{ uri: currentItem.hero_media_url }}
-                  style={styles.heroMedia}
-                  contentFit="contain"
-                />
-              </View>
-            )}
+            </View>
           </View>
         )}
 
