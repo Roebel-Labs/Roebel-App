@@ -554,3 +554,36 @@ export async function fetchUpcomingEventsForFeed(limit: number = 5): Promise<any
 
   return data || [];
 }
+
+// ─── This Week's Events for Story Bar ───────────────────────
+
+/**
+ * Fetch approved events from today through end of this week (Sunday),
+ * with account data joined for the story bar avatar.
+ */
+export async function fetchThisWeekEvents(): Promise<any[]> {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // End of this ISO week: next Sunday (day 0) or this Sunday
+  const endOfWeek = new Date(today);
+  const daysUntilSunday = (7 - today.getDay()) % 7 || 7;
+  endOfWeek.setDate(today.getDate() + daysUntilSunday);
+  const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('*, account:accounts(id, name, avatar_url)')
+    .eq('status', 'approved')
+    .gte('date', todayStr)
+    .lte('date', endOfWeekStr)
+    .order('date', { ascending: true })
+    .limit(10);
+
+  if (error) {
+    console.error('Error fetching this week events:', error);
+    return [];
+  }
+
+  return data ?? [];
+}
