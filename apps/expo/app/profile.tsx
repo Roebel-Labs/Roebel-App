@@ -179,6 +179,11 @@ const handleRefresh = async () => {
                 />
                 <ProfileMenuItem
                   icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Hilfe & Tipps"
+                  onPress={() => router.push('/help')}
+                />
+                <ProfileMenuItem
+                  icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Über die App"
                   onPress={() => openBrowserAsync('https://www.roebel.app/about')}
                 />
@@ -275,6 +280,11 @@ const handleRefresh = async () => {
                   icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Einstellungen"
                   onPress={() => router.push('/settings' as any)}
+                />
+                <ProfileMenuItem
+                  icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Hilfe & Tipps"
+                  onPress={() => router.push('/help')}
                 />
                 <ProfileMenuItem
                   icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
