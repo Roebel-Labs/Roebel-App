@@ -114,8 +114,8 @@ export default function EventStoryBar() {
           initialIndex={viewerIndex}
           onClose={() => setViewerIndex(null)}
           onNavigateToEvent={(id) => {
-            setViewerIndex(null);
             router.push(`/event/${id}` as any);
+            setTimeout(() => setViewerIndex(null), 300);
           }}
         />
       )}

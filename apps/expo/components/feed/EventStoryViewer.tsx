@@ -1,13 +1,15 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   Modal,
   Pressable,
   StyleSheet,
+  Animated,
   PanResponder,
   useWindowDimensions,
   StatusBar,
+  Easing,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +22,8 @@ type Props = {
   onClose: () => void;
   onNavigateToEvent: (id: string) => void;
 };
+
+const STORY_DURATION = 10000; // 10 seconds
 
 function formatEventDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -39,16 +43,72 @@ export default function EventStoryViewer({
   const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
+  // Ref to avoid stale closure in PanResponder
+  const currentIndexRef = useRef(currentIndex);
+  currentIndexRef.current = currentIndex;
+
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
+
   const event = events[currentIndex];
 
+  // --- Progress bar animation (0 → 1 over 10s) ---
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.setValue(0);
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: STORY_DURATION,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    anim.start(({ finished }) => {
+      if (finished) {
+        // Auto-advance to next event or close
+        const idx = currentIndexRef.current;
+        if (idx < eventsRef.current.length - 1) {
+          setCurrentIndex(idx + 1);
+        } else {
+          onClose();
+        }
+      }
+    });
+    return () => anim.stop();
+  }, [currentIndex]);
+
+  // --- Arrow bounce animation ---
+  const arrowBounce = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(arrowBounce, {
+          toValue: -4,
+          duration: 600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(arrowBounce, {
+          toValue: 0,
+          duration: 600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // --- PanResponder (swipe up) ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 8,
       onPanResponderRelease: (_, g) => {
-        // Swipe up at least 60px → go to event detail
         if (g.dy < -60) {
-          onNavigateToEvent(events[currentIndex].id);
+          onNavigateToEvent(eventsRef.current[currentIndexRef.current].id);
         }
       },
     })
@@ -84,18 +144,18 @@ export default function EventStoryViewer({
       <StatusBar hidden />
       <View style={[styles.container, { width, height }]} {...panResponder.panHandlers}>
 
-        {/* Background image */}
+        {/* Background image — fit to width */}
         {event.image_url ? (
           <Image
             source={{ uri: event.image_url }}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
+            contentFit="contain"
           />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.imageFallback]} />
         )}
 
-        {/* Left / right tap zones — must be above image but below header */}
+        {/* Left / right tap zones */}
         <View style={styles.tapRow} pointerEvents="box-none">
           <Pressable style={styles.tapZone} onPress={() => handleTap('left')} />
           <Pressable style={styles.tapZone} onPress={() => handleTap('right')} />
@@ -103,20 +163,42 @@ export default function EventStoryViewer({
 
         {/* Progress bars */}
         <View style={styles.progressRow}>
-          {events.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressBar,
-                {
-                  backgroundColor:
-                    i <= currentIndex
-                      ? '#ffffff'
-                      : 'rgba(255,255,255,0.35)',
-                },
-              ]}
-            />
-          ))}
+          {events.map((_, i) => {
+            if (i < currentIndex) {
+              // Past: solid white
+              return (
+                <View
+                  key={i}
+                  style={[styles.progressBar, styles.progressBarDone]}
+                />
+              );
+            }
+            if (i === currentIndex) {
+              // Current: animated fill
+              return (
+                <View key={i} style={[styles.progressBar, styles.progressBarBg]}>
+                  <Animated.View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        width: progress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
+              );
+            }
+            // Future: dimmed
+            return (
+              <View
+                key={i}
+                style={[styles.progressBar, styles.progressBarFuture]}
+              />
+            );
+          })}
         </View>
 
         {/* Header: org avatar + name + close */}
@@ -168,7 +250,10 @@ export default function EventStoryViewer({
             onPress={() => onNavigateToEvent(event.id)}
             pointerEvents="auto"
           >
-            <Ionicons name="chevron-up" size={18} color="#ffffff" />
+            {/* Only the arrow bounces */}
+            <Animated.View style={{ transform: [{ translateY: arrowBounce }] }}>
+              <Ionicons name="chevron-up" size={18} color="#ffffff" />
+            </Animated.View>
             <Text style={styles.ctaText}>Mehr erfahren</Text>
           </Pressable>
         </View>
@@ -206,6 +291,21 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     borderRadius: 1,
+    overflow: 'hidden',
+  },
+  progressBarDone: {
+    backgroundColor: '#ffffff',
+  },
+  progressBarBg: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 1,
+  },
+  progressBarFuture: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
   header: {
     position: 'absolute',
