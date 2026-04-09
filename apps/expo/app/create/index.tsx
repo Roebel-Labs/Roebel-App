@@ -20,7 +20,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
-import type { PostCategory } from '@/lib/types/feed';
+import type { PostCategory, FeedType } from '@/lib/types/feed';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 
@@ -52,6 +52,7 @@ export default function CreateScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{
+    feedType?: string;
     linkedEventId?: string;
     linkedEventTitle?: string;
     linkedEventDate?: string;
@@ -117,6 +118,14 @@ export default function CreateScreen() {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!params.feedType) return;
+    const allowed: FeedType[] = ['main', 'rathaus', 'app'];
+    if (allowed.includes(params.feedType as FeedType)) {
+      draft.setFeedType(params.feedType as FeedType);
+    }
+  }, [params.feedType]);
 
   const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
 
