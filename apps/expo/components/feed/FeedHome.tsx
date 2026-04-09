@@ -46,6 +46,8 @@ import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
 import MailIcon from '@/assets/icons/mail.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
+import PostBar from './PostBar';
+import EventStoryBar from './EventStoryBar';
 
 export default function FeedHome() {
   const { colors } = useTheme();
@@ -129,7 +131,7 @@ export default function FeedHome() {
 
   const handleCompose = () => {
     if (!walletAddress) return;
-    router.push('/create' as any);
+    router.push({ pathname: '/create', params: { feedType: activeTab } } as any);
   };
 
   const handleMore = (post: PostRecord) => {
@@ -264,6 +266,7 @@ export default function FeedHome() {
 
   const listHeader = (
     <View style={[styles.headerWrapper, { backgroundColor: colors.background, marginHorizontal: -8, marginBottom: 8 }]}>
+      {/* App header row */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
         <View style={styles.headerActions}>
@@ -290,8 +293,21 @@ export default function FeedHome() {
           </Pressable>
         </View>
       </View>
+
+      {/* Post bar — tap to compose */}
+      <PostBar
+        avatarUrl={user?.profile_picture_url ?? null}
+        onPress={handleCompose}
+      />
+
+      {/* Tab bar */}
       <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Context bar */}
       <ContextBar />
+
+      {/* Event story bar — Für dich tab only */}
+      {activeTab === 'main' && <EventStoryBar />}
     </View>
   );
 
