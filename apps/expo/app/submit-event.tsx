@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import { geocodeLocation } from '@/lib/utils/geocoding';
 import { logEventSubmission } from '@/lib/firebase';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import type { ColorTokens } from '@/constants/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -114,6 +115,7 @@ export default function SubmitEventScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
+  const { user } = useUser();
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -165,6 +167,16 @@ export default function SubmitEventScreen() {
     ticket_price: '',
     max_attendees: '',
   });
+
+  // Auto-populate organizer fields from active account and user profile
+  useEffect(() => {
+    setForm((f) => ({
+      ...f,
+      organizer_name: activeAccount?.name ?? f.organizer_name,
+      organizer_email: user?.email ?? f.organizer_email,
+      organizer_phone: user?.phone_number ?? f.organizer_phone,
+    }));
+  }, [activeAccount?.id, user?.email, user?.phone_number]);
 
   // Error tracking state
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -1017,6 +1029,11 @@ export default function SubmitEventScreen() {
         </Field>
 
         {/* Organizer Fields - Single Column */}
+        {(activeAccount?.name || user?.email || user?.phone_number) && (
+          <Text style={[styles.prefillHint, { color: colors.textTertiary }]}>
+            Veranstalter-Informationen wurden aus deinem Profil vorausgefüllt – bitte prüfen und bei Bedarf ändern.
+          </Text>
+        )}
         <Field label="Ihr Name" required error={fieldErrors.organizer_name} colors={colors}>
           <TextInput
             style={[styles.input, { backgroundColor: colors.background, borderColor: colors.borderSecondary, color: colors.textPrimary }, fieldErrors.organizer_name && { borderColor: colors.error, borderWidth: 2 }]}
@@ -1626,6 +1643,12 @@ const styles = StyleSheet.create({
   locationHint: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+    marginTop: 4,
+  },
+  prefillHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 8,
     marginTop: 4,
   },
   // Fullscreen Image Preview Modal Styles

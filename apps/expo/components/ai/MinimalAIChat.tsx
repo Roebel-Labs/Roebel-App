@@ -30,6 +30,8 @@ import FlyerIcon from '@/assets/icons/flyer.svg';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
+import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 
 interface Message {
   id: string;
@@ -40,7 +42,13 @@ interface Message {
   isLoading?: boolean;
 }
 
-const SYSTEM_PROMPT = `Du bist ein hilfreicher KI-Assistent für die Einreichung von Events in Röbel/Müritz.
+function buildSystemPrompt(params: {
+  organizerName: string;
+  organizerEmail: string;
+  organizerPhone: string;
+  accountType: 'personal' | 'organisation';
+}): string {
+  return `Du bist ein hilfreicher KI-Assistent für die Einreichung von Events in Röbel/Müritz.
 
 Deine Aufgabe ist es, Nutzer durch den Prozess der Event-Einreichung zu führen. Stelle freundliche Fragen und sammle folgende Informationen:
 
@@ -48,8 +56,15 @@ Deine Aufgabe ist es, Nutzer durch den Prozess der Event-Einreichung zu führen.
 - Event-Titel
 - Datum (im Format JJJJ-MM-TT) ODER mehrere Termine für wiederkehrende Events
 - Ort/Adresse in Röbel oder Umgebung
-- Name des Veranstalters
-- E-Mail-Adresse des Veranstalters
+
+**Veranstalter-Informationen (bereits bekannt – NICHT danach fragen):**
+- Name: ${params.organizerName || '(nicht angegeben)'}
+- E-Mail: ${params.organizerEmail || '(nicht angegeben)'}
+${params.organizerPhone ? `- Telefon: ${params.organizerPhone}` : ''}
+- Typ: ${params.accountType === 'organisation' ? 'Organisations-Account' : 'Persönlicher Account'}
+
+Zeige dem Nutzer diese Veranstalter-Informationen zu Beginn des Gesprächs und frage: "Stimmen diese Angaben? Oder soll ich sie ändern?" Wenn der Nutzer Änderungen wünscht, übernimm die geänderten Werte. Frage ansonsten NICHT erneut nach Veranstalter-Name, E-Mail oder Telefon.
+Verwende diese Daten direkt beim Aufruf des prepare_event_submission Tools.
 
 **Optionale Felder:**
 - Beschreibung
@@ -59,7 +74,6 @@ Deine Aufgabe ist es, Nutzer durch den Prozess der Event-Einreichung zu führen.
 - Webseite
 - Eintrittspreis (0 für kostenlos)
 - Maximale Teilnehmerzahl
-- Telefonnummer
 
 **Bilder/Flyer:**
 - Nutzer können Event-Flyer oder Bilder hochladen
@@ -83,6 +97,7 @@ Stelle die Fragen einzeln und natürlich. Bestätige die Eingaben des Nutzers.
 3. Sage dem Nutzer: "Wische nach oben um dein Event einzureichen!"
 
 Antworte immer auf Deutsch und sei freundlich und hilfsbereit.`;
+}
 
 // Tools definition for Claude to prepare event submission
 const TOOLS = [
@@ -445,6 +460,8 @@ const previewStyles = StyleSheet.create({
 
 export function MinimalAIChat() {
   const { colors } = useTheme();
+  const { activeAccount } = useAccount();
+  const { user } = useUser();
   const scrollViewRef = useRef<ScrollView>(null);
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([
@@ -567,6 +584,11 @@ export function MinimalAIChat() {
     router.replace('/');
   };
 
+  // Handle go to my events
+  const handleGoToMyEvents = () => {
+    router.replace('/my-events');
+  };
+
   // Submit event to Supabase
   const submitEventToSupabase = async (eventData: any): Promise<boolean> => {
     setIsSubmittingEvent(true);
@@ -615,6 +637,7 @@ export function MinimalAIChat() {
         image_url: eventData.image_url || null,
         status: 'pending',
         is_recurring: isRecurring,
+        account_id: activeAccount?.id || null,
       }).select().single();
 
       if (error) {
@@ -817,7 +840,13 @@ export function MinimalAIChat() {
       );
 
       // Call Anthropic API with tools
-      const response = await callAnthropicAPI(apiKey, SYSTEM_PROMPT, apiMessages, TOOLS);
+      const systemPrompt = buildSystemPrompt({
+        organizerName: activeAccount?.name ?? '',
+        organizerEmail: user?.email ?? '',
+        organizerPhone: user?.phone_number ?? '',
+        accountType: activeAccount?.account_type ?? 'personal',
+      });
+      const response = await callAnthropicAPI(apiKey, systemPrompt, apiMessages, TOOLS);
 
       // Check if Claude wants to use a tool
       const toolUseBlock = response.content.find((block: any) => block.type === 'tool_use');
@@ -1043,9 +1072,14 @@ export function MinimalAIChat() {
           <Text style={styles.successSubtitle}>
             Ihre Veranstaltung wird nun von uns überprüft und erscheint in den nächsten Tagen in der App.
           </Text>
-          <TouchableOpacity style={[styles.homeButton, { backgroundColor: colors.background }]} onPress={handleGoHome}>
-            <Text style={[styles.homeButtonText, { color: colors.primary }]}>Zur Startseite</Text>
-          </TouchableOpacity>
+          <View style={styles.successButtonsContainer}>
+            <TouchableOpacity style={[styles.homeButton, { backgroundColor: colors.background }]} onPress={handleGoHome}>
+              <Text style={[styles.homeButtonText, { color: colors.primary }]}>Zur Startseite</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.myEventsButton, { borderColor: colors.onPrimary }]} onPress={handleGoToMyEvents}>
+              <Text style={[styles.myEventsButtonText, { color: colors.onPrimary }]}>Meine Veranstaltungen</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -1218,16 +1252,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  homeButton: {
+  successButtonsContainer: {
     position: 'absolute',
     bottom: 48,
     left: 24,
     right: 24,
+    gap: 12,
+  },
+  homeButton: {
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
   homeButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+  },
+  myEventsButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  myEventsButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
   },
