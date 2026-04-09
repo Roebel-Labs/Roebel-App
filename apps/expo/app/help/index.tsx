@@ -1,9 +1,10 @@
 // apps/expo/app/help/index.tsx
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchHelpCollections, fetchHelpVideos } from '@/lib/supabase-help';
 import type { HelpCollection, HelpVideo } from '@/lib/types-help';
@@ -33,7 +34,14 @@ export default function HelpHomeScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: 'Hilfe & Tipps' }} />
+        <Stack.Screen options={{
+          title: 'Hilfe & Tipps',
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+            </Pressable>
+          ),
+        }} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -43,7 +51,14 @@ export default function HelpHomeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Hilfe & Tipps' }} />
+      <Stack.Screen options={{
+          title: 'Hilfe & Tipps',
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+            </Pressable>
+          ),
+        }} />
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Featured Hero Card */}
         {featured && (
