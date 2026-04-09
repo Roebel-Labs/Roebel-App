@@ -31,7 +31,7 @@ export default function FeedTabBar({ activeTab, onTabChange }: Props) {
               style={[
                 styles.tabLabel,
                 {
-                  color: isActive ? colors.textPrimary : colors.textTertiary,
+                  color: isActive ? colors.primary : colors.textTertiary,
                   fontFamily: isActive ? 'Inter-Medium' : 'Inter-Regular',
                 },
               ]}

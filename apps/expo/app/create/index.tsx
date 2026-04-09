@@ -32,6 +32,12 @@ import CommunityIcon from '@/assets/icons/community.svg';
 
 const MAX_CONTENT_LENGTH = 500;
 
+const FEED_TYPE_LABELS: Record<FeedType, string> = {
+  main: 'Für Dich',
+  rathaus: 'Stadt',
+  app: 'App',
+};
+
 const CATEGORIES: PostCategory[] = [
   'generell',
   'frage',
@@ -75,6 +81,7 @@ export default function CreateScreen() {
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
 
   // Initialize linked event from route params (coming from event submission success)
   useEffect(() => {
@@ -189,19 +196,47 @@ export default function CreateScreen() {
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </Pressable>
 
-          <Pressable
-            style={[styles.audiencePill, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-            onPress={() => {
-              const next = draft.feedType === 'main' ? 'rathaus' : 'main';
-              draft.setFeedType(next as any);
-            }}
-          >
-            <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
-            <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
-              {draft.feedType === 'main' ? 'Alle' : 'Stadt'}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-          </Pressable>
+          <View>
+            <Pressable
+              style={[styles.audiencePill, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              onPress={() => setFeedDropdownOpen(!feedDropdownOpen)}
+            >
+              <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
+                {FEED_TYPE_LABELS[draft.feedType]}
+              </Text>
+              <Ionicons name={feedDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+            </Pressable>
+            {feedDropdownOpen && (
+              <View style={[styles.feedDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {(Object.keys(FEED_TYPE_LABELS) as FeedType[]).map((ft) => (
+                  <Pressable
+                    key={ft}
+                    style={[
+                      styles.feedDropdownItem,
+                      draft.feedType === ft && { backgroundColor: colors.primaryLight },
+                    ]}
+                    onPress={() => {
+                      draft.setFeedType(ft);
+                      setFeedDropdownOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.feedDropdownText,
+                        { color: draft.feedType === ft ? colors.primary : colors.textPrimary },
+                      ]}
+                    >
+                      {FEED_TYPE_LABELS[ft]}
+                    </Text>
+                    {draft.feedType === ft && (
+                      <Ionicons name="checkmark" size={16} color={colors.primary} />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
 
           <Pressable
             onPress={handleWeiter}
@@ -439,6 +474,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   audienceText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  feedDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    zIndex: 10,
+    minWidth: 140,
+  },
+  feedDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  feedDropdownText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
   },

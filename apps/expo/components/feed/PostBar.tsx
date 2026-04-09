@@ -33,13 +33,13 @@ export default function PostBar({ avatarUrl, onPress }: Props) {
         )}
       </View>
 
-      {/* Placeholder text */}
-      <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-        Teile etwas mit Röbel
-      </Text>
-
-      {/* Image icon */}
-      <Ionicons name="image-outline" size={22} color={colors.textTertiary} />
+      {/* Input area with gray background */}
+      <View style={[styles.inputArea, { backgroundColor: colors.surfaceSecondary }]}>
+        <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
+          Teile etwas mit Röbel
+        </Text>
+        <Ionicons name="image-outline" size={20} color={colors.textTertiary} />
+      </View>
     </Pressable>
   );
 }
@@ -61,6 +61,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
+  },
+  inputArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
   },
   placeholder: {
     flex: 1,
