@@ -10,7 +10,7 @@ export type PostCategory =
   | 'im_angebot'
   | 'generell';
 
-export type FeedType = 'main' | 'rathaus';
+export type FeedType = 'main' | 'rathaus' | 'app';
 export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share';
 
 export type PostAuthor = Pick<

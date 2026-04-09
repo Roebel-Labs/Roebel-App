@@ -58,6 +58,24 @@ export default function FeedEmptyState({ feedType, isCitizen, onCompose }: Props
     );
   }
 
+  // App tab, empty
+  if (feedType === 'app') {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.iconCircle, { backgroundColor: colors.primaryLight }]}>
+          <CommentIcon width={32} height={32} color={colors.primary} />
+        </View>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Noch keine App-Diskussionen</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Teile Ideen oder Feedback zur App!
+        </Text>
+        <Pressable onPress={onCompose} style={[styles.button, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Beitrag erstellen</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   // Main feed, empty
   return (
     <View style={styles.container}>

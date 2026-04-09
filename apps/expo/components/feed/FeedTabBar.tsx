@@ -11,6 +11,7 @@ type Props = {
 const TABS: { key: FeedType; label: string }[] = [
   { key: 'main', label: 'Für Dich' },
   { key: 'rathaus', label: 'Stadt' },
+  { key: 'app', label: 'App' },
 ];
 
 export default function FeedTabBar({ activeTab, onTabChange }: Props) {
