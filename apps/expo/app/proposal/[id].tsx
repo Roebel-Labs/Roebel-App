@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
+import { dismissibleDetail } from '@/lib/navigation/transitionPresets';
 import { useActiveAccount } from 'thirdweb/react';
 import { balanceOf } from 'thirdweb/extensions/erc721';
 import { ArrowLeftIcon } from '@/components/Icons';
@@ -23,6 +24,12 @@ export default function ProposalDetailScreen() {
   const { colors } = useTheme();
   const params = useLocalSearchParams();
   const account = useActiveAccount();
+  const navigation = useNavigation();
+
+  // Present as a modal-like sheet with drag-down-to-dismiss (cross-platform parity).
+  useLayoutEffect(() => {
+    navigation.setOptions(dismissibleDetail() as any);
+  }, [navigation]);
 
   // Get proposal ID from route params (UUID string from Supabase)
   const proposalId = params.id as string | null;

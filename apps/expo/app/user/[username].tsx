@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
+import { dismissibleDetail } from '@/lib/navigation/transitionPresets';
 import TierBadge from '@/components/RoleBadge';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
@@ -21,6 +22,12 @@ export default function PublicProfileScreen() {
   const goBack = useGoBack();
   const { username } = useLocalSearchParams<{ username: string }>();
   const { colors } = useTheme();
+  const navigation = useNavigation();
+
+  // Present as a modal-like sheet with drag-down-to-dismiss (cross-platform parity).
+  useLayoutEffect(() => {
+    navigation.setOptions(dismissibleDetail() as any);
+  }, [navigation]);
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
