@@ -43,6 +43,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 16,
+    borderRadius: 14,
   },
   icon: {
     width: 36,

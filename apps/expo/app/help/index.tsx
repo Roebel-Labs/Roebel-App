@@ -115,18 +115,12 @@ export default function HelpHomeScreen() {
                 </View>
               ) : (
                 <View style={styles.list}>
-                  {sectionCollections.map((col, idx) => (
-                    <React.Fragment key={col.id}>
-                      <HelpListRow
-                        collection={col}
-                        onPress={() => router.push(`/help/${col.id}`)}
-                      />
-                      {idx < sectionCollections.length - 1 && (
-                        <View
-                          style={[styles.listDivider, { backgroundColor: colors.border }]}
-                        />
-                      )}
-                    </React.Fragment>
+                  {sectionCollections.map(col => (
+                    <HelpListRow
+                      key={col.id}
+                      collection={col}
+                      onPress={() => router.push(`/help/${col.id}`)}
+                    />
                   ))}
                 </View>
               )}
@@ -237,11 +231,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   list: {
-    // list rows fill width; dividers between
-  },
-  listDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 66, // align with text after icon
+    paddingHorizontal: 16,
+    gap: 8,
   },
   videoList: {
     gap: 12,
