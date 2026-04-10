@@ -33,29 +33,39 @@ import {
   FolderOpen,
   FileText,
   Video,
-  HelpCircle,
+  Layers,
   Star,
   ExternalLink,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import {
+  deleteSection,
+  togglePublishSection,
   deleteCollection,
   togglePublishCollection,
   deleteItem,
   togglePublishItem,
   deleteVideo,
   togglePublishVideo,
+  type HelpSection,
   type HelpCollection,
   type HelpItem,
   type HelpVideo,
 } from "@/app/actions/help-hub"
 
-type Tab = "collections" | "items" | "videos"
+type Tab = "sections" | "collections" | "items" | "videos"
 
 export default function HelpHubPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<Tab>("collections")
+  const [activeTab, setActiveTab] = useState<Tab>("sections")
+
+  // Sections state
+  const [sections, setSections] = useState<HelpSection[]>([])
+  const [filteredSections, setFilteredSections] = useState<HelpSection[]>([])
+  const [sectionsLoading, setSectionsLoading] = useState(true)
+  const [sectionsSearch, setSectionsSearch] = useState("")
+  const [sectionsPublishFilter, setSectionsPublishFilter] = useState("all")
 
   // Collections state
   const [collections, setCollections] = useState<HelpCollection[]>([])
@@ -63,6 +73,7 @@ export default function HelpHubPage() {
   const [collectionsLoading, setCollectionsLoading] = useState(true)
   const [collectionsSearch, setCollectionsSearch] = useState("")
   const [collectionsPublishFilter, setCollectionsPublishFilter] = useState("all")
+  const [collectionsSectionFilter, setCollectionsSectionFilter] = useState("all")
 
   // Items state
   const [items, setItems] = useState<HelpItem[]>([])
@@ -81,12 +92,29 @@ export default function HelpHubPage() {
 
   // ── Fetch ────────────────────────────────────────────
 
+  const fetchSections = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("help_sections")
+        .select("*")
+        .order("display_order", { ascending: true })
+      if (error) throw error
+      setSections((data || []) as HelpSection[])
+    } catch (error) {
+      console.error("Error fetching sections:", error)
+      toast.error("Fehler beim Laden der Bereiche")
+    } finally {
+      setSectionsLoading(false)
+    }
+  }, [])
+
   const fetchCollections = useCallback(async () => {
     try {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("help_collections")
-        .select("*")
+        .select("*, help_sections(title, view_mode)")
         .order("display_order", { ascending: true })
       if (error) throw error
       setCollections((data || []) as HelpCollection[])
@@ -133,12 +161,28 @@ export default function HelpHubPage() {
   }, [])
 
   useEffect(() => {
+    fetchSections()
     fetchCollections()
     fetchItems()
     fetchVideos()
-  }, [fetchCollections, fetchItems, fetchVideos])
+  }, [fetchSections, fetchCollections, fetchItems, fetchVideos])
 
   // ── Filters ──────────────────────────────────────────
+
+  useEffect(() => {
+    let filtered = sections
+    if (sectionsSearch) {
+      filtered = filtered.filter((s) =>
+        s.title.toLowerCase().includes(sectionsSearch.toLowerCase())
+      )
+    }
+    if (sectionsPublishFilter !== "all") {
+      filtered = filtered.filter((s) =>
+        sectionsPublishFilter === "published" ? s.is_published : !s.is_published
+      )
+    }
+    setFilteredSections(filtered)
+  }, [sections, sectionsSearch, sectionsPublishFilter])
 
   useEffect(() => {
     let filtered = collections
@@ -152,8 +196,15 @@ export default function HelpHubPage() {
         collectionsPublishFilter === "published" ? c.is_published : !c.is_published
       )
     }
+    if (collectionsSectionFilter !== "all") {
+      if (collectionsSectionFilter === "none") {
+        filtered = filtered.filter((c) => !c.section_id)
+      } else {
+        filtered = filtered.filter((c) => c.section_id === collectionsSectionFilter)
+      }
+    }
     setFilteredCollections(filtered)
-  }, [collections, collectionsSearch, collectionsPublishFilter])
+  }, [collections, collectionsSearch, collectionsPublishFilter, collectionsSectionFilter])
 
   useEffect(() => {
     let filtered = items
@@ -189,6 +240,28 @@ export default function HelpHubPage() {
   }, [videos, videosSearch, videosPublishFilter])
 
   // ── Actions ──────────────────────────────────────────
+
+  const handleDeleteSection = async (id: string) => {
+    const loadingToast = toast.loading("Bereich wird gelöscht...")
+    const result = await deleteSection(id)
+    if (result.success) {
+      toast.success("Bereich gelöscht", { id: loadingToast, description: result.message })
+      fetchSections()
+      fetchCollections() // section_id on collections becomes null
+    } else {
+      toast.error("Fehler", { id: loadingToast, description: result.error })
+    }
+  }
+
+  const handleToggleSection = async (id: string, isPublished: boolean) => {
+    const result = await togglePublishSection(id, isPublished)
+    if (result.success) {
+      toast.success(result.message)
+      fetchSections()
+    } else {
+      toast.error(result.error || "Fehler beim Ändern des Status")
+    }
+  }
 
   const handleDeleteCollection = async (id: string) => {
     const loadingToast = toast.loading("Sammlung wird gelöscht...")
@@ -264,6 +337,7 @@ export default function HelpHubPage() {
     )
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+    { key: "sections", label: "Bereiche", icon: <Layers className="h-4 w-4" /> },
     { key: "collections", label: "Sammlungen", icon: <FolderOpen className="h-4 w-4" /> },
     { key: "items", label: "Hilfe-Artikel", icon: <FileText className="h-4 w-4" /> },
     { key: "videos", label: "Videos", icon: <Video className="h-4 w-4" /> },
@@ -301,6 +375,128 @@ export default function HelpHubPage() {
         ))}
       </div>
 
+      {/* Sections Tab */}
+      {activeTab === "sections" && (
+        <div className="space-y-4">
+          {/* Toolbar */}
+          <div className="flex gap-4 items-center flex-wrap">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Bereich suchen..."
+                value={sectionsSearch}
+                onChange={(e) => setSectionsSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={sectionsPublishFilter} onValueChange={setSectionsPublishFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle</SelectItem>
+                <SelectItem value="published">Veröffentlicht</SelectItem>
+                <SelectItem value="draft">Entwurf</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => router.push("/admin/dashboard/help/sections/new")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Neuer Bereich
+            </Button>
+          </div>
+
+          {/* List */}
+          {sectionsLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+          ) : filteredSections.length === 0 ? (
+            <div className="text-center py-12 bg-card border border-border rounded-[10px]">
+              <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">Keine Bereiche gefunden</p>
+              <Button
+                variant="link"
+                onClick={() => router.push("/admin/dashboard/help/sections/new")}
+                className="mt-2"
+              >
+                Ersten Bereich erstellen
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredSections.map((section) => (
+                <div
+                  key={section.id}
+                  className="bg-card border border-border rounded-[10px] p-5 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h3 className="font-medium text-lg">{section.title}</h3>
+                        {getPublishBadge(section.is_published)}
+                        <Badge variant="outline">
+                          {section.view_mode === "list" ? "Liste" : "Grid"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Reihenfolge: {section.display_order}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <Switch
+                        checked={section.is_published}
+                        onCheckedChange={(checked) => handleToggleSection(section.id, checked)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          router.push(`/admin/dashboard/help/sections/${section.id}/edit`)
+                        }
+                      >
+                        <Edit className="h-4 w-4 mr-1.5" />
+                        Bearbeiten
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Bereich löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Möchten Sie &quot;{section.title}&quot; wirklich löschen? Zugehörige
+                              Sammlungen werden nicht gelöscht, aber ihre Zuordnung wird entfernt.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteSection(section.id)}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Collections Tab */}
       {activeTab === "collections" && (
         <div className="space-y-4">
@@ -323,6 +519,20 @@ export default function HelpHubPage() {
                 <SelectItem value="all">Alle</SelectItem>
                 <SelectItem value="published">Veröffentlicht</SelectItem>
                 <SelectItem value="draft">Entwurf</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={collectionsSectionFilter} onValueChange={setCollectionsSectionFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Bereich" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Bereiche</SelectItem>
+                <SelectItem value="none">Ohne Bereich</SelectItem>
+                {sections.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button onClick={() => router.push("/admin/dashboard/help/collections/new")}>
@@ -384,7 +594,8 @@ export default function HelpHubPage() {
                             <p className="text-sm text-muted-foreground">{collection.subtitle}</p>
                           )}
                           <p className="text-xs text-muted-foreground mt-1">
-                            Reihenfolge: {collection.display_order}
+                            Bereich: {collection.help_sections?.title || "–"} · Reihenfolge:{" "}
+                            {collection.display_order}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">

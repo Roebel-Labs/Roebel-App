@@ -1,21 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone"
 import { toast } from "sonner"
 import { createCollection } from "@/app/actions/help-hub"
+import { createClient } from "@/lib/supabase/client"
 import { ArrowLeft, Save, Eye } from "lucide-react"
 
 export default function NewCollectionPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [sections, setSections] = useState<{ id: string; title: string }[]>([])
   const [formData, setFormData] = useState({
+    section_id: "",
     title: "",
     subtitle: "",
     icon_url: "",
@@ -24,11 +34,24 @@ export default function NewCollectionPage() {
     is_featured: false,
   })
 
+  useEffect(() => {
+    const fetchSections = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("help_sections")
+        .select("id, title")
+        .order("display_order", { ascending: true })
+      setSections(data || [])
+    }
+    fetchSections()
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent, publish: boolean) => {
     e.preventDefault()
     setLoading(true)
 
     const submitData = new FormData()
+    submitData.append("section_id", formData.section_id)
     submitData.append("title", formData.title)
     submitData.append("subtitle", formData.subtitle)
     submitData.append("icon_url", formData.icon_url)
@@ -129,6 +152,30 @@ export default function NewCollectionPage() {
         {/* Settings */}
         <div className="bg-card border border-border rounded-[10px] p-6 space-y-6">
           <h3 className="font-medium text-lg">Einstellungen</h3>
+          <div>
+            <Label htmlFor="section_id">Bereich</Label>
+            <Select
+              value={formData.section_id || "none"}
+              onValueChange={(value) =>
+                setFormData({ ...formData, section_id: value === "none" ? "" : value })
+              }
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Bereich auswählen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Kein Bereich (nur Hervorgehoben)</SelectItem>
+                {sections.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sammlungen ohne Bereich werden nur als &quot;Hervorgehoben&quot; angezeigt
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="display_order">Reihenfolge</Label>

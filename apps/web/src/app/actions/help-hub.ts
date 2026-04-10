@@ -5,8 +5,18 @@ import { revalidatePath } from "next/cache"
 
 // ── Types ──────────────────────────────────────────────
 
+export interface HelpSection {
+  id: string
+  title: string
+  view_mode: "grid" | "list"
+  display_order: number
+  is_published: boolean
+  created_at: string
+}
+
 export interface HelpCollection {
   id: string
+  section_id: string | null
   title: string
   subtitle: string | null
   icon_url: string | null
@@ -15,6 +25,7 @@ export interface HelpCollection {
   is_featured: boolean
   is_published: boolean
   created_at: string
+  help_sections?: { title: string; view_mode: string } | null
 }
 
 export interface HelpItem {
@@ -86,15 +97,118 @@ function logError(context: string, error: unknown, extra?: Record<string, unknow
   })
 }
 
+// ── Sections ───────────────────────────────────────────
+
+export async function createSection(formData: FormData) {
+  try {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+      .from("help_sections")
+      .insert({
+        title: formData.get("title") as string,
+        view_mode: (formData.get("view_mode") as string) || "grid",
+        display_order: parseInt(formData.get("display_order") as string) || 0,
+        is_published: formData.get("is_published") === "true",
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    revalidatePath("/admin/dashboard/help")
+    return { success: true, data, message: "Bereich erfolgreich erstellt" }
+  } catch (error) {
+    logError("createSection failed", error)
+    return {
+      success: false,
+      error: `Fehler beim Erstellen des Bereichs: ${formatError(error)}`,
+    }
+  }
+}
+
+export async function updateSection(id: string, formData: FormData) {
+  try {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+      .from("help_sections")
+      .update({
+        title: formData.get("title") as string,
+        view_mode: (formData.get("view_mode") as string) || "grid",
+        display_order: parseInt(formData.get("display_order") as string) || 0,
+        is_published: formData.get("is_published") === "true",
+      })
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    revalidatePath("/admin/dashboard/help")
+    return { success: true, data, message: "Bereich erfolgreich aktualisiert" }
+  } catch (error) {
+    logError("updateSection failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Aktualisieren des Bereichs: ${formatError(error)}`,
+    }
+  }
+}
+
+export async function deleteSection(id: string) {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase.from("help_sections").delete().eq("id", id)
+    if (error) throw error
+
+    revalidatePath("/admin/dashboard/help")
+    return { success: true, message: "Bereich erfolgreich gelöscht" }
+  } catch (error) {
+    logError("deleteSection failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Löschen des Bereichs: ${formatError(error)}`,
+    }
+  }
+}
+
+export async function togglePublishSection(id: string, isPublished: boolean) {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("help_sections")
+      .update({ is_published: isPublished })
+      .eq("id", id)
+
+    if (error) throw error
+
+    revalidatePath("/admin/dashboard/help")
+    return {
+      success: true,
+      message: isPublished ? "Bereich veröffentlicht" : "Bereich als Entwurf gespeichert",
+    }
+  } catch (error) {
+    logError("togglePublishSection failed", error, { id, isPublished })
+    return {
+      success: false,
+      error: `Fehler beim Ändern des Status: ${formatError(error)}`,
+    }
+  }
+}
+
 // ── Collections ────────────────────────────────────────
 
 export async function createCollection(formData: FormData) {
   try {
     const supabase = await createClient()
 
+    const sectionId = (formData.get("section_id") as string) || null
+
     const { data, error } = await supabase
       .from("help_collections")
       .insert({
+        section_id: sectionId,
         title: formData.get("title") as string,
         subtitle: (formData.get("subtitle") as string) || null,
         icon_url: (formData.get("icon_url") as string) || null,
@@ -123,9 +237,12 @@ export async function updateCollection(id: string, formData: FormData) {
   try {
     const supabase = await createClient()
 
+    const sectionId = (formData.get("section_id") as string) || null
+
     const { data, error } = await supabase
       .from("help_collections")
       .update({
+        section_id: sectionId,
         title: formData.get("title") as string,
         subtitle: (formData.get("subtitle") as string) || null,
         icon_url: (formData.get("icon_url") as string) || null,
