@@ -1,9 +1,19 @@
+export type HelpSection = {
+  id: string;
+  title: string;
+  view_mode: 'grid' | 'list';
+  display_order: number;
+  is_published: boolean;
+  created_at: string;
+};
+
 export type HelpCollection = {
   id: string;
   title: string;
   subtitle: string | null;
   icon_url: string | null;
   cover_image_url: string | null;
+  section_id: string | null;
   display_order: number;
   is_featured: boolean;
   is_published: boolean;

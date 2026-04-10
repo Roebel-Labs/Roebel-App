@@ -7,26 +7,49 @@ import type { HelpCollection } from '@/lib/types-help';
 type Props = {
   collection: HelpCollection;
   onPress: () => void;
+  size?: 'large' | 'small';
 };
 
-export default function HelpHeroCard({ collection, onPress }: Props) {
+export default function HelpHeroCard({ collection, onPress, size = 'large' }: Props) {
   const { colors } = useTheme();
+  const isLarge = size === 'large';
 
   return (
-    <Pressable onPress={onPress} style={styles.container}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.container, { backgroundColor: colors.surface }]}
+    >
       {collection.cover_image_url ? (
         <Image
           source={{ uri: collection.cover_image_url }}
-          style={styles.image}
+          style={[isLarge ? styles.imageLarge : styles.imageSmall]}
           contentFit="cover"
         />
       ) : (
-        <View style={[styles.image, { backgroundColor: colors.primary }]} />
+        <View
+          style={[
+            isLarge ? styles.imageLarge : styles.imageSmall,
+            { backgroundColor: colors.primaryLight },
+          ]}
+        />
       )}
-      <View style={styles.overlay}>
-        <Text style={styles.title}>{collection.title}</Text>
+      <View style={styles.textContainer}>
+        <Text
+          style={[
+            isLarge ? styles.titleLarge : styles.titleSmall,
+            { color: colors.textPrimary },
+          ]}
+          numberOfLines={2}
+        >
+          {collection.title}
+        </Text>
         {collection.subtitle && (
-          <Text style={styles.subtitle}>{collection.subtitle}</Text>
+          <Text
+            style={[styles.subtitle, { color: colors.textSecondary }]}
+            numberOfLines={2}
+          >
+            {collection.subtitle}
+          </Text>
         )}
       </View>
     </Pressable>
@@ -35,30 +58,32 @@ export default function HelpHeroCard({ collection, onPress }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
-    marginTop: 12,
     borderRadius: 16,
     overflow: 'hidden',
+    flex: 1,
+  },
+  imageLarge: {
+    width: '100%',
     height: 180,
   },
-  image: {
-    ...StyleSheet.absoluteFillObject,
+  imageSmall: {
+    width: '100%',
+    height: 110,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 16,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  textContainer: {
+    padding: 14,
   },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#fff',
+  titleLarge: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+  },
+  titleSmall: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
   },
   subtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
+    marginTop: 4,
   },
 });

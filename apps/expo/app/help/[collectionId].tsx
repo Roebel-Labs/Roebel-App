@@ -1,14 +1,25 @@
 // apps/expo/app/help/[collectionId].tsx
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchHelpCollection, fetchHelpItems } from '@/lib/supabase-help';
 import type { HelpCollection, HelpItem } from '@/lib/types-help';
 import HelpItemRow from '@/components/help/HelpItemRow';
+
+const HERO_HEIGHT = 320;
 
 export default function CollectionDetailScreen() {
   const router = useRouter();
@@ -20,7 +31,10 @@ export default function CollectionDetailScreen() {
 
   useEffect(() => {
     if (!collectionId) return;
-    Promise.all([fetchHelpCollection(collectionId), fetchHelpItems(collectionId)])
+    Promise.all([
+      fetchHelpCollection(collectionId),
+      fetchHelpItems(collectionId),
+    ])
       .then(([col, itms]) => {
         setCollection(col);
         setItems(itms);
@@ -30,7 +44,9 @@ export default function CollectionDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <Stack.Screen options={{ title: '' }} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -41,7 +57,9 @@ export default function CollectionDetailScreen() {
 
   if (!collection) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <Stack.Screen options={{ title: 'Nicht gefunden' }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -52,19 +70,51 @@ export default function CollectionDetailScreen() {
     );
   }
 
+  const hasHero = !!collection.cover_image_url;
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
-      <Stack.Screen options={{ title: collection.title }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero Image */}
-        {collection.cover_image_url && (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={
+          hasHero
+            ? { headerShown: false }
+            : { title: collection.title }
+        }
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={hasHero ? undefined : styles.noHeroContent}
+      >
+        {/* Hero Image (optional) */}
+        {hasHero && (
           <View style={styles.heroContainer}>
             <Image
-              source={{ uri: collection.cover_image_url }}
+              source={{ uri: collection.cover_image_url! }}
               style={styles.heroImage}
               contentFit="cover"
             />
-            <View style={styles.heroOverlay}>
+
+            {/* Bottom-half gradient (transparent → black) */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.85)']}
+              locations={[0, 1]}
+              style={styles.heroGradient}
+            />
+
+            {/* Back button — rounded top-left */}
+            <SafeAreaView edges={['top']} style={styles.heroBackWrapper}>
+              <Pressable
+                onPress={() => router.back()}
+                style={styles.heroBackButton}
+                hitSlop={8}
+              >
+                <Ionicons name="arrow-back" size={22} color="#fff" />
+              </Pressable>
+            </SafeAreaView>
+
+            {/* Title overlay */}
+            <View style={styles.heroTextContainer}>
               <Text style={styles.heroTitle}>{collection.title}</Text>
               {collection.subtitle && (
                 <Text style={styles.heroSubtitle}>{collection.subtitle}</Text>
@@ -99,7 +149,7 @@ export default function CollectionDetailScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -112,29 +162,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  noHeroContent: {
+    paddingTop: 8,
+  },
   heroContainer: {
-    height: 200,
+    width: '100%',
+    height: HERO_HEIGHT,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
     position: 'relative',
   },
   heroImage: {
     ...StyleSheet.absoluteFillObject,
   },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 16,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  heroGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: HERO_HEIGHT / 2,
+  },
+  heroBackWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  heroBackButton: {
+    marginTop: 8,
+    marginLeft: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTextContainer: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 24,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#fff',
   },
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 6,
   },
   itemsList: {
     padding: 16,

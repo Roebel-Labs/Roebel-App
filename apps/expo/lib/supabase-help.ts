@@ -1,5 +1,20 @@
 import { supabase } from './supabase';
-import type { HelpCollection, HelpItem, HelpVideo } from './types-help';
+import type { HelpCollection, HelpItem, HelpSection, HelpVideo } from './types-help';
+
+export async function fetchHelpSections(): Promise<HelpSection[]> {
+  const { data, error } = await supabase
+    .from('help_sections')
+    .select('*')
+    .eq('is_published', true)
+    .order('display_order', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching help sections:', error);
+    return [];
+  }
+
+  return data as HelpSection[];
+}
 
 export async function fetchHelpCollections(): Promise<HelpCollection[]> {
   const { data, error } = await supabase
