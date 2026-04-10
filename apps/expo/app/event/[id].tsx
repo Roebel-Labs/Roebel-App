@@ -1,10 +1,8 @@
-import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Platform, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
-import Transition from 'react-native-screen-transitions';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
-import { sharedImageDetail } from '@/lib/navigation/transitionPresets';
 import { ArrowLeftIcon, LocationIcon, CalendarIcon, UserIcon, MailIcon, CallIcon, TicketIcon, LocationSmallIcon, ShareIcon, ChevronRight } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { EventRecord, EventDateRecord } from '@/lib/types';
@@ -38,15 +36,6 @@ export default function EventDetails() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
-  const navigation = useNavigation();
-
-  // Shared-element hero image transition from EventCard → event/[id] hero.
-  // The matching sharedBoundTag is set on EventCard.tsx for the same event id.
-  useLayoutEffect(() => {
-    if (!id) return;
-    navigation.setOptions(sharedImageDetail(`event-image-${id}`) as any);
-  }, [navigation, id]);
-
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
   const [eventDates, setEventDates] = useState<EventDateRecord[]>([]);
@@ -250,17 +239,12 @@ export default function EventDetails() {
                 contentFit="cover"
                 blurRadius={20}
               />
-              <Transition.View
-                sharedBoundTag={`event-image-${id}`}
-                style={StyleSheet.absoluteFill}
-              >
-                <Image
-                  source={{ uri: event.image_url }}
-                  style={styles.hero}
-                  contentFit="contain"
-                  accessibilityIgnoresInvertColors
-                />
-              </Transition.View>
+              <Image
+                source={{ uri: event.image_url }}
+                style={styles.hero}
+                contentFit="contain"
+                accessibilityIgnoresInvertColors
+              />
             </Pressable>
           ) : (
             <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]} />

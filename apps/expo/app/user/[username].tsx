@@ -6,7 +6,6 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { dismissibleDetail } from '@/lib/navigation/transitionPresets';
 import TierBadge from '@/components/RoleBadge';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
@@ -24,9 +23,19 @@ export default function PublicProfileScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation();
 
-  // Present as a modal-like sheet with drag-down-to-dismiss (cross-platform parity).
+  // Present as a draggable native bottom sheet (react-native-screens formSheet).
+  // On Android this uses Material BottomSheetBehaviour with native drag-to-dismiss —
+  // matching the feel of the BottomDrawer used for event experiences. iOS gets the
+  // equivalent UIModalPresentationFormSheet. Two detents (60% and full) so the user
+  // can drag between positions before dismissing.
   useLayoutEffect(() => {
-    navigation.setOptions(dismissibleDetail() as any);
+    navigation.setOptions({
+      presentation: 'formSheet',
+      sheetAllowedDetents: [0.6, 1.0],
+      sheetInitialDetentIndex: 0,
+      sheetGrabberVisible: true,
+      sheetCornerRadius: 20,
+    } as any);
   }, [navigation]);
 
   const [user, setUser] = useState<UserRecord | null>(null);

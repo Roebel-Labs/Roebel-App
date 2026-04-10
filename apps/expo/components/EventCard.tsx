@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import Transition from 'react-native-screen-transitions';
 import { LocationSmallIcon, TicketSmallIcon } from './Icons';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
@@ -28,17 +27,12 @@ export default function EventCard({ event }: Props) {
     >
       <View style={styles.imageContainer}>
         {event.image_url ? (
-          <Transition.View
-            sharedBoundTag={`event-image-${event.id}`}
+          <Image
+            source={{ uri: event.image_url }}
             style={[styles.image, { backgroundColor: colors.cardPlaceholder }]}
-          >
-            <Image
-              source={{ uri: event.image_url }}
-              style={StyleSheet.absoluteFillObject}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          </Transition.View>
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
         )}
@@ -89,7 +83,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 16,
-    overflow: 'hidden',
   },
   imagePlaceholder: {
     width: '100%',

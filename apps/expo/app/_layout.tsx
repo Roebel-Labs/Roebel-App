@@ -133,10 +133,10 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <AutoConnectHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
-        <TransitionStack screenOptions={{ headerShown: false }}>
+        <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
           <TransitionStack.Screen
             name="submit"
-            options={{ headerShown: true, title: 'Veranstaltung einreichen' }}
+            options={{ headerShown: true, title: 'Veranstaltung einreichen', animation: 'none' }}
           />
           <TransitionStack.Screen name="games/mecky-jump" options={noTransition()} />
           <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
