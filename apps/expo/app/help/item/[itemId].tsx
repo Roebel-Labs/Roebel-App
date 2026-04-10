@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   },
   heroMedia: {
     width: '100%',
-    height: 200,
+    aspectRatio: 1,
     borderRadius: 16,
   },
   bodyContainer: {

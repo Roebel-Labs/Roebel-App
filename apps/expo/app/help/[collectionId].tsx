@@ -95,9 +95,9 @@ export default function CollectionDetailScreen() {
               contentFit="cover"
             />
 
-            {/* Bottom-half gradient (transparent → black) */}
+            {/* Bottom-half gradient (transparent → pure black) */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.85)']}
+              colors={['transparent', '#000000']}
               locations={[0, 1]}
               style={styles.heroGradient}
             />
