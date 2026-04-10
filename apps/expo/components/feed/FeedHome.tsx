@@ -69,8 +69,11 @@ export default function FeedHome() {
   // Track visible sponsored cards for impression tracking
   const visibleDeals = useRef(new Set<string>());
 
+  // Non-citizens can only see the 'main' feed
+  const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
+
   const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore } =
-    useFeed(activeTab);
+    useFeed(effectiveTab);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
@@ -131,7 +134,7 @@ export default function FeedHome() {
 
   const handleCompose = () => {
     if (!walletAddress) return;
-    router.push({ pathname: '/create', params: { feedType: activeTab } } as any);
+    router.push({ pathname: '/create', params: { feedType: effectiveTab } } as any);
   };
 
   const handleMore = (post: PostRecord) => {
@@ -300,14 +303,14 @@ export default function FeedHome() {
         onPress={handleCompose}
       />
 
-      {/* Tab bar */}
-      <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Tab bar — only for verified citizens */}
+      {isCitizen && <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />}
 
       {/* Context bar — temporarily hidden, keep component for later */}
       {/* <ContextBar /> */}
 
-      {/* Event story bar — Für dich tab only */}
-      {activeTab === 'main' && <EventStoryBar />}
+      {/* Event story bar — Für alle tab only */}
+      {effectiveTab === 'main' && <EventStoryBar />}
     </View>
   );
 
@@ -340,7 +343,7 @@ export default function FeedHome() {
             </View>
           ) : (
             <FeedEmptyState
-              feedType={activeTab}
+              feedType={effectiveTab}
               isCitizen={isCitizen}
               onCompose={handleCompose}
             />
@@ -397,7 +400,7 @@ export default function FeedHome() {
           visible={editComposerVisible}
           onClose={() => setEditComposerVisible(false)}
           onPostCreated={() => {}}
-          feedType={activeTab}
+          feedType={effectiveTab}
           walletAddress={walletAddress || ''}
           isCitizen={isCitizen}
           user={user}

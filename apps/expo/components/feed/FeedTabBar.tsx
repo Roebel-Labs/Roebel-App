@@ -9,7 +9,7 @@ type Props = {
 };
 
 const TABS: { key: FeedType; label: string }[] = [
-  { key: 'main', label: 'Für Dich' },
+  { key: 'main', label: 'Für Alle' },
   { key: 'rathaus', label: 'Stadt' },
   { key: 'app', label: 'App' },
 ];

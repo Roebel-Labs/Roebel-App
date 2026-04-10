@@ -33,7 +33,7 @@ import CommunityIcon from '@/assets/icons/community.svg';
 const MAX_CONTENT_LENGTH = 500;
 
 const FEED_TYPE_LABELS: Record<FeedType, string> = {
-  main: 'Für Dich',
+  main: 'Für Alle',
   rathaus: 'Stadt',
   app: 'App',
 };
@@ -75,7 +75,7 @@ export default function CreateScreen() {
     linkedListingMediaUrls?: string;
     linkedListingNeighborhood?: string;
   }>();
-  const { user } = useUser();
+  const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address || '';
   const draft = useCreatePost();
 
@@ -133,6 +133,13 @@ export default function CreateScreen() {
       draft.setFeedType(params.feedType as FeedType);
     }
   }, [params.feedType]);
+
+  // Non-citizens can only post to 'main' — force it if the draft is anything else
+  useEffect(() => {
+    if (!isCitizen && draft.feedType !== 'main') {
+      draft.setFeedType('main');
+    }
+  }, [isCitizen, draft.feedType]);
 
   const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
 
@@ -199,15 +206,18 @@ export default function CreateScreen() {
           <View>
             <Pressable
               style={[styles.audiencePill, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-              onPress={() => setFeedDropdownOpen(!feedDropdownOpen)}
+              onPress={() => isCitizen && setFeedDropdownOpen(!feedDropdownOpen)}
+              disabled={!isCitizen}
             >
               <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
               <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
                 {FEED_TYPE_LABELS[draft.feedType]}
               </Text>
-              <Ionicons name={feedDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+              {isCitizen && (
+                <Ionicons name={feedDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
+              )}
             </Pressable>
-            {feedDropdownOpen && (
+            {feedDropdownOpen && isCitizen && (
               <View style={[styles.feedDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 {(Object.keys(FEED_TYPE_LABELS) as FeedType[]).map((ft) => (
                   <Pressable
