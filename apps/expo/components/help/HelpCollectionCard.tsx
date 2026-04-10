@@ -36,13 +36,13 @@ export default function HelpCollectionCard({ collection, onPress }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 14,
   },
   icon: {
     width: 36,
     height: 36,
-    borderRadius: 8,
+    borderRadius: 18,
     marginBottom: 10,
   },
   title: {

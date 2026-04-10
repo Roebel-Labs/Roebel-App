@@ -47,13 +47,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 14,
   },
   icon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 24,
   },
   textContainer: {
     flex: 1,

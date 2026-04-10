@@ -49,7 +49,7 @@ export default function HelpVideoCard({ video }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
   },
   thumbnailContainer: {

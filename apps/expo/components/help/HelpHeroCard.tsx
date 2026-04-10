@@ -58,7 +58,7 @@ export default function HelpHeroCard({ collection, onPress, size = 'large' }: Pr
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     flex: 1,
   },
