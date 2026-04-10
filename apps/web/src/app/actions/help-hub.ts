@@ -48,6 +48,44 @@ export interface HelpVideo {
   created_at: string
 }
 
+// ── Helpers ────────────────────────────────────────────
+
+/**
+ * Extracts a human-readable error message from any error shape
+ * (Supabase PostgrestError, Error, string, unknown).
+ */
+function formatError(error: unknown): string {
+  if (!error) return "Unbekannter Fehler"
+  if (typeof error === "string") return error
+
+  // Supabase PostgrestError: { message, details, hint, code }
+  if (typeof error === "object") {
+    const e = error as {
+      message?: string
+      details?: string
+      hint?: string
+      code?: string
+    }
+    const parts: string[] = []
+    if (e.message) parts.push(e.message)
+    if (e.details) parts.push(`Details: ${e.details}`)
+    if (e.hint) parts.push(`Hinweis: ${e.hint}`)
+    if (e.code) parts.push(`Code: ${e.code}`)
+    if (parts.length > 0) return parts.join(" · ")
+  }
+
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function logError(context: string, error: unknown, extra?: Record<string, unknown>) {
+  console.error(`[help-hub] ${context}`, {
+    error,
+    message: formatError(error),
+    ...extra,
+  })
+}
+
 // ── Collections ────────────────────────────────────────
 
 export async function createCollection(formData: FormData) {
@@ -73,8 +111,11 @@ export async function createCollection(formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Sammlung erfolgreich erstellt" }
   } catch (error) {
-    console.error("Error creating collection:", error)
-    return { success: false, error: "Fehler beim Erstellen der Sammlung" }
+    logError("createCollection failed", error)
+    return {
+      success: false,
+      error: `Fehler beim Erstellen der Sammlung: ${formatError(error)}`,
+    }
   }
 }
 
@@ -102,8 +143,11 @@ export async function updateCollection(id: string, formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Sammlung erfolgreich aktualisiert" }
   } catch (error) {
-    console.error("Error updating collection:", error)
-    return { success: false, error: "Fehler beim Aktualisieren der Sammlung" }
+    logError("updateCollection failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Aktualisieren der Sammlung: ${formatError(error)}`,
+    }
   }
 }
 
@@ -116,8 +160,11 @@ export async function deleteCollection(id: string) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, message: "Sammlung erfolgreich gelöscht" }
   } catch (error) {
-    console.error("Error deleting collection:", error)
-    return { success: false, error: "Fehler beim Löschen der Sammlung" }
+    logError("deleteCollection failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Löschen der Sammlung: ${formatError(error)}`,
+    }
   }
 }
 
@@ -137,8 +184,11 @@ export async function togglePublishCollection(id: string, isPublished: boolean) 
       message: isPublished ? "Sammlung veröffentlicht" : "Sammlung als Entwurf gespeichert",
     }
   } catch (error) {
-    console.error("Error toggling collection publish:", error)
-    return { success: false, error: "Fehler beim Ändern des Status" }
+    logError("togglePublishCollection failed", error, { id, isPublished })
+    return {
+      success: false,
+      error: `Fehler beim Ändern des Status: ${formatError(error)}`,
+    }
   }
 }
 
@@ -151,23 +201,27 @@ export async function createItem(formData: FormData) {
     const stepsRaw = formData.get("steps") as string
     const steps = stepsRaw ? JSON.parse(stepsRaw) : null
 
+    const payload = {
+      collection_id: formData.get("collection_id") as string,
+      title: formData.get("title") as string,
+      subtitle: (formData.get("subtitle") as string) || null,
+      icon_url: (formData.get("icon_url") as string) || null,
+      hero_media_url: (formData.get("hero_media_url") as string) || null,
+      hero_media_type: (formData.get("hero_media_type") as string) || "image",
+      body_text: (formData.get("body_text") as string) || null,
+      steps,
+      action_enabled: formData.get("action_enabled") === "true",
+      action_label: (formData.get("action_label") as string) || null,
+      action_route: (formData.get("action_route") as string) || null,
+      display_order: parseInt(formData.get("display_order") as string) || 0,
+      is_published: formData.get("is_published") === "true",
+    }
+
+    console.log("[help-hub] createItem payload", payload)
+
     const { data, error } = await supabase
       .from("help_items")
-      .insert({
-        collection_id: formData.get("collection_id") as string,
-        title: formData.get("title") as string,
-        subtitle: (formData.get("subtitle") as string) || null,
-        icon_url: (formData.get("icon_url") as string) || null,
-        hero_media_url: (formData.get("hero_media_url") as string) || null,
-        hero_media_type: (formData.get("hero_media_type") as string) || "image",
-        body_text: (formData.get("body_text") as string) || null,
-        steps,
-        action_enabled: formData.get("action_enabled") === "true",
-        action_label: (formData.get("action_label") as string) || null,
-        action_route: (formData.get("action_route") as string) || null,
-        display_order: parseInt(formData.get("display_order") as string) || 0,
-        is_published: formData.get("is_published") === "true",
-      })
+      .insert(payload)
       .select()
       .single()
 
@@ -176,8 +230,11 @@ export async function createItem(formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Hilfe-Artikel erfolgreich erstellt" }
   } catch (error) {
-    console.error("Error creating item:", error)
-    return { success: false, error: "Fehler beim Erstellen des Hilfe-Artikels" }
+    logError("createItem failed", error)
+    return {
+      success: false,
+      error: `Fehler beim Erstellen des Hilfe-Artikels: ${formatError(error)}`,
+    }
   }
 }
 
@@ -188,23 +245,27 @@ export async function updateItem(id: string, formData: FormData) {
     const stepsRaw = formData.get("steps") as string
     const steps = stepsRaw ? JSON.parse(stepsRaw) : null
 
+    const payload = {
+      collection_id: formData.get("collection_id") as string,
+      title: formData.get("title") as string,
+      subtitle: (formData.get("subtitle") as string) || null,
+      icon_url: (formData.get("icon_url") as string) || null,
+      hero_media_url: (formData.get("hero_media_url") as string) || null,
+      hero_media_type: (formData.get("hero_media_type") as string) || "image",
+      body_text: (formData.get("body_text") as string) || null,
+      steps,
+      action_enabled: formData.get("action_enabled") === "true",
+      action_label: (formData.get("action_label") as string) || null,
+      action_route: (formData.get("action_route") as string) || null,
+      display_order: parseInt(formData.get("display_order") as string) || 0,
+      is_published: formData.get("is_published") === "true",
+    }
+
+    console.log("[help-hub] updateItem payload", { id, payload })
+
     const { data, error } = await supabase
       .from("help_items")
-      .update({
-        collection_id: formData.get("collection_id") as string,
-        title: formData.get("title") as string,
-        subtitle: (formData.get("subtitle") as string) || null,
-        icon_url: (formData.get("icon_url") as string) || null,
-        hero_media_url: (formData.get("hero_media_url") as string) || null,
-        hero_media_type: (formData.get("hero_media_type") as string) || "image",
-        body_text: (formData.get("body_text") as string) || null,
-        steps,
-        action_enabled: formData.get("action_enabled") === "true",
-        action_label: (formData.get("action_label") as string) || null,
-        action_route: (formData.get("action_route") as string) || null,
-        display_order: parseInt(formData.get("display_order") as string) || 0,
-        is_published: formData.get("is_published") === "true",
-      })
+      .update(payload)
       .eq("id", id)
       .select()
       .single()
@@ -214,8 +275,11 @@ export async function updateItem(id: string, formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Hilfe-Artikel erfolgreich aktualisiert" }
   } catch (error) {
-    console.error("Error updating item:", error)
-    return { success: false, error: "Fehler beim Aktualisieren des Hilfe-Artikels" }
+    logError("updateItem failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Aktualisieren des Hilfe-Artikels: ${formatError(error)}`,
+    }
   }
 }
 
@@ -228,8 +292,11 @@ export async function deleteItem(id: string) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, message: "Hilfe-Artikel erfolgreich gelöscht" }
   } catch (error) {
-    console.error("Error deleting item:", error)
-    return { success: false, error: "Fehler beim Löschen des Hilfe-Artikels" }
+    logError("deleteItem failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Löschen des Hilfe-Artikels: ${formatError(error)}`,
+    }
   }
 }
 
@@ -249,8 +316,11 @@ export async function togglePublishItem(id: string, isPublished: boolean) {
       message: isPublished ? "Artikel veröffentlicht" : "Artikel als Entwurf gespeichert",
     }
   } catch (error) {
-    console.error("Error toggling item publish:", error)
-    return { success: false, error: "Fehler beim Ändern des Status" }
+    logError("togglePublishItem failed", error, { id, isPublished })
+    return {
+      success: false,
+      error: `Fehler beim Ändern des Status: ${formatError(error)}`,
+    }
   }
 }
 
@@ -279,8 +349,11 @@ export async function createVideo(formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Video erfolgreich erstellt" }
   } catch (error) {
-    console.error("Error creating video:", error)
-    return { success: false, error: "Fehler beim Erstellen des Videos" }
+    logError("createVideo failed", error)
+    return {
+      success: false,
+      error: `Fehler beim Erstellen des Videos: ${formatError(error)}`,
+    }
   }
 }
 
@@ -308,8 +381,11 @@ export async function updateVideo(id: string, formData: FormData) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, data, message: "Video erfolgreich aktualisiert" }
   } catch (error) {
-    console.error("Error updating video:", error)
-    return { success: false, error: "Fehler beim Aktualisieren des Videos" }
+    logError("updateVideo failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Aktualisieren des Videos: ${formatError(error)}`,
+    }
   }
 }
 
@@ -322,8 +398,11 @@ export async function deleteVideo(id: string) {
     revalidatePath("/admin/dashboard/help")
     return { success: true, message: "Video erfolgreich gelöscht" }
   } catch (error) {
-    console.error("Error deleting video:", error)
-    return { success: false, error: "Fehler beim Löschen des Videos" }
+    logError("deleteVideo failed", error, { id })
+    return {
+      success: false,
+      error: `Fehler beim Löschen des Videos: ${formatError(error)}`,
+    }
   }
 }
 
@@ -343,7 +422,10 @@ export async function togglePublishVideo(id: string, isPublished: boolean) {
       message: isPublished ? "Video veröffentlicht" : "Video als Entwurf gespeichert",
     }
   } catch (error) {
-    console.error("Error toggling video publish:", error)
-    return { success: false, error: "Fehler beim Ändern des Status" }
+    logError("togglePublishVideo failed", error, { id, isPublished })
+    return {
+      success: false,
+      error: `Fehler beim Ändern des Status: ${formatError(error)}`,
+    }
   }
 }
