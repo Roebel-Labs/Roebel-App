@@ -27,6 +27,8 @@ export default function PostBar({ avatarUrl, onPress }: Props) {
             source={{ uri: avatarUrl }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={0}
           />
         ) : (
           <Ionicons name="person" size={18} color={colors.textTertiary} />

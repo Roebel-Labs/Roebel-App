@@ -303,27 +303,13 @@ export default function FeedHome() {
       {/* Tab bar */}
       <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Context bar */}
-      <ContextBar />
+      {/* Context bar — temporarily hidden, keep component for later */}
+      {/* <ContextBar /> */}
 
       {/* Event story bar — Für dich tab only */}
       {activeTab === 'main' && <EventStoryBar />}
     </View>
   );
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.loadingHeaderWrap}>{listHeader}</View>
-        <View style={[styles.skeletonList, { backgroundColor: colors.feedBackground }]}>
-          {[1, 2, 3, 4].map((i) => (
-            <FeedPostSkeleton key={i} />
-          ))}
-        </View>
-        <BottomNavigation activeTab={navTab} onTabPress={handleTabPress} />
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -346,11 +332,19 @@ export default function FeedHome() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig.current}
         ListEmptyComponent={
-          <FeedEmptyState
-            feedType={activeTab}
-            isCitizen={isCitizen}
-            onCompose={handleCompose}
-          />
+          isLoading ? (
+            <View style={styles.skeletonList}>
+              {[1, 2, 3, 4].map((i) => (
+                <FeedPostSkeleton key={i} />
+              ))}
+            </View>
+          ) : (
+            <FeedEmptyState
+              feedType={activeTab}
+              isCitizen={isCitizen}
+              onCompose={handleCompose}
+            />
+          )
         }
         ListFooterComponent={
           isLoadingMore ? (
@@ -450,9 +444,6 @@ const styles = StyleSheet.create({
   feedContent: {
     paddingHorizontal: 8,
     gap: 8,
-  },
-  loadingHeaderWrap: {
-    paddingHorizontal: 8,
   },
   skeletonList: {
     flex: 1,
