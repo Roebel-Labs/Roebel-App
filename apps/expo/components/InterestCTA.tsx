@@ -150,7 +150,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
         style={({ pressed }) => [
           styles.button,
           isActive
-            ? [styles.buttonActive, { borderColor: colors.primary }]
+            ? [styles.buttonActive, { backgroundColor: colors.surface, borderColor: colors.primary }]
             : { backgroundColor: colors.primary },
           pressed && styles.buttonPressed,
           !account?.address && styles.buttonDisabled,
@@ -238,7 +238,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   buttonActive: {
-    backgroundColor: '#fff',
     borderWidth: 2,
   },
   buttonPressed: {
