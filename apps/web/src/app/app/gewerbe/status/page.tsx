@@ -16,7 +16,7 @@ const STATUS_CONFIG = {
     title: "Registrierung eingereicht",
     subtitle: "Dein Gewerbe wird geprüft. Du wirst benachrichtigt, sobald es freigeschaltet ist.",
   },
-  approved: {
+  published: {
     emoji: "✅",
     bg: "bg-green-50",
     border: "border-green-200",

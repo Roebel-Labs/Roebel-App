@@ -257,10 +257,10 @@ export default function OrgDashboardPage() {
       <div className="bg-card border border-border rounded-lg p-4">
         <h2 className="text-sm font-semibold text-foreground mb-3">Organisationstyp</h2>
         <div className="grid grid-cols-2 gap-2">
-          <OrgTypeCard label="Gewerbe" description="Geschäft, Laden, Gastro" active={activeAccount?.account_type === "unternehmen"} />
-          <OrgTypeCard label="Verein" description="Sport, Kultur, Soziales" active={activeAccount?.account_type === "verein"} />
-          <OrgTypeCard label="Partei" description="Politische Partei" active={activeAccount?.account_type === "partei"} />
-          <OrgTypeCard label="Fraktion" description="Parlamentarische Fraktion" active={activeAccount?.account_type === "fraktion"} />
+          <OrgTypeCard label="Gewerbe" description="Geschäft, Laden, Gastro" active={activeAccount?.sub_type === "unternehmen"} />
+          <OrgTypeCard label="Verein" description="Sport, Kultur, Soziales" active={activeAccount?.sub_type === "verein"} />
+          <OrgTypeCard label="Partei" description="Politische Partei" active={activeAccount?.sub_type === "partei"} />
+          <OrgTypeCard label="Fraktion" description="Parlamentarische Fraktion" active={activeAccount?.sub_type === "fraktion"} />
         </div>
       </div>
     </div>
