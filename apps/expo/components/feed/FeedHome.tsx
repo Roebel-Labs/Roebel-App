@@ -314,7 +314,7 @@ export default function FeedHome() {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        {listHeader}
+        <View style={styles.loadingHeaderWrap}>{listHeader}</View>
         <View style={[styles.skeletonList, { backgroundColor: colors.feedBackground }]}>
           {[1, 2, 3, 4].map((i) => (
             <FeedPostSkeleton key={i} />
@@ -450,6 +450,9 @@ const styles = StyleSheet.create({
   feedContent: {
     paddingHorizontal: 8,
     gap: 8,
+  },
+  loadingHeaderWrap: {
+    paddingHorizontal: 8,
   },
   skeletonList: {
     flex: 1,

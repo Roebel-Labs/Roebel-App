@@ -14,11 +14,6 @@ import { fetchThisWeekEvents } from '@/lib/supabase-posts';
 import type { EventRecord } from '@/lib/types';
 import EventStoryViewer from './EventStoryViewer';
 
-function formatWeekday(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('de-DE', { weekday: 'long' });
-}
-
 export default function EventStoryBar() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -97,7 +92,6 @@ export default function EventStoryBar() {
                 colors={['transparent', 'rgba(0,0,0,0.82)']}
                 style={styles.cardGradient}
               >
-                <Text style={styles.cardDate}>{formatWeekday(event.date)}</Text>
                 <Text style={styles.cardTitle} numberOfLines={2}>
                   {event.title}
                 </Text>
@@ -204,11 +198,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'Inter-SemiBold',
     lineHeight: 13,
-  },
-  cardDate: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontFamily: 'Inter-Regular',
-    marginBottom: 2,
   },
 });

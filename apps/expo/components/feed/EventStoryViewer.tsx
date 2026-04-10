@@ -34,6 +34,11 @@ function formatEventDate(dateStr: string): string {
   });
 }
 
+function formatWeekdayLong(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('de-DE', { weekday: 'long' });
+}
+
 export default function EventStoryViewer({
   events,
   initialIndex,
@@ -237,6 +242,10 @@ export default function EventStoryViewer({
 
         {/* Bottom content */}
         <View style={styles.bottomContent} pointerEvents="box-none">
+          {/* Weekday pill */}
+          <View style={styles.weekdayPill}>
+            <Text style={styles.weekdayPillText}>{formatWeekdayLong(event.date)}</Text>
+          </View>
           <Text style={styles.eventTitle} numberOfLines={2}>
             {event.title}
           </Text>
@@ -365,6 +374,19 @@ const styles = StyleSheet.create({
     bottom: 48,
     left: 20,
     right: 20,
+  },
+  weekdayPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 10,
+  },
+  weekdayPillText: {
+    color: '#000000',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   eventTitle: {
     color: '#ffffff',
