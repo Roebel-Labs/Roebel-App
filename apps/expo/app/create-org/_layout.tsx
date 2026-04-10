@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useSegments, useRouter } from 'expo-router';
+import { useSegments, useRouter } from 'expo-router';
+import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { CreateOrgWizardProvider, useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
@@ -47,16 +48,16 @@ export default function CreateOrgLayout() {
   return (
     <CreateOrgWizardProvider>
       <WizardHeader />
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="type" />
-        <Stack.Screen name="info" />
-        <Stack.Screen name="location" />
-        <Stack.Screen name="contact" />
-        <Stack.Screen name="photos" />
-        <Stack.Screen name="review" />
-        <Stack.Screen name="success" />
-      </Stack>
+      <TransitionStack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <TransitionStack.Screen name="index" />
+        <TransitionStack.Screen name="type" />
+        <TransitionStack.Screen name="info" />
+        <TransitionStack.Screen name="location" />
+        <TransitionStack.Screen name="contact" />
+        <TransitionStack.Screen name="photos" />
+        <TransitionStack.Screen name="review" />
+        <TransitionStack.Screen name="success" />
+      </TransitionStack>
     </CreateOrgWizardProvider>
   );
 }

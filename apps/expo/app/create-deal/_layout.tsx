@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useSegments, useRouter } from 'expo-router';
+import { useSegments, useRouter } from 'expo-router';
+import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { CreateDealWizardProvider, useCreateDealWizard } from '@/context/CreateDealWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
@@ -47,15 +48,15 @@ export default function CreateDealLayout() {
   return (
     <CreateDealWizardProvider>
       <WizardHeader />
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="type" />
-        <Stack.Screen name="details" />
-        <Stack.Screen name="image" />
-        <Stack.Screen name="schedule" />
-        <Stack.Screen name="review" />
-        <Stack.Screen name="success" />
-      </Stack>
+      <TransitionStack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <TransitionStack.Screen name="index" />
+        <TransitionStack.Screen name="type" />
+        <TransitionStack.Screen name="details" />
+        <TransitionStack.Screen name="image" />
+        <TransitionStack.Screen name="schedule" />
+        <TransitionStack.Screen name="review" />
+        <TransitionStack.Screen name="success" />
+      </TransitionStack>
     </CreateDealWizardProvider>
   );
 }
