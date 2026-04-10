@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import type { ColorTokens } from '@/constants/theme';
 
 export default function SubmitEventScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -67,8 +71,22 @@ export default function SubmitEventScreen() {
   }
 
   return (
-    <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
-      <Text style={styles.title}>Veranstaltung einreichen</Text>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={[styles.header, { borderBottomColor: colors.borderSecondary }]}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Zurück"
+          style={styles.backButton}
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+          Veranstaltung einreichen
+        </Text>
+      </View>
+      <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Dein Event wird vor der Veröffentlichung geprüft.</Text>
 
       <Field label="Titel" required colors={colors}>
@@ -145,7 +163,8 @@ export default function SubmitEventScreen() {
       </Pressable>
 
       <Text style={[styles.hint, { color: colors.textSecondary }]}>Mit dem Absenden bestätigst du die Richtigkeit der Angaben. Wir können dich zur Verifizierung kontaktieren.</Text>
-    </KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -161,8 +180,17 @@ function Field({ label, children, required = false, colors }: { label: string; c
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  backButton: { padding: 8 },
+  headerTitle: { fontSize: 16, fontFamily: 'Inter-Medium', flex: 1 },
   container: { padding: 16, gap: 12 },
-  title: { fontSize: 24, fontFamily: 'Inter-SemiBold' },
   subtitle: { marginBottom: 8 },
   label: { fontFamily: 'Inter-SemiBold' },
   input: { borderRadius: 10, borderWidth: 1, padding: 10 },

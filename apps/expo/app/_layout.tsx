@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { TransitionStack } from '@/lib/navigation/TransitionStack';
+import { slideFromRight, noTransition } from '@/lib/navigation/transitionPresets';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { InterestProvider } from '@/context/InterestContext';
 import { LocationProvider } from '@/context/LocationContext';
@@ -131,19 +133,12 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <AutoConnectHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'fade',
-            animationDuration: 0,
-          }}
-        >
-          <Stack.Screen name="submit" options={{ headerShown: true, title: 'Veranstaltung einreichen' }} />
-          <Stack.Screen name="games/mecky-jump" options={{ gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/mecky-portal" options={{ gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/speedrun" options={{ gestureEnabled: false, animation: 'fade' }} />
-          <Stack.Screen name="games/fortune-cards" options={{ gestureEnabled: false, animation: 'fade' }} />
-        </Stack>
+        <TransitionStack screenOptions={slideFromRight()}>
+          <TransitionStack.Screen name="games/mecky-jump" options={noTransition()} />
+          <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
+          <TransitionStack.Screen name="games/speedrun" options={noTransition()} />
+          <TransitionStack.Screen name="games/fortune-cards" options={noTransition()} />
+        </TransitionStack>
       </View>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
     </>
