@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
-import { slideFromRight, noTransition } from '@/lib/navigation/transitionPresets';
+import { noTransition } from '@/lib/navigation/transitionPresets';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { InterestProvider } from '@/context/InterestContext';
 import { LocationProvider } from '@/context/LocationContext';
@@ -133,7 +133,11 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <AutoConnectHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
-        <TransitionStack screenOptions={slideFromRight()}>
+        <TransitionStack screenOptions={{ headerShown: false }}>
+          <TransitionStack.Screen
+            name="submit"
+            options={{ headerShown: true, title: 'Veranstaltung einreichen' }}
+          />
           <TransitionStack.Screen name="games/mecky-jump" options={noTransition()} />
           <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
           <TransitionStack.Screen name="games/speedrun" options={noTransition()} />

@@ -1,72 +1,53 @@
 /**
- * Shared transition presets for the root blank stack.
+ * Per-screen option helpers for the package's native-stack.
  *
- * The `react-native-screen-transitions` package ships vertical / zoom / shared-element
- * presets but no horizontal push, so we build a SlideFromRight interpolator here and
- * reuse it across the app. All timing and gesture values live in this file so
- * cross-platform parity can be tuned in one place.
+ * The root navigator uses the platform-native push animation by default (iOS slide,
+ * Android slide-and-fade). Screens that want richer cross-platform behavior — shared
+ * elements, drag-to-dismiss, snap-point sheets — opt in by spreading one of these
+ * helpers into their `<Stack.Screen options>` (or the parent layout's `Stack.Screen`).
+ *
+ * All helpers set `enableTransitions: true` which, per the native-stack typing, forces
+ * `headerShown: false` and `presentation: 'containedTransparentModal'` so the custom
+ * transition can run over the previous screen.
  */
-import { interpolate, type WithSpringConfig } from 'react-native-reanimated';
-import type { BlankStackNavigationOptions } from 'react-native-screen-transitions/blank-stack';
+import Transition from 'react-native-screen-transitions';
+import type { NativeStackNavigationOptions } from 'react-native-screen-transitions/native-stack';
 
 /**
- * Spring config for the default push/pop. Tuned to feel like an iOS native-stack
- * slide on both iOS and Android (~320 ms push, snappier close).
+ * Drag-down to dismiss, no hero image morph. Use for detail screens that don't have
+ * an obvious thumbnail → hero pairing in the origin card. Combines the package's
+ * `SlideFromBottom` entrance with a bidirectional dismiss gesture.
  */
-export const pushSpring: WithSpringConfig = {
-  mass: 1,
-  damping: 30,
-  stiffness: 240,
-};
-
-export const popSpring: WithSpringConfig = {
-  mass: 1,
-  damping: 32,
-  stiffness: 280,
-};
+export const dismissibleDetail = (): NativeStackNavigationOptions =>
+  ({
+    enableTransitions: true,
+    ...Transition.Presets.SlideFromBottom(),
+    gestureDirection: 'vertical',
+    gestureActivationArea: 'screen',
+    gestureVelocityImpact: 0.5,
+  }) as NativeStackNavigationOptions;
 
 /**
- * Default horizontal slide-from-right, with iOS-style parallax on the screen
- * being covered. Progress values:
- *  - 0: incoming screen sits off-screen right
- *  - 1: centered / visible
- *  - 2: covered by a newer screen pushed on top (nudged 30% to the left)
+ * Shared-element hero image transition (Instagram-style). The origin card and the
+ * destination hero image must both carry the same `sharedBoundTag`. Includes
+ * drag-to-dismiss in any direction.
+ *
+ * @param sharedBoundTag - must uniquely identify the pair (e.g. `event-image-${id}`).
  */
-export const slideFromRight = (): BlankStackNavigationOptions => ({
-  gestureEnabled: true,
-  gestureDirection: 'horizontal',
-  // Edge-only back swipe on the left side — matches iOS native stack behavior
-  // on both platforms and avoids conflicts with in-screen horizontal carousels.
-  gestureActivationArea: { left: 'edge' },
-  gestureVelocityImpact: 0.4,
-  screenStyleInterpolator: ({ progress, layouts: { screen } }) => {
-    'worklet';
-    const translateX = interpolate(
-      progress,
-      [0, 1, 2],
-      [screen.width, 0, -screen.width * 0.3],
-    );
-    return {
-      contentStyle: {
-        transform: [{ translateX }],
-      },
-    };
-  },
-  transitionSpec: {
-    open: pushSpring,
-    close: popSpring,
-  },
-});
+export const sharedImageDetail = (
+  sharedBoundTag: string,
+): NativeStackNavigationOptions =>
+  ({
+    enableTransitions: true,
+    ...Transition.Presets.SharedIGImage({ sharedBoundTag }),
+  }) as NativeStackNavigationOptions;
 
 /**
- * No animation, no gestures. Used for screens that take over the whole display
- * (e.g. full-screen games) where we don't want a transition or accidental
- * back-gesture interfering with gameplay.
+ * Disable both the default push animation and the back gesture. Use for full-screen
+ * immersive screens (e.g. games) where a transition or accidental back swipe would
+ * interrupt the user.
  */
-export const noTransition = (): BlankStackNavigationOptions => ({
+export const noTransition = (): NativeStackNavigationOptions => ({
+  animation: 'none',
   gestureEnabled: false,
-  screenStyleInterpolator: () => {
-    'worklet';
-    return { contentStyle: {} };
-  },
 });

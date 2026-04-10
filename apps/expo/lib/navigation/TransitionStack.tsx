@@ -1,14 +1,18 @@
 /**
- * Expo-router-compatible blank stack navigator from `react-native-screen-transitions`.
+ * Expo-router-compatible native stack navigator from `react-native-screen-transitions`.
  *
- * The blank stack is a pure JS/Reanimated/Gesture Handler stack that gives us full
- * control over transition animations on both iOS and Android. We hoist it through
- * `withLayoutContext` so that `app/_layout.tsx` can use it exactly like expo-router's
- * built-in `Stack` (file-based routing still works).
+ * This uses the package's NATIVE-STACK variant (not blank-stack), which:
+ *   - Sits on top of `react-native-screens`, so push/pop is off-thread and matches
+ *     native platform performance / reliability (no JS-stack blank-frame bugs).
+ *   - Supports `headerShown`, `title`, etc. exactly like `@react-navigation/native-stack`.
+ *   - Defaults to the platform-native push animation (iOS slide, Android slide-and-fade).
+ *   - Lets individual screens opt into custom cross-platform transitions (shared elements,
+ *     drag-to-dismiss, snap-point sheets) by setting `enableTransitions: true` and a
+ *     `screenStyleInterpolator` / preset.
  *
- * Note: the blank stack has no built-in header. Screens that previously relied on
- * `headerShown: true` from the default expo-router Stack must render their own header
- * (see `app/submit.tsx`).
+ * Screens with `enableTransitions: true` implicitly get `headerShown: false` and
+ * `presentation: 'containedTransparentModal'` so the custom animation can run over
+ * the previous screen.
  */
 import { withLayoutContext } from 'expo-router';
 import type {
@@ -16,16 +20,16 @@ import type {
   StackNavigationState,
 } from '@react-navigation/native';
 import {
-  createBlankStackNavigator,
-  type BlankStackNavigationEventMap,
-  type BlankStackNavigationOptions,
-} from 'react-native-screen-transitions/blank-stack';
+  createNativeStackNavigator,
+  type NativeStackNavigationEventMap,
+  type NativeStackNavigationOptions,
+} from 'react-native-screen-transitions/native-stack';
 
-const { Navigator } = createBlankStackNavigator();
+const { Navigator } = createNativeStackNavigator();
 
 export const TransitionStack = withLayoutContext<
-  BlankStackNavigationOptions,
+  NativeStackNavigationOptions,
   typeof Navigator,
   StackNavigationState<ParamListBase>,
-  BlankStackNavigationEventMap
+  NativeStackNavigationEventMap
 >(Navigator);
