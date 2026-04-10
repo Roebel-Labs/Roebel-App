@@ -157,15 +157,28 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
       accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
     >
       <View style={styles.heartIconWrap}>
-        {/* Outline heart */}
-        <Animated.View style={[styles.iconAbsolute, { opacity: outlineOpacity }]}>
+        {/* Outline heart — bottom layer */}
+        <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
           <HeartIcon size={iconSize} color={colors.primary} />
         </Animated.View>
 
-        {/* Heart.png (plop animation) */}
+        {/* Filled heart — middle layer, revealed after PNG fades */}
         <Animated.View
           style={[
-            styles.iconAbsolute,
+            styles.iconMid,
+            {
+              opacity: interested ? 1 : 0,
+              transform: [{ scale: filledScale }],
+            },
+          ]}
+        >
+          <HeartFilledIcon size={iconSize} color={colors.primary} />
+        </Animated.View>
+
+        {/* Heart.png (plop animation) — top layer, sits above both SVG hearts on Android */}
+        <Animated.View
+          style={[
+            styles.iconTop,
             {
               opacity: pngOpacity,
               transform: [
@@ -176,19 +189,6 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
           ]}
         >
           <Image source={HEART_PNG} style={{ width: pngSize, height: pngSize }} contentFit="contain" />
-        </Animated.View>
-
-        {/* Filled heart */}
-        <Animated.View
-          style={[
-            styles.iconAbsolute,
-            {
-              opacity: interested ? 1 : 0,
-              transform: [{ scale: filledScale }],
-            },
-          ]}
-        >
-          <HeartFilledIcon size={iconSize} color={colors.primary} />
         </Animated.View>
       </View>
     </Pressable>
@@ -265,8 +265,18 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'visible',
   },
-  iconAbsolute: {
+  iconBottom: {
     position: 'absolute',
+    zIndex: 0,
+  },
+  iconMid: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  iconTop: {
+    position: 'absolute',
+    zIndex: 2,
   },
 });

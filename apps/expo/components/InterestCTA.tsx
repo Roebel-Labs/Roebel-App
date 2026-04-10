@@ -159,15 +159,28 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
         accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
       >
         <View style={styles.buttonIconWrap}>
-          {/* Outline heart (default) */}
-          <Animated.View style={[styles.iconAbsolute, { opacity: outlineOpacity }]}>
+          {/* Outline heart (default) — bottom layer */}
+          <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
             <HeartIcon size={20} color={isActive ? colors.primary : '#fff'} />
           </Animated.View>
 
-          {/* Heart.png plop */}
+          {/* Filled heart — middle layer, revealed after PNG fades */}
           <Animated.View
             style={[
-              styles.iconAbsolute,
+              styles.iconMid,
+              {
+                opacity: interested ? 1 : 0,
+                transform: [{ scale: filledScale }],
+              },
+            ]}
+          >
+            <HeartFilledIcon size={20} color={colors.primary} />
+          </Animated.View>
+
+          {/* Heart.png plop — top layer, sits above both SVG hearts on Android */}
+          <Animated.View
+            style={[
+              styles.iconTop,
               {
                 opacity: pngOpacity,
                 transform: [
@@ -178,19 +191,6 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
             ]}
           >
             <Image source={HEART_PNG} style={{ width: 28, height: 28 }} contentFit="contain" />
-          </Animated.View>
-
-          {/* Filled heart */}
-          <Animated.View
-            style={[
-              styles.iconAbsolute,
-              {
-                opacity: interested ? 1 : 0,
-                transform: [{ scale: filledScale }],
-              },
-            ]}
-          >
-            <HeartFilledIcon size={20} color={colors.primary} />
           </Animated.View>
         </View>
 
@@ -252,9 +252,19 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'visible',
   },
-  iconAbsolute: {
+  iconBottom: {
     position: 'absolute',
+    zIndex: 0,
+  },
+  iconMid: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  iconTop: {
+    position: 'absolute',
+    zIndex: 2,
   },
   buttonText: {
     fontSize: 15,
