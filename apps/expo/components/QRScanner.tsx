@@ -17,8 +17,10 @@ export type QRScanResult = {
   nftType?: string;
   slug?: string;
   tableNumber?: string;
-  /** Röbel Card payload version (currently always 'v1'). */
+  /** Röbel Card payload version ('v1' = unsigned, 'v2' = HMAC signed). */
   cardVersion?: string;
+  /** Full v2 payload string (unchanged) to hand to create_roebel_card_charge_from_qr. */
+  cardPayload?: string;
 };
 
 interface QRScannerProps {
@@ -44,16 +46,34 @@ function parseQRCode(data: string): QRScanResult {
     return { type: 'stamp', data, id: data.replace('roebel-stamp:', '') };
   }
 
-  // Röbel Card (voucher): roebel-card:v1:<card_id>
-  // TODO(security): extend payload to include a signed nonce (HMAC with
-  // roebel_card.qr_secret) so a static QR can't be copied and replayed.
-  const cardMatch = data.match(/^roebel-card:(v\d+):([0-9a-f-]+)$/i);
-  if (cardMatch) {
+  // Röbel Card v2 (HMAC-signed): roebel-card:v2:<card_id>:<expires_unix>:<hex_hmac>
+  // The full payload is passed through to create_roebel_card_charge_from_qr
+  // where the server verifies the HMAC against the card's qr_secret.
+  const cardV2Match = data.match(
+    /^roebel-card:v2:([0-9a-f-]{36}):(\d+):([0-9a-f]{64})$/i,
+  );
+  if (cardV2Match) {
     return {
       type: 'roebel_card',
       data,
-      cardVersion: cardMatch[1],
-      id: cardMatch[2],
+      cardVersion: 'v2',
+      id: cardV2Match[1],
+      cardPayload: data,
+    };
+  }
+
+  // Röbel Card v1 (legacy unsigned): roebel-card:v1:<card_id>
+  // Still parsed for backward compat during the v1 → v2 transition, but
+  // the RPC will refuse to create a charge from a v1 payload since it
+  // doesn't match the expected 5-part format.
+  const cardV1Match = data.match(/^roebel-card:v1:([0-9a-f-]{36})$/i);
+  if (cardV1Match) {
+    return {
+      type: 'roebel_card',
+      data,
+      cardVersion: 'v1',
+      id: cardV1Match[1],
+      cardPayload: data,
     };
   }
 

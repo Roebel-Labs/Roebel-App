@@ -130,3 +130,41 @@ export async function deactivateEmployee(employeeId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+/**
+ * Employee-side: redeem a ROEB-XXXX-XXXX invite code.
+ *
+ * Calls the SECURITY DEFINER RPC in migration 20260416:
+ *   - Finds the employee row by invite_code.
+ *   - Rewrites the card's wallet_address from 'pending:<code>' to the
+ *     caller's real wallet.
+ *   - Flips the employee row to 'active' and stamps activated_at.
+ *   - Links the employee to the employer org via account_owners
+ *     (role = 'member') so the org shows up in their account switcher.
+ *
+ * Idempotent for re-claims by the same wallet (returns the row as-is).
+ */
+export async function claimEmployeeInvite(
+  inviteCode: string,
+): Promise<RoebelCardEmployeeRow> {
+  const { data, error } = await supabase.rpc(
+    'claim_roebel_card_employee_invite' as any,
+    { p_invite_code: inviteCode } as any,
+  );
+  if (error) throw error;
+  return data as RoebelCardEmployeeRow;
+}
+
+/**
+ * Map RPC error-code strings from the claim flow to German user-facing
+ * messages.
+ */
+export function claimErrorMessage(err: unknown): string {
+  const msg = (err as { message?: string })?.message ?? '';
+  if (msg.includes('einladung_nicht_gefunden')) return 'Einladung nicht gefunden. Bitte prüfe den Code.';
+  if (msg.includes('einladung_deaktiviert')) return 'Diese Einladung wurde deaktiviert.';
+  if (msg.includes('einladung_bereits_eingeloest')) return 'Diese Einladung wurde bereits eingelöst.';
+  if (msg.includes('code_erforderlich')) return 'Bitte gib einen Code ein.';
+  if (msg.includes('nicht_authentifiziert')) return 'Bitte zuerst anmelden.';
+  return 'Die Einladung konnte nicht eingelöst werden.';
+}

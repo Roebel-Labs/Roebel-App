@@ -27,6 +27,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
 import {
   fetchPendingChargesForCard,
+  fetchSignedCardQr,
   type PendingChargeWithPartner,
   type ChargeStatus,
 } from '@/lib/supabase-roebel-card-charges';
@@ -36,6 +37,10 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PendingChargeModal from '@/components/PendingChargeModal';
 
 const POLL_INTERVAL_MS = 2000;
+// Signed QR payloads are valid for 60s (see sign_roebel_card_qr).
+// Refresh every 30s so the displayed QR is always at least 30s away
+// from expiry.
+const QR_REFRESH_INTERVAL_MS = 30_000;
 
 interface ChargeHistoryRow {
   id: string;
@@ -55,7 +60,10 @@ export default function MyRoebelCardScreen() {
   const [history, setHistory] = useState<ChargeHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!card) return;
@@ -98,6 +106,19 @@ export default function MyRoebelCardScreen() {
     setPending(rows.length > 0 ? rows[0] : null);
   }, [card]);
 
+  const refreshQr = useCallback(async () => {
+    if (!card) return;
+    try {
+      const payload = await fetchSignedCardQr(card.card_id);
+      setQrPayload(payload);
+      setQrError(null);
+    } catch (err) {
+      console.error('fetchSignedCardQr error:', err);
+      setQrError('QR-Code konnte nicht geladen werden. Ziehe nach unten zum Aktualisieren.');
+      setQrPayload(null);
+    }
+  }, [card]);
+
   const startPolling = useCallback(() => {
     stopPolling();
     void pollPending();
@@ -106,6 +127,14 @@ export default function MyRoebelCardScreen() {
     }, POLL_INTERVAL_MS);
   }, [pollPending]);
 
+  const startQrRefresh = useCallback(() => {
+    stopQrRefresh();
+    void refreshQr();
+    qrRefreshRef.current = setInterval(() => {
+      void refreshQr();
+    }, QR_REFRESH_INTERVAL_MS);
+  }, [refreshQr]);
+
   const stopPolling = () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -113,28 +142,43 @@ export default function MyRoebelCardScreen() {
     }
   };
 
-  // Start polling + refresh history whenever the screen gains focus.
+  const stopQrRefresh = () => {
+    if (qrRefreshRef.current) {
+      clearInterval(qrRefreshRef.current);
+      qrRefreshRef.current = null;
+    }
+  };
+
+  // Start polling + refresh history + refresh QR whenever the screen gains focus.
   useFocusEffect(
     useCallback(() => {
       startPolling();
+      startQrRefresh();
       void loadHistory();
-      return () => stopPolling();
-    }, [startPolling, loadHistory]),
+      return () => {
+        stopPolling();
+        stopQrRefresh();
+      };
+    }, [startPolling, startQrRefresh, loadHistory]),
   );
 
   // Stop polling whenever the card disappears.
   useEffect(() => {
-    if (!card) stopPolling();
+    if (!card) {
+      stopPolling();
+      stopQrRefresh();
+      setQrPayload(null);
+    }
   }, [card]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refresh(), loadHistory()]);
+      await Promise.all([refresh(), loadHistory(), refreshQr()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refresh, loadHistory]);
+  }, [refresh, loadHistory, refreshQr]);
 
   const handlePendingResolved = () => {
     setPending(null);
@@ -184,17 +228,24 @@ export default function MyRoebelCardScreen() {
           </View>
 
           <View style={[styles.qrBox, { backgroundColor: '#ffffff' }]}>
-            <QRCode
-              value={`roebel-card:v1:${card.card_id}`}
-              size={240}
-              color="#000000"
-              backgroundColor="#ffffff"
-            />
+            {qrPayload ? (
+              <QRCode
+                value={qrPayload}
+                size={240}
+                color="#000000"
+                backgroundColor="#ffffff"
+              />
+            ) : (
+              <View style={styles.qrPlaceholder}>
+                <ActivityIndicator color="#000000" />
+              </View>
+            )}
           </View>
 
           <Text style={[styles.qrHint, { color: colors.textSecondary }]}>
-            Zeige diesen Code dem Partner zum Bezahlen. Der Betrag wird dir zur
-            Bestätigung angezeigt, bevor er abgebucht wird.
+            {qrError
+              ? qrError
+              : 'Zeige diesen Code dem Partner zum Bezahlen. Der Betrag wird dir zur Bestätigung angezeigt, bevor er abgebucht wird.'}
           </Text>
 
           <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>
@@ -315,6 +366,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    width: 280,
+    height: 280,
+  },
+  qrPlaceholder: {
+    width: 240,
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   qrHint: {
     fontSize: 13,

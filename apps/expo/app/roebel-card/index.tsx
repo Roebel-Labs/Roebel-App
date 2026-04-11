@@ -31,13 +31,11 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
-import {
-  openRoebelCardCheckout,
-  openRoebelCardLearnMore,
-} from '@/lib/roebel-card-checkout';
+import { openRoebelCardLearnMore } from '@/lib/roebel-card-checkout';
 import { fetchPartnersByWallet } from '@/lib/supabase-roebel-card-partners';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import TopUpBottomSheet from '@/components/TopUpBottomSheet';
 
 const CARD_IMAGE = require('../../assets/images/card.png');
 
@@ -78,6 +76,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
   // the "Partner werden" card can route straight to the dashboard instead
   // of re-starting the registration wizard.
   const [hasPartnerRecord, setHasPartnerRecord] = useState(false);
+  const [topUpVisible, setTopUpVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +94,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
     };
   }, [activeAccount?.address]);
 
-  async function handleBuyPress() {
+  function handleBuyPress() {
     if (!activeAccount?.address) {
       Alert.alert(
         'Wallet benötigt',
@@ -103,14 +102,14 @@ function BuyerLanding({ card }: BuyerLandingProps) {
       );
       return;
     }
-    try {
-      await openRoebelCardCheckout({
-        walletAddress: activeAccount.address,
-        locale: 'de',
-      });
-    } catch (err) {
-      console.error('Failed to open Röbel Card checkout:', err);
-    }
+    setTopUpVisible(true);
+  }
+
+  function handleStripeDismissed() {
+    // Stripe in-app browser was dismissed — send the user to the
+    // polling success screen which watches for the webhook-driven
+    // balance update.
+    router.push('/roebel-card/topup-success' as any);
   }
 
   async function handleLearnMorePress() {
@@ -225,6 +224,16 @@ function BuyerLanding({ card }: BuyerLandingProps) {
             </View>
           </View>
         )}
+
+        <Pressable
+          onPress={() => router.push('/roebel-card/claim-invite' as any)}
+          style={styles.claimInviteLink}
+          hitSlop={8}
+        >
+          <Text style={[styles.claimInviteText, { color: colors.textSecondary }]}>
+            Ich habe eine Einladung von meinem Arbeitgeber
+          </Text>
+        </Pressable>
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.background }}>
@@ -248,6 +257,13 @@ function BuyerLanding({ card }: BuyerLandingProps) {
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <TopUpBottomSheet
+        visible={topUpVisible}
+        walletAddress={activeAccount?.address ?? null}
+        onClose={() => setTopUpVisible(false)}
+        onStripeDismissed={handleStripeDismissed}
+      />
     </SafeAreaView>
   );
 }
@@ -394,6 +410,17 @@ const styles = StyleSheet.create({
   businessCardSubtitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+  },
+  claimInviteLink: {
+    marginTop: 32,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+  claimInviteText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
   bottomBar: {
     flexDirection: 'row',

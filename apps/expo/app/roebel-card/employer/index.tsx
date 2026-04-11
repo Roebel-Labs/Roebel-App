@@ -176,6 +176,15 @@ export default function EmployerEmployeeListScreen() {
               + Mitarbeiter hinzufügen
             </Text>
           </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/roebel-card/employer/compliance' as any)}
+            style={styles.complianceLink}
+          >
+            <Text style={[styles.complianceLinkText, { color: colors.textSecondary }]}>
+              §8 EStG Dokumentation ansehen
+            </Text>
+          </Pressable>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -327,5 +336,14 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+  },
+  complianceLink: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  complianceLinkText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    textDecorationLine: 'underline',
   },
 });

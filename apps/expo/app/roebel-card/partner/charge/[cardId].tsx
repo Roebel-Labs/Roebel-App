@@ -1,7 +1,8 @@
 // Partner charge flow — two phases in a single screen.
 //
 // Phase 1 "entry": partner types amount + optional note → taps "Fordern"
-//   → createCharge() inserts a pending row and we transition to phase 2.
+//   → createChargeFromQr() calls the HMAC-verified RPC and we transition
+//   to phase 2.
 // Phase 2 "waiting": polls fetchChargeById every 2s, rendering a progress
 //   UI and a countdown. Resolves into one of:
 //     - approved → success screen with "Zurück zum Dashboard"
@@ -24,12 +25,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import {
-  createCharge,
+  createChargeFromQr,
   fetchChargeById,
   chargeErrorMessage,
   type RoebelCardChargeRow,
 } from '@/lib/supabase-roebel-card-charges';
-import { fetchPartnerByAccountId } from '@/lib/supabase-roebel-card-partners';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -41,7 +41,7 @@ export default function PartnerChargeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
-  const { cardId } = useLocalSearchParams<{ cardId: string }>();
+  const { cardId, payload } = useLocalSearchParams<{ cardId: string; payload: string }>();
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -108,6 +108,10 @@ export default function PartnerChargeScreen() {
 
   const handleSubmit = async () => {
     if (!amountValid || !cardId || typeof cardId !== 'string') return;
+    if (!payload || typeof payload !== 'string') {
+      Alert.alert('Fehler', 'Kein QR-Code vorhanden. Bitte erneut scannen.');
+      return;
+    }
     if (!activeAccount || activeAccount.account_type !== 'organisation') {
       Alert.alert('Kein Unternehmensaccount', 'Bitte wechsle zu deinem Partneraccount.');
       return;
@@ -115,24 +119,10 @@ export default function PartnerChargeScreen() {
 
     setPhase('creating');
     try {
-      const partner = await fetchPartnerByAccountId(activeAccount.id);
-      if (!partner) {
-        Alert.alert('Nicht registriert', 'Dieses Unternehmen ist nicht als Partner freigeschaltet.');
-        setPhase('entry');
-        return;
-      }
-      if (partner.status !== 'approved') {
-        Alert.alert(
-          'Noch nicht freigeschaltet',
-          'Zahlungen kannst du erst erfassen, sobald dein Antrag geprüft wurde.',
-        );
-        setPhase('entry');
-        return;
-      }
-
-      const newCharge = await createCharge({
-        cardId,
-        partnerId: partner.id,
+      // All validation (partner approval, HMAC, expiry, card state) is
+      // handled server-side by create_roebel_card_charge_from_qr.
+      const newCharge = await createChargeFromQr({
+        qrPayload: payload,
         amountCents,
         partnerNote: note.trim() || undefined,
       });

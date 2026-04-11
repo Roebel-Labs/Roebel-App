@@ -64,8 +64,16 @@ export interface CreatePartnerInput {
   agreementMetadata: AgreementMetadata;
 }
 
-// TODO(security): encrypt iban_encrypted server-side. For MVP it is stored
-// plain (the column name is inherited from the session 1 migration).
+/**
+ * Two-step partner creation:
+ *   1. INSERT the row WITHOUT the IBAN so RLS + check constraints apply.
+ *   2. RPC set_partner_iban() which encrypts the IBAN using the server
+ *      side GUC key (see migration 20260414).
+ *
+ * The IBAN is never stored plain — it lives only in iban_encrypted_bytea
+ * and can only be decrypted by the admin dashboard via the service_role
+ * key (see admin_get_partner_iban RPC).
+ */
 export async function createRoebelCardPartner(
   input: CreatePartnerInput,
 ): Promise<RoebelCardPartnerRow> {
@@ -75,7 +83,7 @@ export async function createRoebelCardPartner(
     .from('roebel_card_partners' as any)
     .insert({
       account_id: input.accountId,
-      iban_encrypted: iban,
+      // iban_encrypted left NULL — set via RPC below.
       iban_last4: ibanLast4(iban),
       bic: input.bic || null,
       account_holder: input.accountHolder,
@@ -90,7 +98,22 @@ export async function createRoebelCardPartner(
     .single();
 
   if (error) throw error;
-  return data as RoebelCardPartnerRow;
+  const partnerRow = data as RoebelCardPartnerRow;
+
+  // Encrypt the IBAN server-side. If this fails, surface the error but
+  // leave the row in place — the partner can retry and we'll update
+  // iban_encrypted_bytea without creating a duplicate row (account_id is
+  // UNIQUE, so re-inserting the same org would fail).
+  const { error: ibanError } = await supabase.rpc(
+    'set_partner_iban' as any,
+    { p_partner_id: partnerRow.id, p_iban_plain: iban } as any,
+  );
+
+  if (ibanError) {
+    throw ibanError;
+  }
+
+  return partnerRow;
 }
 
 export async function fetchPartnerByAccountId(

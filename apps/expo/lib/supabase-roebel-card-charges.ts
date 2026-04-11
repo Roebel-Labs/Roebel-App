@@ -1,7 +1,11 @@
 // Supabase helpers for Röbel Card charges (two-step partner → buyer flow).
 //
-// - createCharge: partner-side INSERT via RLS policy (must be an approved
-//   partner owned by the caller's wallet).
+// - createChargeFromQr: partner-side create via HMAC-verified RPC. Takes
+//   the scanned v2 QR payload, the amount, and an optional note. The
+//   server parses + verifies the HMAC against the card's qr_secret and
+//   inserts the row (see migration 20260415).
+// - fetchSignedCardQr: buyer-side. Returns a freshly signed v2 payload
+//   valid for 60 seconds.
 // - fetchChargeById: poll target for partner waiting state.
 // - fetchPendingChargesForCard: poll target for buyer approval modal.
 // - approveCharge / declineCharge: RPC calls (security definer functions).
@@ -33,34 +37,44 @@ export interface PendingChargeWithPartner extends RoebelCardChargeRow {
   partner_name: string | null;
 }
 
-export interface CreateChargeInput {
-  cardId: string;
-  partnerId: string;
+/**
+ * Partner-side: create a pending charge via the HMAC-verified RPC.
+ * The partner hands the FULL v2 payload string (including the HMAC and
+ * expiry) returned by the buyer's scanned QR. The server parses the
+ * payload, verifies the HMAC against the card's qr_secret, checks
+ * expiry, and validates that the caller is an approved partner before
+ * inserting. See migration 20260415.
+ */
+export async function createChargeFromQr(input: {
+  qrPayload: string;
   amountCents: number;
   partnerNote?: string;
-}
-
-/**
- * Partner-side: create a new pending charge targeting the buyer's card.
- * Status defaults to 'pending' with expires_at = now() + 2 minutes.
- */
-export async function createCharge(
-  input: CreateChargeInput,
-): Promise<RoebelCardChargeRow> {
-  const builder = supabase.from('roebel_card_charges' as any) as any;
-  const { data, error } = await builder
-    .insert({
-      card_id: input.cardId,
-      partner_id: input.partnerId,
-      amount_cents: input.amountCents,
-      partner_note: input.partnerNote ?? null,
-      status: 'pending',
-    })
-    .select()
-    .single();
+}): Promise<RoebelCardChargeRow> {
+  const { data, error } = await supabase.rpc(
+    'create_roebel_card_charge_from_qr' as any,
+    {
+      p_qr_payload: input.qrPayload,
+      p_amount_cents: input.amountCents,
+      p_partner_note: input.partnerNote ?? null,
+    } as any,
+  );
 
   if (error) throw error;
   return data as RoebelCardChargeRow;
+}
+
+/**
+ * Buyer-side: fetch a freshly-signed QR payload. Valid for 60 seconds.
+ * The screen that shows the QR should refresh this every ~30 seconds
+ * so the displayed code is always at least 30 seconds away from expiry.
+ */
+export async function fetchSignedCardQr(cardId: string): Promise<string> {
+  const { data, error } = await supabase.rpc(
+    'sign_roebel_card_qr' as any,
+    { p_card_id: cardId } as any,
+  );
+  if (error) throw error;
+  return data as string;
 }
 
 export async function fetchChargeById(
@@ -163,8 +177,15 @@ export function chargeErrorMessage(err: unknown): string {
   if (msg.includes('zahlung_abgelaufen')) return 'Zahlung ist abgelaufen';
   if (msg.includes('zahlung_nicht_offen')) return 'Zahlung ist nicht mehr offen';
   if (msg.includes('karte_nicht_aktiv')) return 'Karte ist nicht aktiv';
+  if (msg.includes('karte_nicht_gefunden')) return 'Karte nicht gefunden';
   if (msg.includes('nicht_berechtigt')) return 'Nicht berechtigt';
   if (msg.includes('nicht_authentifiziert')) return 'Nicht angemeldet';
   if (msg.includes('zahlung_nicht_gefunden')) return 'Zahlung nicht gefunden';
+  if (msg.includes('betrag_ungueltig')) return 'Ungültiger Betrag';
+  if (msg.includes('betrag_zu_hoch')) return 'Betrag zu hoch (max. 10.000 €)';
+  if (msg.includes('qr_signatur_ungueltig')) return 'QR-Code ist ungültig oder manipuliert';
+  if (msg.includes('qr_abgelaufen')) return 'QR-Code ist abgelaufen. Bitte neu scannen.';
+  if (msg.includes('qr_ungueltig')) return 'QR-Code konnte nicht gelesen werden';
+  if (msg.includes('partner_nicht_freigeschaltet')) return 'Dein Partnerzugang ist nicht freigeschaltet';
   return 'Etwas ist schiefgelaufen';
 }
