@@ -4,25 +4,33 @@ import {
   stripe,
   ROEBEL_CARD_CONFIG,
   computeRoebelCardFee,
+  parseRoebelCardMetadata,
+  type RoebelCardCheckoutMetadata,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Stripe webhook for Röbel Card purchases.
 //
-// The mobile Expo app opens a Stripe Payment Link directly (no call to
-// our backend). When the buyer completes payment Stripe fires
-// `checkout.session.completed`. We identify Röbel Card purchases via
-// `session.client_reference_id` using the format:
+// Two flows coexist here during the session 5 transition:
 //
-//   rc1|w:<wallet>|b:<verein_uuid_or_TOPF>
+// 1) PROGRAMMATIC (new, preferred):
+//    The mobile app calls POST /api/roebel-card/create-checkout-session
+//    which pre-inserts a `roebel_card_purchases` row with status='pending'
+//    and creates a Stripe Checkout Session whose metadata matches the
+//    RoebelCardCheckoutMetadata shape in `@/lib/stripe`. The webhook
+//    parses metadata.kind === 'roebel_card', looks up the purchase row by
+//    metadata.purchase_id, and flips status to 'paid'.
 //
-// The face value and fee are reverse-computed from `session.amount_total`
-// using the configured 10 % fee ratio (see ROEBEL_CARD_CONFIG). This
-// keeps the mobile → Stripe handoff simple: no per-session API call.
+// 2) LEGACY PAYMENT LINK (kept for backward compat, will be removed once
+//    all Expo clients are on the new flow):
+//    The mobile app opens a pre-configured Stripe Payment Link directly.
+//    The wallet + beneficiary are encoded in `session.client_reference_id`
+//    using `rc1|w:<wallet>|b:<verein_uuid_or_TOPF>`. Face/fee are
+//    reverse-computed from session.amount_total.
 //
-// Idempotency: each Stripe session id is unique, so we upsert the
-// roebel_card_purchases row on (stripe_session_id) — duplicate deliveries
-// become no-ops.
+// Idempotency: the partial unique index on roebel_card_purchases
+// (stripe_session_id) turns concurrent replays into Postgres errors that
+// we catch and treat as no-ops.
 
 const CLIENT_REF_PREFIX = "rc1";
 
@@ -123,7 +131,26 @@ export async function POST(request: NextRequest) {
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
+  const supabase = createAdminClient();
 
+  // --- Flow 1: programmatic metadata ---------------------------------------
+  if (session.metadata?.kind === "roebel_card") {
+    try {
+      const meta = parseRoebelCardMetadata(session.metadata);
+      return await handleProgrammaticSession(session, meta, supabase);
+    } catch (err) {
+      console.error(
+        "❌ [RoebelCard.webhook] programmatic metadata parse failed",
+        err,
+      );
+      return NextResponse.json(
+        { error: "invalid_metadata", details: (err as Error).message ?? "" },
+        { status: 400 },
+      );
+    }
+  }
+
+  // --- Flow 2: legacy payment link -----------------------------------------
   const parsed = parseClientReference(session.client_reference_id);
   if (!parsed) {
     // Not one of ours (e.g. the event tickets flow) — ignore silently.
@@ -140,8 +167,6 @@ export async function POST(request: NextRequest) {
   }
 
   const { faceCents, feeCents, vereineCents } = splitTotal(totalCents);
-
-  const supabase = createAdminClient();
 
   // Idempotency: short-circuit if we've already recorded this session.
   const { data: existing, error: existingErr } = await supabase
@@ -171,11 +196,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Validate the beneficiary account, if one was referenced.
+  // NOTE: `verein` is a SUB_TYPE (account_type is 'personal' | 'organisation'),
+  // so we check sub_type here — previous version had this wrong and would
+  // silently drop every beneficiary back to Topf.
   let beneficiaryAccountId: string | null = null;
   if (parsed.beneficiaryAccountId) {
     const { data: account, error: accountErr } = await supabase
       .from("accounts")
-      .select("id, account_type")
+      .select("id, account_type, sub_type, is_verified")
       .eq("id", parsed.beneficiaryAccountId)
       .maybeSingle();
     if (accountErr) {
@@ -183,11 +211,16 @@ export async function POST(request: NextRequest) {
         "❌ [RoebelCard.webhook] beneficiary lookup failed:",
         accountErr,
       );
-    } else if (account && account.account_type === "verein") {
+    } else if (
+      account &&
+      account.account_type === "organisation" &&
+      account.sub_type === "verein" &&
+      account.is_verified
+    ) {
       beneficiaryAccountId = account.id as string;
     } else {
       console.warn(
-        "⚠️  [RoebelCard.webhook] beneficiary not a Verein, falling back to Topf",
+        "⚠️  [RoebelCard.webhook] beneficiary not a verified Verein, falling back to Topf",
         parsed.beneficiaryAccountId,
       );
     }
@@ -436,6 +469,263 @@ export async function GET() {
       process.env.STRIPE_ROEBEL_CARD_WEBHOOK_SECRET ??
       process.env.STRIPE_WEBHOOK_SECRET
     ),
-    client_reference_id_format: "rc1|w:<wallet>|b:<verein_uuid_or_TOPF>",
+    flows: ["programmatic_metadata", "legacy_client_reference_id"],
   });
+}
+
+// ---------------------------------------------------------------------------
+// Flow 1: programmatic metadata handler
+// ---------------------------------------------------------------------------
+//
+// Called when session.metadata.kind === 'roebel_card'. The
+// `create-checkout-session` endpoint already inserted a
+// roebel_card_purchases row with status='pending' and we look it up by
+// metadata.purchase_id. This means no reverse-computation from
+// amount_total — we trust the server-side values stored on the
+// purchase row and in the metadata.
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function handleProgrammaticSession(
+  session: Stripe.Checkout.Session,
+  meta: RoebelCardCheckoutMetadata,
+  supabase: AdminClient,
+): Promise<NextResponse> {
+  const walletAddress = meta.wallet_address.toLowerCase();
+  const amountCents = Number(meta.amount_cents);
+  const feeCents = Number(meta.fee_cents);
+  const vereineCents = Number(meta.vereine_cents);
+  const beneficiaryFromMeta =
+    meta.beneficiary_account_id && meta.beneficiary_account_id.length > 0
+      ? meta.beneficiary_account_id
+      : null;
+
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return NextResponse.json({ error: "invalid_amount_cents" }, { status: 400 });
+  }
+
+  // Fetch the pre-created purchase row by its id.
+  const { data: purchase, error: purchaseErr } = await supabase
+    .from("roebel_card_purchases")
+    .select("id, status, card_id, stripe_session_id")
+    .eq("id", meta.purchase_id)
+    .maybeSingle();
+
+  if (purchaseErr) {
+    console.error(
+      "❌ [RoebelCard.webhook] purchase lookup failed",
+      purchaseErr,
+    );
+    return NextResponse.json({ error: "purchase_lookup_failed" }, { status: 500 });
+  }
+  if (!purchase) {
+    console.error(
+      "❌ [RoebelCard.webhook] purchase not found for id",
+      meta.purchase_id,
+    );
+    return NextResponse.json({ error: "purchase_not_found" }, { status: 404 });
+  }
+  if (purchase.status === "paid") {
+    // Already processed — idempotent no-op.
+    console.log(
+      "ℹ️  [RoebelCard.webhook] programmatic session already paid",
+      session.id,
+    );
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  // Find or create the card for this wallet.
+  let cardId: string | null = (purchase.card_id as string | null) ?? null;
+  if (!cardId) {
+    const { data: existingCard, error: cardLookupErr } = await supabase
+      .from("roebel_card")
+      .select("id")
+      .eq("wallet_address", walletAddress)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (cardLookupErr) {
+      console.error(
+        "❌ [RoebelCard.webhook] programmatic card lookup failed",
+        cardLookupErr,
+      );
+      return NextResponse.json({ error: "card_lookup_failed" }, { status: 500 });
+    }
+    if (existingCard) {
+      cardId = existingCard.id as string;
+    } else {
+      const { data: newCard, error: newCardErr } = await supabase
+        .from("roebel_card")
+        .insert({ wallet_address: walletAddress })
+        .select("id")
+        .single();
+      if (newCardErr || !newCard) {
+        console.error(
+          "❌ [RoebelCard.webhook] programmatic card insert failed",
+          newCardErr,
+        );
+        return NextResponse.json({ error: "card_insert_failed" }, { status: 500 });
+      }
+      cardId = newCard.id as string;
+    }
+  }
+
+  // Read current balance and add the face value.
+  const { data: cardRow, error: cardReadErr } = await supabase
+    .from("roebel_card")
+    .select("balance_cents")
+    .eq("id", cardId)
+    .single();
+  if (cardReadErr || !cardRow) {
+    console.error(
+      "❌ [RoebelCard.webhook] programmatic card read failed",
+      cardReadErr,
+    );
+    return NextResponse.json({ error: "card_read_failed" }, { status: 500 });
+  }
+  const newBalance = Number(cardRow.balance_cents) + amountCents;
+
+  // Flip the pending purchase row to paid + store the Stripe ids.
+  // The unique partial index on stripe_session_id gives us bulletproof
+  // idempotency against concurrent webhook replays.
+  const { error: updateErr } = await supabase
+    .from("roebel_card_purchases")
+    .update({
+      card_id: cardId,
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      stripe_session_id: session.id,
+      stripe_payment_intent_id:
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : null,
+    })
+    .eq("id", purchase.id);
+
+  if (updateErr) {
+    // 23505 = unique_violation on the partial index → another webhook
+    // delivery beat us to it. Treat as success.
+    const pgError = updateErr as { code?: string };
+    if (pgError.code === "23505") {
+      console.log(
+        "ℹ️  [RoebelCard.webhook] programmatic session concurrent replay",
+        session.id,
+      );
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error(
+      "❌ [RoebelCard.webhook] programmatic purchase update failed",
+      updateErr,
+    );
+    return NextResponse.json({ error: "purchase_update_failed" }, { status: 500 });
+  }
+
+  // Credit the buyer balance.
+  const { error: balanceErr } = await supabase
+    .from("roebel_card")
+    .update({ balance_cents: newBalance })
+    .eq("id", cardId);
+  if (balanceErr) {
+    console.error(
+      "❌ [RoebelCard.webhook] programmatic balance update failed",
+      balanceErr,
+    );
+    return NextResponse.json({ error: "balance_update_failed" }, { status: 500 });
+  }
+
+  // Allocate the Vereine share.
+  if (beneficiaryFromMeta) {
+    const { data: existingContrib, error: contribLookupErr } = await supabase
+      .from("roebel_verein_contributions")
+      .select("id, pending_amount_cents")
+      .eq("beneficiary_account_id", beneficiaryFromMeta)
+      .maybeSingle();
+
+    if (contribLookupErr) {
+      console.error(
+        "❌ [RoebelCard.webhook] programmatic contribution lookup failed",
+        contribLookupErr,
+      );
+    } else if (existingContrib) {
+      const { error: updErr } = await supabase
+        .from("roebel_verein_contributions")
+        .update({
+          pending_amount_cents:
+            Number(existingContrib.pending_amount_cents) + vereineCents,
+        })
+        .eq("id", existingContrib.id);
+      if (updErr) {
+        console.error(
+          "❌ [RoebelCard.webhook] programmatic contribution update failed",
+          updErr,
+        );
+      }
+    } else {
+      const { error: insErr } = await supabase
+        .from("roebel_verein_contributions")
+        .insert({
+          beneficiary_account_id: beneficiaryFromMeta,
+          pending_amount_cents: vereineCents,
+          paid_amount_cents: 0,
+        });
+      if (insErr) {
+        console.error(
+          "❌ [RoebelCard.webhook] programmatic contribution insert failed",
+          insErr,
+        );
+      }
+    }
+  } else {
+    // Röbeler Topf — singleton fund + ledger entry.
+    const { data: topf, error: topfLookupErr } = await supabase
+      .from("roebel_verein_fund")
+      .select("id, balance_cents")
+      .order("updated_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (topfLookupErr || !topf) {
+      console.error(
+        "❌ [RoebelCard.webhook] programmatic topf lookup failed",
+        topfLookupErr,
+      );
+    } else {
+      const { error: topfUpdErr } = await supabase
+        .from("roebel_verein_fund")
+        .update({
+          balance_cents: Number(topf.balance_cents) + vereineCents,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", topf.id);
+      if (topfUpdErr) {
+        console.error(
+          "❌ [RoebelCard.webhook] programmatic topf update failed",
+          topfUpdErr,
+        );
+      }
+      const { error: entryErr } = await supabase
+        .from("roebel_verein_fund_entries")
+        .insert({
+          purchase_id: purchase.id,
+          amount_cents: vereineCents,
+        });
+      if (entryErr) {
+        console.error(
+          "❌ [RoebelCard.webhook] programmatic topf entry insert failed",
+          entryErr,
+        );
+      }
+    }
+  }
+
+  console.log(
+    "✅ [RoebelCard.webhook] programmatic credit",
+    amountCents,
+    "cents · purchase",
+    purchase.id,
+    "· card",
+    cardId,
+  );
+
+  return NextResponse.json({ received: true });
 }

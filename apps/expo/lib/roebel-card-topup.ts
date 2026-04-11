@@ -1,83 +1,112 @@
-// Röbel Card top-up — opens a Stripe payment link sized by denomination.
+// Röbel Card top-up — programmatic Stripe checkout.
 //
-// The Stripe payment links are created and managed by the admin outside
-// the app; each URL is injected via an EXPO_PUBLIC env var. The app
-// appends ?client_reference_id=<wallet_address> so the webhook on the
-// web side can associate the Stripe session with the correct card.
+// Calls POST /api/roebel-card/create-checkout-session on the web
+// backend, which inserts a pending roebel_card_purchases row and creates
+// a Stripe Checkout Session with rich metadata (wallet, amount, fee,
+// Verein beneficiary, purchase_id). The returned URL is opened in the
+// in-app browser sheet. The webhook credits the card on success.
 //
-// Links must be configured in Stripe with a return URL of
-//   roebel://roebel-card/topup-success
-// so the buyer comes back to the in-app success screen after payment.
+// The success_url configured server-side is:
+//   roebel://roebel-card/topup-success?session_id=<session_id>
+// so the buyer returns to the in-app polling screen after payment.
 
 import * as WebBrowser from 'expo-web-browser';
 
-export type TopUpDenomination = 10 | 25 | 50 | 100 | 'custom';
+const DEFAULT_API_BASE_URL = 'https://roebel.app';
 
-/**
- * Resolve the Stripe payment link URL for a given denomination.
- * Reads from process.env at call time (expo-constants injects
- * EXPO_PUBLIC_* vars at build time).
- */
-function resolveStripeLink(denomination: TopUpDenomination): string | null {
-  switch (denomination) {
-    case 10:
-      return process.env.EXPO_PUBLIC_STRIPE_LINK_10 ?? null;
-    case 25:
-      return process.env.EXPO_PUBLIC_STRIPE_LINK_25 ?? null;
-    case 50:
-      return process.env.EXPO_PUBLIC_STRIPE_LINK_50 ?? null;
-    case 100:
-      return process.env.EXPO_PUBLIC_STRIPE_LINK_100 ?? null;
-    case 'custom':
-      return process.env.EXPO_PUBLIC_STRIPE_LINK_CUSTOM ?? null;
-  }
+function getApiBaseUrl(): string {
+  const env = process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (env && env.length > 0) return env.replace(/\/$/, '');
+  return DEFAULT_API_BASE_URL;
 }
 
-/**
- * Append ?client_reference_id=<wallet> so the Stripe webhook can credit
- * the buyer's card after payment. If the link already has query params,
- * the correct separator is used.
- */
-function withClientReference(url: string, walletAddress: string): string {
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}client_reference_id=${encodeURIComponent(walletAddress)}`;
-}
-
-export interface OpenTopUpParams {
+export interface CreateCheckoutInput {
   walletAddress: string;
-  denomination: TopUpDenomination;
+  amountCents: number;
+  /** UUID of a verified Verein account, or null for Röbeler Topf. */
+  beneficiaryAccountId: string | null;
+  locale?: 'de' | 'en';
+}
+
+export interface CreateCheckoutResponse {
+  url: string;
+  session_id: string;
+  purchase_id: string;
+  amount_cents: number;
+  fee_cents: number;
+  total_cents: number;
 }
 
 /**
- * Opens the Stripe payment link for the given denomination in the
- * in-app browser sheet. Returns the WebBrowser result so the caller can
- * react to cancel/dismiss.
- *
- * Throws if the EXPO_PUBLIC_STRIPE_LINK_* env var for the chosen
- * denomination is not configured — surface this as a user-facing Alert
- * at the call site.
+ * Ask the web backend to create a fresh Stripe Checkout Session and
+ * return its hosted URL. Throws on any 4xx/5xx.
  */
-export async function openRoebelCardTopUp(
-  params: OpenTopUpParams,
-): Promise<WebBrowser.WebBrowserResult> {
-  const baseUrl = resolveStripeLink(params.denomination);
-  if (!baseUrl) {
-    throw new Error(
-      `Stripe Payment Link für ${params.denomination === 'custom' ? 'Freibetrag' : `${params.denomination} €`} ist nicht konfiguriert.`,
-    );
+export async function createRoebelCardCheckout(
+  input: CreateCheckoutInput,
+): Promise<CreateCheckoutResponse> {
+  const url = `${getApiBaseUrl()}/api/roebel-card/create-checkout-session`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      wallet_address: input.walletAddress,
+      amount_cents: input.amountCents,
+      beneficiary_account_id: input.beneficiaryAccountId,
+      locale: input.locale ?? 'de',
+    }),
+  });
+
+  if (!res.ok) {
+    let message = `Checkout konnte nicht erstellt werden (HTTP ${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) {
+        message = friendlyError(body.error);
+      }
+    } catch {
+      // Non-JSON error body — fall through to the default message.
+    }
+    throw new Error(message);
   }
-  const url = withClientReference(baseUrl, params.walletAddress);
+
+  return (await res.json()) as CreateCheckoutResponse;
+}
+
+/**
+ * Opens the Stripe Checkout Session URL in the in-app browser sheet.
+ * The caller is responsible for navigating to /roebel-card/topup-success
+ * after this resolves so the polling UI can pick up the webhook-credited
+ * balance.
+ */
+export async function openRoebelCardCheckout(
+  url: string,
+): Promise<WebBrowser.WebBrowserResult> {
   return WebBrowser.openBrowserAsync(url, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
     dismissButtonStyle: 'close',
   });
 }
 
-/**
- * Pure helper used by the bottom sheet for env-availability checks —
- * lets the UI grey-out denominations whose Stripe link has not been
- * configured yet instead of waiting for the user to tap them.
- */
-export function isTopUpConfigured(denomination: TopUpDenomination): boolean {
-  return resolveStripeLink(denomination) !== null;
+function friendlyError(code: string): string {
+  switch (code) {
+    case 'amount_required':
+      return 'Bitte wähle einen Betrag.';
+    case 'amount_too_small':
+      return 'Der Mindestbetrag beträgt 5 €.';
+    case 'amount_too_large':
+      return 'Der Höchstbetrag beträgt 500 €.';
+    case 'wallet_required':
+      return 'Dein Wallet konnte nicht ermittelt werden.';
+    case 'beneficiary_lookup_failed':
+      return 'Der gewählte Verein konnte nicht geprüft werden.';
+    case 'purchase_insert_failed':
+      return 'Der Antrag konnte nicht vorbereitet werden.';
+    case 'card_lookup_failed':
+      return 'Deine Röbel Card konnte nicht geladen werden.';
+    case 'stripe_error':
+      return 'Zahlung bei Stripe konnte nicht gestartet werden.';
+    default:
+      return 'Etwas ist schiefgelaufen.';
+  }
 }
