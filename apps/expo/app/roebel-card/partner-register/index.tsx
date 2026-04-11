@@ -1,50 +1,55 @@
-// Röbel Card — Partner registration (STUB).
-//
-// Reserved route. Real partner registration wizard (signature + IBAN +
-// agreement) lands in a later session. Will likely extend the existing
-// create-org wizard with two additional steps.
+// Röbel Card partner registration — intro (step 0).
+// Mirrors app/create-org/index.tsx.
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
-export default function RoebelCardPartnerRegisterStubScreen() {
+const STEPS = [
+  { emoji: '🏪', title: 'Dein Betrieb', desc: 'Rechtsform und optionale USt-IdNr' },
+  { emoji: '🏦', title: 'Bankverbindung', desc: 'IBAN für monatliche Auszahlungen' },
+  { emoji: '✅', title: 'AGB bestätigen', desc: 'Kurzer Vertragsabschluss per Klick' },
+];
+
+export default function PartnerRegisterIntroScreen() {
   const router = useRouter();
   const { colors } = useTheme();
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}
-    >
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-          Partnerregistrierung
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={styles.content}>
+        <Text style={[styles.heading, { color: colors.textPrimary }]}>
+          Röbel Card{'\n'}Partner werden
         </Text>
-        <View style={styles.backButton} />
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+          In wenigen Schritten registrierst du deinen Betrieb, um Röbel Card Zahlungen
+          entgegenzunehmen.
+        </Text>
+
+        <View style={styles.stepsContainer}>
+          {STEPS.map((step, i) => (
+            <View key={i} style={[styles.stepCard, { borderColor: colors.border }]}>
+              <Text style={styles.stepEmoji}>{step.emoji}</Text>
+              <View style={styles.stepText}>
+                <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>
+                  {`${i + 1}. ${step.title}`}
+                </Text>
+                <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.emoji}>✍️</Text>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>
-          Bald verfügbar
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Die Partnerregistrierung (Vertrag, Signatur, IBAN) wird in einer
-          kommenden Version freigeschaltet.
-        </Text>
+      <View style={styles.footer}>
+        <Pressable
+          onPress={() => router.push('/roebel-card/partner-register/business' as any)}
+          style={[styles.button, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -52,43 +57,59 @@ export default function RoebelCardPartnerRegisterStubScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-  },
   content: {
     flex: 1,
-    alignItems: 'center',
+    paddingHorizontal: 24,
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 12,
   },
-  emoji: {
-    fontSize: 56,
+  heading: {
+    fontSize: 28,
+    fontFamily: 'Inter-Bold',
     marginBottom: 8,
   },
-  title: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-  },
-  subtitle: {
-    fontSize: 14,
+  subheading: {
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 20,
+    marginBottom: 40,
+  },
+  stepsContainer: {
+    gap: 12,
+    marginBottom: 48,
+  },
+  stepCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+  },
+  stepEmoji: {
+    fontSize: 22,
+  },
+  stepText: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  stepDesc: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  button: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
   },
 });

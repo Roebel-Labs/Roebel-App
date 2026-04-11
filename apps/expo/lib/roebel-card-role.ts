@@ -3,6 +3,12 @@
 // dashboard) or employer (Sachbezug / employee management).
 //
 // Kept free of Supabase and React so it can be unit-tested in isolation.
+//
+// RESERVED FOR FUTURE USE — session 2 removed the auto-redirect logic from
+// app/roebel-card/index.tsx in favour of explicit "Für Unternehmen" CTAs,
+// so this helper has no live callsites right now. It's intentionally kept
+// because later sessions (admin views, deep-link gating) will need a pure
+// role-derivation primitive again.
 
 export type RoebelCardRole = 'buyer' | 'partner' | 'employer';
 

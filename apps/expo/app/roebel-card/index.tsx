@@ -1,18 +1,20 @@
 // Röbel Card — buyer entry point.
 //
-// Branches by role:
-//   - partner  → redirect to /roebel-card/partner
-//   - employer → redirect to /roebel-card/employer
-//   - buyer    → <BuyerLanding>
+// Everyone lands here, including business owners. The buyer advertising
+// layout is the default. Org-account owners additionally see a "Für
+// Unternehmen" section with two CTAs:
+//   - "Partner werden" → /roebel-card/partner (if any owned org already has
+//     a roebel_card_partners row) or /roebel-card/partner-register otherwise
+//   - "Sachbezug für Mitarbeiter" → /roebel-card/employer
 //
-// For the foundations session (2026-04-11) the partner/employer stubs are
-// "Bald verfügbar" placeholders. A later session will fill them in.
+// Auto-redirect logic (session 1) was removed — a business owner may still
+// want to buy a card themselves.
 //
-// The buyer branch has two states:
-//   - card === null → advertising landing page (screenshot reference)
-//   - card !== null → placeholder balance view (full card UI lands later)
+// Buyer branch states:
+//   - card === null → advertising landing (screenshot reference)
+//   - card !== null → placeholder balance view
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,35 +31,18 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
-import { deriveRoebelCardRole } from '@/lib/roebel-card-role';
 import {
   openRoebelCardCheckout,
   openRoebelCardLearnMore,
 } from '@/lib/roebel-card-checkout';
+import { fetchPartnersByWallet } from '@/lib/supabase-roebel-card-partners';
+import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 const CARD_IMAGE = require('../../assets/images/card.png');
 
 export default function RoebelCardEntryScreen() {
-  const router = useRouter();
   const { card, refresh } = useRoebelCard();
-  const { activeAccount } = useAccount();
-
-  // For this session, there's no partner or employer detection yet — both
-  // inputs are false. The role derivation always returns 'buyer' until the
-  // partner/employer flows land in later sessions.
-  const role = deriveRoebelCardRole({
-    hasApprovedPartnerRecord: false,
-    hasActiveEmployerPurchases: false,
-  });
-
-  useEffect(() => {
-    if (role === 'partner') {
-      router.replace('/roebel-card/partner' as any);
-    } else if (role === 'employer') {
-      router.replace('/roebel-card/employer' as any);
-    }
-  }, [role, router]);
 
   // Auto-refresh card state when the screen gains focus (e.g., after the
   // user comes back from the web checkout).
@@ -66,11 +51,6 @@ export default function RoebelCardEntryScreen() {
       void refresh();
     }, [refresh]),
   );
-
-  if (role !== 'buyer') {
-    // While the redirect happens we render nothing to avoid a flash.
-    return null;
-  }
 
   return <BuyerLanding card={card} />;
 }
@@ -85,8 +65,35 @@ interface BuyerLandingProps {
 
 function BuyerLanding({ card }: BuyerLandingProps) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const activeAccount = useActiveAccount();
+  const { ownedAccounts } = useAccount();
+
+  const hasOrgAccount = useMemo(
+    () => ownedAccounts.some((a) => a.account_type === 'organisation'),
+    [ownedAccounts],
+  );
+
+  // Check whether any owned org already has a roebel_card_partners row so
+  // the "Partner werden" card can route straight to the dashboard instead
+  // of re-starting the registration wizard.
+  const [hasPartnerRecord, setHasPartnerRecord] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      if (!activeAccount?.address) {
+        setHasPartnerRecord(false);
+        return;
+      }
+      const partners = await fetchPartnersByWallet(activeAccount.address);
+      if (!cancelled) setHasPartnerRecord(partners.length > 0);
+    }
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAccount?.address]);
 
   async function handleBuyPress() {
     if (!activeAccount?.address) {
@@ -114,12 +121,23 @@ function BuyerLanding({ card }: BuyerLandingProps) {
     }
   }
 
+  const handlePartnerPress = () => {
+    router.push(
+      hasPartnerRecord
+        ? ('/roebel-card/partner' as any)
+        : ('/roebel-card/partner-register' as any),
+    );
+  };
+
+  const handleEmployerPress = () => {
+    router.push('/roebel-card/employer' as any);
+  };
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={['top']}
     >
-      {/* Header — back arrow only, no title, no border. */}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -142,7 +160,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
           </Text>
           {card !== null && (
             <Text style={[styles.balanceLine, { color: colors.textSecondary }]}>
-              Dein Guthaben: {formatCents(card.balance_cents)} €
+              Dein Guthaben: {formatEuros(card.balance_cents)}
             </Text>
           )}
         </View>
@@ -174,17 +192,37 @@ function BuyerLanding({ card }: BuyerLandingProps) {
             Die vollständige Kartenansicht (QR, Verlauf, Partner) kommt bald.
           </Text>
         )}
+
+        {hasOrgAccount && (
+          <View style={styles.businessSection}>
+            <Text style={[styles.businessHeading, { color: colors.textSecondary }]}>
+              Für Unternehmen
+            </Text>
+            <View style={styles.businessRow}>
+              <BusinessCard
+                emoji="🏪"
+                title={hasPartnerRecord ? 'Partner Dashboard' : 'Partner werden'}
+                subtitle="Annahme von Röbel Card"
+                onPress={handlePartnerPress}
+                colors={colors}
+              />
+              <BusinessCard
+                emoji="🧾"
+                title="Sachbezug"
+                subtitle="§8 EStG bis 50 €/Monat"
+                onPress={handleEmployerPress}
+                colors={colors}
+              />
+            </View>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Bottom bar — "Mehr erfahren" on the left, compact "Jetzt kaufen" right. */}
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.background }}>
         <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
           <Pressable onPress={handleLearnMorePress} hitSlop={8}>
             <Text
-              style={[
-                styles.learnMoreText,
-                { color: colors.textPrimary },
-              ]}
+              style={[styles.learnMoreText, { color: colors.textPrimary }]}
             >
               Mehr erfahren
             </Text>
@@ -205,11 +243,29 @@ function BuyerLanding({ card }: BuyerLandingProps) {
   );
 }
 
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('de-DE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+function BusinessCard({
+  emoji,
+  title,
+  subtitle,
+  onPress,
+  colors,
+}: {
+  emoji: string;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.businessCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    >
+      <Text style={styles.businessCardEmoji}>{emoji}</Text>
+      <Text style={[styles.businessCardTitle, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.businessCardSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+    </Pressable>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +342,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     textAlign: 'center',
     fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  businessSection: {
+    marginTop: 40,
+    paddingHorizontal: 24,
+  },
+  businessHeading: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  businessRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  businessCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 4,
+  },
+  businessCardEmoji: {
+    fontSize: 28,
+    marginBottom: 4,
+  },
+  businessCardTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  businessCardSubtitle: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
   },
   bottomBar: {
