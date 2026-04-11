@@ -60,9 +60,18 @@ export async function createRoebelCardCheckout(
   if (!res.ok) {
     let message = `Checkout konnte nicht erstellt werden (HTTP ${res.status})`;
     try {
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        details?: string | null;
+      };
       if (body?.error) {
         message = friendlyError(body.error);
+        // Append the raw server-side error so the user can see Postgres /
+        // Stripe details in the Alert on preview builds where console
+        // logs aren't visible.
+        if (body.details) {
+          message += `\n\n(${body.details})`;
+        }
       }
     } catch {
       // Non-JSON error body — fall through to the default message.
@@ -104,6 +113,8 @@ function friendlyError(code: string): string {
       return 'Der Antrag konnte nicht vorbereitet werden.';
     case 'card_lookup_failed':
       return 'Deine Röbel Card konnte nicht geladen werden.';
+    case 'card_provision_failed':
+      return 'Deine Röbel Card konnte nicht erstellt werden.';
     case 'stripe_error':
       return 'Zahlung bei Stripe konnte nicht gestartet werden.';
     default:

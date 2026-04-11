@@ -27,6 +27,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import {
   createRoebelCardCheckout,
@@ -65,6 +66,7 @@ export default function TopUpBottomSheet({
   onStripeDismissed,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('amount');
   const [selected, setSelected] = useState<Denomination | null>(null);
@@ -158,12 +160,19 @@ export default function TopUpBottomSheet({
     >
       <Pressable style={styles.backdrop} onPress={handleClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.avoider}
           pointerEvents="box-none"
+          keyboardVerticalOffset={0}
         >
           <Pressable
-            style={[styles.sheet, { backgroundColor: colors.background }]}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.background,
+                paddingBottom: Math.max(32, insets.bottom + 16),
+              },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -248,7 +257,12 @@ function AmountStep({
   onAdvance: () => void;
 }) {
   return (
-    <>
+    <ScrollView
+      style={styles.amountScroll}
+      contentContainerStyle={styles.amountScrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         Der Nennwert wird deiner Karte gutgeschrieben. Zusätzlich 10 % fließen
         an einen Verein deiner Wahl oder den Röbeler Topf.
@@ -346,7 +360,7 @@ function AmountStep({
           Weiter
         </Text>
       </Pressable>
-    </>
+    </ScrollView>
   );
 }
 
@@ -550,7 +564,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
-  avoider: { justifyContent: 'flex-end' },
+  avoider: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -590,6 +604,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     lineHeight: 18,
+  },
+  amountScroll: {
+    maxHeight: 560,
+  },
+  amountScrollContent: {
+    gap: 12,
+    paddingBottom: 4,
   },
   grid: {
     flexDirection: 'row',

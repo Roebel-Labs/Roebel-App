@@ -117,10 +117,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Look up an existing card for this wallet so the purchase row can be
-  // linked from the start. If no card exists yet, card_id stays null and
-  // the webhook will provision it on successful payment.
-  let cardId: string | null = null;
+  // Look up an existing card for this wallet. If none exists, provision
+  // one NOW so the NOT NULL constraint on roebel_card_purchases.card_id
+  // is always satisfied. Previous revision passed card_id: null here
+  // expecting the webhook to fill it in, but that fails the constraint
+  // before the webhook ever runs.
+  let cardId: string;
   const { data: existingCard, error: cardLookupError } = await supabase
     .from("roebel_card")
     .select("id")
@@ -131,10 +133,30 @@ export async function POST(request: NextRequest) {
 
   if (cardLookupError) {
     console.error("[roebel-card.create-checkout] card lookup failed", cardLookupError);
-    return NextResponse.json({ error: "card_lookup_failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "card_lookup_failed", details: cardLookupError.message ?? null },
+      { status: 500 },
+    );
   }
+
   if (existingCard) {
     cardId = existingCard.id as string;
+  } else {
+    // First-time buyer — provision a zero-balance card so the checkout
+    // and webhook both have a stable card_id to reference.
+    const { data: newCard, error: newCardError } = await supabase
+      .from("roebel_card")
+      .insert({ wallet_address: walletAddress })
+      .select("id")
+      .single();
+    if (newCardError || !newCard) {
+      console.error("[roebel-card.create-checkout] card provision failed", newCardError);
+      return NextResponse.json(
+        { error: "card_provision_failed", details: newCardError?.message ?? null },
+        { status: 500 },
+      );
+    }
+    cardId = newCard.id as string;
   }
 
   // Insert a pending purchase row. The webhook will look it up by
@@ -154,7 +176,10 @@ export async function POST(request: NextRequest) {
 
   if (purchaseError || !purchaseRow) {
     console.error("[roebel-card.create-checkout] purchase insert failed", purchaseError);
-    return NextResponse.json({ error: "purchase_insert_failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "purchase_insert_failed", details: purchaseError?.message ?? null },
+      { status: 500 },
+    );
   }
 
   const purchaseId = purchaseRow.id as string;
