@@ -1,9 +1,11 @@
 "use client";
 
-import { ConnectButton, useActiveAccount } from "thirdweb/react";
-import { client } from "@/app/client";
-import { activeChain } from "@/lib/chains";
-import { wallets } from "@/lib/wallet-config";
+import { useActiveAccount } from "thirdweb/react";
+// TODO: Re-enable ConnectButton later — temporarily hidden from header
+// import { ConnectButton } from "thirdweb/react";
+// import { client } from "@/app/client";
+// import { activeChain } from "@/lib/chains";
+// import { wallets } from "@/lib/wallet-config";
 import Link from "next/link";
 import Image from "next/image";
 import { de } from "@/lib/translations/de";
@@ -75,6 +77,8 @@ export function Header() {
 
           {/* Right Side - Connect Button + Mobile Menu */}
           <div className="flex items-center gap-2">
+            {/* TODO: Re-enable ConnectButton later — temporarily hidden from header */}
+            {/*
             <div className="hidden sm:block">
               <ConnectButton
                 client={client}
@@ -88,7 +92,6 @@ export function Header() {
               />
             </div>
 
-            {/* Mobile Connect Button (Compact) */}
             <div className="block sm:hidden">
               <ConnectButton
                 client={client}
@@ -101,6 +104,7 @@ export function Header() {
                 theme="light"
               />
             </div>
+            */}
 
             {/* Mobile Menu Button */}
             <button
