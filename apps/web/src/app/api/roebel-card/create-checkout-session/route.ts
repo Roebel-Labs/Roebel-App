@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  stripe,
+  stripeCard,
   ROEBEL_CARD_CONFIG,
   computeRoebelCardFee,
   type RoebelCardCheckoutMetadata,
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
   } satisfies Partial<RoebelCardCheckoutMetadata> & Record<string, string>;
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await stripeCard.checkout.sessions.create({
       mode: "payment",
       locale: locale === "en" ? "en" : "de",
       line_items: [

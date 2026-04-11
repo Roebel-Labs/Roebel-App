@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import {
-  stripe,
+  stripeCard,
   ROEBEL_CARD_CONFIG,
   computeRoebelCardFee,
   parseRoebelCardMetadata,
@@ -99,7 +99,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
   }
 
+  // Röbel Card runs on a separate Stripe account — prefer its dedicated
+  // signing secret. Falls back to the legacy name and then to the default
+  // secret so local/dev setups without the card-specific env still work.
   const webhookSecret =
+    process.env.STRIPE_WEBHOOK_SECRET_CARD ??
     process.env.STRIPE_ROEBEL_CARD_WEBHOOK_SECRET ??
     process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -113,7 +117,7 @@ export async function POST(request: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = stripeCard.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(
@@ -466,9 +470,11 @@ export async function GET() {
     status: "ok",
     endpoint: "roebel-card/webhook",
     has_secret: !!(
+      process.env.STRIPE_WEBHOOK_SECRET_CARD ??
       process.env.STRIPE_ROEBEL_CARD_WEBHOOK_SECRET ??
       process.env.STRIPE_WEBHOOK_SECRET
     ),
+    using_card_secret: !!process.env.STRIPE_WEBHOOK_SECRET_CARD,
     flows: ["programmatic_metadata", "legacy_client_reference_id"],
   });
 }
