@@ -11,12 +11,14 @@ import { useRouter } from 'expo-router';
 import ErrorDrawer from './ErrorDrawer';
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
   slug?: string;
   tableNumber?: string;
+  /** Röbel Card payload version (currently always 'v1'). */
+  cardVersion?: string;
 };
 
 interface QRScannerProps {
@@ -40,6 +42,19 @@ function parseQRCode(data: string): QRScanResult {
   // Stamp card: roebel-stamp:<partner_id>
   if (data.startsWith('roebel-stamp:')) {
     return { type: 'stamp', data, id: data.replace('roebel-stamp:', '') };
+  }
+
+  // Röbel Card (voucher): roebel-card:v1:<card_id>
+  // TODO(security): extend payload to include a signed nonce (HMAC with
+  // roebel_card.qr_secret) so a static QR can't be copied and replayed.
+  const cardMatch = data.match(/^roebel-card:(v\d+):([0-9a-f-]+)$/i);
+  if (cardMatch) {
+    return {
+      type: 'roebel_card',
+      data,
+      cardVersion: cardMatch[1],
+      id: cardMatch[2],
+    };
   }
 
   // Restaurant order: https://roebel.app/order/{slug}/{tableNumber}
@@ -70,6 +85,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         checkpoint: 'Explorer-Checkpoint',
         stamp: 'Stempelkarte',
         order: 'Bestellung',
+        roebel_card: 'Röbel Card',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({

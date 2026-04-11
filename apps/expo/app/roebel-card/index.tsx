@@ -188,9 +188,18 @@ function BuyerLanding({ card }: BuyerLandingProps) {
         </View>
 
         {card !== null && (
-          <Text style={[styles.comingSoonNote, { color: colors.textSecondary }]}>
-            Die vollständige Kartenansicht (QR, Verlauf, Partner) kommt bald.
-          </Text>
+          <View style={styles.myCardWrapper}>
+            <Pressable
+              onPress={() => router.push('/roebel-card/my-card' as any)}
+              style={[styles.myCardButton, { backgroundColor: colors.primary }]}
+              accessibilityRole="button"
+              accessibilityLabel="Meine Karte anzeigen"
+            >
+              <Text style={[styles.myCardButtonText, { color: colors.onPrimary }]}>
+                Meine Karte anzeigen
+              </Text>
+            </Pressable>
+          </View>
         )}
 
         {hasOrgAccount && (
@@ -337,12 +346,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 320,
   },
-  comingSoonNote: {
-    marginTop: 24,
-    paddingHorizontal: 32,
-    textAlign: 'center',
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+  myCardWrapper: {
+    marginTop: 32,
+    paddingHorizontal: 48,
+    alignItems: 'center',
+  },
+  myCardButton: {
+    width: '100%',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  myCardButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
   },
   businessSection: {
     marginTop: 40,

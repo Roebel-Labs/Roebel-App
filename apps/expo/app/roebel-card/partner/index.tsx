@@ -136,10 +136,7 @@ export default function PartnerDashboardScreen() {
                 );
                 return;
               }
-              Alert.alert(
-                'Scanner folgt',
-                'Die Zahlungserfassung per QR-Scanner wird in einer kommenden Version freigeschaltet.',
-              );
+              router.push('/roebel-card/partner/scan' as any);
             }}
             style={[
               styles.chargeButton,
