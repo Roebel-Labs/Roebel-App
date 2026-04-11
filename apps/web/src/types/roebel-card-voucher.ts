@@ -66,11 +66,14 @@ export interface PurchaseWithRelations extends RoebelCardPurchaseRow {
 export interface VereineContributionWithAccount extends RoebelVereinContributionRow {
   account_name: string
   account_type: string
+  account_sub_type: string | null
+  is_verified: boolean
 }
 
 export interface PurchaseFilters {
   status?: RoebelCardPurchaseStatus | "all"
-  beneficiaryAccountId?: string | "all"
+  /** Account UUID, "all" for no filter, or "topf" for Röbeler Topf only. */
+  beneficiaryAccountId?: string
   walletSearch?: string
   from?: string // ISO date
   to?: string // ISO date

@@ -4,7 +4,25 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error("STRIPE_SECRET_KEY is not set in environment variables");
 }
 
+// The default/primary Stripe client — used for event tickets and anything
+// else that shares the main Stripe account.
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+/**
+ * Röbel Card Stripe client. The voucher system runs on a SEPARATE Stripe
+ * account (different business entity / compliance profile), so it has its
+ * own secret key, publishable key, and webhook signing secret:
+ *
+ *   STRIPE_SECRET_KEY_CARD          (used here, server-side)
+ *   NEXT_PUBLIC_STRIPE_PUBLIC_KEY_CARD (client-side, for Stripe Elements)
+ *   STRIPE_WEBHOOK_SECRET_CARD      (webhook signature verification)
+ *
+ * Falls back to the default key if the card-specific key is missing so
+ * local dev without the split setup still works.
+ */
+const cardSecretKey =
+  process.env.STRIPE_SECRET_KEY_CARD ?? process.env.STRIPE_SECRET_KEY;
+export const stripeCard = new Stripe(cardSecretKey);
 
 // Event ticket configuration
 export const TICKET_CONFIG = {

@@ -94,10 +94,13 @@ export default async function RoebelCardVereinePage() {
                   <tr key={c.id} className="border-t border-border">
                     <td className="px-4 py-2">
                       <div className="font-medium">{c.account_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        <Badge variant="outline" className="mr-2">
-                          {c.account_type}
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline">
+                          {c.account_sub_type ?? c.account_type}
                         </Badge>
+                        {c.is_verified && (
+                          <Badge variant="secondary">verifiziert</Badge>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2 text-right">

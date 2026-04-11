@@ -177,7 +177,7 @@ export async function listVereineContributions(): Promise<
     .from("roebel_verein_contributions")
     .select(
       `id, beneficiary_account_id, pending_amount_cents, paid_amount_cents, updated_at,
-       accounts!beneficiary_account_id ( name, account_type )`,
+       accounts!beneficiary_account_id ( name, account_type, sub_type, is_verified )`,
     )
     .order("updated_at", { ascending: false });
 
@@ -188,7 +188,12 @@ export async function listVereineContributions(): Promise<
 
   const rows = (data ?? []) as unknown as Array<
     RoebelVereinContributionRow & {
-      accounts: { name: string; account_type: string } | null;
+      accounts: {
+        name: string;
+        account_type: string;
+        sub_type: string | null;
+        is_verified: boolean | null;
+      } | null;
     }
   >;
 
@@ -197,7 +202,9 @@ export async function listVereineContributions(): Promise<
     return {
       ...rest,
       account_name: accounts?.name ?? "—",
-      account_type: accounts?.account_type ?? "verein",
+      account_type: accounts?.account_type ?? "organisation",
+      account_sub_type: accounts?.sub_type ?? null,
+      is_verified: accounts?.is_verified ?? false,
     };
   });
 }
