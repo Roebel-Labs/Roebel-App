@@ -44,7 +44,7 @@ export default function PartnerDashboardPage() {
 
       // Fetch partner status
       const { data: partnerData } = await supabase
-        .from("roebel_card_partners")
+        .from("roebel_stamp_partners")
         .select("*")
         .eq("business_id", biz.id)
         .limit(1);

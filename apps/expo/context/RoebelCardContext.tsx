@@ -1,133 +1,95 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { useUser } from './UserContext';
-import {
-  fetchRoebelCard,
-  ensureRoebelCard,
-  fetchPointsHistory,
-  fetchStampCards,
-  awardPoints,
-  type RoebelCardRecord,
-  type PointsLedgerEntry,
-  type StampCardRecord,
-  type PointsAction,
-} from '@/lib/supabase-roebel-card';
+// RoebelCardContext (voucher edition)
+//
+// This is the NEW Röbel Card system: a local euro-voucher card modelled after
+// zmyle Networks. The legacy points/tier/stamp system that previously owned
+// this filename was renamed to RoebelPointsContext.
+//
+// For this session the context is read-only: it fetches the active wallet's
+// voucher card (if any) so the screen can decide between the advertising
+// landing page (card === null) and the full card view (card !== null, built
+// in a later session). No writes happen here — all money-moving operations
+// go through the web checkout or the partner flow.
+
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { useActiveAccount } from 'thirdweb/react';
+import { supabase } from '@/lib/supabase';
+
+export interface RoebelCardRow {
+  card_id: string;
+  wallet_address: string;
+  owner_account_id: string | null;
+  balance_cents: number;
+  status: 'active' | 'frozen' | 'deactivated';
+  approved_charge_count: number;
+  lifetime_spend_cents: number;
+  created_at: string;
+  updated_at: string;
+}
 
 interface RoebelCardContextValue {
-  card: RoebelCardRecord | null;
-  pointsBalance: number;
-  tier: string;
-  history: PointsLedgerEntry[];
-  stampCards: StampCardRecord[];
+  card: RoebelCardRow | null;
   isLoading: boolean;
-  earnPoints: (
-    action: Exclude<PointsAction, 'redeem'>,
-    referenceType?: string,
-    referenceId?: string,
-    description?: string
-  ) => Promise<boolean>;
   refresh: () => Promise<void>;
 }
 
-const RoebelCardContext = createContext<RoebelCardContextValue | undefined>(undefined);
+const defaultValue: RoebelCardContextValue = {
+  card: null,
+  isLoading: false,
+  refresh: async () => {},
+};
+
+const RoebelCardContext = createContext<RoebelCardContextValue>(defaultValue);
 
 export function RoebelCardProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useUser();
-  const walletAddress = user?.wallet_address;
+  const activeAccount = useActiveAccount();
+  const walletAddress = activeAccount?.address ?? null;
 
-  const [card, setCard] = useState<RoebelCardRecord | null>(null);
-  const [history, setHistory] = useState<PointsLedgerEntry[]>([]);
-  const [stampCards, setStampCards] = useState<StampCardRecord[]>([]);
+  const [card, setCard] = useState<RoebelCardRow | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadCard = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!walletAddress) {
       setCard(null);
-      setHistory([]);
-      setStampCards([]);
       return;
     }
-
     setIsLoading(true);
     try {
-      const [cardData, historyData, stampsData] = await Promise.all([
-        ensureRoebelCard(walletAddress),
-        fetchPointsHistory(walletAddress),
-        fetchStampCards(walletAddress),
-      ]);
+      const { data, error } = await supabase
+        .from('v_roebel_card_overview')
+        .select('*')
+        .eq('wallet_address', walletAddress)
+        .limit(1)
+        .maybeSingle();
 
-      setCard(cardData);
-      setHistory(historyData);
-      setStampCards(stampsData);
-    } catch (error) {
-      console.error('Error loading Röbel Card:', error);
+      if (error) {
+        // PGRST116 = no rows — treat as "no card yet" (advertising state).
+        if (error.code !== 'PGRST116') {
+          console.error('Error loading Röbel Card overview:', error);
+        }
+        setCard(null);
+      } else {
+        setCard((data as RoebelCardRow | null) ?? null);
+      }
+    } catch (err) {
+      console.error('Unexpected error loading Röbel Card overview:', err);
+      setCard(null);
     } finally {
       setIsLoading(false);
     }
   }, [walletAddress]);
 
   useEffect(() => {
-    loadCard();
-  }, [loadCard]);
-
-  const earnPoints = useCallback(
-    async (
-      action: Exclude<PointsAction, 'redeem'>,
-      referenceType?: string,
-      referenceId?: string,
-      description?: string
-    ): Promise<boolean> => {
-      if (!walletAddress) return false;
-
-      const result = await awardPoints(walletAddress, action, referenceType, referenceId, description);
-      if (result.success) {
-        // Optimistically update local state
-        if (result.newBalance !== undefined) {
-          setCard((prev) =>
-            prev ? { ...prev, points_balance: result.newBalance! } : prev
-          );
-        }
-        // Refresh history
-        const newHistory = await fetchPointsHistory(walletAddress, 20);
-        setHistory(newHistory);
-      }
-      return result.success;
-    },
-    [walletAddress]
-  );
+    void load();
+  }, [load]);
 
   const value = useMemo<RoebelCardContextValue>(
-    () => ({
-      card,
-      pointsBalance: card?.points_balance || 0,
-      tier: card?.tier || 'besucher',
-      history,
-      stampCards,
-      isLoading,
-      earnPoints,
-      refresh: loadCard,
-    }),
-    [card, history, stampCards, isLoading, earnPoints, loadCard]
+    () => ({ card, isLoading, refresh: load }),
+    [card, isLoading, load],
   );
 
-  return (
-    <RoebelCardContext.Provider value={value}>
-      {children}
-    </RoebelCardContext.Provider>
-  );
+  return <RoebelCardContext.Provider value={value}>{children}</RoebelCardContext.Provider>;
 }
 
-const defaultValue: RoebelCardContextValue = {
-  card: null,
-  pointsBalance: 0,
-  tier: 'besucher',
-  history: [],
-  stampCards: [],
-  isLoading: false,
-  earnPoints: async () => false,
-  refresh: async () => {},
-};
-
 export function useRoebelCard(): RoebelCardContextValue {
-  const context = useContext(RoebelCardContext);
-  return context ?? defaultValue;
+  return useContext(RoebelCardContext);
 }

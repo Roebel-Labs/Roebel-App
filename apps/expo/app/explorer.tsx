@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { useRoebelCard, RoebelCardProvider } from '@/context/RoebelCardContext';
+import { useRoebelPoints, RoebelPointsProvider } from '@/context/RoebelPointsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { fetchCheckpoints, fetchCompletions, completeCheckpoint, type ExplorerCheckpoint } from '@/lib/supabase-explorer';
 import QRScanner, { type QRScanResult } from '@/components/QRScanner';
@@ -13,9 +13,9 @@ import QrCodeIcon from '@/assets/icons/qr-code.svg';
 
 export default function ExplorerScreenWrapper() {
   return (
-    <RoebelCardProvider>
+    <RoebelPointsProvider>
       <ExplorerScreen />
-    </RoebelCardProvider>
+    </RoebelPointsProvider>
   );
 }
 
@@ -23,7 +23,7 @@ function ExplorerScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user } = useUser();
-  const { earnPoints } = useRoebelCard();
+  const { earnPoints } = useRoebelPoints();
   const { showSnackbar } = useSnackbar();
 
   const [checkpoints, setCheckpoints] = useState<ExplorerCheckpoint[]>([]);

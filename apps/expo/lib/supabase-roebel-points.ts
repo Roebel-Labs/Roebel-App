@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 // ── Types ────────────────────────────────────────────────────
 
-export interface RoebelCardRecord {
+export interface RoebelPointsCardRecord {
   wallet_address: string;
   points_balance: number;
   total_earned: number;
@@ -68,27 +68,27 @@ const POINTS_TABLE: Record<Exclude<PointsAction, 'redeem'>, number> = {
 
 // ── Fetch ────────────────────────────────────────────────────
 
-export async function fetchRoebelCard(walletAddress: string): Promise<RoebelCardRecord | null> {
+export async function fetchRoebelPointsCard(walletAddress: string): Promise<RoebelPointsCardRecord | null> {
   const { data, error } = await supabase
-    .from('roebel_card')
+    .from('roebel_points_card')
     .select('*')
     .eq('wallet_address', walletAddress)
     .single();
 
   if (error) {
     if (error.code === 'PGRST116') return null; // Not found
-    console.error('Error fetching Röbel Card:', error);
+    console.error('Error fetching Röbel Points Card:', error);
     return null;
   }
   return data;
 }
 
-export async function ensureRoebelCard(walletAddress: string): Promise<RoebelCardRecord> {
-  const existing = await fetchRoebelCard(walletAddress);
+export async function ensureRoebelPointsCard(walletAddress: string): Promise<RoebelPointsCardRecord> {
+  const existing = await fetchRoebelPointsCard(walletAddress);
   if (existing) return existing;
 
   const { data, error } = await supabase
-    .from('roebel_card')
+    .from('roebel_points_card')
     .upsert({
       wallet_address: walletAddress,
       points_balance: 0,
@@ -158,10 +158,10 @@ export async function awardPoints(
 
   if (updateError) {
     // Fallback: manually update
-    const card = await fetchRoebelCard(walletAddress);
+    const card = await fetchRoebelPointsCard(walletAddress);
     if (card) {
       const { error } = await supabase
-        .from('roebel_card')
+        .from('roebel_points_card')
         .update({
           points_balance: card.points_balance + amount,
           total_earned: card.total_earned + amount,
@@ -183,7 +183,7 @@ export async function awardPoints(
 export async function fetchStampCards(walletAddress: string): Promise<StampCardRecord[]> {
   const { data, error } = await supabase
     .from('stamp_cards')
-    .select('*, roebel_card_partners(business_id, businesses(name))')
+    .select('*, roebel_stamp_partners(business_id, businesses(name))')
     .eq('wallet_address', walletAddress)
     .eq('is_completed', false)
     .order('created_at', { ascending: false });

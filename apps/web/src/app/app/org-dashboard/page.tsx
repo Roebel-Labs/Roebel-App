@@ -70,7 +70,7 @@ export default function OrgDashboardPage() {
           .eq("organizer_wallet_address", account.address)
           .eq("status", "approved"),
         supabase
-          .from("roebel_card_partners")
+          .from("roebel_stamp_partners")
           .select("id, total_redemptions, is_active")
           .eq("business_id", biz.id)
           .eq("is_active", true)

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
-import { useRoebelCard } from '@/context/RoebelCardContext';
+import { useRoebelPoints } from '@/context/RoebelPointsContext';
 import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness, fetchDealAnalytics } from '@/lib/supabase-deals';
 
@@ -60,7 +60,7 @@ export default function OrgDashboard() {
   const { colors } = useTheme();
   const { user } = useUser();
   const { activeAccount } = useAccount();
-  const { pointsBalance } = useRoebelCard();
+  const { pointsBalance } = useRoebelPoints();
 
   const [dealCount, setDealCount] = useState(0);
   const [totalViews, setTotalViews] = useState(0);

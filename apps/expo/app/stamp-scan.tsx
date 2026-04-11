@@ -3,16 +3,16 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser } from '@/context/UserContext';
-import { useRoebelCard } from '@/context/RoebelCardContext';
+import { useRoebelPoints } from '@/context/RoebelPointsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { addStamp } from '@/lib/supabase-roebel-card';
+import { addStamp } from '@/lib/supabase-roebel-points';
 import QRScanner, { type QRScanResult } from '@/components/QRScanner';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function StampScanScreen() {
   const router = useRouter();
   const { user } = useUser();
-  const { refresh } = useRoebelCard();
+  const { refresh } = useRoebelPoints();
   const { showSnackbar } = useSnackbar();
 
   const handleScan = useCallback(async (result: QRScanResult) => {

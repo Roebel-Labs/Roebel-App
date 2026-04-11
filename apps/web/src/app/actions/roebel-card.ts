@@ -15,7 +15,7 @@ export async function getRoebelCard(walletAddress: string): Promise<{
 
   // Try to fetch existing card
   const { data, error } = await supabase
-    .from("roebel_card")
+    .from("roebel_points_card")
     .select("*")
     .eq("wallet_address", walletAddress)
     .single();
@@ -31,7 +31,7 @@ export async function getRoebelCard(walletAddress: string): Promise<{
   // No card yet — create one via the increment function (auto-creates)
   // or insert directly
   const { data: newCard, error: insertError } = await supabase
-    .from("roebel_card")
+    .from("roebel_points_card")
     .insert({
       wallet_address: walletAddress,
       points_balance: 0,
@@ -90,7 +90,7 @@ export async function getStampCards(walletAddress: string): Promise<{
     .from("stamp_cards")
     .select(`
       *,
-      roebel_card_partners!inner (
+      roebel_stamp_partners!inner (
         businesses!inner (name, logo_url)
       )
     `)
@@ -102,7 +102,7 @@ export async function getStampCards(walletAddress: string): Promise<{
   }
 
   const mapped = (data || []).map((row: Record<string, unknown>) => {
-    const partner = row.roebel_card_partners as Record<string, unknown> | null;
+    const partner = row.roebel_stamp_partners as Record<string, unknown> | null;
     const biz = partner?.businesses as Record<string, unknown> | null;
     return {
       id: String(row.id),
@@ -162,7 +162,7 @@ export async function awardPoints(
 
   // 3. Update tier if needed
   const { data: card } = await supabase
-    .from("roebel_card")
+    .from("roebel_points_card")
     .select("total_earned, tier")
     .eq("wallet_address", walletAddress)
     .single();
@@ -171,7 +171,7 @@ export async function awardPoints(
     const newTier = computeTier(card.total_earned);
     if (newTier !== card.tier) {
       await supabase
-        .from("roebel_card")
+        .from("roebel_points_card")
         .update({ tier: newTier, updated_at: new Date().toISOString() })
         .eq("wallet_address", walletAddress);
     }

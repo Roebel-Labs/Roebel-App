@@ -103,7 +103,7 @@ function TouristCards({ router }: { router: ReturnType<typeof useRouter> }) {
           emoji="🎴"
           title="Röbel Card"
           subtitle="Punkte & Stempel"
-          onPress={() => router.push('/wallet' as any)}
+          onPress={() => router.push('/roebel-card' as any)}
         />
         <ModeCard
           emoji="🧭"
@@ -130,7 +130,7 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
           emoji="🎴"
           title="Röbel Card"
           subtitle="Punkte & Badges"
-          onPress={() => router.push('/wallet' as any)}
+          onPress={() => router.push('/roebel-card' as any)}
         />
         <ModeCard
           emoji="🗳️"

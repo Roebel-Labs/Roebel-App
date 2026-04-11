@@ -1,3 +1,10 @@
+// PRESERVED FOR LATER — This thirdweb wallet screen was unlinked from the
+// profile UI on 2026-04-11 as part of the Röbel Card (voucher) redesign.
+// The file is kept on disk (still auto-registered by expo-router) so a
+// future session can restore the wallet experience without rewriting.
+// Do not delete. See docs/superpowers/plans/2026-04-11-roebel-card-foundations.md
+// (and /Users/maxbrych/.claude/plans/parsed-humming-goblet.md) for context.
+
 import React, { useState } from 'react';
 import {
   View,
@@ -24,7 +31,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import RoebelPointsWidget from '@/components/RoebelPointsWidget';
-import { useRoebelCard, RoebelCardProvider } from '@/context/RoebelCardContext';
+import { useRoebelPoints, RoebelPointsProvider } from '@/context/RoebelPointsContext';
 
 function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -104,9 +111,9 @@ function CollectibleRow({
 
 export default function WalletScreenWrapper() {
   return (
-    <RoebelCardProvider>
+    <RoebelPointsProvider>
       <WalletScreenContent />
-    </RoebelCardProvider>
+    </RoebelPointsProvider>
   );
 }
 
@@ -116,7 +123,7 @@ function WalletScreenContent() {
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
 
-  const { pointsBalance, tier, card } = useRoebelCard();
+  const { pointsBalance, tier, card } = useRoebelPoints();
   const [activeTab, setActiveTab] = useState<'tokens' | 'collectibles'>('tokens');
   const [sendVisible, setSendVisible] = useState(false);
   const [receiveVisible, setReceiveVisible] = useState(false);
