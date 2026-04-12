@@ -11,6 +11,13 @@ export type FeatureCardConfig = {
 
 const DEFAULT_FEATURES: FeatureCardConfig[] = [
   {
+    id: 'roebel-card',
+    emoji: '🎴',
+    title: 'Röbel Card',
+    subtitle: 'Partner werden',
+    route: '/roebel-card',
+  },
+  {
     id: 'dashboard',
     emoji: '📊',
     title: 'Dashboard',

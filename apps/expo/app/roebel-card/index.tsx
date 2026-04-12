@@ -1,20 +1,28 @@
-// Röbel Card — buyer entry point.
+// Röbel Card — entry point.
 //
-// Everyone lands here, including business owners. The buyer advertising
-// layout is the default. Org-account owners additionally see a "Für
-// Unternehmen" section with two CTAs:
-//   - "Partner werden" → /roebel-card/partner (if any owned org already has
-//     a roebel_card_partners row) or /roebel-card/partner-register otherwise
-//   - "Sachbezug für Mitarbeiter" → /roebel-card/employer
+// Branches on the active account type:
 //
-// Auto-redirect logic (session 1) was removed — a business owner may still
-// want to buy a card themselves.
+//   - personal → <BuyerLanding>
+//     "Jetzt kaufen" opens the TopUpBottomSheet which creates a Stripe
+//     checkout session and credits the buyer's card. Shows "Meine Karte
+//     anzeigen" once the buyer has a card. Also shows the
+//     "Ich habe eine Einladung" claim link for employees.
 //
-// Buyer branch states:
-//   - card === null → advertising landing (screenshot reference)
-//   - card !== null → placeholder balance view
+//   - organisation → <OrgLanding>
+//     Organisations don't buy voucher cards — they become partners who
+//     accept them. Same visual layout as BuyerLanding but the primary
+//     CTA says "Partner werden" (or "Zum Partner Dashboard" if the org
+//     already has a roebel_card_partners row) and routes to
+//     /roebel-card/partner-register or /roebel-card/partner. A secondary
+//     link below the hero opens the Sachbezug / Mitarbeiter flow so
+//     employers can still reach /roebel-card/employer without the
+//     cards-for-sale UI in the way.
+//
+// The account type is read from AccountContext's `activeAccount`. If no
+// active account is loaded yet (first render, context still populating)
+// we fall back to BuyerLanding.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -41,6 +49,7 @@ const CARD_IMAGE = require('../../assets/images/card.png');
 
 export default function RoebelCardEntryScreen() {
   const { card, refresh } = useRoebelCard();
+  const { activeAccount } = useAccount();
 
   // Auto-refresh card state when the screen gains focus (e.g., after the
   // user comes back from the web checkout).
@@ -50,11 +59,14 @@ export default function RoebelCardEntryScreen() {
     }, [refresh]),
   );
 
+  if (activeAccount?.account_type === 'organisation') {
+    return <OrgLanding />;
+  }
   return <BuyerLanding card={card} />;
 }
 
 // ---------------------------------------------------------------------------
-// Buyer landing
+// BuyerLanding — personal accounts
 // ---------------------------------------------------------------------------
 
 interface BuyerLandingProps {
@@ -65,34 +77,8 @@ function BuyerLanding({ card }: BuyerLandingProps) {
   const router = useRouter();
   const { colors } = useTheme();
   const activeAccount = useActiveAccount();
-  const { ownedAccounts } = useAccount();
 
-  const hasOrgAccount = useMemo(
-    () => ownedAccounts.some((a) => a.account_type === 'organisation'),
-    [ownedAccounts],
-  );
-
-  // Check whether any owned org already has a roebel_card_partners row so
-  // the "Partner werden" card can route straight to the dashboard instead
-  // of re-starting the registration wizard.
-  const [hasPartnerRecord, setHasPartnerRecord] = useState(false);
   const [topUpVisible, setTopUpVisible] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function check() {
-      if (!activeAccount?.address) {
-        setHasPartnerRecord(false);
-        return;
-      }
-      const partners = await fetchPartnersByWallet(activeAccount.address);
-      if (!cancelled) setHasPartnerRecord(partners.length > 0);
-    }
-    void check();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeAccount?.address]);
 
   function handleBuyPress() {
     if (!activeAccount?.address) {
@@ -119,18 +105,6 @@ function BuyerLanding({ card }: BuyerLandingProps) {
       console.error('Failed to open Röbel Card learn-more page:', err);
     }
   }
-
-  const handlePartnerPress = () => {
-    router.push(
-      hasPartnerRecord
-        ? ('/roebel-card/partner' as any)
-        : ('/roebel-card/partner-register' as any),
-    );
-  };
-
-  const handleEmployerPress = () => {
-    router.push('/roebel-card/employer' as any);
-  };
 
   return (
     <SafeAreaView
@@ -201,30 +175,6 @@ function BuyerLanding({ card }: BuyerLandingProps) {
           </View>
         )}
 
-        {hasOrgAccount && (
-          <View style={styles.businessSection}>
-            <Text style={[styles.businessHeading, { color: colors.textSecondary }]}>
-              Für Unternehmen
-            </Text>
-            <View style={styles.businessRow}>
-              <BusinessCard
-                emoji="🏪"
-                title={hasPartnerRecord ? 'Partner Dashboard' : 'Partner werden'}
-                subtitle="Annahme von Röbel Card"
-                onPress={handlePartnerPress}
-                colors={colors}
-              />
-              <BusinessCard
-                emoji="🧾"
-                title="Sachbezug"
-                subtitle="§8 EStG bis 50 €/Monat"
-                onPress={handleEmployerPress}
-                colors={colors}
-              />
-            </View>
-          </View>
-        )}
-
         <Pressable
           onPress={() => router.push('/roebel-card/claim-invite' as any)}
           style={styles.claimInviteLink}
@@ -268,28 +218,145 @@ function BuyerLanding({ card }: BuyerLandingProps) {
   );
 }
 
-function BusinessCard({
-  emoji,
-  title,
-  subtitle,
-  onPress,
-  colors,
-}: {
-  emoji: string;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
+// ---------------------------------------------------------------------------
+// OrgLanding — organisation accounts (can't buy, become partners)
+// ---------------------------------------------------------------------------
+
+function OrgLanding() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const activeAccount = useActiveAccount();
+
+  // Re-use the existing "any partner row for this wallet" check. For
+  // MVP we don't strictly filter to the active org — if the wallet owns
+  // multiple orgs and any of them is a partner, the CTA flips to
+  // "Zum Partner Dashboard". A more precise check can come later.
+  const [hasPartnerRecord, setHasPartnerRecord] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      if (!activeAccount?.address) {
+        setHasPartnerRecord(false);
+        return;
+      }
+      const partners = await fetchPartnersByWallet(activeAccount.address);
+      if (!cancelled) setHasPartnerRecord(partners.length > 0);
+    }
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAccount?.address]);
+
+  const partnerCtaLabel = hasPartnerRecord ? 'Zum Partner Dashboard' : 'Partner werden';
+
+  const handlePartnerPress = () => {
+    router.push(
+      hasPartnerRecord
+        ? ('/roebel-card/partner' as any)
+        : ('/roebel-card/partner-register' as any),
+    );
+  };
+
+  const handleEmployerPress = () => {
+    router.push('/roebel-card/employer' as any);
+  };
+
+  async function handleLearnMorePress() {
+    try {
+      await openRoebelCardLearnMore();
+    } catch (err) {
+      console.error('Failed to open Röbel Card learn-more page:', err);
+    }
+  }
+
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.businessCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={['top']}
     >
-      <Text style={styles.businessCardEmoji}>{emoji}</Text>
-      <Text style={[styles.businessCardTitle, { color: colors.textPrimary }]}>{title}</Text>
-      <Text style={[styles.businessCardSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
-    </Pressable>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backButton}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Zurück"
+        >
+          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>
+            Röbel{'\n'}Gutschein Card
+          </Text>
+          <Text style={[styles.orgSubtitle, { color: colors.textSecondary }]}>
+            Nimm Röbel Card Zahlungen in deinem Betrieb entgegen und erreiche
+            mehr Kunden aus der Region.
+          </Text>
+        </View>
+
+        <View style={styles.ctaWrapper}>
+          <Pressable
+            onPress={handlePartnerPress}
+            style={[styles.primaryButton, { backgroundColor: '#194383' }]}
+            accessibilityRole="button"
+            accessibilityLabel={partnerCtaLabel}
+          >
+            <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
+              {partnerCtaLabel}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.imageWrapper}>
+          <Image
+            source={CARD_IMAGE}
+            style={styles.cardImage}
+            resizeMode="contain"
+            accessibilityLabel="Röbel Gutschein Card Vorschau"
+          />
+        </View>
+
+        <Pressable
+          onPress={handleEmployerPress}
+          style={styles.sachbezugLink}
+          hitSlop={8}
+        >
+          <Text style={[styles.sachbezugText, { color: colors.textSecondary }]}>
+            🧾  Sachbezug für Mitarbeiter einrichten (§8 EStG)
+          </Text>
+        </Pressable>
+      </ScrollView>
+
+      <SafeAreaView edges={['bottom']} style={{ backgroundColor: colors.background }}>
+        <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
+          <Pressable onPress={handleLearnMorePress} hitSlop={8}>
+            <Text
+              style={[styles.learnMoreText, { color: colors.textPrimary }]}
+            >
+              Mehr erfahren
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handlePartnerPress}
+            style={[styles.primaryButtonCompact, { backgroundColor: '#194383' }]}
+            accessibilityRole="button"
+            accessibilityLabel={partnerCtaLabel}
+          >
+            <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
+              {partnerCtaLabel}
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </SafeAreaView>
   );
 }
 
@@ -326,6 +393,14 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     fontFamily: 'Inter-Bold',
     textAlign: 'center',
+  },
+  orgSubtitle: {
+    marginTop: 16,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   balanceLine: {
     marginTop: 12,
@@ -377,40 +452,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
   },
-  businessSection: {
-    marginTop: 40,
-    paddingHorizontal: 24,
-  },
-  businessHeading: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  businessRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  businessCard: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 4,
-  },
-  businessCardEmoji: {
-    fontSize: 28,
-    marginBottom: 4,
-  },
-  businessCardTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-  },
-  businessCardSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-  },
   claimInviteLink: {
     marginTop: 32,
     paddingHorizontal: 32,
@@ -420,6 +461,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
+  sachbezugLink: {
+    marginTop: 32,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+  sachbezugText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
     textAlign: 'center',
   },
   bottomBar: {
