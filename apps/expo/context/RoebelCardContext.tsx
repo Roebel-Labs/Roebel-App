@@ -42,7 +42,13 @@ const RoebelCardContext = createContext<RoebelCardContextValue>(defaultValue);
 
 export function RoebelCardProvider({ children }: { children: React.ReactNode }) {
   const activeAccount = useActiveAccount();
-  const walletAddress = activeAccount?.address ?? null;
+  // thirdweb returns the wallet address in EIP-55 mixed case ("0xC49…"),
+  // but all persisted rows in supabase use the lowercased form. Query by
+  // the lowercased value so .eq matches exactly. Same pattern used across
+  // the other supabase-*.ts helpers in this app.
+  const walletAddress = activeAccount?.address
+    ? activeAccount.address.toLowerCase()
+    : null;
 
   const [card, setCard] = useState<RoebelCardRow | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +64,7 @@ export function RoebelCardProvider({ children }: { children: React.ReactNode }) 
         .from('v_roebel_card_overview')
         .select('*')
         .eq('wallet_address', walletAddress)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
