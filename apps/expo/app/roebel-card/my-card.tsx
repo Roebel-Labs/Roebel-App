@@ -119,10 +119,12 @@ export default function MyRoebelCardScreen() {
     setPending(rows.length > 0 ? rows[0] : null);
   }, [card]);
 
+  const walletAddress = activeAccount?.address?.toLowerCase() ?? '';
+
   const refreshQr = useCallback(async () => {
-    if (!card) return;
+    if (!card || !walletAddress) return;
     try {
-      const payload = await fetchSignedCardQr(card.card_id);
+      const payload = await fetchSignedCardQr(card.card_id, walletAddress);
       setQrPayload(payload);
       setQrError(null);
     } catch (err) {
@@ -130,7 +132,7 @@ export default function MyRoebelCardScreen() {
       setQrError('QR-Code konnte nicht geladen werden.');
       setQrPayload(null);
     }
-  }, [card]);
+  }, [card, walletAddress]);
 
   const startPolling = useCallback(() => {
     stopPolling();
@@ -384,7 +386,7 @@ export default function MyRoebelCardScreen() {
       </Modal>
 
       {/* Pending charge modal */}
-      <PendingChargeModal charge={pending} onResolved={handlePendingResolved} />
+      <PendingChargeModal charge={pending} walletAddress={walletAddress} onResolved={handlePendingResolved} />
 
       {/* Top-up bottom sheet */}
       <TopUpBottomSheet

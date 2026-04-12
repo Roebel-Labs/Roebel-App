@@ -27,10 +27,11 @@ import {
 
 interface Props {
   charge: PendingChargeWithPartner | null;
+  walletAddress: string;
   onResolved: () => void;
 }
 
-export default function PendingChargeModal({ charge, onResolved }: Props) {
+export default function PendingChargeModal({ charge, walletAddress, onResolved }: Props) {
   const { colors } = useTheme();
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -57,7 +58,7 @@ export default function PendingChargeModal({ charge, onResolved }: Props) {
     if (!charge || busy) return;
     setBusy(true);
     try {
-      await approveCharge(charge.id);
+      await approveCharge(charge.id, walletAddress);
       onResolved();
     } catch (err) {
       Alert.alert('Zahlung abgelehnt', chargeErrorMessage(err));
@@ -71,7 +72,7 @@ export default function PendingChargeModal({ charge, onResolved }: Props) {
     if (!charge || busy) return;
     setBusy(true);
     try {
-      await declineCharge(charge.id);
+      await declineCharge(charge.id, walletAddress);
     } catch (err) {
       // Swallow — the buyer's intent was to decline, so any "already
       // expired" type error just means we converge on the same result.

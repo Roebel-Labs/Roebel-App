@@ -31,6 +31,7 @@ import {
   Image,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -50,6 +51,7 @@ const CARD_IMAGE = require('../../assets/images/card.png');
 export default function RoebelCardEntryScreen() {
   const { card, isLoading, refresh } = useRoebelCard();
   const { activeAccount } = useAccount();
+  const { colors } = useTheme();
   const router = useRouter();
 
   // Auto-refresh card state when the screen gains focus (e.g., after the
@@ -72,6 +74,22 @@ export default function RoebelCardEntryScreen() {
   if (activeAccount?.account_type === 'organisation') {
     return <OrgLanding />;
   }
+
+  // While loading OR if the user has a card (redirect is imminent),
+  // show a blank screen instead of flashing the advertorial.
+  if (isLoading || card !== null) {
+    return (
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.background }]}
+        edges={['top']}
+      >
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return <BuyerLanding card={card} />;
 }
 

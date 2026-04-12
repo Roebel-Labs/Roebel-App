@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useActiveAccount } from 'thirdweb/react';
 import {
   createChargeFromQr,
   fetchChargeById,
@@ -41,6 +42,7 @@ export default function PartnerChargeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
+  const thirdwebAccount = useActiveAccount();
   const { cardId, payload } = useLocalSearchParams<{ cardId: string; payload: string }>();
 
   const [amount, setAmount] = useState('');
@@ -125,6 +127,7 @@ export default function PartnerChargeScreen() {
         qrPayload: payload,
         amountCents,
         partnerNote: note.trim() || undefined,
+        walletAddress: thirdwebAccount?.address ?? '',
       });
 
       setCharge(newCharge);

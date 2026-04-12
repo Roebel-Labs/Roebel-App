@@ -49,6 +49,7 @@ export async function createChargeFromQr(input: {
   qrPayload: string;
   amountCents: number;
   partnerNote?: string;
+  walletAddress: string;
 }): Promise<RoebelCardChargeRow> {
   const { data, error } = await supabase.rpc(
     'create_roebel_card_charge_from_qr' as any,
@@ -56,6 +57,7 @@ export async function createChargeFromQr(input: {
       p_qr_payload: input.qrPayload,
       p_amount_cents: input.amountCents,
       p_partner_note: input.partnerNote ?? null,
+      p_wallet_address: input.walletAddress.toLowerCase(),
     } as any,
   );
 
@@ -68,10 +70,13 @@ export async function createChargeFromQr(input: {
  * The screen that shows the QR should refresh this every ~30 seconds
  * so the displayed code is always at least 30 seconds away from expiry.
  */
-export async function fetchSignedCardQr(cardId: string): Promise<string> {
+export async function fetchSignedCardQr(
+  cardId: string,
+  walletAddress: string,
+): Promise<string> {
   const { data, error } = await supabase.rpc(
     'sign_roebel_card_qr' as any,
-    { p_card_id: cardId } as any,
+    { p_card_id: cardId, p_wallet_address: walletAddress.toLowerCase() } as any,
   );
   if (error) throw error;
   return data as string;
@@ -144,10 +149,11 @@ export async function fetchPendingChargesForCard(
  */
 export async function approveCharge(
   chargeId: string,
+  walletAddress: string,
 ): Promise<RoebelCardChargeRow> {
   const { data, error } = await supabase.rpc(
     'approve_roebel_card_charge' as any,
-    { p_charge_id: chargeId } as any,
+    { p_charge_id: chargeId, p_wallet_address: walletAddress.toLowerCase() } as any,
   );
   if (error) throw error;
   return data as RoebelCardChargeRow;
@@ -158,10 +164,11 @@ export async function approveCharge(
  */
 export async function declineCharge(
   chargeId: string,
+  walletAddress: string,
 ): Promise<RoebelCardChargeRow> {
   const { data, error } = await supabase.rpc(
     'decline_roebel_card_charge' as any,
-    { p_charge_id: chargeId } as any,
+    { p_charge_id: chargeId, p_wallet_address: walletAddress.toLowerCase() } as any,
   );
   if (error) throw error;
   return data as RoebelCardChargeRow;
