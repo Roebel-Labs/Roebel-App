@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,11 @@ import type {
   RoebelCardPurchaseStatus,
 } from "@/types/roebel-card-voucher";
 import { formatEuros } from "@/lib/format-euros";
+import { BuyerCell } from "../_components/buyer-cell";
+import {
+  StatusBadge,
+  STATUS_LABELS,
+} from "../_components/status-badge";
 
 interface VereineOption {
   id: string;
@@ -39,14 +44,6 @@ interface Props {
   };
 }
 
-const STATUS_LABELS: Record<RoebelCardPurchaseStatus | "all", string> = {
-  all: "Alle",
-  pending: "Ausstehend",
-  paid: "Bezahlt",
-  failed: "Fehlgeschlagen",
-  refunded: "Erstattet",
-};
-
 export function PurchasesTable({
   purchases,
   totalCount,
@@ -56,7 +53,6 @@ export function PurchasesTable({
   initialFilters,
 }: Props) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [filters, setFilters] = useState(initialFilters);
   const [isPending, startTransition] = useTransition();
 
@@ -180,8 +176,12 @@ export function PurchasesTable({
                   <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">
                     {formatDate(p.paid_at ?? p.created_at)}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs">
-                    {truncateWallet(p.purchaser_wallet_address)}
+                  <td className="px-4 py-2">
+                    <BuyerCell
+                      walletAddress={p.purchaser_wallet_address}
+                      username={p.purchaser_username}
+                      avatarUrl={p.purchaser_avatar_url}
+                    />
                   </td>
                   <td className="px-4 py-2 text-right">
                     {formatEuros(p.amount_cents)}
@@ -253,16 +253,6 @@ export function PurchasesTable({
   );
 }
 
-function StatusBadge({ status }: { status: RoebelCardPurchaseStatus }) {
-  const variant =
-    status === "paid"
-      ? "default"
-      : status === "pending"
-        ? "secondary"
-        : "destructive";
-  return <Badge variant={variant as any}>{STATUS_LABELS[status]}</Badge>;
-}
-
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("de-DE", {
     day: "2-digit",
@@ -271,9 +261,4 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function truncateWallet(wallet: string): string {
-  if (wallet.length <= 14) return wallet;
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 }

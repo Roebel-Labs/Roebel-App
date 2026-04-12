@@ -86,14 +86,18 @@ export async function listRoebelCardPurchases(
     }
   >;
 
-  const purchases: PurchaseWithRelations[] = rows.map((row) => {
+  const basePurchases: PurchaseWithRelations[] = rows.map((row) => {
     const { roebel_card, beneficiary, ...rest } = row;
     return {
       ...rest,
       card_wallet_address: roebel_card?.wallet_address ?? null,
       beneficiary_name: beneficiary?.name ?? null,
+      purchaser_username: null,
+      purchaser_avatar_url: null,
     };
   });
+
+  const purchases = await attachPurchaserProfiles(supabase, basePurchases);
 
   return {
     purchases,
@@ -103,26 +107,87 @@ export async function listRoebelCardPurchases(
   };
 }
 
+// Second-query join: `roebel_card_purchases.purchaser_wallet_address` is a
+// plain text column (no FK to `users`), so PostgREST can't nested-select it.
+// We bulk-fetch the user rows for the current page and merge in memory.
+// Wallets are stored lowercased in `users` (see supabase-users.ts convention).
+async function attachPurchaserProfiles<
+  T extends { purchaser_wallet_address: string },
+>(
+  supabase: ReturnType<typeof createAdminClient>,
+  rows: (T & { purchaser_username: string | null; purchaser_avatar_url: string | null })[],
+): Promise<(T & { purchaser_username: string | null; purchaser_avatar_url: string | null })[]> {
+  if (rows.length === 0) return rows;
+
+  const wallets = Array.from(
+    new Set(rows.map((r) => r.purchaser_wallet_address.toLowerCase())),
+  );
+
+  const { data: users, error: usersErr } = await supabase
+    .from("users")
+    .select("wallet_address, username, profile_picture_url")
+    .in("wallet_address", wallets);
+
+  if (usersErr) {
+    console.error("[roebel-card-admin] users lookup failed:", usersErr);
+    return rows;
+  }
+
+  const byWallet = new Map<
+    string,
+    { username: string | null; profile_picture_url: string | null }
+  >();
+  for (const u of users ?? []) {
+    byWallet.set((u.wallet_address as string).toLowerCase(), {
+      username: (u.username as string | null) ?? null,
+      profile_picture_url: (u.profile_picture_url as string | null) ?? null,
+    });
+  }
+
+  return rows.map((row) => {
+    const profile = byWallet.get(row.purchaser_wallet_address.toLowerCase());
+    return {
+      ...row,
+      purchaser_username: profile?.username ?? null,
+      purchaser_avatar_url: profile?.profile_picture_url ?? null,
+    };
+  });
+}
+
 export async function getRoebelCardOverviewStats(): Promise<OverviewStats> {
   const supabase = createAdminClient();
 
-  // Purchases aggregates (status = 'paid').
-  const { data: paidPurchases, error: paidErr } = await supabase
+  // Purchases aggregates (single query, tally paid + pending by status).
+  const { data: allPurchases, error: paidErr } = await supabase
     .from("roebel_card_purchases")
-    .select("amount_cents, fee_cents")
-    .eq("status", "paid");
+    .select("amount_cents, fee_cents, status")
+    .in("status", ["paid", "pending"]);
 
   if (paidErr) {
-    console.error("[roebel-card-admin] paid purchases aggregate failed:", paidErr);
+    console.error(
+      "[roebel-card-admin] purchases aggregate failed:",
+      paidErr,
+    );
   }
 
   let purchaseCount = 0;
   let faceValueCents = 0;
   let feeVolumeCents = 0;
-  for (const row of paidPurchases ?? []) {
-    purchaseCount += 1;
-    faceValueCents += Number(row.amount_cents ?? 0);
-    feeVolumeCents += Number(row.fee_cents ?? 0);
+  let pendingCount = 0;
+  let pendingFaceValueCents = 0;
+  let pendingFeeVolumeCents = 0;
+  for (const row of allPurchases ?? []) {
+    const amount = Number(row.amount_cents ?? 0);
+    const fee = Number(row.fee_cents ?? 0);
+    if (row.status === "paid") {
+      purchaseCount += 1;
+      faceValueCents += amount;
+      feeVolumeCents += fee;
+    } else if (row.status === "pending") {
+      pendingCount += 1;
+      pendingFaceValueCents += amount;
+      pendingFeeVolumeCents += fee;
+    }
   }
 
   // Vereine share credited so far.
@@ -166,6 +231,9 @@ export async function getRoebelCardOverviewStats(): Promise<OverviewStats> {
     vereineCreditedCents,
     roebelerTopfBalanceCents: Number(topf?.balance_cents ?? 0),
     outstandingCardBalanceCents,
+    pendingCount,
+    pendingFaceValueCents,
+    pendingFeeVolumeCents,
   };
 }
 

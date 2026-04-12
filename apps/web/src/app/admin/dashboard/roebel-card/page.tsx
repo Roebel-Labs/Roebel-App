@@ -6,14 +6,25 @@ import {
 } from "@/app/actions/roebel-card-admin";
 import { formatEuros } from "@/lib/format-euros";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, TrendingUp, Wallet, Users, Coins } from "lucide-react";
+import {
+  ArrowRight,
+  TrendingUp,
+  Wallet,
+  Users,
+  Coins,
+  Clock,
+} from "lucide-react";
+import { BuyerCell } from "./_components/buyer-cell";
+import { StatusBadge } from "./_components/status-badge";
 
 export const dynamic = "force-dynamic";
 
 export default async function RoebelCardOverviewPage() {
   const [stats, latestResult, contributions] = await Promise.all([
     getRoebelCardOverviewStats(),
-    listRoebelCardPurchases({ status: "paid" }, 1, 10),
+    // Show the 10 newest purchases regardless of status so pending rows
+    // are visible as soon as they're created.
+    listRoebelCardPurchases({}, 1, 10),
     listVereineContributions(),
   ]);
 
@@ -26,15 +37,25 @@ export default async function RoebelCardOverviewPage() {
     )
     .slice(0, 5);
 
+  const pendingTotalCents =
+    stats.pendingFaceValueCents + stats.pendingFeeVolumeCents;
+
   return (
     <div className="space-y-8">
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           icon={<TrendingUp className="h-4 w-4" />}
           label="Bruttoumsatz"
           value={formatEuros(stats.grossVolumeCents)}
           sub={`${stats.purchaseCount} Käufe`}
+        />
+        <KpiCard
+          icon={<Clock className="h-4 w-4" />}
+          label="Ausstehend"
+          value={formatEuros(pendingTotalCents)}
+          sub={`${stats.pendingCount} offene Käufe`}
+          accent="pending"
         />
         <KpiCard
           icon={<Wallet className="h-4 w-4" />}
@@ -72,9 +93,10 @@ export default async function RoebelCardOverviewPage() {
             <thead>
               <tr className="bg-muted/50 text-muted-foreground">
                 <th className="text-left font-medium px-4 py-2">Datum</th>
-                <th className="text-left font-medium px-4 py-2">Wallet</th>
+                <th className="text-left font-medium px-4 py-2">Käufer</th>
                 <th className="text-right font-medium px-4 py-2">Betrag</th>
                 <th className="text-right font-medium px-4 py-2">Gebühr</th>
+                <th className="text-left font-medium px-4 py-2">Status</th>
                 <th className="text-left font-medium px-4 py-2">
                   Begünstigter
                 </th>
@@ -84,7 +106,7 @@ export default async function RoebelCardOverviewPage() {
               {latestResult.purchases.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     Noch keine Käufe
@@ -92,28 +114,25 @@ export default async function RoebelCardOverviewPage() {
                 </tr>
               ) : (
                 latestResult.purchases.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-t border-border"
-                  >
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {p.paid_at
-                        ? new Date(p.paid_at).toLocaleString("de-DE", {
-                            day: "2-digit",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "—"}
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">
+                      {formatDate(p.paid_at ?? p.created_at)}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs">
-                      {truncateWallet(p.purchaser_wallet_address)}
+                    <td className="px-4 py-2">
+                      <BuyerCell
+                        walletAddress={p.purchaser_wallet_address}
+                        username={p.purchaser_username}
+                        avatarUrl={p.purchaser_avatar_url}
+                      />
                     </td>
                     <td className="px-4 py-2 text-right">
                       {formatEuros(p.amount_cents)}
                     </td>
                     <td className="px-4 py-2 text-right text-muted-foreground">
                       {formatEuros(p.fee_cents)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <StatusBadge status={p.status} />
                     </td>
                     <td className="px-4 py-2">
                       {p.beneficiary_name ?? (
@@ -178,15 +197,21 @@ function KpiCard({
   label,
   value,
   sub,
+  accent,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub: string;
+  accent?: "pending";
 }) {
+  const labelClass =
+    accent === "pending"
+      ? "flex items-center gap-2 text-xs uppercase tracking-wider mb-2 text-amber-700 dark:text-amber-400"
+      : "flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider mb-2";
   return (
     <div className="bg-card border border-border rounded-[10px] p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider mb-2">
+      <div className={labelClass}>
         {icon}
         {label}
       </div>
@@ -196,7 +221,11 @@ function KpiCard({
   );
 }
 
-function truncateWallet(wallet: string): string {
-  if (wallet.length <= 14) return wallet;
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

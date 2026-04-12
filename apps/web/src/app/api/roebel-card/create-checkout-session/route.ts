@@ -235,6 +235,21 @@ export async function POST(request: NextRequest) {
       throw new Error("stripe returned session without url");
     }
 
+    // Back-fill the Stripe session id onto the pending purchase row so
+    // the admin dashboard can link straight to Stripe even before the
+    // webhook fires. Non-fatal — the webhook will also set this field
+    // via its `metadata.purchase_id` lookup if this update fails.
+    const { error: backfillError } = await supabase
+      .from("roebel_card_purchases")
+      .update({ stripe_session_id: session.id })
+      .eq("id", purchaseId);
+    if (backfillError) {
+      console.warn(
+        "[roebel-card.create-checkout] stripe_session_id back-fill failed",
+        backfillError,
+      );
+    }
+
     return NextResponse.json({
       url: session.url,
       session_id: session.id,

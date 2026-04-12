@@ -61,6 +61,8 @@ export interface RoebelVereinFundEntryRow {
 export interface PurchaseWithRelations extends RoebelCardPurchaseRow {
   card_wallet_address: string | null
   beneficiary_name: string | null
+  purchaser_username: string | null
+  purchaser_avatar_url: string | null
 }
 
 export interface VereineContributionWithAccount extends RoebelVereinContributionRow {
@@ -87,4 +89,7 @@ export interface OverviewStats {
   vereineCreditedCents: number
   roebelerTopfBalanceCents: number
   outstandingCardBalanceCents: number
+  pendingCount: number
+  pendingFaceValueCents: number
+  pendingFeeVolumeCents: number
 }
