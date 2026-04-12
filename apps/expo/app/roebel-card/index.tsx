@@ -48,8 +48,9 @@ import TopUpBottomSheet from '@/components/TopUpBottomSheet';
 const CARD_IMAGE = require('../../assets/images/card.png');
 
 export default function RoebelCardEntryScreen() {
-  const { card, refresh } = useRoebelCard();
+  const { card, isLoading, refresh } = useRoebelCard();
   const { activeAccount } = useAccount();
+  const router = useRouter();
 
   // Auto-refresh card state when the screen gains focus (e.g., after the
   // user comes back from the web checkout).
@@ -58,6 +59,15 @@ export default function RoebelCardEntryScreen() {
       void refresh();
     }, [refresh]),
   );
+
+  // Once the buyer has a card, skip the advertorial and go straight to
+  // the "Meine Karte" screen. Replace so back-nav goes to profile, not
+  // the ad page again.
+  useEffect(() => {
+    if (!isLoading && card !== null && activeAccount?.account_type !== 'organisation') {
+      router.replace('/roebel-card/my-card' as any);
+    }
+  }, [isLoading, card, activeAccount, router]);
 
   if (activeAccount?.account_type === 'organisation') {
     return <OrgLanding />;

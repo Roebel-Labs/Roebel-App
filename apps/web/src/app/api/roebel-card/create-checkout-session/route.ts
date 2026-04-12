@@ -184,11 +184,13 @@ export async function POST(request: NextRequest) {
 
   const purchaseId = purchaseRow.id as string;
 
-  // Compose the success / cancel deep links back into the Expo app.
-  // Stripe appends its own query params to success_url, but roebel://
-  // scheme handlers ignore unknown params so it's safe.
-  const successUrl = "roebel://roebel-card/topup-success?session_id={CHECKOUT_SESSION_ID}";
-  const cancelUrl = "roebel://roebel-card";
+  // Stripe requires https:// success/cancel URLs — custom schemes like
+  // roebel:// are rejected. We land on our web success page which then
+  // auto-fires the roebel:// deeplink back into the app.
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://roebel.app";
+  const returnTo = encodeURIComponent("roebel://roebel-card/topup-success");
+  const successUrl = `${baseUrl}/roebel-card/success?session_id={CHECKOUT_SESSION_ID}&return_to=${returnTo}`;
+  const cancelUrl = `${baseUrl}/roebel-card/success?cancelled=true&return_to=${encodeURIComponent("roebel://roebel-card")}`;
 
   const faceEuros = (amountCents / 100).toLocaleString(
     locale === "en" ? "en-US" : "de-DE",

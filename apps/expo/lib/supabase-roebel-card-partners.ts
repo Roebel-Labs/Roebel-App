@@ -166,6 +166,37 @@ export interface PartnerChargeRow {
   approved_at: string | null;
 }
 
+/**
+ * Fetch all approved partners with their org name + avatar for the
+ * buyer-facing partner list on the "Meine Karte" screen.
+ */
+export interface ApprovedPartnerDisplay {
+  id: string;
+  account_id: string;
+  account_name: string;
+  avatar_url: string | null;
+}
+
+export async function fetchApprovedPartners(): Promise<ApprovedPartnerDisplay[]> {
+  const { data, error } = await supabase
+    .from('roebel_card_partners' as any)
+    .select('id, account_id, accounts!account_id(name, avatar_url)')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('fetchApprovedPartners error:', error);
+    return [];
+  }
+
+  return (data as any[]).map((row: any) => ({
+    id: row.id as string,
+    account_id: row.account_id as string,
+    account_name: (row.accounts?.name as string) ?? 'Partner',
+    avatar_url: (row.accounts?.avatar_url as string | null) ?? null,
+  }));
+}
+
 export async function fetchRecentChargesByPartner(
   partnerId: string,
   limit = 20,
