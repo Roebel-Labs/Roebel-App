@@ -24,7 +24,7 @@ const SUB_TYPE_EMOJI: Record<string, string> = {
 export default function BusinessPickerScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { ownedAccounts } = useAccount();
+  const { ownedAccounts, activeAccount: ctxAccount } = useAccount();
   const { state, dispatch } = usePartnerRegisterWizard();
 
   const orgAccounts = useMemo(
@@ -32,21 +32,26 @@ export default function BusinessPickerScreen() {
     [ownedAccounts],
   );
 
-  // Auto-advance when the user owns exactly one organisation.
+  // Auto-advance: if the active account is an org, pre-select it and skip
+  // this screen entirely. Falls back to the single-org auto-advance if
+  // the active account isn't an org but there's only one org owned.
   useEffect(() => {
-    if (orgAccounts.length === 1 && !state.selectedAccountId) {
-      const only = orgAccounts[0];
+    if (state.selectedAccountId) return;
+
+    const activeOrg = orgAccounts.find((a) => a.id === ctxAccount?.id);
+    const target = activeOrg ?? (orgAccounts.length === 1 ? orgAccounts[0] : null);
+
+    if (target) {
       dispatch({
         type: 'SELECT_ACCOUNT',
-        payload: { accountId: only.id, accountName: only.name },
+        payload: { accountId: target.id, accountName: target.name },
       });
-      // Tiny delay so the user sees the screen mount before it disappears.
       const timer = setTimeout(() => {
         router.replace('/roebel-card/partner-register/info' as any);
-      }, 200);
+      }, 100);
       return () => clearTimeout(timer);
     }
-  }, [orgAccounts, state.selectedAccountId, dispatch, router]);
+  }, [orgAccounts, ctxAccount, state.selectedAccountId, dispatch, router]);
 
   // Empty state — user has no org accounts at all.
   if (orgAccounts.length === 0) {

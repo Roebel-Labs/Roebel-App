@@ -84,7 +84,7 @@ export default function PartnerDashboardScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.replace('/profile' as any)}
           style={styles.backButton}
           hitSlop={8}
           accessibilityRole="button"

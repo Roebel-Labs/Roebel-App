@@ -261,11 +261,7 @@ function OrgLanding() {
   const { colors } = useTheme();
   const activeAccount = useActiveAccount();
 
-  // Re-use the existing "any partner row for this wallet" check. For
-  // MVP we don't strictly filter to the active org — if the wallet owns
-  // multiple orgs and any of them is a partner, the CTA flips to
-  // "Zum Partner Dashboard". A more precise check can come later.
-  const [hasPartnerRecord, setHasPartnerRecord] = useState(false);
+  const [hasPartnerRecord, setHasPartnerRecord] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,14 +279,30 @@ function OrgLanding() {
     };
   }, [activeAccount?.address]);
 
-  const partnerCtaLabel = hasPartnerRecord ? 'Zum Partner Dashboard' : 'Partner werden';
+  // Auto-redirect existing partners straight to the dashboard —
+  // same pattern as the citizen → my-card redirect.
+  useEffect(() => {
+    if (hasPartnerRecord === true) {
+      router.replace('/roebel-card/partner' as any);
+    }
+  }, [hasPartnerRecord, router]);
+
+  // Show spinner while checking partner status (avoids advertorial flash).
+  if (hasPartnerRecord === null || hasPartnerRecord === true) {
+    return (
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.background }]}
+        edges={['top']}
+      >
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handlePartnerPress = () => {
-    router.push(
-      hasPartnerRecord
-        ? ('/roebel-card/partner' as any)
-        : ('/roebel-card/partner-register' as any),
-    );
+    router.push('/roebel-card/partner-register' as any);
   };
 
   const handleEmployerPress = () => {
@@ -341,10 +353,10 @@ function OrgLanding() {
             onPress={handlePartnerPress}
             style={[styles.primaryButton, { backgroundColor: '#194383' }]}
             accessibilityRole="button"
-            accessibilityLabel={partnerCtaLabel}
+            accessibilityLabel={'Partner werden'}
           >
             <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
-              {partnerCtaLabel}
+              {'Partner werden'}
             </Text>
           </Pressable>
         </View>
@@ -382,10 +394,10 @@ function OrgLanding() {
             onPress={handlePartnerPress}
             style={[styles.primaryButtonCompact, { backgroundColor: '#194383' }]}
             accessibilityRole="button"
-            accessibilityLabel={partnerCtaLabel}
+            accessibilityLabel={'Partner werden'}
           >
             <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
-              {partnerCtaLabel}
+              {'Partner werden'}
             </Text>
           </Pressable>
         </View>

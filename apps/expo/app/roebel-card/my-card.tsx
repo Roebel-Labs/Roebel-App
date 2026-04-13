@@ -53,8 +53,9 @@ const QR_REFRESH_INTERVAL_MS = 30_000;
 
 interface ChargeHistoryRow {
   id: string;
+  kind: 'charge' | 'topup';
   amount_cents: number;
-  status: ChargeStatus;
+  status: string;
   created_at: string;
   approved_at: string | null;
   partner_name: string | null;
@@ -93,31 +94,67 @@ export default function MyRoebelCardScreen() {
     if (!card) return;
     setHistoryLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('roebel_card_charges' as any)
-        .select(
-          'id, amount_cents, status, created_at, approved_at, roebel_card_partners!inner(accounts!inner(name))',
-        )
-        .eq('card_id', card.card_id)
-        .in('status', ['approved', 'declined', 'expired'])
-        .order('created_at', { ascending: false })
-        .limit(20);
+      // Fetch charges (partner payments) + purchases (Stripe top-ups) in
+      // parallel, then merge and sort chronologically.
+      const [chargesResult, purchasesResult] = await Promise.all([
+        supabase
+          .from('roebel_card_charges' as any)
+          .select(
+            'id, amount_cents, status, created_at, approved_at, roebel_card_partners!inner(accounts!inner(name))',
+          )
+          .eq('card_id', card.card_id)
+          .in('status', ['approved', 'declined', 'expired'])
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('roebel_card_purchases' as any)
+          .select('id, amount_cents, status, created_at, paid_at')
+          .eq('card_id', card.card_id)
+          .eq('status', 'paid')
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
 
-      if (error) {
-        console.error('loadHistory error:', error);
-        setHistory([]);
-        return;
+      if (chargesResult.error) {
+        console.error('loadHistory charges error:', chargesResult.error);
+      }
+      if (purchasesResult.error) {
+        console.error('loadHistory purchases error:', purchasesResult.error);
       }
 
-      const mapped: ChargeHistoryRow[] = (data as any[]).map((row) => ({
+      const charges: ChargeHistoryRow[] = (
+        (chargesResult.data as any[]) ?? []
+      ).map((row) => ({
         id: row.id,
+        kind: 'charge' as const,
         amount_cents: row.amount_cents,
         status: row.status,
         created_at: row.created_at,
         approved_at: row.approved_at,
         partner_name: row.roebel_card_partners?.accounts?.name ?? null,
       }));
-      setHistory(mapped);
+
+      const purchases: ChargeHistoryRow[] = (
+        (purchasesResult.data as any[]) ?? []
+      ).map((row) => ({
+        id: `purchase-${row.id}`,
+        kind: 'topup' as const,
+        amount_cents: row.amount_cents,
+        status: row.status,
+        created_at: row.created_at,
+        approved_at: row.paid_at ?? null,
+        partner_name: null,
+      }));
+
+      const merged = [...charges, ...purchases]
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime(),
+        )
+        .slice(0, 20);
+
+      setHistory(merged);
     } finally {
       setHistoryLoading(false);
     }
@@ -450,48 +487,51 @@ function HistoryRow({
   row: ChargeHistoryRow;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
-  const isApproved = row.status === 'approved';
-  const sign = isApproved ? '-' : '';
-  const amountColor = isApproved ? colors.textPrimary : colors.textTertiary;
-  const statusColor = isApproved
-    ? colors.textPrimary
-    : row.status === 'declined'
-      ? colors.error
+  const isTopup = row.kind === 'topup';
+  const isApproved = row.status === 'approved' || row.status === 'paid';
+
+  const sign = isTopup ? '+' : isApproved ? '-' : '';
+  const amountColor = isTopup
+    ? (colors.success ?? '#16a34a')
+    : isApproved
+      ? colors.textPrimary
       : colors.textTertiary;
+
+  const iconBg = isTopup
+    ? (colors.successBackground ?? '#E8F5E9')
+    : isApproved
+      ? colors.primaryLight
+      : colors.surface;
+  const iconText = isTopup
+    ? '↓'
+    : isApproved
+      ? '🛍️'
+      : row.status === 'declined'
+        ? '✕'
+        : '⏳';
+
+  const displayName = isTopup
+    ? 'Aufladen'
+    : row.partner_name ?? 'Unbekannter Partner';
 
   return (
     <View style={styles.historyRow}>
-      {/* Icon circle */}
-      <View
-        style={[
-          styles.historyIcon,
-          { backgroundColor: isApproved ? colors.primaryLight : colors.surface },
-        ]}
-      >
-        <Text style={styles.historyIconText}>
-          {isApproved ? '🛍️' : row.status === 'declined' ? '✕' : '⏳'}
-        </Text>
+      <View style={[styles.historyIcon, { backgroundColor: iconBg }]}>
+        <Text style={styles.historyIconText}>{iconText}</Text>
       </View>
 
-      {/* Name + date */}
       <View style={styles.historyRowCenter}>
         <Text
           style={[styles.historyName, { color: colors.textPrimary }]}
           numberOfLines={1}
         >
-          {row.partner_name ?? 'Unbekannter Partner'}
+          {displayName}
         </Text>
         <Text style={[styles.historyMeta, { color: colors.textTertiary }]}>
           {formatGermanDate(row.created_at)}
-          {!isApproved && (
-            <Text style={{ color: statusColor }}>
-              {' · '}{statusLabel(row.status)}
-            </Text>
-          )}
         </Text>
       </View>
 
-      {/* Amount */}
       <Text style={[styles.historyAmount, { color: amountColor }]}>
         {`${sign}${formatEuros(row.amount_cents)}`}
       </Text>
