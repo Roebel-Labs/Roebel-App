@@ -39,8 +39,10 @@ import { useActiveAccount } from 'thirdweb/react';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
 import { openRoebelCardLearnMore } from '@/lib/roebel-card-checkout';
+import type { BuyerMode } from './my-card';
 import { fetchPartnersByWallet } from '@/lib/supabase-roebel-card-partners';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -105,6 +107,9 @@ function BuyerLanding({ card }: BuyerLandingProps) {
   const router = useRouter();
   const { colors } = useTheme();
   const activeAccount = useActiveAccount();
+  const { isCitizen } = useUser();
+
+  const buyerMode: BuyerMode = isCitizen ? 'citizen' : 'tourist';
 
   const [topUpVisible, setTopUpVisible] = useState(false);
 
@@ -239,6 +244,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
       <TopUpBottomSheet
         visible={topUpVisible}
         walletAddress={activeAccount?.address ?? null}
+        buyerMode={buyerMode}
         onClose={() => setTopUpVisible(false)}
         onStripeDismissed={handleStripeDismissed}
       />

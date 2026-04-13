@@ -40,9 +40,13 @@ import {
 import { supabase } from '@/lib/supabase';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import PlusSignIcon from '@/assets/icons/plus-sign.svg';
+import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import PendingChargeModal from '@/components/PendingChargeModal';
 import TopUpBottomSheet from '@/components/TopUpBottomSheet';
 import { useActiveAccount } from 'thirdweb/react';
+import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 
 const POLL_INTERVAL_MS = 2000;
 const QR_REFRESH_INTERVAL_MS = 30_000;
@@ -56,11 +60,22 @@ interface ChargeHistoryRow {
   partner_name: string | null;
 }
 
+export type BuyerMode = 'citizen' | 'tourist' | 'sachbezug';
+
 export default function MyRoebelCardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { card, refresh } = useRoebelCard();
   const activeAccount = useActiveAccount();
+  const { isCitizen } = useUser();
+  const { activeAccount: accountCtx } = useAccount();
+
+  const buyerMode: BuyerMode =
+    accountCtx?.account_type === 'organisation'
+      ? 'sachbezug'
+      : isCitizen
+        ? 'citizen'
+        : 'tourist';
 
   const [pending, setPending] = useState<PendingChargeWithPartner | null>(null);
   const [history, setHistory] = useState<ChargeHistoryRow[]>([]);
@@ -264,13 +279,13 @@ export default function MyRoebelCardScreen() {
           <View style={styles.actionsRow}>
             <ActionButton
               label="Aufladen"
-              emoji="↑"
+              icon={<PlusSignIcon width={24} height={24} color={colors.textPrimary} />}
               onPress={handleTopUpPress}
               colors={colors}
             />
             <ActionButton
               label="Einlösen"
-              emoji="⊘"
+              icon={<QrCodeIcon width={24} height={24} color={colors.textPrimary} />}
               onPress={handleOpenQr}
               colors={colors}
             />
@@ -392,6 +407,7 @@ export default function MyRoebelCardScreen() {
       <TopUpBottomSheet
         visible={topUpVisible}
         walletAddress={activeAccount?.address ?? null}
+        buyerMode={buyerMode}
         onClose={() => setTopUpVisible(false)}
         onStripeDismissed={handleStripeDismissed}
       />
@@ -405,12 +421,12 @@ export default function MyRoebelCardScreen() {
 
 function ActionButton({
   label,
-  emoji,
+  icon,
   onPress,
   colors,
 }: {
   label: string;
-  emoji: string;
+  icon: React.ReactNode;
   onPress: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
@@ -419,7 +435,7 @@ function ActionButton({
       onPress={onPress}
       style={[styles.actionButton, { backgroundColor: colors.surface }]}
     >
-      <Text style={styles.actionEmoji}>{emoji}</Text>
+      {icon}
       <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
         {label}
       </Text>
@@ -595,10 +611,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    gap: 4,
-  },
-  actionEmoji: {
-    fontSize: 22,
+    gap: 6,
   },
   actionLabel: {
     fontSize: 13,

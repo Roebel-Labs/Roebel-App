@@ -4,6 +4,7 @@ import {
   ROEBEL_CARD_CONFIG,
   computeRoebelCardFee,
   type RoebelCardCheckoutMetadata,
+  type FeeMode,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -11,41 +12,29 @@ import { createAdminClient } from "@/lib/supabase/admin";
 //
 // Body (JSON):
 //   {
-//     amount_cents: number,          // face value the card will be credited
-//     wallet_address: string,        // 0x... hex, lowercased server-side
+//     amount_cents: number,
+//     wallet_address: string,
 //     beneficiary_account_id?: string | null,
-//                                    // UUID of a verified Verein account,
-//                                    // or null/omitted for Röbeler Topf
-//     locale?: "de" | "en"
+//     locale?: "de" | "en",
+//     fee_mode?: "citizen" | "tourist" | "sachbezug",   // default "tourist"
+//     donation_bps?: 1000 | 1500 | 2000 | 2500          // tourist only
 //   }
 //
-// Flow:
-//   1. Validate inputs against ROEBEL_CARD_CONFIG min/max.
-//   2. Compute fee + Verein split server-side via computeRoebelCardFee.
-//   3. If a beneficiary was provided, verify the account is an organisation
-//      with sub_type='verein' and is_verified=true. Falls back to Topf
-//      (null) if not — mirrors the webhook's safety net.
-//   4. Insert a roebel_card_purchases row with status='pending' so the
-//      webhook has a pre-created row to look up by metadata.purchase_id.
-//      The card_id is set if the buyer already has a card, otherwise
-//      left NULL and filled in by the webhook after provisioning.
-//   5. Create a Stripe Checkout Session with price_data (no pre-configured
-//      Product), line item "Röbel Card X €" at the total (face + fee), and
-//      metadata matching RoebelCardCheckoutMetadata.
-//   6. Return the session URL and id.
-//
-// No auth check: anyone who can pay Stripe may credit any wallet. This
-// matches real-world Sachbezug (employers legitimately pay for employees).
-// The only abuse surface is spamming pending rows, mitigated by basic
-// rate limiting in front of this endpoint (add later if needed).
+// Fee models:
+//   citizen  — no fee, card gets full face value
+//   tourist  — fee on top (default 10 %, generous tiers 15/20/25 %)
+//   sachbezug — fee deducted, org pays ≤50 € total, card gets remainder
 
 const VALID_WALLET = /^0x[a-fA-F0-9]{40}$/;
+const VALID_FEE_MODES: FeeMode[] = ["citizen", "tourist", "sachbezug"];
 
 interface RequestBody {
   amount_cents?: unknown;
   wallet_address?: unknown;
   beneficiary_account_id?: unknown;
   locale?: unknown;
+  fee_mode?: unknown;
+  donation_bps?: unknown;
 }
 
 export async function POST(request: NextRequest) {
@@ -56,29 +45,46 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
+  // Parse fee_mode (default: tourist for backward compat).
+  const feeMode: FeeMode =
+    typeof body.fee_mode === "string" && VALID_FEE_MODES.includes(body.fee_mode as FeeMode)
+      ? (body.fee_mode as FeeMode)
+      : "tourist";
+
+  // Parse donation_bps (tourist only).
+  let donationBps: number | undefined;
+  if (feeMode === "tourist" && body.donation_bps != null) {
+    const bps = Number(body.donation_bps);
+    const allowed = ROEBEL_CARD_CONFIG.ALLOWED_DONATION_BPS as readonly number[];
+    if (!allowed.includes(bps)) {
+      return NextResponse.json({ error: "invalid_donation_bps" }, { status: 400 });
+    }
+    donationBps = bps;
+  }
+
   const amountCents = Number(body.amount_cents);
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     return NextResponse.json({ error: "amount_required" }, { status: 400 });
   }
-  if (amountCents < ROEBEL_CARD_CONFIG.MIN_AMOUNT_CENTS) {
-    return NextResponse.json(
-      { error: "amount_too_small" },
-      { status: 400 },
-    );
-  }
-  if (amountCents > ROEBEL_CARD_CONFIG.MAX_AMOUNT_CENTS) {
-    return NextResponse.json(
-      { error: "amount_too_large" },
-      { status: 400 },
-    );
+
+  // Sachbezug: only allow predefined amounts (10/25/50 €).
+  if (feeMode === "sachbezug") {
+    const allowed = ROEBEL_CARD_CONFIG.SACHBEZUG_ALLOWED_CENTS as readonly number[];
+    if (!allowed.includes(amountCents)) {
+      return NextResponse.json({ error: "sachbezug_invalid_amount" }, { status: 400 });
+    }
+  } else {
+    if (amountCents < ROEBEL_CARD_CONFIG.MIN_AMOUNT_CENTS) {
+      return NextResponse.json({ error: "amount_too_small" }, { status: 400 });
+    }
+    if (amountCents > ROEBEL_CARD_CONFIG.MAX_AMOUNT_CENTS) {
+      return NextResponse.json({ error: "amount_too_large" }, { status: 400 });
+    }
   }
 
   const walletRaw = typeof body.wallet_address === "string" ? body.wallet_address : "";
   if (!VALID_WALLET.test(walletRaw)) {
-    return NextResponse.json(
-      { error: "wallet_required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "wallet_required" }, { status: 400 });
   }
   const walletAddress = walletRaw.toLowerCase();
 
@@ -89,7 +95,8 @@ export async function POST(request: NextRequest) {
 
   const locale = body.locale === "en" ? "en" : "de";
 
-  const { feeCents, vereineCents, totalCents } = computeRoebelCardFee(amountCents);
+  const { cardCreditCents, feeCents, vereineCents, totalCents } =
+    computeRoebelCardFee(amountCents, feeMode, donationBps);
 
   const supabase = createAdminClient();
 
@@ -159,16 +166,18 @@ export async function POST(request: NextRequest) {
     cardId = newCard.id as string;
   }
 
-  // Insert a pending purchase row. The webhook will look it up by
-  // metadata.purchase_id and flip status to 'paid'.
+  // Insert a pending purchase row. amount_cents = what the card gets
+  // (for sachbezug this is less than what Stripe charges). The webhook
+  // credits metadata.amount_cents to the card balance.
   const { data: purchaseRow, error: purchaseError } = await supabase
     .from("roebel_card_purchases")
     .insert({
       card_id: cardId,
-      amount_cents: amountCents,
+      amount_cents: cardCreditCents,
       fee_cents: feeCents,
       beneficiary_account_id: beneficiaryAccountId,
       purchaser_wallet_address: walletAddress,
+      is_sachbezug: feeMode === "sachbezug",
       status: "pending",
     })
     .select("id")
@@ -192,21 +201,27 @@ export async function POST(request: NextRequest) {
   const successUrl = `${baseUrl}/roebel-card/success?session_id={CHECKOUT_SESSION_ID}&return_to=${returnTo}`;
   const cancelUrl = `${baseUrl}/roebel-card/success?cancelled=true&return_to=${encodeURIComponent("roebel://roebel-card")}`;
 
-  const faceEuros = (amountCents / 100).toLocaleString(
+  const cardEuros = (cardCreditCents / 100).toLocaleString(
     locale === "en" ? "en-US" : "de-DE",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 },
   );
 
+  const feeLabel =
+    feeMode === "citizen"
+      ? ""
+      : feeMode === "sachbezug"
+        ? ` (davon ${(feeCents / 100).toFixed(2).replace(".", ",")} € für Vereine)`
+        : ` (inkl. ${(feeCents / 100).toFixed(2).replace(".", ",")} € Förderanteil)`;
+
   const metadata: Record<string, string> = {
-    // Shape matches RoebelCardCheckoutMetadata in apps/web/src/lib/stripe.ts
-    // so the webhook can parse it via parseRoebelCardMetadata.
     kind: "roebel_card",
     wallet_address: walletAddress,
-    amount_cents: String(amountCents),
+    amount_cents: String(cardCreditCents),
     fee_cents: String(feeCents),
     vereine_cents: String(vereineCents),
     beneficiary_account_id: beneficiaryAccountId ?? "",
     purchase_id: purchaseId,
+    fee_mode: feeMode,
   } satisfies Partial<RoebelCardCheckoutMetadata> & Record<string, string>;
 
   try {
@@ -220,9 +235,8 @@ export async function POST(request: NextRequest) {
             currency: ROEBEL_CARD_CONFIG.currency,
             unit_amount: totalCents,
             product_data: {
-              name: `Röbel Card — ${faceEuros} €`,
-              description:
-                "Lokaler Gutschein für teilnehmende Partner in Röbel/Müritz. 10 % unterstützen lokale Vereine und den Handel.",
+              name: `Röbel Card — ${cardEuros} €`,
+              description: `Lokaler Gutschein für Röbel/Müritz${feeLabel}`,
             },
           },
         },
@@ -256,7 +270,7 @@ export async function POST(request: NextRequest) {
       url: session.url,
       session_id: session.id,
       purchase_id: purchaseId,
-      amount_cents: amountCents,
+      card_credit_cents: cardCreditCents,
       fee_cents: feeCents,
       total_cents: totalCents,
     });

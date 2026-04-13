@@ -55,11 +55,14 @@ export function generateTicketCode(): string {
 /**
  * Röbel Card voucher configuration.
  *
- * Fee model: "fee on top". Buyer picks a face value `A`; Stripe charges
- * `A + fee`. The full `A` is credited to the card; the fee is split:
- *   - 5 % to the chosen Verein (or Röbeler Topf)
- *   - 4 % reserved as partner redemption bonus (stays in Treuhand until spent)
- *   - 1 % operational
+ * Differentiated fee model by buyer type:
+ *   citizen  — no fee; card gets full face value.
+ *   tourist  — fee on top (default 10 %, optional 15/20/25 % generous tiers).
+ *   sachbezug — fee deducted from total (org pays ≤50 €, card gets remainder).
+ *
+ * Fee split (when fee > 0):
+ *   - Half to the chosen Verein (or Röbeler Topf)
+ *   - The rest: partner redemption bonus + operational (implicit, reconciled at payout)
  */
 export const ROEBEL_CARD_CONFIG = {
   currency: "eur",
@@ -68,19 +71,62 @@ export const ROEBEL_CARD_CONFIG = {
   PRESET_AMOUNTS_CENTS: [1000, 2500, 5000, 10000] as const,
   FEE_BPS: 1000, // 10 %
   VEREINE_BPS: 500, // 5 %
-  // Partner pool & ops shares are implicit (fee - vereine share).
+  SACHBEZUG_ALLOWED_CENTS: [1000, 2500, 5000] as const,
+  ALLOWED_DONATION_BPS: [1000, 1500, 2000, 2500] as const,
 } as const;
 
-export function computeRoebelCardFee(amountCents: number): {
+export type FeeMode = "citizen" | "tourist" | "sachbezug";
+
+/**
+ * Compute fee, Vereine share, card credit, and Stripe total for a
+ * Röbel Card purchase.
+ *
+ * - `citizen`:  fee = 0, total = amountCents (card gets full value)
+ * - `tourist`:  fee = amountCents * feeBps/10000, total = amount + fee
+ * - `sachbezug`: fee = amountCents * 10%, card = amount - fee, total = amount
+ */
+export function computeRoebelCardFee(
+  amountCents: number,
+  feeMode: FeeMode = "tourist",
+  donationBps?: number,
+): {
+  cardCreditCents: number;
   feeCents: number;
   vereineCents: number;
   totalCents: number;
 } {
-  const feeCents = Math.floor((amountCents * ROEBEL_CARD_CONFIG.FEE_BPS) / 10000);
-  const vereineCents = Math.floor(
-    (amountCents * ROEBEL_CARD_CONFIG.VEREINE_BPS) / 10000,
-  );
+  if (feeMode === "citizen") {
+    return {
+      cardCreditCents: amountCents,
+      feeCents: 0,
+      vereineCents: 0,
+      totalCents: amountCents,
+    };
+  }
+
+  const bps =
+    feeMode === "tourist"
+      ? (donationBps ?? ROEBEL_CARD_CONFIG.FEE_BPS)
+      : ROEBEL_CARD_CONFIG.FEE_BPS;
+
+  const feeCents = Math.floor((amountCents * bps) / 10000);
+  // Vereine get half the fee bps.
+  const vereineBps = Math.floor(bps / 2);
+  const vereineCents = Math.floor((amountCents * vereineBps) / 10000);
+
+  if (feeMode === "sachbezug") {
+    // Fee is deducted from the total paid.
+    return {
+      cardCreditCents: amountCents - feeCents,
+      feeCents,
+      vereineCents,
+      totalCents: amountCents, // org pays exactly this amount
+    };
+  }
+
+  // tourist — fee on top
   return {
+    cardCreditCents: amountCents,
     feeCents,
     vereineCents,
     totalCents: amountCents + feeCents,
@@ -95,6 +141,7 @@ export interface RoebelCardCheckoutMetadata {
   vereine_cents: string;
   beneficiary_account_id: string;
   purchase_id: string;
+  fee_mode: string;
 }
 
 /**
@@ -131,5 +178,6 @@ export function parseRoebelCardMetadata(
     vereine_cents: metadata.vereine_cents,
     beneficiary_account_id: metadata.beneficiary_account_id ?? "",
     purchase_id: metadata.purchase_id,
+    fee_mode: metadata.fee_mode ?? "tourist",
   };
 }

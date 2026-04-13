@@ -1,16 +1,11 @@
 // Röbel Card top-up bottom sheet.
 //
-// Two internal steps:
-//   1. amount — 4 denomination buttons (10 / 25 / 50 / 100 €) + a
-//      custom amount input field. Tap Weiter to advance.
-//   2. verein — list of verified Vereine (fetched from supabase)
-//      plus a "Röbeler Topf" option at the top. Tap "Weiter zu Stripe"
-//      to create a checkout session and open Stripe.
+// Differentiated by buyerMode:
+//   citizen  — standard amount picker, no fee
+//   tourist  — standard amount picker, +fee on top, donation tier chips
+//   sachbezug — default 50 €, "Weniger" reveals 10/25/50 chips, fee deducted
 //
-// On submit, calls createRoebelCardCheckout() against the web backend
-// which pre-inserts a pending purchase row and returns a Stripe
-// Checkout Session URL. That URL is opened in the in-app browser sheet.
-// The webhook on the web side credits the card balance after payment.
+// After amount → Verein picker → Stripe checkout in-app browser.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -38,30 +33,35 @@ import {
   type VereinOption,
 } from '@/lib/roebel-card-vereine';
 import { formatEuros } from '@/lib/format-currency';
+import type { BuyerMode } from '@/app/roebel-card/my-card';
 
 type Denomination = 10 | 25 | 50 | 100 | 'custom';
 type Step = 'amount' | 'verein';
 
 const DENOMINATIONS: Exclude<Denomination, 'custom'>[] = [10, 25, 50, 100];
+const SACHBEZUG_DENOMINATIONS = [10, 25, 50] as const;
+const DONATION_TIERS = [
+  { bps: 1000, label: '10 %', sublabel: 'Standard' },
+  { bps: 1500, label: '15 %' },
+  { bps: 2000, label: '20 %' },
+  { bps: 2500, label: '25 %' },
+] as const;
 
-// Must match ROEBEL_CARD_CONFIG in apps/web/src/lib/stripe.ts
-const MIN_AMOUNT_CENTS = 500; // 5 €
-const MAX_AMOUNT_CENTS = 50000; // 500 €
-const FEE_BPS = 1000; // 10 %
+const MIN_AMOUNT_CENTS = 500;
+const MAX_AMOUNT_CENTS = 50000;
 
 interface Props {
   visible: boolean;
   walletAddress: string | null;
+  buyerMode: BuyerMode;
   onClose: () => void;
-  /** Fired after the Stripe browser sheet dismisses. Caller should
-   *  navigate to /roebel-card/topup-success so the user sees a loading
-   *  state while the webhook credits their card. */
   onStripeDismissed: () => void;
 }
 
 export default function TopUpBottomSheet({
   visible,
   walletAddress,
+  buyerMode,
   onClose,
   onStripeDismissed,
 }: Props) {
@@ -69,15 +69,23 @@ export default function TopUpBottomSheet({
   const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('amount');
-  const [selected, setSelected] = useState<Denomination | null>(null);
+  const [selected, setSelected] = useState<Denomination | null>(
+    buyerMode === 'sachbezug' ? 50 : null,
+  );
   const [customAmount, setCustomAmount] = useState('');
-  const [beneficiaryId, setBeneficiaryId] = useState<string | null>(null); // null = Röbeler Topf
+  const [donationBps, setDonationBps] = useState(1000);
+  const [showSachbezugChips, setShowSachbezugChips] = useState(false);
+  const [beneficiaryId, setBeneficiaryId] = useState<string | null>(null);
   const [vereine, setVereine] = useState<VereinOption[]>([]);
   const [vereineLoading, setVereineLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // --- Derived state -----------------------------------------------------
+  // --- Derived state -------------------------------------------------------
   const amountCents = useMemo(() => {
+    if (buyerMode === 'sachbezug') {
+      // For sachbezug, selected is always one of the fixed denominations.
+      return (typeof selected === 'number' ? selected : 50) * 100;
+    }
     if (selected === null) return 0;
     if (selected === 'custom') {
       if (!customAmount) return 0;
@@ -86,18 +94,28 @@ export default function TopUpBottomSheet({
       return Math.round(parsed * 100);
     }
     return selected * 100;
-  }, [selected, customAmount]);
+  }, [selected, customAmount, buyerMode]);
 
   const amountValid =
-    amountCents >= MIN_AMOUNT_CENTS && amountCents <= MAX_AMOUNT_CENTS;
+    buyerMode === 'sachbezug'
+      ? SACHBEZUG_DENOMINATIONS.includes(amountCents / 100 as any)
+      : amountCents >= MIN_AMOUNT_CENTS && amountCents <= MAX_AMOUNT_CENTS;
 
-  const feeCents = Math.floor((amountCents * FEE_BPS) / 10000);
-  const totalCents = amountCents + feeCents;
+  // Fee computation per mode.
+  const feeBps = buyerMode === 'citizen' ? 0 : buyerMode === 'tourist' ? donationBps : 1000;
+  const feeCents = Math.floor((amountCents * feeBps) / 10000);
+  const vereineCents = Math.floor((amountCents * Math.floor(feeBps / 2)) / 10000);
+
+  // For sachbezug, fee is deducted (card gets less); for others, fee on top.
+  const cardCreditCents =
+    buyerMode === 'sachbezug' ? amountCents - feeCents : amountCents;
+  const totalCents =
+    buyerMode === 'sachbezug' ? amountCents : amountCents + feeCents;
 
   const canAdvanceAmount = amountValid && !submitting;
   const canSubmit = amountValid && !submitting && walletAddress !== null;
 
-  // --- Load Vereine once when sheet opens --------------------------------
+  // --- Load Vereine once when sheet opens -----------------------------------
   useEffect(() => {
     if (!visible || vereine.length > 0 || vereineLoading) return;
     setVereineLoading(true);
@@ -106,13 +124,15 @@ export default function TopUpBottomSheet({
       .finally(() => setVereineLoading(false));
   }, [visible, vereine.length, vereineLoading]);
 
-  // --- Handlers ----------------------------------------------------------
+  // Reset on mode change / close.
   const reset = useCallback(() => {
     setStep('amount');
-    setSelected(null);
+    setSelected(buyerMode === 'sachbezug' ? 50 : null);
     setCustomAmount('');
+    setDonationBps(1000);
+    setShowSachbezugChips(false);
     setBeneficiaryId(null);
-  }, []);
+  }, [buyerMode]);
 
   const handleClose = () => {
     reset();
@@ -137,20 +157,22 @@ export default function TopUpBottomSheet({
         amountCents,
         beneficiaryAccountId: beneficiaryId,
         locale: 'de',
+        feeMode: buyerMode,
+        donationBps: buyerMode === 'tourist' ? donationBps : undefined,
       });
       await openRoebelCardCheckout(session.url);
-      // Stripe browser sheet dismissed — parent is responsible for
-      // routing to topup-success so the polling UI takes over.
       handleClose();
       onStripeDismissed();
     } catch (err: any) {
-      Alert.alert('Fehler', err?.message ?? 'Zahlung konnte nicht gestartet werden.');
+      Alert.alert(
+        'Fehler',
+        err?.message ?? 'Zahlung konnte nicht gestartet werden.',
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  // --- Render ------------------------------------------------------------
   return (
     <Modal
       visible={visible}
@@ -179,34 +201,72 @@ export default function TopUpBottomSheet({
 
             <View style={styles.headerRow}>
               {step === 'verein' ? (
-                <Pressable onPress={handleBackToAmount} hitSlop={12} style={styles.closeButton}>
-                  <Text style={[styles.backIcon, { color: colors.textPrimary }]}>‹</Text>
+                <Pressable
+                  onPress={handleBackToAmount}
+                  hitSlop={12}
+                  style={styles.closeButton}
+                >
+                  <Text
+                    style={[styles.backIcon, { color: colors.textPrimary }]}
+                  >
+                    {'‹'}
+                  </Text>
                 </Pressable>
               ) : (
                 <View style={styles.closeButton} />
               )}
               <Text style={[styles.title, { color: colors.textPrimary }]}>
-                {step === 'amount' ? 'Röbel Card aufladen' : 'Wer soll profitieren?'}
+                {step === 'amount'
+                  ? 'Röbel Card aufladen'
+                  : 'Wer soll profitieren?'}
               </Text>
-              <Pressable onPress={handleClose} hitSlop={12} style={styles.closeButton}>
-                <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>✕</Text>
+              <Pressable
+                onPress={handleClose}
+                hitSlop={12}
+                style={styles.closeButton}
+              >
+                <Text
+                  style={[styles.closeIcon, { color: colors.textSecondary }]}
+                >
+                  {'✕'}
+                </Text>
               </Pressable>
             </View>
 
             {step === 'amount' ? (
-              <AmountStep
-                colors={colors}
-                selected={selected}
-                customAmount={customAmount}
-                amountValid={amountValid}
-                amountCents={amountCents}
-                feeCents={feeCents}
-                totalCents={totalCents}
-                onSelect={setSelected}
-                onCustomChange={setCustomAmount}
-                canAdvance={canAdvanceAmount}
-                onAdvance={handleAdvanceToVerein}
-              />
+              buyerMode === 'sachbezug' ? (
+                <SachbezugAmountStep
+                  colors={colors}
+                  selected={typeof selected === 'number' ? selected : 50}
+                  showChips={showSachbezugChips}
+                  onToggleChips={() =>
+                    setShowSachbezugChips((v) => !v)
+                  }
+                  onSelect={(d) => setSelected(d as Denomination)}
+                  cardCreditCents={cardCreditCents}
+                  feeCents={feeCents}
+                  totalCents={totalCents}
+                  canAdvance={canAdvanceAmount}
+                  onAdvance={handleAdvanceToVerein}
+                />
+              ) : (
+                <AmountStep
+                  colors={colors}
+                  buyerMode={buyerMode}
+                  selected={selected}
+                  customAmount={customAmount}
+                  amountValid={amountValid}
+                  cardCreditCents={cardCreditCents}
+                  feeCents={feeCents}
+                  totalCents={totalCents}
+                  donationBps={donationBps}
+                  onSelect={setSelected}
+                  onCustomChange={setCustomAmount}
+                  onDonationBpsChange={setDonationBps}
+                  canAdvance={canAdvanceAmount}
+                  onAdvance={handleAdvanceToVerein}
+                />
+              )
             ) : (
               <VereinStep
                 colors={colors}
@@ -228,31 +288,37 @@ export default function TopUpBottomSheet({
 }
 
 // ---------------------------------------------------------------------------
-// Step 1: amount
+// Step 1a: Amount (citizen + tourist)
 // ---------------------------------------------------------------------------
 
 function AmountStep({
   colors,
+  buyerMode,
   selected,
   customAmount,
   amountValid,
-  amountCents,
+  cardCreditCents,
   feeCents,
   totalCents,
+  donationBps,
   onSelect,
   onCustomChange,
+  onDonationBpsChange,
   canAdvance,
   onAdvance,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
+  buyerMode: 'citizen' | 'tourist';
   selected: Denomination | null;
   customAmount: string;
   amountValid: boolean;
-  amountCents: number;
+  cardCreditCents: number;
   feeCents: number;
   totalCents: number;
+  donationBps: number;
   onSelect: (d: Denomination) => void;
   onCustomChange: (v: string) => void;
+  onDonationBpsChange: (bps: number) => void;
   canAdvance: boolean;
   onAdvance: () => void;
 }) {
@@ -264,8 +330,9 @@ function AmountStep({
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-        Der Nennwert wird deiner Karte gutgeschrieben. Zusätzlich 10 % fließen
-        an einen Verein deiner Wahl oder den Röbeler Topf.
+        {buyerMode === 'citizen'
+          ? 'Wähle den Betrag, der auf deine Karte geladen wird.'
+          : 'Der Nennwert wird deiner Karte gutgeschrieben. Zusätzlich fließt ein Förderanteil an einen Verein deiner Wahl oder den Röbeler Topf.'}
       </Text>
 
       <View style={styles.grid}>
@@ -286,7 +353,9 @@ function AmountStep({
               <Text
                 style={[
                   styles.denomText,
-                  { color: isSelected ? colors.onPrimary : colors.textPrimary },
+                  {
+                    color: isSelected ? colors.onPrimary : colors.textPrimary,
+                  },
                 ]}
               >
                 {denom} €
@@ -301,7 +370,8 @@ function AmountStep({
         style={[
           styles.customRow,
           {
-            borderColor: selected === 'custom' ? colors.primary : colors.border,
+            borderColor:
+              selected === 'custom' ? colors.primary : colors.border,
             backgroundColor:
               selected === 'custom'
                 ? (colors.primaryLight ?? colors.surface)
@@ -319,25 +389,103 @@ function AmountStep({
             placeholder="z.B. 35"
             placeholderTextColor={colors.textTertiary}
             keyboardType="decimal-pad"
+            returnKeyType="done"
             onFocus={() => onSelect('custom')}
             style={[styles.customInput, { color: colors.textPrimary }]}
           />
-          <Text style={[styles.customCurrency, { color: colors.textSecondary }]}>€</Text>
+          <Text
+            style={[styles.customCurrency, { color: colors.textSecondary }]}
+          >
+            €
+          </Text>
         </View>
       </Pressable>
 
       {selected === 'custom' && customAmount.length > 0 && !amountValid && (
-        <Text style={[styles.helperError, { color: colors.error ?? '#DC2626' }]}>
+        <Text
+          style={[styles.helperError, { color: colors.error ?? '#DC2626' }]}
+        >
           Betrag zwischen 5 € und 500 €.
         </Text>
       )}
 
-      {/* Fee breakdown preview */}
+      {/* Donation tier chips — tourist only */}
+      {buyerMode === 'tourist' && amountValid && (
+        <View style={styles.donationSection}>
+          <Text style={[styles.donationLabel, { color: colors.textSecondary }]}>
+            Förderanteil
+          </Text>
+          <View style={styles.donationRow}>
+            {DONATION_TIERS.map((tier) => {
+              const isActive = donationBps === tier.bps;
+              return (
+                <Pressable
+                  key={tier.bps}
+                  onPress={() => onDonationBpsChange(tier.bps)}
+                  style={[
+                    styles.donationChip,
+                    {
+                      borderColor: isActive ? colors.primary : colors.border,
+                      backgroundColor: isActive
+                        ? colors.primary
+                        : colors.surface,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.donationChipText,
+                      {
+                        color: isActive
+                          ? colors.onPrimary
+                          : colors.textPrimary,
+                      },
+                    ]}
+                  >
+                    {tier.label}
+                  </Text>
+                  {'sublabel' in tier && tier.sublabel && (
+                    <Text
+                      style={[
+                        styles.donationChipSub,
+                        {
+                          color: isActive
+                            ? colors.onPrimary
+                            : colors.textTertiary,
+                        },
+                      ]}
+                    >
+                      {tier.sublabel}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Fee breakdown */}
       {amountValid && (
         <View style={[styles.breakdown, { backgroundColor: colors.surface }]}>
-          <BreakdownRow label="Kartenguthaben" value={formatEuros(amountCents)} colors={colors} />
-          <BreakdownRow label="10 % lokaler Beitrag" value={formatEuros(feeCents)} colors={colors} />
-          <View style={[styles.breakdownDivider, { backgroundColor: colors.border }]} />
+          <BreakdownRow
+            label="Kartenguthaben"
+            value={formatEuros(cardCreditCents)}
+            colors={colors}
+          />
+          {feeCents > 0 && (
+            <BreakdownRow
+              label={`${donationBps / 100} % Förderanteil`}
+              value={formatEuros(feeCents)}
+              colors={colors}
+            />
+          )}
+          <View
+            style={[
+              styles.breakdownDivider,
+              { backgroundColor: colors.border },
+            ]}
+          />
           <BreakdownRow
             label="Gesamtbetrag"
             value={formatEuros(totalCents)}
@@ -363,6 +511,143 @@ function AmountStep({
     </ScrollView>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Step 1b: Sachbezug amount (org accounts)
+// ---------------------------------------------------------------------------
+
+function SachbezugAmountStep({
+  colors,
+  selected,
+  showChips,
+  onToggleChips,
+  onSelect,
+  cardCreditCents,
+  feeCents,
+  totalCents,
+  canAdvance,
+  onAdvance,
+}: {
+  colors: ReturnType<typeof useTheme>['colors'];
+  selected: number;
+  showChips: boolean;
+  onToggleChips: () => void;
+  onSelect: (d: number) => void;
+  cardCreditCents: number;
+  feeCents: number;
+  totalCents: number;
+  canAdvance: boolean;
+  onAdvance: () => void;
+}) {
+  return (
+    <ScrollView
+      style={styles.amountScroll}
+      contentContainerStyle={styles.amountScrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Big centered amount */}
+      <View style={styles.sachbezugHero}>
+        <Text style={[styles.sachbezugAmount, { color: colors.textPrimary }]}>
+          {selected} €
+        </Text>
+        <Text style={[styles.sachbezugLabel, { color: colors.textSecondary }]}>
+          Steuerfreier Sachbezug (§8 EStG)
+        </Text>
+      </View>
+
+      {/* "Weniger" toggle */}
+      <Pressable onPress={onToggleChips} hitSlop={8} style={styles.wenigerLink}>
+        <Text style={[styles.wenigerText, { color: colors.primary }]}>
+          {showChips ? 'Weniger ausblenden' : 'Weniger'}
+        </Text>
+      </Pressable>
+
+      {/* Denomination chips (hidden until "Weniger" tapped) */}
+      {showChips && (
+        <View style={styles.sachbezugChips}>
+          {SACHBEZUG_DENOMINATIONS.map((denom) => {
+            const isSelected = selected === denom;
+            return (
+              <Pressable
+                key={denom}
+                onPress={() => onSelect(denom)}
+                style={[
+                  styles.sachbezugChip,
+                  {
+                    borderColor: isSelected
+                      ? colors.primary
+                      : colors.border,
+                    backgroundColor: isSelected
+                      ? colors.primary
+                      : colors.surface,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sachbezugChipText,
+                    {
+                      color: isSelected
+                        ? colors.onPrimary
+                        : colors.textPrimary,
+                    },
+                  ]}
+                >
+                  {denom} €
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Breakdown */}
+      <View style={[styles.breakdown, { backgroundColor: colors.surface }]}>
+        <BreakdownRow
+          label="Kartenguthaben"
+          value={formatEuros(cardCreditCents)}
+          colors={colors}
+        />
+        <BreakdownRow
+          label="Davon für Vereine"
+          value={formatEuros(feeCents)}
+          colors={colors}
+        />
+        <View
+          style={[
+            styles.breakdownDivider,
+            { backgroundColor: colors.border },
+          ]}
+        />
+        <BreakdownRow
+          label="Gesamtbetrag"
+          value={formatEuros(totalCents)}
+          colors={colors}
+          bold
+        />
+      </View>
+
+      <Pressable
+        onPress={onAdvance}
+        disabled={!canAdvance}
+        style={[
+          styles.payButton,
+          { backgroundColor: colors.primary },
+          !canAdvance && { opacity: 0.4 },
+        ]}
+      >
+        <Text style={[styles.payButtonText, { color: colors.onPrimary }]}>
+          Weiter
+        </Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
 
 function BreakdownRow({
   label,
@@ -400,7 +685,7 @@ function BreakdownRow({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Verein picker
+// Step 2: Verein picker (shared across all modes)
 // ---------------------------------------------------------------------------
 
 function VereinStep({
@@ -431,7 +716,10 @@ function VereinStep({
         alle Bürger gemeinsam über Abstimmungen.
       </Text>
 
-      <ScrollView style={styles.vereinList} contentContainerStyle={styles.vereinListContent}>
+      <ScrollView
+        style={styles.vereinList}
+        contentContainerStyle={styles.vereinListContent}
+      >
         <VereinRow
           selected={beneficiaryId === null}
           onPress={() => onSelect(null)}
@@ -462,7 +750,9 @@ function VereinStep({
           ))}
 
         {!vereineLoading && vereine.length === 0 && (
-          <Text style={[styles.vereineEmpty, { color: colors.textTertiary }]}>
+          <Text
+            style={[styles.vereineEmpty, { color: colors.textTertiary }]}
+          >
             Noch keine Vereine registriert. Dein Beitrag geht in den Röbeler
             Topf.
           </Text>
@@ -479,7 +769,7 @@ function VereinStep({
         ]}
       >
         {submitting ? (
-          <ActivityIndicator color={colors.onPrimary} />
+          <ActivityIndicator color="white" />
         ) : (
           <Text style={[styles.payButtonText, { color: colors.onPrimary }]}>
             Weiter zu Stripe · {formatEuros(totalCents)}
@@ -525,18 +815,34 @@ function VereinRow({
       ]}
     >
       {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.vereinAvatar} contentFit="cover" />
+        <Image
+          source={{ uri: avatarUrl }}
+          style={styles.vereinAvatar}
+          contentFit="cover"
+        />
       ) : (
-        <View style={[styles.vereinAvatar, styles.vereinAvatarPlaceholder, { backgroundColor: colors.border }]}>
+        <View
+          style={[
+            styles.vereinAvatar,
+            styles.vereinAvatarPlaceholder,
+            { backgroundColor: colors.border },
+          ]}
+        >
           <Text style={styles.vereinEmoji}>{emoji}</Text>
         </View>
       )}
       <View style={styles.vereinText}>
-        <Text style={[styles.vereinName, { color: colors.textPrimary }]} numberOfLines={1}>
+        <Text
+          style={[styles.vereinName, { color: colors.textPrimary }]}
+          numberOfLines={1}
+        >
           {name}
         </Text>
         {subtitle && (
-          <Text style={[styles.vereinSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
+          <Text
+            style={[styles.vereinSubtitle, { color: colors.textSecondary }]}
+            numberOfLines={2}
+          >
             {subtitle}
           </Text>
         )}
@@ -572,7 +878,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 32,
     gap: 12,
-    maxHeight: '90%',
+    maxHeight: '85%',
   },
   handle: {
     width: 40,
@@ -605,8 +911,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 18,
   },
+  // Amount scroll — flex: 1 lets it fill available space so the keyboard
+  // can shrink it without clipping the CTA button.
   amountScroll: {
-    maxHeight: 560,
+    flex: 1,
   },
   amountScrollContent: {
     gap: 12,
@@ -665,6 +973,81 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginLeft: 16,
   },
+
+  // Donation tier chips (tourist)
+  donationSection: {
+    gap: 8,
+    marginTop: 4,
+  },
+  donationLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  donationRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  donationChip: {
+    flex: 1,
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 2,
+  },
+  donationChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  donationChipSub: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+  },
+
+  // Sachbezug
+  sachbezugHero: {
+    alignItems: 'center',
+    marginVertical: 16,
+    gap: 8,
+  },
+  sachbezugAmount: {
+    fontSize: 48,
+    fontFamily: 'Inter-Bold',
+  },
+  sachbezugLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  wenigerLink: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+  },
+  wenigerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  sachbezugChips: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  sachbezugChip: {
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  sachbezugChipText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+  },
+
+  // Breakdown
   breakdown: {
     borderRadius: 12,
     padding: 16,
@@ -687,6 +1070,8 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: 4,
   },
+
+  // Verein picker
   vereinList: {
     maxHeight: 360,
     marginTop: 4,

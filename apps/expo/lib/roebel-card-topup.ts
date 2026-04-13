@@ -26,13 +26,17 @@ export interface CreateCheckoutInput {
   /** UUID of a verified Verein account, or null for Röbeler Topf. */
   beneficiaryAccountId: string | null;
   locale?: 'de' | 'en';
+  /** Fee model: citizen (no fee), tourist (+fee on top), sachbezug (fee deducted). */
+  feeMode?: 'citizen' | 'tourist' | 'sachbezug';
+  /** Donation tier in bps — tourist only (1000/1500/2000/2500). */
+  donationBps?: number;
 }
 
 export interface CreateCheckoutResponse {
   url: string;
   session_id: string;
   purchase_id: string;
-  amount_cents: number;
+  card_credit_cents: number;
   fee_cents: number;
   total_cents: number;
 }
@@ -54,6 +58,8 @@ export async function createRoebelCardCheckout(
       amount_cents: input.amountCents,
       beneficiary_account_id: input.beneficiaryAccountId,
       locale: input.locale ?? 'de',
+      fee_mode: input.feeMode ?? 'tourist',
+      ...(input.donationBps != null && { donation_bps: input.donationBps }),
     }),
   });
 
