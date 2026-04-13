@@ -1,6 +1,66 @@
 // Types for the new euro-voucher Röbel Card system.
 // Kept separate from the legacy points/stamp types in `roebel-card.ts`.
 
+// ---------------------------------------------------------------------------
+// Partner types
+// ---------------------------------------------------------------------------
+
+export type PartnerStatus = "pending" | "approved" | "rejected" | "suspended"
+
+export type Rechtsform =
+  | "einzelunternehmen"
+  | "gbr"
+  | "ug"
+  | "gmbh"
+  | "gmbh_co_kg"
+  | "ag"
+  | "ev"
+  | "ek"
+  | "ohg"
+  | "kg"
+  | "sonstige"
+
+export const RECHTSFORM_LABELS: Record<Rechtsform, string> = {
+  einzelunternehmen: "Einzelunternehmen",
+  gbr: "GbR",
+  ug: "UG (haftungsbeschränkt)",
+  gmbh: "GmbH",
+  gmbh_co_kg: "GmbH & Co. KG",
+  ag: "AG",
+  ev: "e.V.",
+  ek: "e.K.",
+  ohg: "OHG",
+  kg: "KG",
+  sonstige: "Sonstige",
+}
+
+export interface RoebelCardPartnerRow {
+  id: string
+  account_id: string
+  iban_last4: string | null
+  bic: string | null
+  account_holder: string | null
+  rechtsform: Rechtsform | null
+  vat_id: string | null
+  agreement_version: string | null
+  agreement_signed_at: string | null
+  status: PartnerStatus
+  pending_balance_cents: number
+  lifetime_volume_cents: number
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PartnerWithAccount extends RoebelCardPartnerRow {
+  account_name: string
+  account_avatar_url: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Card types
+// ---------------------------------------------------------------------------
+
 export type RoebelVoucherCardStatus = "active" | "frozen" | "deactivated"
 
 export type RoebelCardPurchaseStatus =

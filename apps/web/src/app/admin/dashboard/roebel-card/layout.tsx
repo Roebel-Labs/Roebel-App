@@ -8,6 +8,7 @@ const tabs = [
   { label: "Übersicht", href: "/admin/dashboard/roebel-card" },
   { label: "Transaktionen", href: "/admin/dashboard/roebel-card/purchases" },
   { label: "Vereine", href: "/admin/dashboard/roebel-card/vereine" },
+  { label: "Partner", href: "/admin/dashboard/roebel-card/partners" },
 ];
 
 export default function RoebelCardAdminLayout({

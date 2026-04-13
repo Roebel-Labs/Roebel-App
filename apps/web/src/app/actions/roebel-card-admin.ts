@@ -1,10 +1,14 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { revalidatePath } from "next/cache";
 import type {
   OverviewStats,
+  PartnerStatus,
+  PartnerWithAccount,
   PurchaseFilters,
   PurchaseWithRelations,
+  RoebelCardPartnerRow,
   RoebelCardPurchaseRow,
   RoebelVereinContributionRow,
   RoebelVereinFundRow,
@@ -321,4 +325,96 @@ export async function getRoebelerTopf(): Promise<RoebelerTopfSummary> {
     fund: (fund as RoebelVereinFundRow | null) ?? null,
     recentEntries,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Partner management
+// ---------------------------------------------------------------------------
+
+export async function listRoebelCardPartners(
+  statusFilter?: PartnerStatus | "all",
+): Promise<PartnerWithAccount[]> {
+  const supabase = createAdminClient();
+
+  let query = supabase
+    .from("roebel_card_partners")
+    .select(
+      `id, account_id, iban_last4, bic, account_holder, rechtsform, vat_id,
+       agreement_version, agreement_signed_at, status,
+       pending_balance_cents, lifetime_volume_cents,
+       approved_at, created_at, updated_at,
+       accounts!account_id ( name, avatar_url )`,
+    )
+    .order("created_at", { ascending: false });
+
+  if (statusFilter && statusFilter !== "all") {
+    query = query.eq("status", statusFilter);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[roebel-card-admin] listPartners error:", error);
+    return [];
+  }
+
+  const rows = (data ?? []) as unknown as Array<
+    RoebelCardPartnerRow & {
+      accounts: { name: string; avatar_url: string | null } | null;
+    }
+  >;
+
+  return rows.map((row) => {
+    const { accounts, ...rest } = row;
+    return {
+      ...rest,
+      account_name: accounts?.name ?? "—",
+      account_avatar_url: accounts?.avatar_url ?? null,
+    };
+  });
+}
+
+export async function approveRoebelCardPartner(
+  partnerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("roebel_card_partners")
+    .update({
+      status: "approved",
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", partnerId);
+
+  if (error) {
+    console.error("[roebel-card-admin] approvePartner error:", error);
+    return { success: false, error: "Fehler beim Genehmigen des Partners" };
+  }
+
+  revalidatePath("/admin/dashboard/roebel-card/partners");
+  return { success: true };
+}
+
+export async function rejectRoebelCardPartner(
+  partnerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("roebel_card_partners")
+    .update({
+      status: "rejected",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", partnerId);
+
+  if (error) {
+    console.error("[roebel-card-admin] rejectPartner error:", error);
+    return { success: false, error: "Fehler beim Ablehnen des Partners" };
+  }
+
+  revalidatePath("/admin/dashboard/roebel-card/partners");
+  return { success: true };
 }
