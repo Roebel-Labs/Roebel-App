@@ -911,11 +911,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 18,
   },
-  // Amount scroll — flex: 1 lets it fill available space so the keyboard
-  // can shrink it without clipping the CTA button.
-  amountScroll: {
-    flex: 1,
-  },
+  // Amount scroll — no flex, no fixed height. The ScrollView sizes to
+  // content; the parent sheet caps overflow at maxHeight: '85%' so the
+  // whole sheet scrolls if content is tall. Keyboard is handled by the
+  // outer KeyboardAvoidingView pushing the sheet up.
+  amountScroll: {},
   amountScrollContent: {
     gap: 12,
     paddingBottom: 4,
