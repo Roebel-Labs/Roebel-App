@@ -101,12 +101,14 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient();
 
   // Validate the beneficiary if one was provided. Silently falls back to
-  // Röbeler Topf if the target doesn't exist or isn't a verified Verein.
+  // Röbeler Topf if the target doesn't exist or isn't a Verein. We no
+  // longer require is_verified = true (mirrors fetchVerifiedVereine in
+  // the Expo app).
   let beneficiaryAccountId: string | null = null;
   if (beneficiaryInput) {
     const { data: account, error: accountError } = await supabase
       .from("accounts")
-      .select("id, account_type, sub_type, is_verified")
+      .select("id, account_type, sub_type")
       .eq("id", beneficiaryInput)
       .maybeSingle();
 
@@ -117,8 +119,7 @@ export async function POST(request: NextRequest) {
     if (
       account &&
       account.account_type === "organisation" &&
-      account.sub_type === "verein" &&
-      account.is_verified
+      account.sub_type === "verein"
     ) {
       beneficiaryAccountId = account.id as string;
     }

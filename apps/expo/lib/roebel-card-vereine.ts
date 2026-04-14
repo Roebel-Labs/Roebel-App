@@ -1,11 +1,10 @@
-// Fetch verified Vereine for the Röbel Card beneficiary picker.
+// Fetch eligible Vereine for the Röbel Card beneficiary picker.
 //
 // A "Verein" in the app is an `accounts` row with
 //   account_type = 'organisation' AND sub_type = 'verein'
-// and we additionally require is_verified = true so buyers can only
-// direct their 10% local-support fee toward Vereine that have been
-// admin-approved. Mirrors the webhook's validation in
-// apps/web/src/app/api/roebel-card/webhook/route.ts.
+// We don't require is_verified = true — any registered Verein account
+// can receive the 10 % local-support fee. (If admin moderation is added
+// later, reintroduce the is_verified filter here + in the webhook.)
 
 import { supabase } from './supabase';
 
@@ -17,17 +16,16 @@ export interface VereinOption {
 }
 
 /**
- * Returns all verified Vereine sorted alphabetically by name.
+ * Returns all Vereine sorted alphabetically by name.
  * Silent-fails to an empty list on error — the TopUpBottomSheet will
  * still render the "Röbeler Topf" option as a fallback.
  */
 export async function fetchVerifiedVereine(): Promise<VereinOption[]> {
   const { data, error } = await supabase
     .from('accounts' as any)
-    .select('id, name, avatar_url, bio, account_type, sub_type, is_verified')
+    .select('id, name, avatar_url, bio, account_type, sub_type')
     .eq('account_type', 'organisation')
     .eq('sub_type', 'verein')
-    .eq('is_verified', true)
     .order('name', { ascending: true });
 
   if (error) {

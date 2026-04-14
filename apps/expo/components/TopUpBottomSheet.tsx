@@ -9,7 +9,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   Pressable,
@@ -34,6 +33,7 @@ import {
 } from '@/lib/roebel-card-vereine';
 import { formatEuros } from '@/lib/format-currency';
 import type { BuyerMode } from '@/app/roebel-card/my-card';
+import BottomDrawer from './BottomDrawer';
 
 type Denomination = 10 | 25 | 50 | 100 | 'custom';
 type Step = 'amount' | 'verein';
@@ -185,33 +185,21 @@ export default function TopUpBottomSheet({
   const ctaDisabled = step === 'amount' ? !canAdvanceAmount : !canSubmit;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-      statusBarTranslucent
-    >
-      <Pressable style={styles.backdrop} onPress={handleClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.avoider}
-          pointerEvents="box-none"
-          keyboardVerticalOffset={0}
+    <BottomDrawer visible={visible} onClose={handleClose} maxSnapPoint={0.92}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.kavContainer}
+        keyboardVerticalOffset={0}
+      >
+        <View
+          style={[
+            styles.sheetInner,
+            {
+              paddingBottom: Math.max(8, insets.bottom),
+            },
+          ]}
         >
-          <Pressable
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: colors.background,
-                paddingBottom: Math.max(32, insets.bottom + 16),
-              },
-            ]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
-
-            <View style={styles.headerRow}>
+          <View style={styles.headerRow}>
               {step === 'verein' ? (
                 <Pressable
                   onPress={handleBackToAmount}
@@ -307,15 +295,14 @@ export default function TopUpBottomSheet({
               )}
             </Pressable>
 
-            {step === 'verein' && (
-              <Text style={[styles.legal, { color: colors.textTertiary }]}>
-                Du wirst zur sicheren Zahlung bei Stripe weitergeleitet.
-              </Text>
-            )}
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+          {step === 'verein' && (
+            <Text style={[styles.legal, { color: colors.textTertiary }]}>
+              Du wirst zur sicheren Zahlung bei Stripe weitergeleitet.
+            </Text>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </BottomDrawer>
   );
 }
 
@@ -830,30 +817,14 @@ function VereinRow({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
+  // KAV + inner container — sits inside the BottomDrawer's content view.
+  // The drawer itself handles the handle, backdrop, drag, and max height.
+  kavContainer: {
+    flexShrink: 1,
   },
-  avoider: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 32,
+  sheetInner: {
     gap: 12,
-    // Sheet grows with content up to 92% of the screen; when content
-    // exceeds that, the inner ScrollView scrolls. The sticky CTA below
-    // the ScrollView is always visible.
-    maxHeight: '92%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 12,
+    flexShrink: 1,
   },
   headerRow: {
     flexDirection: 'row',

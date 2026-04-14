@@ -16,15 +16,33 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  snapPoint?: number; // Height of drawer as percentage of screen (0-1)
+  /**
+   * Fixed drawer height as a fraction of the screen (0-1). If omitted,
+   * the drawer uses dynamic height: it sizes to its content up to
+   * `maxSnapPoint` (default 0.92). Drag-to-dismiss still works.
+   */
+  snapPoint?: number;
+  /**
+   * Max height cap when using dynamic sizing. Defaults to 0.92.
+   * Ignored when `snapPoint` is provided.
+   */
+  maxSnapPoint?: number;
 };
 
-export default function BottomDrawer({ visible, onClose, children, snapPoint = 0.7 }: Props) {
+export default function BottomDrawer({
+  visible,
+  onClose,
+  children,
+  snapPoint,
+  maxSnapPoint = 0.92,
+}: Props) {
   const { colors } = useTheme();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const lastGestureDy = useRef(0);
 
-  const drawerHeight = SCREEN_HEIGHT * snapPoint;
+  const isDynamic = snapPoint === undefined;
+  const drawerHeight = snapPoint !== undefined ? SCREEN_HEIGHT * snapPoint : undefined;
+  const drawerMaxHeight = SCREEN_HEIGHT * maxSnapPoint;
 
   // Pan responder for drag-to-dismiss
   const panResponder = useRef(
@@ -105,8 +123,10 @@ export default function BottomDrawer({ visible, onClose, children, snapPoint = 0
         <Animated.View
           style={[
             styles.drawer,
+            isDynamic
+              ? { maxHeight: drawerMaxHeight }
+              : { height: drawerHeight },
             {
-              height: drawerHeight,
               transform: [{ translateY }],
               backgroundColor: colors.background,
             },
@@ -117,8 +137,12 @@ export default function BottomDrawer({ visible, onClose, children, snapPoint = 0
             <View style={[styles.handle, { backgroundColor: colors.disabled }]} />
           </View>
 
-          {/* Content */}
-          <View style={styles.content}>{children}</View>
+          {/* Content — flex: 1 for fixed snap points fills the available
+              space; for dynamic sizing, shrink so sticky children stay
+              inside the max-height cap. */}
+          <View style={isDynamic ? styles.contentDynamic : styles.content}>
+            {children}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -154,6 +178,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  contentDynamic: {
+    flexShrink: 1,
     paddingHorizontal: 24,
     paddingBottom: 8,
   },
