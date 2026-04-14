@@ -173,12 +173,24 @@ export default function TopUpBottomSheet({
     }
   };
 
+  // Sticky CTA config — always at the bottom of the sheet so it's reachable
+  // regardless of scroll position or keyboard state.
+  const ctaLabel =
+    step === 'amount'
+      ? 'Weiter'
+      : submitting
+        ? ''
+        : `Weiter zu Stripe · ${formatEuros(totalCents)}`;
+  const ctaOnPress = step === 'amount' ? handleAdvanceToVerein : handleSubmit;
+  const ctaDisabled = step === 'amount' ? !canAdvanceAmount : !canSubmit;
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
       onRequestClose={handleClose}
+      statusBarTranslucent
     >
       <Pressable style={styles.backdrop} onPress={handleClose}>
         <KeyboardAvoidingView
@@ -246,8 +258,6 @@ export default function TopUpBottomSheet({
                   cardCreditCents={cardCreditCents}
                   feeCents={feeCents}
                   totalCents={totalCents}
-                  canAdvance={canAdvanceAmount}
-                  onAdvance={handleAdvanceToVerein}
                 />
               ) : (
                 <AmountStep
@@ -263,8 +273,6 @@ export default function TopUpBottomSheet({
                   onSelect={setSelected}
                   onCustomChange={setCustomAmount}
                   onDonationBpsChange={setDonationBps}
-                  canAdvance={canAdvanceAmount}
-                  onAdvance={handleAdvanceToVerein}
                 />
               )
             ) : (
@@ -274,11 +282,35 @@ export default function TopUpBottomSheet({
                 vereineLoading={vereineLoading}
                 beneficiaryId={beneficiaryId}
                 onSelect={setBeneficiaryId}
-                totalCents={totalCents}
-                submitting={submitting}
-                canSubmit={canSubmit}
-                onSubmit={handleSubmit}
               />
+            )}
+
+            {/* Sticky CTA — always visible at the bottom of the sheet,
+                above the keyboard, regardless of scroll position. */}
+            <Pressable
+              onPress={ctaOnPress}
+              disabled={ctaDisabled}
+              style={[
+                styles.payButton,
+                { backgroundColor: colors.primary },
+                ctaDisabled && { opacity: 0.4 },
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text
+                  style={[styles.payButtonText, { color: colors.onPrimary }]}
+                >
+                  {ctaLabel}
+                </Text>
+              )}
+            </Pressable>
+
+            {step === 'verein' && (
+              <Text style={[styles.legal, { color: colors.textTertiary }]}>
+                Du wirst zur sicheren Zahlung bei Stripe weitergeleitet.
+              </Text>
             )}
           </Pressable>
         </KeyboardAvoidingView>
@@ -304,8 +336,6 @@ function AmountStep({
   onSelect,
   onCustomChange,
   onDonationBpsChange,
-  canAdvance,
-  onAdvance,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   buyerMode: 'citizen' | 'tourist';
@@ -319,8 +349,6 @@ function AmountStep({
   onSelect: (d: Denomination) => void;
   onCustomChange: (v: string) => void;
   onDonationBpsChange: (bps: number) => void;
-  canAdvance: boolean;
-  onAdvance: () => void;
 }) {
   return (
     <ScrollView
@@ -494,20 +522,6 @@ function AmountStep({
           />
         </View>
       )}
-
-      <Pressable
-        onPress={onAdvance}
-        disabled={!canAdvance}
-        style={[
-          styles.payButton,
-          { backgroundColor: colors.primary },
-          !canAdvance && { opacity: 0.4 },
-        ]}
-      >
-        <Text style={[styles.payButtonText, { color: colors.onPrimary }]}>
-          Weiter
-        </Text>
-      </Pressable>
     </ScrollView>
   );
 }
@@ -525,8 +539,6 @@ function SachbezugAmountStep({
   cardCreditCents,
   feeCents,
   totalCents,
-  canAdvance,
-  onAdvance,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   selected: number;
@@ -536,8 +548,6 @@ function SachbezugAmountStep({
   cardCreditCents: number;
   feeCents: number;
   totalCents: number;
-  canAdvance: boolean;
-  onAdvance: () => void;
 }) {
   return (
     <ScrollView
@@ -627,20 +637,6 @@ function SachbezugAmountStep({
           bold
         />
       </View>
-
-      <Pressable
-        onPress={onAdvance}
-        disabled={!canAdvance}
-        style={[
-          styles.payButton,
-          { backgroundColor: colors.primary },
-          !canAdvance && { opacity: 0.4 },
-        ]}
-      >
-        <Text style={[styles.payButtonText, { color: colors.onPrimary }]}>
-          Weiter
-        </Text>
-      </Pressable>
     </ScrollView>
   );
 }
@@ -694,20 +690,12 @@ function VereinStep({
   vereineLoading,
   beneficiaryId,
   onSelect,
-  totalCents,
-  submitting,
-  canSubmit,
-  onSubmit,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   vereine: VereinOption[];
   vereineLoading: boolean;
   beneficiaryId: string | null;
   onSelect: (id: string | null) => void;
-  totalCents: number;
-  submitting: boolean;
-  canSubmit: boolean;
-  onSubmit: () => void;
 }) {
   return (
     <>
@@ -758,29 +746,6 @@ function VereinStep({
           </Text>
         )}
       </ScrollView>
-
-      <Pressable
-        onPress={onSubmit}
-        disabled={!canSubmit}
-        style={[
-          styles.payButton,
-          { backgroundColor: colors.primary },
-          !canSubmit && { opacity: 0.4 },
-        ]}
-      >
-        {submitting ? (
-          <ActivityIndicator color="white" />
-        ) : (
-          <Text style={[styles.payButtonText, { color: colors.onPrimary }]}>
-            Weiter zu Stripe · {formatEuros(totalCents)}
-          </Text>
-        )}
-      </Pressable>
-
-      <Text style={[styles.legal, { color: colors.textTertiary }]}>
-        Du wirst zur sicheren Zahlung bei Stripe weitergeleitet. Nach
-        erfolgreicher Zahlung kehrst du automatisch zur App zurück.
-      </Text>
     </>
   );
 }
@@ -878,7 +843,10 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 32,
     gap: 12,
-    maxHeight: '85%',
+    // Sheet grows with content up to 92% of the screen; when content
+    // exceeds that, the inner ScrollView scrolls. The sticky CTA below
+    // the ScrollView is always visible.
+    maxHeight: '92%',
   },
   handle: {
     width: 40,
@@ -911,11 +879,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 18,
   },
-  // Amount scroll — no flex, no fixed height. The ScrollView sizes to
-  // content; the parent sheet caps overflow at maxHeight: '85%' so the
-  // whole sheet scrolls if content is tall. Keyboard is handled by the
-  // outer KeyboardAvoidingView pushing the sheet up.
-  amountScroll: {},
+  // Amount scroll — flexShrink: 1 lets the ScrollView shrink inside the
+  // sheet's capped height so the sticky CTA stays visible. When content
+  // fits, the ScrollView sizes to content. When it doesn't, the
+  // ScrollView scrolls but the CTA remains fixed.
+  amountScroll: {
+    flexShrink: 1,
+  },
   amountScrollContent: {
     gap: 12,
     paddingBottom: 4,
@@ -1071,9 +1041,9 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
 
-  // Verein picker
+  // Verein picker — flexShrink so it shrinks to leave room for the sticky CTA.
   vereinList: {
-    maxHeight: 360,
+    flexShrink: 1,
     marginTop: 4,
   },
   vereinListContent: {
