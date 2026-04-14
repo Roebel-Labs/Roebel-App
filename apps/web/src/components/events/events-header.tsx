@@ -38,9 +38,6 @@ export function EventsHeader() {
             <Link href="/submit" className="text-foreground hover:text-foreground transition-colors font-medium">
               Event einreichen
             </Link>
-            <Link href="/business" className="text-foreground hover:text-foreground transition-colors font-medium">
-              Für Unternehmen
-            </Link>
           </nav>
 
           <div className="flex items-center gap-2 md:gap-4">
@@ -93,13 +90,6 @@ export function EventsHeader() {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Event einreichen
-              </Link>
-              <Link
-                href="/business"
-                className="text-foreground hover:text-foreground transition-colors font-medium py-2"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Für Unternehmen
               </Link>
             </div>
           </nav>
