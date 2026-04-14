@@ -5,10 +5,11 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Plus, Menu, X } from "lucide-react"
 import { useState } from "react"
-import { ConnectButton } from "thirdweb/react"
-import { client } from "@/app/client"
-import { activeChain } from "@/lib/chains"
-import { wallets } from "@/lib/wallet-config"
+// TODO: Re-enable ConnectButton later — temporarily hidden from landing page
+// import { ConnectButton } from "thirdweb/react"
+// import { client } from "@/app/client"
+// import { activeChain } from "@/lib/chains"
+// import { wallets } from "@/lib/wallet-config"
 
 export function EventsHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -43,6 +44,8 @@ export function EventsHeader() {
           </nav>
 
           <div className="flex items-center gap-2 md:gap-4">
+            {/* TODO: Re-enable ConnectButton later — temporarily hidden from landing page */}
+            {/*
             <ConnectButton
               client={client}
               chain={activeChain}
@@ -53,6 +56,7 @@ export function EventsHeader() {
               }}
               theme="light"
             />
+            */}
 
             <Button asChild className="h-9 md:h-10 px-3 md:px-6 text-sm md:text-base">
               <Link href="/submit">
