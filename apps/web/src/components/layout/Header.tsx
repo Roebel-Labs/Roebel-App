@@ -1,11 +1,9 @@
 "use client";
 
-import { useActiveAccount } from "thirdweb/react";
-// TODO: Re-enable ConnectButton later — temporarily hidden from header
-// import { ConnectButton } from "thirdweb/react";
-// import { client } from "@/app/client";
-// import { activeChain } from "@/lib/chains";
-// import { wallets } from "@/lib/wallet-config";
+import { useActiveAccount, ConnectButton } from "thirdweb/react";
+import { client } from "@/app/client";
+import { activeChain } from "@/lib/chains";
+import { wallets } from "@/lib/wallet-config";
 import Link from "next/link";
 import Image from "next/image";
 import { de } from "@/lib/translations/de";
@@ -16,6 +14,9 @@ export function Header() {
   const account = useActiveAccount();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const showConnect =
+    pathname === "/app/submit" || pathname === "/app/submit-ai";
 
   const isActive = (path: string) => {
     return pathname === path || pathname?.startsWith(path + "/");
@@ -77,34 +78,35 @@ export function Header() {
 
           {/* Right Side - Connect Button + Mobile Menu */}
           <div className="flex items-center gap-2">
-            {/* TODO: Re-enable ConnectButton later — temporarily hidden from header */}
-            {/*
-            <div className="hidden sm:block">
-              <ConnectButton
-                client={client}
-                chain={activeChain}
-                wallets={wallets}
-                connectModal={{
-                  title: "Bei Röbel/Müritz DAO anmelden",
-                  size: "compact",
-                }}
-                theme="light"
-              />
-            </div>
+            {showConnect && (
+              <>
+                <div className="hidden sm:block">
+                  <ConnectButton
+                    client={client}
+                    chain={activeChain}
+                    wallets={wallets}
+                    connectModal={{
+                      title: "Bei Röbel/Müritz DAO anmelden",
+                      size: "compact",
+                    }}
+                    theme="light"
+                  />
+                </div>
 
-            <div className="block sm:hidden">
-              <ConnectButton
-                client={client}
-                chain={activeChain}
-                wallets={wallets}
-                connectModal={{
-                  title: "Anmelden",
-                  size: "compact",
-                }}
-                theme="light"
-              />
-            </div>
-            */}
+                <div className="block sm:hidden">
+                  <ConnectButton
+                    client={client}
+                    chain={activeChain}
+                    wallets={wallets}
+                    connectModal={{
+                      title: "Anmelden",
+                      size: "compact",
+                    }}
+                    theme="light"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Mobile Menu Button */}
             <button

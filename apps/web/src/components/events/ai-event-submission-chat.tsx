@@ -8,6 +8,8 @@ import { Avatar } from "@/components/ui/avatar"
 import { Loader2, Send, Upload, CheckCircle, MapPin, Calendar, User } from "lucide-react"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import { useAccount } from "@/lib/context/AccountContext"
+import { ACCOUNT_TYPE_LABELS, SUB_TYPE_LABELS } from "@/types/account"
 
 type Message = {
   id: string
@@ -18,6 +20,7 @@ type Message = {
 }
 
 export function AIEventSubmissionChat() {
+  const { activeAccount } = useAccount()
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
@@ -27,6 +30,14 @@ export function AIEventSubmissionChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastGeocodedLocation = useRef<string>("")
+
+  const accountTypeLabel = activeAccount
+    ? activeAccount.account_type === "personal"
+      ? ACCOUNT_TYPE_LABELS.personal
+      : activeAccount.sub_type
+        ? SUB_TYPE_LABELS[activeAccount.sub_type]
+        : ACCOUNT_TYPE_LABELS.organisation
+    : null
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -138,6 +149,13 @@ Wie möchtest du beginnen?`,
   const sendMessage = async (content: string, skipUserMessage = false) => {
     if (!content.trim()) return
 
+    if (!activeAccount) {
+      toast.error("Kein Konto aktiv", {
+        description: "Bitte warte, bis dein Konto geladen wurde, oder verbinde dein Wallet.",
+      })
+      return
+    }
+
     // Hide initial buttons once user starts interacting
     setShowInitialButtons(false)
 
@@ -173,6 +191,7 @@ Wie möchtest du beginnen?`,
         },
         body: JSON.stringify({
           messages: messagesToSend,
+          accountId: activeAccount.id,
         }),
       })
 
@@ -285,6 +304,21 @@ Wie möchtest du beginnen?`,
   return (
     <Card className="max-w-4xl mx-auto rounded-xl bg-card border border-border shadow-none overflow-hidden">
       <div className="flex flex-col h-[700px]">
+        {/* Active account banner */}
+        <div className="border-b border-border bg-muted/50 px-4 py-2.5 text-sm">
+          {activeAccount ? (
+            <span className="text-muted-foreground">
+              Dein Event wird erstellt als:{" "}
+              <span className="font-semibold text-foreground">
+                {activeAccount.name}
+              </span>{" "}
+              ({accountTypeLabel})
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Kein Konto aktiv</span>
+          )}
+        </div>
+
         {/* Chat messages area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
           {messages.map((message) => (
@@ -427,7 +461,7 @@ Wie möchtest du beginnen?`,
               size="icon"
               className="flex-shrink-0"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
+              disabled={isLoading || !activeAccount}
             >
               <Upload className="h-4 w-4" />
             </Button>
@@ -446,9 +480,13 @@ Wie möchtest du beginnen?`,
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Schreibe deine Nachricht..."
+              placeholder={
+                activeAccount
+                  ? "Schreibe deine Nachricht..."
+                  : "Konto wird geladen..."
+              }
               className="flex-1"
-              disabled={isLoading}
+              disabled={isLoading || !activeAccount}
             />
 
             {/* Send button */}
@@ -456,7 +494,7 @@ Wie möchtest du beginnen?`,
               type="submit"
               size="icon"
               className="flex-shrink-0"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || !activeAccount}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

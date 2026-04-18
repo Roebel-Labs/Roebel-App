@@ -15,6 +15,7 @@ import { CATEGORIES } from "@/lib/constants"
 import { MultiDatePicker } from "@/components/ui/multi-date-picker"
 import { formatDateToString } from "@/lib/utils/recurring-events"
 import { useAccount } from "@/lib/context/AccountContext"
+import { ACCOUNT_TYPE_LABELS, SUB_TYPE_LABELS } from "@/types/account"
 import { useUserProfile } from "@/hooks/useUserProfile"
 
 export function EventSubmissionForm() {
@@ -31,6 +32,14 @@ export function EventSubmissionForm() {
 
   // Gate: only verified citizens can submit events
   const canSubmit = user?.tier === "citizen" || user?.is_verified_citizen
+
+  const accountTypeLabel = activeAccount
+    ? activeAccount.account_type === "personal"
+      ? ACCOUNT_TYPE_LABELS.personal
+      : activeAccount.sub_type
+        ? SUB_TYPE_LABELS[activeAccount.sub_type]
+        : ACCOUNT_TYPE_LABELS.organisation
+    : null
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -75,6 +84,15 @@ export function EventSubmissionForm() {
   }
 
   async function handleSubmit(formData: FormData) {
+    if (!activeAccount?.id) {
+      toast({
+        title: "Kein Konto aktiv",
+        description: "Bitte warte, bis dein Konto geladen wurde, oder verbinde dein Wallet.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -85,9 +103,7 @@ export function EventSubmissionForm() {
       // Location is now a simple text field - geocoding happens server-side
 
       // Add account_id from active account
-      if (activeAccount?.id) {
-        formData.append("account_id", activeAccount.id)
-      }
+      formData.append("account_id", activeAccount.id)
 
       // Add recurring event data
       formData.append("is_recurring", isRecurring.toString())
@@ -177,6 +193,19 @@ export function EventSubmissionForm() {
       </CardHeader>
 
       <CardContent className="px-4 md:px-8 lg:px-12 ">
+        <div className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 mb-6 text-sm">
+          {activeAccount ? (
+            <span className="text-muted-foreground">
+              Dein Event wird erstellt als:{" "}
+              <span className="font-semibold text-foreground">
+                {activeAccount.name}
+              </span>{" "}
+              ({accountTypeLabel})
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Konto wird geladen…</span>
+          )}
+        </div>
         <form id="event-form" action={handleSubmit} className="space-y-6 md:space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <div className="lg:col-span-2">
@@ -451,9 +480,17 @@ export function EventSubmissionForm() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-6 md:pt-8">
-            <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 text-base rounded-lg">
+            <Button
+              type="submit"
+              disabled={isSubmitting || !activeAccount}
+              className="flex-1 h-12 text-base rounded-lg"
+            >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting ? "Wird eingereicht..." : "Event einreichen"}
+              {isSubmitting
+                ? "Wird eingereicht..."
+                : !activeAccount
+                  ? "Konto wird geladen…"
+                  : "Event einreichen"}
             </Button>
             <Button type="button" variant="outline" className="flex-1 h-12 text-base bg-transparent rounded-lg">
               Abbrechen

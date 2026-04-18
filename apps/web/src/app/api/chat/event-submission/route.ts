@@ -11,7 +11,22 @@ export const maxDuration = 60
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json()
+    const { messages, accountId } = await req.json()
+
+    if (!accountId || typeof accountId !== "string") {
+      return new Response("Missing or invalid accountId", { status: 400 })
+    }
+
+    const supabaseAuth = await createClient()
+    const { data: acct, error: acctError } = await supabaseAuth
+      .from("accounts")
+      .select("id")
+      .eq("id", accountId)
+      .maybeSingle()
+
+    if (acctError || !acct) {
+      return new Response("Invalid account", { status: 400 })
+    }
 
     const result = streamText({
       model: openai("gpt-4o"),
@@ -216,6 +231,8 @@ Heutiges Datum: ${new Date().toISOString().split("T")[0]}`,
               }
 
               // Prepare data for submission
+              // account_id is injected server-side from the validated accountId
+              // (captured via closure) — never trust the LLM to pass it.
               const submissionData = {
                 ...eventData,
                 latitude: coordinates.latitude,
@@ -225,6 +242,7 @@ Heutiges Datum: ${new Date().toISOString().split("T")[0]}`,
                 address_components: coordinates.address_components,
                 image_url: imageUrl,
                 status: "pending" as const,
+                account_id: accountId,
               }
 
               // Insert into database
