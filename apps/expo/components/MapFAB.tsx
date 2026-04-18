@@ -7,9 +7,19 @@ import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 
 type Props = {
   visible?: boolean;
+  label?: string;
+  href?: string;
+  icon?: React.ReactNode;
+  accessibilityLabel?: string;
 };
 
-export default function MapFAB({ visible = true }: Props) {
+export default function MapFAB({
+  visible = true,
+  label = 'Karte',
+  href = '/location',
+  icon,
+  accessibilityLabel,
+}: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -59,15 +69,15 @@ export default function MapFAB({ visible = true }: Props) {
       pointerEvents={visible ? 'auto' : 'none'}
     >
       <Pressable
-        onPress={() => router.push('/location' as any)}
+        onPress={() => router.push(href as any)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={[styles.pill, { backgroundColor: colors.background }]}
         accessibilityRole="button"
-        accessibilityLabel="Karte öffnen"
+        accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
       >
-        <LocationIcon size={16} color={colors.textPrimary} />
-        <Text style={[styles.label, { color: colors.textPrimary }]}>Karte</Text>
+        {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
+        <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );

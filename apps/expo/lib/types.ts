@@ -365,6 +365,9 @@ export type UserRecord = {
   achievements: unknown[];
   active_account_id: string | null;
   privacy_settings: Record<string, string>;
+  preferred_role: 'buerger' | 'tourist' | null;
+  onboarding_completed_at: string | null;
+  terms_accepted_at: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string;

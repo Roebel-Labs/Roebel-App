@@ -14,6 +14,8 @@ import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigati
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
+import ProfilePromoCard from '@/components/ProfilePromoCard';
+import MapFAB from '@/components/MapFAB';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
 import ProfileModeCards from '@/components/profile/ProfileModeCards';
@@ -214,23 +216,26 @@ const handleRefresh = async () => {
             {/* Mode-specific action cards */}
             <ProfileModeCards />
 
+            {/* Promo Cards */}
+            <View style={styles.promoSection}>
+              <ProfilePromoCard variant="entdecken" />
+              <ProfilePromoCard variant="card" />
+            </View>
+
             {/* Menu Items */}
             <View style={styles.menuSection}>
-              <View style={styles.menuGroup}>
-                <ProfileMenuItem
-                  icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Profil bearbeiten"
-                  onPress={() => router.push('/edit-profile' as any)}
-                />
-                {activeAccount?.account_type === 'organisation' && (
-                  <ProfileMenuItem
-                    icon={<UserIcon width={20} height={20} color={colors.textPrimary} />}
-                    label="Verwalten"
-                    onPress={() => router.push('/org/manage' as any)}
-                  />
-                )}
-              </View>
-              <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+              {activeAccount?.account_type === 'organisation' && (
+                <>
+                  <View style={styles.menuGroup}>
+                    <ProfileMenuItem
+                      icon={<UserIcon width={20} height={20} color={colors.textPrimary} />}
+                      label="Verwalten"
+                      onPress={() => router.push('/org/manage' as any)}
+                    />
+                  </View>
+                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
 
               {/* Business Registration - for verified citizens without a business */}
               {showBusinessRegister && (
@@ -277,6 +282,11 @@ const handleRefresh = async () => {
 
               <View style={styles.menuGroup}>
                 <ProfileMenuItem
+                  icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                  label="Mein Profil"
+                  onPress={() => router.push('/edit-profile' as any)}
+                />
+                <ProfileMenuItem
                   icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Einstellungen"
                   onPress={() => router.push('/settings' as any)}
@@ -302,6 +312,14 @@ const handleRefresh = async () => {
         )}
 
       </ScrollView>
+
+      {/* Bürger werden FAB — shown for connected non-citizens */}
+      <MapFAB
+        visible={isConnected && !isCitizen}
+        label="Bürger werden"
+        href="/verification/request-citizen"
+        accessibilityLabel="Bürger werden"
+      />
 
       {/* QR Code Scanner FAB - only for verified users */}
       {hasAnyNFT && (
@@ -453,6 +471,12 @@ const styles = StyleSheet.create({
   },
   menuSection: {
     paddingHorizontal: 16,
+  },
+  promoSection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 12,
   },
   menuGroup: {
     gap: 8,

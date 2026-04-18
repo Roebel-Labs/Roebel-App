@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getUserEmail } from 'thirdweb/wallets/in-app';
 import { client } from '@/constants/thirdweb';
@@ -30,15 +31,18 @@ const UserContext = createContext<UserContextValue | undefined>(undefined);
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
+  const router = useRouter();
   const { hasCitizenNFT } = useVerificationContext();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const onboardingTriggeredFor = useRef<string | null>(null);
 
   // Sync user on login/account change
   useEffect(() => {
     if (!account?.address) {
       setUser(null);
+      onboardingTriggeredFor.current = null;
       return;
     }
 
@@ -56,6 +60,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         const userRecord = await upsertUser(account!.address, email);
         setUser(userRecord);
+
+        // Onboarding + consent re-prompt trigger — fires once per connection transition
+        if (userRecord && onboardingTriggeredFor.current !== userRecord.wallet_address) {
+          onboardingTriggeredFor.current = userRecord.wallet_address;
+          if (!userRecord.onboarding_completed_at) {
+            setTimeout(() => router.push('/welcome' as any), 150);
+          } else if (!userRecord.terms_accepted_at) {
+            setTimeout(() => router.push('/welcome/consent' as any), 150);
+          }
+        }
       } catch (error) {
         console.error('Failed to sync user:', error);
       } finally {
@@ -64,7 +78,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     syncUser();
-  }, [account?.address, wallet]);
+  }, [account?.address, wallet, router]);
 
   // Auto-upgrade tier when citizen NFT is detected
   useEffect(() => {

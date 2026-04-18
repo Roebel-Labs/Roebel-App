@@ -5,21 +5,34 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import LogoutDrawer from '@/components/LogoutDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user, updateProfile } = useUser();
+  const wallet = useActiveWallet();
+  const { disconnect } = useDisconnect();
 
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [profilePicture, setProfilePicture] = useState(user?.profile_picture_url || '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
+
+  const handleLogout = () => {
+    if (wallet) {
+      disconnect(wallet);
+      setShowLogoutDrawer(false);
+      router.replace('/profile' as any);
+    }
+  };
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -87,7 +100,7 @@ export default function EditProfileScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Profil bearbeiten</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Profil</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -165,8 +178,22 @@ export default function EditProfileScreen() {
           )}
         </Pressable>
 
+        {/* Logout Button */}
+        <Pressable
+          style={[styles.logoutButton, { borderColor: colors.border }]}
+          onPress={() => setShowLogoutDrawer(true)}
+        >
+          <Text style={[styles.logoutButtonText, { color: colors.error }]}>Abmelden</Text>
+        </Pressable>
+
         <View style={styles.bottomPadding} />
       </KeyboardAwareScrollView>
+
+      <LogoutDrawer
+        visible={showLogoutDrawer}
+        onClose={() => setShowLogoutDrawer(false)}
+        onLogout={handleLogout}
+      />
     </SafeAreaView>
   );
 }
@@ -277,6 +304,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#ffffff',
+  },
+  logoutButton: {
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+  },
+  logoutButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
   },
   bottomPadding: {
     height: 40,

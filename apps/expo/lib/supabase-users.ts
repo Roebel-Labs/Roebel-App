@@ -128,3 +128,41 @@ export async function updateUserTier(
 
 // Backward compatibility alias
 export const updateUserRole = updateUserTier;
+
+/**
+ * Persist Mecky onboarding results.
+ * Always stamps onboarding_completed_at so the full wizard never re-opens.
+ * Only stamps terms_accepted_at when the user taps "Akzeptieren" on the consent screen;
+ * leaving it null triggers the consent-only re-prompt on every subsequent cold start.
+ */
+export async function updateUserOnboarding(
+  walletAddress: string,
+  updates: {
+    username?: string | null;
+    preferredRole?: 'buerger' | 'tourist' | null;
+    termsAccepted?: boolean;
+    markCompleted?: boolean;
+  }
+): Promise<UserRecord | null> {
+  const patch: Record<string, unknown> = {};
+  if (updates.username !== undefined) patch.username = updates.username;
+  if (updates.preferredRole !== undefined) patch.preferred_role = updates.preferredRole;
+  if (updates.markCompleted) patch.onboarding_completed_at = new Date().toISOString();
+  if (updates.termsAccepted) patch.terms_accepted_at = new Date().toISOString();
+
+  if (Object.keys(patch).length === 0) return null;
+
+  const { data, error } = await supabase
+    .from('users')
+    .update(patch)
+    .eq('wallet_address', walletAddress.toLowerCase())
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating onboarding:', error);
+    throw error;
+  }
+
+  return data as UserRecord;
+}

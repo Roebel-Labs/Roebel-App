@@ -142,6 +142,10 @@ function ThemedLayout() {
           <TransitionStack.Screen name="games/mecky-portal" options={noTransition()} />
           <TransitionStack.Screen name="games/speedrun" options={noTransition()} />
           <TransitionStack.Screen name="games/fortune-cards" options={noTransition()} />
+          <TransitionStack.Screen
+            name="welcome"
+            options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}
+          />
         </TransitionStack>
       </View>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
