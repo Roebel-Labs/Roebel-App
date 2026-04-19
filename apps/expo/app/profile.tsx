@@ -130,7 +130,6 @@ const handleRefresh = async () => {
         {!isConnected ? (
           // ============= NOT LOGGED IN STATE =============
           <View style={styles.notConnectedContainer}>
-            <RewardsCTABanner variant="guest" />
             {/* Show "Noch keinen Account" section */}
             <View style={[styles.emptyStateContainer, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Noch keinen Account</Text>
@@ -147,6 +146,9 @@ const handleRefresh = async () => {
                 </Text>
               </Pressable>
             </View>
+
+            {/* Belohnungen teaser for guests — placed below the empty-state card */}
+            <RewardsCTABanner variant="guest" />
 
             {/* Menu Items */}
             <View style={styles.menuSection}>
@@ -202,7 +204,6 @@ const handleRefresh = async () => {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            <RewardsCTABanner />
             {/* Flippable Identity Card */}
             <FlippableIdentityCard
               user={user}
@@ -215,6 +216,9 @@ const handleRefresh = async () => {
               businessName={userBusiness?.name}
               verificationRequestId={citizenRequest?.request_id}
             />
+
+            {/* Belohnungen entry — placed below the identity card */}
+            <RewardsCTABanner />
 
             {/* Mode-specific action cards */}
             <ProfileModeCards />
@@ -287,7 +291,16 @@ const handleRefresh = async () => {
                 <ProfileMenuItem
                   icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Mein Profil"
-                  onPress={() => router.push('/edit-profile' as any)}
+                  onPress={() => {
+                    // Prefer the public profile (X.com/Facebook-style) when the
+                    // user has a username set. Without one, routing to /user/[username]
+                    // would 404 — send them to the editor to create one first.
+                    if (user?.username) {
+                      router.push({ pathname: '/user/[username]', params: { username: user.username } });
+                    } else {
+                      router.push('/edit-profile' as any);
+                    }
+                  }}
                 />
                 <ProfileMenuItem
                   icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}

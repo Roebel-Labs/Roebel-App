@@ -22,7 +22,7 @@ export default function CoinBalanceHero({
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? '#1f3922' : '#E9F6EA',
+          backgroundColor: colors.primaryLight,
         },
       ]}
     >

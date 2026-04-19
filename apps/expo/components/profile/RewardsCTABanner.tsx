@@ -8,7 +8,6 @@ interface RewardsCTABannerProps {
   variant?: 'default' | 'guest';
 }
 
-const CHEST = require('../../assets/illustration/gamification/lootbox.png');
 const COIN_STACK = require('../../assets/illustration/gamification/stack.png');
 
 export default function RewardsCTABanner({ variant = 'default' }: RewardsCTABannerProps) {
@@ -27,31 +26,29 @@ export default function RewardsCTABanner({ variant = 'default' }: RewardsCTABann
       style={({ pressed }) => [
         styles.banner,
         {
-          backgroundColor: isDark ? '#22324c' : '#EEF4FB',
-          borderColor: colors.primary,
+          backgroundColor: isDark ? colors.surface : '#FFFFFF',
           opacity: pressed ? 0.9 : 1,
         },
         Platform.select({
           ios: {
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: isDark ? 0.2 : 0.1,
-            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDark ? 0.2 : 0.12,
+            shadowRadius: 12,
           },
-          android: { elevation: 3 },
+          android: { elevation: 4 },
         }),
       ]}
       accessibilityRole="button"
       accessibilityLabel="Belohnungen öffnen"
     >
-      <Image source={COIN_STACK} style={styles.iconLeft} resizeMode="contain" />
+      <Image source={COIN_STACK} style={styles.coinIcon} resizeMode="contain" />
       <View style={styles.textBlock}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Belohnungen</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={2}>
           {subtitle}
         </Text>
       </View>
-      <Image source={CHEST} style={styles.iconRight} resizeMode="contain" />
     </Pressable>
   );
 }
@@ -61,17 +58,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
   },
-  iconLeft: {
-    width: 48,
-    height: 48,
+  coinIcon: {
+    width: 40,
+    height: 40,
   },
   textBlock: {
     flex: 1,
@@ -85,9 +81,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 12,
     marginTop: 2,
-  },
-  iconRight: {
-    width: 58,
-    height: 58,
   },
 });
