@@ -16,6 +16,8 @@ import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
+import { RewardsProvider } from '@/context/RewardsContext';
+import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
@@ -113,6 +115,14 @@ function AnalyticsTracker() {
 }
 
 /**
+ * Observes user/permission state and auto-completes onboarding rewards tasks.
+ */
+function RewardsTaskTriggers() {
+  useDeferredTaskTriggers();
+  return null;
+}
+
+/**
  * Inner layout that can access ThemeContext
  */
 function AutoConnectHandler() {
@@ -132,6 +142,7 @@ function ThemedLayout() {
       <NotificationHandler />
       <AnalyticsTracker />
       <AutoConnectHandler />
+      <RewardsTaskTriggers />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
           <TransitionStack.Screen
@@ -146,6 +157,7 @@ function ThemedLayout() {
             name="welcome"
             options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}
           />
+          <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
         </TransitionStack>
       </View>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
@@ -192,6 +204,7 @@ export default function Layout() {
                   <UserProvider>
                   <AccountProvider>
                   <NotificationsProvider>
+                  <RewardsProvider>
                   <MeckyProvider>
                   <GovernanceTestProvider>
                   <InterestProvider>
@@ -205,6 +218,7 @@ export default function Layout() {
                   </InterestProvider>
                   </GovernanceTestProvider>
                   </MeckyProvider>
+                  </RewardsProvider>
                   </NotificationsProvider>
                   </AccountProvider>
                   </UserProvider>
