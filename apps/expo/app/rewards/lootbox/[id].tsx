@@ -246,6 +246,15 @@ export default function LootboxDetailScreen() {
           )}
         </View>
 
+        <Text style={[styles.footerHint, { color: colors.textTertiary }]}>
+          Mecky gibt dir einen Schlüssel, mit dem du die Truhe einmal öffnen kannst.
+        </Text>
+      </ScrollView>
+
+      <SafeAreaView
+        edges={['bottom']}
+        style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}
+      >
         {hasKey ? (
           <Pressable
             onPress={handleOpen}
@@ -282,11 +291,7 @@ export default function LootboxDetailScreen() {
             </Text>
           </Pressable>
         )}
-
-        <Text style={[styles.footerHint, { color: colors.textTertiary }]}>
-          Mecky gibt dir einen Schlüssel, mit dem du die Truhe einmal öffnen kannst.
-        </Text>
-      </ScrollView>
+      </SafeAreaView>
     </SafeAreaView>
   );
 }
@@ -308,8 +313,14 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 48,
+    paddingBottom: 24,
     gap: 16,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   loadingBlock: {
     flex: 1,

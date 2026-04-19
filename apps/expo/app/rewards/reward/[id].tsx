@@ -173,32 +173,35 @@ export default function RewardScreen() {
             <Text style={styles.coinBundleText}>+{coinValue} Münzen gutgeschrieben</Text>
           </View>
         )}
-
-        <View style={styles.actions}>
-          <Pressable
-            onPress={handleTryNow}
-            disabled={isTrying}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              { backgroundColor: colors.primary, opacity: pressed || isTrying ? 0.85 : 1 },
-            ]}
-          >
-            {isTrying ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryText}>Jetzt austesten</Text>
-            )}
-          </Pressable>
-          <Pressable
-            onPress={handleLater}
-            style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.6 : 1 }]}
-          >
-            <Text style={[styles.linkText, { color: colors.textSecondary }]}>
-              Später ausprobieren
-            </Text>
-          </Pressable>
-        </View>
       </ScrollView>
+
+      <SafeAreaView
+        edges={['bottom']}
+        style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}
+      >
+        <Pressable
+          onPress={handleTryNow}
+          disabled={isTrying}
+          style={({ pressed }) => [
+            styles.primaryBtn,
+            { backgroundColor: colors.primary, opacity: pressed || isTrying ? 0.85 : 1 },
+          ]}
+        >
+          {isTrying ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryText}>Jetzt austesten</Text>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={handleLater}
+          style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.linkText, { color: colors.textSecondary }]}>
+            Später ausprobieren
+          </Text>
+        </Pressable>
+      </SafeAreaView>
     </SafeAreaView>
   );
 }
@@ -219,9 +222,16 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 48,
+    paddingBottom: 24,
     alignItems: 'center',
     gap: 14,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 2,
   },
   rarityRibbon: {
     alignSelf: 'center',
