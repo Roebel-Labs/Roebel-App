@@ -18,6 +18,8 @@ Repo: Turborepo monorepo. Admin lives at `apps/web` (Next.js 15 App Router, Tail
 | `supabase/migrations/20260425_rewards_catalogue_expansion.sql` | 20 more `lootbox_rewards` entries + auto-wires them into every `lootboxes` row with rarity-weighted pool rows. |
 | `supabase/migrations/20260426_rewards_per_lootbox_keys.sql` | **Breaking**: drops `user_lootbox_keys` and recreates with composite PK `(wallet_address, lootbox_id)`. `purchase_lootbox_key` / `open_lootbox` rewritten to scope to a specific chest. |
 | `supabase/migrations/20260427_rewards_relax_rls.sql` | Relaxed SELECT RLS on user-scoped rewards tables to `using (true)` so the anon client can read its own rows (the app uses a wallet-address trust model, not Supabase Auth). |
+| `supabase/migrations/20260428_rewards_unique_cosmetic_drops.sql` | `open_lootbox` excludes cosmetic rewards the user already owns. Coin bundles stay repeatable. |
+| `supabase/migrations/20260429_themed_lootboxes.sql` | Adds `lootboxes.guaranteed_reward_type` (nullable). When set, `open_lootbox` only draws rewards of that type (e.g. Rahmen-Truhe → profile_frame). Re-seeds the 9 chests: 6 themed (one per reward type) + 3 mystery. |
 
 ### Admin UI already in place (minimal)
 
@@ -108,16 +110,33 @@ PRIMARY KEY (wallet_address, checkin_date)
 Chest catalogue. Each row is a purchasable chest variant.
 
 ```
-id              uuid      PK
-name            text      NOT NULL (e.g. 'Truhe', 'Große Truhe')
-description     text
-image_url       text      chest art; can be blob-URL from Storage or placehold.co placeholder
-coins_per_key   integer   NOT NULL, > 0 (cost of buying a key for this chest)
-display_order   integer   default 0
-is_published    boolean   default false
-created_at      timestamptz default now()
-updated_at      timestamptz default now() (trigger)
+id                      uuid      PK
+name                    text      NOT NULL (e.g. 'Rahmen-Truhe', 'Mystery-Truhe')
+description             text
+image_url               text      chest art; can be blob-URL from Storage or placehold.co placeholder
+coins_per_key           integer   NOT NULL, > 0 (cost of buying a key for this chest)
+guaranteed_reward_type  text      nullable. When set (one of the six lootbox_rewards.type values), open_lootbox only draws rewards of that type — "themed" chest. NULL = mystery chest (full weighted pool).
+display_order           integer   default 0
+is_published            boolean   default false
+created_at              timestamptz default now()
+updated_at              timestamptz default now() (trigger)
 ```
+
+**Current seeded chests** (renumbered by migration 29):
+
+| # | name | guaranteed_reward_type |
+| --- | --- | --- |
+| 0 | Rahmen-Truhe | `profile_frame` |
+| 1 | Sticker-Truhe | `sticker` |
+| 2 | Mecky-Truhe | `animated_sticker` |
+| 3 | Banner-Truhe | `profile_banner` |
+| 4 | Abzeichen-Truhe | `badge` |
+| 5 | Münz-Truhe | `coin_bundle` |
+| 6 | Mystery-Truhe I | NULL |
+| 7 | Mystery-Truhe II | NULL |
+| 8 | Mystery-Truhe III | NULL |
+
+Admin form should expose `guaranteed_reward_type` as a `<Select>` with options {Keine (Mystery), Profilrahmen, Sticker, Animierter Sticker, Banner, Abzeichen, Münzen}.
 
 **RLS:** `for select using (is_published = true)`. Writes via server actions.
 

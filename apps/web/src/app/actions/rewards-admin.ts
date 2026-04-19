@@ -28,6 +28,12 @@ export interface Lootbox {
   description: string | null
   image_url: string | null
   coins_per_key: number
+  /**
+   * When set, open_lootbox only draws rewards of this type (e.g. the
+   * Rahmen-Truhe guarantees a profile_frame). NULL means mystery chest
+   * drawing from the full weighted pool.
+   */
+  guaranteed_reward_type: LootboxRewardType | null
   display_order: number
   is_published: boolean
   created_at: string

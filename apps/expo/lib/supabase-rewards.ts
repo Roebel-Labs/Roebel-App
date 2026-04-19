@@ -43,6 +43,11 @@ export interface Lootbox {
   description: string | null;
   image_url: string | null;
   coins_per_key: number;
+  /**
+   * When set, open_lootbox only draws rewards of this type (e.g. the
+   * Rahmen-Truhe guarantees a profile_frame). NULL means mystery chest.
+   */
+  guaranteed_reward_type: LootboxRewardType | null;
   display_order: number;
   is_published: boolean;
   created_at: string;
@@ -305,6 +310,26 @@ export async function fetchUserRewards(
   return (data || []) as UserLootboxReward[];
 }
 
+/**
+ * Fetch the equipped cosmetics for a wallet (any user, not just the viewer).
+ * Used on the public profile page to render someone else's banner + frame.
+ */
+export async function fetchEquippedRewards(
+  walletAddress: string
+): Promise<UserLootboxReward[]> {
+  const { data, error } = await supabase
+    .from('user_lootbox_rewards')
+    .select('*, reward:lootbox_rewards(*)')
+    .eq('wallet_address', walletAddress)
+    .eq('is_equipped', true);
+
+  if (error) {
+    console.error('Error fetching equipped rewards:', error);
+    return [];
+  }
+  return (data ?? []) as UserLootboxReward[];
+}
+
 export async function equipUserReward(
   userRewardId: string,
   isEquipped: boolean
@@ -319,6 +344,79 @@ export async function equipUserReward(
     return false;
   }
   return true;
+}
+
+/**
+ * Set the equipped cosmetic of a given type for a wallet. Unequips any other
+ * items of the same type first so there's always exactly one active per slot.
+ * Pass userRewardId = null to fully unequip the slot.
+ */
+export async function equipRewardByType(
+  walletAddress: string,
+  type: LootboxRewardType,
+  userRewardId: string | null
+): Promise<boolean> {
+  const { data: owned, error: ownedError } = await supabase
+    .from('user_lootbox_rewards')
+    .select('id, reward:lootbox_rewards(type)')
+    .eq('wallet_address', walletAddress)
+    .eq('is_equipped', true);
+
+  if (ownedError) {
+    console.error('equipRewardByType fetch error:', ownedError);
+    return false;
+  }
+
+  const toUnequip = (owned ?? [])
+    .filter((r: any) => r.reward?.type === type)
+    .map((r: any) => r.id);
+
+  if (toUnequip.length > 0) {
+    const { error: unequipError } = await supabase
+      .from('user_lootbox_rewards')
+      .update({ is_equipped: false })
+      .in('id', toUnequip);
+
+    if (unequipError) {
+      console.error('equipRewardByType unequip error:', unequipError);
+      return false;
+    }
+  }
+
+  if (userRewardId) {
+    const { error: equipError } = await supabase
+      .from('user_lootbox_rewards')
+      .update({ is_equipped: true })
+      .eq('id', userRewardId);
+
+    if (equipError) {
+      console.error('equipRewardByType equip error:', equipError);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Fetch every reward in the catalogue of a given type. Used on the edit
+ * profile screen to show locked cosmetics alongside the user's unlocked ones.
+ */
+export async function fetchRewardsCatalogueByType(
+  type: LootboxRewardType
+): Promise<LootboxReward[]> {
+  const { data, error } = await supabase
+    .from('lootbox_rewards')
+    .select('*')
+    .eq('type', type)
+    .order('rarity', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching rewards catalogue:', error);
+    return [];
+  }
+  return (data ?? []) as LootboxReward[];
 }
 
 // ── Referrals ────────────────────────────────────────────────
