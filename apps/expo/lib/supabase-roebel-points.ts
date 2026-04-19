@@ -60,7 +60,17 @@ export type PointsAction =
   | 'lootbox_open_bonus'
   | 'referral_received';
 
-const POINTS_TABLE: Record<Exclude<PointsAction, 'redeem'>, number> = {
+type LegacyPointsAction = Exclude<
+  PointsAction,
+  | 'redeem'
+  | 'daily_checkin_bonus'
+  | 'task_complete'
+  | 'lootbox_key_purchase'
+  | 'lootbox_open_bonus'
+  | 'referral_received'
+>;
+
+const POINTS_TABLE: Record<LegacyPointsAction, number> = {
   vote: 50,
   event_attend: 30,
   post: 10,
@@ -133,7 +143,7 @@ export async function fetchPointsHistory(
 
 export async function awardPoints(
   walletAddress: string,
-  action: Exclude<PointsAction, 'redeem'>,
+  action: LegacyPointsAction,
   referenceType?: string,
   referenceId?: string,
   description?: string

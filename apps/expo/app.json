@@ -16,6 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.maxbrych.roebelonchain",
       "buildNumber": "23",
+      "associatedDomains": [
+        "applinks:www.roebel.app"
+      ],
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby events and services.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby events and services.",
@@ -37,7 +40,21 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.maxbrych.roebelonchain",
-      "versionCode": 30
+      "versionCode": 30,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.roebel.app",
+              "pathPrefix": "/r/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

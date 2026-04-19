@@ -16,6 +16,7 @@ import HelpFeaturedLayout from '@/components/help/HelpFeaturedLayout';
 import HelpCollectionCard from '@/components/help/HelpCollectionCard';
 import HelpListRow from '@/components/help/HelpListRow';
 import HelpVideoCard from '@/components/help/HelpVideoCard';
+import { markHelpHubOpened } from '@/hooks/useDeferredTaskTriggers';
 
 export default function HelpHomeScreen() {
   const router = useRouter();
@@ -33,6 +34,9 @@ export default function HelpHomeScreen() {
         setVideos(vids);
       })
       .finally(() => setLoading(false));
+    // Flag the read_help_hub reward task so the useDeferredTaskTriggers hook
+    // can complete it on the next wallet-synced render.
+    void markHelpHubOpened();
   }, []);
 
   const featured = useMemo(
