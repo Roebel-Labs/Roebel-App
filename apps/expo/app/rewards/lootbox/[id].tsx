@@ -40,7 +40,7 @@ export default function LootboxDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, isDark } = useTheme();
   const { showSnackbar } = useSnackbar();
-  const { lootboxes, coins, keyCount, openChest } = useRewards();
+  const { lootboxes, coins, keyCountFor, openChest } = useRewards();
 
   const [directLootbox, setDirectLootbox] = useState<Lootbox | null>(null);
   const [isOpening, setIsOpening] = useState(false);
@@ -61,6 +61,7 @@ export default function LootboxDetailScreen() {
     }
   }, [id, contextLootbox]);
 
+  const keyCount = lootbox ? keyCountFor(lootbox.id) : 0;
   const hasKey = keyCount > 0;
 
   const handleOpen = () => {

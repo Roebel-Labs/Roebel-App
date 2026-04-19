@@ -46,6 +46,7 @@ import { consumePendingReferralCode } from '@/lib/referral-deeplink';
 interface RewardsContextValue {
   // State
   coins: number;
+  /** Sum of keys across every lootbox — kept for summary UI only. */
   keyCount: number;
   streak: number;
   tasks: RewardTask[];
@@ -56,7 +57,9 @@ interface RewardsContextValue {
   referralStats: ReferralStats;
   recentCheckins: DailyCheckin[];
   pointsCard: RoebelPointsCardRecord | null;
-  userKeys: UserLootboxKeyRecord | null;
+  /** All rows in user_lootbox_keys for this user (one per lootbox with key_count > 0). */
+  userKeys: UserLootboxKeyRecord[];
+  keysByLootbox: Record<string, number>;
   isLoading: boolean;
   hasCheckedInToday: boolean;
   eligibleTaskKeys: Set<string>;
@@ -65,6 +68,7 @@ interface RewardsContextValue {
   hasCompleted: (taskKey: string) => boolean;
   lastCompletionOf: (taskKey: string) => RewardTaskCompletion | undefined;
   isTaskEligible: (taskKey: string) => boolean;
+  keyCountFor: (lootboxId: string) => number;
 
   // Mutations
   claimDaily: () => Promise<CheckinClaimResult>;
@@ -100,7 +104,7 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
   const [helpHubOpened, setHelpHubOpened] = useState(false);
 
   const [pointsCard, setPointsCard] = useState<RoebelPointsCardRecord | null>(null);
-  const [userKeys, setUserKeys] = useState<UserLootboxKeyRecord | null>(null);
+  const [userKeys, setUserKeys] = useState<UserLootboxKeyRecord[]>([]);
   const [tasks, setTasks] = useState<RewardTask[]>([]);
   const [completions, setCompletions] = useState<RewardTaskCompletion[]>([]);
   const [lootboxes, setLootboxes] = useState<Lootbox[]>([]);
@@ -127,7 +131,7 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
 
     if (!wallet) {
       setPointsCard(null);
-      setUserKeys(null);
+      setUserKeys([]);
       setCompletions([]);
       setUserRewards([]);
       setRecentCheckins([]);
@@ -271,22 +275,30 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       if (!wallet) return { success: false, error: 'not_connected' };
       const result = await purchaseLootboxKey(wallet, lootboxId);
       if (result.success) {
-        // Optimistic local update so UI is snappy before refresh resolves.
         if (typeof result.new_balance === 'number') {
           setPointsCard((p) => (p ? { ...p, points_balance: result.new_balance! } : p));
         }
         if (typeof result.new_key_count === 'number') {
-          setUserKeys((k) =>
-            k
-              ? { ...k, key_count: result.new_key_count! }
-              : {
-                  wallet_address: wallet,
-                  key_count: result.new_key_count!,
-                  total_purchased: 1,
-                  total_used: 0,
-                  updated_at: new Date().toISOString(),
-                }
-          );
+          const newCount = result.new_key_count;
+          setUserKeys((prev) => {
+            const existing = prev.find((k) => k.lootbox_id === lootboxId);
+            if (existing) {
+              return prev.map((k) =>
+                k.lootbox_id === lootboxId ? { ...k, key_count: newCount } : k
+              );
+            }
+            return [
+              ...prev,
+              {
+                wallet_address: wallet,
+                lootbox_id: lootboxId,
+                key_count: newCount,
+                total_purchased: 1,
+                total_used: 0,
+                updated_at: new Date().toISOString(),
+              },
+            ];
+          });
         }
         void refresh();
       }
@@ -300,12 +312,19 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       if (!wallet) return { success: false, error: 'not_connected' };
       const result = await openLootbox(wallet, lootboxId);
       if (result.success) {
-        // Optimistic local decrement of key count; refresh handles balance +
-        // inventory actual state.
-        setUserKeys((k) =>
-          k && k.key_count > 0
-            ? { ...k, key_count: k.key_count - 1, total_used: k.total_used + 1 }
-            : k
+        // Optimistic per-lootbox decrement; refresh reconciles DB state.
+        setUserKeys((prev) =>
+          prev
+            .map((k) =>
+              k.lootbox_id === lootboxId && k.key_count > 0
+                ? {
+                    ...k,
+                    key_count: k.key_count - 1,
+                    total_used: k.total_used + 1,
+                  }
+                : k
+            )
+            .filter((k) => k.key_count > 0)
         );
         void refresh();
       }
@@ -329,7 +348,19 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const coins = pointsCard?.points_balance ?? 0;
-  const keyCount = userKeys?.key_count ?? 0;
+  const keysByLootbox = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const k of userKeys) m[k.lootbox_id] = k.key_count;
+    return m;
+  }, [userKeys]);
+  const keyCount = useMemo(
+    () => userKeys.reduce((sum, k) => sum + k.key_count, 0),
+    [userKeys]
+  );
+  const keyCountFor = useCallback(
+    (lootboxId: string) => keysByLootbox[lootboxId] ?? 0,
+    [keysByLootbox]
+  );
   const streak = pointsCard?.streak_days ?? 0;
   const hasCheckedInToday = useMemo(() => {
     if (!recentCheckins.length) return false;
@@ -370,12 +401,14 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       recentCheckins,
       pointsCard,
       userKeys,
+      keysByLootbox,
       isLoading,
       hasCheckedInToday,
       eligibleTaskKeys,
       hasCompleted,
       lastCompletionOf,
       isTaskEligible,
+      keyCountFor,
       claimDaily,
       completeTask,
       buyKey,
@@ -396,12 +429,14 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       recentCheckins,
       pointsCard,
       userKeys,
+      keysByLootbox,
       isLoading,
       hasCheckedInToday,
       eligibleTaskKeys,
       hasCompleted,
       lastCompletionOf,
       isTaskEligible,
+      keyCountFor,
       claimDaily,
       completeTask,
       buyKey,

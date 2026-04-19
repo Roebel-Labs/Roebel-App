@@ -72,6 +72,7 @@ export interface LootboxReward {
 
 export interface UserLootboxKeyRecord {
   wallet_address: string;
+  lootbox_id: string;
   key_count: number;
   total_purchased: number;
   total_used: number;
@@ -242,27 +243,18 @@ export async function fetchLootboxes(): Promise<Lootbox[]> {
 
 export async function fetchUserKeys(
   walletAddress: string
-): Promise<UserLootboxKeyRecord> {
+): Promise<UserLootboxKeyRecord[]> {
   const { data, error } = await supabase
     .from('user_lootbox_keys')
     .select('*')
     .eq('wallet_address', walletAddress)
-    .single();
+    .gt('key_count', 0);
 
-  if (error && error.code !== 'PGRST116') {
+  if (error) {
     console.error('Error fetching user keys:', error);
+    return [];
   }
-
-  if (!data) {
-    return {
-      wallet_address: walletAddress,
-      key_count: 0,
-      total_purchased: 0,
-      total_used: 0,
-      updated_at: new Date().toISOString(),
-    };
-  }
-  return data;
+  return data || [];
 }
 
 export async function purchaseLootboxKey(

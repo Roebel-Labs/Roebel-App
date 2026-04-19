@@ -32,8 +32,15 @@ export default function SchatzkammerScreen() {
   const { colors, isDark } = useTheme();
   const { isConnected } = useUser();
   const { showSnackbar } = useSnackbar();
-  const { coins, keyCount, lootboxes, userRewards, buyKey, refresh, isLoading } =
-    useRewards();
+  const {
+    coins,
+    lootboxes,
+    userRewards,
+    keyCountFor,
+    buyKey,
+    refresh,
+    isLoading,
+  } = useRewards();
 
   const { buy } = useLocalSearchParams<{ buy?: string }>();
   const [buySheetLootbox, setBuySheetLootbox] = useState<Lootbox | null>(null);
@@ -66,17 +73,16 @@ export default function SchatzkammerScreen() {
         showSnackbar({ message: 'Bitte zuerst anmelden' });
         return;
       }
-      // Already have a key → skip the buy sheet and go straight to the
-      // detail page where the user can open the chest.
-      if (keyCount > 0) {
+      // Per-chest key: already bought for THIS specific Truhe → go to
+      // the detail page to open. Otherwise, if affordable, open the buy
+      // sheet for this chest.
+      if (keyCountFor(lootbox.id) > 0) {
         router.push({
           pathname: '/rewards/lootbox/[id]',
           params: { id: lootbox.id },
         } as any);
         return;
       }
-      // No key. If affordable, open the buy sheet; otherwise inform the
-      // user how many coins are missing.
       if (coins >= lootbox.coins_per_key) {
         setBuySheetLootbox(lootbox);
       } else {
@@ -85,7 +91,7 @@ export default function SchatzkammerScreen() {
         });
       }
     },
-    [coins, isConnected, keyCount, router, showSnackbar]
+    [coins, isConnected, keyCountFor, router, showSnackbar]
   );
 
   const handleBuyKey = useCallback(async () => {
@@ -202,7 +208,7 @@ export default function SchatzkammerScreen() {
                     <LootboxCard
                       key={lootbox.id}
                       lootbox={lootbox}
-                      hasKey={keyCount > 0}
+                      hasKey={keyCountFor(lootbox.id) > 0}
                       canAfford={coins >= lootbox.coins_per_key}
                       onPress={() => handleChestPress(lootbox)}
                     />
