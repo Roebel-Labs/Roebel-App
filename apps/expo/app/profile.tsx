@@ -19,6 +19,7 @@ import MapFAB from '@/components/MapFAB';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
 import ProfileModeCards from '@/components/profile/ProfileModeCards';
+import RewardsCTABanner from '@/components/profile/RewardsCTABanner';
 
 // Import SVG icons
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -129,6 +130,7 @@ const handleRefresh = async () => {
         {!isConnected ? (
           // ============= NOT LOGGED IN STATE =============
           <View style={styles.notConnectedContainer}>
+            <RewardsCTABanner variant="guest" />
             {/* Show "Noch keinen Account" section */}
             <View style={[styles.emptyStateContainer, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Noch keinen Account</Text>
@@ -200,6 +202,7 @@ const handleRefresh = async () => {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
+            <RewardsCTABanner />
             {/* Flippable Identity Card */}
             <FlippableIdentityCard
               user={user}
