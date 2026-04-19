@@ -223,6 +223,24 @@ export async function listLootboxes(): Promise<Lootbox[]> {
   return data || []
 }
 
+function parseGuaranteedType(
+  formData: FormData
+): LootboxRewardType | null {
+  const raw = (formData.get("guaranteed_reward_type") as string) || ""
+  if (!raw || raw === "none") return null
+  const allowed: LootboxRewardType[] = [
+    "profile_frame",
+    "sticker",
+    "animated_sticker",
+    "profile_banner",
+    "badge",
+    "coin_bundle",
+  ]
+  return allowed.includes(raw as LootboxRewardType)
+    ? (raw as LootboxRewardType)
+    : null
+}
+
 export async function createLootbox(formData: FormData) {
   try {
     const supabase = await createClient()
@@ -235,6 +253,7 @@ export async function createLootbox(formData: FormData) {
         coins_per_key: Number(formData.get("coins_per_key") ?? 200),
         display_order: Number(formData.get("display_order") ?? 0),
         is_published: formData.get("is_published") === "true",
+        guaranteed_reward_type: parseGuaranteedType(formData),
       })
       .select()
       .single()
@@ -256,6 +275,7 @@ export async function updateLootbox(id: string, formData: FormData) {
       coins_per_key: Number(formData.get("coins_per_key") ?? 200),
       display_order: Number(formData.get("display_order") ?? 0),
       is_published: formData.get("is_published") === "true",
+      guaranteed_reward_type: parseGuaranteedType(formData),
     }
     const { error } = await supabase.from("lootboxes").update(patch).eq("id", id)
     if (error) throw error

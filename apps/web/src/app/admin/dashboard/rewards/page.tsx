@@ -499,6 +499,19 @@ function LootboxesTab({
                 <p className="text-xs text-muted-foreground">
                   {lb.coins_per_key} Münzen / Schlüssel
                 </p>
+                <div className="mt-1">
+                  {lb.guaranteed_reward_type ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      Garantiert:{" "}
+                      {REWARD_TYPES.find((rt) => rt.value === lb.guaranteed_reward_type)?.label ||
+                        lb.guaranteed_reward_type}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px]">
+                      Mystery
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="flex gap-1">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => onEditPool(lb)}>
@@ -529,9 +542,13 @@ function LootboxDialog({
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
   const [imageUrl, setImageUrl] = useState(state.lootbox?.image_url || "")
+  const [guaranteedType, setGuaranteedType] = useState<LootboxRewardType | "none">(
+    state.lootbox?.guaranteed_reward_type || "none"
+  )
 
   useEffect(() => {
     setImageUrl(state.lootbox?.image_url || "")
+    setGuaranteedType(state.lootbox?.guaranteed_reward_type || "none")
   }, [state.lootbox])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -539,6 +556,7 @@ function LootboxDialog({
     setSaving(true)
     const form = new FormData(e.currentTarget)
     form.set("is_published", form.get("is_published") === "on" ? "true" : "false")
+    form.set("guaranteed_reward_type", guaranteedType)
     const res = state.lootbox
       ? await updateLootbox(state.lootbox.id, form)
       : await createLootbox(form)
@@ -591,6 +609,27 @@ function LootboxDialog({
               />
             </Field>
           </div>
+          <Field label="Garantierter Belohnungstyp">
+            <Select
+              value={guaranteedType}
+              onValueChange={(v) => setGuaranteedType(v as LootboxRewardType | "none")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Mystery (alle Typen)</SelectItem>
+                {REWARD_TYPES.map((rt) => (
+                  <SelectItem key={rt.value} value={rt.value}>
+                    {rt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Wenn gesetzt, zieht die Truhe ausschließlich Belohnungen dieses Typs aus dem Pool.
+            </p>
+          </Field>
           <Field label="Veröffentlicht">
             <Switch name="is_published" defaultChecked={state.lootbox?.is_published} />
           </Field>
@@ -849,6 +888,8 @@ function PoolDialog({
     [weights]
   )
 
+  const guaranteedType = state.lootbox?.guaranteed_reward_type ?? null
+
   const simulation = useMemo(() => {
     const rolls = 1000
     const perReward: Record<string, number> = {}
@@ -861,6 +902,7 @@ function PoolDialog({
     const entries = rewards
       .map((r) => ({ reward: r, weight: weights[r.id] ?? 0 }))
       .filter((e) => e.weight > 0)
+      .filter((e) => !guaranteedType || e.reward.type === guaranteedType)
     const total = entries.reduce((s, e) => s + e.weight, 0)
     if (total <= 0) return { perReward, perRarity, hasPool: false }
     for (let i = 0; i < rolls; i++) {
@@ -875,7 +917,7 @@ function PoolDialog({
       }
     }
     return { perReward, perRarity, hasPool: true }
-  }, [rewards, weights])
+  }, [rewards, weights, guaranteedType])
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
@@ -886,6 +928,22 @@ function PoolDialog({
         <p className="text-sm text-muted-foreground">
           Setze die Gewichtung pro Belohnung. 0 = nicht im Pool. Gesamt: {totalWeight}
         </p>
+        {guaranteedType && (
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs text-muted-foreground">
+            Themed-Truhe: Vorschau berücksichtigt nur Belohnungen vom Typ{" "}
+            <span className="font-medium text-foreground">
+              {REWARD_TYPES.find((rt) => rt.value === guaranteedType)?.label ||
+                guaranteedType}
+            </span>
+            . Andere Gewichte bleiben gespeichert, werden aber von <code>open_lootbox</code>{" "}
+            herausgefiltert.
+          </div>
+        )}
+        <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+          Hinweis: Kosmetische Belohnungen fallen pro Nutzer nur <strong>einmal</strong>. Die
+          Vorschau simuliert eine frische Wallet — echte Nutzer erleben über Zeit einen kleineren
+          Pool.
+        </div>
         {!loading && simulation.hasPool && (
           <div className="rounded-md border bg-muted/30 p-3 space-y-2">
             <div className="flex items-center justify-between">
