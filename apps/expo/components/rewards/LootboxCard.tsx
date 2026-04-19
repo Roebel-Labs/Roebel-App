@@ -5,14 +5,35 @@ import type { Lootbox } from '@/lib/supabase-rewards';
 
 interface LootboxCardProps {
   lootbox: Lootbox;
-  locked?: boolean;
+  canAfford: boolean;
+  hasKey: boolean;
   onPress: () => void;
 }
 
 const CHEST = require('../../assets/illustration/gamification/lootbox.png');
+const COIN = require('../../assets/illustration/gamification/single.png');
 
-export default function LootboxCard({ lootbox, locked, onPress }: LootboxCardProps) {
+/**
+ * Three visual states:
+ *  - hasKey       → fully colored, keyCount pill shown
+ *  - canAfford    → fully colored, coin cost shown
+ *  - !canAfford   → greyed out with lock overlay
+ *
+ * The local chest asset is always preferred when no remote image_url is
+ * provided by the admin.
+ */
+export default function LootboxCard({
+  lootbox,
+  canAfford,
+  hasKey,
+  onPress,
+}: LootboxCardProps) {
   const { colors, isDark } = useTheme();
+  const isLocked = !hasKey && !canAfford;
+  const imageSource =
+    lootbox.image_url && !lootbox.image_url.includes('placehold.co')
+      ? { uri: lootbox.image_url }
+      : CHEST;
 
   return (
     <Pressable
@@ -21,39 +42,61 @@ export default function LootboxCard({ lootbox, locked, onPress }: LootboxCardPro
         styles.card,
         {
           backgroundColor: isDark ? colors.surface : '#FFFFFF',
-          borderColor: colors.border,
+          borderColor: isLocked ? colors.border : colors.primary,
           opacity: pressed ? 0.85 : 1,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isLocked }}
     >
       <View style={styles.imageWrap}>
-        {lootbox.image_url ? (
-          <Image
-            source={{ uri: lootbox.image_url }}
-            style={[styles.image, locked && { opacity: 0.55 }]}
-            resizeMode="contain"
-          />
-        ) : (
-          <Image
-            source={CHEST}
-            style={[styles.image, locked && { opacity: 0.55 }]}
-            resizeMode="contain"
-          />
-        )}
-        {locked && (
+        <Image
+          source={imageSource}
+          style={[styles.image, isLocked && styles.imageLocked]}
+          resizeMode="contain"
+        />
+        {isLocked && (
           <View style={styles.lockedOverlay}>
-            <Text style={styles.lockedEmoji}>🔒</Text>
+            <View style={styles.lockedBubble}>
+              <Text style={styles.lockedEmoji}>🔒</Text>
+            </View>
+          </View>
+        )}
+        {hasKey && (
+          <View style={[styles.keyBadge, { backgroundColor: colors.primary }]}>
+            <Text style={styles.keyBadgeText}>Bereit</Text>
           </View>
         )}
       </View>
-      <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.name,
+          {
+            color: isLocked ? colors.textTertiary : colors.textPrimary,
+          },
+        ]}
+        numberOfLines={1}
+      >
         {lootbox.name}
       </Text>
       <View style={styles.costRow}>
-        <Text style={styles.costEmoji}>🪙</Text>
-        <Text style={[styles.cost, { color: colors.textSecondary }]}>
-          {lootbox.coins_per_key}
-        </Text>
+        {hasKey ? (
+          <Text style={[styles.cost, { color: colors.primary }]}>Öffnen</Text>
+        ) : (
+          <>
+            <Image source={COIN} style={styles.coinImg} resizeMode="contain" />
+            <Text
+              style={[
+                styles.cost,
+                {
+                  color: isLocked ? colors.textTertiary : colors.textPrimary,
+                },
+              ]}
+            >
+              {lootbox.coins_per_key}
+            </Text>
+          </>
+        )}
       </View>
     </Pressable>
   );
@@ -63,7 +106,7 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 1.5,
     padding: 8,
     alignItems: 'center',
     gap: 6,
@@ -73,18 +116,45 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
+  },
+  imageLocked: {
+    opacity: 0.45,
   },
   lockedOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  lockedBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   lockedEmoji: {
-    fontSize: 28,
+    fontSize: 20,
+  },
+  keyBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  keyBadgeText: {
+    color: '#fff',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   name: {
     fontFamily: 'Inter-SemiBold',
@@ -94,9 +164,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minHeight: 16,
   },
-  costEmoji: {
-    fontSize: 11,
+  coinImg: {
+    width: 14,
+    height: 14,
   },
   cost: {
     fontFamily: 'Inter-Medium',

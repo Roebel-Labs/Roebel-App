@@ -11,6 +11,8 @@ import Svg, { Path, Rect, Line, Defs, LinearGradient, Stop } from 'react-native-
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
+import { useEquippedRewards } from '@/hooks/useEquippedRewards';
+import AvatarWithFrame from '@/components/AvatarWithFrame';
 import type { UserTier } from '@/lib/types';
 
 interface FlippableIdentityCardProps {
@@ -60,6 +62,7 @@ export default function FlippableIdentityCard({
   const { colors, isDark } = useTheme();
   const { tier } = useUser();
   const { activeAccount } = useAccount();
+  const equipped = useEquippedRewards();
   const isOrg = activeAccount?.account_type === 'organisation';
   const activeMode: CardMode = isOrg ? 'org' : tier === 'citizen' ? 'citizen' : 'tourist';
 
@@ -144,17 +147,19 @@ export default function FlippableIdentityCard({
         )}
 
         <View style={[styles.frontContent, isOrg && coverUrl ? styles.frontContentWithCover : null]}>
-          {/* Avatar with badge */}
+          {/* Avatar with equipped frame + badge overlay */}
           <View style={styles.avatarContainer}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                <Text style={[styles.avatarText, { color: colors.primary }]}>
-                  {(displayName || '?').charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <AvatarWithFrame size={72} disabled={isOrg}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[styles.avatarText, { color: colors.primary }]}>
+                    {(displayName || '?').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </AvatarWithFrame>
 
             {/* Badge overlay */}
             {isCitizen && !isOrg && (
@@ -169,6 +174,17 @@ export default function FlippableIdentityCard({
                 <View style={[styles.storeBadge, { borderColor: colors.surface }]}>
                   <Text style={styles.storeIcon}>🏪</Text>
                 </View>
+              </View>
+            )}
+
+            {/* Equipped badge cosmetic (secondary, bottom-left) */}
+            {equipped.badge?.reward && !isOrg && (
+              <View style={[styles.cosmeticBadgeContainer]}>
+                <Image
+                  source={{ uri: equipped.badge.reward.asset_url }}
+                  style={styles.cosmeticBadgeImage}
+                  resizeMode="cover"
+                />
               </View>
             )}
           </View>
@@ -337,6 +353,24 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: 'relative',
     marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cosmeticBadgeContainer: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  cosmeticBadgeImage: {
+    width: '100%',
+    height: '100%',
   },
   avatar: {
     width: 72,

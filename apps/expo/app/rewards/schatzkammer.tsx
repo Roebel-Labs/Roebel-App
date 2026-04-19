@@ -24,6 +24,7 @@ import KeyInventoryBadge from '@/components/rewards/KeyInventoryBadge';
 import type { Lootbox, LootboxReward, LootboxRewardRarity } from '@/lib/supabase-rewards';
 
 const HERO = require('../../assets/illustration/gamification/treasury_chamber.png');
+const COIN_SMALL = require('../../assets/illustration/gamification/single.png');
 
 const RARITY_COLOR: Record<LootboxRewardRarity, string> = {
   common: '#94A3B8',
@@ -181,18 +182,24 @@ export default function SchatzkammerScreen() {
               <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
                 Münzen
               </Text>
-              <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>
-                🪙 {coins.toLocaleString('de-DE')}
-              </Text>
+              <View style={styles.balanceInline}>
+                <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
+                <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>
+                  {coins.toLocaleString('de-DE')}
+                </Text>
+              </View>
             </View>
             <View style={[styles.balanceDivider, { backgroundColor: colors.border }]} />
             <View style={styles.balanceItem}>
               <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
                 Schlüssel
               </Text>
-              <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>
-                🗝️ {keyCount}
-              </Text>
+              <View style={styles.balanceInline}>
+                <Text style={styles.balanceKeyEmoji}>🗝️</Text>
+                <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>
+                  {keyCount}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -203,17 +210,18 @@ export default function SchatzkammerScreen() {
           ) : (
             <View style={styles.grid}>
               {chestsInRows.map((row, i) => (
-                <View key={i} style={styles.row}>
+                <View key={`row-${i}`} style={styles.row}>
                   {row.map((lootbox) => (
                     <LootboxCard
                       key={lootbox.id}
                       lootbox={lootbox}
-                      locked={keyCount === 0}
+                      hasKey={keyCount > 0}
+                      canAfford={coins >= lootbox.coins_per_key}
                       onPress={() => handleChestPress(lootbox)}
                     />
                   ))}
                   {Array.from({ length: 3 - row.length }).map((_, idx) => (
-                    <View key={`fill-${idx}`} style={styles.filler} />
+                    <View key={`fill-${i}-${idx}`} style={styles.filler} />
                   ))}
                 </View>
               ))}
@@ -278,9 +286,12 @@ export default function SchatzkammerScreen() {
             <Text style={[styles.buyStatLabel, { color: colors.textSecondary }]}>
               Dein Guthaben
             </Text>
-            <Text style={[styles.buyStatValue, { color: colors.textPrimary }]}>
-              🪙 {coins.toLocaleString('de-DE')}
-            </Text>
+            <View style={styles.balanceInline}>
+              <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
+              <Text style={[styles.buyStatValue, { color: colors.textPrimary }]}>
+                {coins.toLocaleString('de-DE')}
+              </Text>
+            </View>
           </View>
           <Pressable
             onPress={handleBuyKey}
@@ -360,7 +371,7 @@ const styles = StyleSheet.create({
   scrollRoot: { flex: 1 },
   hero: {
     width: '100%',
-    aspectRatio: 1,
+    height: 280,
   },
   absoluteHeader: {
     position: 'absolute',
@@ -385,7 +396,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheet: {
-    marginTop: -40,
+    marginTop: -24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
@@ -417,7 +428,7 @@ const styles = StyleSheet.create({
   balanceItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   balanceLabel: {
     fontFamily: 'Inter-Medium',
@@ -430,6 +441,18 @@ const styles = StyleSheet.create({
   balanceDivider: {
     width: 1,
     height: '65%',
+  },
+  balanceInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  balanceIcon: {
+    width: 20,
+    height: 20,
+  },
+  balanceKeyEmoji: {
+    fontSize: 18,
   },
   sectionTitle: {
     fontFamily: 'Inter-SemiBold',
