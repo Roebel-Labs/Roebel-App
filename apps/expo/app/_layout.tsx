@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { extractReferralCode, storePendingReferralCode } from '@/lib/referral-deeplink';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { noTransition } from '@/lib/navigation/transitionPresets';
 import { BookmarksProvider } from '@/context/BookmarksContext';
@@ -115,6 +117,37 @@ function AnalyticsTracker() {
 }
 
 /**
+ * Captures referral deep-links (roebel://r/<code> and
+ * https://www.roebel.app/r/<code>) and stores the code for the next login to
+ * redeem. Also pushes the /rewards/referral screen so the user sees the hero
+ * immediately when they land from a shared link.
+ */
+function ReferralDeepLinkHandler() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const handle = async (url: string | null) => {
+      const code = extractReferralCode(url);
+      if (!code) return;
+      await storePendingReferralCode(code);
+      setTimeout(() => router.push('/rewards/referral' as any), 200);
+    };
+
+    // Initial URL (cold start).
+    Linking.getInitialURL()
+      .then((url) => handle(url))
+      .catch(() => {});
+
+    const sub = Linking.addEventListener('url', (event) => {
+      void handle(event.url);
+    });
+    return () => sub.remove();
+  }, [router]);
+
+  return null;
+}
+
+/**
  * Observes user/permission state and auto-completes onboarding rewards tasks.
  */
 function RewardsTaskTriggers() {
@@ -143,6 +176,7 @@ function ThemedLayout() {
       <AnalyticsTracker />
       <AutoConnectHandler />
       <RewardsTaskTriggers />
+      <ReferralDeepLinkHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
           <TransitionStack.Screen

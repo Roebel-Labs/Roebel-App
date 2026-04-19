@@ -39,6 +39,7 @@ import {
   fetchRoebelPointsCard,
   type RoebelPointsCardRecord,
 } from '@/lib/supabase-roebel-points';
+import { consumePendingReferralCode } from '@/lib/referral-deeplink';
 
 interface RewardsContextValue {
   // State
@@ -162,6 +163,21 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
     if (lastLoadedFor.current === wallet) return;
     lastLoadedFor.current = wallet;
     void refresh();
+
+    // If the user landed via a referral link before logging in, redeem the
+    // stored code now. consumePendingReferralCode clears it so we won't retry
+    // across sessions. Silent failures are fine — the snackbar in the
+    // referral screen covers the UX when the user goes there manually.
+    if (wallet) {
+      void (async () => {
+        const pending = await consumePendingReferralCode();
+        if (!pending) return;
+        const res = await redeemReferral(pending, wallet);
+        if (res.success) {
+          await refresh();
+        }
+      })();
+    }
   }, [wallet, refresh]);
 
   const hasCompleted = useCallback(
