@@ -24,7 +24,6 @@ import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
-import KeyInventoryBadge from '@/components/rewards/KeyInventoryBadge';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
 
@@ -130,9 +129,7 @@ export default function RewardsIndexScreen() {
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
-        <View style={styles.headerBtn}>
-          <KeyInventoryBadge />
-        </View>
+        <View style={styles.headerBtn} />
       </View>
 
       <ScrollView

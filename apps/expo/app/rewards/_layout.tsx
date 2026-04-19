@@ -7,10 +7,8 @@ export default function RewardsLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="schatzkammer" />
       <Stack.Screen name="referral" />
-      <Stack.Screen
-        name="reward/[id]"
-        options={{ presentation: 'transparentModal', animation: 'fade' }}
-      />
+      <Stack.Screen name="lootbox/[id]" />
+      <Stack.Screen name="reward/[id]" />
     </Stack>
   );
 }
