@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,32 +10,35 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import BottomDrawer from '@/components/BottomDrawer';
 import LootboxCard from '@/components/rewards/LootboxCard';
+import OpenedLootboxCard from '@/components/rewards/OpenedLootboxCard';
 import CoinBalanceBadge from '@/components/rewards/CoinBalanceBadge';
-import type { Lootbox, LootboxReward, LootboxRewardRarity } from '@/lib/supabase-rewards';
+import type { Lootbox, UserLootboxReward } from '@/lib/supabase-rewards';
 
 const HERO = require('../../assets/illustration/gamification/treasury_chamber.png');
-
-const RARITY_COLOR: Record<LootboxRewardRarity, string> = {
-  common: '#94A3B8',
-  rare: '#3B82F6',
-  epic: '#8B5CF6',
-  legendary: '#F59E0B',
-};
+const COIN_SMALL = require('../../assets/illustration/gamification/single.png');
 
 export default function SchatzkammerScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { isConnected } = useUser();
   const { showSnackbar } = useSnackbar();
-  const { coins, keyCount, lootboxes, userRewards, refresh, isLoading } = useRewards();
+  const { coins, keyCount, lootboxes, userRewards, buyKey, refresh, isLoading } =
+    useRewards();
+
+  const { buy } = useLocalSearchParams<{ buy?: string }>();
+  const [buySheetLootbox, setBuySheetLootbox] = useState<Lootbox | null>(null);
+  const [isBuying, setIsBuying] = useState(false);
+  const autoOpenedFor = useRef<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -42,18 +46,100 @@ export default function SchatzkammerScreen() {
     }, [refresh])
   );
 
+  // If the lootbox detail page bounced back with ?buy=<id>, auto-open the
+  // buy sheet for that chest. Guarded by a ref so we don't loop.
+  useEffect(() => {
+    if (!buy || !lootboxes.length) return;
+    if (autoOpenedFor.current === buy) return;
+    const target = lootboxes.find((lb) => lb.id === buy);
+    if (target) {
+      autoOpenedFor.current = buy;
+      setBuySheetLootbox(target);
+      // Drop the query param so back-nav doesn't reopen it.
+      router.setParams({ buy: undefined } as any);
+    }
+  }, [buy, lootboxes, router]);
+
   const handleChestPress = useCallback(
     (lootbox: Lootbox) => {
       if (!isConnected) {
         showSnackbar({ message: 'Bitte zuerst anmelden' });
         return;
       }
+      // Already have a key → skip the buy sheet and go straight to the
+      // detail page where the user can open the chest.
+      if (keyCount > 0) {
+        router.push({
+          pathname: '/rewards/lootbox/[id]',
+          params: { id: lootbox.id },
+        } as any);
+        return;
+      }
+      // No key. If affordable, open the buy sheet; otherwise inform the
+      // user how many coins are missing.
+      if (coins >= lootbox.coins_per_key) {
+        setBuySheetLootbox(lootbox);
+      } else {
+        showSnackbar({
+          message: `Noch ${lootbox.coins_per_key - coins} Münzen nötig`,
+        });
+      }
+    },
+    [coins, isConnected, keyCount, router, showSnackbar]
+  );
+
+  const handleBuyKey = useCallback(async () => {
+    if (!buySheetLootbox) return;
+    setIsBuying(true);
+    try {
+      const res = await buyKey(buySheetLootbox.id);
+      if (res.success) {
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        }
+        const target = buySheetLootbox;
+        setBuySheetLootbox(null);
+        showSnackbar({
+          message: `Schlüssel gekauft (−${target.coins_per_key} Münzen)`,
+        });
+        // Jump straight to the lootbox detail page; the user has a key in
+        // hand now, so the page will show the "Jetzt öffnen" CTA.
+        setTimeout(
+          () =>
+            router.push({
+              pathname: '/rewards/lootbox/[id]',
+              params: { id: target.id },
+            } as any),
+          250
+        );
+      } else if (res.error === 'insufficient_balance') {
+        showSnackbar({ message: 'Nicht genug Münzen' });
+      } else {
+        showSnackbar({ message: 'Fehler beim Kauf' });
+      }
+    } finally {
+      setIsBuying(false);
+    }
+  }, [buyKey, buySheetLootbox, router, showSnackbar]);
+
+  const handleOpenedPress = useCallback(
+    (ur: UserLootboxReward) => {
+      const reward = ur.reward;
+      if (!reward) return;
       router.push({
-        pathname: '/rewards/lootbox/[id]',
-        params: { id: lootbox.id },
+        pathname: '/rewards/reward/[id]',
+        params: {
+          id: ur.id,
+          name: reward.name,
+          description: reward.description || '',
+          asset_url: reward.asset_url,
+          rarity: reward.rarity,
+          type: reward.type,
+          coin_value: reward.coin_value != null ? String(reward.coin_value) : '',
+        },
       } as any);
     },
-    [isConnected, router, showSnackbar]
+    [router]
   );
 
   const chestsInRows = useMemo(() => {
@@ -63,6 +149,14 @@ export default function SchatzkammerScreen() {
     }
     return rows;
   }, [lootboxes]);
+
+  const openedInRows = useMemo(() => {
+    const rows: UserLootboxReward[][] = [];
+    for (let i = 0; i < userRewards.length; i += 3) {
+      rows.push(userRewards.slice(i, i + 3));
+    }
+    return rows;
+  }, [userRewards]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -129,54 +223,98 @@ export default function SchatzkammerScreen() {
                   { color: colors.textPrimary, marginTop: 24 },
                 ]}
               >
-                Meine Belohnungen
+                Meine geöffneten Truhen
               </Text>
-              <View style={styles.rewardsGrid}>
-                {userRewards.map((r) => (
-                  <UserRewardThumb
-                    key={r.id}
-                    reward={r.reward}
-                    equipped={r.is_equipped}
-                    isDark={isDark}
-                  />
+              <View style={styles.grid}>
+                {openedInRows.map((row, i) => (
+                  <View key={`opened-row-${i}`} style={styles.row}>
+                    {row.map((ur) => (
+                      <OpenedLootboxCard
+                        key={ur.id}
+                        userReward={ur}
+                        onPress={() => handleOpenedPress(ur)}
+                      />
+                    ))}
+                    {Array.from({ length: 3 - row.length }).map((_, idx) => (
+                      <View key={`opened-fill-${i}-${idx}`} style={styles.filler} />
+                    ))}
+                  </View>
                 ))}
               </View>
             </>
           )}
         </View>
       </ScrollView>
-    </View>
-  );
-}
 
-function UserRewardThumb({
-  reward,
-  equipped,
-  isDark,
-}: {
-  reward?: LootboxReward;
-  equipped: boolean;
-  isDark: boolean;
-}) {
-  if (!reward) return null;
-  const rarityColor = RARITY_COLOR[reward.rarity];
-  return (
-    <View
-      style={[
-        thumbStyles.wrap,
-        {
-          backgroundColor: isDark ? '#2d2e31' : '#FFFFFF',
-          borderColor: rarityColor,
-        },
-      ]}
-    >
-      <View style={[thumbStyles.rarityBar, { backgroundColor: rarityColor }]} />
-      <Image source={{ uri: reward.asset_url }} style={thumbStyles.img} resizeMode="contain" />
-      {equipped && (
-        <View style={thumbStyles.equippedBadge}>
-          <Text style={thumbStyles.equippedText}>✓</Text>
+      <BottomDrawer
+        visible={!!buySheetLootbox}
+        onClose={() => setBuySheetLootbox(null)}
+      >
+        <View style={styles.buySheet}>
+          <Text style={styles.buyEmoji}>🗝️</Text>
+          <Text style={[styles.buyTitle, { color: colors.textPrimary }]}>
+            Schlüssel kaufen
+          </Text>
+          <Text style={[styles.buyBody, { color: colors.textSecondary }]}>
+            Mecky gibt dir einen Schlüssel für {buySheetLootbox?.coins_per_key ?? 200}{' '}
+            Münzen. Damit kannst du die Truhe einmal öffnen.
+          </Text>
+          <View
+            style={[
+              styles.buyStatRow,
+              {
+                backgroundColor: isDark ? colors.surface : '#F9FAFB',
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.buyStatLabel, { color: colors.textSecondary }]}>
+              Dein Guthaben
+            </Text>
+            <View style={styles.balanceInline}>
+              <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
+              <Text style={[styles.buyStatValue, { color: colors.textPrimary }]}>
+                {coins.toLocaleString('de-DE')}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={handleBuyKey}
+            disabled={
+              isBuying ||
+              !buySheetLootbox ||
+              coins < (buySheetLootbox?.coins_per_key ?? 0)
+            }
+            style={({ pressed }) => [
+              styles.buyCTA,
+              {
+                backgroundColor:
+                  !buySheetLootbox || coins < buySheetLootbox.coins_per_key
+                    ? colors.disabled
+                    : colors.primary,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            {isBuying ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buyCTAText}>
+                {!buySheetLootbox
+                  ? 'Schlüssel kaufen'
+                  : coins < buySheetLootbox.coins_per_key
+                    ? 'Nicht genug Münzen'
+                    : `Für ${buySheetLootbox.coins_per_key} Münzen kaufen`}
+              </Text>
+            )}
+          </Pressable>
+          <Pressable onPress={() => setBuySheetLootbox(null)} style={styles.buyCancel}>
+            <Text style={[styles.buyCancelText, { color: colors.textSecondary }]}>
+              Abbrechen
+            </Text>
+          </Pressable>
         </View>
-      )}
+      </BottomDrawer>
     </View>
   );
 }
@@ -245,49 +383,71 @@ const styles = StyleSheet.create({
   filler: {
     flex: 1,
   },
-  rewardsGrid: {
+  balanceInline: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  balanceIcon: {
+    width: 18,
+    height: 18,
+  },
+  buySheet: {
     gap: 12,
-    marginTop: 4,
+    paddingVertical: 8,
+    paddingBottom: 24,
+    alignItems: 'stretch',
   },
-});
-
-const thumbStyles = StyleSheet.create({
-  wrap: {
-    width: 80,
-    height: 80,
+  buyEmoji: {
+    fontSize: 40,
+    alignSelf: 'center',
+  },
+  buyTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  buyBody: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  buyStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     borderRadius: 12,
-    borderWidth: 2,
-    overflow: 'hidden',
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  buyStatLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+  },
+  buyStatValue: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+  },
+  buyCTA: {
+    borderRadius: 999,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 8,
   },
-  rarityBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-  },
-  img: {
-    width: '80%',
-    height: '80%',
-  },
-  equippedBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#194383',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  equippedText: {
+  buyCTAText: {
     color: '#fff',
     fontFamily: 'Inter-SemiBold',
-    fontSize: 12,
+    fontSize: 15,
+  },
+  buyCancel: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  buyCancelText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
   },
 });

@@ -17,7 +17,6 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
-import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CoinBalanceBadge from '@/components/rewards/CoinBalanceBadge';
@@ -26,23 +25,30 @@ import { fetchLootboxes, type Lootbox } from '@/lib/supabase-rewards';
 const CHEST = require('../../../assets/illustration/gamification/lootbox.png');
 const COIN_SMALL = require('../../../assets/illustration/gamification/single.png');
 
+/**
+ * Lootbox detail page. After the refinement this page has one job: show the
+ * chest art, the cost summary, and a primary CTA.
+ *
+ *  • keyCount > 0 → "Jetzt öffnen" runs the open animation and navigates to
+ *    the reward success page with the rpc result.
+ *  • keyCount === 0 (deep link / back-nav) → "Schlüssel kaufen" bounces back
+ *    to the Schatzkammer with ?buy=<lootboxId> so the Schatzkammer opens the
+ *    BottomDrawer for this chest.
+ */
 export default function LootboxDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, isDark } = useTheme();
-  const { isConnected } = useUser();
   const { showSnackbar } = useSnackbar();
-  const { lootboxes, coins, keyCount, buyKey, openChest } = useRewards();
+  const { lootboxes, coins, keyCount, openChest } = useRewards();
 
   const [directLootbox, setDirectLootbox] = useState<Lootbox | null>(null);
-  const [isBuying, setIsBuying] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
 
   const shake = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
-  // Primary: read the lootbox from context. Fallback: direct fetch (deep link).
   const contextLootbox = lootboxes.find((lb) => lb.id === id) || null;
   const lootbox = contextLootbox || directLootbox;
 
@@ -55,36 +61,12 @@ export default function LootboxDetailScreen() {
     }
   }, [id, contextLootbox]);
 
-  const canAfford = lootbox ? coins >= lootbox.coins_per_key : false;
   const hasKey = keyCount > 0;
-
-  const handleBuyKey = async () => {
-    if (!lootbox || !isConnected) return;
-    setIsBuying(true);
-    try {
-      const res = await buyKey(lootbox.id);
-      if (res.success) {
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-        }
-        showSnackbar({
-          message: `Schlüssel gekauft (−${lootbox.coins_per_key} Münzen)`,
-        });
-      } else if (res.error === 'insufficient_balance') {
-        showSnackbar({ message: 'Nicht genug Münzen' });
-      } else {
-        showSnackbar({ message: 'Fehler beim Kauf' });
-      }
-    } finally {
-      setIsBuying(false);
-    }
-  };
 
   const handleOpen = () => {
     if (!lootbox || isOpening) return;
     setIsOpening(true);
 
-    // Stage 1: shake the chest 3x
     const shakeAnim = Animated.loop(
       Animated.sequence([
         Animated.timing(shake, {
@@ -110,10 +92,8 @@ export default function LootboxDetailScreen() {
     );
 
     shakeAnim.start(async () => {
-      // Fire the RPC while the burst animation plays.
       const rpcPromise = openChest(lootbox.id);
 
-      // Stage 2: burst — scale up + fade out
       Animated.parallel([
         Animated.timing(scale, {
           toValue: 1.3,
@@ -150,7 +130,6 @@ export default function LootboxDetailScreen() {
           },
         } as any);
       } else {
-        // Reset the animation so the user can try again.
         scale.setValue(1);
         opacity.setValue(1);
         shake.setValue(0);
@@ -162,6 +141,14 @@ export default function LootboxDetailScreen() {
         });
       }
     });
+  };
+
+  const handleBounceToBuy = () => {
+    if (!lootbox) return;
+    router.replace({
+      pathname: '/rewards/schatzkammer',
+      params: { buy: lootbox.id },
+    } as any);
   };
 
   const shakeTranslate = shake.interpolate({
@@ -273,32 +260,25 @@ export default function LootboxDetailScreen() {
             {isOpening ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryCTAText}>Truhe mit Schlüssel öffnen</Text>
+              <Text style={styles.primaryCTAText}>Jetzt öffnen</Text>
             )}
           </Pressable>
         ) : (
           <Pressable
-            onPress={handleBuyKey}
-            disabled={isBuying || !canAfford || !isConnected}
+            onPress={handleBounceToBuy}
             style={({ pressed }) => [
               styles.primaryCTA,
               {
-                backgroundColor: canAfford && isConnected ? colors.primary : colors.disabled,
+                backgroundColor: coins >= lootbox.coins_per_key ? colors.primary : colors.disabled,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
-            {isBuying ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryCTAText}>
-                {!isConnected
-                  ? 'Anmelden zum Kaufen'
-                  : canAfford
-                    ? `Schlüssel kaufen für ${lootbox.coins_per_key} Münzen`
-                    : `Noch ${lootbox.coins_per_key - coins} Münzen nötig`}
-              </Text>
-            )}
+            <Text style={styles.primaryCTAText}>
+              {coins >= lootbox.coins_per_key
+                ? `Schlüssel kaufen für ${lootbox.coins_per_key} Münzen`
+                : `Noch ${lootbox.coins_per_key - coins} Münzen nötig`}
+            </Text>
           </Pressable>
         )}
 

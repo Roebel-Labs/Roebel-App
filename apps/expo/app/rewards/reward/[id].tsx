@@ -186,7 +186,7 @@ export default function RewardScreen() {
             {isTrying ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryText}>Jetzt ausprobieren</Text>
+              <Text style={styles.primaryText}>Jetzt austesten</Text>
             )}
           </Pressable>
           <Pressable
