@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { NotificationDot } from "@/components/ui/notification-dot"
@@ -166,6 +166,12 @@ export function AdminSidebar() {
       name: "Hilfe & Tipps",
       href: "/admin/dashboard/help",
       icon: <HelpCircle className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
+      name: "Belohnungen",
+      href: "/admin/dashboard/rewards",
+      icon: <Gift className="h-5 w-5" />,
       badgeKey: null,
     },
   ]
