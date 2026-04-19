@@ -134,12 +134,13 @@ export default function LootboxDetailScreen() {
         scale.setValue(1);
         opacity.setValue(1);
         shake.setValue(0);
-        showSnackbar({
-          message:
-            res.error === 'no_key'
-              ? 'Kein Schlüssel vorhanden'
-              : 'Öffnen fehlgeschlagen',
-        });
+        const message =
+          res.error === 'no_key'
+            ? 'Kein Schlüssel vorhanden'
+            : res.error === 'pool_exhausted'
+              ? 'Du hast bereits alle Belohnungen dieser Truhe gesammelt'
+              : 'Öffnen fehlgeschlagen';
+        showSnackbar({ message });
       }
     });
   };

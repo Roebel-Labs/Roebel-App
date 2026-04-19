@@ -286,7 +286,11 @@ purchase_lootbox_key(p_wallet text, p_lootbox_id uuid) -> jsonb
 
 open_lootbox(p_wallet text, p_lootbox_id uuid) -> jsonb
   success: { success: true, reward_id, user_reward_id, type, name, description, asset_url, rarity, coin_value }
-  errors:  'user_not_ready' | 'no_key' | 'empty_pool'
+  errors:  'user_not_ready' | 'no_key' | 'empty_pool' | 'pool_exhausted'
+  note: Cosmetics (every type except coin_bundle) drop at most once per wallet.
+        'pool_exhausted' fires when the user already owns every cosmetic in
+        this chest's pool AND the pool has no coin_bundle entries.
+        The key is NOT consumed in that case.
 
 ensure_referral_code(p_wallet text) -> text
   returns the code (creates if missing). Idempotent under concurrency.
@@ -380,6 +384,7 @@ The mobile app writes:
 - `rewards_tasks.key` is immutable once the mobile ships with it as a trigger condition. Never reassign.
 - `lootbox_rewards.type` values are the six strings listed in §2.5 — don't introduce new types without also shipping mobile code to render them.
 - `lootbox_rewards.coin_value` must be set for `type = 'coin_bundle'`; should be null for every other type.
+- Cosmetic rewards (every type except `coin_bundle`) are one-shot per wallet: `open_lootbox` filters rewards the user already owns out of the weighted roll. If you want a visually-similar drop to appear twice, create a second `lootbox_rewards` row with a distinct `id` — the filter matches on `reward_id`, not on name.
 
 ---
 
