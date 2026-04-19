@@ -10,6 +10,7 @@ interface ImageUploadDropzoneProps {
   onUploadComplete: (url: string) => void
   currentImageUrl?: string
   bucketName?: string
+  folder?: string
   maxSizeMB?: number
 }
 
@@ -17,6 +18,7 @@ export function ImageUploadDropzone({
   onUploadComplete,
   currentImageUrl = "",
   bucketName = "news-images",
+  folder = "",
   maxSizeMB = 5,
 }: ImageUploadDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false)
@@ -58,7 +60,8 @@ export function ImageUploadDropzone({
       // Generate unique filename
       const fileExt = file.name.split(".").pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-      const filePath = fileName
+      const cleanFolder = folder.replace(/^\/+|\/+$/g, "")
+      const filePath = cleanFolder ? `${cleanFolder}/${fileName}` : fileName
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -90,7 +93,7 @@ export function ImageUploadDropzone({
     } finally {
       setIsUploading(false)
     }
-  }, [bucketName, currentImageUrl, maxSizeMB, onUploadComplete])
+  }, [bucketName, folder, currentImageUrl, maxSizeMB, onUploadComplete])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()

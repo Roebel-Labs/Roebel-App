@@ -10,6 +10,8 @@ import {
   Package,
   Sparkles,
   Save,
+  AlertTriangle,
+  EyeOff,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone"
 import {
   Dialog,
   DialogContent,
@@ -51,14 +54,18 @@ import {
   updateRewardTask,
   deleteRewardTask,
   toggleRewardTaskPublished,
+  countRewardTaskDependencies,
   listLootboxes,
   createLootbox,
   updateLootbox,
   deleteLootbox,
+  countLootboxDependencies,
+  setLootboxPublished,
   listLootboxRewards,
   createLootboxReward,
   updateLootboxReward,
   deleteLootboxReward,
+  countLootboxRewardDependencies,
   listLootboxPool,
   upsertLootboxPoolRow,
   type RewardTask,
@@ -87,7 +94,6 @@ const RARITIES: { value: LootboxRewardRarity; label: string }[] = [
 ]
 
 export default function RewardsAdminPage() {
-  const { toast } = useToast()
   const [tab, setTab] = useState<Tab>("tasks")
   const [tasks, setTasks] = useState<RewardTask[]>([])
   const [lootboxes, setLootboxes] = useState<Lootbox[]>([])
@@ -165,15 +171,7 @@ export default function RewardsAdminPage() {
           loading={loading}
           onCreate={() => setTaskDialog({ open: true, task: null })}
           onEdit={(t) => setTaskDialog({ open: true, task: t })}
-          onDelete={async (id) => {
-            const res = await deleteRewardTask(id)
-            toast({
-              title: res.success ? "Gelöscht" : "Fehler",
-              description: res.success ? "Aufgabe entfernt" : res.error,
-              variant: res.success ? "default" : "destructive",
-            })
-            if (res.success) await refresh()
-          }}
+          onChanged={refresh}
           onTogglePublished={async (id, next) => {
             const res = await toggleRewardTaskPublished(id, next)
             if (res.success) await refresh()
@@ -187,15 +185,7 @@ export default function RewardsAdminPage() {
           loading={loading}
           onCreate={() => setLootboxDialog({ open: true, lootbox: null })}
           onEdit={(lb) => setLootboxDialog({ open: true, lootbox: lb })}
-          onDelete={async (id) => {
-            const res = await deleteLootbox(id)
-            toast({
-              title: res.success ? "Gelöscht" : "Fehler",
-              description: res.success ? "Truhe entfernt" : res.error,
-              variant: res.success ? "default" : "destructive",
-            })
-            if (res.success) await refresh()
-          }}
+          onChanged={refresh}
           onEditPool={(lb) => setPoolDialog({ open: true, lootbox: lb })}
         />
       )}
@@ -206,15 +196,7 @@ export default function RewardsAdminPage() {
           loading={loading}
           onCreate={() => setRewardDialog({ open: true, reward: null })}
           onEdit={(rw) => setRewardDialog({ open: true, reward: rw })}
-          onDelete={async (id) => {
-            const res = await deleteLootboxReward(id)
-            toast({
-              title: res.success ? "Gelöscht" : "Fehler",
-              description: res.success ? "Belohnung entfernt" : res.error,
-              variant: res.success ? "default" : "destructive",
-            })
-            if (res.success) await refresh()
-          }}
+          onChanged={refresh}
         />
       )}
 
@@ -284,14 +266,14 @@ function TasksTab({
   loading,
   onCreate,
   onEdit,
-  onDelete,
+  onChanged,
   onTogglePublished,
 }: {
   tasks: RewardTask[]
   loading: boolean
   onCreate: () => void
   onEdit: (t: RewardTask) => void
-  onDelete: (id: string) => void
+  onChanged: () => Promise<void> | void
   onTogglePublished: (id: string, next: boolean) => void
 }) {
   return (
@@ -342,26 +324,7 @@ function TasksTab({
               <Button variant="ghost" size="icon" onClick={() => onEdit(t)}>
                 <Pencil className="h-4 w-4" />
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Aufgabe löschen?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Diese Aktion kann nicht rückgängig gemacht werden. Alle bestehenden
-                      Fortschritte bleiben im Ledger erhalten.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => onDelete(t.id)}>Löschen</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <SafeDeleteDialog kind="task" id={t.id} name={t.title} onChanged={onChanged} />
             </div>
           ))}
         </div>
@@ -381,6 +344,11 @@ function TaskDialog({
 }) {
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
+  const [imageUrl, setImageUrl] = useState(state.task?.image_url || "")
+
+  useEffect(() => {
+    setImageUrl(state.task?.image_url || "")
+  }, [state.task])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -422,8 +390,15 @@ function TaskDialog({
           <Field label="Beschreibung">
             <Textarea name="description" defaultValue={state.task?.description} required rows={3} />
           </Field>
-          <Field label="Bild-URL">
-            <Input name="image_url" defaultValue={state.task?.image_url || ""} placeholder="https://…" />
+          <Field label="Bild">
+            <ImageUploadDropzone
+              currentImageUrl={imageUrl}
+              onUploadComplete={setImageUrl}
+              bucketName="images"
+              folder="rewards-tasks"
+              maxSizeMB={5}
+            />
+            <input type="hidden" name="image_url" value={imageUrl} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Münzen">
@@ -485,14 +460,14 @@ function LootboxesTab({
   loading,
   onCreate,
   onEdit,
-  onDelete,
+  onChanged,
   onEditPool,
 }: {
   lootboxes: Lootbox[]
   loading: boolean
   onCreate: () => void
   onEdit: (lb: Lootbox) => void
-  onDelete: (id: string) => void
+  onChanged: () => Promise<void> | void
   onEditPool: (lb: Lootbox) => void
 }) {
   return (
@@ -532,22 +507,7 @@ function LootboxesTab({
                 <Button variant="ghost" size="icon" onClick={() => onEdit(lb)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Truhe löschen?</AlertDialogTitle>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(lb.id)}>Löschen</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <SafeDeleteDialog kind="lootbox" id={lb.id} name={lb.name} onChanged={onChanged} />
               </div>
             </div>
           ))}
@@ -568,6 +528,11 @@ function LootboxDialog({
 }) {
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
+  const [imageUrl, setImageUrl] = useState(state.lootbox?.image_url || "")
+
+  useEffect(() => {
+    setImageUrl(state.lootbox?.image_url || "")
+  }, [state.lootbox])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -599,8 +564,15 @@ function LootboxDialog({
           <Field label="Beschreibung">
             <Textarea name="description" defaultValue={state.lootbox?.description || ""} rows={2} />
           </Field>
-          <Field label="Bild-URL">
-            <Input name="image_url" defaultValue={state.lootbox?.image_url || ""} />
+          <Field label="Bild">
+            <ImageUploadDropzone
+              currentImageUrl={imageUrl}
+              onUploadComplete={setImageUrl}
+              bucketName="images"
+              folder="lootboxes"
+              maxSizeMB={5}
+            />
+            <input type="hidden" name="image_url" value={imageUrl} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Münzen pro Schlüssel">
@@ -643,13 +615,13 @@ function RewardsTab({
   loading,
   onCreate,
   onEdit,
-  onDelete,
+  onChanged,
 }: {
   rewards: LootboxReward[]
   loading: boolean
   onCreate: () => void
   onEdit: (r: LootboxReward) => void
-  onDelete: (id: string) => void
+  onChanged: () => Promise<void> | void
 }) {
   return (
     <div className="space-y-4">
@@ -683,22 +655,7 @@ function RewardsTab({
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => onEdit(r)}>
                   Bearbeiten
                 </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Belohnung löschen?</AlertDialogTitle>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onDelete(r.id)}>Löschen</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <SafeDeleteDialog kind="reward" id={r.id} name={r.name} onChanged={onChanged} />
               </div>
             </div>
           ))}
@@ -722,16 +679,31 @@ function RewardDialog({
   const [type, setType] = useState<LootboxRewardType>(
     state.reward?.type || "sticker"
   )
+  const [assetUrl, setAssetUrl] = useState(state.reward?.asset_url || "")
+  const [externalUrl, setExternalUrl] = useState("")
 
   useEffect(() => {
     setType(state.reward?.type || "sticker")
+    setAssetUrl(state.reward?.asset_url || "")
+    setExternalUrl("")
   }, [state.reward])
+
+  const finalAssetUrl = externalUrl.trim() || assetUrl
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!finalAssetUrl) {
+      toast({
+        title: "Asset fehlt",
+        description: "Bitte lade ein Bild hoch oder gib eine externe URL an.",
+        variant: "destructive",
+      })
+      return
+    }
     setSaving(true)
     const form = new FormData(e.currentTarget)
     form.set("type", type)
+    form.set("asset_url", finalAssetUrl)
     const res = state.reward
       ? await updateLootboxReward(state.reward.id, form)
       : await createLootboxReward(form)
@@ -784,8 +756,24 @@ function RewardDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Asset URL (Bild / Lottie)">
-            <Input name="asset_url" defaultValue={state.reward?.asset_url} required />
+          <Field label="Asset (Bild hochladen)">
+            <ImageUploadDropzone
+              currentImageUrl={externalUrl ? "" : assetUrl}
+              onUploadComplete={(url) => {
+                setAssetUrl(url)
+                setExternalUrl("")
+              }}
+              bucketName="images"
+              folder="lootbox-rewards"
+              maxSizeMB={5}
+            />
+          </Field>
+          <Field label="Externe URL (für Lottie / GIF-CDN — überschreibt Upload)">
+            <Input
+              value={externalUrl}
+              onChange={(e) => setExternalUrl(e.target.value)}
+              placeholder="https://…"
+            />
           </Field>
           <Field label="Beschreibung">
             <Textarea name="description" defaultValue={state.reward?.description || ""} rows={2} />
@@ -861,6 +849,34 @@ function PoolDialog({
     [weights]
   )
 
+  const simulation = useMemo(() => {
+    const rolls = 1000
+    const perReward: Record<string, number> = {}
+    const perRarity: Record<LootboxRewardRarity, number> = {
+      common: 0,
+      rare: 0,
+      epic: 0,
+      legendary: 0,
+    }
+    const entries = rewards
+      .map((r) => ({ reward: r, weight: weights[r.id] ?? 0 }))
+      .filter((e) => e.weight > 0)
+    const total = entries.reduce((s, e) => s + e.weight, 0)
+    if (total <= 0) return { perReward, perRarity, hasPool: false }
+    for (let i = 0; i < rolls; i++) {
+      let roll = Math.random() * total
+      for (const e of entries) {
+        roll -= e.weight
+        if (roll <= 0) {
+          perReward[e.reward.id] = (perReward[e.reward.id] || 0) + 1
+          perRarity[e.reward.rarity] = (perRarity[e.reward.rarity] || 0) + 1
+          break
+        }
+      }
+    }
+    return { perReward, perRarity, hasPool: true }
+  }, [rewards, weights])
+
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -870,37 +886,73 @@ function PoolDialog({
         <p className="text-sm text-muted-foreground">
           Setze die Gewichtung pro Belohnung. 0 = nicht im Pool. Gesamt: {totalWeight}
         </p>
+        {!loading && simulation.hasPool && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Drop-Rate Vorschau · 1000 Rolls
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {RARITIES.map((r) => {
+                const count = simulation.perRarity[r.value] ?? 0
+                const pct = (count / 10).toFixed(1)
+                return (
+                  <Badge key={r.value} variant="outline" className="text-xs">
+                    <span className="capitalize mr-1">{r.label}</span>
+                    <span className="font-mono">{pct}%</span>
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {loading ? (
           <Skeleton className="h-40" />
         ) : (
           <div className="space-y-2">
-            {rewards.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 p-2 border rounded-md">
-                <div className="w-10 h-10 bg-muted rounded overflow-hidden">
-                  {r.asset_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.asset_url} alt="" className="w-full h-full object-contain" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{r.name}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {r.rarity}
-                    </Badge>
+            {rewards.map((r) => {
+              const rollCount = simulation.perReward[r.id] ?? 0
+              const pct = rollCount / 10
+              return (
+                <div key={r.id} className="flex items-center gap-3 p-2 border rounded-md">
+                  <div className="w-10 h-10 bg-muted rounded overflow-hidden flex-shrink-0">
+                    {r.asset_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.asset_url} alt="" className="w-full h-full object-contain" />
+                    )}
                   </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{r.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {r.rarity}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 bg-muted rounded flex-1 overflow-hidden">
+                        <div
+                          className="h-full bg-primary"
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-mono text-muted-foreground w-12 text-right">
+                        {pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="w-20"
+                    value={weights[r.id] ?? 0}
+                    onChange={(e) =>
+                      setWeights({ ...weights, [r.id]: Number(e.target.value) })
+                    }
+                  />
                 </div>
-                <Input
-                  type="number"
-                  min={0}
-                  className="w-20"
-                  value={weights[r.id] ?? 0}
-                  onChange={(e) =>
-                    setWeights({ ...weights, [r.id]: Number(e.target.value) })
-                  }
-                />
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
         <DialogFooter>
@@ -913,6 +965,184 @@ function PoolDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Safe delete ────────────────────────────────────────
+
+type SafeDeleteKind = "task" | "lootbox" | "reward"
+
+function SafeDeleteDialog({
+  kind,
+  id,
+  name,
+  onChanged,
+}: {
+  kind: SafeDeleteKind
+  id: string
+  name: string
+  onChanged: () => Promise<void> | void
+}) {
+  const { toast } = useToast()
+  const [open, setOpen] = useState(false)
+  const [loadingCounts, setLoadingCounts] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [deps, setDeps] = useState<{
+    completions?: number
+    ownedRewards?: number
+    keys?: number
+  } | null>(null)
+
+  const kindLabel =
+    kind === "task" ? "Aufgabe" : kind === "lootbox" ? "Truhe" : "Belohnung"
+
+  useEffect(() => {
+    if (!open) {
+      setDeps(null)
+      return
+    }
+    setLoadingCounts(true)
+    const run = async () => {
+      if (kind === "task") {
+        const r = await countRewardTaskDependencies(id)
+        setDeps(r)
+      } else if (kind === "lootbox") {
+        const r = await countLootboxDependencies(id)
+        setDeps(r)
+      } else {
+        const r = await countLootboxRewardDependencies(id)
+        setDeps(r)
+      }
+      setLoadingCounts(false)
+    }
+    void run()
+  }, [open, kind, id])
+
+  const hasUsers =
+    !!deps &&
+    ((deps.completions ?? 0) > 0 ||
+      (deps.ownedRewards ?? 0) > 0 ||
+      (deps.keys ?? 0) > 0)
+
+  async function handleHardDelete() {
+    setBusy(true)
+    const res =
+      kind === "task"
+        ? await deleteRewardTask(id, { force: true })
+        : kind === "lootbox"
+          ? await deleteLootbox(id, { force: true })
+          : await deleteLootboxReward(id, { force: true })
+    setBusy(false)
+    toast({
+      title: res.success ? "Gelöscht" : "Fehler",
+      description: res.success ? `${kindLabel} endgültig entfernt` : res.error,
+      variant: res.success ? "default" : "destructive",
+    })
+    if (res.success) {
+      setOpen(false)
+      await onChanged()
+    }
+  }
+
+  async function handleSoftDelete() {
+    setBusy(true)
+    const res =
+      kind === "task"
+        ? await toggleRewardTaskPublished(id, false)
+        : kind === "lootbox"
+          ? await setLootboxPublished(id, false)
+          : { success: false, error: "Soft-Delete nicht unterstützt" }
+    setBusy(false)
+    toast({
+      title: res.success ? "Ausgeblendet" : "Fehler",
+      description: res.success
+        ? `${kindLabel} für Nutzer ausgeblendet`
+        : "error" in res
+          ? res.error
+          : undefined,
+      variant: res.success ? "default" : "destructive",
+    })
+    if (res.success) {
+      setOpen(false)
+      await onChanged()
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {kindLabel} löschen?
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p>
+                <span className="font-medium text-foreground">{name}</span>
+                {loadingCounts && " · lade Abhängigkeiten…"}
+              </p>
+              {hasUsers && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground space-y-1">
+                  <div className="flex items-center gap-2 font-medium text-destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    Aktive Nutzerdaten betroffen
+                  </div>
+                  {kind === "task" && (
+                    <p>{deps!.completions} Abschlüsse im Verlauf.</p>
+                  )}
+                  {kind === "lootbox" && (
+                    <p>
+                      {deps!.keys ?? 0} Schlüssel-Bestände, {deps!.ownedRewards ?? 0} gewonnene
+                      Belohnungen.
+                    </p>
+                  )}
+                  {kind === "reward" && (
+                    <p>{deps!.ownedRewards} Nutzer besitzen diese Belohnung.</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Endgültiges Löschen entfernt diese Einträge per ON DELETE CASCADE.
+                  </p>
+                </div>
+              )}
+              {!loadingCounts && !hasUsers && (
+                <p className="text-sm text-muted-foreground">
+                  Keine aktiven Nutzerdaten verknüpft. Sicher zu löschen.
+                </p>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="gap-2 flex-wrap">
+          <AlertDialogCancel disabled={busy}>Abbrechen</AlertDialogCancel>
+          {hasUsers && kind !== "reward" && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSoftDelete}
+              disabled={busy}
+            >
+              <EyeOff className="h-4 w-4 mr-2" />
+              Nur ausblenden
+            </Button>
+          )}
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault()
+              void handleHardDelete()
+            }}
+            disabled={busy || loadingCounts}
+            className={hasUsers ? "bg-destructive hover:bg-destructive/90" : ""}
+          >
+            {hasUsers ? "Endgültig löschen" : "Löschen"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

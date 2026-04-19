@@ -150,9 +150,34 @@ export async function updateRewardTask(id: string, formData: FormData) {
   }
 }
 
-export async function deleteRewardTask(id: string) {
+export async function countRewardTaskDependencies(
+  id: string
+): Promise<{ completions: number }> {
+  const supabase = await createClient()
+  const { count } = await supabase
+    .from("rewards_task_completions")
+    .select("*", { count: "exact", head: true })
+    .eq("task_id", id)
+  return { completions: count ?? 0 }
+}
+
+export async function deleteRewardTask(
+  id: string,
+  opts?: { force?: boolean }
+) {
   try {
     const supabase = await createClient()
+    if (!opts?.force) {
+      const { completions } = await countRewardTaskDependencies(id)
+      if (completions > 0) {
+        return {
+          success: false,
+          needsConfirm: true as const,
+          counts: { completions },
+          error: `${completions} Abschlüsse sind mit dieser Aufgabe verknüpft. Bestätigung erforderlich.`,
+        }
+      }
+    }
     const { error } = await supabase.from("rewards_tasks").delete().eq("id", id)
     if (error) throw error
     bumpAdmin()
@@ -235,9 +260,55 @@ export async function updateLootbox(id: string, formData: FormData) {
   }
 }
 
-export async function deleteLootbox(id: string) {
+export async function countLootboxDependencies(
+  id: string
+): Promise<{ ownedRewards: number; keys: number }> {
+  const supabase = await createClient()
+  const [ownedRes, keysRes] = await Promise.all([
+    supabase
+      .from("user_lootbox_rewards")
+      .select("*", { count: "exact", head: true })
+      .eq("lootbox_id", id),
+    supabase
+      .from("user_lootbox_keys")
+      .select("*", { count: "exact", head: true })
+      .eq("lootbox_id", id),
+  ])
+  return {
+    ownedRewards: ownedRes.count ?? 0,
+    keys: keysRes.count ?? 0,
+  }
+}
+
+export async function setLootboxPublished(id: string, next: boolean) {
   try {
     const supabase = await createClient()
+    const { error } = await supabase
+      .from("lootboxes")
+      .update({ is_published: next })
+      .eq("id", id)
+    if (error) throw error
+    bumpAdmin()
+    return { success: true, message: next ? "Truhe veröffentlicht" : "Truhe ausgeblendet" }
+  } catch (error) {
+    return { success: false, error: formatError(error) }
+  }
+}
+
+export async function deleteLootbox(id: string, opts?: { force?: boolean }) {
+  try {
+    const supabase = await createClient()
+    if (!opts?.force) {
+      const deps = await countLootboxDependencies(id)
+      if (deps.ownedRewards > 0 || deps.keys > 0) {
+        return {
+          success: false,
+          needsConfirm: true as const,
+          counts: deps,
+          error: `Aktive Nutzerdaten vorhanden (Schlüssel: ${deps.keys}, gewonnene Belohnungen: ${deps.ownedRewards}). Bestätigung erforderlich.`,
+        }
+      }
+    }
     const { error } = await supabase.from("lootboxes").delete().eq("id", id)
     if (error) throw error
     bumpAdmin()
@@ -307,9 +378,34 @@ export async function updateLootboxReward(id: string, formData: FormData) {
   }
 }
 
-export async function deleteLootboxReward(id: string) {
+export async function countLootboxRewardDependencies(
+  id: string
+): Promise<{ ownedRewards: number }> {
+  const supabase = await createClient()
+  const { count } = await supabase
+    .from("user_lootbox_rewards")
+    .select("*", { count: "exact", head: true })
+    .eq("reward_id", id)
+  return { ownedRewards: count ?? 0 }
+}
+
+export async function deleteLootboxReward(
+  id: string,
+  opts?: { force?: boolean }
+) {
   try {
     const supabase = await createClient()
+    if (!opts?.force) {
+      const { ownedRewards } = await countLootboxRewardDependencies(id)
+      if (ownedRewards > 0) {
+        return {
+          success: false,
+          needsConfirm: true as const,
+          counts: { ownedRewards },
+          error: `${ownedRewards} Nutzer besitzen diese Belohnung bereits. Bestätigung erforderlich.`,
+        }
+      }
+    }
     const { error } = await supabase.from("lootbox_rewards").delete().eq("id", id)
     if (error) throw error
     bumpAdmin()
