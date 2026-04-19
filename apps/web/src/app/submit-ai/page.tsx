@@ -4,6 +4,9 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Sparkles } from "lucide-react"
 
+// Prevent static prerendering — AIEventSubmissionChat uses useAccount context
+export const dynamic = "force-dynamic"
+
 export default function AISubmitEventPage() {
   return (
     <div className="min-h-screen bg-background">
