@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
+import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
@@ -16,6 +18,7 @@ type Props = {
 
 export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Props) {
   const { colors } = useTheme();
+  const router = useRouter();
   const [showActions, setShowActions] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
@@ -25,21 +28,36 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
   const isVerified = comment.author?.is_verified_citizen ?? false;
   const initial = displayName.charAt(0).toUpperCase();
 
+  const isInteractive = canOpenProfile({ author: comment.author, account: comment.author?.account });
+  const openProfile = isInteractive
+    ? () => openAuthorProfile(router, { author: comment.author, account: comment.author?.account })
+    : undefined;
+
   return (
     <View style={[styles.container, { borderBottomColor: colors.border }]}>
       {/* Avatar */}
-      {avatarUri ? (
-        <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
-      ) : (
-        <View style={[styles.avatarFallback, { backgroundColor: colors.primaryLight }]}>
-          <Text style={[styles.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-        </View>
-      )}
+      <Pressable
+        onPress={openProfile}
+        disabled={!isInteractive}
+        hitSlop={4}
+        accessibilityRole={isInteractive ? 'button' : undefined}
+        accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
+      >
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.avatarFallback, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.avatarInitial, { color: colors.primary }]}>{initial}</Text>
+          </View>
+        )}
+      </Pressable>
 
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.nameRow}>
-          <Text style={[styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
+          <Pressable onPress={openProfile} disabled={!isInteractive} hitSlop={4}>
+            <Text style={[styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
+          </Pressable>
           {isVerified && (
             <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
               <Text style={styles.verifiedCheck}>✓</Text>

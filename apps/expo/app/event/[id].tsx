@@ -20,7 +20,17 @@ import ExperienceSection from '@/components/events/ExperienceSection';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
 import { recordView } from '@/lib/supabase-event-views';
+import { fetchAccountById } from '@/lib/supabase-accounts';
 import { useActiveAccount } from 'thirdweb/react';
+import type { Account, OrgSubType } from '@/lib/types';
+
+const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
+  verein: '🏛️ Verein',
+  restaurant: '🍽️ Restaurant',
+  partei: '🎗️ Partei',
+  fraktion: '📋 Fraktion',
+  unternehmen: '🏢 Unternehmen',
+};
 
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
   const svgXml = `
@@ -39,6 +49,7 @@ export default function EventDetails() {
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
   const [eventDates, setEventDates] = useState<EventDateRecord[]>([]);
+  const [publisherAccount, setPublisherAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
   const { showSnackbar } = useSnackbar();
@@ -120,6 +131,19 @@ export default function EventDetails() {
           // Record unique view in Supabase
           if (activeAccount?.address) {
             recordView(data.id, activeAccount.address).catch(() => {});
+          }
+
+          // Load publisher account (org that created the event) so the
+          // "Veranstalter" section can link to a public org profile.
+          const publisherAccountId = (data as EventRecord).account_id;
+          if (publisherAccountId) {
+            fetchAccountById(publisherAccountId)
+              .then((acc) => {
+                if (!cancelled) setPublisherAccount(acc);
+              })
+              .catch(() => {});
+          } else if (!cancelled) {
+            setPublisherAccount(null);
           }
 
           // Fetch event dates for recurring events
@@ -371,7 +395,45 @@ export default function EventDetails() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstalter</Text>
-              <View style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {publisherAccount && publisherAccount.account_type === 'organisation' && (
+                <Pressable
+                  onPress={() =>
+                    router.push({ pathname: '/account/[id]' as any, params: { id: publisherAccount.id } })
+                  }
+                  style={({ pressed }) => [
+                    styles.publisherRow,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    pressed && styles.infoCardPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Profil von ${publisherAccount.name} öffnen`}
+                >
+                  {publisherAccount.avatar_url ? (
+                    <Image
+                      source={{ uri: publisherAccount.avatar_url }}
+                      style={styles.publisherAvatar}
+                      contentFit="cover"
+                      accessibilityIgnoresInvertColors
+                    />
+                  ) : (
+                    <View style={[styles.publisherAvatarPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
+                      <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+                    </View>
+                  )}
+                  <View style={styles.publisherInfo}>
+                    <Text style={[styles.publisherName, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {publisherAccount.name}
+                    </Text>
+                    {publisherAccount.sub_type && (
+                      <Text style={[styles.publisherSubType, { color: colors.textTertiary }]} numberOfLines={1}>
+                        {EVENT_PUBLISHER_SUB_TYPE_LABELS[publisherAccount.sub_type]}
+                      </Text>
+                    )}
+                  </View>
+                  <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
+                </Pressable>
+              )}
+              <View style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
                 <View style={styles.organizerHeader}>
                   <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
                     <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
@@ -646,6 +708,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     lineHeight: 22,
     opacity: 0.85,
+  },
+  publisherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+  },
+  publisherAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  publisherAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  publisherInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  publisherName: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+  publisherSubType: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
   },
   organizerCard: {
     borderRadius: 12,

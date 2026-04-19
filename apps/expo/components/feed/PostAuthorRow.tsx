@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
+import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import type { ImageSource } from 'expo-image';
 import type { PostAuthor, PostCategory } from '@/lib/types/feed';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
@@ -28,6 +30,7 @@ export default function PostAuthorRow({
   badge,
 }: Props) {
   const { colors } = useTheme();
+  const router = useRouter();
 
   // When the post was made from an org account, show the org's name and avatar
   const isOrgPost = !nameOverride && author?.account?.account_type === 'organisation';
@@ -38,8 +41,21 @@ export default function PostAuthorRow({
   const isVerified = author?.is_verified_citizen ?? false;
   const initial = displayName.charAt(0).toUpperCase();
 
+  // Only route when this is a real user/org (not an override like "Mecky Bot" / "Gesponsert")
+  const isInteractive = !nameOverride && canOpenProfile({ author, account: author?.account });
+  const handlePress = isInteractive
+    ? () => openAuthorProfile(router, { author, account: author?.account })
+    : undefined;
+
   return (
-    <View style={styles.container}>
+    <Pressable
+      style={styles.container}
+      onPress={handlePress}
+      disabled={!isInteractive}
+      hitSlop={8}
+      accessibilityRole={isInteractive ? 'button' : undefined}
+      accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
+    >
       {avatarSource ? (
         <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
       ) : profilePic ? (
@@ -79,7 +95,7 @@ export default function PostAuthorRow({
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

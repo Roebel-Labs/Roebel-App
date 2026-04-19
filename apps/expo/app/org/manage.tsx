@@ -123,9 +123,28 @@ export default function OrgManageScreen() {
     const displayName = item.user?.username || `${item.wallet_address.slice(0, 6)}...${item.wallet_address.slice(-4)}`;
     const joinedDate = new Date(item.joined_at).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
     const showMenu = canManage && !isOwner;
+    const memberHasProfile = !!item.user?.username;
 
     return (
-      <View style={[styles.memberRow, { backgroundColor: colors.surface }]}>
+      <Pressable
+        onPress={
+          memberHasProfile
+            ? () =>
+                router.push({
+                  pathname: '/user/[username]',
+                  params: { username: item.user!.username! },
+                })
+            : undefined
+        }
+        disabled={!memberHasProfile}
+        style={({ pressed }) => [
+          styles.memberRow,
+          { backgroundColor: colors.surface },
+          pressed && memberHasProfile && styles.memberRowPressed,
+        ]}
+        accessibilityRole={memberHasProfile ? 'button' : undefined}
+        accessibilityLabel={memberHasProfile ? `Profil von ${displayName} öffnen` : undefined}
+      >
         {item.user?.profile_picture_url ? (
           <Image source={{ uri: item.user.profile_picture_url }} style={styles.memberAvatar} />
         ) : (
@@ -146,6 +165,7 @@ export default function OrgManageScreen() {
           <Pressable
             onPress={() => setShowRoleMenu(showRoleMenu === item.wallet_address ? null : item.wallet_address)}
             style={styles.menuButton}
+            hitSlop={8}
           >
             <Text style={[styles.menuDots, { color: colors.textTertiary }]}>⋮</Text>
           </Pressable>
@@ -181,7 +201,7 @@ export default function OrgManageScreen() {
             </Pressable>
           </View>
         )}
-      </View>
+      </Pressable>
     );
   };
 
@@ -361,6 +381,9 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
     position: 'relative',
+  },
+  memberRowPressed: {
+    opacity: 0.85,
   },
   memberAvatar: { width: 44, height: 44, borderRadius: 22 },
   memberAvatarPlaceholder: {
