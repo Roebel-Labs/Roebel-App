@@ -207,7 +207,7 @@ export default function RewardRevealScreen() {
               </Text>
             )}
             {type === 'coin_bundle' && coinValue > 0 && (
-              <Text style={[styles.bonusText, { color: '#16a34a' }]}>
+              <Text style={[styles.bonusText, { color: '#E9B949' }]}>
                 +{coinValue} Münzen gutgeschrieben
               </Text>
             )}
@@ -231,7 +231,7 @@ export default function RewardRevealScreen() {
                 onPress={handleClose}
                 style={({ pressed }) => [
                   styles.primaryBtn,
-                  { backgroundColor: '#E02424', opacity: pressed ? 0.85 : 1 },
+                  { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
                 ]}
               >
                 <Text style={styles.primaryText}>Weiter</Text>

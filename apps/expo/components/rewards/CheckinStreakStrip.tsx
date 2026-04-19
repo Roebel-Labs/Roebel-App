@@ -13,10 +13,14 @@ const BASE = 20;
 const SINGLE_COIN = require('../../assets/illustration/gamification/single.png');
 const STACK_COIN = require('../../assets/illustration/gamification/stack.png');
 
+const YELLOW = '#E9B949';
+const YELLOW_BG_LIGHT = '#FFFBEA';
+const YELLOW_BG_DARK = '#3c2a12';
+
 /**
  * Visualises the user's 7-day streak window centred on "today". Past days show
- * green checks if checked in, future days show the coin amount they'll earn,
- * every 3rd consecutive day renders as the bonus (stack) image with 2× coins.
+ * a check mark if they were claimed; today is highlighted in primary; every
+ * 3rd consecutive day is the bonus (stack) image for 2×.
  */
 export default function CheckinStreakStrip({
   streak,
@@ -24,8 +28,8 @@ export default function CheckinStreakStrip({
   hasCheckedInToday,
 }: CheckinStreakStripProps) {
   const { colors, isDark } = useTheme();
+  const primary = colors.primary;
 
-  // Build a 7-column strip: 2 past, today, 4 future.
   const items = useMemo(() => {
     const todayStreak = hasCheckedInToday ? streak : streak + 1;
     const start = Math.max(1, todayStreak - 2);
@@ -39,7 +43,7 @@ export default function CheckinStreakStrip({
     });
   }, [streak, hasCheckedInToday]);
 
-  const completedDates = useMemo(
+  const completedDays = useMemo(
     () => new Set(recentCheckins.map((c) => c.streak_day)),
     [recentCheckins]
   );
@@ -62,7 +66,7 @@ export default function CheckinStreakStrip({
       </Text>
       <View style={styles.strip}>
         {items.map((item) => {
-          const wasCompleted = completedDates.has(item.streakDay) || item.state === 'past';
+          const wasCompleted = completedDays.has(item.streakDay) || item.state === 'past';
           const isToday = item.state === 'today';
           return (
             <View
@@ -70,16 +74,26 @@ export default function CheckinStreakStrip({
               style={[
                 styles.cell,
                 isToday && {
-                  backgroundColor: isDark ? '#1e3a1e' : '#D1FADF',
-                  borderColor: '#16a34a',
+                  backgroundColor: isDark ? '#22324c' : '#EEF4FB',
+                  borderColor: primary,
                   borderWidth: 2,
                 },
+                item.isBonus &&
+                  !isToday && {
+                    backgroundColor: isDark ? YELLOW_BG_DARK : YELLOW_BG_LIGHT,
+                  },
               ]}
             >
               <Text
                 style={[
                   styles.dayLabel,
-                  { color: isToday ? '#16a34a' : colors.textSecondary },
+                  {
+                    color: isToday
+                      ? primary
+                      : item.isBonus
+                        ? YELLOW
+                        : colors.textSecondary,
+                  },
                   isToday && styles.dayLabelToday,
                 ]}
               >
@@ -87,7 +101,7 @@ export default function CheckinStreakStrip({
               </Text>
               <View style={styles.coinWrap}>
                 {wasCompleted ? (
-                  <Text style={styles.check}>✓</Text>
+                  <Text style={[styles.check, { color: primary }]}>✓</Text>
                 ) : (
                   <Image
                     source={item.isBonus ? STACK_COIN : SINGLE_COIN}
@@ -156,7 +170,6 @@ const styles = StyleSheet.create({
   },
   check: {
     fontSize: 20,
-    color: '#16a34a',
     fontFamily: 'Inter-SemiBold',
   },
   amount: {

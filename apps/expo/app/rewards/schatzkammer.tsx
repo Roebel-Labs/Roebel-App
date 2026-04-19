@@ -138,7 +138,6 @@ export default function SchatzkammerScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <Image source={HERO} style={styles.hero} resizeMode="cover" />
       <SafeAreaView style={styles.absoluteHeader} edges={['top']} pointerEvents="box-none">
         <View style={styles.headerRow}>
           <Pressable
@@ -152,15 +151,17 @@ export default function SchatzkammerScreen() {
         </View>
       </SafeAreaView>
 
-      <View
-        style={[
-          styles.sheet,
-          { backgroundColor: colors.background, borderTopColor: colors.border },
-        ]}
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollRoot}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
+        <Image source={HERO} style={styles.hero} resizeMode="cover" />
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: colors.background, borderTopColor: colors.border },
+          ]}
         >
           <Text style={[styles.title, { color: colors.textPrimary }]}>Schatzkammer</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -249,8 +250,8 @@ export default function SchatzkammerScreen() {
               accessibilityLabel="Truhe wird geöffnet"
             />
           )}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
 
       <BottomDrawer
         visible={!!buySheetLootbox}
@@ -294,7 +295,7 @@ export default function SchatzkammerScreen() {
                 backgroundColor:
                   !buySheetLootbox || coins < buySheetLootbox.coins_per_key
                     ? colors.disabled
-                    : '#E02424',
+                    : colors.primary,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
@@ -356,18 +357,17 @@ function UserRewardThumb({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  scrollRoot: { flex: 1 },
   hero: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 320,
+    width: '100%',
+    aspectRatio: 1,
   },
   absoluteHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    zIndex: 10,
   },
   headerRow: {
     flexDirection: 'row',
@@ -385,20 +385,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheet: {
-    position: 'absolute',
-    top: 280,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    marginTop: -40,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
-  },
-  scroll: {
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 48,
-    gap: 12,
+  },
+  scroll: {
+    paddingBottom: 0,
   },
   title: {
     fontFamily: 'Inter-SemiBold',
@@ -542,7 +538,7 @@ const thumbStyles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#16a34a',
+    backgroundColor: '#194383',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,31 +1,69 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import type { RewardTask } from '@/lib/supabase-rewards';
 
 interface TaskCardProps {
   task: RewardTask;
   completed?: boolean;
+  eligible?: boolean;
+  claiming?: boolean;
   disabled?: boolean;
   onPress: () => void;
 }
 
 const COIN_ICON = require('../../assets/illustration/gamification/single.png');
 
-export default function TaskCard({ task, completed, disabled, onPress }: TaskCardProps) {
+const YELLOW = '#E9B949';
+const YELLOW_DARK = '#8A5A00';
+const YELLOW_BG = '#FFFBEA';
+
+export default function TaskCard({
+  task,
+  completed,
+  eligible,
+  claiming,
+  disabled,
+  onPress,
+}: TaskCardProps) {
   const { colors, isDark } = useTheme();
+  const primary = colors.primary;
+
+  const variant: 'completed' | 'eligible' | 'default' = completed
+    ? 'completed'
+    : eligible
+      ? 'eligible'
+      : 'default';
+
+  const borderColor =
+    variant === 'completed' ? primary : variant === 'eligible' ? YELLOW : primary;
+  const textColor =
+    variant === 'completed' ? primary : variant === 'eligible' ? YELLOW_DARK : primary;
+  const fillColor =
+    variant === 'eligible' ? YELLOW : variant === 'completed' ? 'transparent' : 'transparent';
+  const pressedFill =
+    variant === 'eligible'
+      ? YELLOW
+      : variant === 'completed'
+        ? isDark ? colors.surfaceSecondary : '#F3F4F6'
+        : isDark ? '#22324c' : '#EEF4FB';
+
+  const label = completed ? 'Erhalten ✓' : eligible ? 'Erhalten' : task.cta_label;
 
   return (
     <View
       style={[
         styles.card,
-        { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border },
+        {
+          backgroundColor: isDark ? colors.surface : '#FFFFFF',
+          borderColor: colors.border,
+        },
       ]}
     >
       <View
         style={[
           styles.thumb,
-          { backgroundColor: isDark ? colors.surfaceSecondary : '#F3F4F6' },
+          { backgroundColor: isDark ? colors.surfaceSecondary : YELLOW_BG },
         ]}
       >
         {task.image_url ? (
@@ -50,19 +88,28 @@ export default function TaskCard({ task, completed, disabled, onPress }: TaskCar
           </View>
           <Pressable
             onPress={onPress}
-            disabled={disabled || completed}
+            disabled={disabled || claiming || completed}
             style={({ pressed }) => [
               styles.cta,
               {
-                borderColor: completed ? '#16a34a' : '#E02424',
-                backgroundColor: pressed ? (completed ? '#E8F5E9' : '#FEE2E2') : 'transparent',
+                borderColor,
+                backgroundColor: pressed ? pressedFill : fillColor,
                 opacity: disabled ? 0.4 : 1,
               },
             ]}
           >
-            <Text style={[styles.ctaText, { color: completed ? '#16a34a' : '#E02424' }]}>
-              {completed ? 'Fertig ✓' : task.cta_label}
-            </Text>
+            {claiming ? (
+              <ActivityIndicator color={variant === 'eligible' ? '#fff' : textColor} size="small" />
+            ) : (
+              <Text
+                style={[
+                  styles.ctaText,
+                  { color: variant === 'eligible' ? '#fff' : textColor },
+                ]}
+              >
+                {label}
+              </Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -126,10 +173,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   cta: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 7,
+    minWidth: 96,
+    alignItems: 'center',
   },
   ctaText: {
     fontFamily: 'Inter-SemiBold',

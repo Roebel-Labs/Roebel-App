@@ -55,7 +55,7 @@ function TabButton({
         style={[
           styles.label,
           {
-            color: active ? '#E02424' : colors.textSecondary,
+            color: active ? colors.primary : colors.textSecondary,
             fontFamily: active ? 'Inter-SemiBold' : 'Inter-Medium',
           },
         ]}
@@ -65,7 +65,7 @@ function TabButton({
       <View
         style={[
           styles.underline,
-          { backgroundColor: active ? '#E02424' : 'transparent' },
+          { backgroundColor: active ? colors.primary : 'transparent' },
         ]}
       />
     </Pressable>

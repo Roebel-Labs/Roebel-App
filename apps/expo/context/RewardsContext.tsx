@@ -7,7 +7,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useActiveAccount } from 'thirdweb/react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '@/context/UserContext';
+import { useNotificationsContext } from '@/context/NotificationsContext';
 import {
   claimDailyCheckin,
   completeRewardTask,
@@ -57,10 +59,12 @@ interface RewardsContextValue {
   userKeys: UserLootboxKeyRecord | null;
   isLoading: boolean;
   hasCheckedInToday: boolean;
+  eligibleTaskKeys: Set<string>;
 
   // Helpers
   hasCompleted: (taskKey: string) => boolean;
   lastCompletionOf: (taskKey: string) => RewardTaskCompletion | undefined;
+  isTaskEligible: (taskKey: string) => boolean;
 
   // Mutations
   claimDaily: () => Promise<CheckinClaimResult>;
@@ -85,9 +89,15 @@ function todayStrBerlin(): string {
   return berlin; // yyyy-mm-dd
 }
 
+const HELP_HUB_OPENED_KEY = '@rewards/help_hub_opened';
+
 export function RewardsProvider({ children }: { children: React.ReactNode }) {
-  const account = useActiveAccount();
-  const wallet = account?.address ?? null;
+  const { user, isCitizen } = useUser();
+  const { permissionStatus } = useNotificationsContext();
+  // Gate everything on the users-table row (NOT just the wallet address) — the
+  // RPCs write to roebel_points_card which has a FK to users(wallet_address).
+  const wallet = user?.wallet_address ?? null;
+  const [helpHubOpened, setHelpHubOpened] = useState(false);
 
   const [pointsCard, setPointsCard] = useState<RoebelPointsCardRecord | null>(null);
   const [userKeys, setUserKeys] = useState<UserLootboxKeyRecord | null>(null);
@@ -193,6 +203,45 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
     [completions]
   );
 
+  // Read the help-hub-opened flag once per wallet so eligibility reflects it.
+  useEffect(() => {
+    AsyncStorage.getItem(HELP_HUB_OPENED_KEY).then((v) => setHelpHubOpened(v === '1'));
+  }, [wallet, tasks.length]);
+
+  // Computed set of task keys the user is eligible to claim based on their
+  // current state (profile completeness, permissions, NFT, etc). Used by the
+  // UI to render the "Erhalten" button when a task's condition is already met
+  // but the completion row hasn't been inserted yet.
+  const eligibleTaskKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (!wallet || !user) return set;
+
+    // first_login — always eligible once connected.
+    set.add('first_login');
+
+    if (user.profile_picture_url) {
+      set.add('add_profile_picture');
+    }
+    if (user.username && user.profile_picture_url) {
+      set.add('complete_profile');
+    }
+    if (permissionStatus === 'granted') {
+      set.add('activate_push');
+    }
+    if (helpHubOpened) {
+      set.add('read_help_hub');
+    }
+    if (isCitizen) {
+      set.add('verify_citizen');
+    }
+    return set;
+  }, [wallet, user, isCitizen, permissionStatus, helpHubOpened]);
+
+  const isTaskEligible = useCallback(
+    (taskKey: string) => eligibleTaskKeys.has(taskKey),
+    [eligibleTaskKeys]
+  );
+
   const claimDaily = useCallback(async (): Promise<CheckinClaimResult> => {
     if (!wallet) return { success: false, error: 'not_connected' };
     const result = await claimDailyCheckin(wallet);
@@ -280,6 +329,26 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
     return recentCheckins.some((c) => c.checkin_date === todayStrBerlin());
   }, [recentCheckins]);
 
+  // Auto check-in on app open. Fires once per wallet per day; guarded by
+  // autoClaimedFor ref so React double-renders or rapid wallet flips don't
+  // double-call. The server enforces uniqueness via the PK anyway.
+  const autoClaimedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wallet) return;
+    if (isLoading) return;
+    if (hasCheckedInToday) return;
+    const today = todayStrBerlin();
+    const sig = `${wallet}:${today}`;
+    if (autoClaimedFor.current === sig) return;
+    autoClaimedFor.current = sig;
+    void (async () => {
+      const result = await claimDailyCheckin(wallet);
+      if (result.success) {
+        await refresh();
+      }
+    })();
+  }, [wallet, isLoading, hasCheckedInToday, refresh]);
+
   const value: RewardsContextValue = useMemo(
     () => ({
       coins,
@@ -296,8 +365,10 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       userKeys,
       isLoading,
       hasCheckedInToday,
+      eligibleTaskKeys,
       hasCompleted,
       lastCompletionOf,
+      isTaskEligible,
       claimDaily,
       completeTask,
       buyKey,
@@ -320,8 +391,10 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       userKeys,
       isLoading,
       hasCheckedInToday,
+      eligibleTaskKeys,
       hasCompleted,
       lastCompletionOf,
+      isTaskEligible,
       claimDaily,
       completeTask,
       buyKey,

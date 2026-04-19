@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -39,12 +39,11 @@ export default function RewardsIndexScreen() {
     streak,
     tasks,
     completions,
-    lootboxes,
     referralCode,
     recentCheckins,
     hasCheckedInToday,
     hasCompleted,
-    claimDaily,
+    isTaskEligible,
     completeTask,
     refresh,
     isLoading,
@@ -52,7 +51,7 @@ export default function RewardsIndexScreen() {
 
   const [tab, setTab] = useState<TaskTabValue>('available');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isClaimingCheckin, setIsClaimingCheckin] = useState(false);
+  const [claimingKey, setClaimingKey] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,59 +74,45 @@ export default function RewardsIndexScreen() {
     setIsRefreshing(false);
   }, [refresh]);
 
-  const handleCheckIn = useCallback(async () => {
-    if (!isConnected) {
-      showSnackbar({ message: 'Bitte zuerst anmelden, um einzuchecken' });
-      return;
-    }
-    setIsClaimingCheckin(true);
-    try {
-      const result = await claimDaily();
-      if (result.success) {
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        }
-        showSnackbar({
-          message: `+${result.coins_awarded} Münzen${result.is_bonus ? ' (Bonus 2×!)' : ''}`,
-          duration: 3500,
-        });
-      } else if (result.error === 'already_checked_in') {
-        showSnackbar({ message: 'Du hast heute bereits eingecheckt' });
-      } else {
-        showSnackbar({ message: 'Check-in nicht möglich. Versuche es später.' });
-      }
-    } finally {
-      setIsClaimingCheckin(false);
-    }
-  }, [claimDaily, isConnected, showSnackbar]);
-
   const handleTaskPress = useCallback(
-    async (taskKey: string, ctaRoute: string | null, isCompleted: boolean) => {
+    async (taskKey: string, ctaRoute: string | null) => {
       if (!isConnected) {
         showSnackbar({ message: 'Bitte zuerst anmelden' });
         return;
       }
-      if (isCompleted) return;
-      // If task has an in-app route, push it. Deferred trigger hook will
-      // auto-complete when conditions are met. For repeatable tasks without
-      // a route, mark complete directly.
-      if (ctaRoute) {
-        router.push(ctaRoute as any);
+      // If user is eligible (state-based: already citizen, already granted
+      // push, etc.) call the RPC directly. Otherwise route them to the CTA
+      // page so they can fulfill the condition.
+      if (isTaskEligible(taskKey)) {
+        setClaimingKey(taskKey);
+        try {
+          const res = await completeTask(taskKey);
+          if (res.success) {
+            if (Platform.OS !== 'web') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+                () => {}
+              );
+            }
+            showSnackbar({ message: `+${res.coins_awarded} Münzen erhalten` });
+          } else if (res.error === 'already_completed') {
+            showSnackbar({ message: 'Bereits erhalten' });
+          } else if (res.error === 'user_not_ready') {
+            showSnackbar({ message: 'Einen Moment — Profil wird geladen' });
+          } else if (res.error === 'cooldown_active') {
+            showSnackbar({ message: 'Bitte später erneut versuchen' });
+          } else {
+            showSnackbar({ message: 'Konnte nicht eingelöst werden' });
+          }
+        } finally {
+          setClaimingKey(null);
+        }
         return;
       }
-      const res = await completeTask(taskKey);
-      if (res.success) {
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        }
-        showSnackbar({ message: `+${res.coins_awarded} Münzen` });
-      } else if (res.error === 'already_completed') {
-        showSnackbar({ message: 'Bereits abgeschlossen' });
-      } else if (res.error === 'cooldown_active') {
-        showSnackbar({ message: 'Bitte noch etwas warten' });
+      if (ctaRoute) {
+        router.push(ctaRoute as any);
       }
     },
-    [completeTask, isConnected, router, showSnackbar]
+    [completeTask, isConnected, isTaskEligible, router, showSnackbar]
   );
 
   return (
@@ -168,7 +153,9 @@ export default function RewardsIndexScreen() {
               ? 'Melde dich an, um Münzen zu sammeln'
               : keyCount > 0
                 ? `${keyCount} Schlüssel bereit für die Schatzkammer`
-                : undefined
+                : hasCheckedInToday
+                  ? `Check-in erledigt · Serie ${streak} Tage`
+                  : undefined
           }
         />
 
@@ -179,29 +166,18 @@ export default function RewardsIndexScreen() {
         />
 
         <Pressable
-          onPress={handleCheckIn}
-          disabled={!isConnected || hasCheckedInToday || isClaimingCheckin}
+          onPress={() => router.push('/rewards/schatzkammer' as any)}
           style={({ pressed }) => [
-            styles.checkinBtn,
+            styles.primaryCTA,
             {
-              backgroundColor: hasCheckedInToday || !isConnected ? colors.disabled : '#E02424',
+              backgroundColor: colors.primary,
               opacity: pressed ? 0.85 : 1,
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Täglichen Check-in einlösen"
+          accessibilityLabel="Zur Schatzkammer navigieren"
         >
-          {isClaimingCheckin ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.checkinText}>
-              {!isConnected
-                ? 'Anmelden um zu starten'
-                : hasCheckedInToday
-                  ? 'Heute bereits eingelöst'
-                  : 'Check-in machen'}
-            </Text>
-          )}
+          <Text style={styles.primaryCTAText}>Zur Schatzkammer</Text>
         </Pressable>
 
         <View style={styles.missionHeader}>
@@ -233,10 +209,9 @@ export default function RewardsIndexScreen() {
                 <TaskCard
                   key={task.id}
                   task={task}
-                  completed={false}
-                  onPress={() =>
-                    handleTaskPress(task.key, task.cta_route, hasCompleted(task.key))
-                  }
+                  eligible={isTaskEligible(task.key) && !hasCompleted(task.key)}
+                  claiming={claimingKey === task.key}
+                  onPress={() => handleTaskPress(task.key, task.cta_route)}
                 />
               ))
             )
@@ -276,29 +251,6 @@ export default function RewardsIndexScreen() {
               </Text>
             )}
           </View>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push('/rewards/schatzkammer' as any)}
-          style={({ pressed }) => [
-            styles.treasuryShortcut,
-            {
-              backgroundColor: isDark ? '#3c2a12' : '#FFF4DC',
-              borderColor: '#E9B949',
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <Text style={styles.treasuryEmoji}>🗝️</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.treasuryTitle, { color: colors.textPrimary }]}>
-              Röbeler Schatzkammer
-            </Text>
-            <Text style={[styles.treasurySub, { color: colors.textSecondary }]}>
-              Tausche Münzen gegen Schlüssel und öffne Truhen von Mecky
-            </Text>
-          </View>
-          <Text style={[styles.treasuryChevron, { color: colors.textSecondary }]}>›</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -350,13 +302,13 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: 16,
   },
-  checkinBtn: {
+  primaryCTA: {
     borderRadius: 999,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkinText: {
+  primaryCTAText: {
     color: '#fff',
     fontFamily: 'Inter-SemiBold',
     fontSize: 15,
@@ -404,24 +356,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 13,
     marginTop: 4,
-  },
-  treasuryShortcut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    gap: 12,
-  },
-  treasuryEmoji: { fontSize: 28 },
-  treasuryTitle: { fontFamily: 'Inter-SemiBold', fontSize: 15 },
-  treasurySub: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  treasuryChevron: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 20,
   },
 });
