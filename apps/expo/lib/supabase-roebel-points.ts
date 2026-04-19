@@ -51,7 +51,14 @@ export type PointsAction =
   | 'first_purchase'
   | 'verify_citizen'
   | 'stamp'
-  | 'redeem';
+  | 'redeem'
+  // Rewards-gamification actions — values owned by Supabase RPCs, these entries
+  // exist so the ledger is fully typed on the client.
+  | 'daily_checkin_bonus'
+  | 'task_complete'
+  | 'lootbox_key_purchase'
+  | 'lootbox_open_bonus'
+  | 'referral_received';
 
 const POINTS_TABLE: Record<Exclude<PointsAction, 'redeem'>, number> = {
   vote: 50,
