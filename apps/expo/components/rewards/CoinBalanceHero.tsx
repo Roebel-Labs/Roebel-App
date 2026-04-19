@@ -18,14 +18,7 @@ export default function CoinBalanceHero({
   const { colors, isDark } = useTheme();
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.primaryLight,
-        },
-      ]}
-    >
+    <View style={styles.container}>
       <View style={styles.textBlock}>
         <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
         <Text style={[styles.balance, { color: colors.textPrimary }]}>

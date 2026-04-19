@@ -14,7 +14,6 @@ import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigati
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
-import ProfilePromoCard from '@/components/ProfilePromoCard';
 import MapFAB from '@/components/MapFAB';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
@@ -222,12 +221,6 @@ const handleRefresh = async () => {
 
             {/* Mode-specific action cards */}
             <ProfileModeCards />
-
-            {/* Promo Cards */}
-            <View style={styles.promoSection}>
-              <ProfilePromoCard variant="entdecken" />
-              <ProfilePromoCard variant="card" />
-            </View>
 
             {/* Menu Items */}
             <View style={styles.menuSection}>

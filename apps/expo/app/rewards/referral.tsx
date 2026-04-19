@@ -32,6 +32,17 @@ export default function ReferralScreen() {
     }, [refresh])
   );
 
+  // When the screen is reached via a fresh deep-link launch the nav stack
+  // only contains this route, so router.back() goes to a blank screen. Fall
+  // back to /profile in that case.
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/profile' as any);
+    }
+  }, [router]);
+
   return (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: colors.background }]}
@@ -39,7 +50,7 @@ export default function ReferralScreen() {
     >
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.6 : 1 }]}
           accessibilityLabel="Zurück"
         >
