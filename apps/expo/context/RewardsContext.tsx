@@ -138,6 +138,13 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true);
     try {
+      // Only ensure a referral code if we don't already have one cached —
+      // otherwise every screen focus would re-hit the RPC and log noise if it
+      // ever errors.
+      const codePromise = referralCode
+        ? Promise.resolve(referralCode)
+        : ensureReferralCode(wallet).catch(() => null);
+
       const [
         card,
         keys,
@@ -153,7 +160,7 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
         fetchUserRewards(wallet),
         fetchReferralStats(wallet),
         fetchRecentCheckins(wallet, 14),
-        ensureReferralCode(wallet),
+        codePromise,
       ]);
       setPointsCard(card);
       setUserKeys(keys);
@@ -161,13 +168,13 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
       setUserRewards(rewards);
       setReferralStats(stats);
       setRecentCheckins(checkins);
-      setReferralCode(code);
+      if (code) setReferralCode(code);
     } catch (e) {
       console.error('RewardsContext refresh failed:', e);
     } finally {
       setIsLoading(false);
     }
-  }, [wallet]);
+  }, [wallet, referralCode]);
 
   useEffect(() => {
     if (lastLoadedFor.current === wallet) return;
