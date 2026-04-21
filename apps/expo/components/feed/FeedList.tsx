@@ -243,6 +243,7 @@ export default FeedList;
 const styles = StyleSheet.create({
   feedContent: {
     paddingHorizontal: 8,
+    paddingTop: 8,
     gap: 8,
   },
   skeletonList: {
