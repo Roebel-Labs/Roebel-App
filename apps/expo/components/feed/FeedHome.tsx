@@ -1,44 +1,21 @@
-import React, { useState, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  ViewToken,
-  Pressable,
-} from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import PagerView, {
+  type PagerViewOnPageScrollEventData,
+  type PagerViewOnPageSelectedEventData,
+} from 'react-native-pager-view';
+import { useSharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
-import { useFeed } from '@/hooks/useFeed';
-import { usePostActions } from '@/hooks/usePostActions';
-import { getUserLikedPostIds, deletePost } from '@/lib/supabase-posts';
-import type { FeedItem, FeedType, PostRecord } from '@/lib/types/feed';
-import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '@/lib/types';
-import type { BusinessDealWithBusiness } from '@/lib/types/feed';
+import { deletePost } from '@/lib/supabase-posts';
+import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
-import ContextBar from './ContextBar';
-import GovernanceNudge from './GovernanceNudge';
-import MeckyTip from './MeckyTip';
-import type { GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
-import FeedPostCard from './FeedPostCard';
-import FeedAlertCard from './FeedAlertCard';
-import FeedMeckyCard from './FeedMeckyCard';
-import FeedSponsoredCard from './FeedSponsoredCard';
-import FeedMarketplaceCard from './FeedMarketplaceCard';
-import FeedEventCard from './FeedEventCard';
-import FeedNewsSection from './FeedNewsSection';
-import FeedCinemaSection from './FeedCinemaSection';
-import FeedRestaurantSection from './FeedRestaurantSection';
-import FeedSpecialMenuSection from './FeedSpecialMenuSection';
-import FeedPostSkeleton from './FeedPostSkeleton';
-import FeedEmptyState from './FeedEmptyState';
+import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
 import PostOptionsDrawer from './PostOptionsDrawer';
 import ReportDrawer from './ReportDrawer';
@@ -48,6 +25,9 @@ import MailIcon from '@/assets/icons/mail.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
+import { usePostActions } from '@/hooks/usePostActions';
+
+const TAB_ORDER: FeedType[] = ['main', 'rathaus', 'app'];
 
 export default function FeedHome() {
   const { colors } = useTheme();
@@ -66,62 +46,49 @@ export default function FeedHome() {
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [editComposerVisible, setEditComposerVisible] = useState(false);
 
-  // Track visible sponsored cards for impression tracking
-  const visibleDeals = useRef(new Set<string>());
+  const pagerRef = useRef<PagerView>(null);
+  const scrollProgress = useSharedValue(0);
 
-  // Non-citizens can only see the 'main' feed
+  const mainListRef = useRef<FeedListHandle>(null);
+  const rathausListRef = useRef<FeedListHandle>(null);
+  const appListRef = useRef<FeedListHandle>(null);
+  const nonCitizenListRef = useRef<FeedListHandle>(null);
+
+  const { reportPost } = usePostActions(walletAddress);
+
+  const refreshAll = useCallback(() => {
+    mainListRef.current?.refresh();
+    rathausListRef.current?.refresh();
+    appListRef.current?.refresh();
+    nonCitizenListRef.current?.refresh();
+  }, []);
+
   const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
 
-  const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore } =
-    useFeed(effectiveTab);
+  const handleTabChange = (tab: FeedType) => {
+    const idx = TAB_ORDER.indexOf(tab);
+    if (idx === -1) return;
+    pagerRef.current?.setPage(idx);
+    setActiveTab(tab);
+  };
 
-  const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
-
-  // Initialize like states when items change
-  React.useEffect(() => {
-    if (!walletAddress || items.length === 0) return;
-
-    const postIds = items
-      .filter((item): item is FeedItem & { type: 'post' | 'mecky' } =>
-        item.type === 'post' || item.type === 'mecky'
-      )
-      .map((item) => (item.data as PostRecord).id);
-
-    if (postIds.length === 0) return;
-
-    const counts: Record<string, number> = {};
-    items.forEach((item) => {
-      if (item.type === 'post' || item.type === 'mecky') {
-        const post = item.data as PostRecord;
-        counts[post.id] = post.likes_count;
-      }
-    });
-
-    getUserLikedPostIds(postIds, walletAddress).then((likedIds) => {
-      initLikes(likedIds, counts);
-    });
-  }, [items, walletAddress]);
-
-  // Track viewable items for ad impressions
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      viewableItems.forEach((item) => {
-        if (item.item?.type === 'sponsored') {
-          const dealId = item.item.data?.id;
-          if (dealId && !visibleDeals.current.has(dealId)) {
-            visibleDeals.current.add(dealId);
-          }
-        }
-      });
+  const handlePageScroll = useCallback(
+    (e: { nativeEvent: PagerViewOnPageScrollEventData }) => {
+      scrollProgress.value = e.nativeEvent.position + e.nativeEvent.offset;
     },
-    []
+    [scrollProgress],
   );
 
-  const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 50,
-  });
+  const handlePageSelected = useCallback(
+    (e: { nativeEvent: PagerViewOnPageSelectedEventData }) => {
+      const idx = e.nativeEvent.position;
+      const next = TAB_ORDER[idx];
+      if (next) setActiveTab(next);
+    },
+    [],
+  );
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
+  const handleNavTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
     setNavTab(tab);
     if (tab === 'explore') {
       router.push('/explore');
@@ -157,7 +124,7 @@ export default function FeedHome() {
       showSnackbar({ message: 'Beitrag gelöscht' });
       setDeleteConfirmVisible(false);
       setSelectedPost(null);
-      refresh();
+      refreshAll();
     } catch {
       showSnackbar({ message: 'Fehler beim Löschen des Beitrags' });
     }
@@ -166,7 +133,7 @@ export default function FeedHome() {
   const handlePostUpdated = () => {
     setEditComposerVisible(false);
     setSelectedPost(null);
-    refresh();
+    refreshAll();
   };
 
   const handleOpenReport = () => {
@@ -186,90 +153,8 @@ export default function FeedHome() {
     }
   };
 
-  const renderItem = useCallback(
-    ({ item }: { item: FeedItem }) => {
-      switch (item.type) {
-        case 'alert':
-          return <FeedAlertCard alert={item.data} />;
-
-        case 'post': {
-          const post = item.data as PostRecord;
-          return (
-            <FeedPostCard
-              post={post}
-              isLiked={isLiked(post.id)}
-              displayLikeCount={getLikeCount(post.id, post.likes_count)}
-              walletAddress={walletAddress}
-              onLike={() => toggleLike(post.id, post.likes_count)}
-              onShare={() => sharePost(post.id, post.content)}
-              onMore={() => handleMore(post)}
-            />
-          );
-        }
-
-        case 'mecky': {
-          const post = item.data as PostRecord;
-          return (
-            <FeedMeckyCard
-              post={post}
-              isLiked={isLiked(post.id)}
-              displayLikeCount={getLikeCount(post.id, post.likes_count)}
-              walletAddress={walletAddress}
-              onLike={() => toggleLike(post.id, post.likes_count)}
-              onShare={() => sharePost(post.id, post.content)}
-              onMore={() => handleMore(post)}
-            />
-          );
-        }
-
-        case 'sponsored':
-          return (
-            <FeedSponsoredCard
-              deal={item.data as BusinessDealWithBusiness}
-              isVisible={visibleDeals.current.has((item.data as BusinessDealWithBusiness).id)}
-            />
-          );
-
-        case 'marketplace':
-          return <FeedMarketplaceCard listing={item.data as MarketplaceListingRecord} />;
-
-        case 'event':
-          return <FeedEventCard event={item.data as EventRecord} />;
-
-        case 'news_section':
-          return <FeedNewsSection articles={item.data as NewsArticle[]} />;
-
-        case 'cinema_section':
-          return <FeedCinemaSection movies={item.data as MovieRecord[]} />;
-
-        case 'restaurant_section':
-          return <FeedRestaurantSection restaurants={item.data as RestaurantRecord[]} />;
-
-        case 'special_menu_section':
-          return <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />;
-
-        case 'governance_nudge': {
-          const nudge = item.data as GovernanceNudgeData;
-          return <GovernanceNudge proposalId={nudge.proposalId} title={nudge.title} forPercentage={nudge.forPercentage} againstPercentage={nudge.againstPercentage} daysRemaining={nudge.daysRemaining} />;
-        }
-
-        case 'mecky_tip': {
-          const tip = item.data as MeckyTipData;
-          return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
-        }
-
-        default:
-          return null;
-      }
-    },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost]
-  );
-
-  const keyExtractor = useCallback((item: FeedItem) => item.id, []);
-
-  const listHeader = (
-    <View style={[styles.headerWrapper, { backgroundColor: colors.background, marginHorizontal: -8, marginBottom: 8 }]}>
-      {/* App header row */}
+  const appHeader = (
+    <View style={[styles.headerWrapper, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
         <View style={styles.headerActions}>
@@ -288,84 +173,83 @@ export default function FeedHome() {
             <NotificationIcon width={20} height={20} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
+                <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
               </View>
             )}
           </Pressable>
         </View>
       </View>
 
-      {/* Post bar — tap to compose */}
-      <PostBar
-        avatarUrl={user?.profile_picture_url ?? null}
-        onPress={handleCompose}
-      />
+      <PostBar avatarUrl={user?.profile_picture_url ?? null} onPress={handleCompose} />
 
-      {/* Tab bar — only for verified citizens */}
-      {isCitizen && <FeedTabBar activeTab={activeTab} onTabChange={setActiveTab} />}
-
-      {/* Context bar — temporarily hidden, keep component for later */}
-      {/* <ContextBar /> */}
-
-      {/* Event story bar — Für alle tab only */}
-      {effectiveTab === 'main' && <EventStoryBar />}
+      {isCitizen && (
+        <FeedTabBar activeTab={activeTab} onTabChange={handleTabChange} scrollProgress={scrollProgress} />
+      )}
     </View>
   );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Feed list */}
-      <FlatList
-        data={items}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListHeaderComponent={listHeader}
-        style={{ backgroundColor: colors.feedBackground }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refresh}
-            tintColor={colors.primary}
-          />
-        }
-        onEndReached={hasMore ? loadMore : undefined}
-        onEndReachedThreshold={0.3}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig.current}
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.skeletonList}>
-              {[1, 2, 3, 4].map((i) => (
-                <FeedPostSkeleton key={i} />
-              ))}
-            </View>
-          ) : (
-            <FeedEmptyState
-              feedType={effectiveTab}
-              isCitizen={isCitizen}
-              onCompose={handleCompose}
-            />
-          )
-        }
-        ListFooterComponent={
-          isLoadingMore ? (
-            <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
-          ) : (
-            <View style={styles.bottomPadding} />
-          )
-        }
-        contentContainerStyle={[
-          styles.feedContent,
-          items.length === 0 && styles.emptyContainer,
-        ]}
-      />
+      {appHeader}
 
-      {/* FAB */}
+      {isCitizen ? (
+        <PagerView
+          ref={pagerRef}
+          style={styles.pager}
+          initialPage={0}
+          onPageScroll={handlePageScroll}
+          onPageSelected={handlePageSelected}
+          offscreenPageLimit={1}
+          overdrag
+        >
+          <View key="main" style={styles.page} collapsable={false}>
+            <FeedList
+              ref={mainListRef}
+              feedType="main"
+              isCitizen={isCitizen}
+              walletAddress={walletAddress}
+              onCompose={handleCompose}
+              onMore={handleMore}
+              listHeader={<EventStoryBar />}
+            />
+          </View>
+          <View key="rathaus" style={styles.page} collapsable={false}>
+            <FeedList
+              ref={rathausListRef}
+              feedType="rathaus"
+              isCitizen={isCitizen}
+              walletAddress={walletAddress}
+              onCompose={handleCompose}
+              onMore={handleMore}
+            />
+          </View>
+          <View key="app" style={styles.page} collapsable={false}>
+            <FeedList
+              ref={appListRef}
+              feedType="app"
+              isCitizen={isCitizen}
+              walletAddress={walletAddress}
+              onCompose={handleCompose}
+              onMore={handleMore}
+            />
+          </View>
+        </PagerView>
+      ) : (
+        <View style={styles.pager}>
+          <FeedList
+            ref={nonCitizenListRef}
+            feedType="main"
+            isCitizen={isCitizen}
+            walletAddress={walletAddress}
+            onCompose={handleCompose}
+            onMore={handleMore}
+            listHeader={<EventStoryBar />}
+          />
+        </View>
+      )}
+
       {walletAddress && <FeedFAB onPress={handleCompose} />}
 
-      {/* Post options drawer */}
       <PostOptionsDrawer
         visible={optionsDrawerVisible}
         onClose={() => setOptionsDrawerVisible(false)}
@@ -375,14 +259,12 @@ export default function FeedHome() {
         onReport={handleOpenReport}
       />
 
-      {/* Report drawer */}
       <ReportDrawer
         visible={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
         onReport={handleSubmitReport}
       />
 
-      {/* Delete confirmation */}
       <ConfirmationDrawer
         visible={deleteConfirmVisible}
         title="Beitrag löschen?"
@@ -394,7 +276,6 @@ export default function FeedHome() {
         onCancel={() => setDeleteConfirmVisible(false)}
       />
 
-      {/* Edit composer */}
       {selectedPost && (
         <PostComposer
           visible={editComposerVisible}
@@ -409,8 +290,7 @@ export default function FeedHome() {
         />
       )}
 
-      {/* Bottom navigation */}
-      <BottomNavigation activeTab={navTab} onTabPress={handleTabPress} />
+      <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} />
     </SafeAreaView>
   );
 }
@@ -444,21 +324,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  feedContent: {
-    paddingHorizontal: 8,
-    gap: 8,
-  },
-  skeletonList: {
+  pager: {
     flex: 1,
   },
-  emptyContainer: {
+  page: {
     flex: 1,
-  },
-  footerLoader: {
-    padding: 20,
-  },
-  bottomPadding: {
-    height: 100,
   },
   badge: {
     position: 'absolute',
