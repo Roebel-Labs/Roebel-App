@@ -1,74 +1,104 @@
-import React, { useEffect, useState, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
-import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import { fetchEquippedRewards } from '@/lib/supabase-rewards';
+import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
 import TierBadge from '@/components/RoleBadge';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
+import ProfileCoverBanner from '@/components/profile/ProfileCoverBanner';
+import ProfileTabs from '@/components/profile/ProfileTabs';
+import UserPostsList from '@/components/profile/UserPostsList';
+import UserEventsList from '@/components/profile/UserEventsList';
 import type { UserRecord } from '@/lib/types';
+
+type TabKey = 'posts' | 'events';
 
 function isFieldVisible(privacy: Record<string, string> | null, field: string): boolean {
   if (!privacy) return true;
   return privacy[field] !== 'private';
 }
 
-export default function PublicProfileScreen() {
+function formatJoinedDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+}
+
+export default function PublicUserProfileScreen() {
   const goBack = useGoBack();
+  const router = useRouter();
   const { username } = useLocalSearchParams<{ username: string }>();
   const { colors } = useTheme();
-  const navigation = useNavigation();
+  const { user: currentUser } = useUser();
 
-  // Present as a draggable native bottom sheet (react-native-screens formSheet).
-  // On Android this uses Material BottomSheetBehaviour with native drag-to-dismiss —
-  // matching the feel of the BottomDrawer used for event experiences. iOS gets the
-  // equivalent UIModalPresentationFormSheet. Two detents (60% and full) so the user
-  // can drag between positions before dismissing.
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      presentation: 'formSheet',
-      sheetAllowedDetents: [0.6, 1.0],
-      sheetInitialDetentIndex: 0,
-      sheetGrabberVisible: true,
-      sheetCornerRadius: 20,
-    } as any);
-  }, [navigation]);
-
-  const [user, setUser] = useState<UserRecord | null>(null);
+  const [profile, setProfile] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
   useEffect(() => {
     if (!username) return;
-    loadUser();
-  }, [username]);
-
-  const loadUser = async () => {
-    try {
+    let cancelled = false;
+    (async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('username', username!)
+        .eq('username', username)
         .single();
 
-      if (error) throw error;
-      setUser(data as UserRecord);
-    } catch (error) {
-      console.error('Error loading user:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (cancelled) return;
+      if (error) {
+        console.error('Error loading user:', error);
+        setProfile(null);
+        setEquipped([]);
+      } else {
+        const userRow = data as UserRecord;
+        setProfile(userRow);
+        const rewards = await fetchEquippedRewards(userRow.wallet_address);
+        if (!cancelled) setEquipped(rewards);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [username]);
+
+  const isOwner = useMemo(() => {
+    if (!currentUser || !profile) return false;
+    return currentUser.wallet_address.toLowerCase() === profile.wallet_address.toLowerCase();
+  }, [currentUser, profile]);
+
+  const bannerReward = useMemo<LootboxReward | null>(() => {
+    const hit = equipped.find((r) => r.reward?.type === 'profile_banner');
+    return hit?.reward ?? null;
+  }, [equipped]);
+
+  const frameReward = useMemo<LootboxReward | null>(() => {
+    const hit = equipped.find((r) => r.reward?.type === 'profile_frame');
+    return hit?.reward ?? null;
+  }, [equipped]);
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable onPress={goBack} style={styles.backButton}>
+        <View style={styles.topBar}>
+          <Pressable onPress={goBack} style={styles.backButton} hitSlop={8}>
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
@@ -79,140 +109,194 @@ export default function PublicProfileScreen() {
     );
   }
 
-  if (!user) {
+  if (!profile) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable onPress={goBack} style={styles.backButton}>
+        <View style={styles.topBar}>
+          <Pressable onPress={goBack} style={styles.backButton} hitSlop={8}>
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
         <View style={styles.centered}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Benutzer nicht gefunden</Text>
+          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+            Benutzer nicht gefunden
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const privacy = user.privacy_settings;
-  const interests = Array.isArray(user.interests) ? user.interests : [];
-  const vereine = Array.isArray(user.vereine) ? user.vereine : [];
+  const privacy = profile.privacy_settings;
+  const interests = Array.isArray(profile.interests) ? profile.interests : [];
+  const vereine = Array.isArray(profile.vereine) ? profile.vereine : [];
+  const displayName = profile.username ?? profile.wallet_address.slice(0, 10);
+  const initial = displayName.charAt(0).toUpperCase();
+  const bannerUrl = bannerReward?.asset_url ?? profile.cover_image_url ?? null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable onPress={goBack} style={styles.backButton}>
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Profil</Text>
-        <View style={styles.backButton} />
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Avatar */}
-        <View style={styles.avatarSection}>
-          {user.profile_picture_url ? (
-            <Image
-              source={{ uri: user.profile_picture_url }}
-              style={styles.avatar}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.cardPlaceholder }]}>
-              <UserIcon width={48} height={48} color={colors.textTertiary} />
-            </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        stickyHeaderIndices={[3]}
+      >
+        {/* ── Cover banner with back chevron + optional edit pill ── */}
+        <View style={styles.bannerWrap}>
+          <ProfileCoverBanner assetUrl={bannerUrl} />
+          <Pressable
+            onPress={goBack}
+            style={[styles.backPill, { backgroundColor: colors.background }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Zurück"
+          >
+            <ChevronLeftIcon width={20} height={20} color={colors.textPrimary} />
+          </Pressable>
+          {isOwner && (
+            <Pressable
+              onPress={() => router.push('/edit-profile' as any)}
+              style={[styles.editPill, { backgroundColor: colors.background, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Profil bearbeiten"
+            >
+              <Text style={[styles.editPillText, { color: colors.textPrimary }]}>Bearbeiten</Text>
+            </Pressable>
           )}
+        </View>
 
-          {/* Username + Verified */}
+        {/* ── Avatar + identity ── */}
+        <View style={styles.identityRow}>
+          <UserAvatarWithFrame
+            size={AVATAR_SIZE}
+            uri={profile.profile_picture_url}
+            fallbackInitial={initial}
+            frameAssetUrl={frameReward?.asset_url ?? null}
+          />
+        </View>
+
+        {/* ── Name / tier / bio / location / joined ── */}
+        <View style={styles.header}>
           <View style={styles.nameRow}>
-            <Text style={[styles.username, { color: colors.textPrimary }]}>@{user.username}</Text>
-            {user.is_verified_citizen && (
+            <Text style={[styles.displayName, { color: colors.textPrimary }]} numberOfLines={1}>
+              {profile.username ? `@${profile.username}` : displayName}
+            </Text>
+            {profile.is_verified_citizen && (
               <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
                 <Text style={styles.verifiedCheck}>✓</Text>
-                <Text style={styles.verifiedText}>Verifiziert</Text>
               </View>
             )}
           </View>
-
-          <TierBadge tier={user.tier} size="medium" />
-        </View>
-
-        {/* Bio */}
-        {isFieldVisible(privacy, 'bio') && user.bio && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über mich</Text>
-            <Text style={[styles.bioText, { color: colors.textSecondary }]}>{user.bio}</Text>
+          <View style={styles.subRow}>
+            <TierBadge tier={profile.tier} size="medium" />
           </View>
-        )}
 
-        {/* Neighborhood */}
-        {isFieldVisible(privacy, 'neighborhood') && user.neighborhood && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.locationRow}>
-              <LocationSmallIcon width={16} height={16} color={colors.textTertiary} />
-              <Text style={[styles.locationText, { color: colors.textSecondary }]}>{user.neighborhood}</Text>
+          {isFieldVisible(privacy, 'bio') && profile.bio ? (
+            <Text style={[styles.bio, { color: colors.textPrimary }]}>{profile.bio}</Text>
+          ) : null}
+
+          <View style={styles.metaRow}>
+            {isFieldVisible(privacy, 'neighborhood') && profile.neighborhood ? (
+              <View style={styles.metaItem}>
+                <LocationSmallIcon width={14} height={14} color={colors.textTertiary} />
+                <Text style={[styles.metaText, { color: colors.textTertiary }]}>
+                  {profile.neighborhood}
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.metaItem}>
+              <UserIcon width={14} height={14} color={colors.textTertiary} />
+              <Text style={[styles.metaText, { color: colors.textTertiary }]}>
+                Beigetreten {formatJoinedDate(profile.created_at)}
+              </Text>
             </View>
           </View>
-        )}
 
-        {/* Interests */}
-        {isFieldVisible(privacy, 'interests') && interests.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Interessen</Text>
-            <View style={styles.tagsRow}>
-              {interests.map((interest: string) => (
-                <View key={interest} style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
-                  <Text style={[styles.tagText, { color: colors.textSecondary }]}>{interest}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Vereine */}
-        {isFieldVisible(privacy, 'vereine') && vereine.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Vereine</Text>
-            <View style={styles.tagsRow}>
-              {vereine.map((verein: string) => (
-                <View key={verein} style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
-                  <Text style={[styles.tagText, { color: colors.textSecondary }]}>{verein}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Stats */}
-        {isFieldVisible(privacy, 'gamification_points') && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{user.gamification_points}</Text>
+          {/* Stats */}
+          {isFieldVisible(privacy, 'gamification_points') && (
+            <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
+              <View style={styles.stat}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                  {profile.gamification_points}
+                </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Punkte</Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>{user.total_votes_cast}</Text>
+              <View style={styles.stat}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                  {profile.total_votes_cast}
+                </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Abstimmungen</Text>
               </View>
+              <View style={styles.stat}>
+                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                  {profile.voting_streak}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Streak</Text>
+              </View>
             </View>
-          </View>
-        )}
+          )}
+
+          {/* Interests / Vereine pills */}
+          {isFieldVisible(privacy, 'interests') && interests.length > 0 && (
+            <View style={styles.pillsRow}>
+              {interests.slice(0, 8).map((interest) => (
+                <View
+                  key={interest}
+                  style={[styles.pill, { backgroundColor: colors.surfaceSecondary }]}
+                >
+                  <Text style={[styles.pillText, { color: colors.textSecondary }]}>{interest}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {isFieldVisible(privacy, 'vereine') && vereine.length > 0 && (
+            <View style={styles.pillsRow}>
+              {vereine.map((verein) => (
+                <View
+                  key={verein}
+                  style={[styles.pill, { backgroundColor: colors.surfaceSecondary }]}
+                >
+                  <Text style={[styles.pillText, { color: colors.textSecondary }]}>{verein}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* ── Tabs (sticky) ── */}
+        <View style={{ backgroundColor: colors.background }}>
+          <ProfileTabs<TabKey>
+            tabs={[
+              { key: 'posts', label: 'Beiträge' },
+              { key: 'events', label: 'Veranstaltungen' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
+        </View>
+
+        {/* ── Tab body ── */}
+        <View>
+          {activeTab === 'posts' ? (
+            <UserPostsList walletAddress={profile.wallet_address} />
+          ) : (
+            <UserEventsList walletAddress={profile.wallet_address} />
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+const AVATAR_SIZE = 96;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
   },
   backButton: {
@@ -220,10 +304,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
   },
   centered: {
     flex: 1,
@@ -237,103 +317,135 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    gap: 12,
+  bannerWrap: {
+    position: 'relative',
   },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+  backPill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  editPill: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  editPillText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: -(AVATAR_SIZE / 2),
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  username: {
+  displayName: {
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
+    flexShrink: 1,
   },
   verifiedBadge: {
-    flexDirection: 'row',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    gap: 4,
+    justifyContent: 'center',
   },
   verifiedCheck: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
     color: '#ffffff',
-  },
-  verifiedText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
+    fontWeight: '700',
   },
-  section: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    marginHorizontal: 16,
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    marginBottom: 8,
-  },
-  bioText: {
+  bio: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
   },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-  },
-  tagsRow: {
+  metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    rowGap: 6,
+    columnGap: 16,
   },
-  tag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tagText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  statsRow: {
+  metaItem: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
     alignItems: 'center',
     gap: 4,
   },
+  metaText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    marginTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+  },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Inter-SemiBold',
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  pill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  pillText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
 });

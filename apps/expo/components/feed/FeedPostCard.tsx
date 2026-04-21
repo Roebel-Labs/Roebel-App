@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
@@ -75,6 +76,15 @@ export default function FeedPostCard({
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
       )}
 
+      {post.sticker && (
+        <Image
+          source={{ uri: post.sticker.asset_url }}
+          style={styles.sticker}
+          contentFit="contain"
+          accessibilityIgnoresInvertColors
+        />
+      )}
+
       {firstLink && <PostLinkPreview link={firstLink} />}
 
       {post.poll && (
@@ -112,5 +122,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
+  },
+  sticker: {
+    width: 200,
+    height: 200,
+    alignSelf: 'flex-start',
   },
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
 import type { Message } from '@/lib/supabase-messages';
 
@@ -9,6 +10,7 @@ type Props = {
   message: Message;
   isOwn: boolean;
   peerAvatar?: string | null;
+  peerFrameUrl?: string | null;
 };
 
 function formatTime(isoDate: string): string {
@@ -43,21 +45,26 @@ function tryParseListingInquiry(content: string): ListingInquiry | null {
   return null;
 }
 
-export default function MessageBubble({ message, isOwn, peerAvatar }: Props) {
+export default function MessageBubble({ message, isOwn, peerAvatar, peerFrameUrl }: Props) {
   const { colors } = useTheme();
 
-  if (!message.content) return null;
+  const hasSticker = !!message.sticker?.asset_url;
+  const hasText = !!message.content && message.content.trim().length > 0;
 
-  const listingData = tryParseListingInquiry(message.content);
+  if (!hasSticker && !hasText) return null;
+
+  const listingData = !hasSticker && hasText ? tryParseListingInquiry(message.content) : null;
 
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
       {/* Peer avatar (only for other's messages) */}
       {!isOwn && (
         <View style={styles.avatarSlot}>
-          {peerAvatar ? (
-            <Image source={{ uri: peerAvatar }} style={styles.avatar} contentFit="cover" />
-          ) : null}
+          <UserAvatarWithFrame
+            size={24}
+            uri={peerAvatar ?? null}
+            frameAssetUrl={peerFrameUrl ?? null}
+          />
         </View>
       )}
 
@@ -71,23 +78,33 @@ export default function MessageBubble({ message, isOwn, peerAvatar }: Props) {
           </>
         ) : (
           <>
-            <View
-              style={[
-                styles.bubble,
-                isOwn
-                  ? [styles.bubbleOwn, { backgroundColor: colors.primary }]
-                  : [styles.bubbleOther, { backgroundColor: colors.surface }],
-              ]}
-            >
-              <Text
+            {hasText && (
+              <View
                 style={[
-                  styles.text,
-                  { color: isOwn ? colors.onPrimary : colors.textPrimary },
+                  styles.bubble,
+                  isOwn
+                    ? [styles.bubbleOwn, { backgroundColor: colors.primary }]
+                    : [styles.bubbleOther, { backgroundColor: colors.surface }],
                 ]}
               >
-                {message.content}
-              </Text>
-            </View>
+                <Text
+                  style={[
+                    styles.text,
+                    { color: isOwn ? colors.onPrimary : colors.textPrimary },
+                  ]}
+                >
+                  {message.content}
+                </Text>
+              </View>
+            )}
+            {hasSticker && (
+              <Image
+                source={{ uri: message.sticker!.asset_url }}
+                style={styles.sticker}
+                contentFit="contain"
+                accessibilityIgnoresInvertColors
+              />
+            )}
             <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: colors.textTertiary }]}>
               {formatTime(message.created_at)}
             </Text>
@@ -111,14 +128,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   avatarSlot: {
-    width: 28,
+    width: 32,
     marginRight: 4,
     justifyContent: 'flex-end',
-  },
-  avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
   },
   wrapper: {
     maxWidth: '75%',
@@ -144,6 +156,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 21,
+  },
+  sticker: {
+    width: 180,
+    height: 180,
+    marginTop: 2,
   },
   time: {
     fontSize: 11,

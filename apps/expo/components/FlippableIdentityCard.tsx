@@ -12,7 +12,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useEquippedRewards } from '@/hooks/useEquippedRewards';
-import AvatarWithFrame from '@/components/AvatarWithFrame';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import type { UserTier } from '@/lib/types';
 
 interface FlippableIdentityCardProps {
@@ -149,17 +149,12 @@ export default function FlippableIdentityCard({
         <View style={[styles.frontContent, isOrg && coverUrl ? styles.frontContentWithCover : null]}>
           {/* Avatar with equipped frame + badge overlay */}
           <View style={styles.avatarContainer}>
-            <AvatarWithFrame size={72} disabled={isOrg}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.avatarText, { color: colors.primary }]}>
-                    {(displayName || '?').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </AvatarWithFrame>
+            <UserAvatarWithFrame
+              size={72}
+              uri={avatarUrl ?? null}
+              fallbackInitial={(displayName || '?').charAt(0).toUpperCase()}
+              disabled={isOrg}
+            />
 
             {/* Badge overlay */}
             {isCitizen && !isOrg && (

@@ -5,57 +5,81 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Text,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import ArrowRightIcon from '@/assets/icons/arrow-right.svg';
+import EmojiIcon from '@/assets/icons/emoji.svg';
 import { useTheme } from '@/context/ThemeContext';
-import EmojiPicker from './EmojiPicker';
+import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
+import type { LootboxReward } from '@/lib/supabase-rewards';
 
 type Props = {
-  onSend: (text: string) => void;
+  onSend: (text: string, stickerRewardId: string | null) => void;
   isSending: boolean;
 };
 
 export default function ChatInput({ onSend, isSending }: Props) {
   const { colors } = useTheme();
   const [text, setText] = useState('');
-  const [showEmoji, setShowEmoji] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pendingSticker, setPendingSticker] = useState<LootboxReward | null>(null);
+
+  const canSend = (text.trim().length > 0 || !!pendingSticker) && !isSending;
 
   const handleSend = () => {
-    if (!text.trim() || isSending) return;
-    onSend(text.trim());
+    if (!canSend) return;
+    onSend(text.trim(), pendingSticker?.id ?? null);
     setText('');
-    setShowEmoji(false);
+    setPendingSticker(null);
+    setShowPicker(false);
   };
 
   const handleEmojiSelect = (emoji: string) => {
     setText((prev) => prev + emoji);
-    setShowEmoji(false);
+    setShowPicker(false);
   };
 
-  const canSend = text.trim().length > 0 && !isSending;
+  const handleStickerSelect = (reward: LootboxReward) => {
+    setPendingSticker(reward);
+    setShowPicker(false);
+  };
 
   return (
     <View>
-      {showEmoji && (
-        <EmojiPicker
-          onSelect={handleEmojiSelect}
-          onClose={() => setShowEmoji(false)}
+      {showPicker && (
+        <StickerEmojiPicker
+          onPickEmoji={handleEmojiSelect}
+          onPickSticker={handleStickerSelect}
+          onClose={() => setShowPicker(false)}
         />
+      )}
+      {pendingSticker && (
+        <View style={[styles.stickerChip, { backgroundColor: colors.surfaceSecondary }]}>
+          <Image
+            source={{ uri: pendingSticker.asset_url }}
+            style={styles.stickerChipImage}
+            contentFit="contain"
+          />
+          <Pressable onPress={() => setPendingSticker(null)} hitSlop={8}>
+            <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+          </Pressable>
+        </View>
       )}
       <View style={[styles.container, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
         <Pressable
           style={styles.emojiButton}
-          onPress={() => setShowEmoji((prev) => !prev)}
+          onPress={() => setShowPicker((prev) => !prev)}
+          accessibilityLabel="Emoji oder Sticker öffnen"
         >
-          <Text style={styles.emojiIcon}>😊</Text>
+          <EmojiIcon width={24} height={24} color={colors.textSecondary} />
         </Pressable>
         <TextInput
           style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
           value={text}
           onChangeText={(t) => {
             setText(t);
-            if (showEmoji) setShowEmoji(false);
+            if (showPicker) setShowPicker(false);
           }}
           placeholder="Nachricht schreiben..."
           placeholderTextColor={colors.textTertiary}
@@ -98,9 +122,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emojiIcon: {
-    fontSize: 24,
-  },
   input: {
     flex: 1,
     borderRadius: 20,
@@ -118,4 +139,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {},
+  stickerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginHorizontal: 12,
+    marginTop: 4,
+    borderRadius: 12,
+    padding: 6,
+    gap: 6,
+  },
+  stickerChipImage: {
+    width: 48,
+    height: 48,
+  },
 });

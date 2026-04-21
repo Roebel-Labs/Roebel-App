@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -18,6 +17,7 @@ import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
 import MessageBubble from '@/components/messages/MessageBubble';
 import ChatInput from '@/components/messages/ChatInput';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import type { Message } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -60,6 +60,7 @@ export default function ChatScreen() {
       message={item}
       isOwn={item.sender_address.toLowerCase() === myAddress}
       peerAvatar={peerUser?.profilePictureUrl}
+      peerFrameUrl={peerUser?.equippedFrameUrl ?? null}
     />
   );
 
@@ -71,19 +72,12 @@ export default function ChatScreen() {
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
         <Pressable style={styles.headerCenter} onPress={() => peerAddress && router.push(`/user/${peerAddress}` as any)}>
-          {peerUser?.profilePictureUrl ? (
-            <Image
-              source={{ uri: peerUser.profilePictureUrl }}
-              style={styles.headerAvatar}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.headerAvatarFallback, { backgroundColor: colors.cardPlaceholder }]}>
-              <Text style={[styles.headerAvatarText, { color: colors.textSecondary }]}>
-                {(peerDisplayName[0] || '?').toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <UserAvatarWithFrame
+            size={32}
+            uri={peerUser?.profilePictureUrl ?? null}
+            fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
+            frameAssetUrl={peerUser?.equippedFrameUrl ?? null}
+          />
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
             {peerDisplayName}
           </Text>

@@ -16,6 +16,7 @@ import { fetchUserByWallet } from '@/lib/supabase-users';
 export type PeerUser = {
   username: string | null;
   profilePictureUrl: string | null;
+  equippedFrameUrl: string | null;
 };
 
 export function useConversation(conversationId: string) {
@@ -58,6 +59,7 @@ export function useConversation(conversationId: string) {
             setPeerUser({
               username: user.username,
               profilePictureUrl: user.profile_picture_url,
+              equippedFrameUrl: user.equipped_frame_asset_url ?? null,
             });
           }
         }
@@ -95,11 +97,22 @@ export function useConversation(conversationId: string) {
           table: 'direct_messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        async (payload) => {
           const newMsg = payload.new as Message;
+          // If the row has a sticker FK, hydrate the joined reward before
+          // rendering so the bubble can show the sticker image immediately.
+          let enriched: Message = newMsg;
+          if (newMsg.sticker_reward_id) {
+            const { data } = await supabase
+              .from('lootbox_rewards')
+              .select('id, type, name, asset_url')
+              .eq('id', newMsg.sticker_reward_id)
+              .maybeSingle();
+            if (data) enriched = { ...newMsg, sticker: data as any };
+          }
           setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [newMsg, ...prev]; // Prepend for inverted FlatList
+            if (prev.some((m) => m.id === enriched.id)) return prev;
+            return [enriched, ...prev]; // Prepend for inverted FlatList
           });
         }
       )
@@ -113,13 +126,14 @@ export function useConversation(conversationId: string) {
     };
   }, [conversationId]);
 
-  // Send a message
+  // Send a message (optionally with an attached sticker reward)
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!conversationId || !account?.address || !text.trim()) return;
+    async (text: string, stickerRewardId: string | null = null) => {
+      if (!conversationId || !account?.address) return;
+      if (!text.trim() && !stickerRewardId) return;
       setIsSending(true);
       try {
-        await sendMsg(conversationId, account.address, text.trim());
+        await sendMsg(conversationId, account.address, text.trim(), stickerRewardId);
       } catch (err) {
         console.error('Failed to send message:', err);
       } finally {

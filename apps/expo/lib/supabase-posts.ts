@@ -40,13 +40,14 @@ export async function fetchFeedPosts(options: {
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
       account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
-      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood)
+      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .eq('feed_type', options.feedType)
     .eq('status', 'published')
@@ -65,6 +66,91 @@ export async function fetchFeedPosts(options: {
 }
 
 /**
+ * Fetch a user's own posts by wallet address, ordered newest first.
+ * Used on the public profile's "Beiträge" tab.
+ */
+export async function fetchUserPosts(
+  walletAddress: string,
+  options?: { page?: number; pageSize?: number }
+): Promise<{ data: PostRecord[]; hasMore: boolean }> {
+  const size = options?.pageSize || PAGE_SIZE;
+  const page = options?.page || 0;
+  const from = page * size;
+  const to = from + size - 1;
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      *,
+      author:users!posts_wallet_address_fkey(
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
+      ),
+      account:accounts(id, account_type, name, avatar_url),
+      links:post_links(*),
+      poll:post_polls(*),
+      linked_event:events(id, title, date, time, location, image_url, category),
+      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
+    `)
+    .eq('wallet_address', walletAddress.toLowerCase())
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error('Error fetching user posts:', error);
+    return { data: [], hasMore: false };
+  }
+
+  return {
+    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
+    hasMore: data.length === size,
+  };
+}
+
+/**
+ * Fetch posts authored from a specific organisation account, newest first.
+ */
+export async function fetchAccountPosts(
+  accountId: string,
+  options?: { page?: number; pageSize?: number }
+): Promise<{ data: PostRecord[]; hasMore: boolean }> {
+  const size = options?.pageSize || PAGE_SIZE;
+  const page = options?.page || 0;
+  const from = page * size;
+  const to = from + size - 1;
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      *,
+      author:users!posts_wallet_address_fkey(
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
+      ),
+      account:accounts(id, account_type, name, avatar_url),
+      links:post_links(*),
+      poll:post_polls(*),
+      linked_event:events(id, title, date, time, location, image_url, category),
+      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
+    `)
+    .eq('account_id', accountId)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error('Error fetching account posts:', error);
+    return { data: [], hasMore: false };
+  }
+
+  return {
+    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
+    hasMore: data.length === size,
+  };
+}
+
+/**
  * Fetch a single post with all relations
  */
 export async function fetchPostById(postId: string): Promise<PostRecord | null> {
@@ -73,13 +159,14 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
       account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
-      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood)
+      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .eq('id', postId)
     .single();
@@ -110,14 +197,16 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       linked_event_id: input.linked_event_id || null,
       linked_marketplace_id: input.linked_marketplace_id || null,
       linked_mecky_draft_id: input.linked_mecky_draft_id || null,
+      sticker_reward_id: input.sticker_reward_id || null,
       status: 'published',
     })
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
 
@@ -158,13 +247,14 @@ export async function updatePost(
     .select(`
       *,
       author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
       account:accounts(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
-      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood)
+      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
 
@@ -266,9 +356,10 @@ export async function fetchPostComments(
     .select(`
       *,
       author:users!post_comments_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen
+        wallet_address, username, profile_picture_url, is_verified_citizen, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .eq('post_id', postId)
     .eq('status', 'published')
@@ -299,13 +390,15 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
       content: input.content,
       media_urls: input.media_urls || [],
       video_url: input.video_url || null,
+      sticker_reward_id: input.sticker_reward_id || null,
     })
     .select(`
       *,
       author:users!post_comments_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen
+        wallet_address, username, profile_picture_url, is_verified_citizen, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
 
@@ -374,9 +467,10 @@ export async function updateComment(
     .select(`
       *,
       author:users!post_comments_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen
+        wallet_address, username, profile_picture_url, is_verified_citizen, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
 

@@ -1,10 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import TierBadge from './RoleBadge';
-import UserIcon from '@/assets/icons/user.svg';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
 import type { UserRecord } from '@/lib/types';
 
@@ -34,18 +33,12 @@ export default function UserSearchCard({ user, onPress }: Props) {
       accessibilityLabel={user.username || 'Benutzer'}
     >
       {/* Avatar */}
-      {user.profile_picture_url ? (
-        <Image
-          source={{ uri: user.profile_picture_url }}
-          style={styles.avatar}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
-        />
-      ) : (
-        <View style={[styles.avatarPlaceholder, { backgroundColor: colors.cardPlaceholder }]}>
-          <UserIcon width={22} height={22} color={colors.textTertiary} />
-        </View>
-      )}
+      <UserAvatarWithFrame
+        size={44}
+        uri={user.profile_picture_url}
+        fallbackInitial={(user.username || '?').charAt(0).toUpperCase()}
+        frameAssetUrl={user.equipped_frame_asset_url ?? null}
+      />
 
       {/* Info */}
       <View style={styles.info}>

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import type { ImageSource } from 'expo-image';
 import type { PostAuthor, PostCategory } from '@/lib/types/feed';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
@@ -58,12 +59,14 @@ export default function PostAuthorRow({
     >
       {avatarSource ? (
         <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
-      ) : profilePic ? (
-        <Image source={{ uri: profilePic }} style={styles.avatar} contentFit="cover" />
       ) : (
-        <View style={[styles.avatarFallback, { backgroundColor: colors.primaryLight }]}>
-          <Text style={[styles.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-        </View>
+        <UserAvatarWithFrame
+          size={36}
+          uri={profilePic ?? null}
+          fallbackInitial={initial}
+          frameAssetUrl={isOrgPost ? null : author?.equipped_frame_asset_url ?? null}
+          disabled={isOrgPost}
+        />
       )}
 
       <View style={styles.info}>

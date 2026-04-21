@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 
 type Props = {
   avatarUrl: string | null;
@@ -20,20 +20,8 @@ export default function PostBar({ avatarUrl, onPress }: Props) {
         { backgroundColor: colors.background, borderBottomColor: colors.border },
       ]}
     >
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: colors.surfaceSecondary }]}>
-        {avatarUrl ? (
-          <Image
-            source={{ uri: avatarUrl }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={0}
-          />
-        ) : (
-          <Ionicons name="person" size={18} color={colors.textTertiary} />
-        )}
-      </View>
+      {/* Avatar — viewer's own, uses the equipped frame from the rewards hook */}
+      <UserAvatarWithFrame size={36} uri={avatarUrl} />
 
       {/* Input area with gray background */}
       <View style={[styles.inputArea, { backgroundColor: colors.surfaceSecondary }]}>

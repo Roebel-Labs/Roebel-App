@@ -18,11 +18,12 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import BottomDrawer from '@/components/BottomDrawer';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { createExperience } from '@/lib/supabase-experiences';
+import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
+import EmojiIcon from '@/assets/icons/emoji.svg';
+import type { LootboxReward } from '@/lib/supabase-rewards';
 
 const MAX_IMAGES = 4;
 const MAX_CONTENT_LENGTH = 500;
-
-const CURATED_EMOJIS = ['😍', '🎉', '🔥', '😊', '👏', '🎶', '⭐', '🥳'];
 
 type Props = {
   visible: boolean;
@@ -45,16 +46,17 @@ export default function ExperienceComposer({
 
   const [content, setContent] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [pendingSticker, setPendingSticker] = useState<LootboxReward | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canSubmit = content.trim().length > 0 && !isUploading && !isSubmitting;
-
-  const handleEmojiToggle = (emoji: string) => {
-    setSelectedEmoji((prev) => (prev === emoji ? null : emoji));
-  };
+  const canSubmit =
+    (content.trim().length > 0 || !!pendingSticker || !!selectedEmoji) &&
+    !isUploading &&
+    !isSubmitting;
 
   const handlePickImages = async () => {
     const remaining = MAX_IMAGES - images.length;
@@ -114,6 +116,7 @@ export default function ExperienceComposer({
       media_urls: images.length > 0 ? images : undefined,
       video_url: videoUrl || undefined,
       emoji: selectedEmoji || undefined,
+      sticker_reward_id: pendingSticker?.id,
     });
 
     setIsSubmitting(false);
@@ -121,6 +124,7 @@ export default function ExperienceComposer({
     if (result) {
       setContent('');
       setSelectedEmoji(null);
+      setPendingSticker(null);
       setImages([]);
       setVideoUrl(null);
       onClose();
@@ -136,21 +140,29 @@ export default function ExperienceComposer({
       <View style={styles.container}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Erlebnis teilen</Text>
 
-        {/* Emoji Picker Row */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiRow}>
-          {CURATED_EMOJIS.map((emoji) => (
-            <Pressable
-              key={emoji}
-              onPress={() => handleEmojiToggle(emoji)}
-              style={[
-                styles.emojiButton,
-                selectedEmoji === emoji && { backgroundColor: colors.primaryLight },
-              ]}
-            >
-              <Text style={styles.emojiText}>{emoji}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        {/* Selected emoji or sticker preview */}
+        {(selectedEmoji || pendingSticker) && (
+          <View style={styles.selectedPreviewRow}>
+            {pendingSticker ? (
+              <View style={[styles.stickerChip, { backgroundColor: colors.surfaceSecondary }]}>
+                <Image
+                  source={{ uri: pendingSticker.asset_url }}
+                  style={styles.stickerChipImage}
+                />
+                <Pressable onPress={() => setPendingSticker(null)} hitSlop={8}>
+                  <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={[styles.emojiChip, { backgroundColor: colors.primaryLight }]}>
+                <Text style={styles.emojiText}>{selectedEmoji}</Text>
+                <Pressable onPress={() => setSelectedEmoji(null)} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Image/Video Previews */}
         {(images.length > 0 || videoUrl) && (
@@ -214,6 +226,18 @@ export default function ExperienceComposer({
               <Ionicons name="videocam-outline" size={18} color={colors.primary} />
               <Text style={[styles.mediaChipText, { color: colors.primary }]}>Video</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setShowPicker((p) => !p)}
+              style={[
+                styles.mediaChip,
+                { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+              ]}
+              accessibilityLabel="Emoji oder Sticker öffnen"
+            >
+              <EmojiIcon width={18} height={18} color={colors.primary} />
+              <Text style={[styles.mediaChipText, { color: colors.primary }]}>Emoji</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Text input + send button row (matching AI chat layout) */}
@@ -248,6 +272,22 @@ export default function ExperienceComposer({
             </TouchableOpacity>
           </View>
         </View>
+
+        {showPicker && (
+          <StickerEmojiPicker
+            onPickEmoji={(emoji) => {
+              setSelectedEmoji(emoji);
+              setPendingSticker(null);
+              setShowPicker(false);
+            }}
+            onPickSticker={(reward) => {
+              setPendingSticker(reward);
+              setSelectedEmoji(null);
+              setShowPicker(false);
+            }}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
       </View>
     </BottomDrawer>
   );
@@ -262,17 +302,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     marginBottom: 12,
   },
-  emojiRow: {
+  selectedPreviewRow: {
+    flexDirection: 'row',
     marginBottom: 12,
-    flexGrow: 0,
   },
-  emojiButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  stickerChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 8,
+  },
+  stickerChipImage: {
+    width: 56,
+    height: 56,
+  },
+  emojiChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    gap: 6,
   },
   emojiText: {
     fontSize: 22,

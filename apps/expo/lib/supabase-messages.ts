@@ -9,16 +9,28 @@ export interface Conversation {
   created_at: string;
 }
 
+export interface MessageStickerRef {
+  id: string;
+  type: 'sticker' | 'animated_sticker';
+  name: string;
+  asset_url: string;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
   sender_address: string;
   content: string;
+  sticker_reward_id: string | null;
+  sticker?: MessageStickerRef | null;
   created_at: string;
 }
 
 export interface ConversationWithLastMessage extends Conversation {
   peerAddress: string;
+  peerProfilePictureUrl: string | null;
+  peerEquippedFrameUrl: string | null;
+  peerUsername: string | null;
   lastMessage: Message | null;
   lastReadAt: string | null;
   hasUnread: boolean;
@@ -92,6 +104,34 @@ export async function fetchConversations(
 
   const convos = rawConvos as Conversation[];
 
+  // Collect peer wallet addresses so we can batch-fetch their profile fields.
+  const peerAddresses = convos.map((c) =>
+    c.participant_one === addr ? c.participant_two : c.participant_one
+  );
+
+  const peerProfileByAddr = new Map<
+    string,
+    { profile_picture_url: string | null; equipped_frame_asset_url: string | null; username: string | null }
+  >();
+  if (peerAddresses.length > 0) {
+    const { data: peers } = await supabase
+      .from('users')
+      .select('wallet_address, profile_picture_url, equipped_frame_asset_url, username')
+      .in('wallet_address', peerAddresses);
+    for (const p of (peers ?? []) as Array<{
+      wallet_address: string;
+      profile_picture_url: string | null;
+      equipped_frame_asset_url: string | null;
+      username: string | null;
+    }>) {
+      peerProfileByAddr.set(p.wallet_address, {
+        profile_picture_url: p.profile_picture_url,
+        equipped_frame_asset_url: p.equipped_frame_asset_url,
+        username: p.username,
+      });
+    }
+  }
+
   // Fetch last message + read tracking for each conversation
   const results: ConversationWithLastMessage[] = [];
 
@@ -102,7 +142,7 @@ export async function fetchConversations(
     // Last message
     const { data: msgs } = await supabase
       .from('direct_messages' as any)
-      .select('*')
+      .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
       .eq('conversation_id', convo.id)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -124,7 +164,18 @@ export async function fetchConversations(
       lastMessage.sender_address !== addr &&
       (!lastReadAt || new Date(lastMessage.created_at) > new Date(lastReadAt));
 
-    results.push({ ...convo, peerAddress, lastMessage, lastReadAt, hasUnread });
+    const peerProfile = peerProfileByAddr.get(peerAddress);
+
+    results.push({
+      ...convo,
+      peerAddress,
+      peerProfilePictureUrl: peerProfile?.profile_picture_url ?? null,
+      peerEquippedFrameUrl: peerProfile?.equipped_frame_asset_url ?? null,
+      peerUsername: peerProfile?.username ?? null,
+      lastMessage,
+      lastReadAt,
+      hasUnread,
+    });
   }
 
   // Sort by last message time (newest first), then by created_at
@@ -144,7 +195,7 @@ export async function fetchMessages(
 ): Promise<Message[]> {
   let query = supabase
     .from('direct_messages' as any)
-    .select('*')
+    .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -164,7 +215,8 @@ export async function fetchMessages(
 export async function sendMessage(
   conversationId: string,
   senderAddress: string,
-  content: string
+  content: string,
+  stickerRewardId: string | null = null
 ): Promise<Message | null> {
   const { data, error } = await supabase
     .from('direct_messages' as any)
@@ -172,8 +224,9 @@ export async function sendMessage(
       conversation_id: conversationId,
       sender_address: senderAddress.toLowerCase(),
       content,
+      sticker_reward_id: stickerRewardId,
     } as any)
-    .select()
+    .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
     .single();
 
   if (error) {

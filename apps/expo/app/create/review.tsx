@@ -42,7 +42,8 @@ export default function ReviewScreen() {
 
   const handlePost = async () => {
     const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
-    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem)) return;
+    const hasSticker = !!draft.sticker;
+    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem && !hasSticker)) return;
     setIsSubmitting(true);
 
     try {
@@ -58,6 +59,7 @@ export default function ReviewScreen() {
         video_url: draft.videoUrl || undefined,
         linked_event_id: draft.linkedEventId || undefined,
         linked_marketplace_id: draft.linkedMarketplaceId || undefined,
+        sticker_reward_id: draft.sticker?.id ?? null,
       });
 
       if (!post) {

@@ -368,6 +368,8 @@ export type UserRecord = {
   preferred_role: 'buerger' | 'tourist' | null;
   onboarding_completed_at: string | null;
   terms_accepted_at: string | null;
+  /** Denormalized asset_url of the currently-equipped profile_frame reward. Synced via DB trigger. */
+  equipped_frame_asset_url: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string;

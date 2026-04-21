@@ -29,6 +29,7 @@ import {
 } from '@/lib/supabase-posts';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import { Image } from 'expo-image';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
@@ -117,7 +118,7 @@ export default function PostDetailScreen() {
     setIsLoadingMoreComments(false);
   }, [id, commentPage, isLoadingMoreComments, hasMoreComments]);
 
-  const handleSubmitComment = async (content: string) => {
+  const handleSubmitComment = async (content: string, stickerRewardId: string | null) => {
     if (!walletAddress || !id) return;
     setIsSubmittingComment(true);
 
@@ -127,6 +128,7 @@ export default function PostDetailScreen() {
         wallet_address: walletAddress,
         account_id: activeAccount?.id,
         content,
+        sticker_reward_id: stickerRewardId,
       });
 
       if (newComment) {
@@ -214,7 +216,7 @@ export default function PostDetailScreen() {
     }
   };
 
-  const handleSubmitEditComment = async (content: string) => {
+  const handleSubmitEditComment = async (content: string, _stickerRewardId: string | null) => {
     if (!editingComment) return;
     try {
       const updated = await updateComment(editingComment.id, content);
@@ -284,6 +286,15 @@ export default function PostDetailScreen() {
 
       {mediaUrls.length > 0 && (
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+      )}
+
+      {post.sticker && (
+        <Image
+          source={{ uri: post.sticker.asset_url }}
+          style={styles.postSticker}
+          contentFit="contain"
+          accessibilityIgnoresInvertColors
+        />
       )}
 
       {firstLink && <PostLinkPreview link={firstLink} />}
@@ -486,6 +497,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     lineHeight: 24,
+  },
+  postSticker: {
+    width: 200,
+    height: 200,
+    alignSelf: 'flex-start',
   },
   commentsHeader: {
     paddingTop: 14,

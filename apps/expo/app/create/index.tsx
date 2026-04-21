@@ -29,6 +29,8 @@ import LocationIcon from '@/assets/icons/location-small.svg';
 import MarketsIcon from '@/assets/icons/markets.svg';
 import CalendarIcon from '@/assets/icons/calendar.svg';
 import CommunityIcon from '@/assets/icons/community.svg';
+import EmojiIcon from '@/assets/icons/emoji.svg';
+import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
 
 const MAX_CONTENT_LENGTH = 500;
 
@@ -82,6 +84,7 @@ export default function CreateScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   // Initialize linked event from route params (coming from event submission success)
   useEffect(() => {
@@ -367,6 +370,23 @@ export default function CreateScreen() {
             </View>
           )}
 
+          {/* Sticker preview */}
+          {draft.sticker && (
+            <View style={styles.stickerPreviewRow}>
+              <Image
+                source={{ uri: draft.sticker.asset_url }}
+                style={styles.stickerPreview}
+                contentFit="contain"
+              />
+              <Pressable
+                onPress={() => draft.setSticker(null)}
+                style={[styles.stickerRemoveBtn, { backgroundColor: colors.surfaceSecondary }]}
+              >
+                <Ionicons name="close" size={14} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          )}
+
           {/* Category chips */}
           {draft.feedType === 'main' && (
             <ScrollView
@@ -418,6 +438,16 @@ export default function CreateScreen() {
                 color={draft.images.length >= 4 ? colors.disabled : colors.textSecondary}
               />
             </Pressable>
+            <Pressable
+              style={styles.toolbarBtn}
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowPicker((p) => !p);
+              }}
+              accessibilityLabel="Emoji oder Sticker öffnen"
+            >
+              <EmojiIcon width={22} height={22} color={colors.textSecondary} />
+            </Pressable>
             <Pressable style={styles.toolbarBtn} onPress={() => {}}>
               <LocationIcon width={22} height={22} color={colors.textSecondary} />
             </Pressable>
@@ -453,6 +483,19 @@ export default function CreateScreen() {
               </Pressable>
             ))}
           </View>
+        )}
+        {showPicker && (
+          <StickerEmojiPicker
+            onPickEmoji={(emoji) => {
+              draft.setContent(draft.content + emoji);
+              setShowPicker(false);
+            }}
+            onPickSticker={(reward) => {
+              draft.setSticker(reward);
+              setShowPicker(false);
+            }}
+            onClose={() => setShowPicker(false)}
+          />
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -629,6 +672,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     marginTop: 8,
+  },
+  stickerPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 8,
+  },
+  stickerPreview: {
+    width: 120,
+    height: 120,
+  },
+  stickerRemoveBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   uploadingText: {
     fontSize: 13,

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
-import { fetchUserByWallet } from '@/lib/supabase-users';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 type Props = {
@@ -37,7 +36,10 @@ function formatTimestamp(isoDate: string): string {
   });
 }
 
-function getPreviewText(content: string): string {
+function getPreviewText(message: ConversationWithLastMessage['lastMessage']): string {
+  if (!message) return '';
+  if (message.sticker_reward_id) return '🎁 Sticker';
+  const content = message.content ?? '';
   try {
     const parsed = JSON.parse(content);
     if (parsed?.type === 'listing_inquiry' || parsed?.type === 'product_inquiry') {
@@ -51,22 +53,16 @@ function getPreviewText(content: string): string {
 
 export default function ConversationListItem({ conversation, onPress }: Props) {
   const { colors } = useTheme();
-  const { peerAddress, lastMessage, hasUnread } = conversation;
-  const [peerName, setPeerName] = useState<string | null>(null);
-  const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
+  const {
+    peerAddress,
+    peerProfilePictureUrl,
+    peerEquippedFrameUrl,
+    peerUsername,
+    lastMessage,
+    hasUnread,
+  } = conversation;
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchUserByWallet(peerAddress).then((user) => {
-      if (user && !cancelled) {
-        setPeerName(user.username);
-        setPeerAvatar(user.profile_picture_url);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [peerAddress]);
-
-  const displayName = peerName || shortenAddress(peerAddress);
+  const displayName = peerUsername || shortenAddress(peerAddress);
 
   return (
     <Pressable
@@ -77,15 +73,12 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
       ]}
       onPress={onPress}
     >
-      {peerAvatar ? (
-        <Image source={{ uri: peerAvatar }} style={styles.avatar} contentFit="cover" />
-      ) : (
-        <View style={[styles.avatarFallback, { backgroundColor: colors.cardPlaceholder }]}>
-          <Text style={[styles.avatarText, { color: colors.textSecondary }]}>
-            {(displayName[0] || '?').toUpperCase()}
-          </Text>
-        </View>
-      )}
+      <UserAvatarWithFrame
+        size={48}
+        uri={peerProfilePictureUrl}
+        fallbackInitial={(displayName[0] || '?').toUpperCase()}
+        frameAssetUrl={peerEquippedFrameUrl}
+      />
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text
@@ -114,7 +107,7 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
               ]}
               numberOfLines={1}
             >
-              {getPreviewText(lastMessage.content)}
+              {getPreviewText(lastMessage)}
             </Text>
           ) : (
             <Text style={[styles.preview, styles.previewEmpty, { color: colors.textSecondary }]}>

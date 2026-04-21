@@ -18,21 +18,9 @@ import { useRewards } from '@/context/RewardsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { equipUserReward } from '@/lib/supabase-rewards';
 import type { LootboxRewardRarity, LootboxRewardType } from '@/lib/supabase-rewards';
+import RarityPill from '@/components/rewards/RarityPill';
+import { RARITY_COLOR } from '@/lib/rarity';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-
-const RARITY_LABEL: Record<LootboxRewardRarity, string> = {
-  common: 'Gewöhnlich',
-  rare: 'Selten',
-  epic: 'Episch',
-  legendary: 'Legendär',
-};
-
-const RARITY_COLOR: Record<LootboxRewardRarity, string> = {
-  common: '#94A3B8',
-  rare: '#3B82F6',
-  epic: '#8B5CF6',
-  legendary: '#F59E0B',
-};
 
 /**
  * Decide where "Jetzt ausprobieren" should push based on reward type.
@@ -128,15 +116,8 @@ export default function RewardScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View
-          style={[
-            styles.rarityRibbon,
-            { backgroundColor: rarityColor + (isDark ? '33' : '22') },
-          ]}
-        >
-          <Text style={[styles.rarityRibbonText, { color: rarityColor }]}>
-            {RARITY_LABEL[rarity]}
-          </Text>
+        <View style={styles.rarityRow}>
+          <RarityPill rarity={rarity} size="medium" />
         </View>
 
         <View
@@ -233,17 +214,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 2,
   },
-  rarityRibbon: {
+  rarityRow: {
     alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  rarityRibbonText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   artBox: {
     width: '78%',

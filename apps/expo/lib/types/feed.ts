@@ -15,9 +15,17 @@ export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share';
 
 export type PostAuthor = Pick<
   UserRecord,
-  'wallet_address' | 'username' | 'profile_picture_url' | 'is_verified_citizen' | 'tier'
+  'wallet_address' | 'username' | 'profile_picture_url' | 'is_verified_citizen' | 'tier' | 'equipped_frame_asset_url'
 > & {
   account?: Pick<Account, 'id' | 'account_type' | 'name' | 'avatar_url'> | null;
+};
+
+/** Lightweight sticker payload joined onto sticker-bearing records. */
+export type StickerRewardRef = {
+  id: string;
+  type: 'sticker' | 'animated_sticker';
+  name: string;
+  asset_url: string;
 };
 
 export type PostLinkRecord = {
@@ -62,6 +70,7 @@ export type PostRecord = {
   linked_event_id: string | null;
   linked_marketplace_id: string | null;
   linked_mecky_draft_id: string | null;
+  sticker_reward_id: string | null;
   likes_count: number;
   comments_count: number;
   created_at: string;
@@ -70,6 +79,7 @@ export type PostRecord = {
   author?: PostAuthor;
   links?: PostLinkRecord[];
   poll?: PostPollRecord;
+  sticker?: StickerRewardRef | null;
   linked_event?: Pick<EventRecord, 'id' | 'title' | 'date' | 'time' | 'location' | 'image_url' | 'category'>;
   linked_marketplace?: Pick<MarketplaceListingRecord, 'id' | 'title' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'neighborhood'>;
 };
@@ -82,10 +92,12 @@ export type PostCommentRecord = {
   content: string;
   media_urls: string[] | null;
   video_url: string | null;
+  sticker_reward_id: string | null;
   status: 'published' | 'deleted';
   created_at: string;
   // Joined data
   author?: PostAuthor;
+  sticker?: StickerRewardRef | null;
 };
 
 // ─── Event Experience Types ─────────────────────────────────
@@ -98,9 +110,11 @@ export type EventExperience = {
   media_urls: string[] | null;
   video_url: string | null;
   emoji: string | null;
+  sticker_reward_id: string | null;
   status: 'published' | 'deleted';
   created_at: string;
   author?: PostAuthor;
+  sticker?: StickerRewardRef | null;
 };
 
 export type CreateExperienceInput = {
@@ -111,6 +125,7 @@ export type CreateExperienceInput = {
   media_urls?: string[];
   video_url?: string;
   emoji?: string;
+  sticker_reward_id?: string;
 };
 
 // ─── Create Inputs ──────────────────────────────────────────
@@ -127,6 +142,7 @@ export type CreatePostInput = {
   linked_event_id?: string;
   linked_marketplace_id?: string;
   linked_mecky_draft_id?: string;
+  sticker_reward_id?: string | null;
 };
 
 export type CreateCommentInput = {
@@ -136,6 +152,7 @@ export type CreateCommentInput = {
   content: string;
   media_urls?: string[];
   video_url?: string;
+  sticker_reward_id?: string | null;
 };
 
 export type CreatePollInput = {

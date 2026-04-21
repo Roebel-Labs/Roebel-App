@@ -1,57 +1,83 @@
-import React from 'react';
+import React, { type ComponentProps } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import type { UserTier } from '@/lib/types';
+
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 type Props = {
   tier: UserTier;
   size?: 'small' | 'medium';
 };
 
-const TIER_CONFIG: Record<UserTier, { label: string; bgLight: string; bgDark: string; textLight: string; textDark: string }> = {
+type TierCfg = {
+  label: string;
+  icon: IoniconName;
+  bgLight: string;
+  bgDark: string;
+  fgLight: string;
+  fgDark: string;
+};
+
+/**
+ * Tier pills get a small glyph left of the label so they feel like the
+ * rarity pills on the rewards surface. Icons map to the tier's semantic:
+ * guest → neutral person, tourist → compass, citizen → shield (Bürgerausweis).
+ * When PNG assets land at `assets/illustration/gamification/tier/<tier>.png`,
+ * swap the `<Ionicons>` here for a local `<Image>`.
+ */
+const TIER_CONFIG: Record<UserTier, TierCfg> = {
   guest: {
     label: 'Gast',
+    icon: 'person-outline',
     bgLight: '#E5E7EB',
     bgDark: '#374151',
-    textLight: '#4B5563',
-    textDark: '#9CA3AF',
+    fgLight: '#4B5563',
+    fgDark: '#9CA3AF',
   },
   tourist: {
     label: 'Tourist',
+    icon: 'compass',
     bgLight: '#DBEAFE',
     bgDark: '#1E3A5F',
-    textLight: '#1E40AF',
-    textDark: '#93C5FD',
+    fgLight: '#1E40AF',
+    fgDark: '#93C5FD',
   },
   citizen: {
     label: 'Bürger',
+    icon: 'shield-checkmark',
     bgLight: '#D1FAE5',
     bgDark: '#064E3B',
-    textLight: '#065F46',
-    textDark: '#6EE7B7',
+    fgLight: '#065F46',
+    fgDark: '#6EE7B7',
   },
 };
 
 export default function TierBadge({ tier, size = 'small' }: Props) {
   const { isDark } = useTheme();
-  const config = TIER_CONFIG[tier];
+  const cfg = TIER_CONFIG[tier];
+  const fg = isDark ? cfg.fgDark : cfg.fgLight;
+  const bg = isDark ? cfg.bgDark : cfg.bgLight;
+  const isMedium = size === 'medium';
 
   return (
     <View
       style={[
         styles.badge,
-        size === 'medium' && styles.badgeMedium,
-        { backgroundColor: isDark ? config.bgDark : config.bgLight },
+        isMedium ? styles.badgeMedium : styles.badgeSmall,
+        { backgroundColor: bg },
       ]}
     >
+      <Ionicons name={cfg.icon} size={isMedium ? 14 : 12} color={fg} />
       <Text
         style={[
-          styles.badgeText,
-          size === 'medium' && styles.badgeTextMedium,
-          { color: isDark ? config.textDark : config.textLight },
+          styles.label,
+          isMedium ? styles.labelMedium : styles.labelSmall,
+          { color: fg },
         ]}
       >
-        {config.label}
+        {cfg.label}
       </Text>
     </View>
   );
@@ -59,21 +85,28 @@ export default function TierBadge({ tier, size = 'small' }: Props) {
 
 const styles = StyleSheet.create({
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+  },
+  badgeSmall: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
+    gap: 4,
   },
   badgeMedium: {
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 8,
+    gap: 6,
   },
-  badgeText: {
-    fontSize: 11,
+  label: {
     fontFamily: 'Inter-Medium',
   },
-  badgeTextMedium: {
+  labelSmall: {
+    fontSize: 11,
+  },
+  labelMedium: {
     fontSize: 13,
   },
 });

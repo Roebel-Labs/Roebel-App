@@ -26,9 +26,10 @@ export async function fetchEventExperiences(
     .select(`
       *,
       author:users!event_experiences_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .eq('event_id', eventId)
     .eq('status', 'published')
@@ -62,14 +63,16 @@ export async function createExperience(
       media_urls: input.media_urls || [],
       video_url: input.video_url || null,
       emoji: input.emoji || null,
+      sticker_reward_id: input.sticker_reward_id || null,
       status: 'published',
     })
     .select(`
       *,
       author:users!event_experiences_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier
+        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url)
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
 

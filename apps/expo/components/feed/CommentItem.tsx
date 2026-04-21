@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -43,13 +44,13 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
         accessibilityRole={isInteractive ? 'button' : undefined}
         accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
       >
-        {avatarUri ? (
-          <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
-        ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: colors.primaryLight }]}>
-            <Text style={[styles.avatarInitial, { color: colors.primary }]}>{initial}</Text>
-          </View>
-        )}
+        <UserAvatarWithFrame
+          size={32}
+          uri={avatarUri ?? null}
+          fallbackInitial={initial}
+          frameAssetUrl={isOrgComment ? null : comment.author?.equipped_frame_asset_url ?? null}
+          disabled={isOrgComment}
+        />
       </Pressable>
 
       {/* Content */}
@@ -76,7 +77,18 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
             </Pressable>
           )}
         </View>
-        <Text style={[styles.text, { color: colors.textPrimary }]}>{comment.content}</Text>
+        {comment.content ? (
+          <Text style={[styles.text, { color: colors.textPrimary }]}>{comment.content}</Text>
+        ) : null}
+
+        {comment.sticker ? (
+          <Image
+            source={{ uri: comment.sticker.asset_url }}
+            style={styles.sticker}
+            contentFit="contain"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
 
         {showActions && (
           <View style={styles.actionsRow}>
@@ -182,6 +194,11 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 6,
+  },
+  sticker: {
+    width: 120,
+    height: 120,
+    marginTop: 4,
   },
   moreButton: {
     marginLeft: 'auto',

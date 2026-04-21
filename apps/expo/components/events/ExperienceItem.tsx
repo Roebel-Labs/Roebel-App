@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet, Linking } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
@@ -33,12 +34,20 @@ export default function ExperienceItem({ experience, isOwner, onDelete }: Props)
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Emoji banner */}
-      {experience.emoji && (
+      {/* Emoji or sticker banner */}
+      {experience.sticker ? (
+        <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
+          <Image
+            source={{ uri: experience.sticker.asset_url }}
+            style={styles.stickerBanner}
+            contentFit="contain"
+          />
+        </View>
+      ) : experience.emoji ? (
         <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
           <Text style={styles.emoji}>{experience.emoji}</Text>
         </View>
-      )}
+      ) : null}
 
       <View style={styles.body}>
         {/* Author + menu */}
@@ -113,6 +122,10 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 48,
+  },
+  stickerBanner: {
+    width: 140,
+    height: 140,
   },
   body: {
     padding: 16,
