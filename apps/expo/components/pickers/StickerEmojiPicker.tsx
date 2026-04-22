@@ -16,7 +16,7 @@ type Props = {
   onClose: () => void;
   onPickEmoji: (emoji: string) => void;
   onPickSticker: (reward: LootboxReward) => void;
-  /** Hide the sticker sections (e.g. on surfaces where only emoji is wanted). */
+  /** Hide the sticker sections (used for pure-text surfaces if needed later). */
   stickersEnabled?: boolean;
 };
 
@@ -85,9 +85,9 @@ const EMOJI_SIZE = 34;
 const STICKER_TILE = 68;
 
 /**
- * Discord-style tabbed-by-section picker. Single scrollable column with
- * section headers; emoji grid first, then owned sticker grids. Used in
- * DMs, post comments, create-post and event experiences.
+ * Discord-style tabbed-by-section picker. Renders as a bottom sheet with a
+ * dimmed backdrop. Stickers come first (exclusive/rare content), emojis
+ * below. Used in DMs, post comments, create-post and event experiences.
  */
 export default function StickerEmojiPicker({
   onClose,
@@ -115,18 +115,48 @@ export default function StickerEmojiPicker({
   }, [userRewards, stickersEnabled]);
 
   return (
-    <Pressable style={styles.overlay} onPress={onClose}>
-      <Pressable
-        onPress={(e) => e.stopPropagation()}
+    <View style={styles.root} pointerEvents="box-none">
+      {/* Tap-outside backdrop — absolute fill, doesn't wrap the sheet so
+          the ScrollView inside the sheet receives its own gestures. */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+
+      <View
         style={[
           styles.container,
           { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
         <ScrollView
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
           contentContainerStyle={styles.scrollContent}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
+          {stickersEnabled && (
+            <>
+              <StickerSection
+                title="Animierte Sticker"
+                rewards={stickersByType.animated_sticker}
+                emptyHint="Animierte Sticker aus Schatztruhen freischalten →"
+                onPickSticker={onPickSticker}
+                onEmptyPress={() => {
+                  onClose();
+                  router.push('/rewards/schatzkammer' as any);
+                }}
+              />
+              <StickerSection
+                title="Sticker"
+                rewards={stickersByType.sticker}
+                emptyHint="Sticker aus Schatztruhen freischalten →"
+                onPickSticker={onPickSticker}
+                onEmptyPress={() => {
+                  onClose();
+                  router.push('/rewards/schatzkammer' as any);
+                }}
+              />
+            </>
+          )}
+
           {EMOJI_SECTIONS.map((section) => (
             <View key={section.key} style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>
@@ -148,34 +178,9 @@ export default function StickerEmojiPicker({
               </View>
             </View>
           ))}
-
-          {stickersEnabled && (
-            <>
-              <StickerSection
-                title="Sticker"
-                rewards={stickersByType.sticker}
-                emptyHint="Sticker aus Schatztruhen freischalten →"
-                onPickSticker={onPickSticker}
-                onEmptyPress={() => {
-                  onClose();
-                  router.push('/rewards/schatzkammer' as any);
-                }}
-              />
-              <StickerSection
-                title="Animierte Sticker"
-                rewards={stickersByType.animated_sticker}
-                emptyHint="Animierte Sticker freischalten →"
-                onPickSticker={onPickSticker}
-                onEmptyPress={() => {
-                  onClose();
-                  router.push('/rewards/schatzkammer' as any);
-                }}
-              />
-            </>
-          )}
         </ScrollView>
-      </Pressable>
-    </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -233,7 +238,14 @@ function StickerSection({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  root: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  backdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -257,6 +269,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingVertical: 10,
+    paddingBottom: 18,
   },
   section: {
     paddingHorizontal: 10,

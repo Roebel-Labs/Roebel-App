@@ -48,25 +48,31 @@ export default function PostAuthorRow({
     ? () => openAuthorProfile(router, { author, account: author?.account })
     : undefined;
 
+  const avatarNode = avatarSource ? (
+    <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
+  ) : (
+    <UserAvatarWithFrame
+      size={36}
+      uri={profilePic ?? null}
+      fallbackInitial={initial}
+      frameAssetUrl={isOrgPost ? null : author?.equipped_frame_asset_url ?? null}
+      disabled={isOrgPost}
+    />
+  );
+
   return (
-    <Pressable
-      style={styles.container}
-      onPress={handlePress}
-      disabled={!isInteractive}
-      hitSlop={8}
-      accessibilityRole={isInteractive ? 'button' : undefined}
-      accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
-    >
-      {avatarSource ? (
-        <Image source={avatarSource} style={styles.avatar} contentFit="cover" />
+    <View style={styles.container}>
+      {isInteractive ? (
+        <Pressable
+          onPress={handlePress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Profil von ${displayName} öffnen`}
+        >
+          {avatarNode}
+        </Pressable>
       ) : (
-        <UserAvatarWithFrame
-          size={36}
-          uri={profilePic ?? null}
-          fallbackInitial={initial}
-          frameAssetUrl={isOrgPost ? null : author?.equipped_frame_asset_url ?? null}
-          disabled={isOrgPost}
-        />
+        avatarNode
       )}
 
       <View style={styles.info}>
@@ -98,7 +104,7 @@ export default function PostAuthorRow({
           </Text>
         </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
