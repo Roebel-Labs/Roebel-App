@@ -22539,7 +22539,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 20.19.37
+      '@types/node': 22.19.15
       '@types/responselike': 1.0.3
 
   '@types/caseless@0.12.5':
@@ -22736,7 +22736,7 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 20.19.37
+      '@types/node': 22.19.15
 
   '@types/linkify-it@3.0.5': {}
 
@@ -22850,7 +22850,7 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 20.19.37
+      '@types/node': 22.19.15
 
   '@types/shimmer@1.2.0': {}
 

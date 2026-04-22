@@ -1,12 +1,23 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  UIManager,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import PagerView, {
-  type PagerViewOnPageScrollEventData,
-  type PagerViewOnPageSelectedEventData,
-} from 'react-native-pager-view';
-import { useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedScrollHandler,
+  useDerivedValue,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
@@ -29,6 +40,134 @@ import { usePostActions } from '@/hooks/usePostActions';
 
 const TAB_ORDER: FeedType[] = ['main', 'rathaus', 'app'];
 
+// Detect whether the native PagerView module is baked into the current
+// binary. An EAS Update can ship JS that imports a new native module into
+// a binary that was built before the module existed — rendering that
+// module would crash the app. We fall back to a pure-JS horizontal
+// ScrollView when the native view manager isn't registered.
+const PagerViewModule = (() => {
+  try {
+    const mod = require('react-native-pager-view');
+    const native =
+      !!UIManager.getViewManagerConfig?.('RNCViewPager') ||
+      !!UIManager.getViewManagerConfig?.('RCTRNCViewPager');
+    return native ? mod.default : null;
+  } catch {
+    return null;
+  }
+})() as React.ComponentType<any> | null;
+
+type PagerProps = {
+  initialPage: number;
+  scrollProgress: SharedValue<number>;
+  onPageSelected: (index: number) => void;
+  pageWidth: number;
+  children: React.ReactNode;
+};
+
+type PagerHandle = {
+  setPage: (index: number) => void;
+};
+
+const NativePager = PagerViewModule
+  ? React.forwardRef<PagerHandle, PagerProps>(function NativePager(
+      { initialPage, scrollProgress, onPageSelected, children, pageWidth: _pageWidth },
+      ref,
+    ) {
+      const pagerRef = useRef<any>(null);
+      React.useImperativeHandle(ref, () => ({
+        setPage: (i: number) => pagerRef.current?.setPage?.(i),
+      }));
+
+      const handleScroll = useCallback(
+        (e: { nativeEvent: { position: number; offset: number } }) => {
+          scrollProgress.value = e.nativeEvent.position + e.nativeEvent.offset;
+        },
+        [scrollProgress],
+      );
+
+      const handleSelected = useCallback(
+        (e: { nativeEvent: { position: number } }) => {
+          onPageSelected(e.nativeEvent.position);
+        },
+        [onPageSelected],
+      );
+
+      const Pager = PagerViewModule!;
+      return (
+        <Pager
+          ref={pagerRef}
+          style={styles.pager}
+          initialPage={initialPage}
+          onPageScroll={handleScroll}
+          onPageSelected={handleSelected}
+          offscreenPageLimit={1}
+          overdrag
+        >
+          {children}
+        </Pager>
+      );
+    })
+  : null;
+
+const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPager(
+  { initialPage, scrollProgress, onPageSelected, pageWidth, children },
+  ref,
+) {
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollX = useSharedValue(initialPage * pageWidth);
+
+  React.useEffect(() => {
+    scrollProgress.value = pageWidth > 0 ? scrollX.value / pageWidth : 0;
+  }, [pageWidth, scrollProgress, scrollX]);
+
+  React.useImperativeHandle(ref, () => ({
+    setPage: (i: number) => {
+      scrollRef.current?.scrollTo({ x: i * pageWidth, animated: true });
+    },
+  }));
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+      scrollProgress.value = pageWidth > 0 ? e.contentOffset.x / pageWidth : 0;
+    },
+  });
+
+  const handleMomentumEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (pageWidth <= 0) return;
+      const idx = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+      onPageSelected(idx);
+    },
+    [onPageSelected, pageWidth],
+  );
+
+  return (
+    <Animated.ScrollView
+      ref={scrollRef as any}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      onScroll={scrollHandler}
+      scrollEventThrottle={16}
+      onMomentumScrollEnd={handleMomentumEnd}
+      decelerationRate="fast"
+      disableIntervalMomentum
+      bounces={false}
+      overScrollMode="never"
+      contentOffset={{ x: initialPage * pageWidth, y: 0 }}
+      style={styles.pager}
+    >
+      {children}
+    </Animated.ScrollView>
+  );
+});
+
+const Pager = (NativePager ?? ScrollPager) as React.ForwardRefExoticComponent<
+  PagerProps & React.RefAttributes<PagerHandle>
+>;
+
 export default function FeedHome() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -36,6 +175,7 @@ export default function FeedHome() {
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
   const { unreadCount } = useNotificationsContext();
+  const { width: screenWidth } = useWindowDimensions();
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
@@ -46,7 +186,7 @@ export default function FeedHome() {
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [editComposerVisible, setEditComposerVisible] = useState(false);
 
-  const pagerRef = useRef<PagerView>(null);
+  const pagerRef = useRef<PagerHandle>(null);
   const scrollProgress = useSharedValue(0);
 
   const mainListRef = useRef<FeedListHandle>(null);
@@ -72,21 +212,10 @@ export default function FeedHome() {
     setActiveTab(tab);
   };
 
-  const handlePageScroll = useCallback(
-    (e: { nativeEvent: PagerViewOnPageScrollEventData }) => {
-      scrollProgress.value = e.nativeEvent.position + e.nativeEvent.offset;
-    },
-    [scrollProgress],
-  );
-
-  const handlePageSelected = useCallback(
-    (e: { nativeEvent: PagerViewOnPageSelectedEventData }) => {
-      const idx = e.nativeEvent.position;
-      const next = TAB_ORDER[idx];
-      if (next) setActiveTab(next);
-    },
-    [],
-  );
+  const handlePageSelected = useCallback((idx: number) => {
+    const next = TAB_ORDER[idx];
+    if (next) setActiveTab(next);
+  }, []);
 
   const handleNavTabPress = (tab: 'home' | 'explore' | 'map' | 'profile') => {
     setNavTab(tab);
@@ -193,16 +322,14 @@ export default function FeedHome() {
       {appHeader}
 
       {isCitizen ? (
-        <PagerView
+        <Pager
           ref={pagerRef}
-          style={styles.pager}
           initialPage={0}
-          onPageScroll={handlePageScroll}
+          scrollProgress={scrollProgress}
           onPageSelected={handlePageSelected}
-          offscreenPageLimit={1}
-          overdrag
+          pageWidth={screenWidth}
         >
-          <View key="main" style={styles.page} collapsable={false}>
+          <View key="main" style={[styles.page, { width: screenWidth }]} collapsable={false}>
             <FeedList
               ref={mainListRef}
               feedType="main"
@@ -213,7 +340,7 @@ export default function FeedHome() {
               listHeader={<EventStoryBar />}
             />
           </View>
-          <View key="rathaus" style={styles.page} collapsable={false}>
+          <View key="rathaus" style={[styles.page, { width: screenWidth }]} collapsable={false}>
             <FeedList
               ref={rathausListRef}
               feedType="rathaus"
@@ -223,7 +350,7 @@ export default function FeedHome() {
               onMore={handleMore}
             />
           </View>
-          <View key="app" style={styles.page} collapsable={false}>
+          <View key="app" style={[styles.page, { width: screenWidth }]} collapsable={false}>
             <FeedList
               ref={appListRef}
               feedType="app"
@@ -233,7 +360,7 @@ export default function FeedHome() {
               onMore={handleMore}
             />
           </View>
-        </PagerView>
+        </Pager>
       ) : (
         <View style={styles.pager}>
           <FeedList
