@@ -38,14 +38,14 @@ export const governorContract = getContract({
 export const SIGNATURE_REQUIREMENTS = {
   citizen: {
     attesters: 1,
-    citizens: 2,
-    minimumApprovers: 3,
+    citizens: 1,
+    minimumApprovers: 2,
   },
   attester: {
-    attesters: 3,
+    attesters: 2,
   },
   revocation: {
-    attesters: 3,
+    attesters: 1,
   },
 };
 

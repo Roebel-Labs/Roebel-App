@@ -131,13 +131,10 @@ constructor(
   - = 2 different people, requirement met ✅
 
 ### For Citizen NFT Revocation:
-- **Need**: 3 Attester signatures
-- **Plus**: 3 different wallets
+- **Need**: 1 Attester signature
 - **Example Valid**:
   - Attester #1 approves ✅
-  - Attester #2 approves ✅
-  - Attester #3 approves ✅
-  - = 3 different people, requirement met ✅
+  - = 1 Attester, requirement met ✅
 
 ---
 

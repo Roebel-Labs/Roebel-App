@@ -1,33 +1,22 @@
-# CitizenNFT v2 Deployment Guide
+# CitizenNFT Deployment Guide
 
-## Summary of Changes
+## Current Signature Thresholds
 
-### Smart Contract Changes
-✅ **Updated CitizenNFT.sol** with role selection and increased security:
-- Added `signAsAttester` parameter to `approveRequest()` function
-- Changed signature requirements from **1 Attester + 1 Citizen** to **1 Attester + 2 Citizens**
-- Changed minimum unique signers from **2 people** to **3 people**
-- Dual NFT holders can now explicitly choose which role to sign as
-- Updated event emission to include `signedAsAttester` parameter
+- **Citizen attestation:** 1 Attester + 1 Citizen (minimum 2 unique people)
+- **Citizen revocation:** 1 Attester
+- **Attester attestation/revocation:** 2 Attesters
+- `signAsAttester` parameter on `approveRequest()` lets dual NFT holders choose which role to sign as
+- Target cannot approve their own request (`msg.sender != req.target`), so dual holders still cannot self-mint
 
-### Frontend Changes
-✅ **Removed event polling** - Success shown immediately after transaction submission
-✅ **Updated UI** to show new signature requirements (1 Attester + 2 Citizens)
-✅ **Added role selection** for dual NFT holders (Attester vs Citizen)
-✅ **Updated contract ABI** to include new `signAsAttester` parameter
+## Frontend
 
-## Why These Changes?
+✅ UI reflects the 1+1 citizen attestation rule and 2-Attester Attester-minting rule
+✅ Role selection surfaces for dual NFT holders (Attester vs Citizen)
+✅ Contract ABI includes the `signAsAttester` parameter
 
-### Security Problem (FIXED)
-**OLD SYSTEM:** 1 Attester + 1 Citizen (minimum 2 people)
-- ❌ One person with both NFTs could approve new citizens alone
-- ❌ Vulnerable to single-person decision making
+## Rationale
 
-**NEW SYSTEM:** 1 Attester + 2 Citizens (minimum 3 people)
-- ✅ Requires broader community consensus
-- ✅ Prevents one dual-holder from approving alone
-- ✅ Ensures at least 2 pure Citizens must agree
-- ✅ Dual holders can choose their role explicitly
+Earlier versions required 1 Attester + 2 Citizens and a minimum of 3 unique signers. Onboarding friction was too high for a town still growing its verified-citizen base, so the bar was lowered to 1+1 with a 2-unique-signer minimum. The self-approval guard still prevents a dual holder from minting themselves.
 
 ### UX Problem (FIXED)
 **OLD SYSTEM:** Event polling after transaction
@@ -93,10 +82,10 @@ npm run dev
 - [ ] Wallet with only Attester NFT: Should auto-select "Attester" role
 - [ ] Wallet with only Citizen NFT: Should auto-select "Citizen" role
 - [ ] Wallet with both NFTs: Should show role selection (Attester / Citizen)
-- [ ] Signature counts display: "0/1" for Attester, "0/2" for Citizens
+- [ ] Signature counts display: "0/1" for Attester, "0/1" for Citizens
 - [ ] After signing: Success shown immediately (no polling)
 - [ ] Transaction link to Blockscout works
-- [ ] Request auto-executes after 1 Attester + 2 Citizens sign (3 people minimum)
+- [ ] Request auto-executes after 1 Attester + 1 Citizen sign (2 people minimum)
 
 ### Step 5: Deploy Frontend (Optional)
 
@@ -136,13 +125,13 @@ All existing attestation requests on the **old CitizenNFT contract** (0x8e0D66Bd
 2. UI auto-selects "Attester" role
 3. Signs request
 4. Attester count: 0/1 → 1/1 ✅
-5. Citizen count: 0/2 (unchanged)
+5. Citizen count: 0/1 (unchanged)
 
 ### Scenario 2: Pure Citizen Signs
 1. Wallet holds only Citizen NFT
 2. UI auto-selects "Citizen" role
 3. Signs request
-4. Citizen count: 0/2 → 1/2
+4. Citizen count: 0/1 → 1/1 ✅
 5. Attester count: 0/1 (unchanged)
 
 ### Scenario 3: Dual Holder Signs as Attester
@@ -151,28 +140,27 @@ All existing attestation requests on the **old CitizenNFT contract** (0x8e0D66Bd
 3. User selects "Als Bescheiniger unterschreiben"
 4. Signs request
 5. Attester count: 0/1 → 1/1 ✅
-6. Citizen count: 0/2 (unchanged)
+6. Citizen count: 0/1 (unchanged)
 
 ### Scenario 4: Dual Holder Signs as Citizen
 1. Wallet holds both NFTs
 2. UI shows role selection
 3. User selects "Als Bürger unterschreiben"
 4. Signs request
-5. Citizen count: 0/2 → 1/2
+5. Citizen count: 0/1 → 1/1 ✅
 6. Attester count: 0/1 (unchanged)
 
 ### Scenario 5: Auto-Execute (Happy Path)
 1. Person A (Attester only): Signs as Attester → 1/1 Attester ✅
-2. Person B (Citizen only): Signs as Citizen → 1/2 Citizens
-3. Person C (Citizen only): Signs as Citizen → 2/2 Citizens ✅
-4. **Auto-execute:** NFT minted to requester! 🎉
-5. **Requirement met:** 3 different people signed (A, B, C)
+2. Person B (Citizen only): Signs as Citizen → 1/1 Citizens ✅
+3. **Auto-execute:** NFT minted to requester! 🎉
+4. **Requirement met:** 2 different people signed (A, B)
 
 ### Scenario 6: Security Test (Blocked)
-1. Person A (holds both NFTs): Signs as Attester → 1/1 Attester ✅
-2. Person A tries to sign again → ❌ **Blocked:** "Already approved"
-3. System requires 2 more people (Citizens) to approve
-4. **Security maintained:** One person cannot approve alone
+1. Target of the request cannot approve their own request (blocked by `msg.sender != req.target`)
+2. Person A (holds both NFTs): Signs as Attester → 1/1 Attester ✅
+3. Person A tries to sign the same request again → ❌ **Blocked:** "Already approved"
+4. System still requires a second unique signer acting as Citizen before auto-execute
 
 ## Rollback Plan
 
@@ -232,9 +220,9 @@ If you encounter issues:
 ✅ Contract deploys successfully
 ✅ Frontend compiles without TypeScript errors
 ✅ Role selection UI works for dual NFT holders
-✅ Signature counts show "1 Attester + 2 Citizens" requirement
+✅ Signature counts show "1 Attester + 1 Citizen" requirement
 ✅ Success shown immediately after transaction (no polling)
-✅ Requests auto-execute after 3 people sign
+✅ Requests auto-execute after 2 different people sign (1 Attester + 1 Citizen)
 
 ---
 

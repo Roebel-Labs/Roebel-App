@@ -34,7 +34,7 @@ AttesterGovernor (Depends on both NFT addresses)
 ## 🚀 Step 1: Deploy AttesterNFT
 
 ### What is AttesterNFT?
-Soulbound NFT for culture committee members who can verify citizens. Requires 3 Attester signatures to mint new Attesters.
+Soulbound NFT for culture committee members who can verify citizens. Requires 2 Attester signatures to mint new Attesters.
 
 ### Compilation
 
@@ -106,7 +106,7 @@ Check on BaseScan:
 ## 🚀 Step 2: Deploy CitizenNFT
 
 ### What is CitizenNFT?
-Soulbound NFT with voting power for verified Röbel citizens. Requires 1 Attester + 2 Citizen signatures to mint new Citizens.
+Soulbound NFT with voting power for verified Röbel citizens. Requires 1 Attester + 1 Citizen signature to mint new Citizens.
 
 ### Deployment
 

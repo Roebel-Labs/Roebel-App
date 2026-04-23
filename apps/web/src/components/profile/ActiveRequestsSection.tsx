@@ -220,12 +220,12 @@ export function ActiveRequestsSection() {
                       <div
                         className="bg-blue-600 h-2 rounded-full transition-all"
                         style={{
-                          width: `${Math.min(((request.signatureCount || 0) / 3) * 100, 100)}%`,
+                          width: `${Math.min(((request.signatureCount || 0) / 2) * 100, 100)}%`,
                         }}
                       />
                     </div>
                     <span className="text-muted-foreground text-xs whitespace-nowrap">
-                      {request.signatureCount || 0} / 3 Unterschriften
+                      {request.signatureCount || 0} / 2 Unterschriften
                     </span>
                   </div>
                 ) : (
@@ -254,12 +254,12 @@ export function ActiveRequestsSection() {
                         <div
                           className="bg-blue-600 h-2 rounded-full transition-all"
                           style={{
-                            width: `${Math.min(((request.citizenSignatures || 0) / 2) * 100, 100)}%`,
+                            width: `${Math.min((request.citizenSignatures || 0) * 100, 100)}%`,
                           }}
                         />
                       </div>
                       <span className="text-muted-foreground text-xs whitespace-nowrap">
-                        {request.citizenSignatures || 0} / 2
+                        {request.citizenSignatures || 0} / 1
                       </span>
                     </div>
                   </div>

@@ -52,10 +52,10 @@ export const VERIFICATION_CONTRACTS = {
 - `hasAttesterNFT(address account)` - Check if address has attester NFT
 
 ### Signature Requirements
-- **Citizen Attestation**: 1 Attester + 2 Citizens (minimum 3 different people)
-- **Attester Attestation**: 3 Attesters
-- **Citizen Revocation**: 3 Attesters
-- **Attester Revocation**: 3 Attesters
+- **Citizen Attestation**: 1 Attester + 1 Citizen (minimum 2 different people)
+- **Attester Attestation**: 2 Attesters
+- **Citizen Revocation**: 1 Attester
+- **Attester Revocation**: 2 Attesters
 
 ---
 

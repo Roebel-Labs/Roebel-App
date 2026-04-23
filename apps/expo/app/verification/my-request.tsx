@@ -164,7 +164,7 @@ export default function MyRequestScreen() {
                   <View style={styles.progressBar}>
                     <Text style={[styles.progressText, { color: colors.textSecondary }]}>
                       {activePendingRequest.attester_signatures || 0} /{' '}
-                      {nftType === 'citizen' ? '1' : '3'}
+                      {nftType === 'citizen' ? '1' : '2'}
                     </Text>
                     <View style={[styles.progressBarTrack, { backgroundColor: colors.borderSecondary }]}>
                       <View
@@ -174,7 +174,7 @@ export default function MyRequestScreen() {
                           {
                             width: `${
                               ((activePendingRequest.attester_signatures || 0) /
-                                (nftType === 'citizen' ? 1 : 3)) *
+                                (nftType === 'citizen' ? 1 : 2)) *
                               100
                             }%`,
                           },
@@ -189,7 +189,7 @@ export default function MyRequestScreen() {
                     <Text style={[styles.progressLabel, { color: colors.textPrimary }]}>Bürger</Text>
                     <View style={styles.progressBar}>
                       <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-                        {activePendingRequest.citizen_signatures || 0} / 2
+                        {activePendingRequest.citizen_signatures || 0} / 1
                       </Text>
                       <View style={[styles.progressBarTrack, { backgroundColor: colors.borderSecondary }]}>
                         <View
@@ -198,7 +198,7 @@ export default function MyRequestScreen() {
                             { backgroundColor: colors.primary },
                             {
                               width: `${
-                                ((activePendingRequest.citizen_signatures || 0) / 2) * 100
+                                Math.min((activePendingRequest.citizen_signatures || 0) * 100, 100)
                               }%`,
                             },
                           ]}
@@ -212,9 +212,8 @@ export default function MyRequestScreen() {
               <Text style={[styles.progressHint, { color: colors.textTertiary }]}>
                 &#x2139;&#xFE0F; Sie benötigen{' '}
                 {nftType === 'citizen'
-                  ? '1 Bescheiniger und 2 Bürger'
-                  : '3 Bescheiniger'}{' '}
-                (mindestens 3 verschiedene Personen)
+                  ? '1 Bescheiniger und 1 Bürger (mindestens 2 verschiedene Personen)'
+                  : '2 Bescheiniger (mindestens 2 verschiedene Personen)'}
               </Text>
             </View>
           </>

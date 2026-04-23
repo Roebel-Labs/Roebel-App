@@ -158,16 +158,16 @@ export function getRequiredSignatures(
   requestType: RequestType
 ): { attester?: number; citizen?: number; total?: number } {
   if (nftType === "attester") {
-    // Attester NFT always requires 3 Attester signatures
-    return { total: 3 };
+    // Attester NFT: 2 Attester signatures for both minting and revocation
+    return { total: 2 };
   } else {
     // Citizen NFT
     if (requestType === RequestType.Attestation) {
       // Attestation: 1 Attester + 1 Citizen
       return { attester: 1, citizen: 1 };
     } else {
-      // Revocation: 3 Attesters
-      return { total: 3 };
+      // Revocation: 1 Attester
+      return { total: 1 };
     }
   }
 }
@@ -182,12 +182,12 @@ export function formatSignatureProgress(
   citizenSigs?: number
 ): string {
   if (nftType === "attester") {
-    return `${attesterSigs}/3 Attestierer`;
+    return `${attesterSigs}/2 Attestierer`;
   } else {
     if (requestType === RequestType.Attestation) {
       return `${attesterSigs}/1 Attestierer, ${citizenSigs || 0}/1 Bürger`;
     } else {
-      return `${attesterSigs}/3 Attestierer`;
+      return `${attesterSigs}/1 Attestierer`;
     }
   }
 }

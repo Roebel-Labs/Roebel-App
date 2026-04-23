@@ -337,7 +337,7 @@ export default function RequestAttesterNFT() {
                         Anforderungen:
                       </p>
                       <p className="text-sm text-blue-800">
-                        Dein Antrag benötigt <strong>3 Bescheiniger-Unterschriften</strong>, um genehmigt zu werden.
+                        Dein Antrag benötigt <strong>2 Bescheiniger-Unterschriften</strong>, um genehmigt zu werden.
                       </p>
                     </div>
 
@@ -491,7 +491,7 @@ export default function RequestAttesterNFT() {
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
-                    Nach der Erstellung wartet dein Antrag auf <strong>3 Bescheiniger-Unterschriften</strong>.
+                    Nach der Erstellung wartet dein Antrag auf <strong>2 Bescheiniger-Unterschriften</strong>.
                   </p>
                 </div>
 
@@ -594,7 +594,7 @@ export default function RequestAttesterNFT() {
                   <ol className="space-y-2 text-sm text-foreground">
                     <li>1. Zeige den QR-Code einem Bescheiniger</li>
                     <li>2. Er kann deinen Antrag prüfen und unterschreiben</li>
-                    <li>3. Nach 3 Bescheiniger-Unterschriften wird dein Pass vergeben</li>
+                    <li>3. Nach 2 Bescheiniger-Unterschriften wird dein Pass vergeben</li>
                   </ol>
                 </div>
 

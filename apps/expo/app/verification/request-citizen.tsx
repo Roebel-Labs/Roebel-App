@@ -128,7 +128,7 @@ export default function RequestCitizenScreen() {
           <Text style={styles.infoText}>
             Um ein verifizierter Bürger zu werden, benötigen Sie:{'\n'}
             • 1 Bescheiniger-Unterschrift{'\n'}
-            • 2 Bürger-Unterschriften{'\n\n'}
+            • 1 Bürger-Unterschrift{'\n\n'}
             Ihre persönlichen Daten (Name und Adresse) werden verschlüsselt gespeichert und nur Sie können sie entschlüsseln.
           </Text>
         </View>

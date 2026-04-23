@@ -17,12 +17,12 @@ interface IAttesterNFT {
  * FEATURES:
  * - Soulbound (non-transferable) NFTs for verified citizens
  * - ERC721Votes compatible for DAO governance (1 NFT = 1 vote)
- * - Multi-signature attestation: 1 Attester + 2 Citizens required
+ * - Multi-signature attestation: 1 Attester + 1 Citizen required
  * - Dual NFT holders can choose which role to sign as
- * - Minimum 3 DIFFERENT people must sign (enforced via address tracking)
+ * - Minimum 2 DIFFERENT people must sign attestations (enforced via address tracking)
  * - Bootstrap: 3 founding citizens minted in constructor
  * - Emergency mint permanently disabled (prevents fraud)
- * - Multi-signature revocation: Initiated by Citizens, needs Attester approval
+ * - Multi-signature revocation: Initiated by Citizens, needs 1 Attester approval
  * - Evidence stored on IPFS (JSON with name, address, reason, date)
  * - Real-time voting rights upon approval
  * - Requests can be approved or rejected
@@ -31,19 +31,19 @@ interface IAttesterNFT {
  * BOOTSTRAP:
  * 0. Constructor receives 3 founding citizen addresses
  * 1. 3 Citizen NFTs auto-minted to founding members at deployment
- * 2. System is immediately operational (with 3 Attesters from AttesterNFT)
+ * 2. System is immediately operational (with the founding Attesters from AttesterNFT)
  *
  * ATTESTATION FLOW:
  * 1. Requester creates attestation request with IPFS evidence
  * 2. Request appears in public list
- * 3. Needs at least 1 Attester signature + 2 Citizen signatures
+ * 3. Needs at least 1 Attester signature + 1 Citizen signature
  *    - If someone holds both NFTs, they choose which role to sign as
- *    - Minimum 3 DIFFERENT wallets must sign (requester doesn't count)
- * 4. Once threshold met AND 3+ people signed, NFT is auto-minted
+ *    - Minimum 2 DIFFERENT wallets must sign (requester doesn't count)
+ * 4. Once threshold met AND 2+ people signed, NFT is auto-minted
  *
  * REVOCATION FLOW:
  * 1. Any Citizen creates revocation request with evidence
- * 2. Needs Attester approval signatures
+ * 2. Needs 1 Attester approval signature
  * 3. Once threshold met, NFT is burned
  */
 contract CitizenNFT is ERC721, ERC721Votes, Ownable {
@@ -79,13 +79,13 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
     mapping(uint256 => Request) public requests;
     uint256 public requestCount;
 
-    // Track unique approvers per request (to enforce 3 different people minimum)
+    // Track unique approvers per request (attestations need 2 different people, revocations need 1)
     mapping(uint256 => address[]) private _requestApprovers;
 
     // Constants for signature requirements
     uint256 public constant REQUIRED_ATTESTER_SIGNATURES = 1;
-    uint256 public constant REQUIRED_CITIZEN_SIGNATURES = 2; // Changed from 1 to 2 for better security
-    uint256 public constant REQUIRED_REVOCATION_SIGNATURES = 3; // 3 Attesters for revocation
+    uint256 public constant REQUIRED_CITIZEN_SIGNATURES = 1;
+    uint256 public constant REQUIRED_REVOCATION_SIGNATURES = 1; // 1 Attester for revocation
 
     // Events
     event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI);
@@ -173,7 +173,8 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
     /**
      * @dev Approve a request (attestation or revocation)
      * Dual NFT holders can choose which role to sign as
-     * Auto-executes when signature thresholds reached AND minimum 3 people signed
+     * Auto-executes when signature thresholds reached AND minimum unique approvers signed
+     * (2 for attestation, 1 for revocation)
      * @param requestId The ID of the request to approve
      * @param signAsAttester True to sign as Attester, false to sign as Citizen
      */
@@ -194,7 +195,7 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
 
         // Count signatures based on EXPLICIT role selection
         if (req.requestType == RequestType.Attestation) {
-            // Attestation: need 1 Attester + 2 Citizens (minimum 3 people)
+            // Attestation: need 1 Attester + 1 Citizen (minimum 2 people)
             if (signAsAttester) {
                 require(isAttester, "Must have Attester NFT to sign as Attester");
                 req.attesterSignatures++;
@@ -203,15 +204,16 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
                 req.citizenSignatures++;
             }
         } else {
-            // Revocation: need 3 Attester signatures
+            // Revocation: need 1 Attester signature
             require(isAttester, "Must be Attester for revocation");
             req.attesterSignatures++;
         }
 
         emit RequestApproved(requestId, msg.sender, isAttester, isCitizen, signAsAttester);
 
-        // Check if thresholds met AND minimum 3 different people signed
-        if (_hasRequiredSignatures(requestId) && _requestApprovers[requestId].length >= 3) {
+        // Attestation: 2 unique approvers (1 Attester + 1 Citizen). Revocation: 1 Attester.
+        uint256 minUniqueApprovers = req.requestType == RequestType.Attestation ? 2 : 1;
+        if (_hasRequiredSignatures(requestId) && _requestApprovers[requestId].length >= minUniqueApprovers) {
             _executeRequest(requestId);
         }
     }
@@ -243,11 +245,11 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
         Request storage req = requests[requestId];
 
         if (req.requestType == RequestType.Attestation) {
-            // Attestation: needs 1 Attester + 2 Citizens (minimum 3 people)
+            // Attestation: needs 1 Attester + 1 Citizen (minimum 2 people)
             return req.attesterSignatures >= REQUIRED_ATTESTER_SIGNATURES &&
                    req.citizenSignatures >= REQUIRED_CITIZEN_SIGNATURES;
         } else {
-            // Revocation: needs 3 Attester signatures
+            // Revocation: needs 1 Attester signature
             return req.attesterSignatures >= REQUIRED_REVOCATION_SIGNATURES;
         }
     }
@@ -305,7 +307,7 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
 
     /**
      * @dev Emergency mint is permanently disabled after bootstrap
-     * All citizens must go through the decentralized multi-sig approval process (1 Attester + 2 Citizens)
+     * All citizens must go through the decentralized multi-sig approval process (1 Attester + 1 Citizen)
      * This prevents centralization and fraud by removing owner's backdoor minting power
      */
     function emergencyMint(address /* to */) external pure {

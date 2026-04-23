@@ -7,8 +7,8 @@ All smart contracts have been created in `governor-contract/contracts/verificati
 
 1. **AttesterNFT.sol** ✅
    - Soulbound NFT for culture committee members
-   - Multi-signature attestation (3 Attester signatures required)
-   - Multi-signature revocation (3 Attester signatures required)
+   - Multi-signature attestation (2 Attester signatures required)
+   - Multi-signature revocation (2 Attester signatures required)
    - Emergency mint function for initial bootstrap
    - Request management (create, approve, reject)
    - Events for frontend listening
@@ -17,8 +17,8 @@ All smart contracts have been created in `governor-contract/contracts/verificati
 2. **CitizenNFT.sol** ✅
    - Soulbound NFT with ERC721Votes for DAO governance
    - Multi-signature attestation (1 Attester + 1 Citizen)
-   - If Attester holds both NFTs, signature counts as both
-   - Multi-signature revocation (3 Attesters)
+   - Dual NFT holders explicitly choose role via `signAsAttester` parameter
+   - Multi-signature revocation (1 Attester)
    - Emergency mint function for initial bootstrap
    - Compatible with SimpleHomeTownGovernor
    - Location: `/governor-contract/contracts/verification-system/CitizenNFT.sol`

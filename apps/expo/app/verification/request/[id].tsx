@@ -212,14 +212,14 @@ export default function RequestDetailsScreen() {
               <View style={styles.progressItem}>
                 <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bescheiniger</Text>
                 <Text style={[styles.progressValue, { color: colors.primary }]}>
-                  {request.attesterSignatures} / {nftType === 'citizen' ? '1' : '3'}
+                  {request.attesterSignatures} / {nftType === 'citizen' ? '1' : '2'}
                 </Text>
               </View>
               {nftType === 'citizen' && (
                 <View style={styles.progressItem}>
                   <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bürger</Text>
                   <Text style={[styles.progressValue, { color: colors.primary }]}>
-                    {request.citizenSignatures} / 2
+                    {request.citizenSignatures} / 1
                   </Text>
                 </View>
               )}

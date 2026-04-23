@@ -82,7 +82,7 @@ The new contracts were deployed with secure bootstrap, minting NFTs to:
 
 4. **Decentralized Governance**
    - All future members require multi-sig approval:
-     - **New Attesters**: Need 3 Attester signatures
+     - **New Attesters**: Need 2 Attester signatures
      - **New Citizens**: Need 1 Attester + 1 Citizen (2 different people)
 
 ---

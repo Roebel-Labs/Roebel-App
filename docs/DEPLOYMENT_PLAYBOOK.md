@@ -124,13 +124,14 @@ export const ATTESTER_GOVERNOR_ADDRESS = "0xNEW_GOVERNOR_ADDRESS";
 
 | Rule | Value |
 |------|-------|
-| New Attester approval | 3 existing Attesters must sign |
-| New Citizen approval | 1 Attester + 2 Citizens (3 different people) |
+| New Attester approval | 2 existing Attesters must sign |
+| New Citizen approval | 1 Attester + 1 Citizen (2 different people) |
 | Who can propose | Attesters only |
 | Who can vote | Citizens only (1 NFT = 1 vote) |
 | Voting activation | Must delegate (auto-delegated on mint) |
 | Quorum | 10% of delegated Citizens |
-| Revocation | 3 Attesters must approve |
+| Citizen revocation | 1 Attester must approve |
+| Attester revocation | 2 Attesters must approve |
 | Transferability | Soulbound (non-transferable) |
 | Max per wallet | 1 NFT each |
 

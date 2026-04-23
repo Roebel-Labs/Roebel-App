@@ -86,7 +86,7 @@ export const de = {
 
     // Signature counts
     requiresAttesterAndCitizen: "Benötigt: 1 Bescheiniger + 1 Bürger",
-    requiresThreeAttesters: "Benötigt: 3 Bescheiniger",
+    requiresThreeAttesters: "Benötigt: 2 Bescheiniger",
     attesterAlsoCitizen: "Diese Person zählt für beide Rollen",
 
     // Request creation

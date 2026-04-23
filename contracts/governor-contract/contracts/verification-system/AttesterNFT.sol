@@ -10,8 +10,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *
  * FEATURES:
  * - Soulbound (non-transferable) NFTs for committee members
- * - Multi-signature attestation system (3 Attester signatures required)
- * - Multi-signature revocation system (3 Attester signatures required)
+ * - Multi-signature attestation system (2 Attester signatures required)
+ * - Multi-signature revocation system (2 Attester signatures required)
  * - Each wallet can only hold ONE Attester NFT
  * - Bootstrap: 3 founding attesters minted in constructor
  * - Emergency mint permanently disabled (prevents fraud)
@@ -28,13 +28,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * ATTESTATION FLOW:
  * 1. Requester creates attestation request with IPFS evidence
  * 2. Request appears in public list
- * 3. 3 different Attester NFT holders sign the request
- * 4. Once 3 signatures reached, NFT is auto-minted
+ * 3. 2 different Attester NFT holders sign the request
+ * 4. Once 2 signatures reached, NFT is auto-minted
  *
  * REVOCATION FLOW:
  * 1. Any Attester creates revocation request with evidence
- * 2. 3 different Attester NFT holders sign the revocation
- * 3. Once 3 signatures reached, NFT is burned
+ * 2. 2 different Attester NFT holders sign the revocation
+ * 3. Once 2 signatures reached, NFT is burned
  */
 contract AttesterNFT is ERC721, Ownable {
     uint256 private _nextTokenId;
@@ -70,7 +70,7 @@ contract AttesterNFT is ERC721, Ownable {
     mapping(uint256 => mapping(address => bool)) private _requestRejections;
 
     // Constants
-    uint256 public constant REQUIRED_SIGNATURES = 3;
+    uint256 public constant REQUIRED_SIGNATURES = 2;
 
     // Events
     event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI);
@@ -239,7 +239,7 @@ contract AttesterNFT is ERC721, Ownable {
 
     /**
      * @dev Emergency mint is permanently disabled after bootstrap
-     * All attesters must go through the decentralized multi-sig approval process (3 attester signatures)
+     * All attesters must go through the decentralized multi-sig approval process (2 attester signatures)
      * This prevents centralization and fraud by removing owner's backdoor minting power
      */
     function emergencyMint(address /* to */) external pure {

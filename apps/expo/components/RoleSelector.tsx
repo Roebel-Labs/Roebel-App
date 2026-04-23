@@ -80,8 +80,8 @@ export default function RoleSelector({ selectedRole, onSelectRole, disabled = fa
         <Text style={styles.infoText}>
           Für eine Bürger-Verifizierung werden benötigt:{'\n'}
           • 1 Bescheiniger-Unterschrift{'\n'}
-          • 2 Bürger-Unterschriften{'\n'}
-          • Mindestens 3 verschiedene Personen
+          • 1 Bürger-Unterschrift{'\n'}
+          • Mindestens 2 verschiedene Personen
         </Text>
       </View>
     </View>

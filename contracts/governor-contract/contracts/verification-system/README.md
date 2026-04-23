@@ -17,18 +17,18 @@ Two-tier Soulbound NFT system with decentralized social verification:
 
 ### Attester SBT NFT
 - **Purpose**: Culture committee members who can attest citizens
-- **Minting**: Requires 3 Attester signatures
-- **Revocation**: Requires 3 Attester signatures
+- **Minting**: Requires 2 Attester signatures
+- **Revocation**: Requires 2 Attester signatures
 - **Initial Bootstrap**: 3 founding committee members receive emergency mint
 - **Properties**: Soulbound (non-transferable), one per wallet
 - **Governance**: No direct voting rights (but should hold Citizen SBT)
 
 ### Citizen SBT NFT
 - **Purpose**: Verified citizens with DAO voting rights (ERC721Votes)
-- **Minting**: Requires 1 Attester + 1 Citizen signature (minimum 2 people)
-  - If Attester also holds Citizen SBT, their signature counts as both
+- **Minting**: Requires 1 Attester + 1 Citizen signature (minimum 2 unique people)
+  - Dual NFT holders explicitly choose their role via `signAsAttester`
   - Requester cannot approve their own request
-- **Revocation**: Requires 3 Attester signatures
+- **Revocation**: Requires 1 Attester signature
 - **Initial Bootstrap**: Same 3 founding members receive emergency mint
 - **Properties**: Soulbound, one per wallet, ERC721Votes for governance
 - **Governance**: 1 NFT = 1 vote in DAO
@@ -286,12 +286,12 @@ export const CONTRACTS = {
    - Creates revocation request for Michael (moved away)
    - Evidence: "Michael ist nach Berlin gezogen am 2025-01-15"
 
-2. **3 Attesters** (Lisa, Johannes, Sarah):
-   - Review evidence
-   - Each signs to approve revocation
+2. **1 Attester** (Lisa):
+   - Reviews evidence
+   - Signs to approve revocation
 
 3. **System**:
-   - Detects 3 Attester signatures
+   - Detects 1 Attester signature
    - Burns Michael's Citizen NFT
    - Michael loses voting rights
    - Michael can re-request if he returns
@@ -303,7 +303,7 @@ export const CONTRACTS = {
 - [ ] Emergency mint 3 Attester NFTs
 - [ ] Emergency mint 3 Citizen NFTs (same wallets)
 - [ ] Test Attester request creation
-- [ ] Test Attester request approval (3 signatures)
+- [ ] Test Attester request approval (2 signatures)
 - [ ] Verify NFT minted on threshold
 - [ ] Test Citizen request creation
 - [ ] Test Citizen request with Attester + Citizen approval

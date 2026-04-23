@@ -754,19 +754,19 @@ export default function NachweisPage() {
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Bürger</span>
-                        <span className="font-medium">{request.citizenSignatures} / 2</span>
+                        <span className="font-medium">{request.citizenSignatures} / 1</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-gray-400 h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min((request.citizenSignatures / 2) * 100, 100)}%` }}
+                          style={{ width: `${Math.min(request.citizenSignatures * 100, 100)}%` }}
                         />
                       </div>
                     </div>
 
                     <div className="mt-4 p-4 border border-border rounded-lg">
                       <p className="text-sm text-foreground">
-                        <span className="font-medium">Benötigt:</span> 1 Bescheiniger + 2 Bürger Unterschriften (mindestens 3 verschiedene Personen)
+                        <span className="font-medium">Benötigt:</span> 1 Bescheiniger + 1 Bürger Unterschrift (mindestens 2 verschiedene Personen)
                       </p>
                     </div>
                   </div>
@@ -774,18 +774,18 @@ export default function NachweisPage() {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">Bescheiniger</span>
-                      <span className="font-medium">{request.signatureCount} / 3</span>
+                      <span className="font-medium">{request.signatureCount} / 2</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
                         className="bg-gray-400 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min((request.signatureCount / 3) * 100, 100)}%` }}
+                        style={{ width: `${Math.min((request.signatureCount / 2) * 100, 100)}%` }}
                       />
                     </div>
 
                     <div className="mt-4 p-4 border border-border rounded-lg">
                       <p className="text-sm text-foreground">
-                        <span className="font-medium">Benötigt:</span> 3 Bescheiniger Unterschriften
+                        <span className="font-medium">Benötigt:</span> 2 Bescheiniger Unterschriften
                       </p>
                     </div>
                   </div>
@@ -871,7 +871,7 @@ export default function NachweisPage() {
                         <p className="text-sm font-medium text-foreground mb-2">Aktuelle Unterschriften:</p>
                         <div className="space-y-1 text-sm text-muted-foreground">
                           <div>• Bescheiniger: {request?.attesterSignatures || 0}/1</div>
-                          <div>• Bürger: {request?.citizenSignatures || 0}/2</div>
+                          <div>• Bürger: {request?.citizenSignatures || 0}/1</div>
                         </div>
                       </div>
 
@@ -926,7 +926,7 @@ export default function NachweisPage() {
                       {request && (
                         <div className="mt-3 text-xs text-muted-foreground">
                           <div>• Bescheiniger: {request.attesterSignatures || 0}/1</div>
-                          <div>• Bürger: {request.citizenSignatures || 0}/2</div>
+                          <div>• Bürger: {request.citizenSignatures || 0}/1</div>
                         </div>
                       )}
                     </div>

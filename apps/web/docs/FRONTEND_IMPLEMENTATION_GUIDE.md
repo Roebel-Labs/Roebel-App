@@ -47,7 +47,7 @@ Follow the patterns from the completed pages. Copy structure from similar pages:
 </div>
 ```
 4. Use `attesterNFTContract` instead of `citizenNFTContract`
-5. Mention "Benötigt 3 Bescheiniger-Unterschriften"
+5. Mention "Benötigt 2 Bescheiniger-Unterschriften"
 
 ---
 

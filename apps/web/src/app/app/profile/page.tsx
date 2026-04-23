@@ -534,7 +534,7 @@ export default function ProfilePage() {
                                   {" • "}
                                   {"attesterSignatures" in request && "citizenSignatures" in request && (
                                     <>
-                                      {request.attesterSignatures}/1 Bescheiniger, {request.citizenSignatures}/2 Bürger
+                                      {request.attesterSignatures}/1 Bescheiniger, {request.citizenSignatures}/1 Bürger
                                     </>
                                   )}
                                 </p>

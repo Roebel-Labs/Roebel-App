@@ -56,9 +56,9 @@ export default function RequestCard({
 
   const getProgress = () => {
     if (nftType === 'citizen') {
-      return `${attesterSignatures}/1 Bescheiniger, ${citizenSignatures}/2 Bürger`;
+      return `${attesterSignatures}/1 Bescheiniger, ${citizenSignatures}/1 Bürger`;
     } else {
-      return `${attesterSignatures}/3 Bescheiniger`;
+      return `${attesterSignatures}/2 Bescheiniger`;
     }
   };
 

@@ -55,10 +55,10 @@ export default function VerificationBanner() {
     const citizenSigs = activePendingRequest.citizen_signatures ?? 0;
     const nftType = activePendingRequest.nft_type || activePendingRequest.contract_type || 'citizen';
 
-    const attesterRequired = nftType === 'citizen' ? 1 : 3;
+    const attesterRequired = nftType === 'citizen' ? 1 : 2;
     const progress = `${attesterSigs}/${attesterRequired} Bescheiniger`;
     const citizenProgress = nftType === 'citizen'
-      ? `, ${citizenSigs}/2 Bürger`
+      ? `, ${citizenSigs}/1 Bürger`
       : '';
 
     return (
