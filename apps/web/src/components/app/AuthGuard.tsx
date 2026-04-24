@@ -1,7 +1,7 @@
 "use client";
 
 import { useActiveAccount, useIsAutoConnecting } from "thirdweb/react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function AppLoadingSkeleton() {
@@ -56,6 +56,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const account = useActiveAccount();
   const isAutoConnecting = useIsAutoConnecting();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [hasChecked, setHasChecked] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
@@ -69,10 +71,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isAutoConnecting || timedOut) {
       setHasChecked(true);
       if (!account) {
-        router.replace("/");
+        const search = searchParams?.toString();
+        const current = (pathname ?? "/app") + (search ? `?${search}` : "");
+        router.replace(`/?returnTo=${encodeURIComponent(current)}`);
       }
     }
-  }, [isAutoConnecting, account, router, timedOut]);
+  }, [isAutoConnecting, account, router, timedOut, pathname, searchParams]);
 
   // Still auto-connecting
   if ((isAutoConnecting && !timedOut) || !hasChecked) {
