@@ -2,9 +2,9 @@
 
 // Contract addresses deployed on Base Mainnet
 export const CONTRACTS = {
-  attesterNFT: "0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f",
-  citizenNFT: "0x78C88B01664Df4AA2F026DA68e834B4f33a3d751",
-  governor: "0x572c97329ACaCBeBA74e28E3998674E9058A095a",
+  attesterNFT: "0xa06F09Cb406880512326318fbC09Cdb28631DA73",
+  citizenNFT: "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7",
+  governor: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",
 
   // Legacy addresses
   legacyNFT: "0xc49003E2b834ee10CADa6bcf3b369C7b9E01d7cd",

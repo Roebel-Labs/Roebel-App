@@ -31,9 +31,9 @@ export const usdcContract = getContract({
 });
 
 // Governance Contracts
-const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f";
-const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0x78C88B01664Df4AA2F026DA68e834B4f33a3d751";
-const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x572c97329ACaCBeBA74e28E3998674E9058A095a";
+const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0xa06F09Cb406880512326318fbC09Cdb28631DA73";
+const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7";
+const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 
 export const attesterNFTContract = getContract({
 	client,

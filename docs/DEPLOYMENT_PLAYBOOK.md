@@ -110,15 +110,24 @@ export const CITIZEN_NFT_ADDRESS = "0xNEW_CITIZEN_NFT_ADDRESS";
 export const ATTESTER_GOVERNOR_ADDRESS = "0xNEW_GOVERNOR_ADDRESS";
 ```
 
+## Current Deployment Addresses (Base Mainnet)
+
+| Contract | Address |
+|----------|---------|
+| AttesterNFT (2-sig rule) | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` |
+| CitizenNFT (1 Attester + 1 Citizen) | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` |
+| AttesterGovernor (1h voting, 10% quorum) | `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` |
+| Timelock | `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0` |
+
 ## Previous Deployment Addresses (for reference)
 
-| Contract | Address | Chain |
-|----------|---------|-------|
-| AttesterNFT | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` | Base Mainnet |
-| CitizenNFT v3 | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` | Base Mainnet |
-| AttesterGovernor | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` | Base Mainnet |
-| Old NFT (deprecated) | `0x976966e2669b3bF3c99B38cA4259a864f85191A1` | Base Mainnet |
-| Old Governor (deprecated) | `0x767f7b996E54248F88944DAc344Ab74e93E21cdB` | Base Mainnet |
+| Contract | Address |
+|----------|---------|
+| AttesterNFT v1 (3-sig rule, superseded) | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` |
+| CitizenNFT v3 (1+2 rule, superseded) | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` |
+| AttesterGovernor v1 (1-day voting, superseded) | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` |
+| Old NFT (deprecated) | `0x976966e2669b3bF3c99B38cA4259a864f85191A1` |
+| Old Governor (deprecated) | `0x767f7b996E54248F88944DAc344Ab74e93E21cdB` |
 
 ## Governance Rules
 

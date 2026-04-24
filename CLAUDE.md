@@ -83,9 +83,10 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 - **HomeTownMaciGovernor.sol** - MACI-integrated governance (private voting)
 
 ### Deployed Contract Addresses (Base Mainnet)
-- AttesterNFT: `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f`
-- CitizenNFT: `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751`
-- Governor: `0x572c97329ACaCBeBA74e28E3998674E9058A095a`
+- AttesterNFT: `0xa06F09Cb406880512326318fbC09Cdb28631DA73`
+- CitizenNFT: `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`
+- Governor (AttesterGovernor): `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b`
+- Timelock: `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0`
 
 ## Environment Variables
 
