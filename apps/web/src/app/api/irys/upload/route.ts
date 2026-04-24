@@ -95,9 +95,11 @@ export async function POST(request: NextRequest) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
 
+    // Surface the actual error to the client so funding / config issues
+    // are visible in the browser console instead of a generic "Upload failed".
     return NextResponse.json(
       {
-        error: "Upload failed",
+        error: errorMessage,
         details: errorMessage,
       },
       { status: 500 }
