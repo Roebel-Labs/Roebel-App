@@ -15,9 +15,6 @@ export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const showConnect =
-    pathname === "/app/submit" || pathname === "/app/submit-ai";
-
   const isActive = (path: string) => {
     return pathname === path || pathname?.startsWith(path + "/");
   };
@@ -78,35 +75,31 @@ export function Header() {
 
           {/* Right Side - Connect Button + Mobile Menu */}
           <div className="flex items-center gap-2">
-            {showConnect && (
-              <>
-                <div className="hidden sm:block">
-                  <ConnectButton
-                    client={client}
-                    chain={activeChain}
-                    wallets={wallets}
-                    connectModal={{
-                      title: "Bei Röbel/Müritz DAO anmelden",
-                      size: "compact",
-                    }}
-                    theme="light"
-                  />
-                </div>
+            <div className="hidden sm:block">
+              <ConnectButton
+                client={client}
+                chain={activeChain}
+                wallets={wallets}
+                connectModal={{
+                  title: "Bei Röbel/Müritz DAO anmelden",
+                  size: "compact",
+                }}
+                theme="light"
+              />
+            </div>
 
-                <div className="block sm:hidden">
-                  <ConnectButton
-                    client={client}
-                    chain={activeChain}
-                    wallets={wallets}
-                    connectModal={{
-                      title: "Anmelden",
-                      size: "compact",
-                    }}
-                    theme="light"
-                  />
-                </div>
-              </>
-            )}
+            <div className="block sm:hidden">
+              <ConnectButton
+                client={client}
+                chain={activeChain}
+                wallets={wallets}
+                connectModal={{
+                  title: "Anmelden",
+                  size: "compact",
+                }}
+                theme="light"
+              />
+            </div>
 
             {/* Mobile Menu Button */}
             <button
