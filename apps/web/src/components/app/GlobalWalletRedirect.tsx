@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useActiveAccount, useIsAutoConnecting } from "thirdweb/react";
 
 // Routes that should NOT redirect to /app even when wallet is connected
@@ -28,15 +28,19 @@ function isSafeReturnTo(value: string | null): value is string {
 export function GlobalWalletRedirect() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const account = useActiveAccount();
   const isAutoConnecting = useIsAutoConnecting();
 
   useEffect(() => {
     if (isAutoConnecting || !account || !pathname) return;
 
-    // Honor returnTo from AuthGuard bounce, when safe.
-    const returnTo = searchParams?.get("returnTo") ?? null;
+    // Read returnTo directly from window.location to avoid adding a
+    // useSearchParams() call to the root layout, which would force every
+    // statically prerendered page into a Suspense boundary (Next 15).
+    const returnTo =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("returnTo")
+        : null;
     if (isSafeReturnTo(returnTo)) {
       router.replace(returnTo);
       return;
@@ -49,7 +53,7 @@ export function GlobalWalletRedirect() {
     if (!isExcluded) {
       router.replace("/app");
     }
-  }, [isAutoConnecting, account, pathname, searchParams, router]);
+  }, [isAutoConnecting, account, pathname, router]);
 
   return null;
 }

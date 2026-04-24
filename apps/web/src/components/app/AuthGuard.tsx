@@ -1,7 +1,7 @@
 "use client";
 
 import { useActiveAccount, useIsAutoConnecting } from "thirdweb/react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function AppLoadingSkeleton() {
@@ -56,8 +56,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const account = useActiveAccount();
   const isAutoConnecting = useIsAutoConnecting();
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [hasChecked, setHasChecked] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
@@ -71,12 +69,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isAutoConnecting || timedOut) {
       setHasChecked(true);
       if (!account) {
-        const search = searchParams?.toString();
-        const current = (pathname ?? "/app") + (search ? `?${search}` : "");
+        // Read pathname+search from window.location to avoid using
+        // useSearchParams() inside a layout-level component (which would
+        // force every statically prerendered page into a Suspense boundary
+        // in Next 15). This effect runs client-side so window is defined.
+        const current =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/app";
         router.replace(`/?returnTo=${encodeURIComponent(current)}`);
       }
     }
-  }, [isAutoConnecting, account, router, timedOut, pathname, searchParams]);
+  }, [isAutoConnecting, account, router, timedOut]);
 
   // Still auto-connecting
   if ((isAutoConnecting && !timedOut) || !hasChecked) {
