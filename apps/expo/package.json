@@ -31,6 +31,7 @@
     "@react-navigation/native": "^7.1.6",
     "@react-navigation/native-stack": "^7.3.10",
     "@rnmapbox/maps": "10.2.10",
+    "@sentry/cli": "2.58.4",
     "@sentry/react-native": "~7.11.0",
     "@supabase/supabase-js": "^2.45.3",
     "@thirdweb-dev/react-native-adapter": "^1.5.4",
