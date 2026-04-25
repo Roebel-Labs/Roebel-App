@@ -25,7 +25,14 @@ interface UserContextValue {
   isConnected: boolean;
 
   refreshUser: () => Promise<void>;
-  updateProfile: (updates: { username?: string; bio?: string; profile_picture_url?: string }) => Promise<void>;
+  updateProfile: (updates: {
+    username?: string;
+    bio?: string;
+    profile_picture_url?: string;
+    cover_image_url?: string;
+    neighborhood?: string;
+    interests?: string[];
+  }) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
@@ -139,7 +146,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [account?.address]);
 
-  const updateProfile = useCallback(async (updates: { username?: string; bio?: string; profile_picture_url?: string }) => {
+  const updateProfile = useCallback(async (updates: {
+    username?: string;
+    bio?: string;
+    profile_picture_url?: string;
+    cover_image_url?: string;
+    neighborhood?: string;
+    interests?: string[];
+  }) => {
     if (!user?.wallet_address) throw new Error('No user logged in');
     const updated = await updateUserProfile(user.wallet_address, updates);
     if (updated) setUser(updated);

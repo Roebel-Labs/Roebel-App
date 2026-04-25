@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -8,23 +8,58 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useRewards } from '@/context/RewardsContext';
 import { supabase } from '@/lib/supabase';
+import {
+  equipRewardByType,
+  fetchRewardsCatalogueByType,
+} from '@/lib/supabase-rewards';
+import type { LootboxReward } from '@/lib/supabase-rewards';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import FrameCarousel from '@/components/rewards/FrameCarousel';
+import BannerSelectionGrid from '@/components/rewards/BannerSelectionGrid';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user, updateProfile } = useUser();
+  const { userRewards, refresh: refreshRewards } = useRewards();
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
 
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [profilePicture, setProfilePicture] = useState(user?.profile_picture_url || '');
+  const [neighborhood, setNeighborhood] = useState(user?.neighborhood || '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
+
+  const [frameCatalogue, setFrameCatalogue] = useState<LootboxReward[]>([]);
+  const [bannerCatalogue, setBannerCatalogue] = useState<LootboxReward[]>([]);
+
+  // Derive currently-equipped ids straight from the RewardsContext inventory.
+  const equippedFrameId =
+    userRewards.find((r) => r.reward?.type === 'profile_frame' && r.is_equipped)?.id ?? null;
+  const equippedBannerId =
+    userRewards.find((r) => r.reward?.type === 'profile_banner' && r.is_equipped)?.id ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [frames, banners] = await Promise.all([
+        fetchRewardsCatalogueByType('profile_frame'),
+        fetchRewardsCatalogueByType('profile_banner'),
+      ]);
+      if (cancelled) return;
+      setFrameCatalogue(frames);
+      setBannerCatalogue(banners);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = () => {
     if (wallet) {
@@ -84,6 +119,7 @@ export default function EditProfileScreen() {
         username: username || undefined,
         bio: bio || undefined,
         profile_picture_url: profilePicture || undefined,
+        neighborhood: neighborhood || undefined,
       });
       router.back();
     } catch (error: any) {
@@ -94,17 +130,48 @@ export default function EditProfileScreen() {
     }
   };
 
+  const handleEquipFrame = async (userRewardId: string | null) => {
+    if (!user?.wallet_address) return;
+    await equipRewardByType(user.wallet_address, 'profile_frame', userRewardId);
+    await refreshRewards();
+  };
+
+  const handleEquipBanner = async (userRewardId: string | null) => {
+    if (!user?.wallet_address) return;
+    await equipRewardByType(user.wallet_address, 'profile_banner', userRewardId);
+    await refreshRewards();
+  };
+
+  const handleLockedTap = () => {
+    Alert.alert(
+      'Noch gesperrt',
+      'Öffne Truhen in der Schatzkammer, um diese Belohnung freizuschalten.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Zur Schatzkammer', onPress: () => router.push('/rewards' as any) },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Profil</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Profil bearbeiten</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <KeyboardAwareScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
+      <KeyboardAwareScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={100}
+        extraHeight={150}
+      >
         {/* Profile Picture */}
         <View style={styles.avatarSection}>
           <Pressable onPress={handlePickImage} disabled={uploading}>
@@ -123,6 +190,31 @@ export default function EditProfileScreen() {
             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Foto ändern</Text>
           </Pressable>
         </View>
+
+        {/* Frame carousel (horizontal swipe) */}
+        <View style={styles.fieldSection}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>PROFIL-RAHMEN</Text>
+        </View>
+        <FrameCarousel
+          catalogue={frameCatalogue}
+          userRewards={userRewards}
+          avatarUri={profilePicture || null}
+          equippedUserRewardId={equippedFrameId}
+          onSelect={handleEquipFrame}
+          onLockedTap={handleLockedTap}
+        />
+
+        {/* Banner grid */}
+        <View style={styles.fieldSection}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>COVER-BANNER</Text>
+        </View>
+        <BannerSelectionGrid
+          catalogue={bannerCatalogue}
+          userRewards={userRewards}
+          equippedUserRewardId={equippedBannerId}
+          onSelect={handleEquipBanner}
+          onLockedTap={handleLockedTap}
+        />
 
         {/* Username */}
         <View style={styles.fieldSection}>
@@ -163,6 +255,21 @@ export default function EditProfileScreen() {
           <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>
             {bio.length}/500 Zeichen
           </Text>
+        </View>
+
+        {/* Neighborhood */}
+        <View style={styles.fieldSection}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>ORTSTEIL</Text>
+          <View style={[styles.inputContainer, { backgroundColor: colors.surface }]}>
+            <TextInput
+              style={[styles.input, { color: colors.textPrimary }]}
+              value={neighborhood}
+              onChangeText={setNeighborhood}
+              placeholder="z. B. Altstadt"
+              placeholderTextColor={colors.textTertiary}
+              maxLength={60}
+            />
+          </View>
         </View>
 
         {/* Save Button */}
@@ -239,7 +346,7 @@ const styles = StyleSheet.create({
   avatarSection: {
     alignItems: 'center',
     paddingTop: 32,
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   avatar: {
     width: 96,
