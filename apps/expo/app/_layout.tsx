@@ -28,8 +28,9 @@ import { ThirdwebProvider, useAutoConnect } from 'thirdweb/react';
 import { client, chain } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { wallets } from '@/constants/wallets';
-import * as Sentry from '@sentry/react-native';
-import { PostHogProvider } from 'posthog-react-native';
+import { ConsentProvider } from '@/context/ConsentContext';
+import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
+import { ConsentGate } from '@/components/consent/ConsentGate';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -199,6 +200,18 @@ function ThemedLayout() {
             name="welcome"
             options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}
           />
+          <TransitionStack.Screen
+            name="consent"
+            options={{
+              headerShown: false,
+              presentation: 'fullScreenModal',
+              animation: 'fade',
+              gestureEnabled: false,
+            }}
+          />
+          <TransitionStack.Screen name="settings/consent/index" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
         </TransitionStack>
       </View>
@@ -236,55 +249,52 @@ function Layout() {
   }
 
   return (
-    <PostHogProvider
-      apiKey={process.env.EXPO_PUBLIC_POSTHOG_KEY}
-      options={{
-        host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
-        enableSessionReplay: false,
-        captureAppLifecycleEvents: true,
-      }}
-      autocapture={false}
-    >
-      <ErrorBoundary>
-        <ThirdwebProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <SafeAreaProvider>
-              <ThemeProvider>
-                <MessagingProvider>
-                  <VerificationProvider>
-                    <UserProvider>
-                    <AccountProvider>
-                    <NotificationsProvider>
-                    <RewardsProvider>
-                    <MeckyProvider>
-                    <GovernanceTestProvider>
-                    <InterestProvider>
-                    <BookmarksProvider>
-                      <LocationProvider>
-                        <SnackbarProvider>
-                          <ThemedLayout />
-                        </SnackbarProvider>
-                      </LocationProvider>
-                    </BookmarksProvider>
-                    </InterestProvider>
-                    </GovernanceTestProvider>
-                    </MeckyProvider>
-                    </RewardsProvider>
-                    </NotificationsProvider>
-                    </AccountProvider>
-                    </UserProvider>
-                  </VerificationProvider>
-                </MessagingProvider>
-              </ThemeProvider>
-            </SafeAreaProvider>
-          </GestureHandlerRootView>
-        </ThirdwebProvider>
-      </ErrorBoundary>
-    </PostHogProvider>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <ConsentProvider>
+              <ConditionalPostHogProvider>
+                <ThirdwebProvider>
+                  <MessagingProvider>
+                    <VerificationProvider>
+                      <UserProvider>
+                      <AccountProvider>
+                      <NotificationsProvider>
+                      <RewardsProvider>
+                      <MeckyProvider>
+                      <GovernanceTestProvider>
+                      <InterestProvider>
+                      <BookmarksProvider>
+                        <LocationProvider>
+                          <SnackbarProvider>
+                            <ConsentGate />
+                            <ThemedLayout />
+                          </SnackbarProvider>
+                        </LocationProvider>
+                      </BookmarksProvider>
+                      </InterestProvider>
+                      </GovernanceTestProvider>
+                      </MeckyProvider>
+                      </RewardsProvider>
+                      </NotificationsProvider>
+                      </AccountProvider>
+                      </UserProvider>
+                    </VerificationProvider>
+                  </MessagingProvider>
+                </ThirdwebProvider>
+              </ConditionalPostHogProvider>
+            </ConsentProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 
-export default Sentry.wrap(Layout);
+// Sentry is initialized manually inside ConsentGate when the user opts in to
+// crash reporting. See lib/sentry-init.ts.
+export default Layout;
 
 const styles = StyleSheet.create({
   gradientContainer: {

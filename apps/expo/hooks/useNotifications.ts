@@ -21,6 +21,7 @@ import {
   DEFAULT_PREFERENCES,
 } from '@/lib/supabase-notifications';
 import { EventCategory, EVENT_CATEGORIES } from '@/lib/categories';
+import { useConsent } from '@/context/ConsentContext';
 
 // AsyncStorage keys for prompt tracking
 const PROMPT_SEEN_KEY = '@notification_prompt_seen';
@@ -89,6 +90,8 @@ function getDeviceId(): string {
 }
 
 export function useNotifications(): UseNotificationsReturn {
+  const { preferences: consentPrefs } = useConsent();
+  const pushConsent = consentPrefs.push;
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('undetermined');
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
@@ -123,6 +126,12 @@ export function useNotifications(): UseNotificationsReturn {
   const requestPermission = useCallback(async (): Promise<boolean> => {
     console.log('=== REQUEST PERMISSION ===');
     console.log('Device.isDevice:', Device.isDevice);
+
+    if (!pushConsent) {
+      console.log('Push consent not granted; refusing to request OS permission');
+      setError(null);
+      return false;
+    }
 
     if (!Device.isDevice) {
       console.log('Not a physical device, returning false');
@@ -168,6 +177,11 @@ export function useNotifications(): UseNotificationsReturn {
    */
   const registerToken = useCallback(async () => {
     console.log('=== REGISTER TOKEN ===');
+
+    if (!pushConsent) {
+      console.log('Push consent not granted; skipping token registration');
+      return;
+    }
 
     if (!Device.isDevice) {
       console.log('Push notifications not available on simulator/emulator');
@@ -421,8 +435,8 @@ export function useNotifications(): UseNotificationsReturn {
           setPermissionStatus(status);
         }
 
-        // If permission granted, register token
-        if (status === 'granted') {
+        // If permission granted AND user has consented to push, register token
+        if (status === 'granted' && pushConsent) {
           console.log('Permission granted, registering token...');
           await registerToken();
         } else {
@@ -454,6 +468,17 @@ export function useNotifications(): UseNotificationsReturn {
     }
 
     initialize();
+
+    // Revoke token if consent flips off mid-session
+    const revokeIfDenied = async () => {
+      if (!pushConsent && expoPushToken) {
+        await deactivatePushToken(getDeviceId());
+        if (mounted) {
+          setExpoPushToken(null);
+        }
+      }
+    };
+    void revokeIfDenied();
 
     // Set up notification listeners
     notificationListener.current = Notifications.addNotificationReceivedListener(

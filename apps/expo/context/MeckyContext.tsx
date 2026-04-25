@@ -6,15 +6,17 @@
 import React, {
   createContext,
   useContext,
+  useEffect,
   useState,
   useCallback,
   useRef,
   useMemo,
 } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
-import { getAnthropicChatService } from '@/lib/services/anthropic-chat';
+import { disposeAnthropicChatService, getAnthropicChatService } from '@/lib/services/anthropic-chat';
 import { meckyToolDefinitions, executeMeckyTool } from '@/lib/tools/mecky-tools';
 import { getMeckySystemPrompt } from '@/lib/prompts/mecky-system-prompt';
+import { useConsent } from '@/context/ConsentContext';
 import type { AnthropicMessage } from '@/lib/types/anthropic';
 import type { MeckyMessage, RichCardData, NavigationLink } from '@/lib/types/mecky';
 
@@ -22,6 +24,7 @@ interface MeckyContextValue {
   messages: MeckyMessage[];
   isStreaming: boolean;
   streamingText: string;
+  isEnabled: boolean;
   sendMessage: (text: string) => Promise<void>;
   clearConversation: () => void;
 }
@@ -34,9 +37,16 @@ function generateId(): string {
 
 export function MeckyProvider({ children }: { children: React.ReactNode }) {
   const account = useActiveAccount();
+  const { preferences } = useConsent();
+  const isEnabled = preferences.ai_assistant;
   const [messages, setMessages] = useState<MeckyMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
+
+  // Drop the cached client when consent is withdrawn so no stale config sticks.
+  useEffect(() => {
+    if (!isEnabled) disposeAnthropicChatService();
+  }, [isEnabled]);
 
   // Anthropic conversation history (includes tool calls/results)
   const historyRef = useRef<AnthropicMessage[]>([]);
@@ -49,6 +59,25 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isStreaming) return;
+
+      // Consent gate: refuse to call Anthropic if the user has not opted in.
+      if (!isEnabled) {
+        const userMsg: MeckyMessage = {
+          id: generateId(),
+          role: 'user',
+          content: text.trim(),
+          timestamp: Date.now(),
+        };
+        const refusalMsg: MeckyMessage = {
+          id: generateId(),
+          role: 'assistant',
+          content:
+            'Aktiviere den Mecky-KI Assistenten in den Datenschutz-Einstellungen, um zu chatten.',
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, userMsg, refusalMsg]);
+        return;
+      }
 
       // Add user message to UI
       const userMsg: MeckyMessage = {
@@ -73,7 +102,7 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
       toolResultsRef.current = { richCards: [], navLinks: [] };
 
       try {
-        const service = getAnthropicChatService();
+        const service = getAnthropicChatService(true);
         const systemPrompt = getMeckySystemPrompt({
           walletAddress: account?.address,
           userRole: undefined, // Could be enhanced with useUser() but keeping it simple
@@ -150,7 +179,7 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
         setIsStreaming(false);
       }
     },
-    [isStreaming, account?.address]
+    [isStreaming, isEnabled, account?.address]
   );
 
   const clearConversation = useCallback(() => {
@@ -164,10 +193,11 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
       messages,
       isStreaming,
       streamingText,
+      isEnabled,
       sendMessage,
       clearConversation,
     }),
-    [messages, isStreaming, streamingText, sendMessage, clearConversation]
+    [messages, isStreaming, streamingText, isEnabled, sendMessage, clearConversation]
   );
 
   return (

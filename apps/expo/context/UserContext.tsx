@@ -3,9 +3,10 @@ import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getUserEmail } from 'thirdweb/wallets/in-app';
 import { usePostHog } from 'posthog-react-native';
-import * as Sentry from '@sentry/react-native';
 import { client } from '@/constants/thirdweb';
 import { useVerificationContext } from '@/context/VerificationContext';
+import { useConsent } from '@/context/ConsentContext';
+import { setSentryUser } from '@/lib/sentry-init';
 import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
 import type { UserRecord, UserTier } from '@/lib/types';
 
@@ -43,11 +44,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { hasCitizenNFT } = useVerificationContext();
   const posthog = usePostHog();
+  const consent = useConsent();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const onboardingTriggeredFor = useRef<string | null>(null);
   const identifiedFor = useRef<string | null>(null);
+  const grandfatherCheckedFor = useRef<string | null>(null);
 
   // Sync user on login/account change
   useEffect(() => {
@@ -91,7 +94,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     syncUser();
   }, [account?.address, wallet, router]);
 
-  // Identify user in PostHog + Sentry on login; reset on logout
+  // Identify user in PostHog + Sentry on login (gated by consent); reset on logout
   useEffect(() => {
     if (user?.wallet_address) {
       const props = {
@@ -99,19 +102,57 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         onboarding_completed: !!user.onboarding_completed_at,
         is_verified_citizen: !!user.is_verified_citizen,
       };
-      if (identifiedFor.current !== user.wallet_address) {
-        posthog?.identify(user.wallet_address, props);
-        identifiedFor.current = user.wallet_address;
-      } else {
-        posthog?.capture('$set', { $set: props });
+      if (consent.preferences.analytics) {
+        if (identifiedFor.current !== user.wallet_address) {
+          posthog?.identify(user.wallet_address, props);
+          identifiedFor.current = user.wallet_address;
+        } else {
+          posthog?.capture('$set', { $set: props });
+        }
       }
-      Sentry.setUser({ id: user.wallet_address, segment: user.tier });
+      if (consent.preferences.crash) {
+        setSentryUser({ id: user.wallet_address, segment: user.tier });
+      }
     } else if (identifiedFor.current) {
       posthog?.reset();
-      Sentry.setUser(null);
+      setSentryUser(null);
       identifiedFor.current = null;
     }
-  }, [user?.wallet_address, user?.tier, user?.onboarding_completed_at, user?.is_verified_citizen, posthog]);
+  }, [
+    user?.wallet_address,
+    user?.tier,
+    user?.onboarding_completed_at,
+    user?.is_verified_citizen,
+    posthog,
+    consent.preferences.analytics,
+    consent.preferences.crash,
+  ]);
+
+  // Reconcile device-level consent record with the wallet once it appears.
+  // Apply the grandfather "Accept all" path for users who already accepted
+  // terms before the granular consent system existed.
+  useEffect(() => {
+    if (!user?.wallet_address) return;
+    if (!consent.ready) return;
+    void consent.reconcileWallet(user.wallet_address);
+
+    if (
+      grandfatherCheckedFor.current === user.wallet_address ||
+      consent.needsConsent === false
+    ) {
+      // either we already grandfathered on this wallet, or there's stored
+      // consent (handled by the standard flow), or the modal will be shown.
+    }
+
+    if (
+      consent.needsConsent &&
+      user.terms_accepted_at &&
+      grandfatherCheckedFor.current !== user.wallet_address
+    ) {
+      grandfatherCheckedFor.current = user.wallet_address;
+      void consent.applyGrandfather();
+    }
+  }, [user?.wallet_address, user?.terms_accepted_at, consent]);
 
   // Auto-upgrade tier when citizen NFT is detected
   useEffect(() => {

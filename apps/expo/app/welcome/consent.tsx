@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 
@@ -14,6 +15,7 @@ export default function WelcomeConsentScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user, refreshUser } = useUser();
+  const { acceptAll, acceptEssential } = useConsent();
   const { state, dispatch } = useWelcomeWizard();
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,6 +26,7 @@ export default function WelcomeConsentScreen() {
 
   const handleAccept = async () => {
     if (!user?.wallet_address) {
+      await acceptAll('welcome_terms');
       router.replace('/welcome/notifications' as any);
       return;
     }
@@ -35,6 +38,7 @@ export default function WelcomeConsentScreen() {
         termsAccepted: true,
         markCompleted: true,
       });
+      await acceptAll('welcome_terms');
       await refreshUser();
       router.replace('/welcome/notifications' as any);
     } catch (err) {
@@ -58,6 +62,7 @@ export default function WelcomeConsentScreen() {
         console.error('Failed to persist declined onboarding:', err);
       }
     }
+    await acceptEssential('welcome_terms');
     dismissToProfile();
   };
 

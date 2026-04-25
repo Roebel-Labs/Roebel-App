@@ -282,7 +282,18 @@ export class AnthropicChatService {
  */
 let anthropicServiceInstance: AnthropicChatService | null = null;
 
-export function getAnthropicChatService(): AnthropicChatService {
+/**
+ * Defense in depth: callers should already gate on consent (see MeckyContext),
+ * but if anything reaches this function without explicit allow, refuse.
+ * Pass `consented: true` from a code path that has confirmed
+ * `consent.preferences.ai_assistant === true`.
+ */
+export function getAnthropicChatService(consented = false): AnthropicChatService {
+  if (!consented) {
+    throw new Error(
+      'anthropic-chat: caller did not assert consent. The Mecky-KI category must be enabled in the consent context before calling this service.'
+    );
+  }
   if (!anthropicServiceInstance) {
     const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
 
@@ -299,4 +310,8 @@ export function getAnthropicChatService(): AnthropicChatService {
   }
 
   return anthropicServiceInstance;
+}
+
+export function disposeAnthropicChatService(): void {
+  anthropicServiceInstance = null;
 }

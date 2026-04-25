@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
+
+const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
 
 type SectionProps = {
   title: string;
@@ -87,6 +89,42 @@ export default function SettingsScreen() {
               colors={colors}
             />
           ))}
+        </Section>
+
+        <Section title="DATENSCHUTZ" colors={colors}>
+          <Pressable
+            style={[
+              styles.themeOptionRow,
+              { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary },
+            ]}
+            onPress={() => router.push('/settings/consent' as any)}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Datenschutz anpassen
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Statistik, Mecky-KI, Karten und mehr einzeln steuern.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
+          <Pressable
+            style={styles.themeOptionRow}
+            onPress={() => {
+              Linking.openURL(DATENSCHUTZ_URL).catch(() => {});
+            }}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Datenschutzerklärung
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Vollständige Erklärung im Browser öffnen.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>↗</Text>
+          </Pressable>
         </Section>
 
         <View style={styles.footerNote}>
@@ -175,5 +213,9 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  chevron: {
+    fontSize: 18,
+    fontFamily: 'Inter-Regular',
   },
 });

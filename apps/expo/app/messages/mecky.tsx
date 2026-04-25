@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useMecky } from '@/context/MeckyContext';
+import { useConsent } from '@/context/ConsentContext';
 import MeckyChatBubble from '@/components/mecky/MeckyChatBubble';
 import ChatInput from '@/components/messages/ChatInput';
 import type { MeckyMessage } from '@/lib/types/mecky';
@@ -23,8 +24,9 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function MeckyScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { messages, isStreaming, streamingText, sendMessage, clearConversation } =
+  const { messages, isStreaming, streamingText, isEnabled, sendMessage, clearConversation } =
     useMecky();
+  const { setPreference } = useConsent();
   const listRef = useRef<FlatList>(null);
 
   // Build display list: messages + streaming indicator
@@ -92,43 +94,80 @@ export default function MeckyScreen() {
         </Pressable>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flex}
-      >
-        {/* Messages */}
-        <FlatList
-          ref={listRef}
-          data={displayData}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          inverted
-          contentContainerStyle={styles.messageList}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Image
-                source={require('@/assets/games/mecky/mecky_main.png')}
-                style={styles.emptyAvatar}
-                contentFit="cover"
-              />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                Hallo! Ich bin Mecky 👋
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Frag mich nach Events, Restaurants, Nachrichten oder was auch immer du über Röbel wissen willst!
-              </Text>
-            </View>
-          }
-        />
-
-        {/* Input */}
-        <SafeAreaView
-          edges={['bottom']}
-          style={[styles.inputSafe, { backgroundColor: colors.background }]}
+      {!isEnabled ? (
+        <View style={styles.consentEmpty}>
+          <Image
+            source={require('@/assets/games/mecky/mecky_main.png')}
+            style={styles.emptyAvatar}
+            contentFit="cover"
+          />
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+            Mecky braucht deine Zustimmung
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Mecky ist ein KI-Assistent von Anthropic (USA). Aktiviere ihn, um auf Deutsch zu chatten —
+            jederzeit widerrufbar.
+          </Text>
+          <Pressable
+            onPress={async () => {
+              await setPreference('ai_assistant', true, 'banner');
+            }}
+            style={[styles.consentPrimary, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.consentPrimaryLabel, { color: colors.onPrimary }]}>
+              Mecky aktivieren
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/settings/consent' as any)}
+            style={styles.consentSecondary}
+            accessibilityRole="link"
+          >
+            <Text style={[styles.consentSecondaryLabel, { color: colors.textSecondary }]}>
+              Datenschutz-Einstellungen öffnen
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flex}
         >
-          <ChatInput onSend={sendMessage} isSending={isStreaming} />
-        </SafeAreaView>
-      </KeyboardAvoidingView>
+          {/* Messages */}
+          <FlatList
+            ref={listRef}
+            data={displayData}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            inverted
+            contentContainerStyle={styles.messageList}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Image
+                  source={require('@/assets/games/mecky/mecky_main.png')}
+                  style={styles.emptyAvatar}
+                  contentFit="cover"
+                />
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                  Hallo! Ich bin Mecky 👋
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Frag mich nach Events, Restaurants, Nachrichten oder was auch immer du über Röbel wissen willst!
+                </Text>
+              </View>
+            }
+          />
+
+          {/* Input */}
+          <SafeAreaView
+            edges={['bottom']}
+            style={[styles.inputSafe, { backgroundColor: colors.background }]}
+          >
+            <ChatInput onSend={sendMessage} isSending={isStreaming} />
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
@@ -237,4 +276,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputSafe: {},
+  consentEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  consentPrimary: {
+    marginTop: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  consentPrimaryLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  consentSecondary: {
+    paddingVertical: 12,
+  },
+  consentSecondaryLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    textDecorationLine: 'underline',
+  },
 });
