@@ -1,5 +1,6 @@
 import React, { Component, ReactNode } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 
 // Hardcoded fallback colors — ErrorBoundary renders outside ThemeProvider
 const fallbackColors = {
@@ -75,16 +76,12 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    Sentry.captureException(error, {
+      contexts: { react: { componentStack: errorInfo.componentStack ?? undefined } },
+    });
 
-    // Log error details for production debugging
-    if (!__DEV__) {
-      console.log('Production error details:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        componentStack: errorInfo.componentStack,
-      });
+    if (__DEV__) {
+      console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
 
     this.setState({

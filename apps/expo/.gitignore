@@ -17,6 +17,8 @@ web-build/
 
 .env
 .env.local
+sentry.properties
+.sentryclirc
 biome.json
 .yalc/
 yalc.lock

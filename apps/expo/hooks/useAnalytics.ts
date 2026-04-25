@@ -7,6 +7,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { usePathname, useSegments } from 'expo-router';
+import { usePostHog } from 'posthog-react-native';
 import {
   logScreenView,
   logEvent,
@@ -23,13 +24,15 @@ import {
 export function useScreenTracking(): void {
   const pathname = usePathname();
   const segments = useSegments();
+  const posthog = usePostHog();
 
   useEffect(() => {
     if (pathname) {
       const screenName = getScreenNameFromPath(pathname, segments);
       logScreenView(screenName, getScreenClass(segments));
+      posthog?.screen(screenName, { path: pathname });
     }
-  }, [pathname, segments]);
+  }, [pathname, segments, posthog]);
 }
 
 /**

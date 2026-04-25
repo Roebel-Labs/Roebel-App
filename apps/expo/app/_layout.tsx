@@ -28,6 +28,8 @@ import { ThirdwebProvider, useAutoConnect } from 'thirdweb/react';
 import { client, chain } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { wallets } from '@/constants/wallets';
+import * as Sentry from '@sentry/react-native';
+import { PostHogProvider } from 'posthog-react-native';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -205,7 +207,7 @@ function ThemedLayout() {
   );
 }
 
-export default function Layout() {
+function Layout() {
   const { fontsLoaded, fontError } = useInterFonts();
 
   React.useEffect(() => {
@@ -234,43 +236,55 @@ export default function Layout() {
   }
 
   return (
-    <ErrorBoundary>
-      <ThirdwebProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <SafeAreaProvider>
-            <ThemeProvider>
-              <MessagingProvider>
-                <VerificationProvider>
-                  <UserProvider>
-                  <AccountProvider>
-                  <NotificationsProvider>
-                  <RewardsProvider>
-                  <MeckyProvider>
-                  <GovernanceTestProvider>
-                  <InterestProvider>
-                  <BookmarksProvider>
-                    <LocationProvider>
-                      <SnackbarProvider>
-                        <ThemedLayout />
-                      </SnackbarProvider>
-                    </LocationProvider>
-                  </BookmarksProvider>
-                  </InterestProvider>
-                  </GovernanceTestProvider>
-                  </MeckyProvider>
-                  </RewardsProvider>
-                  </NotificationsProvider>
-                  </AccountProvider>
-                  </UserProvider>
-                </VerificationProvider>
-              </MessagingProvider>
-            </ThemeProvider>
-          </SafeAreaProvider>
-        </GestureHandlerRootView>
-      </ThirdwebProvider>
-    </ErrorBoundary>
+    <PostHogProvider
+      apiKey={process.env.EXPO_PUBLIC_POSTHOG_KEY}
+      options={{
+        host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://eu.i.posthog.com',
+        enableSessionReplay: false,
+        captureAppLifecycleEvents: true,
+      }}
+      autocapture={false}
+    >
+      <ErrorBoundary>
+        <ThirdwebProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <SafeAreaProvider>
+              <ThemeProvider>
+                <MessagingProvider>
+                  <VerificationProvider>
+                    <UserProvider>
+                    <AccountProvider>
+                    <NotificationsProvider>
+                    <RewardsProvider>
+                    <MeckyProvider>
+                    <GovernanceTestProvider>
+                    <InterestProvider>
+                    <BookmarksProvider>
+                      <LocationProvider>
+                        <SnackbarProvider>
+                          <ThemedLayout />
+                        </SnackbarProvider>
+                      </LocationProvider>
+                    </BookmarksProvider>
+                    </InterestProvider>
+                    </GovernanceTestProvider>
+                    </MeckyProvider>
+                    </RewardsProvider>
+                    </NotificationsProvider>
+                    </AccountProvider>
+                    </UserProvider>
+                  </VerificationProvider>
+                </MessagingProvider>
+              </ThemeProvider>
+            </SafeAreaProvider>
+          </GestureHandlerRootView>
+        </ThirdwebProvider>
+      </ErrorBoundary>
+    </PostHogProvider>
   );
 }
+
+export default Sentry.wrap(Layout);
 
 const styles = StyleSheet.create({
   gradientContainer: {

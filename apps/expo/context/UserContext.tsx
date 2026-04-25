@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getUserEmail } from 'thirdweb/wallets/in-app';
+import { usePostHog } from 'posthog-react-native';
+import * as Sentry from '@sentry/react-native';
 import { client } from '@/constants/thirdweb';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
@@ -33,10 +35,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const wallet = useActiveWallet();
   const router = useRouter();
   const { hasCitizenNFT } = useVerificationContext();
+  const posthog = usePostHog();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const onboardingTriggeredFor = useRef<string | null>(null);
+  const identifiedFor = useRef<string | null>(null);
 
   // Sync user on login/account change
   useEffect(() => {
@@ -79,6 +83,28 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     syncUser();
   }, [account?.address, wallet, router]);
+
+  // Identify user in PostHog + Sentry on login; reset on logout
+  useEffect(() => {
+    if (user?.wallet_address) {
+      const props = {
+        tier: user.tier,
+        onboarding_completed: !!user.onboarding_completed_at,
+        is_verified_citizen: !!user.is_verified_citizen,
+      };
+      if (identifiedFor.current !== user.wallet_address) {
+        posthog?.identify(user.wallet_address, props);
+        identifiedFor.current = user.wallet_address;
+      } else {
+        posthog?.capture('$set', { $set: props });
+      }
+      Sentry.setUser({ id: user.wallet_address, segment: user.tier });
+    } else if (identifiedFor.current) {
+      posthog?.reset();
+      Sentry.setUser(null);
+      identifiedFor.current = null;
+    }
+  }, [user?.wallet_address, user?.tier, user?.onboarding_completed_at, user?.is_verified_citizen, posthog]);
 
   // Auto-upgrade tier when citizen NFT is detected
   useEffect(() => {
