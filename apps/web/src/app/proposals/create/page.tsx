@@ -15,6 +15,7 @@ import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { uploadToIrys } from "@/lib/irys";
 import { client } from "@/app/client";
 import { useVerificationStatus } from "@/hooks/useVerificationStatus";
+import { IrysBalanceCard } from "@/components/admin/IrysBalanceCard";
 import { de } from "@/lib/translations/de";
 
 type UploadStage = "idle" | "uploading" | "submitting" | "confirming" | "success" | "error";
@@ -305,6 +306,8 @@ export default function CreateProposalPage() {
                     Erstelle einen Vorschlag, über den die Community abstimmen kann. Deine Beschreibung wird dauerhaft auf Irys (Arweave) gespeichert.
                   </p>
                 </div>
+
+                <IrysBalanceCard />
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
