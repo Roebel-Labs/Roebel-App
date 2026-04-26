@@ -6,6 +6,7 @@ import {
   Pressable,
   Animated,
   Image,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LocationIcon, CalendarIcon } from '@/components/Icons';
@@ -13,11 +14,19 @@ import { useTheme } from '@/context/ThemeContext';
 import { isRestaurantOpen } from '@/lib/utils';
 import { BUSINESS_CATEGORY_LABELS, ENTITY_TYPE_COLORS } from '@/lib/map/constants';
 import type { EventRecord, RestaurantRecord, BusinessRecord } from '@/lib/types';
+import {
+  POI_TYPE_COLORS,
+  POI_TYPE_LABELS_DE,
+  SWIM_STATUS_COLORS,
+  SWIM_STATUS_LABELS_DE,
+  type PoiRecord,
+} from '@/lib/supabase-pois';
 
 export type MapPreviewData =
   | { entityType: 'event'; event: EventRecord }
   | { entityType: 'restaurant'; restaurant: RestaurantRecord }
-  | { entityType: 'business'; business: BusinessRecord };
+  | { entityType: 'business'; business: BusinessRecord }
+  | { entityType: 'poi'; poi: PoiRecord };
 
 type Props = {
   data: MapPreviewData | null;
@@ -66,7 +75,10 @@ export default function MapPreviewCard({ data, onClose }: Props) {
 
   const imageUrl = getImageUrl(data);
   const placeholderEmoji = getPlaceholderEmoji(data);
-  const entityColor = ENTITY_TYPE_COLORS[data.entityType];
+  const entityColor =
+    data.entityType === 'poi'
+      ? POI_TYPE_COLORS[data.poi.type] || '#194383'
+      : ENTITY_TYPE_COLORS[data.entityType];
 
   return (
     <Animated.View
@@ -126,8 +138,23 @@ function getImageUrl(data: MapPreviewData): string | null {
       return data.restaurant.cover_image_url || data.restaurant.logo_url;
     case 'business':
       return data.business.cover_image_url || data.business.logo_url;
+    case 'poi':
+      return null;
   }
 }
+
+const POI_EMOJIS: Record<string, string> = {
+  toilet: '🚻',
+  drinking_water: '🚰',
+  bike_repair: '🔧',
+  bike_rental: '🚲',
+  swim_spot: '🏊',
+  indoor_alternative: '🏛️',
+  tourist_info: 'ℹ️',
+  pharmacy: '💊',
+  observation_stand: '🦅',
+  viewpoint: '🌄',
+};
 
 function getPlaceholderEmoji(data: MapPreviewData): string {
   switch (data.entityType) {
@@ -137,6 +164,8 @@ function getPlaceholderEmoji(data: MapPreviewData): string {
       return '🍽️';
     case 'business':
       return '🏪';
+    case 'poi':
+      return POI_EMOJIS[data.poi.type] || '📍';
   }
 }
 
@@ -148,6 +177,10 @@ function getButtonLabel(data: MapPreviewData): string {
       return 'Speisekarte';
     case 'business':
       return 'Mehr erfahren';
+    case 'poi':
+      if (data.poi.phone) return 'Anrufen';
+      if (data.poi.website) return 'Website';
+      return 'Details';
   }
 }
 
@@ -161,6 +194,13 @@ function handleNavigate(data: MapPreviewData, router: ReturnType<typeof useRoute
       break;
     case 'business':
       router.push({ pathname: '/business/[slug]', params: { slug: data.business.slug } });
+      break;
+    case 'poi':
+      if (data.poi.phone) {
+        Linking.openURL(`tel:${data.poi.phone.replace(/\s+/g, '')}`);
+      } else if (data.poi.website) {
+        Linking.openURL(data.poi.website);
+      }
       break;
   }
 }
@@ -248,6 +288,57 @@ function renderContent(
                 {categoryLabel}
               </Text>
             </View>
+          </View>
+        </>
+      );
+    }
+    case 'poi': {
+      const { poi } = data;
+      const typeLabel = POI_TYPE_LABELS_DE[poi.type] || poi.type;
+      const isSwimSpot = poi.type === 'swim_spot' && poi.status?.startsWith('swim_');
+      const swimColor = isSwimSpot ? SWIM_STATUS_COLORS[poi.status as string] : null;
+      const swimLabel = isSwimSpot ? SWIM_STATUS_LABELS_DE[poi.status as string] : null;
+      return (
+        <>
+          <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+            {poi.name_de}
+          </Text>
+          {poi.address && (
+            <View style={styles.infoRow}>
+              <LocationIcon width={14} height={14} color={colors.textSecondary} />
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                {poi.address}
+              </Text>
+            </View>
+          )}
+          {isSwimSpot && swimColor && swimLabel ? (
+            <View style={styles.infoRow}>
+              <View style={[styles.statusDot, { backgroundColor: swimColor }]} />
+              <Text style={[styles.meta, { color: swimColor, fontFamily: 'Inter-Medium' }]}>
+                {swimLabel}
+              </Text>
+            </View>
+          ) : poi.opening_hours_de ? (
+            <View style={styles.infoRow}>
+              <Text style={[styles.meta, { color: colors.textTertiary }]} numberOfLines={1}>
+                {poi.opening_hours_de}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.infoRow}>
+            <View style={[styles.categoryChip, { backgroundColor: entityColor + '1A' }]}>
+              <Text style={[styles.categoryChipText, { color: entityColor }]}>{typeLabel}</Text>
+            </View>
+            {poi.is_24h && (
+              <View style={[styles.categoryChip, { backgroundColor: '#194383' + '1A', marginLeft: 6 }]}>
+                <Text style={[styles.categoryChipText, { color: '#194383' }]}>24h</Text>
+              </View>
+            )}
+            {poi.is_pannendienst && (
+              <View style={[styles.categoryChip, { backgroundColor: '#E85D04' + '1A', marginLeft: 6 }]}>
+                <Text style={[styles.categoryChipText, { color: '#E85D04' }]}>Pannendienst</Text>
+              </View>
+            )}
           </View>
         </>
       );

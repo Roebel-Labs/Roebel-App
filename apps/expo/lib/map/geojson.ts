@@ -1,4 +1,5 @@
 import type { EventRecord, RestaurantRecord, BusinessRecord, MapEntityType } from '@/lib/types';
+import type { PoiRecord } from '@/lib/supabase-pois';
 import { ROEBEL_CENTER } from './constants';
 
 // --- Event-specific types (kept for backward compat) ---
@@ -30,6 +31,8 @@ export type MapFeatureProperties = {
   image_url: string | null;
   date: string | null;
   slug: string | null;
+  poi_type: string | null;
+  poi_status: string | null;
 };
 
 export type MapGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Point, MapFeatureProperties>;
@@ -107,7 +110,8 @@ export function eventsToGeoJSON(events: EventWithCoordinates[]): EventGeoJSON {
 export function entitiesToGeoJSON(
   events: EventWithCoordinates[],
   restaurants: RestaurantRecord[],
-  businesses: BusinessRecord[]
+  businesses: BusinessRecord[],
+  pois: PoiRecord[] = []
 ): MapGeoJSON {
   const eventFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = events.map((e) => ({
     type: 'Feature',
@@ -125,6 +129,8 @@ export function entitiesToGeoJSON(
       image_url: e.image_url,
       date: e.date,
       slug: null,
+      poi_type: null,
+      poi_status: null,
     },
   }));
 
@@ -146,6 +152,8 @@ export function entitiesToGeoJSON(
         image_url: r.cover_image_url || r.logo_url,
         date: null,
         slug: r.slug,
+        poi_type: null,
+        poi_status: null,
       },
     }));
 
@@ -167,11 +175,34 @@ export function entitiesToGeoJSON(
         image_url: b.cover_image_url || b.logo_url,
         date: null,
         slug: b.slug,
+        poi_type: null,
+        poi_status: null,
       },
     }));
 
+  const poiFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = pois.map((p) => ({
+    type: 'Feature',
+    id: `poi-${p.id}`,
+    geometry: {
+      type: 'Point',
+      coordinates: [p.lon, p.lat],
+    },
+    properties: {
+      id: p.id,
+      entityType: 'poi' as const,
+      title: p.name_de,
+      subtitle: p.address || '',
+      category: p.type,
+      image_url: null,
+      date: null,
+      slug: null,
+      poi_type: p.type,
+      poi_status: p.status,
+    },
+  }));
+
   return {
     type: 'FeatureCollection',
-    features: [...eventFeatures, ...restaurantFeatures, ...businessFeatures],
+    features: [...eventFeatures, ...restaurantFeatures, ...businessFeatures, ...poiFeatures],
   };
 }

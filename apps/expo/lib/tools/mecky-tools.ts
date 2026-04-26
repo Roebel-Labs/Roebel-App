@@ -10,6 +10,14 @@ import { supabase } from "../supabase";
 import { fetchRestaurants } from "../supabase-restaurants";
 import { fetchMarketplaceListings } from "../supabase-marketplace";
 import {
+  fetchPois,
+  fetchTodayAdvisories,
+  POI_TYPE_LABELS_DE,
+  SWIM_STATUS_LABELS_DE,
+  distanceKm,
+  type PoiType,
+} from "../supabase-pois";
+import {
   eventSubmissionToolDefinitions,
   executeSearchLocation,
   executeExtractFlyer,
@@ -66,6 +74,31 @@ const navigateUserSchema = z.object({
   label: z.string().describe("Button-Beschriftung auf Deutsch"),
 });
 
+const searchPoisSchema = z.object({
+  type: z
+    .enum([
+      "toilet",
+      "drinking_water",
+      "bike_repair",
+      "bike_rental",
+      "swim_spot",
+      "indoor_alternative",
+      "tourist_info",
+      "pharmacy",
+      "observation_stand",
+      "viewpoint",
+    ])
+    .optional()
+    .describe(
+      "POI-Typ: toilet=Toilette, drinking_water=Trinkwasser, bike_repair=Fahrradwerkstatt, bike_rental=Fahrradverleih, swim_spot=Badestelle, indoor_alternative=Schlechtwetter-Tipp, tourist_info=Tourist-Info, pharmacy=Apotheke, observation_stand=Beobachtungsstand, viewpoint=Aussichtspunkt."
+    ),
+  near_lat: z.number().optional().describe("Breitengrad als Zentrum für Nähe-Suche."),
+  near_lon: z.number().optional().describe("Längengrad als Zentrum für Nähe-Suche."),
+  radius_km: z.number().optional().describe("Suchradius in km, Standard 5."),
+});
+
+const todayAdvisoriesSchema = z.object({});
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
@@ -116,6 +149,18 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Erstellt einen klickbaren Link zu einer bestimmten Seite in der App, z.B. Event-Detail, Restaurant, Governance.",
     input_schema: zodToToolInputSchema(navigateUserSchema),
+  },
+  {
+    name: "searchPois",
+    description:
+      "Findet Mecky-Tipps in der Nähe: Toiletten, Trinkwasser, Fahrradverleih, 24h Pannendienst, Badestellen mit Wasserqualität (Heute baden? Ja/Mit Vorsicht/Lieber nicht), Schlechtwetter-Alternativen, Tourist-Infos, Apotheken, Beobachtungsstände im Nationalpark, Aussichtspunkte.",
+    input_schema: zodToToolInputSchema(searchPoisSchema),
+  },
+  {
+    name: "todayAdvisories",
+    description:
+      "Liefert die Tagesempfehlungen von Mecky: Mücken-, Zecken-, Blaualgen- und UV-Index. Nutze das, wenn jemand fragt 'Soll ich heute baden?', 'Sind heute viele Mücken?' o.ä.",
+    input_schema: zodToToolInputSchema(todayAdvisoriesSchema),
   },
 ];
 
@@ -399,6 +444,90 @@ async function executeNavigateUser(
   };
 }
 
+async function executeSearchPois(
+  input: z.infer<typeof searchPoisSchema>
+): Promise<ToolResult> {
+  try {
+    const all = await fetchPois(input.type ? [input.type as PoiType] : undefined);
+    let results = all;
+    if (input.near_lat != null && input.near_lon != null) {
+      const radius = input.radius_km ?? 5;
+      results = all
+        .map((p) => ({
+          ...p,
+          _distance: distanceKm(input.near_lat!, input.near_lon!, p.lat, p.lon),
+        }))
+        .filter((p) => p._distance <= radius)
+        .sort((a, b) => a._distance - b._distance);
+    }
+    const items = results.slice(0, 8).map((p) => ({
+      id: p.id,
+      type: p.type,
+      type_label_de: POI_TYPE_LABELS_DE[p.type],
+      name: p.name_de,
+      description: p.description_de,
+      address: p.address,
+      phone: p.phone,
+      website: p.website,
+      opening_hours_de: p.opening_hours_de,
+      is_24h: p.is_24h,
+      is_pannendienst: p.is_pannendienst,
+      status: p.status,
+      status_label_de: p.status?.startsWith("swim_")
+        ? SWIM_STATUS_LABELS_DE[p.status as string]
+        : null,
+      status_note_de: p.status_note_de,
+      lat: p.lat,
+      lon: p.lon,
+    }));
+    return {
+      success: true,
+      data: {
+        items,
+        count: items.length,
+        displayType: "pois",
+        message: items.length
+          ? `${items.length} Mecky-Tipp(s) gefunden.`
+          : "Keine passenden Tipps gefunden.",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler bei der Tipp-Suche." },
+    };
+  }
+}
+
+async function executeTodayAdvisories(): Promise<ToolResult> {
+  try {
+    const advisories = await fetchTodayAdvisories();
+    return {
+      success: true,
+      data: {
+        items: advisories.map((a) => ({
+          type: a.type,
+          level: a.level,
+          message: a.message_de,
+          recommendation: a.recommendation_de,
+        })),
+        count: advisories.length,
+        displayType: "advisories",
+        message: advisories.length
+          ? `Mecky hat ${advisories.length} Tagestipp(s) für dich.`
+          : "Heute keine besonderen Hinweise.",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler bei den Tagestipps." },
+    };
+  }
+}
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 export const meckyToolDefinitions: AnthropicToolDefinition[] = [
@@ -420,6 +549,8 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   searchBusinesses: executeSearchBusinesses,
   searchDeals: executeSearchDeals,
   navigateUser: executeNavigateUser,
+  searchPois: executeSearchPois,
+  todayAdvisories: executeTodayAdvisories,
 };
 
 export async function executeMeckyTool(

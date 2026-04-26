@@ -7,6 +7,7 @@ export type MapFilter = {
   events: boolean;
   restaurants: boolean;
   businesses: boolean;
+  pois: boolean;
 };
 
 type Props = {
@@ -14,10 +15,11 @@ type Props = {
   onFilterChange: (filter: MapFilter) => void;
 };
 
-const CHIPS: { key: keyof MapFilter; entityType: string }[] = [
+const CHIPS: { key: keyof MapFilter; entityType: string; label?: string; color?: string }[] = [
   { key: 'events', entityType: 'event' },
   { key: 'restaurants', entityType: 'restaurant' },
   { key: 'businesses', entityType: 'business' },
+  { key: 'pois', entityType: 'poi', label: 'Tipps', color: '#194383' },
 ];
 
 export default function MapFilterChips({ filter, onFilterChange }: Props) {
@@ -29,10 +31,10 @@ export default function MapFilterChips({ filter, onFilterChange }: Props) {
 
   return (
     <View style={styles.container}>
-      {CHIPS.map(({ key, entityType }) => {
+      {CHIPS.map(({ key, entityType, label: customLabel, color: customColor }) => {
         const isActive = filter[key];
-        const chipColor = ENTITY_TYPE_COLORS[entityType];
-        const label = ENTITY_TYPE_LABELS[entityType];
+        const chipColor = customColor || ENTITY_TYPE_COLORS[entityType];
+        const label = customLabel || ENTITY_TYPE_LABELS[entityType];
 
         return (
           <Pressable

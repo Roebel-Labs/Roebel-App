@@ -215,7 +215,7 @@ export type BusinessRecord = {
   updated_at: string;
 };
 
-export type MapEntityType = 'event' | 'restaurant' | 'business';
+export type MapEntityType = 'event' | 'restaurant' | 'business' | 'poi';
 
 export type MenuCategoryRecord = {
   id: string;

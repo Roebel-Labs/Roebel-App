@@ -13,6 +13,7 @@ import MapPreviewCard, { type MapPreviewData } from '@/components/map/MapPreview
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
 import MyLocationButton from '@/components/map/MyLocationButton';
 import MapFilterChips, { type MapFilter } from '@/components/map/MapFilterChips';
+import VerlorenSheet from '@/components/utilities/VerlorenSheet';
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +25,14 @@ import {
   type EventWithCoordinates,
 } from '@/lib/map/geojson';
 import type { EventRecord, RestaurantRecord, BusinessRecord, MapEntityType } from '@/lib/types';
+import {
+  fetchPois,
+  fetchTodayAdvisories,
+  type PoiRecord,
+  type DailyAdvisoryRecord,
+  ADVISORY_LEVEL_COLORS,
+  ADVISORY_LEVEL_LABELS_DE,
+} from '@/lib/supabase-pois';
 
 // Try to load Mapbox — fails gracefully in Expo Go
 let Mapbox: any = null;
@@ -53,16 +62,20 @@ export default function LocationScreen() {
   const [events, setEvents] = useState<EventWithCoordinates[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
   const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
+  const [pois, setPois] = useState<PoiRecord[]>([]);
+  const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEntity, setSelectedEntity] = useState<MapPreviewData | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showVerloren, setShowVerloren] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
   const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(null);
   const [mapFilter, setMapFilter] = useState<MapFilter>({
     events: true,
     restaurants: true,
     businesses: true,
+    pois: false,
   });
 
   // Build unified GeoJSON from all entities, respecting active filters
@@ -71,9 +84,10 @@ export default function LocationScreen() {
       entitiesToGeoJSON(
         mapFilter.events ? events : [],
         mapFilter.restaurants ? restaurants : [],
-        mapFilter.businesses ? businesses : []
+        mapFilter.businesses ? businesses : [],
+        mapFilter.pois ? pois : []
       ),
-    [events, restaurants, businesses, mapFilter]
+    [events, restaurants, businesses, pois, mapFilter]
   );
 
   // Check privacy consent on mount
@@ -102,21 +116,18 @@ export default function LocationScreen() {
   const fetchMapData = async () => {
     try {
       setLoading(true);
-      const [eventsResult, restaurantsResult, businessesResult] = await Promise.all([
-        supabase
-          .from('events')
-          .select('*')
-          .eq('status', 'approved')
-          .order('date', { ascending: true }),
-        supabase
-          .from('restaurants')
-          .select('*')
-          .eq('status', 'published'),
-        supabase
-          .from('businesses')
-          .select('*')
-          .eq('status', 'approved'),
-      ]);
+      const [eventsResult, restaurantsResult, businessesResult, poisResult, advisoriesResult] =
+        await Promise.all([
+          supabase
+            .from('events')
+            .select('*')
+            .eq('status', 'approved')
+            .order('date', { ascending: true }),
+          supabase.from('restaurants').select('*').eq('status', 'published'),
+          supabase.from('businesses').select('*').eq('status', 'approved'),
+          fetchPois(),
+          fetchTodayAdvisories(),
+        ]);
 
       if (eventsResult.data) {
         setEvents(processEventsWithCoordinates(eventsResult.data as EventRecord[]));
@@ -127,6 +138,8 @@ export default function LocationScreen() {
       if (businessesResult.data) {
         setBusinesses(businessesResult.data as BusinessRecord[]);
       }
+      setPois(poisResult);
+      setAdvisories(advisoriesResult);
 
       if (eventsResult.error) console.error('Error fetching events:', eventsResult.error);
       if (restaurantsResult.error) console.error('Error fetching restaurants:', restaurantsResult.error);
@@ -177,6 +190,12 @@ export default function LocationScreen() {
         if (business.latitude && business.longitude) {
           setFlyToCoordinate([business.longitude, business.latitude]);
         }
+      }
+    } else if (entityType === 'poi') {
+      const poi = pois.find((p) => p.id === id);
+      if (poi) {
+        setSelectedEntity({ entityType: 'poi', poi });
+        setFlyToCoordinate([poi.lon, poi.lat]);
       }
     }
   };
@@ -235,6 +254,41 @@ export default function LocationScreen() {
             {/* Filter chips */}
             <MapFilterChips filter={mapFilter} onFilterChange={setMapFilter} />
 
+            {/* Today's advisories — visible when Tipps layer is on */}
+            {mapFilter.pois && advisories.length > 0 ? (
+              <View style={styles.advisoriesRow}>
+                {advisories.map((adv) => (
+                  <View
+                    key={adv.id}
+                    style={[
+                      styles.advisoryChip,
+                      { backgroundColor: ADVISORY_LEVEL_COLORS[adv.level] + '22' },
+                    ]}
+                  >
+                    <Text style={styles.advisoryEmoji}>
+                      {adv.type === 'mosquito'
+                        ? '🦟'
+                        : adv.type === 'tick'
+                        ? '🕷️'
+                        : adv.type === 'cyanobacteria'
+                        ? '💧'
+                        : adv.type === 'sun'
+                        ? '☀️'
+                        : '🌼'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.advisoryText,
+                        { color: ADVISORY_LEVEL_COLORS[adv.level] },
+                      ]}
+                    >
+                      {ADVISORY_LEVEL_LABELS_DE[adv.level]}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {/* Floating Search Button */}
             <Pressable
               style={({ pressed }) => [
@@ -248,11 +302,26 @@ export default function LocationScreen() {
               <SearchIcon width={22} height={22} color={colors.tabIconActive} />
             </Pressable>
 
+            {/* "Verloren?" button — bottom right above tab bar */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.verlorenBtn,
+                pressed && styles.floatingSearchBtnPressed,
+              ]}
+              accessibilityLabel="Wo bin ich verloren"
+              onPress={() => setShowVerloren(true)}
+            >
+              <Text style={styles.verlorenEmoji}>🆘</Text>
+              <Text style={styles.verlorenLabel}>Verloren?</Text>
+            </Pressable>
+
             {/* My Location Button */}
             <MyLocationButton onLocationFound={handleLocationFound} />
           </>
         )}
       </View>
+
+      <VerlorenSheet visible={showVerloren} onClose={() => setShowVerloren(false)} />
 
       <MapPreviewCard
         data={selectedEntity}
@@ -318,5 +387,56 @@ const styles = StyleSheet.create({
   floatingSearchBtnPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.95 }],
+  },
+  verlorenBtn: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: '#D62828',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    zIndex: 100,
+  },
+  verlorenEmoji: {
+    fontSize: 16,
+  },
+  verlorenLabel: {
+    color: '#fff',
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+  },
+  advisoriesRow: {
+    position: 'absolute',
+    top: 70,
+    left: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    zIndex: 100,
+    maxWidth: '80%',
+  },
+  advisoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  advisoryEmoji: {
+    fontSize: 13,
+  },
+  advisoryText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
   },
 });

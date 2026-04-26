@@ -14,6 +14,7 @@ import {
 } from '@/lib/map/constants';
 import type { MapGeoJSON } from '@/lib/map/geojson';
 import type { MapEntityType } from '@/lib/types';
+import { POI_TYPE_COLORS } from '@/lib/supabase-pois';
 
 // Try to load Mapbox — fails gracefully in Expo Go
 let Mapbox: any = null;
@@ -118,13 +119,23 @@ export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate 
     []
   );
 
+  // POI type → color match expression
+  const poiColorExpression: any = [
+    'match',
+    ['get', 'poi_type'],
+    ...Object.entries(POI_TYPE_COLORS).flatMap(([type, color]) => [type, color]),
+    DEFAULT_MARKER_COLOR,
+  ];
+
   // Entity-type-aware marker colors:
-  // restaurant → orange, business → green, event → category-based colors
+  // poi → POI-type color, restaurant → orange, business → green, event → category-based
   const markerCircleStyle = useMemo(
     () => ({
       circleRadius: 12,
       circleColor: [
         'case',
+        ['==', ['get', 'entityType'], 'poi'],
+        poiColorExpression,
         ['==', ['get', 'entityType'], 'restaurant'],
         ENTITY_TYPE_COLORS.restaurant,
         ['==', ['get', 'entityType'], 'business'],

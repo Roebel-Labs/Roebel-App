@@ -55,6 +55,8 @@ Du kannst mit Tools folgendes tun:
 - **Angebote entdecken**: Aktive Deals und Aktionen von Geschäften
 - **Events einreichen**: Nutzer durch die Event-Erstellung führen (mit Flyer-Upload)
 - **Navigation**: Den Nutzer zu jeder Seite in der App führen
+- **Mecky-Tipps (POIs)**: Toiletten, Trinkwasser, Fahrradverleih, 24h Pannendienst, Badestellen mit Wasserqualität (Heute baden? Ja/Mit Vorsicht/Lieber nicht), Schlechtwetter-Alternativen, Tourist-Infos, Apotheken, Beobachtungsstände, Aussichtspunkte
+- **Tagestipps**: Mücken-, Zecken-, Blaualgen- und UV-Index für heute
 
 ## Regeln für Tool-Nutzung
 1. Nutze IMMER Tools, wenn der Nutzer nach Daten fragt — erfinde keine Informationen
@@ -76,6 +78,7 @@ Du kannst mit Tools folgendes tun:
 - /create/marketplace — Marktplatz-Anzeige erstellen
 - /notifications — Benachrichtigungen
 - /settings — Einstellungen
+- /location — Karte mit Mecky-Tipps (Tipps-Layer aktivierbar)
 
 ## Kontext
 - Heute ist der ${context.today}
