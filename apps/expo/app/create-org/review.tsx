@@ -19,6 +19,7 @@ const ORG_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   verein: { emoji: '🤝', label: 'Verein' },
   partei: { emoji: '🏛️', label: 'Partei' },
   fraktion: { emoji: '⚖️', label: 'Fraktion' },
+  journalist: { emoji: '📝', label: 'Journalist:in' },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -48,8 +49,17 @@ export default function CreateOrgReviewScreen() {
     dispatch({ type: 'SET_SUBMITTING', payload: true });
 
     try {
-      // 1. Create account with sub_type
-      const orgAccount = await createOrgAccount(state.orgType as OrgSubType, state.name.trim());
+      // 1. Create account with sub_type (+ extern flag if applicable)
+      const orgAccount = await createOrgAccount(
+        state.orgType as OrgSubType,
+        state.name.trim(),
+        {
+          isExtern: state.isExtern,
+          contactEmail: state.isExtern ? state.contactEmail.trim() || null : null,
+          reason: state.isExtern ? state.externReason.trim() || null : null,
+          bio: state.description.trim() || null,
+        }
+      );
 
       // 2. Store images on the account itself
       if (state.logoUrl || state.coverImageUrl) {
@@ -62,37 +72,41 @@ export default function CreateOrgReviewScreen() {
       // 3. Store new account ID for success screen
       dispatch({ type: 'SET_NEW_ACCOUNT_ID', payload: orgAccount.id });
 
-      // 4. Create business record
-      await createBusiness({
-        owner_wallet_address: account.address,
-        name: state.name.trim(),
-        category: state.category || 'sonstiges',
-        description: state.description.trim() || undefined,
-        phone: state.phone.trim() || undefined,
-        email: state.email.trim() || undefined,
-        website_url: state.website.trim() || undefined,
-        address: state.formattedAddress || state.address.trim() || undefined,
-        logo_url: state.logoUrl || undefined,
-        cover_image_url: state.coverImageUrl || undefined,
-      });
+      // 4. Create business + restaurant records only for storefront-shaped orgs
+      const needsBusinessRecord =
+        state.orgType === 'restaurant' || state.orgType === 'unternehmen';
 
-      // 5. For restaurants: also create restaurant record
-      if (state.orgType === 'restaurant') {
-        await createRestaurant({
+      if (needsBusinessRecord) {
+        await createBusiness({
+          owner_wallet_address: account.address,
           name: state.name.trim(),
-          account_id: orgAccount.id,
-          description: state.description.trim() || null,
-          logo_url: state.logoUrl || null,
-          cover_image_url: state.coverImageUrl || null,
-          address: state.formattedAddress || state.address.trim() || null,
-          phone: state.phone.trim() || null,
-          website_url: state.website.trim() || null,
-          latitude: state.latitude,
-          longitude: state.longitude,
+          category: state.category || 'sonstiges',
+          description: state.description.trim() || undefined,
+          phone: state.phone.trim() || undefined,
+          email: state.email.trim() || undefined,
+          website_url: state.website.trim() || undefined,
+          address: state.formattedAddress || state.address.trim() || undefined,
+          logo_url: state.logoUrl || undefined,
+          cover_image_url: state.coverImageUrl || undefined,
         });
+
+        if (state.orgType === 'restaurant') {
+          await createRestaurant({
+            name: state.name.trim(),
+            account_id: orgAccount.id,
+            description: state.description.trim() || null,
+            logo_url: state.logoUrl || null,
+            cover_image_url: state.coverImageUrl || null,
+            address: state.formattedAddress || state.address.trim() || null,
+            phone: state.phone.trim() || null,
+            website_url: state.website.trim() || null,
+            latitude: state.latitude,
+            longitude: state.longitude,
+          });
+        }
       }
 
-      // 6. Navigate to success
+      // 5. Navigate to success
       router.replace('/create-org/success');
     } catch (error: any) {
       console.error('Org creation error:', error);

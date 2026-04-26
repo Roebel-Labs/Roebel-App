@@ -1,6 +1,44 @@
 import { supabase } from './supabase';
 import type { Account, AccountOwner, AccountType, OrgSubType } from './types';
 
+export type CreateOrgAccountOptions = {
+  /** Mark this org as extern (non-Röbel). Stored as extern_status='pending'. */
+  isExtern?: boolean;
+  /** Contact email for approval notifications. */
+  contactEmail?: string | null;
+  /** Free-text "why I want an account" — shown to admin reviewer. */
+  reason?: string | null;
+  /** Optional bio/description. */
+  bio?: string | null;
+};
+
+function generateSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+async function uniqueAccountSlug(base: string): Promise<string> {
+  const baseSlug = base || 'org';
+  let slug = baseSlug;
+  let n = 1;
+  while (true) {
+    const { data } = await supabase
+      .from('accounts' as any)
+      .select('id')
+      .eq('slug', slug)
+      .limit(1);
+    if (!data || (data as any[]).length === 0) return slug;
+    n += 1;
+    slug = `${baseSlug}-${n}`;
+  }
+}
+
 // ── Fetch ────────────────────────────────────────────────────
 
 export async function fetchAccountById(accountId: string): Promise<Account | null> {
@@ -110,9 +148,12 @@ export async function createPersonalAccount(
 export async function createOrgAccount(
   walletAddress: string,
   subType: OrgSubType,
-  name: string
+  name: string,
+  options: CreateOrgAccountOptions = {}
 ): Promise<Account | null> {
   const normalized = walletAddress.toLowerCase();
+  const isExtern = !!options.isExtern;
+  const slug = await uniqueAccountSlug(generateSlug(name));
 
   const { data: account, error: accError } = await supabase
     .from('accounts' as any)
@@ -120,6 +161,12 @@ export async function createOrgAccount(
       account_type: 'organisation' as AccountType,
       sub_type: subType,
       name,
+      slug,
+      bio: options.bio ?? null,
+      contact_email: options.contactEmail ?? null,
+      is_extern: isExtern,
+      extern_status: isExtern ? 'pending' : null,
+      extern_reason: isExtern ? options.reason ?? null : null,
     })
     .select()
     .single();

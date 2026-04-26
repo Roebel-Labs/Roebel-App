@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useReducer, useMemo, ReactNode } from 'react';
 import type { BusinessCategory, OpeningHours } from '@/lib/types';
 
-export type OrgTypeChoice = 'restaurant' | 'unternehmen' | 'verein' | 'partei' | 'fraktion';
+export type OrgTypeChoice =
+  | 'restaurant'
+  | 'unternehmen'
+  | 'verein'
+  | 'partei'
+  | 'fraktion'
+  | 'journalist';
 
 export type WizardState = {
   orgType: OrgTypeChoice | null;
@@ -18,6 +24,10 @@ export type WizardState = {
   openingHours: OpeningHours | null;
   logoUrl: string | null;
   coverImageUrl: string | null;
+  // Extern (non-Röbel) request flow
+  isExtern: boolean;
+  contactEmail: string;
+  externReason: string;
   isSubmitting: boolean;
   newAccountId: string | null;
 };
@@ -28,6 +38,7 @@ type WizardAction =
   | { type: 'SET_LOCATION'; payload: { address: string; latitude: number | null; longitude: number | null; formattedAddress: string | null } }
   | { type: 'SET_CONTACT'; payload: { phone: string; email: string; website: string; openingHours: OpeningHours | null } }
   | { type: 'SET_PHOTOS'; payload: { logoUrl: string | null; coverImageUrl: string | null } }
+  | { type: 'SET_EXTERN'; payload: { isExtern: boolean; contactEmail: string; externReason: string } }
   | { type: 'SET_SUBMITTING'; payload: boolean }
   | { type: 'SET_NEW_ACCOUNT_ID'; payload: string }
   | { type: 'RESET' };
@@ -36,7 +47,9 @@ const initialState: WizardState = {
   orgType: null, name: '', description: '', category: null,
   address: '', latitude: null, longitude: null, formattedAddress: null,
   phone: '', email: '', website: '', openingHours: null,
-  logoUrl: null, coverImageUrl: null, isSubmitting: false, newAccountId: null,
+  logoUrl: null, coverImageUrl: null,
+  isExtern: false, contactEmail: '', externReason: '',
+  isSubmitting: false, newAccountId: null,
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -46,6 +59,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case 'SET_LOCATION': return { ...state, ...action.payload };
     case 'SET_CONTACT': return { ...state, ...action.payload };
     case 'SET_PHOTOS': return { ...state, ...action.payload };
+    case 'SET_EXTERN': return { ...state, ...action.payload };
     case 'SET_SUBMITTING': return { ...state, isSubmitting: action.payload };
     case 'SET_NEW_ACCOUNT_ID': return { ...state, newAccountId: action.payload };
     case 'RESET': return initialState;

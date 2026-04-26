@@ -307,9 +307,17 @@ export type UserTier = 'guest' | 'tourist' | 'citizen';
 
 // Account types
 export type AccountType = 'personal' | 'organisation';
-export type OrgSubType = 'restaurant' | 'unternehmen' | 'verein' | 'partei' | 'fraktion';
+export type OrgSubType =
+  | 'restaurant'
+  | 'unternehmen'
+  | 'verein'
+  | 'partei'
+  | 'fraktion'
+  | 'journalist';
 /** @deprecated Use OrgSubType instead */
 export type OrgType = OrgSubType;
+
+export type ExternStatus = 'pending' | 'approved' | 'rejected';
 
 export type Account = {
   id: string;
@@ -320,6 +328,94 @@ export type Account = {
   avatar_url: string | null;
   cover_url: string | null;
   is_verified: boolean;
+  slug: string | null;
+  is_extern: boolean;
+  extern_status: ExternStatus | null;
+  extern_reason: string | null;
+  extern_reviewed_by: string | null;
+  extern_reviewed_at: string | null;
+  contact_email: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// ── Org sub-type labels & feature gating ──────────────────────────
+
+export const SUB_TYPE_LABELS: Record<OrgSubType, string> = {
+  restaurant: 'Restaurant',
+  unternehmen: 'Unternehmen',
+  verein: 'Verein',
+  partei: 'Partei',
+  fraktion: 'Fraktion',
+  journalist: 'Journalist:in',
+};
+
+export const SUB_TYPE_EMOJI: Record<OrgSubType, string> = {
+  restaurant: '🍽️',
+  unternehmen: '🏪',
+  verein: '🤝',
+  partei: '🏛️',
+  fraktion: '⚖️',
+  journalist: '📝',
+};
+
+export type SubTypeFeatures = {
+  blog: boolean;
+  members: boolean;
+  openingHours: boolean;
+  products: boolean;
+  ads: boolean;
+  events: boolean;
+  partner: boolean;
+};
+
+export function subTypeFeatures(subType: OrgSubType | null): SubTypeFeatures {
+  switch (subType) {
+    case 'restaurant':
+    case 'unternehmen':
+      return { blog: true, members: true, openingHours: true, products: true, ads: true, events: true, partner: true };
+    case 'verein':
+    case 'partei':
+    case 'fraktion':
+      return { blog: true, members: true, openingHours: false, products: false, ads: false, events: true, partner: false };
+    case 'journalist':
+      return { blog: true, members: true, openingHours: false, products: false, ads: false, events: false, partner: false };
+    default:
+      return { blog: false, members: false, openingHours: false, products: false, ads: false, events: false, partner: false };
+  }
+}
+
+export function isOrgAccount(account: Account | null | undefined): boolean {
+  return !!account && account.account_type === 'organisation';
+}
+
+export function canPublishBlog(account: Account | null | undefined): boolean {
+  if (!account || account.account_type !== 'organisation') return false;
+  if (!account.is_extern) return true;
+  return account.extern_status === 'approved';
+}
+
+export function isExternPending(account: Account | null | undefined): boolean {
+  return !!account && account.is_extern && account.extern_status === 'pending';
+}
+
+// ── Blog articles (org-published) ──────────────────────────────────
+
+export type BlogArticle = {
+  id: string;
+  account_id: string;
+  author_account_id: string | null;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string; // HTML
+  cover_image_url: string | null;
+  category: string | null;
+  tags: string[];
+  status: 'draft' | 'published' | 'archived';
+  is_featured: boolean;
+  view_count: number;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
 };

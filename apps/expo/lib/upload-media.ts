@@ -19,7 +19,8 @@ export async function uploadMediaFile(
   walletAddress: string,
   type: 'image' | 'video',
   folder: string = 'posts',
-  mimeType?: string
+  mimeType?: string,
+  bucket: string = 'images'
 ): Promise<string | null> {
   try {
     // Compress images before upload (converts HEIC→JPEG, resizes large photos)
@@ -46,7 +47,7 @@ export async function uploadMediaFile(
     const filePath = `${folder}/${fileName}`;
     const contentType = type === 'video' ? (mimeType || 'video/mp4') : 'image/jpeg';
 
-    const { error } = await supabase.storage.from('images').upload(filePath, arrayBuffer, {
+    const { error } = await supabase.storage.from(bucket).upload(filePath, arrayBuffer, {
       contentType,
       cacheControl: '3600',
       upsert: false,
@@ -57,7 +58,7 @@ export async function uploadMediaFile(
       return null;
     }
 
-    const { data } = supabase.storage.from('images').getPublicUrl(filePath);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
     return data.publicUrl;
   } catch (err) {
     console.error('[upload-media] Upload failed:', err);
