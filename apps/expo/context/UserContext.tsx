@@ -6,6 +6,7 @@ import { client } from '@/constants/thirdweb';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useConsent } from '@/context/ConsentContext';
 import { setSentryUser } from '@/lib/sentry-init';
+import { Events, track } from '@/lib/analytics';
 import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
 import type { UserRecord, UserTier } from '@/lib/types';
 
@@ -76,6 +77,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         // Onboarding + consent re-prompt trigger — fires once per connection transition
         if (userRecord && onboardingTriggeredFor.current !== userRecord.wallet_address) {
           onboardingTriggeredFor.current = userRecord.wallet_address;
+          track(Events.LOGIN_COMPLETED, {
+            tier: userRecord.tier,
+            is_returning_user: !!userRecord.terms_accepted_at,
+            onboarding_completed: !!userRecord.onboarding_completed_at,
+          });
           if (!userRecord.onboarding_completed_at) {
             setTimeout(() => router.push('/welcome' as any), 150);
           } else if (!userRecord.terms_accepted_at) {

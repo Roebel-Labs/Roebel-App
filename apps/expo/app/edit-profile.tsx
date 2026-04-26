@@ -10,6 +10,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRewards } from '@/context/RewardsContext';
 import { supabase } from '@/lib/supabase';
+import { Events, track } from '@/lib/analytics';
 import {
   equipRewardByType,
   fetchRewardsCatalogueByType,
@@ -120,6 +121,12 @@ export default function EditProfileScreen() {
         bio: bio || undefined,
         profile_picture_url: profilePicture || undefined,
         neighborhood: neighborhood || undefined,
+      });
+      track(Events.PROFILE_UPDATED, {
+        changed_username: !!username,
+        changed_bio: !!bio,
+        changed_profile_picture: !!profilePicture,
+        changed_neighborhood: !!neighborhood,
       });
       router.back();
     } catch (error: any) {

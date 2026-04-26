@@ -8,6 +8,7 @@ import { isProposalActive } from '@/lib/governance-utils';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
 import { useTheme } from '@/context/ThemeContext';
+import { Events, track } from '@/lib/analytics';
 
 interface VoteButtonsProps {
   proposalId: bigint;
@@ -73,6 +74,12 @@ export default function VoteButtons({
       const receipt = await sendTransaction({
         transaction,
         account,
+      });
+
+      track(Events.PROPOSAL_VOTED, {
+        proposal_id: proposalId.toString(),
+        vote_type: VoteType[support] ?? String(support),
+        tx_hash: receipt.transactionHash,
       });
 
       setSuccessDrawer({

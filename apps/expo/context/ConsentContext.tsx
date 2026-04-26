@@ -51,6 +51,7 @@ import {
   reconcileWalletAddress,
   type AuditLogEntry,
 } from '@/lib/consent-supabase';
+import { Events, track } from '@/lib/analytics';
 
 type ContextValue = {
   /** True once SecureStore has been read at least once. Children should render skeletons until ready. */
@@ -205,6 +206,21 @@ export function ConsentProvider({ children }: { children: React.ReactNode }) {
       await saveVersion(PRIVACY_POLICY_VERSION);
       setStoredPolicyVersion(PRIVACY_POLICY_VERSION);
       scheduleMirror(sanitized, source);
+
+      // Fire CONSENT_ACCEPTED only on the major decision moments — not on
+      // every per-category toggle. Deferred so the PostHog provider has had
+      // a frame to mount before the event is captured.
+      if (source === 'first_launch' || source === 'reconsent' || source === 'welcome_terms') {
+        const granted = (Object.keys(sanitized) as (keyof ConsentPreferences)[])
+          .filter((k) => sanitized[k]);
+        setTimeout(() => {
+          track(Events.CONSENT_ACCEPTED, {
+            source,
+            categories_granted: granted,
+            policy_version: PRIVACY_POLICY_VERSION,
+          });
+        }, 250);
+      }
     },
     [scheduleMirror]
   );

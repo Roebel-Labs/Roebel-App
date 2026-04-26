@@ -10,6 +10,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
+import { Events, track } from '@/lib/analytics';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
@@ -73,6 +74,7 @@ export default function ProfileScreen() {
 
   const handleDisconnect = async () => {
     if (wallet) {
+      track(Events.LOGOUT, { tier: user?.tier });
       disconnect(wallet);
       setShowLogoutDrawer(false);
     }

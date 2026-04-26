@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { loadBookmarks, toggleBookmark as toggleBookmarkStorage } from '@/lib/bookmarks';
+import { Events, track } from '@/lib/analytics';
 
 export type BookmarksContextValue = {
   bookmarkedIds: Set<string>;
@@ -22,6 +23,9 @@ export function BookmarksProvider({ children }: { children: React.ReactNode }) {
     const wasBookmarked = bookmarkedIds.has(id);
     const next = await toggleBookmarkStorage(bookmarkedIds, id);
     setBookmarkedIds(next);
+    if (!wasBookmarked) {
+      track(Events.EVENT_BOOKMARKED, { event_id: id });
+    }
     return wasBookmarked ? 'removed' : 'added';
   }, [bookmarkedIds]);
 

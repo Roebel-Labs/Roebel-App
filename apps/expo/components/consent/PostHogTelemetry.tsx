@@ -15,6 +15,7 @@ import { usePostHog } from 'posthog-react-native';
 import { useConsent } from '@/context/ConsentContext';
 import { useUser } from '@/context/UserContext';
 import { getScreenName } from '@/hooks/useAnalytics';
+import { setAnalyticsClient } from '@/lib/analytics';
 
 export function PostHogTelemetry() {
   const { ready, preferences } = useConsent();
@@ -29,6 +30,13 @@ function PostHogTelemetryInner() {
   const segments = useSegments();
   const identifiedFor = useRef<string | null>(null);
   const lastUserRef = useRef<string | null>(null);
+
+  // Publish the live client to the module-level analytics façade so that
+  // `track()` call-sites can fire custom events without needing the provider.
+  useEffect(() => {
+    setAnalyticsClient(posthog ?? null);
+    return () => setAnalyticsClient(null);
+  }, [posthog]);
 
   // Screen tracking
   useEffect(() => {

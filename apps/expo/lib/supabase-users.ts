@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { createPersonalAccount } from './supabase-accounts';
+import { Events, track } from './analytics';
 import type { UserRecord, UserTier } from './types';
 
 /**
@@ -162,6 +163,13 @@ export async function updateUserOnboarding(
   if (error) {
     console.error('Error updating onboarding:', error);
     throw error;
+  }
+
+  if (updates.markCompleted) {
+    track(Events.ONBOARDING_COMPLETED, {
+      preferred_role: updates.preferredRole ?? null,
+      terms_accepted: !!updates.termsAccepted,
+    });
   }
 
   return data as UserRecord;

@@ -17,6 +17,7 @@ import { disposeAnthropicChatService, getAnthropicChatService } from '@/lib/serv
 import { meckyToolDefinitions, executeMeckyTool } from '@/lib/tools/mecky-tools';
 import { getMeckySystemPrompt } from '@/lib/prompts/mecky-system-prompt';
 import { useConsent } from '@/context/ConsentContext';
+import { Events, track } from '@/lib/analytics';
 import type { AnthropicMessage } from '@/lib/types/anthropic';
 import type { MeckyMessage, RichCardData, NavigationLink } from '@/lib/types/mecky';
 
@@ -87,6 +88,11 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, userMsg]);
+
+      track(Events.MECKY_MESSAGE_SENT, {
+        message_length: text.trim().length,
+        turn_index: historyRef.current.length,
+      });
 
       // Add to Anthropic history
       historyRef.current.push({ role: 'user', content: text.trim() });

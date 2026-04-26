@@ -30,6 +30,7 @@ import MultiDatePicker from '@/components/MultiDatePicker';
 import { format } from 'date-fns';
 import { geocodeLocation } from '@/lib/utils/geocoding';
 import { logEventSubmission } from '@/lib/firebase';
+import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
@@ -628,6 +629,13 @@ export default function SubmitEventScreen() {
       });
       setIsSuccess(true);
       logEventSubmission(true, 'manual');
+      track(Events.EVENT_SUBMITTED, {
+        event_id: eventData.id,
+        category: eventData.category ?? null,
+        is_recurring: isRecurring,
+        has_image: !!imageUrl,
+        method: 'manual',
+      });
     } catch (error: any) {
       const errorMessage = error.message || 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
       setSubmissionError(errorMessage);
