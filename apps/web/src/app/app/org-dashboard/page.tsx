@@ -12,21 +12,23 @@ import {
   Tag,
   Eye,
   MousePointerClick,
-  TrendingUp,
   Settings,
   Plus,
-  ArrowRight,
   Handshake,
   CreditCard,
-  Users,
   Calendar,
-  BarChart3,
+  FileText,
+  Users,
 } from "lucide-react";
-import { useAppMode } from "@/lib/context/AppModeContext";
 import { useAccount } from "@/lib/context/AccountContext";
-import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
+import {
+  isOrgAccount,
+  SUB_TYPE_LABELS,
+  subTypeFeatures,
+  canPublishBlog,
+} from "@/types/account";
 
-interface DashboardStats {
+interface BusinessStats {
   totalViews: number;
   totalClicks: number;
   activeDeals: number;
@@ -36,38 +38,77 @@ interface DashboardStats {
   partnerRedemptions: number;
 }
 
+interface OrgStats {
+  draftPosts: number;
+  publishedPosts: number;
+  totalPostViews: number;
+  membersCount: number;
+  eventsCount: number;
+}
+
 export default function OrgDashboardPage() {
-  const account = useActiveAccount();
-  const { activeMode } = useAppMode();
+  const wallet = useActiveAccount();
   const { activeAccount } = useAccount();
   const isOrg = activeAccount ? isOrgAccount(activeAccount) : false;
+  const subType = activeAccount?.sub_type ?? null;
+  const features = subTypeFeatures(subType);
+
   const [business, setBusiness] = useState<Business | null>(null);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [bizStats, setBizStats] = useState<BusinessStats | null>(null);
+  const [orgStats, setOrgStats] = useState<OrgStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchDashboard() {
-      if (!account?.address) return;
-      setLoading(true);
+    if (!isOrg || !activeAccount) return;
+    setLoading(true);
+    const accountId = activeAccount.id;
+    const wallet_address = wallet?.address;
+    const supabase = createClient();
 
-      const bizResult = await getBusinessesByOwner(account.address);
-      if (!bizResult.success || !bizResult.data || bizResult.data.length === 0) {
+    const loadGenericOrgStats = async () => {
+      const [postsRes, membersRes, eventsRes] = await Promise.all([
+        supabase
+          .from("blog_articles")
+          .select("status, view_count")
+          .eq("account_id", accountId),
+        supabase
+          .from("account_owners")
+          .select("wallet_address", { count: "exact", head: true })
+          .eq("account_id", accountId),
+        supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("account_id", accountId),
+      ]);
+
+      const posts = postsRes.data || [];
+      setOrgStats({
+        draftPosts: posts.filter((p) => p.status === "draft").length,
+        publishedPosts: posts.filter((p) => p.status === "published").length,
+        totalPostViews: posts.reduce((s, p) => s + (p.view_count || 0), 0),
+        membersCount: membersRes.count || 0,
+        eventsCount: eventsRes.count || 0,
+      });
+    };
+
+    const loadBusinessStats = async () => {
+      if (!wallet_address) {
         setLoading(false);
         return;
       }
-
+      const bizResult = await getBusinessesByOwner(wallet_address);
+      if (!bizResult.success || !bizResult.data || bizResult.data.length === 0) {
+        return;
+      }
       const biz = bizResult.data[0];
       setBusiness(biz);
 
-      const supabase = createClient();
-
-      // Fetch deals and stats in parallel
       const [dealsResult, eventsRes, partnerRes] = await Promise.all([
         getBusinessDeals(biz.id),
         supabase
           .from("events")
           .select("id", { count: "exact", head: true })
-          .eq("organizer_wallet_address", account.address)
+          .eq("organizer_wallet_address", wallet_address)
           .eq("status", "approved"),
         supabase
           .from("roebel_stamp_partners")
@@ -77,28 +118,34 @@ export default function OrgDashboardPage() {
           .limit(1),
       ]);
 
-      const deals = dealsResult.success && dealsResult.data ? dealsResult.data : [];
+      const deals: BusinessDeal[] =
+        dealsResult.success && dealsResult.data ? dealsResult.data : [];
       const activeDeals = deals.filter((d) => d.status === "active");
-      const partner = partnerRes.data && partnerRes.data.length > 0 ? partnerRes.data[0] : null;
+      const partner =
+        partnerRes.data && partnerRes.data.length > 0 ? partnerRes.data[0] : null;
 
-      setStats({
-        totalViews: deals.reduce((sum, d) => sum + (d.views_count || 0), 0),
-        totalClicks: deals.reduce((sum, d) => sum + (d.clicks_count || 0), 0),
+      setBizStats({
+        totalViews: deals.reduce((s, d) => s + (d.views_count || 0), 0),
+        totalClicks: deals.reduce((s, d) => s + (d.clicks_count || 0), 0),
         activeDeals: activeDeals.length,
         totalDeals: deals.length,
         eventsCount: eventsRes.count || 0,
         isRoebelPartner: !!partner,
         partnerRedemptions: partner?.total_redemptions || 0,
       });
+    };
 
-      setLoading(false);
-    }
-    fetchDashboard();
-  }, [account?.address]);
+    Promise.all([
+      loadGenericOrgStats(),
+      features.partner ? loadBusinessStats() : Promise.resolve(),
+    ]).finally(() => setLoading(false));
+  }, [activeAccount, isOrg, wallet?.address, features.partner]);
+
+  if (!isOrg || !activeAccount) return null;
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="space-y-4">
         <div className="h-32 bg-muted rounded-lg animate-pulse" />
         <div className="h-24 bg-muted rounded-lg animate-pulse" />
         <div className="h-48 bg-muted rounded-lg animate-pulse" />
@@ -106,142 +153,178 @@ export default function OrgDashboardPage() {
     );
   }
 
-  if (!business) {
-    return (
-      <div className="max-w-2xl mx-auto text-center py-12">
-        <Store className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-        <h2 className="text-lg font-medium text-foreground mb-2">Kein Gewerbe gefunden</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Registriere dein Gewerbe, um das Dashboard zu nutzen.
-        </p>
-        <Link
-          href="/app/gewerbe/erstellen"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Gewerbe anmelden
-        </Link>
-      </div>
-    );
-  }
+  const subLabel = subType ? SUB_TYPE_LABELS[subType] : "Organisation";
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      {/* Org account header */}
+    <div className="space-y-6">
+      {/* Header */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex items-center justify-center flex-shrink-0">
-            {isOrg && activeAccount?.avatar_url ? (
-              <Image src={activeAccount.avatar_url} alt={activeAccount.name} width={48} height={48} className="object-cover w-full h-full" />
-            ) : business.logo_url ? (
-              <Image src={business.logo_url} alt={business.name} width={48} height={48} className="object-cover w-full h-full" />
+            {activeAccount.avatar_url ? (
+              <Image
+                src={activeAccount.avatar_url}
+                alt={activeAccount.name}
+                width={48}
+                height={48}
+                className="object-cover w-full h-full"
+              />
             ) : (
               <Store className="h-6 w-6 text-muted-foreground" />
             )}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-foreground truncate">
-              {isOrg && activeAccount ? activeAccount.name : business.name}
+              {activeAccount.name}
             </h1>
-            <p className="text-xs text-muted-foreground">
-              {isOrg && activeAccount
-                ? ACCOUNT_TYPE_LABELS[activeAccount.account_type]
-                : (business.address || "Röbel/Müritz")}
-            </p>
+            <p className="text-xs text-muted-foreground">{subLabel}</p>
           </div>
           <Link
-            href="/app/gewerbe/bearbeiten"
+            href="/app/org-dashboard/profile"
             className="p-2 rounded-lg hover:bg-accent transition-colors"
-            title="Gewerbe bearbeiten"
+            title="Profil bearbeiten"
           >
             <Settings className="h-5 w-5 text-muted-foreground" />
           </Link>
         </div>
       </div>
 
-      {/* Stats grid */}
-      {stats && (
+      {/* Extern banner */}
+      {activeAccount.is_extern && activeAccount.extern_status !== "approved" && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-lg p-4 text-sm text-amber-900 dark:text-amber-200">
+          Dein externes Konto wartet auf Freigabe. Du kannst Profil und Inhalte
+          vorbereiten, aber noch nicht veröffentlichen.
+        </div>
+      )}
+
+      {/* Generic org stats — visible to every sub_type */}
+      {orgStats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard icon={<Eye className="h-4 w-4 text-blue-500" />} label="Aufrufe" value={stats.totalViews} />
-          <StatCard icon={<MousePointerClick className="h-4 w-4 text-green-500" />} label="Klicks" value={stats.totalClicks} />
-          <StatCard icon={<Tag className="h-4 w-4 text-orange-500" />} label="Angebote" value={`${stats.activeDeals}/${stats.totalDeals}`} />
-          <StatCard icon={<Calendar className="h-4 w-4 text-purple-500" />} label="Events" value={stats.eventsCount} />
+          <StatCard
+            icon={<FileText className="h-4 w-4 text-blue-500" />}
+            label="Veröffentlicht"
+            value={orgStats.publishedPosts}
+          />
+          <StatCard
+            icon={<FileText className="h-4 w-4 text-amber-500" />}
+            label="Entwürfe"
+            value={orgStats.draftPosts}
+          />
+          <StatCard
+            icon={<Eye className="h-4 w-4 text-emerald-500" />}
+            label="Artikel-Views"
+            value={orgStats.totalPostViews}
+          />
+          <StatCard
+            icon={<Users className="h-4 w-4 text-purple-500" />}
+            label="Mitglieder"
+            value={orgStats.membersCount}
+          />
+        </div>
+      )}
+
+      {/* Business-specific stats */}
+      {features.ads && bizStats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard
+            icon={<Eye className="h-4 w-4 text-blue-500" />}
+            label="Aufrufe"
+            value={bizStats.totalViews}
+          />
+          <StatCard
+            icon={<MousePointerClick className="h-4 w-4 text-green-500" />}
+            label="Klicks"
+            value={bizStats.totalClicks}
+          />
+          <StatCard
+            icon={<Tag className="h-4 w-4 text-orange-500" />}
+            label="Angebote"
+            value={`${bizStats.activeDeals}/${bizStats.totalDeals}`}
+          />
+          <StatCard
+            icon={<Calendar className="h-4 w-4 text-purple-500" />}
+            label="Events"
+            value={bizStats.eventsCount}
+          />
         </div>
       )}
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {features.blog && canPublishBlog(activeAccount) && (
+          <QuickAction
+            href="/app/org-dashboard/blog/new"
+            icon={<Plus className="h-5 w-5 text-primary" />}
+            title="Neuer Blog-Artikel"
+            subtitle="Schreibe und veröffentliche"
+          />
+        )}
+        {features.ads && (
+          <QuickAction
+            href="/app/gewerbe/angebote"
+            icon={<Tag className="h-5 w-5 text-orange-500" />}
+            title="Angebote verwalten"
+            subtitle="Erstelle und verwalte Angebote"
+          />
+        )}
+        {features.events && (
+          <QuickAction
+            href="/app/submit"
+            icon={<Calendar className="h-5 w-5 text-purple-500" />}
+            title="Event erstellen"
+            subtitle="Veranstaltung planen"
+          />
+        )}
+        {features.members && (
+          <QuickAction
+            href="/app/org-dashboard/members"
+            icon={<Users className="h-5 w-5 text-blue-500" />}
+            title="Mitglieder verwalten"
+            subtitle="Einladen und Rollen ändern"
+          />
+        )}
         <QuickAction
-          href="/app/gewerbe/angebote"
-          icon={<Tag className="h-5 w-5 text-primary" />}
-          title="Angebote verwalten"
-          subtitle="Erstelle und verwalte Angebote"
-        />
-        <QuickAction
-          href="/app/submit"
-          icon={<Calendar className="h-5 w-5 text-purple-500" />}
-          title="Event erstellen"
-          subtitle="Veranstaltung planen"
-        />
-        <QuickAction
-          href={`/app/gewerbe/${business.slug}`}
-          icon={<Eye className="h-5 w-5 text-blue-500" />}
-          title="Profil ansehen"
-          subtitle="So sehen Kunden dein Gewerbe"
-        />
-        <QuickAction
-          href="/app/gewerbe/bearbeiten"
+          href="/app/org-dashboard/profile"
           icon={<Settings className="h-5 w-5 text-muted-foreground" />}
-          title="Gewerbe bearbeiten"
-          subtitle="Name, Bilder, Öffnungszeiten"
+          title="Profil bearbeiten"
+          subtitle="Name, Bilder, Beschreibung"
         />
       </div>
 
-      {/* Röbel Card Partner section */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <CreditCard className="h-5 w-5 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Röbel Card Partner</h2>
-        </div>
-        {stats?.isRoebelPartner ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Status</span>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
-                Aktiv
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Einlösungen</span>
-              <span className="text-sm font-medium text-foreground">{stats.partnerRedemptions}</span>
-            </div>
-            <Link
-              href="/app/org-dashboard/partner"
-              className="flex items-center justify-center gap-2 w-full py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition-colors"
-            >
-              <Handshake className="h-4 w-4" />
-              Partner-Dashboard
-            </Link>
+      {/* Röbel Card Partner section — only for restaurants/businesses */}
+      {features.partner && business && bizStats && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CreditCard className="h-5 w-5 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Röbel Card Partner
+            </h2>
           </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Werde Röbel Card Partner und biete Stempelkarten, Punkte-Multiplikatoren oder exklusive Angebote an.
-            </p>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 bg-muted rounded-lg">
-                <p className="text-xs font-medium text-foreground">Stempelkarte</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Treue belohnen</p>
+          {bizStats.isRoebelPartner ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
+                  Aktiv
+                </span>
               </div>
-              <div className="p-2 bg-muted rounded-lg">
-                <p className="text-xs font-medium text-foreground">Punkte ×2</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Mehr Punkte</p>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Einlösungen
+                </span>
+                <span className="text-sm font-medium text-foreground">
+                  {bizStats.partnerRedemptions}
+                </span>
               </div>
-              <div className="p-2 bg-muted rounded-lg">
-                <p className="text-xs font-medium text-foreground">Exklusiv</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">VIP-Zugang</p>
-              </div>
+              <Link
+                href="/app/org-dashboard/partner"
+                className="flex items-center justify-center gap-2 w-full py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition-colors"
+              >
+                <Handshake className="h-4 w-4" />
+                Partner-Dashboard
+              </Link>
             </div>
+          ) : (
             <Link
               href="/app/org-dashboard/partner"
               className="flex items-center justify-center gap-2 w-full py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
@@ -249,34 +332,44 @@ export default function OrgDashboardPage() {
               <Handshake className="h-4 w-4" />
               Partner werden
             </Link>
-          </div>
-        )}
-      </div>
-
-      {/* Org type info */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Organisationstyp</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <OrgTypeCard label="Gewerbe" description="Geschäft, Laden, Gastro" active={activeAccount?.sub_type === "unternehmen"} />
-          <OrgTypeCard label="Verein" description="Sport, Kultur, Soziales" active={activeAccount?.sub_type === "verein"} />
-          <OrgTypeCard label="Partei" description="Politische Partei" active={activeAccount?.sub_type === "partei"} />
-          <OrgTypeCard label="Fraktion" description="Parlamentarische Fraktion" active={activeAccount?.sub_type === "fraktion"} />
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
+function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+}) {
   return (
     <div className="bg-card border border-border rounded-lg p-3">
-      <div className="flex items-center gap-1.5 mb-1">{icon}<span className="text-xs text-muted-foreground">{label}</span></div>
+      <div className="flex items-center gap-1.5 mb-1">
+        {icon}
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
       <p className="text-xl font-bold text-foreground">{value}</p>
     </div>
   );
 }
 
-function QuickAction({ href, icon, title, subtitle }: { href: string; icon: React.ReactNode; title: string; subtitle: string }) {
+function QuickAction({
+  href,
+  icon,
+  title,
+  subtitle,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+}) {
   return (
     <Link
       href={href}
@@ -290,15 +383,5 @@ function QuickAction({ href, icon, title, subtitle }: { href: string; icon: Reac
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
     </Link>
-  );
-}
-
-function OrgTypeCard({ label, description, active }: { label: string; description: string; active: boolean }) {
-  return (
-    <div className={`p-3 rounded-lg border ${active ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30"}`}>
-      <p className={`text-sm font-medium ${active ? "text-primary" : "text-muted-foreground"}`}>{label}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-      {active && <span className="text-[10px] font-medium text-primary mt-1 inline-block">Aktiv</span>}
-    </div>
   );
 }

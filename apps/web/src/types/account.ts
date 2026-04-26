@@ -1,6 +1,7 @@
 /**
  * Account system types — unified account model
- * Matches Supabase accounts + account_owners tables (migrations 005, 007, 010, 011)
+ * Matches Supabase accounts + account_owners tables
+ * (migrations 005, 007, 010, 011, 20260427)
  */
 
 // User tiers — unified role system
@@ -8,9 +9,17 @@ export type UserTier = "guest" | "tourist" | "citizen";
 
 // Account types (migration 007 simplified to personal/organisation + sub_type)
 export type AccountType = "personal" | "organisation";
-export type OrgSubType = "restaurant" | "unternehmen" | "verein" | "partei" | "fraktion";
+export type OrgSubType =
+  | "restaurant"
+  | "unternehmen"
+  | "verein"
+  | "partei"
+  | "fraktion"
+  | "journalist";
 /** @deprecated Use OrgSubType instead */
 export type OrgType = OrgSubType;
+
+export type ExternStatus = "pending" | "approved" | "rejected";
 
 export interface Account {
   id: string;
@@ -21,6 +30,13 @@ export interface Account {
   avatar_url: string | null;
   cover_url: string | null;
   is_verified: boolean;
+  slug: string | null;
+  is_extern: boolean;
+  extern_status: ExternStatus | null;
+  extern_reason: string | null;
+  extern_reviewed_by: string | null;
+  extern_reviewed_at: string | null;
+  contact_email: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,7 +56,12 @@ export const SYSTEM_ACCOUNT_ID = "00000000-0000-0000-0000-000000000001";
 
 // ── Invite & notification types ─────────────────────────────────────
 
-export type InviteTokenStatus = "pending" | "accepted" | "declined" | "expired" | "revoked";
+export type InviteTokenStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "expired"
+  | "revoked";
 
 export interface InviteToken {
   id: string;
@@ -102,6 +123,7 @@ export const SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: "Verein",
   partei: "Partei",
   fraktion: "Fraktion",
+  journalist: "Journalist:in",
 };
 
 export const SUB_TYPE_EMOJI: Record<OrgSubType, string> = {
@@ -110,8 +132,93 @@ export const SUB_TYPE_EMOJI: Record<OrgSubType, string> = {
   verein: "🤝",
   partei: "🏛️",
   fraktion: "⚖️",
+  journalist: "📝",
 };
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 export function isOrgAccount(account: Account): boolean {
   return account.account_type === "organisation";
+}
+
+/** True for local orgs and approved externs only. */
+export function canPublishBlog(account: Account): boolean {
+  if (account.account_type !== "organisation") return false;
+  if (!account.is_extern) return true;
+  return account.extern_status === "approved";
+}
+
+/** True if the account is currently waiting on admin approval. */
+export function isExternPending(account: Account): boolean {
+  return account.is_extern && account.extern_status === "pending";
+}
+
+export interface SubTypeFeatures {
+  blog: boolean;
+  members: boolean;
+  openingHours: boolean;
+  products: boolean;
+  ads: boolean;
+  events: boolean;
+  partner: boolean;
+}
+
+/** Single source of truth for which dashboard panels each sub_type sees. */
+export function subTypeFeatures(
+  subType: OrgSubType | null
+): SubTypeFeatures {
+  switch (subType) {
+    case "restaurant":
+    case "unternehmen":
+      return {
+        blog: true,
+        members: true,
+        openingHours: true,
+        products: true,
+        ads: true,
+        events: true,
+        partner: true,
+      };
+    case "verein":
+      return {
+        blog: true,
+        members: true,
+        openingHours: false,
+        products: false,
+        ads: false,
+        events: true,
+        partner: false,
+      };
+    case "partei":
+    case "fraktion":
+      return {
+        blog: true,
+        members: true,
+        openingHours: false,
+        products: false,
+        ads: false,
+        events: true,
+        partner: false,
+      };
+    case "journalist":
+      return {
+        blog: true,
+        members: true,
+        openingHours: false,
+        products: false,
+        ads: false,
+        events: false,
+        partner: false,
+      };
+    default:
+      return {
+        blog: false,
+        members: false,
+        openingHours: false,
+        products: false,
+        ads: false,
+        events: false,
+        partner: false,
+      };
+  }
 }

@@ -13,6 +13,7 @@ export interface NotificationCounts {
   meckyDrafts: number
   flaggedPosts: number
   alerts: number
+  externAccounts: number
 }
 
 export async function getNotificationCounts(): Promise<{
@@ -29,7 +30,7 @@ export async function getNotificationCounts(): Promise<{
     today.setHours(0, 0, 0, 0)
 
     // Run all queries in parallel for performance
-    const [feedbackResult, eventsResult, newsResult, moviesResult, restaurantsResult, pushResult, businessesResult, meckyResult, flaggedPostsResult, alertsResult] = await Promise.all([
+    const [feedbackResult, eventsResult, newsResult, moviesResult, restaurantsResult, pushResult, businessesResult, meckyResult, flaggedPostsResult, alertsResult, externResult] = await Promise.all([
       // Feedback: count items with status='new'
       supabase
         .from("feedback")
@@ -90,6 +91,13 @@ export async function getNotificationCounts(): Promise<{
         .from("service_alerts")
         .select("id", { count: "exact", head: true })
         .eq("status", "active"),
+
+      // Extern accounts: pending applications
+      supabase
+        .from("accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("is_extern", true)
+        .eq("extern_status", "pending"),
     ])
 
     return {
@@ -105,6 +113,7 @@ export async function getNotificationCounts(): Promise<{
         meckyDrafts: meckyResult.count || 0,
         flaggedPosts: flaggedPostsResult.count || 0,
         alerts: alertsResult.count || 0,
+        externAccounts: externResult.count || 0,
       },
     }
   } catch (error) {

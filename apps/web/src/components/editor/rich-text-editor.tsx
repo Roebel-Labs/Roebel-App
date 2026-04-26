@@ -16,9 +16,11 @@ interface RichTextEditorProps {
   content: string
   onChange: (content: string) => void
   placeholder?: string
+  /** Supabase storage bucket for inline image uploads. Defaults to "news-images" for back-compat. */
+  bucket?: string
 }
 
-export function RichTextEditor({ content, onChange, placeholder = "Schreiben Sie hier..." }: RichTextEditorProps) {
+export function RichTextEditor({ content, onChange, placeholder = "Schreiben Sie hier...", bucket = "news-images" }: RichTextEditorProps) {
   // Function to upload image to Supabase and return URL
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
     // Validate file
@@ -43,8 +45,8 @@ export function RichTextEditor({ content, onChange, placeholder = "Schreiben Sie
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("news-images")
+      const { error } = await supabase.storage
+        .from(bucket)
         .upload(fileName, file, {
           cacheControl: "3600",
           upsert: false,
@@ -57,7 +59,7 @@ export function RichTextEditor({ content, onChange, placeholder = "Schreiben Sie
       // Get public URL
       const {
         data: { publicUrl },
-      } = supabase.storage.from("news-images").getPublicUrl(fileName)
+      } = supabase.storage.from(bucket).getPublicUrl(fileName)
 
       toast.success("Bild hochgeladen", { id: loadingToast })
       return publicUrl
@@ -69,7 +71,7 @@ export function RichTextEditor({ content, onChange, placeholder = "Schreiben Sie
       })
       return null
     }
-  }, [])
+  }, [bucket])
 
   const editor = useEditor({
     extensions: [
