@@ -23,6 +23,13 @@ import {
   type TransitMode,
 } from "../supabase-transit";
 import {
+  fetchTours,
+  DIFFICULTY_LABELS_DE,
+  HOURS_LABELS_DE,
+  type TourDifficulty,
+  type TourHoursBucket,
+} from "../supabase-tours";
+import {
   eventSubmissionToolDefinitions,
   executeSearchLocation,
   executeExtractFlyer,
@@ -115,6 +122,25 @@ const searchTransitSchema = z.object({
   near_lon: z.number().optional().describe("Längengrad des Nutzers für Nähe-Sortierung."),
 });
 
+const recommendTourSchema = z.object({
+  hours: z.enum(['2h', '4h', 'tag', 'mehrtag']).optional()
+    .describe("Wieviel Zeit hat der Nutzer? 2h, 4h, ganztag, mehrtag."),
+  category: z
+    .enum([
+      'familie', 'wildlife', 'faehre_kombi', 'bus_kombi',
+      'badewetter', 'schlechtwetter', 'sonnenuntergang', 'sonnenaufgang',
+      'altstadt', 'kultur', 'naturpark', 'flach', 'rad', 'wandern',
+    ])
+    .optional()
+    .describe("Themen-Filter, z.B. familie oder schlechtwetter."),
+  family: z.boolean().optional().describe("Familienfreundlich (Kinder dabei)?"),
+  bad_weather: z.boolean().optional().describe("Schlechtes Wetter — Indoor / regenfest gewünscht?"),
+  difficulty: z.enum(['leicht', 'mittel', 'sportlich']).optional()
+    .describe("Schwierigkeit gewünscht."),
+  ferry_combo: z.boolean().optional().describe("Mit Schiffsfahrt kombinieren?"),
+  q: z.string().optional().describe("Freitextsuche im Titel."),
+});
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
@@ -183,6 +209,12 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Findet die nächsten Abfahrten aus Röbel und Umgebung: Linie 12 (Waren ↔ Neubrandenburg), Stadtbus Röbel 024, Nationalpark-Linien 9/10, MS Diana (Schiff) und Elli-Bus (auf Anruf). Berücksichtigt Wochentag, Saison und Tageszeit. Markiert die letzte Abfahrt des Tages.",
     input_schema: zodToToolInputSchema(searchTransitSchema),
+  },
+  {
+    name: "recommendTour",
+    description:
+      "Empfiehlt eine Mecky-Sternfahrt aus dem 30-Touren-Katalog. Filtert nach verfügbarer Zeit (2h/4h/Tag/Mehrtag), Thema (Familie, Wildlife, Schiff-Kombi, Schlechtwetter, Sonnenuntergang…), Schwierigkeit. Ideal für 'Ich habe X Stunden, was kann ich machen?' oder 'Was kann ich bei Regen machen?'",
+    input_schema: zodToToolInputSchema(recommendTourSchema),
   },
 ];
 
@@ -569,6 +601,59 @@ async function executeSearchTransit(
   }
 }
 
+async function executeRecommendTour(
+  input: z.infer<typeof recommendTourSchema>
+): Promise<ToolResult> {
+  try {
+    const tours = await fetchTours({
+      hours_bucket: input.hours as TourHoursBucket | undefined,
+      category: input.category,
+      family_friendly: input.family,
+      bad_weather_alternative: input.bad_weather,
+      ferry_combo: input.ferry_combo,
+      difficulty: input.difficulty as TourDifficulty | undefined,
+      q: input.q,
+    });
+    const items = tours.slice(0, 6).map((t) => ({
+      slug: t.slug,
+      title: t.title_de,
+      subtitle: t.subtitle_de,
+      distance_km: t.distance_km,
+      duration_min: t.duration_min,
+      difficulty: t.difficulty,
+      difficulty_label_de: DIFFICULTY_LABELS_DE[t.difficulty],
+      hours_bucket: t.hours_bucket,
+      hours_label_de: t.hours_bucket ? HOURS_LABELS_DE[t.hours_bucket] : null,
+      categories: t.categories,
+      is_sternfahrt: t.is_sternfahrt,
+      ferry_combo: t.ferry_combo,
+      bus_combo: t.bus_combo,
+      family_friendly: t.family_friendly,
+      bad_weather_alternative: t.bad_weather_alternative,
+      season: t.season_de,
+      best_start_time: t.best_start_time_de,
+      highlights: t.highlights_de,
+    }));
+    return {
+      success: true,
+      data: {
+        items,
+        count: items.length,
+        displayType: "tours",
+        message: items.length
+          ? `${items.length} Mecky-Tour(en) gefunden.`
+          : "Keine passende Tour gefunden — Filter lockern?",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler bei der Tour-Suche." },
+    };
+  }
+}
+
 async function executeTodayAdvisories(): Promise<ToolResult> {
   try {
     const advisories = await fetchTodayAdvisories();
@@ -621,6 +706,7 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   searchPois: executeSearchPois,
   todayAdvisories: executeTodayAdvisories,
   searchTransit: executeSearchTransit,
+  recommendTour: executeRecommendTour,
 };
 
 export async function executeMeckyTool(
