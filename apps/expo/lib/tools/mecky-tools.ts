@@ -30,6 +30,13 @@ import {
   type TourHoursBucket,
 } from "../supabase-tours";
 import {
+  fetchSightings,
+  fetchSeasonalEvents,
+  fetchSpecies,
+  isEventActive,
+  freshnessLabelDe,
+} from "../supabase-wildlife";
+import {
   eventSubmissionToolDefinitions,
   executeSearchLocation,
   executeExtractFlyer,
@@ -120,6 +127,18 @@ const searchTransitSchema = z.object({
     ),
   near_lat: z.number().optional().describe("Breitengrad des Nutzers für Nähe-Sortierung."),
   near_lon: z.number().optional().describe("Längengrad des Nutzers für Nähe-Sortierung."),
+});
+
+const searchWildlifeSchema = z.object({
+  species_slug: z.string().optional()
+    .describe("Slug einer bestimmten Art (z.B. 'fischadler', 'seeadler', 'kranich')."),
+  hours: z.number().optional().describe("Nur Sichtungen der letzten N Stunden (Standard: 48)."),
+  category: z.enum(['vogel', 'saeugetier', 'reptil', 'amphibie', 'fisch', 'insekt', 'sonstiges'])
+    .optional().describe("Tier-Kategorie."),
+});
+
+const seasonalCalendarSchema = z.object({
+  active_only: z.boolean().optional().describe("Nur derzeit laufende Saison-Events?"),
 });
 
 const recommendTourSchema = z.object({
@@ -215,6 +234,18 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Empfiehlt eine Mecky-Sternfahrt aus dem 30-Touren-Katalog. Filtert nach verfügbarer Zeit (2h/4h/Tag/Mehrtag), Thema (Familie, Wildlife, Schiff-Kombi, Schlechtwetter, Sonnenuntergang…), Schwierigkeit. Ideal für 'Ich habe X Stunden, was kann ich machen?' oder 'Was kann ich bei Regen machen?'",
     input_schema: zodToToolInputSchema(recommendTourSchema),
+  },
+  {
+    name: "searchWildlife",
+    description:
+      "Findet aktuelle Wildlife-Sichtungen in der Müritz-Region — Fischadler, Seeadler, Kranich, Singschwan, Silberreiher, Rothirsch, Damhirsch, Wolf, Fischotter und mehr. Sortiert nach Aktualität, mit Mecky-bestätigten Sichtungen zuerst.",
+    input_schema: zodToToolInputSchema(searchWildlifeSchema),
+  },
+  {
+    name: "seasonalCalendar",
+    description:
+      "Liefert den Wildlife-Saisonkalender — Kraniche-Rast, Fischadler-Brut, Hirschbrunft, Singschwan-Winterrast, Kranichtanz, Reiherenten-Schwärme. Mit Push-Nachrichten und Zeitfenstern.",
+    input_schema: zodToToolInputSchema(seasonalCalendarSchema),
   },
 ];
 
@@ -654,6 +685,102 @@ async function executeRecommendTour(
   }
 }
 
+async function executeSearchWildlife(
+  input: z.infer<typeof searchWildlifeSchema>
+): Promise<ToolResult> {
+  try {
+    const all = await fetchSpecies();
+    let speciesId: string | undefined;
+    if (input.species_slug) {
+      speciesId = all.find((s) => s.slug === input.species_slug)?.id;
+    }
+    const sightings = await fetchSightings({
+      species_id: speciesId,
+      hours: input.hours ?? 48,
+      limit: 30,
+    });
+    const speciesById = new Map(all.map((s) => [s.id, s]));
+    let filtered = sightings;
+    if (input.category) {
+      filtered = sightings.filter((s) => {
+        const sp = s.species_id ? speciesById.get(s.species_id) : null;
+        return sp?.category === input.category;
+      });
+    }
+    const items = filtered.slice(0, 8).map((s) => {
+      const sp = s.species_id ? speciesById.get(s.species_id) : null;
+      return {
+        species_de: sp?.name_de ?? 'Unbekannt',
+        species_slug: sp?.slug ?? null,
+        is_protected: sp?.is_protected ?? false,
+        individual_count: s.individual_count,
+        observed_at: s.observed_at,
+        freshness: freshnessLabelDe(s.observed_at),
+        near_landmark: s.near_landmark_de,
+        notes: s.notes_de,
+        observer: s.observer_name_de,
+        verified_by_mecky: s.verified_by_mecky,
+        helpful_count: s.helpful_count,
+      };
+    });
+    return {
+      success: true,
+      data: {
+        items,
+        count: items.length,
+        displayType: "wildlife",
+        message: items.length
+          ? `${items.length} aktuelle Sichtung(en) gefunden.`
+          : "Aktuell keine Sichtungen — sei der erste, der eine meldet!",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler bei der Wildlife-Suche." },
+    };
+  }
+}
+
+async function executeSeasonalCalendar(
+  input: z.infer<typeof seasonalCalendarSchema>
+): Promise<ToolResult> {
+  try {
+    const events = await fetchSeasonalEvents();
+    const filtered = input.active_only ? events.filter((e) => isEventActive(e)) : events;
+    const items = filtered.map((e) => ({
+      title: e.title_de,
+      description: e.description_de,
+      start_month: e.start_month,
+      end_month: e.end_month,
+      start_date_hint: e.start_date_hint_de,
+      peak_window: e.peak_window_de,
+      best_location: e.best_location_de,
+      alarm_kind: e.alarm_kind,
+      push_message: e.push_message_de,
+      is_active_now: isEventActive(e),
+    }));
+    return {
+      success: true,
+      data: {
+        items,
+        count: items.length,
+        displayType: "wildlife_calendar",
+        message: items.length
+          ? `${items.length} Saison-Termine im Kalender.`
+          : "Keine Termine.",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler beim Saisonkalender." },
+    };
+  }
+}
+
 async function executeTodayAdvisories(): Promise<ToolResult> {
   try {
     const advisories = await fetchTodayAdvisories();
@@ -707,6 +834,8 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   todayAdvisories: executeTodayAdvisories,
   searchTransit: executeSearchTransit,
   recommendTour: executeRecommendTour,
+  searchWildlife: executeSearchWildlife,
+  seasonalCalendar: executeSeasonalCalendar,
 };
 
 export async function executeMeckyTool(

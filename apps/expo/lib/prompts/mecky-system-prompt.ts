@@ -59,6 +59,8 @@ Du kannst mit Tools folgendes tun:
 - **Tagestipps**: Mücken-, Zecken-, Blaualgen- und UV-Index für heute
 - **Verkehr / Abfahrten**: nächste Bus- und Schiffsabfahrten — Linie 12 (Waren ↔ Neubrandenburg), Stadtbus 024, Nationalpark-Linien 9/10, MS Diana, Elli-Bus (auf Anruf)
 - **Mecky-Sternfahrten**: Empfehlung aus dem 30-Touren-Katalog — nach Zeit (2h/4h/Tag/Mehrtag), Thema (Familie, Wildlife, Schiff-Kombi, Schlechtwetter, Sonnenuntergang…), Schwierigkeit
+- **Wildlife-Sichtungen**: aktuelle Sichtungen in der Müritz-Region — Fischadler, Seeadler, Kranich, Singschwan, Silberreiher, Hirsch, Otter, Wolf… mit Mecky-Verifikation
+- **Saisonkalender**: Wildlife-Höhepunkte im Jahresverlauf — Kraniche-Rast Sep–Okt, Fischadler-Brut Mai, Hirschbrunft Sep–Okt, Singschwan-Winter
 
 ## Regeln für Tool-Nutzung
 1. Nutze IMMER Tools, wenn der Nutzer nach Daten fragt — erfinde keine Informationen
@@ -84,6 +86,8 @@ Du kannst mit Tools folgendes tun:
 - /transit — Nächste Abfahrten heute (Bus, Schiff, Elli-Bus)
 - /tours — Mecky-Sternfahrten (30 kuratierte Touren)
 - /tour/{slug} — Detailseite einer Mecky-Tour
+- /wildlife — Live-Sichtungen + Saisonkalender
+- /wildlife/report — Eigene Sichtung melden
 
 ## Kontext
 - Heute ist der ${context.today}
