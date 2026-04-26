@@ -5,6 +5,18 @@
 
 import { supabase } from "./supabase";
 import type { Account, AccountOwner, OrgSubType } from "@/types/account";
+import { generateSlug } from "./slug";
+
+export interface CreateOrgAccountOptions {
+  /** Mark this org as extern (non-Röbel). Will be created in pending status. */
+  isExtern?: boolean;
+  /** Optional contact email for the org (used for extern approval notifications). */
+  contactEmail?: string | null;
+  /** Optional reason / motivation, shown to the admin reviewing the request. */
+  reason?: string | null;
+  /** Optional bio/description. */
+  bio?: string | null;
+}
 
 // ── Fetch ────────────────────────────────────────────────────
 
@@ -122,12 +134,31 @@ export async function createPersonalAccount(
   return acc;
 }
 
+async function uniqueAccountSlug(base: string): Promise<string> {
+  const baseSlug = base || "org";
+  let slug = baseSlug;
+  let n = 1;
+  while (true) {
+    const { data } = await supabase
+      .from("accounts")
+      .select("id")
+      .eq("slug", slug)
+      .limit(1);
+    if (!data || data.length === 0) return slug;
+    n += 1;
+    slug = `${baseSlug}-${n}`;
+  }
+}
+
 export async function createOrgAccount(
   walletAddress: string,
   subType: OrgSubType,
-  name: string
+  name: string,
+  options: CreateOrgAccountOptions = {}
 ): Promise<Account | null> {
   const normalized = walletAddress.toLowerCase();
+  const isExtern = !!options.isExtern;
+  const slug = await uniqueAccountSlug(generateSlug(name));
 
   const { data: account, error: accError } = await supabase
     .from("accounts")
@@ -135,6 +166,12 @@ export async function createOrgAccount(
       account_type: "organisation",
       sub_type: subType,
       name,
+      slug,
+      bio: options.bio ?? null,
+      contact_email: options.contactEmail ?? null,
+      is_extern: isExtern,
+      extern_status: isExtern ? "pending" : null,
+      extern_reason: isExtern ? options.reason ?? null : null,
     })
     .select()
     .single();
@@ -147,12 +184,10 @@ export async function createOrgAccount(
   const acc = account as Account;
 
   // Link creator as owner
-  const { error: ownerError } = await supabase
-    .from("account_owners")
-    .insert({
-      account_id: acc.id,
-      wallet_address: normalized,
-    });
+  const { error: ownerError } = await supabase.from("account_owners").insert({
+    account_id: acc.id,
+    wallet_address: normalized,
+  });
 
   if (ownerError) {
     console.error("createOrgAccount owner link error:", ownerError);

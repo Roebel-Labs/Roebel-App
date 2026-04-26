@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Store } from "lucide-react";
 import { useAccount } from "@/lib/context/AccountContext";
-import { isOrgAccount, isExternPending } from "@/types/account";
+import { isOrgAccount } from "@/types/account";
 import { OrgSidebar } from "@/components/org-dashboard/org-sidebar";
 
 export default function OrgDashboardLayout({
@@ -13,15 +11,7 @@ export default function OrgDashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const { activeAccount, ownedAccounts, isLoading } = useAccount();
-
-  useEffect(() => {
-    if (!activeAccount) return;
-    if (isExternPending(activeAccount)) {
-      router.replace("/extern/pending");
-    }
-  }, [activeAccount, router]);
 
   if (isLoading) {
     return (
@@ -53,15 +43,12 @@ export default function OrgDashboardLayout({
           </div>
         ) : (
           <Link
-            href="/app/org/manage"
+            href="/app/org/create"
             className="inline-block mt-6 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
           >
             Organisation anlegen
           </Link>
         )}
-        <p className="text-xs text-muted-foreground mt-6">
-          Externe? <Link className="underline" href="/extern/signup">Hier registrieren</Link>
-        </p>
       </div>
     );
   }
