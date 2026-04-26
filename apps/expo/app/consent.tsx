@@ -92,6 +92,16 @@ export default function ConsentModalScreen() {
           durch anonymisierte Statistik, schnellere Bugfixes, einen klügeren Mecky und Karten, die
           dir Veranstaltungen in deiner Nähe zeigen.
         </Text>
+
+        <View style={styles.linksRow}>
+          <Pressable onPress={() => openUrl(AGB_URL)} accessibilityRole="link">
+            <Text style={[styles.link, { color: colors.textSecondary }]}>AGB</Text>
+          </Pressable>
+          <Text style={[styles.linkSep, { color: colors.textTertiary }]}>·</Text>
+          <Pressable onPress={() => openUrl(DATENSCHUTZ_URL)} accessibilityRole="link">
+            <Text style={[styles.link, { color: colors.textSecondary }]}>Datenschutzerklärung</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
@@ -117,19 +127,9 @@ export default function ConsentModalScreen() {
           accessibilityRole="button"
         >
           <Text style={[styles.tertiaryLabel, { color: colors.textSecondary }]}>
-            Nur Notwendig
+            Nur Notwendige
           </Text>
         </Pressable>
-
-        <View style={styles.linksRow}>
-          <Pressable onPress={() => openUrl(AGB_URL)} accessibilityRole="link">
-            <Text style={[styles.link, { color: colors.textTertiary }]}>AGB</Text>
-          </Pressable>
-          <Text style={[styles.linkSep, { color: colors.textTertiary }]}>·</Text>
-          <Pressable onPress={() => openUrl(DATENSCHUTZ_URL)} accessibilityRole="link">
-            <Text style={[styles.link, { color: colors.textTertiary }]}>Datenschutzerklärung</Text>
-          </Pressable>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -249,17 +249,16 @@ const styles = StyleSheet.create({
   },
   linksRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    marginTop: 8,
+    marginTop: 16,
   },
   link: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
     textDecorationLine: 'underline',
   },
   linkSep: {
-    fontSize: 12,
+    fontSize: 13,
   },
 });
