@@ -31,6 +31,7 @@ import CalendarIcon from '@/assets/icons/calendar.svg';
 import CommunityIcon from '@/assets/icons/community.svg';
 import EmojiIcon from '@/assets/icons/emoji.svg';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
+import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 
 const MAX_CONTENT_LENGTH = 500;
 
@@ -149,7 +150,7 @@ export default function CreateScreen() {
   const canProceed = draft.content.trim().length > 0 || hasLinkedItem;
 
   const handleClose = () => {
-    if (draft.content.trim() || draft.images.length > 0) {
+    if (draft.content.trim() || draft.images.length > 0 || draft.videoUrl) {
       Alert.alert('Verwerfen?', 'Dein Beitrag wird nicht gespeichert.', [
         { text: 'Abbrechen', style: 'cancel' },
         {
@@ -349,13 +350,14 @@ export default function CreateScreen() {
 
           {/* Video preview */}
           {draft.videoUrl && (
-            <View style={styles.videoPreview}>
-              <View style={[styles.videoBadge, { backgroundColor: colors.surface }]}>
-                <Ionicons name="videocam" size={20} color={colors.primary} />
-                <Text style={[styles.videoText, { color: colors.textPrimary }]}>Video angehängt</Text>
-              </View>
-              <Pressable onPress={draft.removeVideo}>
-                <Ionicons name="close-circle" size={22} color={colors.error} />
+            <View style={styles.videoPreviewWrapper}>
+              <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay />
+              <Pressable
+                onPress={draft.removeVideo}
+                style={[styles.videoRemoveBtn, { backgroundColor: colors.error }]}
+                accessibilityLabel="Video entfernen"
+              >
+                <Ionicons name="close" size={16} color="#ffffff" />
               </Pressable>
             </View>
           )}
@@ -430,12 +432,33 @@ export default function CreateScreen() {
             <Pressable
               style={styles.toolbarBtn}
               onPress={() => draft.addImages(walletAddress)}
-              disabled={draft.images.length >= 4 || draft.isUploading}
+              disabled={draft.images.length >= 4 || draft.isUploading || !!draft.videoUrl}
+              accessibilityLabel="Bilder anhängen"
             >
               <CanvasIcon
                 width={22}
                 height={22}
-                color={draft.images.length >= 4 ? colors.disabled : colors.textSecondary}
+                color={
+                  draft.images.length >= 4 || draft.videoUrl
+                    ? colors.disabled
+                    : colors.textSecondary
+                }
+              />
+            </Pressable>
+            <Pressable
+              style={styles.toolbarBtn}
+              onPress={() => draft.pickVideo(walletAddress)}
+              disabled={!!draft.videoUrl || draft.images.length > 0 || draft.isUploading}
+              accessibilityLabel="Video anhängen"
+            >
+              <Ionicons
+                name="videocam-outline"
+                size={22}
+                color={
+                  draft.videoUrl || draft.images.length > 0
+                    ? colors.disabled
+                    : colors.textSecondary
+                }
               />
             </Pressable>
             <Pressable
@@ -647,24 +670,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  videoPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  videoPreviewWrapper: {
+    position: 'relative',
     paddingHorizontal: 16,
     marginTop: 12,
   },
-  videoBadge: {
-    flexDirection: 'row',
+  videoRemoveBtn: {
+    position: 'absolute',
+    top: -6,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  videoText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   uploadingRow: {
     flexDirection: 'row',

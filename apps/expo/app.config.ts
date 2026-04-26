@@ -78,6 +78,13 @@ const config: ExpoConfig = {
     'expo-image',
     'expo-localization',
     [
+      'expo-video',
+      {
+        supportsBackgroundPlayback: false,
+        supportsPictureInPicture: true,
+      },
+    ],
+    [
       '@sentry/react-native/expo',
       {
         organization: 'robel-labs',

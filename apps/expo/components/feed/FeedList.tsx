@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import {
   View,
   FlatList,
@@ -69,6 +69,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   useImperativeHandle(ref, () => ({ refresh }), [refresh]);
 
   const visibleDeals = useRef(new Set<string>());
+  const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     if (!walletAddress || items.length === 0) return;
@@ -96,6 +97,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const nextVideoIds = new Set<string>();
       viewableItems.forEach((item) => {
         if (item.item?.type === 'sponsored') {
           const dealId = item.item.data?.id;
@@ -103,13 +105,30 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
             visibleDeals.current.add(dealId);
           }
         }
+        if (item.item?.type === 'post' || item.item?.type === 'mecky') {
+          const post = item.item.data as PostRecord;
+          if (post?.video_url) {
+            nextVideoIds.add(post.id);
+          }
+        }
+      });
+      setVisibleVideoIds((prev) => {
+        if (prev.size === nextVideoIds.size) {
+          let same = true;
+          prev.forEach((id) => {
+            if (!nextVideoIds.has(id)) same = false;
+          });
+          if (same) return prev;
+        }
+        return nextVideoIds;
       });
     },
     [],
   );
 
   const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 50,
+    itemVisiblePercentThreshold: 70,
+    minimumViewTime: 200,
   });
 
   const renderItem = useCallback(
@@ -126,6 +145,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
               isLiked={isLiked(post.id)}
               displayLikeCount={getLikeCount(post.id, post.likes_count)}
               walletAddress={walletAddress}
+              isVisible={visibleVideoIds.has(post.id)}
               onLike={() => toggleLike(post.id, post.likes_count)}
               onShare={() => sharePost(post.id, post.content)}
               onMore={() => onMore(post)}
@@ -141,6 +161,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
               isLiked={isLiked(post.id)}
               displayLikeCount={getLikeCount(post.id, post.likes_count)}
               walletAddress={walletAddress}
+              isVisible={visibleVideoIds.has(post.id)}
               onLike={() => toggleLike(post.id, post.likes_count)}
               onShare={() => sharePost(post.id, post.content)}
               onMore={() => onMore(post)}
@@ -196,7 +217,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return null;
       }
     },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore],
+    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);

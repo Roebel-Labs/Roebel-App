@@ -31,6 +31,7 @@ import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import { Image } from 'expo-image';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
 import PostPollView from '@/components/feed/PostPollView';
@@ -286,6 +287,10 @@ export default function PostDetailScreen() {
 
       {mediaUrls.length > 0 && (
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+      )}
+
+      {post.video_url && (
+        <PostVideoPlayer videoUrl={post.video_url} isVisible autoPlay />
       )}
 
       {post.sticker && (

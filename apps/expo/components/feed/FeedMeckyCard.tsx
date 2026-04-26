@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
 import PostAuthorRow from './PostAuthorRow';
 import PostImageGrid from './PostImageGrid';
+import PostVideoPlayer from './PostVideoPlayer';
 import PostLinkPreview from './PostLinkPreview';
 import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -16,6 +17,7 @@ type Props = {
   isLiked: boolean;
   displayLikeCount: number;
   walletAddress: string | undefined;
+  isVisible?: boolean;
   onLike: () => void;
   onShare: () => void;
   onMore?: () => void;
@@ -26,6 +28,7 @@ export default function FeedMeckyCard({
   isLiked,
   displayLikeCount,
   walletAddress,
+  isVisible = false,
   onLike,
   onShare,
   onMore,
@@ -69,6 +72,10 @@ export default function FeedMeckyCard({
 
       {mediaUrls.length > 0 && (
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+      )}
+
+      {post.video_url && (
+        <PostVideoPlayer videoUrl={post.video_url} isVisible={isVisible} />
       )}
 
       {firstLink && <PostLinkPreview link={firstLink} />}

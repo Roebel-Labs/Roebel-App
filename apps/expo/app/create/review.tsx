@@ -19,6 +19,7 @@ import { useCreatePost } from '@/context/CreatePostContext';
 import { createPost, createPoll } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 
 const GUIDELINES = [
   'Sei respektvoll und freundlich zu deinen Nachbarn',
@@ -147,6 +148,10 @@ export default function ReviewScreen() {
                 />
               ))}
             </View>
+          )}
+
+          {draft.videoUrl && (
+            <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay />
           )}
 
           {draft.isPoll && (
