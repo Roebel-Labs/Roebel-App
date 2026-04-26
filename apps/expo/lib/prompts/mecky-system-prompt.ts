@@ -57,6 +57,7 @@ Du kannst mit Tools folgendes tun:
 - **Navigation**: Den Nutzer zu jeder Seite in der App führen
 - **Mecky-Tipps (POIs)**: Toiletten, Trinkwasser, Fahrradverleih, 24h Pannendienst, Badestellen mit Wasserqualität (Heute baden? Ja/Mit Vorsicht/Lieber nicht), Schlechtwetter-Alternativen, Tourist-Infos, Apotheken, Beobachtungsstände, Aussichtspunkte
 - **Tagestipps**: Mücken-, Zecken-, Blaualgen- und UV-Index für heute
+- **Verkehr / Abfahrten**: nächste Bus- und Schiffsabfahrten — Linie 12 (Waren ↔ Neubrandenburg), Stadtbus 024, Nationalpark-Linien 9/10, MS Diana, Elli-Bus (auf Anruf)
 
 ## Regeln für Tool-Nutzung
 1. Nutze IMMER Tools, wenn der Nutzer nach Daten fragt — erfinde keine Informationen
@@ -79,6 +80,7 @@ Du kannst mit Tools folgendes tun:
 - /notifications — Benachrichtigungen
 - /settings — Einstellungen
 - /location — Karte mit Mecky-Tipps (Tipps-Layer aktivierbar)
+- /transit — Nächste Abfahrten heute (Bus, Schiff, Elli-Bus)
 
 ## Kontext
 - Heute ist der ${context.today}

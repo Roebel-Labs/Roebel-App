@@ -18,6 +18,11 @@ import {
   type PoiType,
 } from "../supabase-pois";
 import {
+  fetchNextDepartures,
+  TRANSIT_MODE_LABELS_DE,
+  type TransitMode,
+} from "../supabase-transit";
+import {
   eventSubmissionToolDefinitions,
   executeSearchLocation,
   executeExtractFlyer,
@@ -99,6 +104,17 @@ const searchPoisSchema = z.object({
 
 const todayAdvisoriesSchema = z.object({});
 
+const searchTransitSchema = z.object({
+  mode: z
+    .enum(['bus_regio', 'bus_city', 'bus_park', 'buergerbus', 'ferry', 'train'])
+    .optional()
+    .describe(
+      "Verkehrsmittel: bus_regio=Linie 12 (MVVG/dat Bus), bus_city=Stadtbus 024, bus_park=Nationalpark-Linien 9/10, buergerbus=Elli-Bus, ferry=MS Diana / MS Fontane."
+    ),
+  near_lat: z.number().optional().describe("Breitengrad des Nutzers für Nähe-Sortierung."),
+  near_lon: z.number().optional().describe("Längengrad des Nutzers für Nähe-Sortierung."),
+});
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
@@ -161,6 +177,12 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Liefert die Tagesempfehlungen von Mecky: Mücken-, Zecken-, Blaualgen- und UV-Index. Nutze das, wenn jemand fragt 'Soll ich heute baden?', 'Sind heute viele Mücken?' o.ä.",
     input_schema: zodToToolInputSchema(todayAdvisoriesSchema),
+  },
+  {
+    name: "searchTransit",
+    description:
+      "Findet die nächsten Abfahrten aus Röbel und Umgebung: Linie 12 (Waren ↔ Neubrandenburg), Stadtbus Röbel 024, Nationalpark-Linien 9/10, MS Diana (Schiff) und Elli-Bus (auf Anruf). Berücksichtigt Wochentag, Saison und Tageszeit. Markiert die letzte Abfahrt des Tages.",
+    input_schema: zodToToolInputSchema(searchTransitSchema),
   },
 ];
 
@@ -500,6 +522,53 @@ async function executeSearchPois(
   }
 }
 
+async function executeSearchTransit(
+  input: z.infer<typeof searchTransitSchema>
+): Promise<ToolResult> {
+  try {
+    const departures = await fetchNextDepartures({
+      lat: input.near_lat,
+      lon: input.near_lon,
+      limit: 30,
+    });
+    const filtered = input.mode
+      ? departures.filter((d) => d.line.mode === (input.mode as TransitMode))
+      : departures;
+    const items = filtered.slice(0, 8).map((d) => ({
+      line_code: d.line.code,
+      line_name: d.line.name_de,
+      mode: d.line.mode,
+      mode_label_de: TRANSIT_MODE_LABELS_DE[d.line.mode],
+      departure_time: d.departure.departure_time.slice(0, 5),
+      destination: d.departure.destination_de,
+      trip_label: d.departure.trip_label_de,
+      stop: d.stop?.name_de ?? null,
+      free_with_gaestekarte: d.line.free_with_gaestekarte,
+      carries_bikes: d.line.carries_bikes,
+      is_last_of_day: d.departure.is_last_of_day,
+      distance_km: d.distance_km == null ? null : Number(d.distance_km.toFixed(2)),
+      notes: d.line.notes_de,
+    }));
+    return {
+      success: true,
+      data: {
+        items,
+        count: items.length,
+        displayType: "transit",
+        message: items.length
+          ? `${items.length} kommende Abfahrt(en) gefunden.`
+          : "Heute keine weiteren Abfahrten — vielleicht den Elli-Bus rufen?",
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: { message: "Fehler bei der Verkehrs-Suche." },
+    };
+  }
+}
+
 async function executeTodayAdvisories(): Promise<ToolResult> {
   try {
     const advisories = await fetchTodayAdvisories();
@@ -551,6 +620,7 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   navigateUser: executeNavigateUser,
   searchPois: executeSearchPois,
   todayAdvisories: executeTodayAdvisories,
+  searchTransit: executeSearchTransit,
 };
 
 export async function executeMeckyTool(
