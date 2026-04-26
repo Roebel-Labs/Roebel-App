@@ -14,6 +14,7 @@ export interface NotificationCounts {
   flaggedPosts: number
   alerts: number
   externAccounts: number
+  touristHelpRequests: number
 }
 
 export async function getNotificationCounts(): Promise<{
@@ -30,7 +31,7 @@ export async function getNotificationCounts(): Promise<{
     today.setHours(0, 0, 0, 0)
 
     // Run all queries in parallel for performance
-    const [feedbackResult, eventsResult, newsResult, moviesResult, restaurantsResult, pushResult, businessesResult, meckyResult, flaggedPostsResult, alertsResult, externResult] = await Promise.all([
+    const [feedbackResult, eventsResult, newsResult, moviesResult, restaurantsResult, pushResult, businessesResult, meckyResult, flaggedPostsResult, alertsResult, externResult, openHelpRequestsResult, unverifiedSightingsResult] = await Promise.all([
       // Feedback: count items with status='new'
       supabase
         .from("feedback")
@@ -98,6 +99,19 @@ export async function getNotificationCounts(): Promise<{
         .select("id", { count: "exact", head: true })
         .eq("is_extern", true)
         .eq("extern_status", "pending"),
+
+      // Tourists: open help requests
+      supabase
+        .from("help_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "open"),
+
+      // Tourists: unverified wildlife sightings
+      supabase
+        .from("wildlife_sightings")
+        .select("id", { count: "exact", head: true })
+        .eq("verified_by_mecky", false)
+        .eq("is_visible", true),
     ])
 
     return {
@@ -114,6 +128,9 @@ export async function getNotificationCounts(): Promise<{
         flaggedPosts: flaggedPostsResult.count || 0,
         alerts: alertsResult.count || 0,
         externAccounts: externResult.count || 0,
+        touristHelpRequests:
+          (openHelpRequestsResult.count || 0) +
+          (unverifiedSightingsResult.count || 0),
       },
     }
   } catch (error) {
