@@ -67,7 +67,8 @@ const config: Config = {
   			},
   			info: {
   				DEFAULT: 'hsl(var(--info))',
-  				foreground: 'hsl(var(--info-foreground))'
+  				foreground: 'hsl(var(--info-foreground))',
+  				background: 'hsl(var(--info-background))'
   			},
   			blue: {
   				'50': '#e8eef7',
