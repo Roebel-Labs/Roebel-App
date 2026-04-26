@@ -505,34 +505,54 @@ Wir geben Ihre personenbezogenen Daten nur an folgende Empfänger weiter:
 
 ---
 
-### 6.6 Analytics und Monitoring (falls zutreffend)
+### 6.6 Analytics und Monitoring
 
-**Option 1: Vercel Web Analytics (Empfohlen - datenschutzfreundlich)**
+In der mobilen App (Expo/React Native) verwenden wir zwei einwilligungsbasierte Dienste. Beide sind standardmäßig **deaktiviert** und werden erst nach deiner ausdrücklichen Zustimmung im Datenschutz-Dialog geladen.
+
+**PostHog Cloud (EU - Statistik & Verbesserung)**
+
+**Anbieter:** PostHog, Inc., gehostet auf AWS Frankfurt (EU)
+
+**Zweck:** Anonymisierte Nutzungsstatistiken (welche Bildschirme aufgerufen werden, wo Nutzer abbrechen) zur gezielten Verbesserung der App.
+
+**Verarbeitete Daten:**
+- Pseudonyme Wallet-Adresse als Distinct-ID
+- Tier (Gast / Tourist / Bürger)
+- Bildschirmaufrufe (Pfade) und Zeitstempel
+- Geräte- und App-Kontext (OS, App-Version, Sprache)
 
 **Datenschutzmerkmale:**
-- Keine Cookies
-- Keine cross-site Verfolgung
-- Anonyme Besucher-Identifikation (Hash-basiert)
-- Sitzungsdaten werden nach 24 Stunden automatisch gelöscht
-- Keine personenbezogenen Daten erfasst
+- Verarbeitung in Frankfurt (EU) — keine Datenübermittlung in Drittländer
+- Keine Session-Aufzeichnung
+- Keine Autocapture von UI-Interaktionen
+- Beim Logout wird die Distinct-ID zurückgesetzt
+- Speicherdauer: 90 Tage
 
-**Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse)
-- Keine Einwilligung erforderlich (keine Cookies, vollständig anonym)
+**Rechtsgrundlage:** Art. 6 Abs. 1 lit. a DSGVO (Einwilligung) — Kategorie „Statistik & Verbesserung" im App-Datenschutz-Dialog.
 
 ---
 
-**Option 2: Google Analytics (Falls verwendet - erfordert Einwilligung)**
+**Sentry (USA - Fehlerprotokollierung)**
 
-**Zweck:** Website-Analyse, Nutzerverhalten, Traffic-Quellen
+**Anbieter:** Functional Software, Inc. d/b/a Sentry, San Francisco, USA
 
-**Rechtsgrundlage:** Art. 6 Abs. 1 lit. a DSGVO (Einwilligung)
-- Erfordert ausdrückliche Einwilligung über Cookie-Banner
-- Cookies werden erst nach Einwilligung gesetzt
+**Zweck:** Automatische Erkennung und Diagnose von App-Abstürzen, damit wir sie schneller beheben können.
 
-**Datenschutzfreundliche Konfiguration:**
-- IP-Anonymisierung aktiviert
-- Keine Weitergabe an Google für Werbezwecke
-- Auftragsverarbeitungsvertrag mit Google abgeschlossen
+**Verarbeitete Daten:**
+- Stack-Traces und Fehlermeldungen
+- IP-Adresse (zur Spam-Abwehr und Geo-Korrelation)
+- User-Agent und Geräte-Kontext (OS, App-Version, Sprache, Hardware-Modell)
+- Pseudonyme Wallet-Adresse als User-ID
+- Breadcrumbs (interne Navigations- und Netzwerkereignisse vor dem Absturz)
+
+**Nicht verarbeitet:** Nachrichteninhalte, Formulareingaben, Passwörter oder Wallet-Schlüssel.
+
+**Datenübermittlung in die USA:**
+- Standardvertragsklauseln (SCCs) gemäß Beschluss (EU) 2021/914
+- EU-US Data Privacy Framework (DPF) — Sentry ist nach DPF zertifiziert
+- Speicherdauer: 90 Tage
+
+**Rechtsgrundlage:** Art. 6 Abs. 1 lit. a DSGVO (Einwilligung) — Kategorie „Fehlerprotokollierung" im App-Datenschutz-Dialog.
 
 ---
 
@@ -558,6 +578,13 @@ Einige unserer Dienstleister verarbeiten Daten außerhalb des Europäischen Wirt
 - thirdweb Inc. (Web3-Infrastruktur)
 - Google LLC (Maps, ggf. Analytics)
 - Expo (Mobile-Plattform)
+- Sentry / Functional Software, Inc. (Fehlerprotokollierung — nur bei Einwilligung)
+- Anthropic PBC (Mecky-KI-Assistent — nur bei Einwilligung)
+- Mapbox, Inc. (Karten — nur bei Einwilligung)
+
+**EU (Europäischer Wirtschaftsraum):**
+- PostHog, Inc. — gehostet auf AWS Frankfurt (Statistik & Verbesserung — nur bei Einwilligung, keine Drittlandsübermittlung)
+- Supabase Inc. — EU-Region (Datenbank, Auth, Storage)
 
 ### 7.2 Garantien für Datentransfers
 

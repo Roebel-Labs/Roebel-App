@@ -83,7 +83,7 @@ export const CONSENT_CATEGORIES: ConsentCategory[] = [
     isLocked: false,
     legalBasis: 'Art. 6 Abs. 1 lit. a DSGVO (Einwilligung)',
     detailDe:
-      'Bei einem Absturz senden wir den Stack-Trace an Sentry, damit wir das Problem reproduzieren können. Übermittlung in die USA auf Basis der Standardvertragsklauseln (SCCs) und des EU-US Data Privacy Framework (DPF).',
+      'Bei einem Absturz senden wir den Stack-Trace an Sentry, damit wir das Problem reproduzieren können. Zur besseren Fehleranalyse werden außerdem deine IP-Adresse, dein Geräte- und App-Kontext (z. B. Betriebssystem, App-Version, Sprache) und deine pseudonyme Wallet-Adresse übermittelt — keine Inhalte deiner Nachrichten oder Eingaben. Übermittlung in die USA auf Basis der Standardvertragsklauseln (SCCs) und des EU-US Data Privacy Framework (DPF).',
   },
   {
     id: 'ai_assistant',

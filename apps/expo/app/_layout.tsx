@@ -31,6 +31,7 @@ import { wallets } from '@/constants/wallets';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
 import { ConsentGate } from '@/components/consent/ConsentGate';
+import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -183,6 +184,7 @@ function ThemedLayout() {
     <>
       <NotificationHandler />
       <AnalyticsTracker />
+      <PostHogTelemetry />
       <AutoConnectHandler />
       <RewardsTaskTriggers />
       <ReferralDeepLinkHandler />

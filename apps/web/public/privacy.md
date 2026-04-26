@@ -505,34 +505,54 @@ We only share your personal data with the following recipients:
 
 ---
 
-### 6.6 Analytics and Monitoring (if applicable)
+### 6.6 Analytics and Monitoring
 
-**Option 1: Vercel Web Analytics (Recommended - privacy-friendly)**
+In the mobile app (Expo/React Native) we use two consent-based services. Both are **disabled by default** and only loaded after your explicit opt-in in the privacy dialog.
 
-**Privacy Features:**
-- No cookies
-- No cross-site tracking
-- Anonymous visitor identification (hash-based)
-- Session data automatically deleted after 24 hours
-- No personal data collected
+**PostHog Cloud (EU - Product Analytics)**
 
-**Legal Basis:** Art. 6(1)(f) GDPR (legitimate interest)
-- No consent required (no cookies, fully anonymous)
+**Provider:** PostHog, Inc., hosted on AWS Frankfurt (EU)
+
+**Purpose:** Anonymous usage statistics (which screens are visited, where users drop off) to improve the app.
+
+**Data processed:**
+- Pseudonymous wallet address as distinct ID
+- Tier (guest / tourist / citizen)
+- Screen views (paths) and timestamps
+- Device and app context (OS, app version, locale)
+
+**Privacy features:**
+- Processed in Frankfurt (EU) — no third-country transfer
+- No session replay
+- No UI autocapture
+- Distinct ID is reset on logout
+- Retention: 90 days
+
+**Legal Basis:** Art. 6(1)(a) GDPR (consent) — "Statistics & Improvement" category in the in-app privacy dialog.
 
 ---
 
-**Option 2: Google Analytics (If used - requires consent)**
+**Sentry (USA - Crash Reporting)**
 
-**Purpose:** Website analysis, user behavior, traffic sources
+**Provider:** Functional Software, Inc. d/b/a Sentry, San Francisco, USA
 
-**Legal Basis:** Art. 6(1)(a) GDPR (consent)
-- Requires express consent via cookie banner
-- Cookies are only set after consent
+**Purpose:** Automatic detection and diagnosis of app crashes so we can fix them faster.
 
-**Privacy-Friendly Configuration:**
-- IP anonymization enabled
-- No sharing with Google for advertising purposes
-- Data processing agreement with Google executed
+**Data processed:**
+- Stack traces and error messages
+- IP address (for spam protection and geo-correlation)
+- User agent and device context (OS, app version, locale, hardware model)
+- Pseudonymous wallet address as user ID
+- Breadcrumbs (internal navigation and network events leading up to the crash)
+
+**Not processed:** message contents, form input, passwords, or wallet keys.
+
+**Transfer to the USA:**
+- Standard Contractual Clauses (SCCs) under Decision (EU) 2021/914
+- EU-US Data Privacy Framework (DPF) — Sentry is DPF-certified
+- Retention: 90 days
+
+**Legal Basis:** Art. 6(1)(a) GDPR (consent) — "Crash Reporting" category in the in-app privacy dialog.
 
 ---
 
@@ -558,6 +578,13 @@ Some of our service providers process data outside the European Economic Area (E
 - thirdweb Inc. (Web3 infrastructure)
 - Google LLC (Maps, potentially Analytics)
 - Expo (mobile platform)
+- Sentry / Functional Software, Inc. (crash reporting — consent-only)
+- Anthropic PBC (Mecky AI assistant — consent-only)
+- Mapbox, Inc. (maps — consent-only)
+
+**EU (European Economic Area):**
+- PostHog, Inc. — hosted on AWS Frankfurt (product analytics — consent-only, no third-country transfer)
+- Supabase Inc. — EU region (database, auth, storage)
 
 ### 7.2 Safeguards for Data Transfers
 

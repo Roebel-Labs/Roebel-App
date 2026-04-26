@@ -69,6 +69,10 @@ export function initSentryWithBufferReplay(): void {
       enableAutoSessionTracking: true,
       tracesSampleRate: 0,
       attachStacktrace: true,
+      // Auto-attach IP, user-agent, and request headers. The user has explicitly
+      // consented to crash reporting (this code only runs after that), and the
+      // Datenschutzerklärung documents the SCC/DPF transfer to Sentry US.
+      sendDefaultPii: true,
     });
     initialized = true;
 

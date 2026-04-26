@@ -1,13 +1,9 @@
 import { Platform } from "react-native";
 import "react-native-get-random-values";
-import * as Sentry from "@sentry/react-native";
 
-Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  enabled: !__DEV__,
-  sendDefaultPii: false,
-  tracesSampleRate: 0.1,
-});
+// Sentry is initialized lazily inside <ConsentGate /> once the user opts in
+// to crash reporting. Until then, errors are buffered locally — see
+// lib/sentry-init.ts.
 
 // Suppress thirdweb HMR error in development (Metro/thirdweb incompatibility)
 // Thirdweb's native-connector.js dynamically loads modules during auth,

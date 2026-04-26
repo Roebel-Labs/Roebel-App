@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getUserEmail } from 'thirdweb/wallets/in-app';
-import { usePostHog } from 'posthog-react-native';
 import { client } from '@/constants/thirdweb';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useConsent } from '@/context/ConsentContext';
@@ -43,13 +42,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const wallet = useActiveWallet();
   const router = useRouter();
   const { hasCitizenNFT } = useVerificationContext();
-  const posthog = usePostHog();
   const consent = useConsent();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const onboardingTriggeredFor = useRef<string | null>(null);
-  const identifiedFor = useRef<string | null>(null);
+  const sentryIdentifiedFor = useRef<string | null>(null);
   const grandfatherCheckedFor = useRef<string | null>(null);
 
   // Sync user on login/account change
@@ -94,37 +92,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     syncUser();
   }, [account?.address, wallet, router]);
 
-  // Identify user in PostHog + Sentry on login (gated by consent); reset on logout
+  // Identify user in Sentry on login (consent-aware via setSentryUser);
+  // reset on logout. PostHog identify is handled by <PostHogTelemetry />,
+  // which only mounts when analytics consent is granted (so it stays inside
+  // the actual <PostHogProvider> and never calls usePostHog without one).
   useEffect(() => {
     if (user?.wallet_address) {
-      const props = {
-        tier: user.tier,
-        onboarding_completed: !!user.onboarding_completed_at,
-        is_verified_citizen: !!user.is_verified_citizen,
-      };
-      if (consent.preferences.analytics) {
-        if (identifiedFor.current !== user.wallet_address) {
-          posthog?.identify(user.wallet_address, props);
-          identifiedFor.current = user.wallet_address;
-        } else {
-          posthog?.capture('$set', { $set: props });
-        }
-      }
       if (consent.preferences.crash) {
         setSentryUser({ id: user.wallet_address, segment: user.tier });
+        sentryIdentifiedFor.current = user.wallet_address;
       }
-    } else if (identifiedFor.current) {
-      posthog?.reset();
+    } else if (sentryIdentifiedFor.current) {
       setSentryUser(null);
-      identifiedFor.current = null;
+      sentryIdentifiedFor.current = null;
     }
   }, [
     user?.wallet_address,
     user?.tier,
-    user?.onboarding_completed_at,
-    user?.is_verified_citizen,
-    posthog,
-    consent.preferences.analytics,
     consent.preferences.crash,
   ]);
 
