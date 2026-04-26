@@ -63,12 +63,14 @@ export default function ConsentModalScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Image
-          source={require('../assets/illustration/consent/consent.png')}
-          style={styles.illustration}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
+        <View style={styles.illustrationFrame}>
+          <Image
+            source={require('../assets/illustration/consent/consent.png')}
+            style={styles.illustration}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+        </View>
 
         <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Datenschutz</Text>
         <Text style={[styles.headline, { color: colors.textPrimary }]}>
@@ -155,10 +157,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 24,
   },
+  illustrationFrame: {
+    width: '100%',
+    borderRadius: 24,
+    backgroundColor: '#E4F2FF',
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
   illustration: {
     width: '100%',
     height: 220,
-    marginBottom: 24,
   },
   eyebrow: {
     fontSize: 13,
