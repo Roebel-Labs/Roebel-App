@@ -57,6 +57,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       'react-native-qrcode-svg',
       'expo-screen-orientation',
       'react-native-web-webview',
+      'react-native-pager-view',
     ];
     if (webExclude.some(pkg => moduleName === pkg || moduleName.startsWith(pkg + '/'))) {
       return { type: 'empty' };
