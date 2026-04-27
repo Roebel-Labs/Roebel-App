@@ -110,6 +110,19 @@ export function isUpcoming(departureTime: string, date = new Date()): boolean {
 
 // ─── Fetchers ────────────────────────────────────────────────
 
+export async function fetchTransitLineByCode(code: string): Promise<TransitLine | null> {
+  const { data, error } = await supabase
+    .from('transit_lines')
+    .select('*')
+    .eq('code', code)
+    .single();
+  if (error) {
+    console.error('Error fetching transit line:', error);
+    return null;
+  }
+  return data as TransitLine;
+}
+
 export async function fetchTransitLines(): Promise<TransitLine[]> {
   const { data, error } = await supabase
     .from('transit_lines')

@@ -33,7 +33,40 @@ export type MapFeatureProperties = {
   slug: string | null;
   poi_type: string | null;
   poi_status: string | null;
+  emoji: string;
 };
+
+const POI_EMOJIS: Record<string, string> = {
+  toilet: '🚻',
+  drinking_water: '🚰',
+  bike_repair: '🔧',
+  bike_rental: '🚲',
+  swim_spot: '🏊',
+  indoor_alternative: '🏛️',
+  tourist_info: 'ℹ️',
+  pharmacy: '💊',
+  observation_stand: '🦅',
+  viewpoint: '🌄',
+};
+
+const EVENT_CATEGORY_EMOJIS: Record<string, string> = {
+  Musik: '🎵',
+  Kultur: '🎭',
+  Sport: '⚽',
+  Fest: '🎉',
+  Natur: '🌿',
+  Mittelalter: '🏰',
+  Lesung: '📖',
+  Kirchliches: '⛪',
+  Ausstellungen: '🖼️',
+  Stadt: '🏙️',
+  'Essen & Trinken': '🍽️',
+};
+
+function eventEmoji(category: string | null | undefined): string {
+  if (!category) return '📅';
+  return EVENT_CATEGORY_EMOJIS[category] || '📅';
+}
 
 export type MapGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Point, MapFeatureProperties>;
 
@@ -131,6 +164,7 @@ export function entitiesToGeoJSON(
       slug: null,
       poi_type: null,
       poi_status: null,
+      emoji: eventEmoji(e.category),
     },
   }));
 
@@ -154,6 +188,7 @@ export function entitiesToGeoJSON(
         slug: r.slug,
         poi_type: null,
         poi_status: null,
+        emoji: '🍽️',
       },
     }));
 
@@ -177,6 +212,7 @@ export function entitiesToGeoJSON(
         slug: b.slug,
         poi_type: null,
         poi_status: null,
+        emoji: '🏪',
       },
     }));
 
@@ -198,6 +234,7 @@ export function entitiesToGeoJSON(
       slug: null,
       poi_type: p.type,
       poi_status: p.status,
+      emoji: POI_EMOJIS[p.type] || '📍',
     },
   }));
 

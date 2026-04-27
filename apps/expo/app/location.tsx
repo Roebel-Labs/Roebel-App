@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { ScrollView } from 'react-native';
 
 import { SearchIcon } from '@/components/Icons';
 import SearchModal from '@/components/SearchModal';
@@ -69,6 +70,7 @@ export default function LocationScreen() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showVerloren, setShowVerloren] = useState(false);
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
   const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(null);
   const [mapFilter, setMapFilter] = useState<MapFilter>({
@@ -302,7 +304,7 @@ export default function LocationScreen() {
               <SearchIcon width={22} height={22} color={colors.tabIconActive} />
             </Pressable>
 
-            {/* "Verloren?" button — bottom right above tab bar */}
+            {/* "Verloren?" button — high z-index so it stays above bottom sheets */}
             <Pressable
               style={({ pressed }) => [
                 styles.verlorenBtn,
@@ -315,8 +317,138 @@ export default function LocationScreen() {
               <Text style={styles.verlorenLabel}>Verloren?</Text>
             </Pressable>
 
-            {/* My Location Button */}
+            {/* My Location Button (always above bottom sheets) */}
             <MyLocationButton onLocationFound={handleLocationFound} />
+
+            {/* Centered Karte/Liste toggle — always above bottom sheet */}
+            <View style={styles.viewToggleWrap}>
+              <View style={[styles.viewToggle, { backgroundColor: colors.background }]}>
+                <Pressable
+                  onPress={() => setViewMode('map')}
+                  style={[
+                    styles.viewToggleBtn,
+                    viewMode === 'map' && { backgroundColor: '#194383' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.viewToggleText,
+                      { color: viewMode === 'map' ? '#fff' : colors.textPrimary },
+                    ]}
+                  >
+                    Karte
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setViewMode('list')}
+                  style={[
+                    styles.viewToggleBtn,
+                    viewMode === 'list' && { backgroundColor: '#194383' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.viewToggleText,
+                      { color: viewMode === 'list' ? '#fff' : colors.textPrimary },
+                    ]}
+                  >
+                    Liste
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* List view — stacked on top of the map when viewMode === 'list' */}
+            {viewMode === 'list' ? (
+              <View style={[styles.listOverlay, { backgroundColor: colors.background }]}>
+                <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 220 }}>
+                  {mapFilter.pois &&
+                    pois.map((p) => (
+                      <Pressable
+                        key={`poi-${p.id}`}
+                        style={[styles.listRow, { backgroundColor: colors.surface }]}
+                        onPress={() => router.push({ pathname: '/poi/[id]', params: { id: p.id } } as any)}
+                      >
+                        <Text style={styles.listEmoji}>📍</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {p.name_de}
+                          </Text>
+                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {p.address || ''}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  {mapFilter.events &&
+                    events.map((e) => (
+                      <Pressable
+                        key={`event-${e.id}`}
+                        style={[styles.listRow, { backgroundColor: colors.surface }]}
+                        onPress={() =>
+                          router.push({ pathname: '/event/[id]', params: { id: e.id } } as any)
+                        }
+                      >
+                        <Text style={styles.listEmoji}>📅</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {e.title}
+                          </Text>
+                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {e.location}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  {mapFilter.restaurants &&
+                    restaurants.map((r) => (
+                      <Pressable
+                        key={`r-${r.id}`}
+                        style={[styles.listRow, { backgroundColor: colors.surface }]}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/restaurant/[slug]',
+                            params: { slug: r.slug },
+                          } as any)
+                        }
+                      >
+                        <Text style={styles.listEmoji}>🍽️</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {r.name}
+                          </Text>
+                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {r.address || ''}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  {mapFilter.businesses &&
+                    businesses.map((b) => (
+                      <Pressable
+                        key={`b-${b.id}`}
+                        style={[styles.listRow, { backgroundColor: colors.surface }]}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/business/[slug]',
+                            params: { slug: b.slug },
+                          } as any)
+                        }
+                      >
+                        <Text style={styles.listEmoji}>🏪</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {b.name}
+                          </Text>
+                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {b.address || ''}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                </ScrollView>
+              </View>
+            ) : null}
           </>
         )}
       </View>
@@ -390,8 +522,8 @@ const styles = StyleSheet.create({
   },
   verlorenBtn: {
     position: 'absolute',
-    bottom: 100,
-    right: 20,
+    bottom: 240,
+    left: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -403,8 +535,63 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 100,
+    elevation: 16,
+    zIndex: 2000,
+  },
+  viewToggleWrap: {
+    position: 'absolute',
+    bottom: 180,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    borderRadius: 22,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 16,
+  },
+  viewToggleBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  viewToggleText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  listOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 50,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  listEmoji: {
+    fontSize: 22,
+  },
+  listTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  listSub: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
   },
   verlorenEmoji: {
     fontSize: 16,

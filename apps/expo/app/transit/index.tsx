@@ -211,9 +211,15 @@ function DepartureRow({ item, colors }: { item: NextDeparture; colors: any }) {
   const color = TRANSIT_MODE_COLORS[line.mode];
   const emoji = TRANSIT_MODE_EMOJIS[line.mode];
   const time = departure.departure_time.slice(0, 5);
+  const router = useRouter();
 
   return (
-    <View style={[styles.depRow, { backgroundColor: colors.surface }]}>
+    <Pressable
+      style={[styles.depRow, { backgroundColor: colors.surface }]}
+      onPress={() =>
+        router.push({ pathname: '/transit/line/[code]', params: { code: line.code } } as any)
+      }
+    >
       <View style={[styles.depColorBar, { backgroundColor: color }]} />
       <View style={{ flex: 1, padding: 12 }}>
         <View style={styles.depHeader}>
@@ -253,7 +259,7 @@ function DepartureRow({ item, colors }: { item: NextDeparture; colors: any }) {
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -134,6 +134,46 @@ export async function fetchSeasonalEvents(): Promise<WildlifeSeasonalEvent[]> {
   return (data || []) as WildlifeSeasonalEvent[];
 }
 
+export async function fetchSightingById(id: string): Promise<WildlifeSighting | null> {
+  const { data, error } = await supabase
+    .from('wildlife_sightings')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) {
+    console.error('Error fetching sighting:', error);
+    return null;
+  }
+  return data as WildlifeSighting;
+}
+
+export async function fetchSpeciesBySlug(slug: string): Promise<WildlifeSpecies | null> {
+  const { data, error } = await supabase
+    .from('wildlife_species')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+  if (error) {
+    console.error('Error fetching species:', error);
+    return null;
+  }
+  return data as WildlifeSpecies;
+}
+
+export async function fetchSeasonalEventsForSpecies(speciesId: string): Promise<WildlifeSeasonalEvent[]> {
+  const { data, error } = await supabase
+    .from('wildlife_seasonal_events')
+    .select('*')
+    .eq('species_id', speciesId)
+    .eq('is_active', true)
+    .order('start_month', { ascending: true });
+  if (error) {
+    console.error('Error fetching species events:', error);
+    return [];
+  }
+  return (data || []) as WildlifeSeasonalEvent[];
+}
+
 export async function fetchSightings(opts: {
   species_id?: string;
   hours?: number;

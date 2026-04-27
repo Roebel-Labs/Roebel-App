@@ -53,7 +53,7 @@ export default function MyLocationButton({ onLocationFound }: Props) {
 const styles = StyleSheet.create({
   button: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 240,
     right: 20,
     width: 48,
     height: 48,
@@ -64,8 +64,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 100,
+    elevation: 16,
+    zIndex: 2000,
   },
   pressed: {
     opacity: 0.9,

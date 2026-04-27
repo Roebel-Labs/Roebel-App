@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
+import EmbeddedMap, { type EmbeddedMapPoint } from '@/components/map/EmbeddedMap';
 
 import {
   fetchTourBySlug,
@@ -101,6 +102,37 @@ export default function TourDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {(() => {
+          const mapPoints: EmbeddedMapPoint[] = [];
+          if (tour.start_lat != null && tour.start_lon != null) {
+            mapPoints.push({
+              id: 'start',
+              lat: tour.start_lat,
+              lon: tour.start_lon,
+              emoji: '🚩',
+              color: '#194383',
+              size: 'lg',
+            });
+          }
+          stops.forEach((s, i) => {
+            if (s.lat == null || s.lon == null) return;
+            const isStart = s.stop_type === 'start' || (i === 0 && mapPoints.length === 0);
+            const isFinish = s.stop_type === 'finish' || i === stops.length - 1;
+            mapPoints.push({
+              id: s.id,
+              lat: s.lat,
+              lon: s.lon,
+              emoji: STOP_EMOJIS[s.stop_type || ''] || '📍',
+              color: isFinish ? '#D62828' : isStart ? '#194383' : diffColor,
+              size: isStart || isFinish ? 'lg' : 'sm',
+            });
+          });
+          if (mapPoints.length === 0) return null;
+          // For 2 points use arc (Uber Eats style); for many use line
+          const drawRoute = mapPoints.length === 2 ? 'arc' : 'line';
+          return <EmbeddedMap height={240} points={mapPoints} drawRoute={drawRoute} />;
+        })()}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{tour.title_de}</Text>
         {tour.subtitle_de ? (
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -239,6 +271,7 @@ export default function TourDetailScreen() {
         ) : null}
 
         <View style={{ height: 40 }} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -303,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
-  scrollContent: { padding: 16 },
+  scrollContent: {},
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   title: { fontSize: 26, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 16, lineHeight: 22 },

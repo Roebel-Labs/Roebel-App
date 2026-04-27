@@ -42,7 +42,13 @@ export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate 
   const { isDark } = useTheme();
   const cameraRef = useRef<any>(null);
 
-  const styleURL = Mapbox ? (isDark ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light) : '';
+  // Outdoors style is much more vibrant for the Müritz Nationalpark setting
+  // (terrain, parks, water in color); fall back to Light/Dark for monochrome.
+  const styleURL = Mapbox
+    ? isDark
+      ? Mapbox.StyleURL.Dark
+      : Mapbox.StyleURL.Outdoors || Mapbox.StyleURL.Light
+    : '';
 
   // Fly to a specific coordinate when it changes
   React.useEffect(() => {
@@ -202,9 +208,27 @@ export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate 
             filter={['!', ['has', 'point_count']]}
             style={markerCircleStyle}
           />
+
+          {/* Emoji label on top of each marker — gives the dot a visual identity */}
+          <Mapbox.SymbolLayer
+            id="entity-emojis"
+            filter={['!', ['has', 'point_count']]}
+            style={{
+              textField: ['get', 'emoji'] as any,
+              textSize: 14,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+              textHaloWidth: 0,
+            }}
+          />
         </Mapbox.ShapeSource>
 
-        <Mapbox.UserLocation visible={false} />
+        {/* Heading puck — animated blue arrow showing direction the user is facing */}
+        <Mapbox.UserLocation
+          visible={true}
+          showsUserHeadingIndicator={true}
+          androidRenderMode="compass"
+        />
       </Mapbox.MapView>
     </View>
   );
