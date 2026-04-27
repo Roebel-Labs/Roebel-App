@@ -29,9 +29,8 @@ import BusinessDealCard from './BusinessDealCard';
 import MarketplaceCard from './MarketplaceCard';
 import MovieCard from './MovieCard';
 import UserSearchCard from './UserSearchCard';
-import CategoryCard from './CategoryCard';
+import AppSectionTile from './AppSectionTile';
 import { useRouter } from 'expo-router';
-import { EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
 import { logSearch } from '@/lib/firebase';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -73,12 +72,44 @@ const RESULT_SECTIONS: { key: keyof SearchResults; label: string }[] = [
   { key: 'movies', label: 'Kino' },
 ];
 
-const QUICK_LINKS: { label: string; route: string }[] = [
-  { label: 'Gastronomie', route: '/restaurant' },
-  { label: 'Kino', route: '/movies' },
-  { label: 'Unternehmen', route: '/businesses' },
-  { label: 'Angebote', route: '/deals' },
-  { label: 'Marktplatz', route: '/marketplace' },
+const APP_SECTIONS: { title: string; items: { label: string; route: string }[] }[] = [
+  {
+    title: 'Freizeit',
+    items: [
+      { label: 'Veranstaltungen', route: '/category/all' },
+      { label: 'Kino', route: '/movies' },
+      { label: 'Gastronomie', route: '/restaurant' },
+      { label: 'Neuigkeiten', route: '/news' },
+      { label: 'Sternfahrten', route: '/tours' },
+      { label: 'Wildtiere', route: '/wildlife' },
+      { label: 'Blog', route: '/blog' },
+      { label: 'Spiele', route: '/games' },
+    ],
+  },
+  {
+    title: 'Mobilität',
+    items: [
+      { label: 'Bürger Bus', route: '/transit' },
+      { label: 'Linie 12', route: '/transit/line/12' },
+    ],
+  },
+  {
+    title: 'Stadt',
+    items: [
+      { label: 'Bürgerumfragen', route: '/proposal' },
+      { label: 'Bürgersprechstunden', route: '/category/Stadt' },
+      { label: 'Unternehmen', route: '/businesses' },
+      { label: 'Karte', route: '/location' },
+    ],
+  },
+  {
+    title: 'Shopping',
+    items: [
+      { label: 'Marktplatz', route: '/marketplace' },
+      { label: 'Angebote', route: '/deals' },
+      { label: 'Röbel-Karte', route: '/roebel-card' },
+    ],
+  },
 ];
 
 function useDebounced<T>(value: T, delayMs: number): T {
@@ -234,12 +265,7 @@ export default function SearchModal({ visible, onClose }: Props) {
     onClose();
   };
 
-  const handleCategoryPress = (category: EventCategory) => {
-    handleClose();
-    router.push(`/category/${category}` as any);
-  };
-
-  const handleQuickLink = (route: string) => {
+  const handleSectionPress = (route: string) => {
     handleClose();
     router.push(route as any);
   };
@@ -318,12 +344,12 @@ export default function SearchModal({ visible, onClose }: Props) {
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.surface }]}>
-          <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
+        <View style={styles.header}>
+          <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
             <SearchIcon size={20} color={colors.textTertiary} />
             <TextInput
               style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="In Röbel suchen..."
+              placeholder="Suchen nach..."
               placeholderTextColor={colors.textTertiary}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -393,34 +419,27 @@ export default function SearchModal({ visible, onClose }: Props) {
 
           {/* Suggestions — shown when no query */}
           {!showResults && !showRecentSearches && (
-            <View style={styles.section}>
-              {/* Quick Links to content sections */}
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Entdecken</Text>
-              <View style={styles.quickLinksRow}>
-                {QUICK_LINKS.map((link) => (
-                  <Pressable
-                    key={link.route}
-                    style={[styles.quickLinkChip, { backgroundColor: colors.surfaceSecondary }]}
-                    onPress={() => handleQuickLink(link.route)}
-                  >
-                    <Text style={[styles.quickLinkText, { color: colors.textPrimary }]}>{link.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Event Categories */}
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 24 }]}>
-                Veranstaltungs-Kategorien
-              </Text>
-              <View style={styles.categoriesGrid}>
-                {EVENT_CATEGORIES.map((category) => (
-                  <CategoryCard
-                    key={category}
-                    category={category}
-                    onPress={() => handleCategoryPress(category)}
-                  />
-                ))}
-              </View>
+            <View style={styles.sectionsWrapper}>
+              {APP_SECTIONS.map((section) => (
+                <View key={section.title} style={styles.appSection}>
+                  <Text style={[styles.appSectionTitle, { color: colors.textPrimary }]}>
+                    {section.title}
+                  </Text>
+                  <View style={styles.appSectionGrid}>
+                    {section.items.map((item) => (
+                      <View key={item.route} style={styles.appSectionCell}>
+                        <AppSectionTile
+                          label={item.label}
+                          onPress={() => handleSectionPress(item.route)}
+                        />
+                      </View>
+                    ))}
+                    {section.items.length % 2 === 1 && (
+                      <View style={styles.appSectionCell} />
+                    )}
+                  </View>
+                </View>
+              ))}
             </View>
           )}
         </ScrollView>
@@ -437,24 +456,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 60,
-    borderBottomWidth: 1,
+    paddingTop: 12,
+    paddingBottom: 12,
     gap: 12,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'Inter',
+    fontFamily: 'Inter-Regular',
   },
   clearButton: {
     width: 24,
@@ -535,23 +553,25 @@ const styles = StyleSheet.create({
   resultSectionContent: {
     gap: 8,
   },
-  quickLinksRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  quickLinkChip: {
+  sectionsWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  quickLinkText: {
-    fontSize: 14,
+  appSection: {
+    marginBottom: 24,
+  },
+  appSectionTitle: {
+    fontSize: 22,
     fontFamily: 'Inter-Medium',
+    marginBottom: 12,
   },
-  categoriesGrid: {
+  appSectionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+  },
+  appSectionCell: {
+    width: '48%',
   },
 });

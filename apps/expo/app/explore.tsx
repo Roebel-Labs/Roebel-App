@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -23,7 +23,7 @@ import MiniGamesSection from '@/components/games/MiniGamesSection';
 import FortuneCardsBanner from '@/components/games/FortuneCardsBanner';
 import HoroscopeBanner from '@/components/games/HoroscopeBanner';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
-import { SearchIcon } from '@/components/Icons';
+import ExploreSearchBar from '@/components/ExploreSearchBar';
 import ExploreCategoryChips from '@/components/ExploreCategoryChips';
 import SwipeableCardStack from '@/components/SwipeableCardStack';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
@@ -174,19 +174,10 @@ export default function ExploreScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Entdecken</Text>
-          <Pressable
-            style={[styles.actionBtn, { backgroundColor: colors.surfaceSecondary }]}
-            accessibilityLabel="Suchen"
-            onPress={() => setShowSearchModal(true)}
-          >
-            <SearchIcon size={20} color={colors.tabIconActive} />
-          </Pressable>
-        </View>
+        {/* Search bar */}
+        <ExploreSearchBar onPress={() => setShowSearchModal(true)} />
 
-        {/* Category Chips */}
+        {/* Category tiles */}
         <ExploreCategoryChips />
 
         {loading ? (
@@ -275,18 +266,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontFamily: 'Inter-Medium',
-  },
   skeletonContainer: {
     marginTop: 24,
   },
@@ -295,12 +274,5 @@ const styles = StyleSheet.create({
   },
   skeletonRow: {
     flexDirection: 'row',
-  },
-  actionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

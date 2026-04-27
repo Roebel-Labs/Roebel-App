@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -8,6 +9,8 @@ type CategoryChip = {
   label: string;
   route: string;
 };
+
+const PLACEHOLDER_IMAGE = require('@/assets/illustration/collections/events.png');
 
 const EXPLORE_CATEGORIES: CategoryChip[] = [
   { key: 'events', label: 'Veranstaltungen', route: '/category/all' },
@@ -24,18 +27,27 @@ export default function ExploreCategoryChips() {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const renderChip = ({ item }: { item: CategoryChip }) => (
+  const renderItem = ({ item }: { item: CategoryChip }) => (
     <Pressable
       onPress={() => router.push(item.route as any)}
-      style={({ pressed }) => [
-        styles.chip,
-        { backgroundColor: colors.surfaceSecondary },
-        pressed && styles.chipPressed,
-      ]}
+      style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
       accessibilityRole="button"
       accessibilityLabel={item.label}
     >
-      <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>{item.label}</Text>
+      <View style={[styles.tile, { backgroundColor: colors.surfaceSecondary }]}>
+        <Image
+          source={PLACEHOLDER_IMAGE}
+          style={styles.tileImage}
+          contentFit="contain"
+          transition={0}
+        />
+      </View>
+      <Text
+        style={[styles.label, { color: colors.textPrimary }]}
+        numberOfLines={2}
+      >
+        {item.label}
+      </Text>
     </Pressable>
   );
 
@@ -44,7 +56,7 @@ export default function ExploreCategoryChips() {
       <FlatList
         horizontal
         data={EXPLORE_CATEGORIES}
-        renderItem={renderChip}
+        renderItem={renderItem}
         keyExtractor={(item) => item.key}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -55,22 +67,36 @@ export default function ExploreCategoryChips() {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   listContent: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 16,
   },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+  item: {
+    width: 64,
+    alignItems: 'center',
   },
-  chipPressed: {
+  itemPressed: {
     opacity: 0.7,
   },
-  chipLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+  tile: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  tileImage: {
+    width: 40,
+    height: 40,
+  },
+  label: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
   },
 });

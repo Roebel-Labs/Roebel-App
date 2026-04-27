@@ -13,7 +13,11 @@ export default function ExploreSearchBar({ onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.container, { backgroundColor: colors.surface }]}
+      style={({ pressed }) => [
+        styles.container,
+        { backgroundColor: colors.surfaceSecondary },
+        pressed && styles.pressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel="Suche öffnen"
     >
@@ -21,7 +25,7 @@ export default function ExploreSearchBar({ onPress }: Props) {
         <SearchIcon width={20} height={20} color={colors.textTertiary} />
       </View>
       <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-        Suche in Röbel...
+        Suchen nach...
       </Text>
     </Pressable>
   );
@@ -31,18 +35,21 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 48,
     marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 24,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   iconWrapper: {
-    marginRight: 10,
+    marginRight: 12,
   },
   placeholder: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
   },
 });
