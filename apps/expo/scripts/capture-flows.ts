@@ -172,7 +172,8 @@ async function runFlow(
 async function captureCitizenFlow(page: Page): Promise<void> {
   await runFlow(page, 'citizen', 'Citizen Verification', [
     ['/profile', 'profile-entry'],
-    ['/verification/request-citizen', 'request-citizen'],
+    ['/verification/request-citizen', 'request-citizen-intro'],
+    ['/verification/request-citizen/form', 'request-citizen-form'],
     ['/verification/my-request', 'my-request-qr'],
     ['/verification/scan', 'scan'],
   ]);
@@ -180,7 +181,7 @@ async function captureCitizenFlow(page: Page): Promise<void> {
   // here because it's a plain form (no Pressable navigation involved).
   const flow = 'citizen';
   const dir = path.join(ROOT_DIR, flow);
-  await gotoAndSettle(page, '/verification/request-citizen');
+  await gotoAndSettle(page, '/verification/request-citizen/form');
   await fillByPlaceholder(page, 'Max Mustermann', 'Max Mustermann');
   await fillByPlaceholder(page, 'Musterstraße 123, 17207 Röbel', 'Musterstraße 12, 17207 Röbel');
   await fillByPlaceholder(
@@ -190,7 +191,7 @@ async function captureCitizenFlow(page: Page): Promise<void> {
   );
   await page.keyboard.press('Tab');
   await settle(page, 800);
-  await snap(flow, dir, page, 5, 'request-citizen-filled', '/verification/request-citizen');
+  await snap(flow, dir, page, 6, 'request-citizen-filled', '/verification/request-citizen/form');
   console.log('  · approve drawer & success modal skipped (require 2nd wallet)');
 }
 

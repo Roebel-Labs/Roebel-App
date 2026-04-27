@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { ScrollView } from 'react-native';
 
 import { SearchIcon } from '@/components/Icons';
 import SearchModal from '@/components/SearchModal';
@@ -34,6 +33,15 @@ import {
   ADVISORY_LEVEL_COLORS,
   ADVISORY_LEVEL_LABELS_DE,
 } from '@/lib/supabase-pois';
+import {
+  fetchTransitLines,
+  fetchTransitStops,
+  fetchTransitDepartures,
+  type TransitLine,
+  type TransitStop,
+  type TransitDeparture,
+} from '@/lib/supabase-transit';
+import { computeLiveVehicles, vehiclesToGeoJSON, type LiveVehicle } from '@/lib/live-vehicles';
 
 // Try to load Mapbox — fails gracefully in Expo Go
 let Mapbox: any = null;
@@ -71,6 +79,13 @@ export default function LocationScreen() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showVerloren, setShowVerloren] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [showLiveBuses, setShowLiveBuses] = useState(true);
+  const [transitLines, setTransitLines] = useState<TransitLine[]>([]);
+  const [transitStops, setTransitStops] = useState<TransitStop[]>([]);
+  const [transitDepartures, setTransitDepartures] = useState<TransitDeparture[]>([]);
+  const [vehicles, setVehicles] = useState<LiveVehicle[]>([]);
+  const [tickNow, setTickNow] = useState<Date>(new Date());
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
   const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(null);
   const [mapFilter, setMapFilter] = useState<MapFilter>({
@@ -103,6 +118,43 @@ export default function LocationScreen() {
   useEffect(() => {
     fetchMapData();
   }, []);
+
+  // Load transit data (lines/stops/departures) once for live-bus simulation
+  useEffect(() => {
+    void Promise.all([fetchTransitLines(), fetchTransitStops(), fetchTransitDepartures()]).then(
+      ([l, s, d]) => {
+        setTransitLines(l);
+        setTransitStops(s);
+        setTransitDepartures(d);
+      }
+    );
+  }, []);
+
+  // Tick every 15 s — recomputes live vehicle positions
+  useEffect(() => {
+    tickRef.current = setInterval(() => setTickNow(new Date()), 15000);
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, []);
+
+  // Recompute vehicles whenever schedule data or tickNow changes
+  useEffect(() => {
+    if (!showLiveBuses || transitLines.length === 0) {
+      setVehicles([]);
+      return;
+    }
+    setVehicles(
+      computeLiveVehicles({
+        lines: transitLines,
+        stops: transitStops,
+        departures: transitDepartures,
+        now: tickNow,
+      })
+    );
+  }, [showLiveBuses, transitLines, transitStops, transitDepartures, tickNow]);
+
+  const vehiclesGeoJSON = useMemo(() => vehiclesToGeoJSON(vehicles), [vehicles]);
 
   // Fly to selected event when deep-linked
   useEffect(() => {
@@ -251,10 +303,62 @@ export default function LocationScreen() {
               geojson={geojson}
               onMarkerPress={handleMarkerPress}
               flyToCoordinate={flyToCoordinate}
+              vehiclesGeoJSON={showLiveBuses ? vehiclesGeoJSON : null}
+              onVehiclePress={(depId) => {
+                const v = vehicles.find((x) => x.id === depId);
+                if (!v) return;
+                Alert.alert(
+                  `${v.line_code} · live`,
+                  `${v.line_name_de}\n` +
+                    (v.next_stop_name
+                      ? `→ ${v.next_stop_name}` +
+                        (v.arrives_in_minutes != null
+                          ? ` (in ~${Math.round(v.arrives_in_minutes)} min)`
+                          : '')
+                      : ''),
+                  [
+                    { text: 'Schließen', style: 'cancel' },
+                    {
+                      text: 'Linie öffnen',
+                      onPress: () =>
+                        router.push({
+                          pathname: '/transit/line/[code]',
+                          params: { code: v.line_code },
+                        } as any),
+                    },
+                  ]
+                );
+              }}
             />
 
             {/* Filter chips */}
             <MapFilterChips filter={mapFilter} onFilterChange={setMapFilter} />
+
+            {/* Live ÖPNV toggle pill — top right */}
+            <Pressable
+              onPress={() => setShowLiveBuses((v) => !v)}
+              style={[
+                styles.liveBusToggle,
+                {
+                  backgroundColor: showLiveBuses ? '#194383' : colors.background,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.liveDot,
+                  { backgroundColor: showLiveBuses ? '#2B9348' : colors.textTertiary },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.liveBusText,
+                  { color: showLiveBuses ? '#fff' : colors.textPrimary },
+                ]}
+              >
+                Live ÖPNV {showLiveBuses ? `· ${vehicles.length}` : ''}
+              </Text>
+            </Pressable>
 
             {/* Today's advisories — visible when Tipps layer is on */}
             {mapFilter.pois && advisories.length > 0 ? (
@@ -625,5 +729,31 @@ const styles = StyleSheet.create({
   advisoryText: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
+  },
+  liveBusToggle: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    zIndex: 1500,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  liveBusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
 });

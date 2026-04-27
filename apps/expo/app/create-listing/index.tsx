@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -8,9 +8,21 @@ import type { ListingTypeChoice } from '@/context/CreateListingWizardContext';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
 
 const STEPS = [
-  { emoji: '📦', title: 'Beschreibe dein Angebot', desc: 'Typ, Kategorie, Titel und Fotos' },
-  { emoji: '💰', title: 'Setze deinen Preis', desc: 'Festpreis, VB oder zu verschenken' },
-  { emoji: '🚀', title: 'Werde sichtbar', desc: 'Sofort im Marktplatz für alle sichtbar' },
+  {
+    title: 'Beschreibe dein Angebot',
+    desc: 'Typ, Kategorie, Titel und Fotos',
+    illustration: require('@/assets/illustration/small/product-listing.png'),
+  },
+  {
+    title: 'Setze deinen Preis',
+    desc: 'Festpreis, VB oder zu verschenken',
+    illustration: require('@/assets/illustration/small/sale-tag.png'),
+  },
+  {
+    title: 'Werde sichtbar',
+    desc: 'Sofort im Marktplatz für alle sichtbar',
+    illustration: require('@/assets/illustration/small/mecky-thumbs-up.png'),
+  },
 ];
 
 export default function CreateListingIntroScreen() {
@@ -40,25 +52,29 @@ export default function CreateListingIntroScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => setShowExit(true)} style={styles.closeButton}>
-          <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>✕</Text>
+          <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
         </Pressable>
       </View>
       <View style={styles.content}>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          Erstelle deine{'\n'}Anzeige
-        </Text>
-        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-          In wenigen Schritten erreichst du deine Nachbarn.
+          So einfach erstellst du{'\n'}eine Anzeige
         </Text>
 
         <View style={styles.stepsContainer}>
           {STEPS.map((step, i) => (
-            <View key={i} style={[styles.stepCard, { borderColor: colors.border }]}>
-              <Text style={styles.stepEmoji}>{step.emoji}</Text>
+            <View
+              key={i}
+              style={[
+                styles.stepRow,
+                i < STEPS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.stepNumber, { color: colors.textPrimary }]}>{i + 1}</Text>
               <View style={styles.stepText}>
-                <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{`${i + 1}. ${step.title}`}</Text>
+                <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{step.title}</Text>
                 <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
               </View>
+              <Image source={step.illustration} style={styles.stepIllustration} resizeMode="contain" />
             </View>
           ))}
         </View>
@@ -95,22 +111,20 @@ const styles = StyleSheet.create({
   headerRow: { paddingHorizontal: 24, paddingTop: 8 },
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   closeIcon: { fontSize: 20, fontFamily: 'Inter-Regular' },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  heading: { fontSize: 28, fontFamily: 'Inter-Bold', marginBottom: 8 },
-  subheading: { fontSize: 16, fontFamily: 'Inter-Regular', marginBottom: 40 },
-  stepsContainer: { gap: 12, marginBottom: 48 },
-  stepCard: {
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  heading: { fontSize: 32, fontFamily: 'Inter-Bold', marginBottom: 32, lineHeight: 38 },
+  stepsContainer: {},
+  stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
+    paddingVertical: 20,
   },
-  stepEmoji: { fontSize: 22 },
+  stepNumber: { fontSize: 22, fontFamily: 'Inter-SemiBold', width: 24 },
   stepText: { flex: 1 },
-  stepTitle: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  stepDesc: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
+  stepTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  stepDesc: { fontSize: 14, fontFamily: 'Inter-Regular', marginTop: 4, lineHeight: 19 },
+  stepIllustration: { width: 64, height: 64 },
   footer: { paddingHorizontal: 24, paddingBottom: 24 },
   button: { borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
   buttonText: { fontSize: 14, fontFamily: 'Inter-Medium' },

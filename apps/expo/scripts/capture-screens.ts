@@ -133,7 +133,8 @@ function buildScreenList(ids: Record<string, string>): ScreenDef[] {
     // Verification
     { route: '/verification/scan', name: 'Verification-Scan' },
     { route: '/verification/my-request', name: 'Verification-MyRequest' },
-    { route: '/verification/request-citizen', name: 'Verification-RequestCitizen' },
+    { route: '/verification/request-citizen', name: 'Verification-RequestCitizen-Intro' },
+    { route: '/verification/request-citizen/form', name: 'Verification-RequestCitizen-Form' },
 
     // Business
     { route: '/business/register', name: 'Business-Register' },

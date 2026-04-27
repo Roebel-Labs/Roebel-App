@@ -1,58 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useCreateDealWizard } from '@/context/CreateDealWizardContext';
-import { useUser } from '@/context/UserContext';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
-import ExitWizardSheet from '@/components/ExitWizardSheet';
 
 const STEPS = [
   {
-    title: 'Wähle die Art',
-    desc: 'Rabatt, Event oder Neues Produkt',
-    illustration: require('@/assets/illustration/small/sale-tag.png'),
+    title: 'Antrag stellen',
+    desc: 'Name und Adresse werden mit End-zu-Ende-Verschlüsselung gesichert.',
+    illustration: require('@/assets/illustration/small/encryption.png'),
   },
   {
-    title: 'Beschreibe dein Angebot',
-    desc: 'Titel, Details und Bild',
-    illustration: require('@/assets/illustration/small/fill-out.png'),
+    title: 'Digitale Unterschriften einholen',
+    desc: 'Holen Sie zwei Unterschriften von weiteren Bürgern ein.',
+    illustration: require('@/assets/illustration/small/signatures.png'),
   },
   {
-    title: 'Sofort oder später',
-    desc: 'Entwurf speichern oder direkt aktiv',
-    illustration: require('@/assets/illustration/small/mecky-thumbs-up.png'),
+    title: 'Verifiziert',
+    desc: 'Sie können nun an Bürgerumfragen anonym teilnehmen.',
+    illustration: require('@/assets/illustration/small/verification-badge.png'),
   },
 ];
 
-export default function CreateDealIntroScreen() {
+export default function VerifyCitizenIntroScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const [showExit, setShowExit] = useState(false);
-  const { dispatch } = useCreateDealWizard();
-  const { user } = useUser();
-
-  // Auto-resolve business on mount
-  useEffect(() => {
-    if (user?.wallet_address) {
-      fetchBusinessesByOwner(user.wallet_address).then(businesses => {
-        const primary = businesses.find(b => b.status === 'approved') || businesses[0];
-        if (primary) dispatch({ type: 'SET_BUSINESS_ID', payload: primary.id });
-      });
-    }
-  }, [user?.wallet_address]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.headerRow}>
-        <Pressable onPress={() => setShowExit(true)} style={styles.closeButton}>
-          <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>{'✕'}</Text>
+        <Pressable onPress={() => router.back()} style={styles.closeButton}>
+          <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
         </Pressable>
       </View>
       <View style={styles.content}>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          So einfach erstellst du{'\n'}ein Angebot
+          So einfach ist die{'\n'}Verifizierung
         </Text>
 
         <View style={styles.stepsContainer}>
@@ -77,26 +60,12 @@ export default function CreateDealIntroScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          onPress={() => router.push('/create-deal/type')}
+          onPress={() => router.push('/verification/request-citizen/form' as any)}
           style={[styles.button, { backgroundColor: colors.primary }]}
         >
-          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Loslegen</Text>
         </Pressable>
       </View>
-
-      <ExitWizardSheet
-        visible={showExit}
-        onDelete={() => {
-          dispatch({ type: 'RESET' });
-          setShowExit(false);
-          router.back();
-        }}
-        onSaveAndExit={() => {
-          setShowExit(false);
-          router.back();
-        }}
-        onCancel={() => setShowExit(false)}
-      />
     </SafeAreaView>
   );
 }

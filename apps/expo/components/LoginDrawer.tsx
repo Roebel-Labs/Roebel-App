@@ -52,7 +52,7 @@ export default function LoginDrawer({ visible, onClose }: Props) {
         <View style={styles.infoContainer}>
           <View style={styles.infoItem}>
             <Image
-              source={require('@/assets/illustration/data-privacy.png')}
+              source={require('@/assets/illustration/small/encryption.png')}
               style={styles.illustration}
               resizeMode="contain"
             />
@@ -66,29 +66,28 @@ export default function LoginDrawer({ visible, onClose }: Props) {
 
           <View style={styles.infoItem}>
             <Image
-              source={require('@/assets/illustration/pass.png')}
+              source={require('@/assets/illustration/small/coin-stack.png')}
               style={styles.illustration}
               resizeMode="contain"
             />
             <View style={styles.infoTextContainer}>
-              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Bürgerabstimmungen testen</Text>
-
+              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Tägliche Münzen erhalten</Text>
               <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Nehmen Sie an Bürgerabstimmungen teil
+                Kaufe Schlüssel und öffne Truhen
               </Text>
             </View>
           </View>
 
           <View style={styles.infoItem}>
             <Image
-              source={require('@/assets/illustration/send.png')}
+              source={require('@/assets/illustration/small/mecky-thumbs-up.png')}
               style={styles.illustration}
               resizeMode="contain"
             />
             <View style={styles.infoTextContainer}>
-              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Veranstaltungen einsenden</Text>
+              <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Kommuniziere mit Mecky</Text>
               <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-                Senden Sie Ihre Veranstaltung ein
+                Mecky hilft dir bei allen Fragen zu Röbel
               </Text>
             </View>
           </View>

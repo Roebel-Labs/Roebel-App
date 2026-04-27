@@ -28,6 +28,9 @@ type Props = {
   geojson: MapGeoJSON;
   onMarkerPress: (id: string, entityType: MapEntityType) => void;
   flyToCoordinate?: [number, number] | null; // [lng, lat]
+  // Optional live vehicle layer (simulated bus/ferry positions)
+  vehiclesGeoJSON?: GeoJSON.FeatureCollection<GeoJSON.Point> | null;
+  onVehiclePress?: (departureId: string) => void;
 };
 
 // Build a Mapbox match expression for event category → color
@@ -38,7 +41,13 @@ const categoryColorExpression: any = [
   DEFAULT_MARKER_COLOR,
 ];
 
-export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate }: Props) {
+export default function MapboxMapView({
+  geojson,
+  onMarkerPress,
+  flyToCoordinate,
+  vehiclesGeoJSON,
+  onVehiclePress,
+}: Props) {
   const { isDark } = useTheme();
   const cameraRef = useRef<any>(null);
 
@@ -89,6 +98,15 @@ export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate 
       }
     },
     [onMarkerPress]
+  );
+
+  const handleVehiclePress = useCallback(
+    (e: any) => {
+      const feature = e.features?.[0];
+      const id = feature?.properties?.id;
+      if (id && onVehiclePress) onVehiclePress(id);
+    },
+    [onVehiclePress]
   );
 
   const clusterCircleStyle = useMemo(
@@ -222,6 +240,49 @@ export default function MapboxMapView({ geojson, onMarkerPress, flyToCoordinate 
             }}
           />
         </Mapbox.ShapeSource>
+
+        {/* Live vehicles — simulated bus / ferry positions */}
+        {vehiclesGeoJSON && vehiclesGeoJSON.features.length > 0 ? (
+          <Mapbox.ShapeSource
+            id="live-vehicles-source"
+            shape={vehiclesGeoJSON}
+            onPress={handleVehiclePress}
+          >
+            <Mapbox.CircleLayer
+              id="live-vehicles-bg"
+              style={{
+                circleRadius: 18,
+                circleColor: ['get', 'color'] as any,
+                circleStrokeWidth: 3,
+                circleStrokeColor: '#ffffff',
+                circleSortKey: 10,
+              }}
+            />
+            <Mapbox.SymbolLayer
+              id="live-vehicles-emoji"
+              style={{
+                textField: ['get', 'emoji'] as any,
+                textSize: 18,
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
+              }}
+            />
+            <Mapbox.SymbolLayer
+              id="live-vehicles-label"
+              style={{
+                textField: ['get', 'line_code'] as any,
+                textOffset: [0, 1.4] as any,
+                textSize: 11,
+                textColor: '#ffffff',
+                textHaloColor: '#000000',
+                textHaloWidth: 1.2,
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
+                textFont: ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+              }}
+            />
+          </Mapbox.ShapeSource>
+        ) : null}
 
         {/* Heading puck — animated blue arrow showing direction the user is facing */}
         <Mapbox.UserLocation
