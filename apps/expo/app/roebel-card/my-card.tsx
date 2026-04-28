@@ -1,37 +1,43 @@
 // Röbel Card — buyer "Meine Karte" screen.
 //
-// Uber Cash-inspired layout:
-//   - Hero balance
-//   - Action buttons row (Aufladen, Einlösen)
-//   - Transaction history (Apple Wallet-style rows)
-//   - Partner list at the bottom
-//
-// QR code is shown in a modal triggered by "Einlösen" — not always
-// visible on the main screen. Polls for pending charges every 2 s;
-// when a partner submits a charge the PendingChargeModal appears.
+// Two-state animated layout:
+//   - State A (default): navy card teaser peeks behind a white sheet that
+//     holds balance, action pills (Aufstocken / Einlösen) and the
+//     transaction history.
+//   - State B (expanded): tapping the card teaser slides the sheet down
+//     off-screen to reveal the full navy card and the partner-business
+//     grid. Tapping the back arrow slides the sheet back up.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
   ActivityIndicator,
-  RefreshControl,
+  BackHandler,
   Modal,
+  Pressable,
+  SafeAreaView as RNSafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import {
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import { useFocusEffect, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { Image } from 'expo-image';
+
 import { useTheme } from '@/context/ThemeContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
 import {
   fetchPendingChargesForCard,
   fetchSignedCardQr,
   type PendingChargeWithPartner,
-  type ChargeStatus,
 } from '@/lib/supabase-roebel-card-charges';
 import {
   fetchApprovedPartners,
@@ -40,31 +46,32 @@ import {
 import { supabase } from '@/lib/supabase';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import PlusSignIcon from '@/assets/icons/plus-sign.svg';
-import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import PendingChargeModal from '@/components/PendingChargeModal';
 import TopUpBottomSheet from '@/components/TopUpBottomSheet';
 import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 
+import RoebelCardHero, {
+  HERO_HEIGHT,
+} from './_components/RoebelCardHero';
+import RoebelCardSheet, {
+  type SheetHistoryRow,
+} from './_components/RoebelCardSheet';
+import PartnersGrid from './_components/PartnersGrid';
+
 const POLL_INTERVAL_MS = 2000;
 const QR_REFRESH_INTERVAL_MS = 30_000;
-
-interface ChargeHistoryRow {
-  id: string;
-  kind: 'charge' | 'topup';
-  amount_cents: number;
-  status: string;
-  created_at: string;
-  approved_at: string | null;
-  partner_name: string | null;
-}
+const CARD_PEEK_HEIGHT = 72;
+const TOP_BAR_HEIGHT = 48;
+const TOP_BAR_GAP = 12;
+const SHEET_SPRING = { damping: 22, stiffness: 200, mass: 1 };
 
 export type BuyerMode = 'citizen' | 'tourist' | 'sachbezug';
 
 export default function MyRoebelCardScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { card, refresh } = useRoebelCard();
   const activeAccount = useActiveAccount();
@@ -79,7 +86,7 @@ export default function MyRoebelCardScreen() {
         : 'tourist';
 
   const [pending, setPending] = useState<PendingChargeWithPartner | null>(null);
-  const [history, setHistory] = useState<ChargeHistoryRow[]>([]);
+  const [history, setHistory] = useState<SheetHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [partners, setPartners] = useState<ApprovedPartnerDisplay[]>([]);
@@ -87,20 +94,37 @@ export default function MyRoebelCardScreen() {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrPayload, setQrPayload] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const sheetTranslateY = useSharedValue(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const TOP_BAR_BOTTOM = insets.top + TOP_BAR_HEIGHT + TOP_BAR_GAP;
+  const HERO_TOP = TOP_BAR_BOTTOM + 4;
+  const SHEET_REST_TOP = HERO_TOP + CARD_PEEK_HEIGHT;
+
+  const expand = useCallback(() => {
+    if (sheetHeight === 0) return;
+    setIsExpanded(true);
+    sheetTranslateY.value = withSpring(sheetHeight, SHEET_SPRING);
+  }, [sheetHeight, sheetTranslateY]);
+
+  const collapse = useCallback(() => {
+    sheetTranslateY.value = withSpring(0, SHEET_SPRING, (finished) => {
+      if (finished) runOnJS(setIsExpanded)(false);
+    });
+  }, [sheetTranslateY]);
 
   const loadHistory = useCallback(async () => {
     if (!card) return;
     setHistoryLoading(true);
     try {
-      // Fetch charges (partner payments) + purchases (Stripe top-ups) in
-      // parallel, then merge and sort chronologically.
       const [chargesResult, purchasesResult] = await Promise.all([
         supabase
           .from('roebel_card_charges' as any)
           .select(
-            'id, amount_cents, status, created_at, approved_at, roebel_card_partners!inner(accounts!inner(name))',
+            'id, amount_cents, status, created_at, approved_at, roebel_card_partners!inner(accounts!inner(name, avatar_url))',
           )
           .eq('card_id', card.card_id)
           .in('status', ['approved', 'declined', 'expired'])
@@ -122,7 +146,7 @@ export default function MyRoebelCardScreen() {
         console.error('loadHistory purchases error:', purchasesResult.error);
       }
 
-      const charges: ChargeHistoryRow[] = (
+      const charges: SheetHistoryRow[] = (
         (chargesResult.data as any[]) ?? []
       ).map((row) => ({
         id: row.id,
@@ -132,9 +156,11 @@ export default function MyRoebelCardScreen() {
         created_at: row.created_at,
         approved_at: row.approved_at,
         partner_name: row.roebel_card_partners?.accounts?.name ?? null,
+        partner_avatar_url:
+          row.roebel_card_partners?.accounts?.avatar_url ?? null,
       }));
 
-      const purchases: ChargeHistoryRow[] = (
+      const purchases: SheetHistoryRow[] = (
         (purchasesResult.data as any[]) ?? []
       ).map((row) => ({
         id: `purchase-${row.id}`,
@@ -144,6 +170,7 @@ export default function MyRoebelCardScreen() {
         created_at: row.created_at,
         approved_at: row.paid_at ?? null,
         partner_name: null,
+        partner_avatar_url: null,
       }));
 
       const merged = [...charges, ...purchases]
@@ -186,12 +213,6 @@ export default function MyRoebelCardScreen() {
     }
   }, [card, walletAddress]);
 
-  const startPolling = useCallback(() => {
-    stopPolling();
-    void pollPending();
-    pollingRef.current = setInterval(() => void pollPending(), POLL_INTERVAL_MS);
-  }, [pollPending]);
-
   const stopPolling = () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -199,11 +220,11 @@ export default function MyRoebelCardScreen() {
     }
   };
 
-  const startQrRefresh = useCallback(() => {
-    stopQrRefresh();
-    void refreshQr();
-    qrRefreshRef.current = setInterval(() => void refreshQr(), QR_REFRESH_INTERVAL_MS);
-  }, [refreshQr]);
+  const startPolling = useCallback(() => {
+    stopPolling();
+    void pollPending();
+    pollingRef.current = setInterval(() => void pollPending(), POLL_INTERVAL_MS);
+  }, [pollPending]);
 
   const stopQrRefresh = () => {
     if (qrRefreshRef.current) {
@@ -211,6 +232,15 @@ export default function MyRoebelCardScreen() {
       qrRefreshRef.current = null;
     }
   };
+
+  const startQrRefresh = useCallback(() => {
+    stopQrRefresh();
+    void refreshQr();
+    qrRefreshRef.current = setInterval(
+      () => void refreshQr(),
+      QR_REFRESH_INTERVAL_MS,
+    );
+  }, [refreshQr]);
 
   useFocusEffect(
     useCallback(() => {
@@ -231,6 +261,19 @@ export default function MyRoebelCardScreen() {
       setQrPayload(null);
     }
   }, [card]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (isExpanded) {
+          collapse();
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [isExpanded, collapse]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -265,136 +308,138 @@ export default function MyRoebelCardScreen() {
     router.push('/roebel-card/topup-success' as any);
   };
 
+  const handleBack = () => {
+    if (isExpanded) {
+      collapse();
+    } else {
+      router.back();
+    }
+  };
+
+  const handleHeroPress = () => {
+    if (!isExpanded) expand();
+  };
+
+  if (!card) {
+    return (
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.feedBackground }]}
+        edges={['top', 'bottom']}
+      >
+        <View style={styles.centerFill}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}
-    >
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+    <View style={[styles.root, { backgroundColor: colors.feedBackground }]}>
+      <ScrollView
+        style={styles.bgScroll}
+        contentContainerStyle={[
+          styles.bgScrollContent,
+          { paddingTop: HERO_TOP + HERO_HEIGHT + 16 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={isExpanded}
+      >
+        <PartnersGrid partners={partners} />
+      </ScrollView>
+
+      <View
+        style={[
+          styles.heroLayer,
+          { top: HERO_TOP, left: 16, right: 16 },
+        ]}
+        pointerEvents="box-none"
+      >
+        <RoebelCardHero
+          height={HERO_HEIGHT}
+          onPress={handleHeroPress}
+          pressable={!isExpanded}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.sheetLayer,
+          { top: SHEET_REST_TOP },
+        ]}
+        pointerEvents="box-none"
+      >
+        <RoebelCardSheet
+          balanceCents={card.balance_cents}
+          history={history}
+          historyLoading={historyLoading}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onTopUp={handleTopUpPress}
+          onRedeem={handleOpenQr}
+          translateY={sheetTranslateY}
+          onMeasure={(h) => {
+            if (h > 0 && Math.abs(h - sheetHeight) > 1) setSheetHeight(h);
+          }}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.topBar,
+          { top: insets.top + 8, paddingHorizontal: 16 },
+        ]}
+        pointerEvents="box-none"
+      >
         <Pressable
-          onPress={() => router.back()}
-          style={styles.headerButton}
+          onPress={handleBack}
+          style={[
+            styles.roundButton,
+            { backgroundColor: colors.background, shadowColor: '#000' },
+          ]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Zurück"
         >
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+          <ChevronLeftIcon
+            width={24}
+            height={24}
+            color={colors.textPrimary}
+          />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-          Meine Karte
-        </Text>
-        <View style={styles.headerButton} />
+
+        {!isExpanded && (
+          <View
+            style={[
+              styles.roundButton,
+              { backgroundColor: colors.background, shadowColor: '#000' },
+            ]}
+          >
+            <Text style={[styles.infoGlyph, { color: colors.textPrimary }]}>
+              i
+            </Text>
+          </View>
+        )}
       </View>
 
-      {!card ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-        >
-          {/* Balance hero */}
-          <View style={styles.balanceBlock}>
-            <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
-              Guthaben
-            </Text>
-            <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>
-              {formatEuros(card.balance_cents)}
-            </Text>
-          </View>
-
-          {/* Action buttons (Uber Cash style) */}
-          <View style={styles.actionsRow}>
-            <ActionButton
-              label="Aufladen"
-              icon={<PlusSignIcon width={24} height={24} color={colors.textPrimary} />}
-              onPress={handleTopUpPress}
-              colors={colors}
-            />
-            <ActionButton
-              label="Einlösen"
-              icon={<QrCodeIcon width={24} height={24} color={colors.textPrimary} />}
-              onPress={handleOpenQr}
-              colors={colors}
-            />
-          </View>
-
-          {/* Transaction history (Apple Wallet style) */}
-          <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>
-            Letzte Zahlungen
-          </Text>
-
-          {historyLoading && history.length === 0 ? (
-            <ActivityIndicator color={colors.primary} style={styles.historyLoader} />
-          ) : history.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-                Noch keine Zahlungen
-              </Text>
-            </View>
-          ) : (
-            <View style={[styles.historyCard, { backgroundColor: colors.surface }]}>
-              {history.map((row, i) => (
-                <View key={row.id}>
-                  {i > 0 && (
-                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                  )}
-                  <HistoryRow row={row} colors={colors} />
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Partner list */}
-          {partners.length > 0 && (
-            <>
-              <Text
-                style={[styles.sectionHeading, { color: colors.textSecondary, marginTop: 32 }]}
-              >
-                Teilnehmende Partner
-              </Text>
-              <View style={[styles.partnerCard, { backgroundColor: colors.surface }]}>
-                {partners.map((p, i) => (
-                  <View key={p.id}>
-                    {i > 0 && (
-                      <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                    )}
-                    <PartnerRow partner={p} colors={colors} />
-                  </View>
-                ))}
-              </View>
-            </>
-          )}
-        </ScrollView>
-      )}
-
-      {/* QR Modal */}
       <Modal
         visible={qrModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={handleCloseQr}
       >
-        <SafeAreaView
+        <RNSafeAreaView
           style={[styles.safeArea, { backgroundColor: colors.background }]}
         >
-          <View style={[styles.qrModalHeader, { borderBottomColor: colors.border }]}>
-            <View style={styles.headerButton} />
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          <View
+            style={[styles.qrModalHeader, { borderBottomColor: colors.border }]}
+          >
+            <View style={styles.qrHeaderSpacer} />
+            <Text style={[styles.qrHeaderTitle, { color: colors.textPrimary }]}>
               Einlösen
             </Text>
             <Pressable
               onPress={handleCloseQr}
-              style={styles.headerButton}
+              style={styles.qrHeaderSpacer}
               hitSlop={8}
             >
               <Text style={[styles.qrCloseText, { color: colors.primary }]}>
@@ -404,11 +449,9 @@ export default function MyRoebelCardScreen() {
           </View>
 
           <View style={styles.qrContent}>
-            {card && (
-              <Text style={[styles.qrBalance, { color: colors.textSecondary }]}>
-                Guthaben: {formatEuros(card.balance_cents)}
-              </Text>
-            )}
+            <Text style={[styles.qrBalance, { color: colors.textSecondary }]}>
+              Guthaben: {formatEuros(card.balance_cents)}
+            </Text>
 
             <View style={[styles.qrBox, { backgroundColor: '#ffffff' }]}>
               {qrPayload ? (
@@ -434,13 +477,15 @@ export default function MyRoebelCardScreen() {
               Der Betrag wird dir zur Bestätigung angezeigt.
             </Text>
           </View>
-        </SafeAreaView>
+        </RNSafeAreaView>
       </Modal>
 
-      {/* Pending charge modal */}
-      <PendingChargeModal charge={pending} walletAddress={walletAddress} onResolved={handlePendingResolved} />
+      <PendingChargeModal
+        charge={pending}
+        walletAddress={walletAddress}
+        onResolved={handlePendingResolved}
+      />
 
-      {/* Top-up bottom sheet */}
       <TopUpBottomSheet
         visible={topUpVisible}
         walletAddress={activeAccount?.address ?? null}
@@ -448,296 +493,56 @@ export default function MyRoebelCardScreen() {
         onClose={() => setTopUpVisible(false)}
         onStripeDismissed={handleStripeDismissed}
       />
-    </SafeAreaView>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function ActionButton({
-  label,
-  icon,
-  onPress,
-  colors,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  onPress: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.actionButton, { backgroundColor: colors.surface }]}
-    >
-      {icon}
-      <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function HistoryRow({
-  row,
-  colors,
-}: {
-  row: ChargeHistoryRow;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
-  const isTopup = row.kind === 'topup';
-  const isApproved = row.status === 'approved' || row.status === 'paid';
-
-  const sign = isTopup ? '+' : isApproved ? '-' : '';
-  const amountColor = isTopup
-    ? (colors.success ?? '#16a34a')
-    : isApproved
-      ? colors.textPrimary
-      : colors.textTertiary;
-
-  const iconBg = isTopup
-    ? (colors.successBackground ?? '#E8F5E9')
-    : isApproved
-      ? colors.primaryLight
-      : colors.surface;
-  const iconText = isTopup
-    ? '↓'
-    : isApproved
-      ? '🛍️'
-      : row.status === 'declined'
-        ? '✕'
-        : '⏳';
-
-  const displayName = isTopup
-    ? 'Aufladen'
-    : row.partner_name ?? 'Unbekannter Partner';
-
-  return (
-    <View style={styles.historyRow}>
-      <View style={[styles.historyIcon, { backgroundColor: iconBg }]}>
-        <Text style={styles.historyIconText}>{iconText}</Text>
-      </View>
-
-      <View style={styles.historyRowCenter}>
-        <Text
-          style={[styles.historyName, { color: colors.textPrimary }]}
-          numberOfLines={1}
-        >
-          {displayName}
-        </Text>
-        <Text style={[styles.historyMeta, { color: colors.textTertiary }]}>
-          {formatGermanDate(row.created_at)}
-        </Text>
-      </View>
-
-      <Text style={[styles.historyAmount, { color: amountColor }]}>
-        {`${sign}${formatEuros(row.amount_cents)}`}
-      </Text>
     </View>
   );
 }
-
-function PartnerRow({
-  partner,
-  colors,
-}: {
-  partner: ApprovedPartnerDisplay;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
-  return (
-    <View style={styles.partnerRow}>
-      {partner.avatar_url ? (
-        <Image
-          source={{ uri: partner.avatar_url }}
-          style={styles.partnerAvatar}
-          contentFit="cover"
-        />
-      ) : (
-        <View
-          style={[styles.partnerAvatar, { backgroundColor: colors.primaryLight }]}
-        >
-          <Text style={styles.partnerAvatarFallback}>
-            {partner.account_name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-      )}
-      <Text
-        style={[styles.partnerName, { color: colors.textPrimary }]}
-        numberOfLines={1}
-      >
-        {partner.account_name}
-      </Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function statusLabel(status: ChargeStatus): string {
-  switch (status) {
-    case 'approved': return 'Bestätigt';
-    case 'declined': return 'Abgelehnt';
-    case 'expired': return 'Abgelaufen';
-    case 'reversed': return 'Storniert';
-    case 'pending': return 'Offen';
-  }
-}
-
-function formatGermanDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   safeArea: { flex: 1 },
-  header: {
-    height: 56,
+  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  bgScroll: { flex: 1 },
+  bgScrollContent: { flexGrow: 1 },
+
+  heroLayer: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  sheetLayer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
+  },
+
+  topBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 48,
+    zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
   },
-  headerButton: {
-    width: 56,
-    height: 40,
+  roundButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
-  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 48,
-  },
-
-  // Balance hero
-  balanceBlock: { alignItems: 'center', marginBottom: 24, marginTop: 8 },
-  balanceLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  balanceValue: {
-    fontSize: 44,
-    fontFamily: 'Inter-Bold',
-    marginTop: 4,
-  },
-
-  // Action buttons
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-
-  // Section heading
-  sectionHeading: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-
-  // History
-  historyLoader: { marginTop: 16 },
-  emptyCard: {
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: { fontSize: 13, fontFamily: 'Inter-Regular' },
-  historyCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 56,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  historyIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyIconText: {
-    fontSize: 16,
-  },
-  historyRowCenter: { flex: 1, gap: 2 },
-  historyName: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
-  historyMeta: { fontSize: 12, fontFamily: 'Inter-Regular' },
-  historyAmount: {
-    fontSize: 15,
+  infoGlyph: {
+    fontSize: 18,
     fontFamily: 'Inter-SemiBold',
   },
 
-  // Partners
-  partnerCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  partnerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  partnerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  partnerAvatarFallback: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#194383',
-  },
-  partnerName: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    flex: 1,
-  },
-
-  // QR modal
   qrModalHeader: {
     height: 56,
     flexDirection: 'row',
@@ -745,6 +550,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 8,
     borderBottomWidth: 1,
+  },
+  qrHeaderTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  qrHeaderSpacer: {
+    width: 56,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   qrCloseText: {
     fontSize: 16,
