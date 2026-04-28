@@ -131,13 +131,12 @@ export default function MapboxMapView({
     []
   );
 
-  // White-pill marker style — flat, monochrome, Yandex-Eats-clean.
+  // White-pill marker style — flat, monochrome, Yandex-Eats-clean. No border.
   const markerCircleStyle = useMemo(
     () => ({
       circleRadius: 16,
       circleColor: '#ffffff',
-      circleStrokeWidth: 1.5,
-      circleStrokeColor: '#000000',
+      circleStrokeWidth: 0,
       circleSortKey: 1,
     }),
     []

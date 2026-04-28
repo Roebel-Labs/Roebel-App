@@ -8,9 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import DiscoverStroke from '@/assets/icons/bottom-nav/discover.svg';
 
 import { ArrowLeftIcon, CallIcon, LocationIcon, SearchIcon } from '@/components/Icons';
 import SearchModal from '@/components/SearchModal';
@@ -80,12 +81,14 @@ if (isMapboxAvailable && Mapbox) {
   Mapbox.setAccessToken(mapboxToken);
 }
 
-const SHEET_LIFT_PX = 240;
+const SHEET_LIFT_PX = 140;
 
 export default function LocationScreen() {
   const router = useRouter();
   const { selectedEventId } = useLocalSearchParams<{ selectedEventId?: string }>();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomBase = Math.max(insets.bottom, 12) + 16;
 
   const [events, setEvents] = useState<EventWithCoordinates[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
@@ -449,7 +452,7 @@ export default function LocationScreen() {
             <Animated.View
               style={[
                 styles.bottomRow,
-                { transform: [{ translateY: bottomTranslate }] },
+                { bottom: bottomBase, transform: [{ translateY: bottomTranslate }] },
               ]}
               pointerEvents="box-none"
             >
@@ -466,7 +469,7 @@ export default function LocationScreen() {
                 style={[styles.erkundenPill, { backgroundColor: '#ffffff' }]}
                 accessibilityLabel="Erkunden öffnen"
               >
-                <LocationIcon size={16} color="#000000" />
+                <DiscoverStroke width={18} height={18} color="#000000" />
                 <Text style={styles.erkundenText}>Erkunden</Text>
               </Pressable>
 
@@ -490,6 +493,7 @@ export default function LocationScreen() {
           initialId={carousel.selectedId}
           onClose={() => setCarousel(null)}
           onSelectionChange={handleCarouselSelectionChange}
+          bottom={bottomBase}
         />
       ) : null}
 
@@ -539,7 +543,7 @@ const styles = StyleSheet.create({
   headerCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -581,7 +585,6 @@ const styles = StyleSheet.create({
   },
   bottomRow: {
     position: 'absolute',
-    bottom: 24,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -593,7 +596,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

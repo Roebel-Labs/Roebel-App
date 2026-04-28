@@ -35,6 +35,7 @@ type Props = {
   initialId: string;
   onClose: () => void;
   onSelectionChange: (item: CarouselItem) => void;
+  bottom?: number;
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -47,6 +48,7 @@ export default function MapPreviewCarousel({
   initialId,
   onClose,
   onSelectionChange,
+  bottom = 24,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -96,7 +98,7 @@ export default function MapPreviewCarousel({
 
   return (
     <Animated.View
-      style={[styles.wrapper, { transform: [{ translateY: slideAnim }] }]}
+      style={[styles.wrapper, { bottom, transform: [{ translateY: slideAnim }] }]}
       pointerEvents="box-none"
     >
       <Animated.FlatList
@@ -423,7 +425,6 @@ function navigate(item: CarouselItem, router: ReturnType<typeof useRouter>) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    bottom: 24,
     left: 0,
     right: 0,
     zIndex: 1000,
