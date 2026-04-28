@@ -8,13 +8,9 @@ import {
   MAX_ZOOM,
   CLUSTER_RADIUS,
   CLUSTER_MAX_ZOOM,
-  CATEGORY_COLORS,
-  DEFAULT_MARKER_COLOR,
-  ENTITY_TYPE_COLORS,
 } from '@/lib/map/constants';
 import type { MapGeoJSON } from '@/lib/map/geojson';
 import type { MapEntityType } from '@/lib/types';
-import { POI_TYPE_COLORS } from '@/lib/supabase-pois';
 
 // Try to load Mapbox — fails gracefully in Expo Go
 let Mapbox: any = null;
@@ -32,14 +28,6 @@ type Props = {
   vehiclesGeoJSON?: GeoJSON.FeatureCollection<GeoJSON.Point> | null;
   onVehiclePress?: (departureId: string) => void;
 };
-
-// Build a Mapbox match expression for event category → color
-const categoryColorExpression: any = [
-  'match',
-  ['get', 'category'],
-  ...Object.entries(CATEGORY_COLORS).flatMap(([cat, color]) => [cat, color]),
-  DEFAULT_MARKER_COLOR,
-];
 
 export default function MapboxMapView({
   geojson,
@@ -143,31 +131,13 @@ export default function MapboxMapView({
     []
   );
 
-  // POI type → color match expression
-  const poiColorExpression: any = [
-    'match',
-    ['get', 'poi_type'],
-    ...Object.entries(POI_TYPE_COLORS).flatMap(([type, color]) => [type, color]),
-    DEFAULT_MARKER_COLOR,
-  ];
-
-  // Entity-type-aware marker colors:
-  // poi → POI-type color, restaurant → orange, business → green, event → category-based
+  // White-pill marker style — flat, monochrome, Yandex-Eats-clean.
   const markerCircleStyle = useMemo(
     () => ({
-      circleRadius: 12,
-      circleColor: [
-        'case',
-        ['==', ['get', 'entityType'], 'poi'],
-        poiColorExpression,
-        ['==', ['get', 'entityType'], 'restaurant'],
-        ENTITY_TYPE_COLORS.restaurant,
-        ['==', ['get', 'entityType'], 'business'],
-        ENTITY_TYPE_COLORS.business,
-        categoryColorExpression,
-      ] as any,
-      circleStrokeWidth: 3,
-      circleStrokeColor: '#ffffff',
+      circleRadius: 16,
+      circleColor: '#ffffff',
+      circleStrokeWidth: 1.5,
+      circleStrokeColor: '#000000',
       circleSortKey: 1,
     }),
     []
@@ -227,16 +197,16 @@ export default function MapboxMapView({
             style={markerCircleStyle}
           />
 
-          {/* Emoji label on top of each marker — gives the dot a visual identity */}
+          {/* Black Maki icon on top of the white circle — single-color, Yandex-Eats-clean */}
           <Mapbox.SymbolLayer
-            id="entity-emojis"
+            id="entity-icons"
             filter={['!', ['has', 'point_count']]}
             style={{
-              textField: ['get', 'emoji'] as any,
-              textSize: 14,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-              textHaloWidth: 0,
+              iconImage: ['concat', ['get', 'maki'], '-15'] as any,
+              iconSize: 1,
+              iconColor: '#000000',
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
             }}
           />
         </Mapbox.ShapeSource>

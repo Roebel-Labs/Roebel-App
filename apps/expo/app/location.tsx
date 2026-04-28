@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-import { SearchIcon } from '@/components/Icons';
+import { ArrowLeftIcon, CallIcon, LocationIcon, SearchIcon } from '@/components/Icons';
 import SearchModal from '@/components/SearchModal';
 import MapLoadingSkeleton from '@/components/MapLoadingSkeleton';
-import BottomNavigation from '@/components/BottomNavigation';
 import MapboxMapView from '@/components/map/MapboxMapView';
-import MapPreviewCard, { type MapPreviewData } from '@/components/map/MapPreviewCard';
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
-import MyLocationButton from '@/components/map/MyLocationButton';
 import MapFilterChips, { type MapFilter } from '@/components/map/MapFilterChips';
+import MapPreviewCarousel, {
+  type CarouselItem,
+} from '@/components/map/MapPreviewCarousel';
 import VerlorenSheet from '@/components/utilities/VerlorenSheet';
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,7 +32,12 @@ import {
   entitiesToGeoJSON,
   type EventWithCoordinates,
 } from '@/lib/map/geojson';
-import type { EventRecord, RestaurantRecord, BusinessRecord, MapEntityType } from '@/lib/types';
+import type {
+  EventRecord,
+  RestaurantRecord,
+  BusinessRecord,
+  MapEntityType,
+} from '@/lib/types';
 import {
   fetchPois,
   fetchTodayAdvisories,
@@ -33,6 +46,7 @@ import {
   ADVISORY_LEVEL_COLORS,
   ADVISORY_LEVEL_LABELS_DE,
 } from '@/lib/supabase-pois';
+import * as Location from 'expo-location';
 import {
   fetchTransitLines,
   fetchTransitStops,
@@ -41,7 +55,11 @@ import {
   type TransitStop,
   type TransitDeparture,
 } from '@/lib/supabase-transit';
-import { computeLiveVehicles, vehiclesToGeoJSON, type LiveVehicle } from '@/lib/live-vehicles';
+import {
+  computeLiveVehicles,
+  vehiclesToGeoJSON,
+  type LiveVehicle,
+} from '@/lib/live-vehicles';
 
 // Try to load Mapbox — fails gracefully in Expo Go
 let Mapbox: any = null;
@@ -53,7 +71,6 @@ try {
   // Native module not available (Expo Go)
 }
 
-// Initialize Mapbox with access token (only if available)
 const mapboxToken =
   Constants.expoConfig?.extra?.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ||
   process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ||
@@ -62,6 +79,8 @@ const mapboxToken =
 if (isMapboxAvailable && Mapbox) {
   Mapbox.setAccessToken(mapboxToken);
 }
+
+const SHEET_LIFT_PX = 240;
 
 export default function LocationScreen() {
   const router = useRouter();
@@ -74,11 +93,13 @@ export default function LocationScreen() {
   const [pois, setPois] = useState<PoiRecord[]>([]);
   const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEntity, setSelectedEntity] = useState<MapPreviewData | null>(null);
+  const [carousel, setCarousel] = useState<{
+    items: CarouselItem[];
+    selectedId: string;
+  } | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showVerloren, setShowVerloren] = useState(false);
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [showLiveBuses, setShowLiveBuses] = useState(true);
   const [transitLines, setTransitLines] = useState<TransitLine[]>([]);
   const [transitStops, setTransitStops] = useState<TransitStop[]>([]);
@@ -86,8 +107,21 @@ export default function LocationScreen() {
   const [vehicles, setVehicles] = useState<LiveVehicle[]>([]);
   const [tickNow, setTickNow] = useState<Date>(new Date());
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
-  const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(null);
+  const [flyToCoordinate, setFlyToCoordinate] = useState<[number, number] | null>(
+    ROEBEL_CENTER
+  );
+
+  // Slide bottom row up when the carousel is visible
+  const bottomTranslate = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(bottomTranslate, {
+      toValue: carousel ? -SHEET_LIFT_PX : 0,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [carousel, bottomTranslate]);
+
   const [mapFilter, setMapFilter] = useState<MapFilter>({
     events: true,
     restaurants: true,
@@ -95,7 +129,6 @@ export default function LocationScreen() {
     pois: false,
   });
 
-  // Build unified GeoJSON from all entities, respecting active filters
   const geojson = useMemo(
     () =>
       entitiesToGeoJSON(
@@ -107,30 +140,35 @@ export default function LocationScreen() {
     [events, restaurants, businesses, pois, mapFilter]
   );
 
-  // Check privacy consent on mount
+  // Privacy consent
   useEffect(() => {
     AsyncStorage.getItem(MAP_PRIVACY_STORAGE_KEY).then((value) => {
       if (value === 'true') setPrivacyAccepted(true);
     });
   }, []);
 
-  // Fetch all map data from Supabase
+  // Always centre Röbel as the initial camera position — independent of GPS
+  useEffect(() => {
+    setFlyToCoordinate(ROEBEL_CENTER);
+  }, []);
+
   useEffect(() => {
     fetchMapData();
   }, []);
 
-  // Load transit data (lines/stops/departures) once for live-bus simulation
+  // Pre-load transit + tick interval for live-bus simulation
   useEffect(() => {
-    void Promise.all([fetchTransitLines(), fetchTransitStops(), fetchTransitDepartures()]).then(
-      ([l, s, d]) => {
-        setTransitLines(l);
-        setTransitStops(s);
-        setTransitDepartures(d);
-      }
-    );
+    void Promise.all([
+      fetchTransitLines(),
+      fetchTransitStops(),
+      fetchTransitDepartures(),
+    ]).then(([l, s, d]) => {
+      setTransitLines(l);
+      setTransitStops(s);
+      setTransitDepartures(d);
+    });
   }, []);
 
-  // Tick every 15 s — recomputes live vehicle positions
   useEffect(() => {
     tickRef.current = setInterval(() => setTickNow(new Date()), 15000);
     return () => {
@@ -138,7 +176,6 @@ export default function LocationScreen() {
     };
   }, []);
 
-  // Recompute vehicles whenever schedule data or tickNow changes
   useEffect(() => {
     if (!showLiveBuses || transitLines.length === 0) {
       setVehicles([]);
@@ -156,15 +193,16 @@ export default function LocationScreen() {
 
   const vehiclesGeoJSON = useMemo(() => vehiclesToGeoJSON(vehicles), [vehicles]);
 
-  // Fly to selected event when deep-linked
+  // Deep-link
   useEffect(() => {
     if (selectedEventId && events.length > 0) {
       const event = events.find((e) => e.id === selectedEventId);
       if (event) {
-        setSelectedEntity({ entityType: 'event', event });
+        openCarouselFor('event', event.id);
         setFlyToCoordinate([event.longitude, event.latitude]);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId, events]);
 
   const fetchMapData = async () => {
@@ -194,15 +232,6 @@ export default function LocationScreen() {
       }
       setPois(poisResult);
       setAdvisories(advisoriesResult);
-
-      if (eventsResult.error) console.error('Error fetching events:', eventsResult.error);
-      if (restaurantsResult.error) console.error('Error fetching restaurants:', restaurantsResult.error);
-      if (businessesResult.error) console.error('Error fetching businesses:', businessesResult.error);
-
-      // Auto-center on Röbel/Müritz unless deep-linked to a specific event
-      if (!selectedEventId) {
-        setFlyToCoordinate(ROEBEL_CENTER);
-      }
     } catch (error) {
       console.error('Failed to fetch map data:', error);
     } finally {
@@ -214,71 +243,103 @@ export default function LocationScreen() {
     try {
       await AsyncStorage.setItem(MAP_PRIVACY_STORAGE_KEY, 'true');
       setPrivacyAccepted(true);
-    } catch (error) {
+    } catch {
       Alert.alert(
         'Fehler',
-        'Die Datenschutzbestimmungen konnten nicht gespeichert werden. Bitte versuchen Sie es erneut.'
+        'Die Datenschutzbestimmungen konnten nicht gespeichert werden.'
       );
     }
   };
 
-  const handleMarkerPress = (id: string, entityType: MapEntityType) => {
+  // Build a CarouselItem list of all entities of the given type
+  const buildCarouselItems = (entityType: MapEntityType): CarouselItem[] => {
     if (entityType === 'event') {
-      const event = events.find((e) => e.id === id);
-      if (event) {
-        setSelectedEntity({ entityType: 'event', event });
-        setFlyToCoordinate([event.longitude, event.latitude]);
-      }
-    } else if (entityType === 'restaurant') {
-      const restaurant = restaurants.find((r) => r.id === id);
-      if (restaurant) {
-        setSelectedEntity({ entityType: 'restaurant', restaurant });
-        if (restaurant.latitude && restaurant.longitude) {
-          setFlyToCoordinate([restaurant.longitude, restaurant.latitude]);
-        }
-      }
-    } else if (entityType === 'business') {
-      const business = businesses.find((b) => b.id === id);
-      if (business) {
-        setSelectedEntity({ entityType: 'business', business });
-        if (business.latitude && business.longitude) {
-          setFlyToCoordinate([business.longitude, business.latitude]);
-        }
-      }
-    } else if (entityType === 'poi') {
-      const poi = pois.find((p) => p.id === id);
-      if (poi) {
-        setSelectedEntity({ entityType: 'poi', poi });
-        setFlyToCoordinate([poi.lon, poi.lat]);
-      }
+      return events.map((e) => ({
+        id: e.id,
+        entityType: 'event',
+        lat: e.latitude,
+        lon: e.longitude,
+        data: e,
+      }));
+    }
+    if (entityType === 'restaurant') {
+      return restaurants
+        .filter((r) => r.latitude != null && r.longitude != null)
+        .map((r) => ({
+          id: r.id,
+          entityType: 'restaurant',
+          lat: r.latitude!,
+          lon: r.longitude!,
+          data: r,
+        }));
+    }
+    if (entityType === 'business') {
+      return businesses
+        .filter((b) => b.latitude != null && b.longitude != null)
+        .map((b) => ({
+          id: b.id,
+          entityType: 'business',
+          lat: b.latitude!,
+          lon: b.longitude!,
+          data: b,
+        }));
+    }
+    if (entityType === 'poi') {
+      return pois.map((p) => ({
+        id: p.id,
+        entityType: 'poi',
+        lat: p.lat,
+        lon: p.lon,
+        data: p,
+      }));
+    }
+    return [];
+  };
+
+  const openCarouselFor = (entityType: MapEntityType, id: string) => {
+    const items = buildCarouselItems(entityType);
+    if (items.length === 0) return;
+    const target = items.find((it) => it.id === id);
+    if (!target) return;
+    setCarousel({ items, selectedId: id });
+    setFlyToCoordinate([target.lon, target.lat]);
+  };
+
+  const handleMarkerPress = (id: string, entityType: MapEntityType) => {
+    openCarouselFor(entityType, id);
+  };
+
+  const handleCarouselSelectionChange = (item: CarouselItem) => {
+    setCarousel((prev) => (prev ? { ...prev, selectedId: item.id } : prev));
+    setFlyToCoordinate([item.lon, item.lat]);
+  };
+
+  const handleLocateMe = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setFlyToCoordinate([pos.coords.longitude, pos.coords.latitude]);
+    } catch (e) {
+      console.error('locate-me error', e);
     }
   };
 
-  const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
-    setActiveTab(tab);
-    if (tab === 'home') router.replace('/');
-    else if (tab === 'explore') router.push('/explore');
-    else if (tab === 'profile') router.push('/profile');
-  };
-
-  const handleLocationFound = (coordinate: [number, number]) => {
-    setFlyToCoordinate(coordinate);
-  };
-
-  // Expo Go fallback — native Mapbox module not available
+  // Expo Go fallback
   if (!isMapboxAvailable) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.fallbackContainer}>
-          <Text style={[styles.fallbackEmoji]}>🗺️</Text>
-          <Text style={[styles.fallbackTitle, { color: colors.text }]}>
+          <Text style={styles.fallbackEmoji}>🗺️</Text>
+          <Text style={[styles.fallbackTitle, { color: colors.textPrimary }]}>
             Karte nicht verfügbar
           </Text>
           <Text style={[styles.fallbackText, { color: colors.textSecondary }]}>
             Die Karte erfordert einen Dev-Client Build und ist in Expo Go nicht verfügbar.
           </Text>
         </View>
-        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
       </SafeAreaView>
     );
   }
@@ -287,13 +348,12 @@ export default function LocationScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <MapLoadingSkeleton />
-        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <View style={styles.mapContainer}>
         {!privacyAccepted ? (
           <MapPrivacyConsent onAccept={handlePrivacyAccept} />
@@ -331,34 +391,32 @@ export default function LocationScreen() {
               }}
             />
 
-            {/* Filter chips */}
-            <MapFilterChips filter={mapFilter} onFilterChange={setMapFilter} />
-
-            {/* Live ÖPNV toggle pill — top right */}
-            <Pressable
-              onPress={() => setShowLiveBuses((v) => !v)}
-              style={[
-                styles.liveBusToggle,
-                {
-                  backgroundColor: showLiveBuses ? '#194383' : colors.background,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.liveDot,
-                  { backgroundColor: showLiveBuses ? '#2B9348' : colors.textTertiary },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.liveBusText,
-                  { color: showLiveBuses ? '#fff' : colors.textPrimary },
-                ]}
+            {/* Top header — back left, search right */}
+            <SafeAreaView style={styles.topHeader} edges={['top']} pointerEvents="box-none">
+              <Pressable
+                onPress={() => router.back()}
+                style={styles.headerCircle}
+                accessibilityLabel="Zurück"
               >
-                Live ÖPNV {showLiveBuses ? `· ${vehicles.length}` : ''}
-              </Text>
-            </Pressable>
+                <ArrowLeftIcon size={20} color="#000000" />
+              </Pressable>
+              <Pressable
+                onPress={() => setShowSearchModal(true)}
+                style={styles.headerCircle}
+                accessibilityLabel="Suchen"
+              >
+                <SearchIcon size={20} color="#000000" />
+              </Pressable>
+            </SafeAreaView>
+
+            {/* Filter chips — horizontal scrollable, Live ÖPNV at end */}
+            <MapFilterChips
+              filter={mapFilter}
+              onFilterChange={setMapFilter}
+              liveBuses={showLiveBuses}
+              onToggleLiveBuses={() => setShowLiveBuses((v) => !v)}
+              liveBusCount={vehicles.length}
+            />
 
             {/* Today's advisories — visible when Tipps layer is on */}
             {mapFilter.pois && advisories.length > 0 ? (
@@ -368,19 +426,11 @@ export default function LocationScreen() {
                     key={adv.id}
                     style={[
                       styles.advisoryChip,
-                      { backgroundColor: ADVISORY_LEVEL_COLORS[adv.level] + '22' },
+                      { backgroundColor: '#ffffff' },
                     ]}
                   >
                     <Text style={styles.advisoryEmoji}>
-                      {adv.type === 'mosquito'
-                        ? '🦟'
-                        : adv.type === 'tick'
-                        ? '🕷️'
-                        : adv.type === 'cyanobacteria'
-                        ? '💧'
-                        : adv.type === 'sun'
-                        ? '☀️'
-                        : '🌼'}
+                      {advisoryEmoji(adv.type)}
                     </Text>
                     <Text
                       style={[
@@ -395,192 +445,180 @@ export default function LocationScreen() {
               </View>
             ) : null}
 
-            {/* Floating Search Button */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.floatingSearchBtn,
-                { backgroundColor: colors.background },
-                pressed && styles.floatingSearchBtnPressed,
+            {/* Bottom row — SOS / Erkunden / MyLocation, slides up when sheet visible */}
+            <Animated.View
+              style={[
+                styles.bottomRow,
+                { transform: [{ translateY: bottomTranslate }] },
               ]}
-              accessibilityLabel="Suchen"
-              onPress={() => setShowSearchModal(true)}
+              pointerEvents="box-none"
             >
-              <SearchIcon width={22} height={22} color={colors.tabIconActive} />
-            </Pressable>
+              <Pressable
+                onPress={() => setShowVerloren(true)}
+                style={[styles.iconButton, { backgroundColor: '#ffffff' }]}
+                accessibilityLabel="Wo bin ich verloren"
+              >
+                <CallIcon size={20} color="#000000" />
+              </Pressable>
 
-            {/* "Verloren?" button — high z-index so it stays above bottom sheets */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.verlorenBtn,
-                pressed && styles.floatingSearchBtnPressed,
-              ]}
-              accessibilityLabel="Wo bin ich verloren"
-              onPress={() => setShowVerloren(true)}
-            >
-              <Text style={styles.verlorenEmoji}>🆘</Text>
-              <Text style={styles.verlorenLabel}>Verloren?</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => router.push('/explore' as any)}
+                style={[styles.erkundenPill, { backgroundColor: '#ffffff' }]}
+                accessibilityLabel="Erkunden öffnen"
+              >
+                <LocationIcon size={16} color="#000000" />
+                <Text style={styles.erkundenText}>Erkunden</Text>
+              </Pressable>
 
-            {/* My Location Button (always above bottom sheets) */}
-            <MyLocationButton onLocationFound={handleLocationFound} />
-
-            {/* Centered Karte/Liste toggle — always above bottom sheet */}
-            <View style={styles.viewToggleWrap}>
-              <View style={[styles.viewToggle, { backgroundColor: colors.background }]}>
-                <Pressable
-                  onPress={() => setViewMode('map')}
-                  style={[
-                    styles.viewToggleBtn,
-                    viewMode === 'map' && { backgroundColor: '#194383' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.viewToggleText,
-                      { color: viewMode === 'map' ? '#fff' : colors.textPrimary },
-                    ]}
-                  >
-                    Karte
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setViewMode('list')}
-                  style={[
-                    styles.viewToggleBtn,
-                    viewMode === 'list' && { backgroundColor: '#194383' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.viewToggleText,
-                      { color: viewMode === 'list' ? '#fff' : colors.textPrimary },
-                    ]}
-                  >
-                    Liste
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* List view — stacked on top of the map when viewMode === 'list' */}
-            {viewMode === 'list' ? (
-              <View style={[styles.listOverlay, { backgroundColor: colors.background }]}>
-                <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 220 }}>
-                  {mapFilter.pois &&
-                    pois.map((p) => (
-                      <Pressable
-                        key={`poi-${p.id}`}
-                        style={[styles.listRow, { backgroundColor: colors.surface }]}
-                        onPress={() => router.push({ pathname: '/poi/[id]', params: { id: p.id } } as any)}
-                      >
-                        <Text style={styles.listEmoji}>📍</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {p.name_de}
-                          </Text>
-                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {p.address || ''}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  {mapFilter.events &&
-                    events.map((e) => (
-                      <Pressable
-                        key={`event-${e.id}`}
-                        style={[styles.listRow, { backgroundColor: colors.surface }]}
-                        onPress={() =>
-                          router.push({ pathname: '/event/[id]', params: { id: e.id } } as any)
-                        }
-                      >
-                        <Text style={styles.listEmoji}>📅</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {e.title}
-                          </Text>
-                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {e.location}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  {mapFilter.restaurants &&
-                    restaurants.map((r) => (
-                      <Pressable
-                        key={`r-${r.id}`}
-                        style={[styles.listRow, { backgroundColor: colors.surface }]}
-                        onPress={() =>
-                          router.push({
-                            pathname: '/restaurant/[slug]',
-                            params: { slug: r.slug },
-                          } as any)
-                        }
-                      >
-                        <Text style={styles.listEmoji}>🍽️</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {r.name}
-                          </Text>
-                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {r.address || ''}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  {mapFilter.businesses &&
-                    businesses.map((b) => (
-                      <Pressable
-                        key={`b-${b.id}`}
-                        style={[styles.listRow, { backgroundColor: colors.surface }]}
-                        onPress={() =>
-                          router.push({
-                            pathname: '/business/[slug]',
-                            params: { slug: b.slug },
-                          } as any)
-                        }
-                      >
-                        <Text style={styles.listEmoji}>🏪</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                            {b.name}
-                          </Text>
-                          <Text style={[styles.listSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {b.address || ''}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                </ScrollView>
-              </View>
-            ) : null}
+              <Pressable
+                onPress={handleLocateMe}
+                style={[styles.iconButton, { backgroundColor: '#ffffff' }]}
+                accessibilityLabel="Mein Standort"
+              >
+                <LocationIcon size={20} color="#000000" />
+              </Pressable>
+            </Animated.View>
           </>
         )}
       </View>
 
       <VerlorenSheet visible={showVerloren} onClose={() => setShowVerloren(false)} />
 
-      <MapPreviewCard
-        data={selectedEntity}
-        onClose={() => setSelectedEntity(null)}
-      />
+      {carousel ? (
+        <MapPreviewCarousel
+          items={carousel.items}
+          initialId={carousel.selectedId}
+          onClose={() => setCarousel(null)}
+          onSelectionChange={handleCarouselSelectionChange}
+        />
+      ) : null}
 
       <SearchModal
         visible={showSearchModal}
         onClose={() => setShowSearchModal(false)}
       />
-
-      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
-    </SafeAreaView>
+    </View>
   );
+}
+
+function advisoryEmoji(type: string): string {
+  switch (type) {
+    case 'mosquito':
+      return '🦟';
+    case 'tick':
+      return '🕷️';
+    case 'cyanobacteria':
+      return '💧';
+    case 'sun':
+      return '☀️';
+    default:
+      return '🌼';
+  }
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
   mapContainer: {
     flex: 1,
     position: 'relative',
+  },
+  topHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    zIndex: 200,
+  },
+  headerCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  advisoriesRow: {
+    position: 'absolute',
+    top: 116,
+    left: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    zIndex: 100,
+    maxWidth: '80%',
+  },
+  advisoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  advisoryEmoji: {
+    fontSize: 13,
+  },
+  advisoryText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+  },
+  bottomRow: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    zIndex: 2000,
+  },
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  erkundenPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  erkundenText: {
+    color: '#000000',
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
   },
   fallbackContainer: {
     flex: 1,
@@ -603,157 +641,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 22,
-  },
-  floatingSearchBtn: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 100,
-  },
-  floatingSearchBtnPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.95 }],
-  },
-  verlorenBtn: {
-    position: 'absolute',
-    bottom: 240,
-    left: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
-    backgroundColor: '#D62828',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 16,
-    zIndex: 2000,
-  },
-  viewToggleWrap: {
-    position: 'absolute',
-    bottom: 180,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 2000,
-  },
-  viewToggle: {
-    flexDirection: 'row',
-    borderRadius: 22,
-    padding: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 16,
-  },
-  viewToggleBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  viewToggleText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-  },
-  listOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 50,
-  },
-  listRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  listEmoji: {
-    fontSize: 22,
-  },
-  listTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  listSub: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 2,
-  },
-  verlorenEmoji: {
-    fontSize: 16,
-  },
-  verlorenLabel: {
-    color: '#fff',
-    fontFamily: 'Inter-Medium',
-    fontSize: 13,
-  },
-  advisoriesRow: {
-    position: 'absolute',
-    top: 70,
-    left: 16,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    zIndex: 100,
-    maxWidth: '80%',
-  },
-  advisoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  advisoryEmoji: {
-    fontSize: 13,
-  },
-  advisoryText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-  },
-  liveBusToggle: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    zIndex: 1500,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  liveBusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
   },
 });
