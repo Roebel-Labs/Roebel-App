@@ -25,7 +25,7 @@ import '@/lib/patch-text';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { ThirdwebProvider, useAutoConnect } from 'thirdweb/react';
+import { ThirdwebProvider, AutoConnect } from 'thirdweb/react';
 import { client, chain } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { wallets } from '@/constants/wallets';
@@ -170,13 +170,21 @@ function RewardsTaskTriggers() {
  * Inner layout that can access ThemeContext
  */
 function AutoConnectHandler() {
-  useAutoConnect({
-    client,
-    wallets,
-    chain,
-    timeout: 15000,
-  });
-  return null;
+  return (
+    <AutoConnect
+      client={client}
+      wallets={wallets}
+      timeout={15000}
+      onConnect={(wallet) => {
+        if (__DEV__) {
+          console.log('[thirdweb] auto-connect ✓', {
+            walletId: wallet.id,
+            address: wallet.getAccount()?.address,
+          });
+        }
+      }}
+    />
+  );
 }
 
 function ThemedLayout() {
