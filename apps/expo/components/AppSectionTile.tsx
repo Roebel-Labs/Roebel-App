@@ -44,14 +44,17 @@ const styles = StyleSheet.create({
     flex: 1,
     aspectRatio: 1.55,
     borderRadius: 12,
-    padding: 16,
+    paddingTop: 16,
+    paddingLeft: 16,
+    paddingBottom: 16,
+    paddingRight: 0,
     overflow: 'hidden',
   },
   pressed: {
     opacity: 0.7,
   },
   labelWrapper: {
-    maxWidth: '60%',
+    maxWidth: '55%',
   },
   label: {
     fontSize: 15,
@@ -62,7 +65,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     bottom: 0,
-    width: '60%',
-    height: '75%',
+    width: '70%',
+    height: '90%',
   },
 });
