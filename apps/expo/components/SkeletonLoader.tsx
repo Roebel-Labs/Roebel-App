@@ -260,6 +260,36 @@ export function RestaurantDetailSkeleton() {
   );
 }
 
+export function SpecialMenuDetailSkeleton() {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Skeleton height={220} borderRadius={0} />
+
+      <View style={{ paddingHorizontal: 16, paddingTop: 32, paddingBottom: 16 }}>
+        <Skeleton width="70%" height={26} style={{ marginBottom: 16 }} />
+        <Skeleton width="100%" height={16} style={{ marginBottom: 6 }} />
+        <Skeleton width="92%" height={16} style={{ marginBottom: 6 }} />
+        <Skeleton width="78%" height={16} />
+      </View>
+
+      <View style={{ paddingHorizontal: 16, paddingTop: 32 }}>
+        {[1, 2].map(group => (
+          <View key={group} style={{ marginBottom: 24 }}>
+            <Skeleton width={140} height={20} style={{ marginBottom: 16 }} />
+            {[1, 2, 3].map(row => (
+              <View key={row} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <Skeleton width="60%" height={16} />
+                <Skeleton width={48} height={16} />
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function NotificationCardSkeleton() {
   const { colors } = useTheme();
   return (
