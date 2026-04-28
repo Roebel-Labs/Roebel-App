@@ -34,27 +34,31 @@ export default function VerifyCitizenIntroScreen() {
         </Pressable>
       </View>
       <View style={styles.content}>
-        <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          So einfach ist die{'\n'}Verifizierung
-        </Text>
+        <View>
+          <Text style={[styles.heading, { color: colors.textPrimary }]}>
+            So einfach ist die{'\n'}Verifizierung
+          </Text>
 
-        <View style={styles.stepsContainer}>
-          {STEPS.map((step, i) => (
-            <View
-              key={i}
-              style={[
-                styles.stepRow,
-                i < STEPS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.stepNumber, { color: colors.textPrimary }]}>{i + 1}</Text>
-              <View style={styles.stepText}>
-                <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{step.title}</Text>
-                <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
+          <View style={styles.stepsContainer}>
+            {STEPS.map((step, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.stepRow,
+                  i < STEPS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.stepNumber, { color: colors.textPrimary }]}>{i + 1}</Text>
+                <View style={styles.stepText}>
+                  <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{step.title}</Text>
+                  <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
+                </View>
+                <View style={styles.stepIllustrationBox}>
+                  <Image source={step.illustration} style={styles.stepIllustration} resizeMode="contain" />
+                </View>
               </View>
-              <Image source={step.illustration} style={styles.stepIllustration} resizeMode="contain" />
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
       </View>
 
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
   headerRow: { paddingHorizontal: 24, paddingTop: 8 },
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   closeIcon: { fontSize: 20, fontFamily: 'Inter-Regular' },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
   heading: { fontSize: 32, fontFamily: 'Inter-Bold', marginBottom: 32, lineHeight: 38 },
   stepsContainer: {},
   stepRow: {
@@ -84,11 +88,12 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingVertical: 20,
   },
-  stepNumber: { fontSize: 22, fontFamily: 'Inter-SemiBold', width: 24 },
+  stepNumber: { fontSize: 16, fontFamily: 'Inter-SemiBold', width: 24, alignSelf: 'flex-start', paddingTop: 4 },
   stepText: { flex: 1 },
-  stepTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  stepTitle: { fontSize: 17, fontFamily: 'Inter-Medium' },
   stepDesc: { fontSize: 14, fontFamily: 'Inter-Regular', marginTop: 4, lineHeight: 19 },
-  stepIllustration: { width: 64, height: 64 },
+  stepIllustrationBox: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center' },
+  stepIllustration: { width: 80, height: 80 },
   footer: { paddingHorizontal: 24, paddingBottom: 24 },
   button: { borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
   buttonText: { fontSize: 14, fontFamily: 'Inter-Medium' },

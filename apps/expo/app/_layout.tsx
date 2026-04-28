@@ -21,6 +21,7 @@ import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
 import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
+import '@/lib/patch-text';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -173,6 +174,7 @@ function AutoConnectHandler() {
     client,
     wallets,
     chain,
+    timeout: 15000,
   });
   return null;
 }
@@ -185,7 +187,6 @@ function ThemedLayout() {
       <NotificationHandler />
       <AnalyticsTracker />
       <PostHogTelemetry />
-      <AutoConnectHandler />
       <RewardsTaskTriggers />
       <ReferralDeepLinkHandler />
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
@@ -258,6 +259,7 @@ function Layout() {
             <ConsentProvider>
               <ConditionalPostHogProvider>
                 <ThirdwebProvider>
+                  <AutoConnectHandler />
                   <MessagingProvider>
                     <VerificationProvider>
                       <UserProvider>
