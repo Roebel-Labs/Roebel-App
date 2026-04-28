@@ -9,7 +9,9 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { SearchIcon } from './Icons';
+import AnimatedSearchPlaceholder from './AnimatedSearchPlaceholder';
 import { supabase } from '@/lib/supabase';
 import {
   EventRecord,
@@ -342,20 +344,29 @@ export default function SearchModal({ visible, onClose }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        edges={['top']}
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={[styles.searchContainer, { backgroundColor: colors.surfaceSecondary }]}>
             <SearchIcon size={20} color={colors.textTertiary} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Suchen nach..."
-              placeholderTextColor={colors.textTertiary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-              returnKeyType="search"
-            />
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={[styles.searchInput, { color: colors.textPrimary }]}
+                placeholder=""
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+                returnKeyType="search"
+              />
+              {searchQuery.length === 0 && (
+                <View style={styles.placeholderOverlay} pointerEvents="none">
+                  <AnimatedSearchPlaceholder fontSize={14} />
+                </View>
+              )}
+            </View>
             {searchQuery.length > 0 && (
               <Pressable onPress={clearSearch} style={[styles.clearButton, { backgroundColor: colors.textTertiary }]}>
                 <Text style={[styles.clearText, { color: colors.textInverted }]}>×</Text>
@@ -443,7 +454,7 @@ export default function SearchModal({ visible, onClose }: Props) {
             </View>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -469,10 +480,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
-  searchInput: {
+  inputWrapper: {
     flex: 1,
-    fontSize: 16,
+    justifyContent: 'center',
+  },
+  searchInput: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
+    padding: 0,
+  },
+  placeholderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   clearButton: {
     width: 24,
@@ -482,7 +502,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clearText: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
   },
   cancelButton: {
@@ -490,7 +510,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cancelText: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
   },
   content: {
@@ -500,7 +520,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
     marginBottom: 16,
   },
@@ -512,8 +532,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   recentText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -521,8 +541,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
   noResults: {
     alignItems: 'center',
@@ -530,12 +550,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   noResultsText: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
   },
   noResultsSubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter',
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
   },
   resultsContainer: {
     gap: 8,
@@ -544,7 +564,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   resultSectionTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -562,7 +582,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   appSectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Inter-Medium',
     marginBottom: 12,
   },

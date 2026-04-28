@@ -3,10 +3,10 @@ import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 
-type Props = {
+type Props = Readonly<{
   label: string;
   onPress: () => void;
-};
+}>;
 
 const PLACEHOLDER_IMAGE = require('@/assets/illustration/collections/events.png');
 
@@ -54,8 +54,8 @@ const styles = StyleSheet.create({
     maxWidth: '60%',
   },
   label: {
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: 'Inter-Medium',
   },
   image: {

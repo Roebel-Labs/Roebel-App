@@ -25,7 +25,10 @@ const EXPLORE_CATEGORIES: CategoryChip[] = [
 
 export default function ExploreCategoryChips() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+
+  // In dark mode, lift the tile above the surface by using a slightly lighter gray.
+  const tileBackground = isDark ? '#4a4d52' : colors.surfaceSecondary;
 
   const renderItem = ({ item }: { item: CategoryChip }) => (
     <Pressable
@@ -34,7 +37,7 @@ export default function ExploreCategoryChips() {
       accessibilityRole="button"
       accessibilityLabel={item.label}
     >
-      <View style={[styles.tile, { backgroundColor: colors.surfaceSecondary }]}>
+      <View style={[styles.tile, { backgroundColor: tileBackground }]}>
         <Image
           source={PLACEHOLDER_IMAGE}
           style={styles.tileImage}
@@ -84,7 +87,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: 8,
     overflow: 'hidden',
@@ -94,8 +97,8 @@ const styles = StyleSheet.create({
     height: 40,
   },
   label: {
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 13,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },

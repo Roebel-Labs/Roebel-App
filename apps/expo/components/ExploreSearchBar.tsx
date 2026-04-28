@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { SearchIcon } from '@/components/Icons';
+import AnimatedSearchPlaceholder from '@/components/AnimatedSearchPlaceholder';
 
 type Props = {
   onPress: () => void;
@@ -24,9 +25,7 @@ export default function ExploreSearchBar({ onPress }: Props) {
       <View style={styles.iconWrapper}>
         <SearchIcon width={20} height={20} color={colors.textTertiary} />
       </View>
-      <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-        Suchen nach...
-      </Text>
+      <AnimatedSearchPlaceholder fontSize={16} />
     </Pressable>
   );
 }
@@ -47,9 +46,5 @@ const styles = StyleSheet.create({
   },
   iconWrapper: {
     marginRight: 12,
-  },
-  placeholder: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
   },
 });
