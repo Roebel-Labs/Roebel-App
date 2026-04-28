@@ -6,6 +6,7 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchDealById, incrementDealViews } from '@/lib/supabase-deals';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { fetchBusinessBySlug } from '@/lib/supabase-businesses';
 import { DEAL_TYPE_LABELS, BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -76,9 +77,7 @@ export default function DealDetailScreen() {
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Angebot nicht gefunden</Text>
-        </View>
+        <MeckyNotFound title="Angebot nicht gefunden" />
       </SafeAreaView>
     );
   }

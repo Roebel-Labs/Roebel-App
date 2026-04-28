@@ -24,6 +24,7 @@ import {
 import { createRestaurant } from '@/lib/supabase-restaurants';
 import type { MenuCategoryRecord } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 export default function MenuCategoriesScreen() {
   const router = useRouter();
@@ -114,14 +115,8 @@ export default function MenuCategoriesScreen() {
 
   if (error) {
     return (
-      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{error}</Text>
-        <Pressable
-          onPress={loadRestaurant}
-          style={[styles.addBtn, { backgroundColor: colors.primary, marginTop: 16, paddingVertical: 12 }]}
-        >
-          <Text style={[styles.addBtnText, { color: colors.onPrimary }]}>Erneut versuchen</Text>
-        </Pressable>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <MeckyNotFound title="Menü konnte nicht geladen werden" subtitle={error} />
       </SafeAreaView>
     );
   }

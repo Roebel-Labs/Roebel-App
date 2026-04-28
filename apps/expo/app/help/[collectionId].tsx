@@ -18,6 +18,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fetchHelpCollection, fetchHelpItems } from '@/lib/supabase-help';
 import type { HelpCollection, HelpItem } from '@/lib/types-help';
 import HelpItemRow from '@/components/help/HelpItemRow';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 const HERO_HEIGHT = 320;
 
@@ -61,11 +62,7 @@ export default function CollectionDetailScreen() {
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         <Stack.Screen options={{ title: 'Nicht gefunden' }} />
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Sammlung nicht gefunden
-          </Text>
-        </View>
+        <MeckyNotFound title="Sammlung nicht gefunden" />
       </SafeAreaView>
     );
   }

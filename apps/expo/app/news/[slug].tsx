@@ -21,6 +21,7 @@ import { formatPublishDate, calculateReadTime } from '@/lib/utils';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { NewsDetailSkeleton } from '@/components/SkeletonLoader';
 import NewsCard from '@/components/NewsCard';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { logNewsView, logEvent } from '@/lib/firebase';
 import { useTheme } from '@/context/ThemeContext';
@@ -138,19 +139,10 @@ export default function NewsDetailScreen() {
           <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Artikel nicht gefunden</Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Artikel</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorContainer}>
-          <Ionicons name="document-text-outline" size={64} color={colors.textTertiary} />
-          <Text style={[styles.errorText, { color: colors.textSecondary }]}>Artikel nicht gefunden</Text>
-          <Pressable
-            style={[styles.returnButton, { backgroundColor: colors.primary }]}
-            onPress={goBack}
-          >
-            <Text style={[styles.returnButtonText, { color: colors.onPrimary }]}>Zurück zur Übersicht</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Artikel nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -314,26 +306,6 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     padding: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorText: {
-    fontSize: 18,
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  returnButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  returnButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
   },
   coverImage: {
     width: '100%',

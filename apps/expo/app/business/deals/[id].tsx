@@ -8,6 +8,7 @@ import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { fetchDealById, updateDeal, deleteDeal, toggleDealBoost } from '@/lib/supabase-deals';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import type { BusinessDealRecord, DealStatus } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -141,12 +142,7 @@ export default function DealDetailScreen() {
   if (!deal) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Angebot nicht gefunden</Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Zurück</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Angebot nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -323,17 +319,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    marginBottom: 24,
-  },
   detailCard: {
     margin: 16,
     borderRadius: 12,
@@ -445,18 +430,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#EF4444',
-  },
-  primaryButton: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
   },
   bottomPadding: {
     height: 40,

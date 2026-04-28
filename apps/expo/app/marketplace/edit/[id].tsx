@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fetchListingById, updateListing, deleteListing } from '@/lib/supabase-marketplace';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import type { MarketplaceListingRecord, MarketplacePriceType, MarketplaceCondition } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -211,12 +212,7 @@ export default function MarketplaceEditScreen() {
   if (!listing) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Anzeige nicht gefunden</Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Zurück</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Anzeige nicht gefunden" />
       </SafeAreaView>
     );
   }

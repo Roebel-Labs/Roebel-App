@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useSpecialMenu } from '@/hooks/useSpecialMenu';
 import MenuCategorySection from '@/components/MenuCategorySection';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { SpecialMenuDetailSkeleton } from '@/components/SkeletonLoader';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -23,7 +24,7 @@ export default function SpecialMenuDetailScreen() {
   if (!specialMenu) return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Stack.Screen options={{ headerShown: false }} />
       <View style={styles.floatingBackContainer}><Pressable onPress={() => router.back()} style={[styles.floatingBackButton, { backgroundColor: colors.background }, shadows.backButton]}><ArrowLeftIcon size={24} color={colors.tabIconActive} /></Pressable></View>
-      <View style={styles.notFoundContainer}><Text style={styles.notFoundEmoji}>🍽️</Text><Text style={[styles.notFoundText, { color: colors.textSecondary }]}>Menü nicht gefunden</Text></View>
+      <MeckyNotFound title="Menü nicht gefunden" />
     </SafeAreaView>
   );
 
@@ -83,21 +84,6 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  notFoundContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 48,
-  },
-  notFoundEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  notFoundText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
   },
   heroContainer: {
     width: '100%',

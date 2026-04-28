@@ -10,6 +10,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fetchHelpItems } from '@/lib/supabase-help';
 import type { HelpItem } from '@/lib/types-help';
 import HelpPaginationBar from '@/components/help/HelpPaginationBar';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 export default function ItemDetailScreen() {
   const router = useRouter();
@@ -63,11 +64,7 @@ export default function ItemDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ title: 'Nicht gefunden' }} />
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Inhalt nicht gefunden
-          </Text>
-        </View>
+        <MeckyNotFound title="Inhalt nicht gefunden" />
       </SafeAreaView>
     );
   }

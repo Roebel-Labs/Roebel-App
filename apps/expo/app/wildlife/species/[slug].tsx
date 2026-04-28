@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
   fetchSpeciesBySlug,
@@ -69,7 +70,7 @@ export default function SpeciesDetailScreen() {
   if (!species) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.textPrimary, padding: 20 }}>Art nicht gefunden.</Text>
+        <MeckyNotFound title="Art nicht gefunden" />
       </SafeAreaView>
     );
   }

@@ -17,6 +17,7 @@ import VotingStats from '@/components/VotingStats';
 import VoteButtonsEnhanced from '@/components/VoteButtonsEnhanced';
 import ProposalTimers from '@/components/ProposalTimers';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 export default function ProposalDetailScreen() {
   const goBack = useGoBack();
@@ -121,14 +122,7 @@ export default function ProposalDetailScreen() {
           </Pressable>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorIcon}>&#x26A0;&#xFE0F;</Text>
-          <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>Fehler</Text>
-          <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error || 'Vorschlag nicht gefunden'}</Text>
-          <Pressable style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={goBack}>
-            <Text style={[styles.retryButtonText, { color: colors.onPrimary }]}>Zurück</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title={error || 'Vorschlag nicht gefunden'} />
       </SafeAreaView>
     );
   }
@@ -277,36 +271,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  errorIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 22,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  retryButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
   },
   statusContainer: {
     paddingHorizontal: 20,

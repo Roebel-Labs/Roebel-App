@@ -1,5 +1,5 @@
 import React, { Component, ReactNode } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 
 // Hardcoded fallback colors — ErrorBoundary renders outside ThemeProvider
@@ -37,25 +37,30 @@ function ErrorFallback({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Oops! Etwas ist schief gelaufen</Text>
+        <Image
+          source={require('@/assets/illustration/mecky/not_found.png')}
+          style={styles.image}
+          resizeMode="contain"
+        />
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Hier gibt&apos;s nichts zu finden</Text>
         <Text style={[styles.message, { color: colors.textSecondary }]}>
-          Die App ist unerwartet abgestürzt. Dies kann an fehlenden Konfigurationen liegen.
+          Mecky geht dem auf die Spur.
         </Text>
 
-        {error && (
+        {__DEV__ && error && (
           <View style={[styles.errorDetails, { backgroundColor: colors.surface }]}>
             <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>
-              {__DEV__ ? 'Fehlerdetails (nur in Entwicklung):' : 'Fehler:'}
+              Fehlerdetails (nur in Entwicklung):
             </Text>
             <Text style={[styles.errorText, { color: colors.error }]}>{error.message}</Text>
-            {__DEV__ && errorInfo && (
+            {errorInfo && (
               <Text style={[styles.errorStack, { color: colors.textSecondary }]}>{errorInfo}</Text>
             )}
           </View>
         )}
 
         <Pressable style={[styles.button, { backgroundColor: colors.primary }]} onPress={onReset}>
-          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Erneut versuchen</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zurück zur Startseite</Text>
         </Pressable>
       </View>
     </View>
@@ -119,12 +124,18 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     maxWidth: 400,
+    alignSelf: 'stretch',
+  },
+  image: {
+    width: 180,
+    height: 180,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   message: {
     fontSize: 16,
@@ -151,9 +162,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   button: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    alignSelf: 'stretch',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   buttonText: {
     fontSize: 16,

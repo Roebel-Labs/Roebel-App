@@ -21,6 +21,7 @@ import {
 } from '@/lib/supabase-blog-articles';
 import { SUB_TYPE_EMOJI, SUB_TYPE_LABELS } from '@/lib/types';
 import RichTextRenderer from '@/components/RichTextRenderer';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 export default function BlogArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -93,24 +94,11 @@ export default function BlogArticleScreen() {
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Artikel nicht gefunden
+            Artikel
           </Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorContainer}>
-          <Ionicons name="document-text-outline" size={64} color={colors.textTertiary} />
-          <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-            Artikel nicht gefunden
-          </Text>
-          <Pressable
-            style={[styles.returnButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={[styles.returnButtonText, { color: colors.onPrimary }]}>
-              Zurück
-            </Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Artikel nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -250,15 +238,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
   headerSpacer: { width: 44, height: 44, flex: 1 },
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  errorText: { fontSize: 18, marginTop: 16, marginBottom: 24 },
-  returnButton: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
-  returnButtonText: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
   scrollContent: { paddingBottom: 32 },
   coverImage: { width: '100%', aspectRatio: 16 / 9 },
   coverPlaceholder: {

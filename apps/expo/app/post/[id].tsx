@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
@@ -260,11 +261,7 @@ export default function PostDetailScreen() {
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Beitrag</Text>
           <View style={styles.backButton} />
         </View>
-        <View style={styles.errorState}>
-          <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-            Beitrag nicht gefunden
-          </Text>
-        </View>
+        <MeckyNotFound title="Beitrag nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -515,15 +512,6 @@ const styles = StyleSheet.create({
   commentsTitle: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-  },
-  errorState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
   },
   noComments: {
     padding: 32,

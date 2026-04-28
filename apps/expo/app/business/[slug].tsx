@@ -20,6 +20,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { isRestaurantOpen } from '@/lib/utils';
 import { fetchBusinessBySlug } from '@/lib/supabase-businesses';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
@@ -138,10 +139,7 @@ export default function BusinessDetailScreen() {
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
         </View>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🏪</Text>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Unternehmen nicht gefunden</Text>
-        </View>
+        <MeckyNotFound title="Unternehmen nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -423,21 +421,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 48,
-  },
-  emptyEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
-    textAlign: 'center',
   },
   // Hero
   heroContainer: {

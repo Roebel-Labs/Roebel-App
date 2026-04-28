@@ -13,6 +13,7 @@ import TableQRCode from '@/components/kitchen/TableQRCode';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PlusSignIcon from '@/assets/icons/plus-sign.svg';
 import BorderFullIcon from '@/assets/icons/border-full.svg';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_GAP = 12;
@@ -106,14 +107,8 @@ export default function TableManagementScreen() {
 
   if (error) {
     return (
-      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{error}</Text>
-        <Pressable
-          onPress={loadRestaurant}
-          style={[styles.retryBtn, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.retryBtnText, { color: colors.onPrimary }]}>Erneut versuchen</Text>
-        </Pressable>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <MeckyNotFound title="Tische konnten nicht geladen werden" subtitle={error} />
       </SafeAreaView>
     );
   }
@@ -312,21 +307,5 @@ const styles = StyleSheet.create({
   qrContainer: {
     marginTop: 20,
     borderRadius: 14,
-  },
-  retryBtn: {
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginTop: 16,
-  },
-  retryBtnText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
   },
 });

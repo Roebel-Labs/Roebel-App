@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useActiveAccount } from 'thirdweb/react';
 import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
 import type { BusinessRecord } from '@/lib/types';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 const ORG_TYPE_EMOJI: Record<string, string> = {
   gastronomie: '🍽️',
@@ -159,11 +160,8 @@ export default function OrgStatusScreen() {
 
   if (!business) {
     return (
-      <SafeAreaView style={[styles.centeredPadded, { backgroundColor: colors.background }]}>
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Organisation gefunden.</Text>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={[styles.backText, { color: colors.primary }]}>Zurück</Text>
-        </Pressable>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <MeckyNotFound title="Keine Organisation gefunden" />
       </SafeAreaView>
     );
   }
@@ -210,24 +208,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  centeredPadded: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-  },
-  backButton: {
-    marginTop: 16,
-  },
-  backText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
   },
   header: {
     flexDirection: 'row',

@@ -17,6 +17,7 @@ import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fetchListingById, fetchMarketplaceListings, deleteListing } from '@/lib/supabase-marketplace';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
@@ -167,9 +168,7 @@ export default function ListingDetailScreen() {
             <ArrowLeftIcon size={24} color={colors.tabIconActive} />
           </Pressable>
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Anzeige nicht gefunden</Text>
-        </View>
+        <MeckyNotFound title="Anzeige nicht gefunden" />
       </SafeAreaView>
     );
   }

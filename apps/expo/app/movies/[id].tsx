@@ -17,6 +17,7 @@ import { SvgXml } from 'react-native-svg';
 import MovieCard from '@/components/MovieCard';
 import { MovieDetailSkeleton } from '@/components/SkeletonLoader';
 import { useTheme } from '@/context/ThemeContext';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 // Play icon SVG component
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
@@ -95,9 +96,7 @@ export default function MovieDetailScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.center}>
-          <Text style={{ color: colors.textPrimary }}>Film nicht gefunden.</Text>
-        </View>
+        <MeckyNotFound title="Film nicht gefunden" />
       </View>
     );
   }

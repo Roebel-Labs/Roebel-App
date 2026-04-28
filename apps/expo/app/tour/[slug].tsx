@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import EmbeddedMap, { type EmbeddedMapPoint } from '@/components/map/EmbeddedMap';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
   fetchTourBySlug,
@@ -77,9 +78,7 @@ export default function TourDetailScreen() {
   if (!tour) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.loadingBox}>
-          <Text style={{ color: colors.textPrimary }}>Tour nicht gefunden.</Text>
-        </View>
+        <MeckyNotFound title="Tour nicht gefunden" />
       </SafeAreaView>
     );
   }

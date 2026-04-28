@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import EmbeddedMap from '@/components/map/EmbeddedMap';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
   fetchPoiById,
@@ -66,7 +67,7 @@ export default function PoiDetailScreen() {
   if (!poi) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.textPrimary, padding: 20 }}>POI nicht gefunden.</Text>
+        <MeckyNotFound title="POI nicht gefunden" />
       </SafeAreaView>
     );
   }

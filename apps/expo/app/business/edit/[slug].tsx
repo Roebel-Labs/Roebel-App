@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchBusinessBySlug, updateBusiness } from '@/lib/supabase-businesses';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { supabase } from '@/lib/supabase';
 import type { BusinessRecord, BusinessCategory, OpeningHours } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -244,9 +245,7 @@ export default function BusinessEditScreen() {
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bearbeiten</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Unternehmen nicht gefunden</Text>
-        </View>
+        <MeckyNotFound title="Unternehmen nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -510,10 +509,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
   },
   // Cover
   coverSection: {

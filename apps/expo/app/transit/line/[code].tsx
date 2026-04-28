@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import EmbeddedMap, { type EmbeddedMapPoint } from '@/components/map/EmbeddedMap';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
   fetchTransitLineByCode,
@@ -98,7 +99,7 @@ export default function TransitLineDetail() {
   if (!line) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.textPrimary, padding: 20 }}>Linie nicht gefunden.</Text>
+        <MeckyNotFound title="Linie nicht gefunden" />
       </SafeAreaView>
     );
   }

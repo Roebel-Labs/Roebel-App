@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import EventCard from '@/components/EventCard';
 import { EventCardSkeleton } from '@/components/SkeletonLoader';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { CATEGORY_METADATA, EventCategory } from '@/lib/categories';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -56,12 +57,7 @@ export default function CategoryDetail() {
   if (!categoryMeta) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.notFoundContainer}>
-          <Text style={[styles.notFoundTitle, { color: colors.textPrimary }]}>Kategorie nicht gefunden</Text>
-          <Pressable onPress={() => router.back()} style={[styles.notFoundButton, { backgroundColor: colors.tabIconActive }]}>
-            <Text style={[styles.notFoundButtonText, { color: colors.textInverted }]}>Zurück</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Kategorie nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -142,26 +138,6 @@ const styles = StyleSheet.create({
   },
   flex1: {
     flex: 1,
-  },
-  notFoundContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  notFoundTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 16,
-  },
-  notFoundButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  notFoundButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
   },
   heroSection: {
     position: 'relative',

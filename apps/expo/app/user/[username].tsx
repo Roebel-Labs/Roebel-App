@@ -23,6 +23,7 @@ import LocationSmallIcon from '@/assets/icons/location-small.svg';
 import ProfileCoverBanner from '@/components/profile/ProfileCoverBanner';
 import ProfileTabs from '@/components/profile/ProfileTabs';
 import UserPostsList from '@/components/profile/UserPostsList';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import UserEventsList from '@/components/profile/UserEventsList';
 import type { UserRecord } from '@/lib/types';
 
@@ -117,11 +118,7 @@ export default function PublicUserProfileScreen() {
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
-        <View style={styles.centered}>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-            Benutzer nicht gefunden
-          </Text>
-        </View>
+        <MeckyNotFound title="Benutzer nicht gefunden" />
       </SafeAreaView>
     );
   }

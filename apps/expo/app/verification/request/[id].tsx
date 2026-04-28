@@ -17,6 +17,7 @@ import { RequestStatus } from '@/lib/verification-types';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import SuccessDrawer from '@/components/SuccessDrawer';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 export default function RequestDetailsScreen() {
   const router = useRouter();
@@ -155,13 +156,7 @@ export default function RequestDetailsScreen() {
   if (!request) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.messageContainer}>
-          <Text style={[styles.messageTitle, { color: colors.textPrimary }]}>&#x274C; Antrag nicht gefunden</Text>
-          <Text style={[styles.messageText, { color: colors.textSecondary }]}>Der angeforderte Antrag existiert nicht.</Text>
-          <Pressable style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zurück</Text>
-          </Pressable>
-        </View>
+        <MeckyNotFound title="Antrag nicht gefunden" />
       </SafeAreaView>
     );
   }
@@ -545,31 +540,5 @@ const styles = StyleSheet.create({
     color: '#1976D2',
     lineHeight: 20,
     textAlign: 'center',
-  },
-  messageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  messageTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 12,
-  },
-  messageText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  button: {
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  buttonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
   },
 });

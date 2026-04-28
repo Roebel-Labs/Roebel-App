@@ -8,6 +8,7 @@ import { useRestaurantDetail } from '@/hooks/useRestaurantDetail';
 import SpecialMenuGrid from '@/components/SpecialMenuGrid';
 import { RestaurantDetailSkeleton } from '@/components/SkeletonLoader';
 import MenuCategorySection from '@/components/MenuCategorySection';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { isRestaurantOpen } from '@/lib/utils';
 import { logRestaurantView } from '@/lib/firebase';
 import { useTheme } from '@/context/ThemeContext';
@@ -30,7 +31,7 @@ export default function RestaurantDetailScreen() {
   if (!restaurant) return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}><Stack.Screen options={{ headerShown: false }} />
       <View style={styles.floatingBackContainer}><Pressable onPress={() => router.back()} style={[styles.floatingBackButton, { backgroundColor: colors.background }, shadows.backButton]}><ArrowLeftIcon size={24} color={colors.tabIconActive} /></Pressable></View>
-      <View style={styles.notFoundContainer}><Text style={styles.notFoundEmoji}>🍽️</Text><Text style={[styles.notFoundText, { color: colors.textSecondary }]}>Restaurant nicht gefunden</Text></View>
+      <MeckyNotFound title="Restaurant nicht gefunden" />
     </SafeAreaView>
   );
 
@@ -99,21 +100,6 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  notFoundContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 48,
-  },
-  notFoundEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  notFoundText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
   },
   heroContainer: {
     width: '100%',

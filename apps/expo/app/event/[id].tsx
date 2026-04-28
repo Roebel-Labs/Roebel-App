@@ -19,6 +19,7 @@ import { SvgXml } from 'react-native-svg';
 import ExperienceSection from '@/components/events/ExperienceSection';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
+import MeckyNotFound from '@/components/MeckyNotFound';
 import { recordView } from '@/lib/supabase-event-views';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { useActiveAccount } from 'thirdweb/react';
@@ -220,9 +221,9 @@ export default function EventDetails() {
   }
   if (!event) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Text style={{ color: colors.textPrimary }}>Veranstaltung nicht gefunden.</Text>
+        <MeckyNotFound title="Veranstaltung nicht gefunden" />
       </View>
     );
   }

@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import EmbeddedMap from '@/components/map/EmbeddedMap';
+import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
   fetchSightingById,
@@ -62,7 +63,7 @@ export default function SightingDetailScreen() {
   if (!sighting) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.textPrimary, padding: 20 }}>Sichtung nicht gefunden.</Text>
+        <MeckyNotFound title="Sichtung nicht gefunden" />
       </SafeAreaView>
     );
   }
