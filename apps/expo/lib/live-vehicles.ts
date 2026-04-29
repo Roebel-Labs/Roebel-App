@@ -37,10 +37,34 @@ const MODE_DURATION_DEFAULTS: Record<TransitMode, number> = {
   bus_regio: 60,    // Linie 12 Röbel ↔ Waren ↔ Neubrandenburg full leg
   bus_city: 38,     // Stadtbus 024 round trip (seed data)
   bus_park: 45,     // Nationalpark-Linien
-  buergerbus: 0,    // call-only — no live simulation
+  buergerbus: 60,   // Elli loop through service area
   ferry: 75,        // MS Diana per leg
   train: 60,
 };
+
+// Bürgerbus Elli — service-area loop. The Verein has no fixed schedule
+// (Mo–Fr 07–18 on call), so we interpolate through these waypoints over
+// 60 minutes during operating hours to give users a "where might Elli be
+// right now?" cue. When a real telemetry feed exists, replace this with
+// a Supabase `current_lat / current_lon / last_seen_at` read.
+const BUERGERBUS_LOOP: { lat: number; lon: number; name: string }[] = [
+  { lat: 53.368, lon: 12.6037, name: 'Bahnhofstraße / Müritztherme' },
+  { lat: 53.3666, lon: 12.5994, name: 'Marktplatz Röbel' },
+  { lat: 53.3692, lon: 12.5898, name: 'Stadthafen' },
+  { lat: 53.3608, lon: 12.5828, name: 'Marienfelde' },
+  { lat: 53.398, lon: 12.55, name: 'Hinrichshof' },
+  { lat: 53.435, lon: 12.45, name: 'Walow' },
+  { lat: 53.42, lon: 12.55, name: 'Bütow' },
+  { lat: 53.3989, lon: 12.6228, name: 'Ludorf' },
+  { lat: 53.4067, lon: 12.6492, name: 'Großer Schwerin' },
+  { lat: 53.385, lon: 12.62, name: 'Sietow' },
+  { lat: 53.368, lon: 12.6037, name: 'Bahnhofstraße / Müritztherme' },
+];
+const BUERGERBUS_LOOP_DURATION_MIN = 60;
+const BUERGERBUS_OP_START_HOUR = 7;
+const BUERGERBUS_OP_END_HOUR = 18;
+// 1 = Mon … 5 = Fri (Sun=0, Sat=6)
+const BUERGERBUS_OP_DAYS = new Set([1, 2, 3, 4, 5]);
 
 // Bus_city does a loop (round trip). Others are one-way.
 function isRoundTrip(mode: TransitMode): boolean {
@@ -148,10 +172,51 @@ export function computeLiveVehicles(opts: {
   // Cache paths per line + round-trip flag (constant)
   const pathByLine = new Map<string, ReturnType<typeof buildPath>>();
 
+  // ── Elli (buergerbus) — synthesize a position from a service-area loop
+  for (const line of opts.lines) {
+    if (line.mode !== 'buergerbus' || !line.is_active) continue;
+    if (!BUERGERBUS_OP_DAYS.has(now.getDay())) continue;
+    const hr = now.getHours() + now.getMinutes() / 60;
+    if (hr < BUERGERBUS_OP_START_HOUR || hr >= BUERGERBUS_OP_END_HOUR) continue;
+
+    const loop: TransitStop[] = BUERGERBUS_LOOP.map((wp, i) => ({
+      id: `elli-wp-${i}`,
+      line_id: line.id,
+      name_de: wp.name,
+      lat: wp.lat,
+      lon: wp.lon,
+      stop_order: i,
+      notes_de: null,
+      is_active: true,
+    }));
+    const path = buildPath(loop, false);
+    if (path.points.length < 2) continue;
+
+    const minuteOfHour = nowInMinutes(now) % BUERGERBUS_LOOP_DURATION_MIN;
+    const fraction = minuteOfHour / BUERGERBUS_LOOP_DURATION_MIN;
+    const pos = positionOnPath(path, fraction);
+    if (!pos) continue;
+
+    out.push({
+      id: `elli-live-${line.id}`,
+      line_id: line.id,
+      line_code: line.code,
+      line_name_de: line.name_de,
+      mode: line.mode,
+      lat: pos.lat,
+      lon: pos.lon,
+      progress: fraction,
+      current_stop_name: path.points[pos.current_idx]?.name ?? null,
+      next_stop_name: path.points[pos.next_idx]?.name ?? null,
+      arrives_in_minutes: null, // on-demand — no fixed ETA
+      is_returning: false,
+    });
+  }
+
   for (const dep of opts.departures) {
     const line = opts.lines.find((l) => l.id === dep.line_id);
     if (!line) continue;
-    if (line.mode === 'buergerbus') continue; // call-only — skip
+    if (line.mode === 'buergerbus') continue; // handled above via loop
 
     if (!isInSeason(dep.season_start, dep.season_end, now)) continue;
     if (!isServiceToday(dep.service_days, now)) continue;

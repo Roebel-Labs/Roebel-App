@@ -370,27 +370,29 @@ export default function LocationScreen() {
               onVehiclePress={(depId) => {
                 const v = vehicles.find((x) => x.id === depId);
                 if (!v) return;
-                Alert.alert(
-                  `${v.line_code} · live`,
+                const isElli = v.mode === 'buergerbus';
+                const title = isElli ? `${v.line_code} · auf Anruf` : `${v.line_code} · live`;
+                const body =
                   `${v.line_name_de}\n` +
-                    (v.next_stop_name
-                      ? `→ ${v.next_stop_name}` +
-                        (v.arrives_in_minutes != null
-                          ? ` (in ~${Math.round(v.arrives_in_minutes)} min)`
-                          : '')
-                      : ''),
-                  [
-                    { text: 'Schließen', style: 'cancel' },
-                    {
-                      text: 'Linie öffnen',
-                      onPress: () =>
-                        router.push({
-                          pathname: '/transit/line/[code]',
-                          params: { code: v.line_code },
-                        } as any),
-                    },
-                  ]
-                );
+                  (isElli
+                    ? `Elli unterwegs in ${v.current_stop_name ?? 'der Region'}.\nReservierung Mo–Fr 10–14 Uhr unter +49 151 63459759`
+                    : v.next_stop_name
+                    ? `→ ${v.next_stop_name}` +
+                      (v.arrives_in_minutes != null
+                        ? ` (in ~${Math.round(v.arrives_in_minutes)} min)`
+                        : '')
+                    : '');
+                Alert.alert(title, body, [
+                  { text: 'Schließen', style: 'cancel' },
+                  {
+                    text: 'Linie öffnen',
+                    onPress: () =>
+                      router.push({
+                        pathname: '/transit/line/[code]',
+                        params: { code: v.line_code },
+                      } as any),
+                  },
+                ]);
               }}
             />
 
