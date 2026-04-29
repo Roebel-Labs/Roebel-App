@@ -3,24 +3,23 @@ import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { hyphenate } from '@/lib/hyphenate';
 
 type CategoryChip = {
   key: string;
   label: string;
   route: string;
+  image: any;
 };
 
-const PLACEHOLDER_IMAGE = require('@/assets/illustration/collections/events.png');
-
 const EXPLORE_CATEGORIES: CategoryChip[] = [
-  { key: 'events', label: 'Veranstaltungen', route: '/category/all' },
-  { key: 'news', label: 'Neuigkeiten', route: '/news' },
-  { key: 'restaurants', label: 'Gastronomie', route: '/restaurant' },
-  { key: 'movies', label: 'Kino', route: '/movies' },
-  { key: 'businesses', label: 'Unternehmen', route: '/businesses' },
-  { key: 'deals', label: 'Angebote', route: '/deals' },
-  { key: 'marketplace', label: 'Marktplatz', route: '/marketplace' },
-  { key: 'map', label: 'Karte', route: '/location' },
+  { key: 'events', label: 'Veranstaltungen', route: '/events', image: require('@/assets/illustration/collections/events.png') },
+  { key: 'news', label: 'Neuigkeiten', route: '/news', image: require('@/assets/illustration/collections/neuigkeiten.png') },
+  { key: 'restaurants', label: 'Gastronomie', route: '/restaurant', image: require('@/assets/illustration/collections/gastronomie.png') },
+  { key: 'movies', label: 'Kino', route: '/movies', image: require('@/assets/illustration/collections/kino.png') },
+  { key: 'businesses', label: 'Unternehmen', route: '/businesses', image: require('@/assets/illustration/collections/unternehmen.png') },
+  { key: 'deals', label: 'Angebote', route: '/deals', image: require('@/assets/illustration/collections/angebote.png') },
+  { key: 'marketplace', label: 'Marktplatz', route: '/marketplace', image: require('@/assets/illustration/collections/marktplatz.png') },
 ];
 
 export default function ExploreCategoryChips() {
@@ -39,7 +38,7 @@ export default function ExploreCategoryChips() {
     >
       <View style={[styles.tile, { backgroundColor: tileBackground }]}>
         <Image
-          source={PLACEHOLDER_IMAGE}
+          source={item.image}
           style={styles.tileImage}
           contentFit="contain"
           transition={0}
@@ -49,7 +48,7 @@ export default function ExploreCategoryChips() {
         style={[styles.label, { color: colors.textPrimary }]}
         numberOfLines={2}
       >
-        {item.label}
+        {hyphenate(item.label)}
       </Text>
     </Pressable>
   );

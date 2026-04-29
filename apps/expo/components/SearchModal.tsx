@@ -74,42 +74,37 @@ const RESULT_SECTIONS: { key: keyof SearchResults; label: string }[] = [
   { key: 'movies', label: 'Kino' },
 ];
 
-const APP_SECTIONS: { title: string; items: { label: string; route: string }[] }[] = [
+const APP_SECTIONS: { title: string; items: { label: string; route: string; image: any }[] }[] = [
   {
     title: 'Freizeit',
     items: [
-      { label: 'Veranstaltungen', route: '/category/all' },
-      { label: 'Kino', route: '/movies' },
-      { label: 'Gastronomie', route: '/restaurant' },
-      { label: 'Neuigkeiten', route: '/news' },
-      { label: 'Sternfahrten', route: '/tours' },
-      { label: 'Wildtiere', route: '/wildlife' },
-      { label: 'Blog', route: '/blog' },
-      { label: 'Spiele', route: '/games' },
+      { label: 'Veranstaltungen', route: '/events', image: require('@/assets/illustration/collections/events.png') },
+      { label: 'Kino', route: '/movies', image: require('@/assets/illustration/collections/kino.png') },
+      { label: 'Gastronomie', route: '/restaurant', image: require('@/assets/illustration/collections/gastronomie.png') },
+      { label: 'Neuigkeiten', route: '/news', image: require('@/assets/illustration/collections/neuigkeiten.png') },
+      { label: 'Sternfahrten', route: '/tours', image: require('@/assets/illustration/collections/sternfahrt.png') },
+      { label: 'Wildtiere', route: '/wildlife', image: require('@/assets/illustration/collections/wildtriere.png') },
     ],
   },
   {
     title: 'Mobilität',
     items: [
-      { label: 'Bürger Bus', route: '/transit' },
-      { label: 'Linie 12', route: '/transit/line/12' },
+      { label: 'Bürger Bus', route: '/transit', image: require('@/assets/illustration/collections/bürgerbus.png') },
+      { label: 'Linie 12', route: '/transit/line/12', image: require('@/assets/illustration/collections/linie12.png') },
     ],
   },
   {
     title: 'Stadt',
     items: [
-      { label: 'Bürgerumfragen', route: '/proposal' },
-      { label: 'Bürgersprechstunden', route: '/category/Stadt' },
-      { label: 'Unternehmen', route: '/businesses' },
-      { label: 'Karte', route: '/location' },
+      { label: 'Bürgerumfragen', route: '/proposal', image: require('@/assets/illustration/collections/bürgerumfragen.png') },
+      { label: 'Unternehmen', route: '/businesses', image: require('@/assets/illustration/collections/unternehmen.png') },
     ],
   },
   {
     title: 'Shopping',
     items: [
-      { label: 'Marktplatz', route: '/marketplace' },
-      { label: 'Angebote', route: '/deals' },
-      { label: 'Röbel-Karte', route: '/roebel-card' },
+      { label: 'Marktplatz', route: '/marketplace', image: require('@/assets/illustration/collections/marktplatz.png') },
+      { label: 'Angebote', route: '/deals', image: require('@/assets/illustration/collections/angebote.png') },
     ],
   },
 ];
@@ -441,6 +436,7 @@ export default function SearchModal({ visible, onClose }: Props) {
                       <View key={item.route} style={styles.appSectionCell}>
                         <AppSectionTile
                           label={item.label}
+                          image={item.image}
                           onPress={() => handleSectionPress(item.route)}
                         />
                       </View>

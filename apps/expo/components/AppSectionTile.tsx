@@ -2,15 +2,15 @@ import React from 'react';
 import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import { hyphenate } from '@/lib/hyphenate';
 
 type Props = Readonly<{
   label: string;
+  image: any;
   onPress: () => void;
 }>;
 
-const PLACEHOLDER_IMAGE = require('@/assets/illustration/collections/events.png');
-
-export default function AppSectionTile({ label, onPress }: Props) {
+export default function AppSectionTile({ label, image, onPress }: Props) {
   const { colors } = useTheme();
 
   return (
@@ -26,11 +26,11 @@ export default function AppSectionTile({ label, onPress }: Props) {
     >
       <View style={styles.labelWrapper}>
         <Text style={[styles.label, { color: colors.textPrimary }]} numberOfLines={2}>
-          {label}
+          {hyphenate(label)}
         </Text>
       </View>
       <Image
-        source={PLACEHOLDER_IMAGE}
+        source={image}
         style={styles.image}
         contentFit="contain"
         transition={0}
