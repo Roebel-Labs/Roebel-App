@@ -33,6 +33,7 @@ export default function AppSectionTile({ label, image, onPress }: Props) {
         source={image}
         style={styles.image}
         contentFit="contain"
+        contentPosition="right"
         transition={0}
       />
     </Pressable>
@@ -54,7 +55,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   labelWrapper: {
-    maxWidth: '55%',
+    maxWidth: '62%',
   },
   label: {
     fontSize: 15,
