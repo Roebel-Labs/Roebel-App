@@ -81,14 +81,14 @@ if (isMapboxAvailable && Mapbox) {
   Mapbox.setAccessToken(mapboxToken);
 }
 
-const SHEET_LIFT_PX = 140;
+const SHEET_LIFT_PX = 200;
 
 export default function LocationScreen() {
   const router = useRouter();
   const { selectedEventId } = useLocalSearchParams<{ selectedEventId?: string }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const bottomBase = Math.max(insets.bottom, 12) + 16;
+  const bottomBase = Math.max(insets.bottom, 12) + 28;
 
   const [events, setEvents] = useState<EventWithCoordinates[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);

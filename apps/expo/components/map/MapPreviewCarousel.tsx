@@ -437,6 +437,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
     padding: 12,
+    minHeight: 124,
   },
   row: {
     flexDirection: 'row',
