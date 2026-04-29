@@ -89,14 +89,14 @@ const APP_SECTIONS: { title: string; items: { label: string; route: string; imag
   {
     title: 'Mobilität',
     items: [
-      { label: 'Bürger Bus', route: '/transit', image: require('@/assets/illustration/collections/bürgerbus.png') },
+      { label: 'Bürger Bus', route: '/transit', image: require('@/assets/illustration/collections/buergerbus.png') },
       { label: 'Linie 12', route: '/transit/line/12', image: require('@/assets/illustration/collections/linie12.png') },
     ],
   },
   {
     title: 'Stadt',
     items: [
-      { label: 'Bürgerumfragen', route: '/proposal', image: require('@/assets/illustration/collections/bürgerumfragen.png') },
+      { label: 'Bürgerumfragen', route: '/proposal', image: require('@/assets/illustration/collections/buergerumfragen.png') },
       { label: 'Unternehmen', route: '/businesses', image: require('@/assets/illustration/collections/unternehmen.png') },
     ],
   },
