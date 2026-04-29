@@ -127,16 +127,9 @@ export default function RoebelCardSheet({
             style={styles.loader}
           />
         ) : history.length === 0 ? (
-          <View
-            style={[
-              styles.emptyCard,
-              { backgroundColor: colors.feedBackground },
-            ]}
-          >
-            <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-              Noch keine Zahlungen
-            </Text>
-          </View>
+          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+            Noch keine Zahlungen
+          </Text>
         ) : (
           <View style={styles.historyList}>
             {history.map((row) => (
@@ -318,12 +311,11 @@ const styles = StyleSheet.create({
   },
 
   loader: { marginTop: 16 },
-  emptyCard: {
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    paddingVertical: 8,
   },
-  emptyText: { fontSize: 13, fontFamily: 'Inter-Regular' },
 
   historyList: {
     gap: 12,

@@ -12,9 +12,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  Modal,
   Pressable,
-  SafeAreaView as RNSafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,7 +28,6 @@ import {
   runOnJS,
 } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
-import QRCode from 'react-native-qrcode-svg';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
@@ -44,7 +41,6 @@ import {
   type ApprovedPartnerDisplay,
 } from '@/lib/supabase-roebel-card-partners';
 import { supabase } from '@/lib/supabase';
-import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import PendingChargeModal from '@/components/PendingChargeModal';
 import TopUpBottomSheet from '@/components/TopUpBottomSheet';
@@ -59,12 +55,13 @@ import RoebelCardSheet, {
   type SheetHistoryRow,
 } from './_components/RoebelCardSheet';
 import PartnersGrid from './_components/PartnersGrid';
+import RoebelCardRedeemSheet from './_components/RoebelCardRedeemSheet';
 
 const POLL_INTERVAL_MS = 2000;
 const QR_REFRESH_INTERVAL_MS = 30_000;
 const CARD_PEEK_HEIGHT = 72;
 const TOP_BAR_HEIGHT = 48;
-const TOP_BAR_GAP = 12;
+const TOP_BAR_GAP = 32;
 const SHEET_SPRING = { damping: 22, stiffness: 200, mass: 1 };
 
 export type BuyerMode = 'citizen' | 'tourist' | 'sachbezug';
@@ -344,7 +341,10 @@ export default function MyRoebelCardScreen() {
         showsVerticalScrollIndicator={false}
         scrollEnabled={isExpanded}
       >
-        <PartnersGrid partners={partners} />
+        <PartnersGrid
+          partners={partners}
+          onPressPartner={(p) => router.push(`/account/${p.account_id}` as any)}
+        />
       </ScrollView>
 
       <View
@@ -421,64 +421,13 @@ export default function MyRoebelCardScreen() {
         )}
       </View>
 
-      <Modal
+      <RoebelCardRedeemSheet
         visible={qrModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleCloseQr}
-      >
-        <RNSafeAreaView
-          style={[styles.safeArea, { backgroundColor: colors.background }]}
-        >
-          <View
-            style={[styles.qrModalHeader, { borderBottomColor: colors.border }]}
-          >
-            <View style={styles.qrHeaderSpacer} />
-            <Text style={[styles.qrHeaderTitle, { color: colors.textPrimary }]}>
-              Einlösen
-            </Text>
-            <Pressable
-              onPress={handleCloseQr}
-              style={styles.qrHeaderSpacer}
-              hitSlop={8}
-            >
-              <Text style={[styles.qrCloseText, { color: colors.primary }]}>
-                Fertig
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.qrContent}>
-            <Text style={[styles.qrBalance, { color: colors.textSecondary }]}>
-              Guthaben: {formatEuros(card.balance_cents)}
-            </Text>
-
-            <View style={[styles.qrBox, { backgroundColor: '#ffffff' }]}>
-              {qrPayload ? (
-                <QRCode
-                  value={qrPayload}
-                  size={240}
-                  color="#000000"
-                  backgroundColor="#ffffff"
-                />
-              ) : (
-                <View style={styles.qrPlaceholder}>
-                  {qrError ? (
-                    <Text style={styles.qrErrorText}>{qrError}</Text>
-                  ) : (
-                    <ActivityIndicator color="#000000" />
-                  )}
-                </View>
-              )}
-            </View>
-
-            <Text style={[styles.qrHint, { color: colors.textSecondary }]}>
-              Zeige diesen Code dem Partner zum Bezahlen.{'\n'}
-              Der Betrag wird dir zur Bestätigung angezeigt.
-            </Text>
-          </View>
-        </RNSafeAreaView>
-      </Modal>
+        onClose={handleCloseQr}
+        balanceCents={card.balance_cents}
+        qrPayload={qrPayload}
+        qrError={qrError}
+      />
 
       <PendingChargeModal
         charge={pending}
@@ -541,64 +490,5 @@ const styles = StyleSheet.create({
   infoGlyph: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-  },
-
-  qrModalHeader: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-  },
-  qrHeaderTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
-  qrHeaderSpacer: {
-    width: 56,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qrCloseText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-  },
-  qrContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  qrBalance: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 24,
-  },
-  qrBox: {
-    padding: 20,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 280,
-    height: 280,
-    marginBottom: 24,
-  },
-  qrPlaceholder: {
-    width: 240,
-    height: 240,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qrErrorText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#DC2626',
-    textAlign: 'center',
-    padding: 16,
-  },
-  qrHint: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });
