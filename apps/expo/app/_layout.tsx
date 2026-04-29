@@ -25,7 +25,14 @@ import '@/lib/patch-text';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { ThirdwebProvider, AutoConnect } from 'thirdweb/react';
+import {
+  ThirdwebProvider,
+  AutoConnect,
+  useActiveAccount,
+  useActiveWalletConnectionStatus,
+  useIsAutoConnecting,
+} from 'thirdweb/react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { client, chain } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { wallets } from '@/constants/wallets';
@@ -187,6 +194,47 @@ function AutoConnectHandler() {
   );
 }
 
+/**
+ * Dev-only floating badge that reports the live thirdweb session state so we
+ * can diagnose persistence issues on preview builds without adb logcat.
+ * Tap to dismiss.
+ */
+function ThirdwebDebugBadge() {
+  const account = useActiveAccount();
+  const status = useActiveWalletConnectionStatus();
+  const isAutoConnecting = useIsAutoConnecting();
+  const [storageKeyCount, setStorageKeyCount] = React.useState<number | null>(null);
+  const [hidden, setHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    AsyncStorage.getAllKeys()
+      .then((keys) => {
+        const thirdwebKeys = keys.filter((k) =>
+          /thirdweb|inAppWallet|iaw|smart-account|active-wallet|connect-token/i.test(k),
+        );
+        setStorageKeyCount(thirdwebKeys.length);
+        console.log('[thirdweb] storage keys at boot', thirdwebKeys);
+      })
+      .catch(() => setStorageKeyCount(-1));
+  }, []);
+
+  if (hidden) return null;
+
+  const short = (a: string | undefined) =>
+    a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—';
+
+  return (
+    <View style={styles.debugBadge} pointerEvents="box-none">
+      <Text
+        onPress={() => setHidden(true)}
+        style={styles.debugBadgeText}
+      >
+        TW {status} · ac:{isAutoConnecting ? '…' : 'done'} · {short(account?.address)} · keys:{storageKeyCount ?? '?'}
+      </Text>
+    </View>
+  );
+}
+
 function ThemedLayout() {
   const { colors, isDark } = useTheme();
 
@@ -197,6 +245,7 @@ function ThemedLayout() {
       <PostHogTelemetry />
       <RewardsTaskTriggers />
       <ReferralDeepLinkHandler />
+      <ThirdwebDebugBadge />{/* TODO: remove once auto-login is verified */}
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
           <TransitionStack.Screen
@@ -311,5 +360,21 @@ export default Layout;
 const styles = StyleSheet.create({
   gradientContainer: {
     flex: 1,
+  },
+  debugBadge: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 32,
+    right: 8,
+    zIndex: 9999,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    maxWidth: 280,
+  },
+  debugBadgeText: {
+    color: '#00ff88',
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
   },
 });
