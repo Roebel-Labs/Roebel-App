@@ -25,13 +25,7 @@ import '@/lib/patch-text';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import {
-  ThirdwebProvider,
-  useActiveAccount,
-  useActiveWalletConnectionStatus,
-  useSetActiveWallet,
-} from 'thirdweb/react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ThirdwebProvider, useSetActiveWallet } from 'thirdweb/react';
 import { client } from '../constants/thirdweb';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { wallets } from '@/constants/wallets';
@@ -173,136 +167,38 @@ function RewardsTaskTriggers() {
 }
 
 /**
- * Inner layout that can access ThemeContext
+ * Restores the last connected wallet on cold start.
+ *
+ * We call wallet.autoConnect({ client }) explicitly per wallet (rather than
+ * using <AutoConnect> / useAutoConnect) because the higher-level helpers were
+ * swallowing errors and leaving the connection status as 'unknown' on Android
+ * preview builds even when AsyncStorage held a valid session.
  */
-type AutoConnectState =
-  | { phase: 'idle' }
-  | { phase: 'running' }
-  | { phase: 'ok'; walletId: string; address?: string }
-  | { phase: 'no-session' }
-  | { phase: 'error'; walletId: string; message: string };
-
-const autoConnectState = { current: { phase: 'idle' } as AutoConnectState };
-const autoConnectListeners = new Set<() => void>();
-function setAutoConnectState(next: AutoConnectState) {
-  autoConnectState.current = next;
-  autoConnectListeners.forEach((l) => l());
-}
-function useAutoConnectState() {
-  const [, setTick] = React.useState(0);
-  React.useEffect(() => {
-    const l = () => setTick((t) => t + 1);
-    autoConnectListeners.add(l);
-    return () => {
-      autoConnectListeners.delete(l);
-    };
-  }, []);
-  return autoConnectState.current;
-}
-
 function AutoConnectHandler() {
   const setActiveWallet = useSetActiveWallet();
 
   React.useEffect(() => {
     let cancelled = false;
-    setAutoConnectState({ phase: 'running' });
-
     (async () => {
-      let connected = false;
       for (const wallet of wallets) {
         try {
           const account = await wallet.autoConnect({ client });
           if (cancelled) return;
           if (account) {
             await setActiveWallet(wallet);
-            connected = true;
-            setAutoConnectState({
-              phase: 'ok',
-              walletId: wallet.id,
-              address: account.address,
-            });
             return;
           }
-        } catch (e: any) {
-          if (cancelled) return;
-          setAutoConnectState({
-            phase: 'error',
-            walletId: wallet.id,
-            message: String(e?.message ?? e ?? 'unknown'),
-          });
-          return;
+        } catch {
+          // No stored session for this wallet, or restore failed; try next.
         }
       }
-      if (!connected && !cancelled) {
-        setAutoConnectState({ phase: 'no-session' });
-      }
     })();
-
     return () => {
       cancelled = true;
     };
   }, [setActiveWallet]);
 
   return null;
-}
-
-/**
- * Floating badge that reports live thirdweb session state on preview builds.
- * Tap to expand and see storage keys + last error. Long-press to dismiss.
- */
-function ThirdwebDebugBadge() {
-  const account = useActiveAccount();
-  const status = useActiveWalletConnectionStatus();
-  const acState = useAutoConnectState();
-  const [storageKeys, setStorageKeys] = React.useState<string[] | null>(null);
-  const [expanded, setExpanded] = React.useState(false);
-  const [hidden, setHidden] = React.useState(false);
-
-  React.useEffect(() => {
-    AsyncStorage.getAllKeys()
-      .then((keys) => {
-        const thirdwebKeys = keys.filter((k) =>
-          /thirdweb|inAppWallet|iaw|smart-account|active-wallet|connect-token|ecosystem/i.test(
-            k,
-          ),
-        );
-        setStorageKeys(thirdwebKeys);
-      })
-      .catch(() => setStorageKeys([]));
-  }, []);
-
-  if (hidden) return null;
-
-  const short = (a: string | undefined) =>
-    a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—';
-
-  const acSummary =
-    acState.phase === 'ok'
-      ? `ok ${short(acState.address)}`
-      : acState.phase === 'error'
-      ? `ERR ${acState.walletId}`
-      : acState.phase === 'no-session'
-      ? 'no-session'
-      : acState.phase;
-
-  return (
-    <View style={styles.debugBadge} pointerEvents="box-none">
-      <Text
-        onPress={() => setExpanded((v) => !v)}
-        onLongPress={() => setHidden(true)}
-        style={styles.debugBadgeText}
-      >
-        TW {status} · ac:{acSummary} · {short(account?.address)} · k:
-        {storageKeys?.length ?? '?'}
-      </Text>
-      {expanded && (
-        <Text style={styles.debugBadgeText}>
-          {acState.phase === 'error' ? `err: ${acState.message}\n` : ''}
-          {(storageKeys ?? []).map((k) => `• ${k}`).join('\n')}
-        </Text>
-      )}
-    </View>
-  );
 }
 
 function ThemedLayout() {
@@ -315,7 +211,6 @@ function ThemedLayout() {
       <PostHogTelemetry />
       <RewardsTaskTriggers />
       <ReferralDeepLinkHandler />
-      <ThirdwebDebugBadge />{/* TODO: remove once auto-login is verified */}
       <View style={[styles.gradientContainer, { backgroundColor: colors.background }]}>
         <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
           <TransitionStack.Screen
@@ -430,22 +325,5 @@ export default Layout;
 const styles = StyleSheet.create({
   gradientContainer: {
     flex: 1,
-  },
-  debugBadge: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 32,
-    right: 8,
-    zIndex: 9999,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    maxWidth: 320,
-  },
-  debugBadgeText: {
-    color: '#00ff88',
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 13,
   },
 });
