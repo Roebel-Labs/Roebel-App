@@ -30,6 +30,7 @@ import type {
 import FeedPostCard from './FeedPostCard';
 import FeedAlertCard from './FeedAlertCard';
 import FeedMeckyCard from './FeedMeckyCard';
+import FeedExperienceCard from './FeedExperienceCard';
 import FeedSponsoredCard from './FeedSponsoredCard';
 import FeedMarketplaceCard from './FeedMarketplaceCard';
 import FeedEventCard from './FeedEventCard';
@@ -139,6 +140,18 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
         case 'post': {
           const post = item.data as PostRecord;
+          if (post.post_type === 'event_experience') {
+            return (
+              <FeedExperienceCard
+                post={post}
+                isLiked={isLiked(post.id)}
+                displayLikeCount={getLikeCount(post.id, post.likes_count)}
+                onLike={() => toggleLike(post.id, post.likes_count)}
+                onShare={() => sharePost(post.id, post.content)}
+                onMore={() => onMore(post)}
+              />
+            );
+          }
           return (
             <FeedPostCard
               post={post}

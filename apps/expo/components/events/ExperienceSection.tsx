@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { useState, useEffect, useCallback, RefObject } from 'react';
+import { View, Text, Pressable, ActivityIndicator, Image, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -8,11 +8,17 @@ import ExperienceItem from './ExperienceItem';
 import ExperienceComposer from './ExperienceComposer';
 import type { EventExperience } from '@/lib/types/feed';
 
+const MAX_HIGHLIGHT_PAGES = 5;
+
 type Props = {
   eventId: string;
+  /** Optional id of an experience to scroll to and visually highlight */
+  highlightExperienceId?: string;
+  /** Parent ScrollView ref so the highlighted item can scroll itself into view */
+  scrollViewRef?: RefObject<ScrollView | null>;
 };
 
-export default function ExperienceSection({ eventId }: Props) {
+export default function ExperienceSection({ eventId, highlightExperienceId, scrollViewRef }: Props) {
   const { colors } = useTheme();
   const { user } = useUser();
 
@@ -43,6 +49,18 @@ export default function ExperienceSection({ eventId }: Props) {
   useEffect(() => {
     loadExperiences(0);
   }, [loadExperiences]);
+
+  // Page through experiences until the highlighted one shows up (or give up).
+  useEffect(() => {
+    if (!highlightExperienceId || loading) return;
+    if (experiences.some((e) => e.id === highlightExperienceId)) return;
+    if (!hasMore) return;
+    if (page >= MAX_HIGHLIGHT_PAGES - 1) return;
+    if (loadingMore) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadExperiences(nextPage, true);
+  }, [highlightExperienceId, experiences, hasMore, loading, loadingMore, page, loadExperiences]);
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
@@ -131,6 +149,8 @@ export default function ExperienceSection({ eventId }: Props) {
               experience={experience}
               isOwner={user?.wallet_address === experience.wallet_address}
               onDelete={handleDelete}
+              isHighlighted={experience.id === highlightExperienceId}
+              scrollViewRef={scrollViewRef}
             />
           ))}
         </View>

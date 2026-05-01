@@ -11,7 +11,7 @@ export type PostCategory =
   | 'generell';
 
 export type FeedType = 'main' | 'rathaus' | 'app';
-export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share';
+export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share' | 'event_experience';
 
 export type PostAuthor = Pick<
   UserRecord,
@@ -70,6 +70,7 @@ export type PostRecord = {
   linked_event_id: string | null;
   linked_marketplace_id: string | null;
   linked_mecky_draft_id: string | null;
+  linked_experience_id: string | null;
   sticker_reward_id: string | null;
   likes_count: number;
   comments_count: number;
@@ -106,6 +107,7 @@ export type EventExperience = {
   id: string;
   event_id: string;
   wallet_address: string;
+  account_id: string | null;
   content: string;
   media_urls: string[] | null;
   video_url: string | null;
@@ -142,6 +144,7 @@ export type CreatePostInput = {
   linked_event_id?: string;
   linked_marketplace_id?: string;
   linked_mecky_draft_id?: string;
+  linked_experience_id?: string;
   sticker_reward_id?: string | null;
 };
 

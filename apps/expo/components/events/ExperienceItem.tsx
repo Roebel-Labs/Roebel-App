@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet, Linking } from 'react-native';
+import { useEffect, useRef, useState, RefObject } from 'react';
+import { View, Text, Pressable, Alert, StyleSheet, Linking, ScrollView, findNodeHandle } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,12 +12,49 @@ type Props = {
   experience: EventExperience;
   isOwner: boolean;
   onDelete?: (experience: EventExperience) => void;
+  isHighlighted?: boolean;
+  scrollViewRef?: RefObject<ScrollView | null>;
 };
 
-export default function ExperienceItem({ experience, isOwner, onDelete }: Props) {
+export default function ExperienceItem({
+  experience,
+  isOwner,
+  onDelete,
+  isHighlighted = false,
+  scrollViewRef,
+}: Props) {
   const { colors } = useTheme();
   const [menuVisible, setMenuVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [showHighlight, setShowHighlight] = useState(false);
+  const cardRef = useRef<View>(null);
+
+  useEffect(() => {
+    if (!isHighlighted) return;
+    const node = cardRef.current;
+    const scrollNode = scrollViewRef?.current
+      ? findNodeHandle(scrollViewRef.current)
+      : null;
+    if (!node || !scrollNode) return;
+
+    const measureTimer = setTimeout(() => {
+      node.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          scrollViewRef?.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+        },
+        () => {},
+      );
+    }, 250);
+
+    setShowHighlight(true);
+    const fadeTimer = setTimeout(() => setShowHighlight(false), 2200);
+
+    return () => {
+      clearTimeout(measureTimer);
+      clearTimeout(fadeTimer);
+    };
+  }, [isHighlighted, scrollViewRef]);
 
   const handleDelete = () => {
     Alert.alert('Erlebnis löschen', 'Möchtest du dieses Erlebnis wirklich löschen?', [
@@ -33,7 +70,14 @@ export default function ExperienceItem({ experience, isOwner, onDelete }: Props)
   const imageUrls = experience.media_urls?.filter(Boolean) ?? [];
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View
+      ref={cardRef}
+      style={[
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        showHighlight && { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+      ]}
+    >
       {/* Emoji or sticker banner */}
       {experience.sticker ? (
         <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>

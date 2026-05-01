@@ -48,7 +48,11 @@ export async function fetchEventExperiences(
 }
 
 /**
- * Create a new experience on an event
+ * Create a new experience on an event.
+ *
+ * Also mirrors the experience into `posts` so it surfaces in the main home
+ * feed via the existing fetchFeedPosts query. The mirror is best-effort: if
+ * it fails the experience itself is still returned successfully.
  */
 export async function createExperience(
   input: CreateExperienceInput
@@ -81,11 +85,34 @@ export async function createExperience(
     return null;
   }
 
-  return mergeAccountIntoAuthor(data as EventExperience);
+  const experience = data as EventExperience;
+
+  const { error: postError } = await supabase.from('posts').insert({
+    wallet_address: experience.wallet_address,
+    account_id: experience.account_id ?? null,
+    content: experience.content,
+    media_urls: experience.media_urls ?? [],
+    video_url: experience.video_url ?? null,
+    sticker_reward_id: experience.sticker_reward_id ?? null,
+    category: 'generell',
+    feed_type: 'main',
+    post_type: 'event_experience',
+    linked_event_id: experience.event_id,
+    linked_experience_id: experience.id,
+    status: 'published',
+  });
+
+  if (postError) {
+    console.error('Error mirroring experience to feed:', postError);
+  }
+
+  return mergeAccountIntoAuthor(experience);
 }
 
 /**
- * Soft-delete an experience by setting status to 'deleted'
+ * Soft-delete an experience by setting status to 'deleted'.
+ * Mirrors the soft-delete to the paired feed post so the compact card
+ * disappears from the home feed too.
  */
 export async function deleteExperience(experienceId: string): Promise<void> {
   const { error } = await supabase
@@ -96,5 +123,14 @@ export async function deleteExperience(experienceId: string): Promise<void> {
   if (error) {
     console.error('Error deleting experience:', error);
     throw error;
+  }
+
+  const { error: postError } = await supabase
+    .from('posts')
+    .update({ status: 'deleted' })
+    .eq('linked_experience_id', experienceId);
+
+  if (postError) {
+    console.error('Error soft-deleting paired feed post:', postError);
   }
 }

@@ -43,7 +43,7 @@ const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, colo
 };
 
 export default function EventDetails() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
@@ -463,7 +463,11 @@ export default function EventDetails() {
             </View>
 
             {/* Event Experiences Section */}
-            <ExperienceSection eventId={id as string} />
+            <ExperienceSection
+              eventId={id as string}
+              highlightExperienceId={experienceId}
+              scrollViewRef={scrollRef}
+            />
 
             {/* More Events Section */}
             {moreEvents.length > 0 && (
