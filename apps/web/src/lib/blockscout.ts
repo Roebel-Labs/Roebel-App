@@ -49,3 +49,11 @@ export function getBaseScanContractEventsUrl(address: string): string {
 export function getBaseScanTxUrl(txHash: string): string {
   return `https://basescan.org/tx/${txHash}`;
 }
+
+/**
+ * Get BaseScan address URL
+ * Traditional explorer link to a contract / address page
+ */
+export function getBaseScanAddressUrl(address: string): string {
+  return `https://basescan.org/address/${address}`;
+}

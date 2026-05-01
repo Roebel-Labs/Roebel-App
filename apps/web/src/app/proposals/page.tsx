@@ -62,12 +62,20 @@ export default function ProposalsPage() {
               <h1 className="text-3xl font-medium text-foreground">{de.proposals.title}</h1>
               <p className="text-muted-foreground mt-1">{de.proposals.subtitle}</p>
             </div>
-            <Link
-              href="/proposals/create"
-              className="inline-flex items-center justify-center bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-            >
-              {de.proposals.createProposal}
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/proposals/timeline"
+                className="inline-flex items-center justify-center rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {de.governance.timelineLink} →
+              </Link>
+              <Link
+                href="/proposals/create"
+                className="inline-flex items-center justify-center bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              >
+                {de.proposals.createProposal}
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-6">

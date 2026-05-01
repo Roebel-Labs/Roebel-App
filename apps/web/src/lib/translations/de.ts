@@ -316,6 +316,54 @@ export const de = {
     perPage: "pro Seite",
   },
 
+  governance: {
+    timelineTitle: "Blockchain-Zeitleiste",
+    timelineLead:
+      "Die nachweisbare Geschichte der Bürgervertretung Röbel/Müritz — jeder Schritt liegt unveränderbar auf der Base-Blockchain und kann von jedem Menschen unabhängig überprüft werden.",
+    timelineFooter:
+      "Diese Seite liest die Ereignisse direkt aus den Smart Contracts auf Base Mainnet. Lade die Seite neu, um den aktuellen Stand abzurufen.",
+    timelineLink: "Blockchain-Zeitleiste",
+
+    contractsTitle: "Verträge zur Verifizierung",
+    contractsLead:
+      "Alle Aktionen werden von diesen vier Smart Contracts ausgeführt. Klicke auf einen Eintrag, um den Quellcode und sämtliche Transaktionen einzusehen.",
+    openOnBasescan: "Auf Basescan öffnen",
+    verifyOnBasescan: "Auf Basescan verifizieren",
+
+    eventCreated: "Vorschlag erstellt",
+    eventVoteCast: "Stimme abgegeben",
+    eventQueued: "In Warteschlange",
+    eventExecuted: "Ausgeführt",
+    eventCanceled: "Abgebrochen",
+
+    voteFor: "Dafür",
+    voteAgainst: "Dagegen",
+    voteAbstain: "Enthaltung",
+
+    roleGovernor: "Governor (AttesterGovernor)",
+    roleTimelock: "Timelock (RoebelTimelock)",
+    roleCitizenNFT: "Bürger-Pass (CitizenNFT)",
+    roleAttesterNFT: "Bescheiniger-Pass (AttesterNFT)",
+
+    block: "Block:",
+    weight: "Gewicht:",
+    voter: "Stimme von:",
+    proposer: "Eingereicht von:",
+
+    eventSingular: "Ereignis",
+    eventPlural: "Ereignisse",
+
+    relativePrefix: "vor",
+    minutesShort: "Min.",
+    hoursShort: "Std.",
+    daysShort: "Tagen",
+    monthsShort: "Monaten",
+
+    unknownProposal: "Vorschlag",
+    emptyState:
+      "Es liegen noch keine On-Chain-Ereignisse vor. Sobald der erste Vorschlag eingereicht wird, erscheint er hier.",
+  },
+
   errors: {
     generic: "Ein Fehler ist aufgetreten",
     walletNotConnected: "Wallet nicht verbunden",
