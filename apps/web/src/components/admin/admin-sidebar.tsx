@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, UserCog, Map } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, UserCog, Map, Vote } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { NotificationDot } from "@/components/ui/notification-dot"
@@ -143,6 +143,12 @@ export function AdminSidebar() {
       href: "/admin/dashboard/extern-accounts",
       icon: <UserCog className="h-5 w-5" />,
       badgeKey: "externAccounts",
+    },
+    {
+      name: "DAO & Bürger",
+      href: "/admin/dashboard/dao",
+      icon: <Vote className="h-5 w-5" />,
+      badgeKey: null,
     },
     {
       name: "Meldungen",
