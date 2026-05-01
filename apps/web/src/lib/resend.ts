@@ -11,5 +11,6 @@ export const resend = process.env.RESEND_API_KEY
 // Email configuration
 export const EMAIL_CONFIG = {
   from: "Röbel App <tickets@roebel.app>", // Update with your verified domain
+  fromHello: "Röbel Card <hello@roebel.app>", // Used for landing-page lead confirmations
   replyTo: "support@roebel.app",
 } as const;
