@@ -17,6 +17,7 @@ import { de } from 'date-fns/locale';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { formatTime, formatLocation } from '@/lib/utils';
+import { softShadow } from '@/lib/shadow';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -142,7 +143,7 @@ function SwiperSlide({
   totalSlides,
 }: SwiperSlideProps) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -288,7 +289,13 @@ function SwiperSlide({
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View style={[styles.cardWrapper, animatedStyle, slideIndex === 0 && styles.frontCardShadow]}>
+      <Animated.View
+        style={[
+          styles.cardWrapper,
+          animatedStyle,
+          slideIndex === 0 && softShadow(3, isDark),
+        ]}
+      >
         <Pressable
           onPress={() => {
             if (isActive) {
@@ -406,14 +413,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     left: 0,
     top: 0,
-  },
-  frontCardShadow: {
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-    elevation: 8,
+    borderRadius: 24,
   },
 
   // Card container
