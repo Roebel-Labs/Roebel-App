@@ -20,6 +20,9 @@ import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import FlippableIdentityCard from '@/components/FlippableIdentityCard';
 import ProfileModeCards from '@/components/profile/ProfileModeCards';
 import RewardsCTABanner from '@/components/profile/RewardsCTABanner';
+import ProfileHeaderCard from '@/components/profile/ProfileHeaderCard';
+import CoinsCard from '@/components/profile/CoinsCard';
+import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 
 // Import SVG icons
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -205,24 +208,36 @@ const handleRefresh = async () => {
         ) : (
           // ============= LOGGED IN STATE =============
           <View style={styles.connectedContainer}>
-            {/* Flippable Identity Card */}
-            <FlippableIdentityCard
-              user={user}
-              role={tier}
-              isCitizen={isCitizen}
-              verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
-              attestedBy={isCitizen ? 3 : 0}
-              votingStreak={user?.voting_streak || 0}
-              isPending={isBusinessOwner && userBusiness?.status === 'pending'}
-              businessName={userBusiness?.name}
-              verificationRequestId={citizenRequest?.request_id}
-            />
-
-            {/* Belohnungen entry — placed below the identity card */}
-            <RewardsCTABanner />
-
-            {/* Mode-specific action cards */}
-            <ProfileModeCards />
+            {isCitizen && activeAccount?.account_type !== 'organisation' ? (
+              <>
+                {/* New citizen layout: header card → coins → 3×2 action grid */}
+                <ProfileHeaderCard
+                  name={displayName || 'Bürger'}
+                  avatarUrl={user?.profile_picture_url ?? null}
+                  isCitizen={isCitizen}
+                  onPress={() => router.push('/citizen-verification' as any)}
+                />
+                <CoinsCard />
+                <ProfileActionGrid />
+              </>
+            ) : (
+              <>
+                {/* Tourist + org modes keep the existing flippable card layout */}
+                <FlippableIdentityCard
+                  user={user}
+                  role={tier}
+                  isCitizen={isCitizen}
+                  verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
+                  attestedBy={isCitizen ? 3 : 0}
+                  votingStreak={user?.voting_streak || 0}
+                  isPending={isBusinessOwner && userBusiness?.status === 'pending'}
+                  businessName={userBusiness?.name}
+                  verificationRequestId={citizenRequest?.request_id}
+                />
+                <RewardsCTABanner />
+                <ProfileModeCards />
+              </>
+            )}
 
             {/* Menu Items */}
             <View style={styles.menuSection}>
