@@ -18,6 +18,9 @@ import VoteButtonsEnhanced from '@/components/VoteButtonsEnhanced';
 import ProposalTimers from '@/components/ProposalTimers';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
+import ProposalOnchainLinks from '@/components/proposals/ProposalOnchainLinks';
+import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
+import { governorContractAddress } from '@/constants/thirdweb';
 
 export default function ProposalDetailScreen() {
   const goBack = useGoBack();
@@ -101,7 +104,7 @@ export default function ProposalDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <Pressable onPress={goBack} style={styles.backButton}>
             <ArrowLeftIcon size={24} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerSpacer} />
@@ -117,7 +120,7 @@ export default function ProposalDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+          <Pressable onPress={goBack} style={styles.backButton}>
             <ArrowLeftIcon size={24} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.headerSpacer} />
@@ -134,14 +137,14 @@ export default function ProposalDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surface }]}>
+        <Pressable onPress={goBack} style={styles.backButton}>
           <ArrowLeftIcon size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {proposal.title || 'Vorschlag'}
         </Text>
-        <Pressable onPress={handleShare} style={[styles.shareButton, { backgroundColor: colors.surface }]}>
-          <Text style={styles.shareIcon}>&#x2197;</Text>
+        <Pressable onPress={handleShare} style={styles.shareButton}>
+          <Text style={[styles.shareIcon, { color: colors.textPrimary }]}>&#x2197;</Text>
         </Pressable>
       </View>
 
@@ -183,6 +186,12 @@ export default function ProposalDetailScreen() {
           </Text>
         </View>
 
+        {/* Onchain links */}
+        <ProposalOnchainLinks
+          transactionHash={proposal.transactionHash}
+          governorAddress={governorContractAddress}
+        />
+
         {/* Proposal Content */}
         <ProposalContent
           content={content}
@@ -212,6 +221,11 @@ export default function ProposalDetailScreen() {
           proposalId={BigInt(proposal.blockchainProposalId || proposal.proposalId)}
           proposalState={proposal.state}
         />
+
+        {/* Discussion */}
+        {proposalId && (
+          <ProposalCommentSection proposalId={proposalId} isCitizen={isCitizen} />
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>

@@ -200,6 +200,49 @@ export type BusinessDealWithBusiness = BusinessDealRecord & {
   business?: Pick<BusinessRecord, 'id' | 'name' | 'slug' | 'logo_url' | 'category'>;
 };
 
+// ─── Proposal Feed Types ────────────────────────────────────
+
+export type ProposalFeedRecord = {
+  id: string;
+  proposal_id: string;
+  proposal_number: number | null;
+  title: string;
+  summary: string;
+  category: string;
+  proposer_address: string;
+  state: number;
+  for_votes: string;
+  against_votes: string;
+  abstain_votes: string;
+  transaction_hash: string;
+  blockchain_proposal_id: string;
+  created_at: string;
+};
+
+export type ProposalPreviewRef = {
+  proposal_id: string;
+  title: string;
+  state: number;
+  for_votes: string;
+  against_votes: string;
+  abstain_votes: string;
+};
+
+export type ProposalCommentFeedRecord = {
+  id: string;
+  proposal_id: string;
+  wallet_address: string;
+  account_id: string | null;
+  content: string;
+  media_urls: string[] | null;
+  video_url: string | null;
+  emoji: string | null;
+  status: 'published' | 'deleted';
+  created_at: string;
+  author?: PostAuthor;
+  proposal?: ProposalPreviewRef;
+};
+
 export type FeedItem =
   | { type: 'post'; data: PostRecord; id: string }
   | { type: 'mecky'; data: PostRecord; id: string }
@@ -212,7 +255,9 @@ export type FeedItem =
   | { type: 'restaurant_section'; data: RestaurantRecord[]; id: string }
   | { type: 'special_menu_section'; data: SpecialMenuRecord[]; id: string }
   | { type: 'governance_nudge'; data: GovernanceNudgeData; id: string }
-  | { type: 'mecky_tip'; data: MeckyTipData; id: string };
+  | { type: 'mecky_tip'; data: MeckyTipData; id: string }
+  | { type: 'proposal'; data: ProposalFeedRecord; id: string }
+  | { type: 'proposal_comment'; data: ProposalCommentFeedRecord; id: string };
 
 export type GovernanceNudgeData = {
   proposalId: string;

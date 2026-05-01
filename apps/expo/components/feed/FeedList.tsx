@@ -42,6 +42,8 @@ import FeedPostSkeleton from './FeedPostSkeleton';
 import FeedEmptyState from './FeedEmptyState';
 import GovernanceNudge from './GovernanceNudge';
 import MeckyTip from './MeckyTip';
+import FeedProposalCard from './FeedProposalCard';
+import FeedProposalCommentCard from './FeedProposalCommentCard';
 
 export type FeedListHandle = {
   refresh: () => void;
@@ -225,6 +227,12 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           const tip = item.data as MeckyTipData;
           return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
         }
+
+        case 'proposal':
+          return <FeedProposalCard proposal={item.data} />;
+
+        case 'proposal_comment':
+          return <FeedProposalCommentCard comment={item.data} />;
 
         default:
           return null;

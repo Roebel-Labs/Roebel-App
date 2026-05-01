@@ -51,6 +51,7 @@ export type Proposal = {
   irysUrl?: string;
   createdAt?: string;
   blockchainProposalId?: string; // The numeric ID used for blockchain calls
+  transactionHash?: string; // Tx hash of the proposal-creation transaction
 
   // Flags
   blockchainUnavailable?: boolean; // True if blockchain data fetch failed
@@ -125,6 +126,7 @@ export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Propo
     irysUrl: supabaseProposal.irys_url,
     createdAt: supabaseProposal.created_at,
     blockchainProposalId: supabaseProposal.blockchain_proposal_id,
+    transactionHash: supabaseProposal.transaction_hash,
 
     // Flags
     blockchainUnavailable: false, // Will be set to true if blockchain fetch fails

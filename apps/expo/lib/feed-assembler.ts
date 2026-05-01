@@ -6,6 +6,8 @@ import type {
   BusinessDealWithBusiness,
   GovernanceNudgeData,
   MeckyTipData,
+  ProposalFeedRecord,
+  ProposalCommentFeedRecord,
 } from './types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from './types';
 
@@ -48,6 +50,8 @@ export function assembleFeed(params: {
   specialMenus?: SpecialMenuRecord[];
   governanceNudges?: GovernanceNudgeData[];
   meckyTips?: MeckyTipData[];
+  proposals?: ProposalFeedRecord[];
+  proposalComments?: ProposalCommentFeedRecord[];
   feedType: FeedType;
 }): FeedItem[] {
   const {
@@ -62,6 +66,8 @@ export function assembleFeed(params: {
     specialMenus = [],
     governanceNudges = [],
     meckyTips = [],
+    proposals = [],
+    proposalComments = [],
     feedType,
   } = params;
   const items: FeedItem[] = [];
@@ -79,9 +85,35 @@ export function assembleFeed(params: {
     id: `post-${post.id}`,
   }));
 
-  // For Rathaus tab, just add posts and return
+  // For Rathaus (Stadt) tab: merge posts + proposals + proposal comments
+  // sorted by created_at desc.
   if (feedType === 'rathaus') {
-    items.push(...postItems);
+    type Sortable = { item: FeedItem; ts: number };
+    const sortable: Sortable[] = [];
+
+    for (const item of postItems) {
+      const post = item.data as PostRecord;
+      sortable.push({ item, ts: new Date(post.created_at).getTime() });
+    }
+    for (const proposal of proposals) {
+      sortable.push({
+        item: { type: 'proposal', data: proposal, id: `proposal-${proposal.proposal_id}` },
+        ts: new Date(proposal.created_at).getTime(),
+      });
+    }
+    for (const comment of proposalComments) {
+      sortable.push({
+        item: {
+          type: 'proposal_comment',
+          data: comment,
+          id: `proposal-comment-${comment.id}`,
+        },
+        ts: new Date(comment.created_at).getTime(),
+      });
+    }
+
+    sortable.sort((a, b) => b.ts - a.ts);
+    items.push(...sortable.map((s) => s.item));
     return items;
   }
 

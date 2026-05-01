@@ -13,7 +13,7 @@ export default function VotingStats({ votes }: VotingStatsProps) {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={styles.container}>
       <Text style={[styles.title, { color: colors.textPrimary }]}>Wahlergebnisse</Text>
 
       {/* Dafür (For) */}
@@ -22,7 +22,7 @@ export default function VotingStats({ votes }: VotingStatsProps) {
           <Text style={[styles.voteLabel, { color: colors.textPrimary }]}>Dafür</Text>
           <Text style={[styles.votePercentage, { color: colors.textPrimary }]}>{percentages.forPercent.toFixed(0)}%</Text>
         </View>
-        <View style={[styles.progressBarContainer, { backgroundColor: colors.surfaceSecondary }]}>
+        <View style={[styles.progressBarContainer, { borderColor: colors.border }]}>
           <View
             style={[
               styles.progressBarFor,
@@ -39,7 +39,7 @@ export default function VotingStats({ votes }: VotingStatsProps) {
           <Text style={[styles.voteLabel, { color: colors.textPrimary }]}>Gegen</Text>
           <Text style={[styles.votePercentage, { color: colors.textPrimary }]}>{percentages.againstPercent.toFixed(0)}%</Text>
         </View>
-        <View style={[styles.progressBarContainer, { backgroundColor: colors.surfaceSecondary }]}>
+        <View style={[styles.progressBarContainer, { borderColor: colors.border }]}>
           <View
             style={[
               styles.progressBarAgainst,
@@ -56,11 +56,11 @@ export default function VotingStats({ votes }: VotingStatsProps) {
           <Text style={[styles.voteLabel, { color: colors.textPrimary }]}>Enthaltung</Text>
           <Text style={[styles.votePercentage, { color: colors.textPrimary }]}>{percentages.abstainPercent.toFixed(0)}%</Text>
         </View>
-        <View style={[styles.progressBarContainer, { backgroundColor: colors.surfaceSecondary }]}>
+        <View style={[styles.progressBarContainer, { borderColor: colors.border }]}>
           <View
             style={[
               styles.progressBarAbstain,
-              { width: `${percentages.abstainPercent}%` },
+              { width: `${percentages.abstainPercent}%`, backgroundColor: colors.textSecondary },
             ]}
           />
         </View>
@@ -72,10 +72,9 @@ export default function VotingStats({ votes }: VotingStatsProps) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     marginVertical: 16,
-    borderWidth: 1,
   },
   title: {
     fontSize: 18,
@@ -100,25 +99,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   progressBarContainer: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 6,
+    borderWidth: 1,
   },
   progressBarFor: {
     height: '100%',
     backgroundColor: '#10B981',
-    borderRadius: 3,
   },
   progressBarAgainst: {
     height: '100%',
     backgroundColor: '#EF4444',
-    borderRadius: 3,
   },
   progressBarAbstain: {
     height: '100%',
-    backgroundColor: '#9CA3AF',
-    borderRadius: 3,
   },
   voteCount: {
     fontSize: 12,

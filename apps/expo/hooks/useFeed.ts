@@ -1,5 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { FeedItem, FeedType, PostRecord, ServiceAlertRecord, BusinessDealWithBusiness, GovernanceNudgeData, MeckyTipData } from '@/lib/types/feed';
+import type {
+  FeedItem,
+  FeedType,
+  PostRecord,
+  ServiceAlertRecord,
+  BusinessDealWithBusiness,
+  GovernanceNudgeData,
+  MeckyTipData,
+  ProposalFeedRecord,
+  ProposalCommentFeedRecord,
+} from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '@/lib/types';
 import { fetchFeedPosts, fetchActiveServiceAlerts, fetchUpcomingEventsForFeed } from '@/lib/supabase-posts';
 import { fetchActiveDeals } from '@/lib/supabase-deals';
@@ -8,6 +18,10 @@ import { fetchRecentNews } from '@/lib/supabase-news';
 import { fetchUpcomingMovies } from '@/lib/supabase-cinema';
 import { fetchFeaturedRestaurants, fetchActiveSpecialMenus } from '@/lib/supabase-restaurants';
 import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
+import {
+  fetchRecentProposalComments,
+  type ProposalCommentWithPreview,
+} from '@/lib/supabase-proposal-comments';
 import { assembleFeed } from '@/lib/feed-assembler';
 
 function buildGovernanceNudges(proposals: SupabaseProposal[]): GovernanceNudgeData[] {
@@ -63,6 +77,8 @@ export function useFeed(feedType: FeedType) {
   const specialMenusRef = useRef<SpecialMenuRecord[]>([]);
   const governanceRef = useRef<GovernanceNudgeData[]>([]);
   const meckyTipsRef = useRef<MeckyTipData[]>([]);
+  const proposalsRef = useRef<ProposalFeedRecord[]>([]);
+  const proposalCommentsRef = useRef<ProposalCommentFeedRecord[]>([]);
   const allPostsRef = useRef<PostRecord[]>([]);
 
   const buildFeed = useCallback(
@@ -79,6 +95,8 @@ export function useFeed(feedType: FeedType) {
         specialMenus: specialMenusRef.current,
         governanceNudges: governanceRef.current,
         meckyTips: meckyTipsRef.current,
+        proposals: proposalsRef.current,
+        proposalComments: proposalCommentsRef.current,
         feedType,
       }),
     [feedType]
@@ -86,21 +104,34 @@ export function useFeed(feedType: FeedType) {
 
   const fetchAllData = useCallback(async () => {
     const isMain = feedType === 'main';
+    const isRathaus = feedType === 'rathaus';
     const emptyArr = Promise.resolve([] as any[]);
 
-    const [postsResult, alerts, deals, marketplace, events, news, movies, restaurants, specialMenus, proposals] =
-      await Promise.all([
-        fetchFeedPosts({ feedType, page: 0 }),
-        fetchActiveServiceAlerts(),
-        isMain ? fetchActiveDeals() : emptyArr,
-        isMain ? fetchMarketplaceListings({ limit: 5 }) : emptyArr,
-        isMain ? fetchUpcomingEventsForFeed(5) : emptyArr,
-        isMain ? fetchRecentNews(5) : emptyArr,
-        isMain ? fetchUpcomingMovies(6) : emptyArr,
-        isMain ? fetchFeaturedRestaurants() : emptyArr,
-        isMain ? fetchActiveSpecialMenus(3) : emptyArr,
-        isMain ? fetchProposals().catch(() => []) : emptyArr,
-      ]);
+    const [
+      postsResult,
+      alerts,
+      deals,
+      marketplace,
+      events,
+      news,
+      movies,
+      restaurants,
+      specialMenus,
+      proposals,
+      proposalComments,
+    ] = await Promise.all([
+      fetchFeedPosts({ feedType, page: 0 }),
+      fetchActiveServiceAlerts(),
+      isMain ? fetchActiveDeals() : emptyArr,
+      isMain ? fetchMarketplaceListings({ limit: 5 }) : emptyArr,
+      isMain ? fetchUpcomingEventsForFeed(5) : emptyArr,
+      isMain ? fetchRecentNews(5) : emptyArr,
+      isMain ? fetchUpcomingMovies(6) : emptyArr,
+      isMain ? fetchFeaturedRestaurants() : emptyArr,
+      isMain ? fetchActiveSpecialMenus(3) : emptyArr,
+      isMain || isRathaus ? fetchProposals().catch(() => []) : emptyArr,
+      isRathaus ? fetchRecentProposalComments(50).catch(() => []) : emptyArr,
+    ]);
 
     alertsRef.current = alerts;
     dealsRef.current = deals as BusinessDealWithBusiness[];
@@ -112,6 +143,8 @@ export function useFeed(feedType: FeedType) {
     specialMenusRef.current = specialMenus as SpecialMenuRecord[];
     governanceRef.current = buildGovernanceNudges(proposals as SupabaseProposal[]);
     meckyTipsRef.current = generateMeckyTips();
+    proposalsRef.current = proposals as ProposalFeedRecord[];
+    proposalCommentsRef.current = proposalComments as ProposalCommentFeedRecord[];
     allPostsRef.current = postsResult.data;
 
     return postsResult;
