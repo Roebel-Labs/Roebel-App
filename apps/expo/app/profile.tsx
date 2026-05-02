@@ -17,12 +17,13 @@ import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import MapFAB from '@/components/MapFAB';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
-import FlippableIdentityCard from '@/components/FlippableIdentityCard';
-import ProfileModeCards from '@/components/profile/ProfileModeCards';
 import RewardsCTABanner from '@/components/profile/RewardsCTABanner';
 import ProfileHeaderCard from '@/components/profile/ProfileHeaderCard';
 import CoinsCard from '@/components/profile/CoinsCard';
 import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
+import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
+import TouristActionRow from '@/components/profile/TouristActionRow';
+import OrgActionCards from '@/components/profile/OrgActionCards';
 
 // Import SVG icons
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -30,13 +31,19 @@ import SentIcon from '@/assets/icons/profile/sent.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import HelpCircleIcon from '@/assets/icons/profile/help-circle.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
-import MailIcon from '@/assets/icons/mail.svg';
 import SettingsIcon from '@/assets/icons/profile/settings.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { ListIcon } from '@/components/Icons';
-import UserIcon from '@/assets/icons/user.svg';
+
+const ORG_TYPE_LABELS: Record<string, string> = {
+  restaurant: 'Restaurant',
+  unternehmen: 'Unternehmen',
+  verein: 'Verein',
+  partei: 'Partei',
+  fraktion: 'Fraktion',
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -207,134 +214,177 @@ const handleRefresh = async () => {
           </View>
         ) : (
           // ============= LOGGED IN STATE =============
-          <View style={styles.connectedContainer}>
-            {isCitizen && activeAccount?.account_type !== 'organisation' ? (
-              <>
-                {/* New citizen layout: header card → coins → 3×2 action grid */}
-                <ProfileHeaderCard
-                  name={displayName || 'Bürger'}
-                  avatarUrl={user?.profile_picture_url ?? null}
-                  isCitizen={isCitizen}
-                  onPress={() => router.push('/citizen-verification' as any)}
-                />
-                <CoinsCard />
-                <ProfileActionGrid />
-              </>
-            ) : (
-              <>
-                {/* Tourist + org modes keep the existing flippable card layout */}
-                <FlippableIdentityCard
-                  user={user}
-                  role={tier}
-                  isCitizen={isCitizen}
-                  verifiedSince={user?.citizen_verification_date ? new Date(user.citizen_verification_date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : undefined}
-                  attestedBy={isCitizen ? 3 : 0}
-                  votingStreak={user?.voting_streak || 0}
-                  isPending={isBusinessOwner && userBusiness?.status === 'pending'}
-                  businessName={userBusiness?.name}
-                  verificationRequestId={citizenRequest?.request_id}
-                />
-                <RewardsCTABanner />
-                <ProfileModeCards />
-              </>
-            )}
+          (() => {
+            const isOrg = activeAccount?.account_type === 'organisation';
+            // Aspiring citizen = logged-in non-citizen non-org with a citizen
+            // verification request in flight (or a previously submitted one).
+            const isAspiringCitizen = !isOrg && !isCitizen && !!citizenRequest;
+            const orgPillLabel = isOrg
+              ? ORG_TYPE_LABELS[activeAccount?.sub_type || ''] || 'Organisation'
+              : 'Tourist';
 
-            {/* Menu Items */}
-            <View style={styles.menuSection}>
-              {activeAccount?.account_type === 'organisation' && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<UserIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Verwalten"
+            const profileHref = user?.username
+              ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
+              : ('/edit-profile' as const);
+
+            return (
+              <View style={styles.connectedContainer}>
+                {isOrg ? (
+                  <>
+                    <ProfileHeaderCard
+                      name={activeAccount?.name || 'Organisation'}
+                      avatarUrl={activeAccount?.avatar_url || activeAccount?.cover_url}
+                      variant="org"
+                      pillLabel={orgPillLabel}
                       onPress={() => router.push('/org/manage' as any)}
                     />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
-
-              {/* Business Registration - for verified citizens without a business */}
-              {showBusinessRegister && (
-                <>
-                  <View style={styles.menuGroup}>
-                    <ProfileMenuItem
-                      icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
-                      label="Organisation erstellen"
-                      onPress={() => router.push('/create-org' as any)}
+                    {isBusinessOwner && userBusiness && userBusiness.status !== 'published' && (
+                      <View style={styles.orgStatusWrap}>
+                        <BusinessStatusBanner
+                          business={userBusiness}
+                          onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
+                        />
+                      </View>
+                    )}
+                    <OrgActionCards />
+                  </>
+                ) : isCitizen ? (
+                  <>
+                    <ProfileHeaderCard
+                      name={displayName || 'Bürger'}
+                      avatarUrl={user?.profile_picture_url ?? null}
+                      variant="citizen"
+                      pillLabel="Bürger"
+                      onPress={() => router.push('/citizen-verification' as any)}
                     />
-                  </View>
-                  <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-                </>
-              )}
+                    <CoinsCard />
+                    <ProfileActionGrid />
+                  </>
+                ) : isAspiringCitizen ? (
+                  <>
+                    <CitizenVerificationBanner pending={!!activePendingRequest} />
+                    <ProfileHeaderCard
+                      name={displayName || 'Gast'}
+                      avatarUrl={user?.profile_picture_url ?? null}
+                      variant="guest"
+                      pillLabel="Gast"
+                      onPress={() => router.push(profileHref as any)}
+                    />
+                    <CoinsCard />
+                    <ProfileActionGrid />
+                  </>
+                ) : (
+                  <>
+                    {/* Tourist: header + 2-up coins/Röbel Card row */}
+                    <ProfileHeaderCard
+                      name={displayName || 'Tourist'}
+                      avatarUrl={user?.profile_picture_url ?? null}
+                      variant="tourist"
+                      pillLabel="Tourist"
+                      onPress={() => router.push(profileHref as any)}
+                    />
+                    <TouristActionRow />
+                  </>
+                )}
 
-              {/* Business Status Banner - for business owners with pending/rejected business */}
-              {isBusinessOwner && userBusiness && userBusiness.status !== 'published' && (
-                <BusinessStatusBanner
-                  business={userBusiness}
-                  onPress={() => router.push({ pathname: '/org-status', params: { businessId: userBusiness.id } } as any)}
-                />
-              )}
+                {/* Menu Items */}
+                <View style={styles.menuSection}>
+                  {!isOrg && showBusinessRegister && (
+                    <>
+                      <View style={styles.menuGroup}>
+                        <ProfileMenuItem
+                          icon={<StarIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Organisation erstellen"
+                          onPress={() => router.push('/create-org' as any)}
+                        />
+                      </View>
+                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+                    </>
+                  )}
 
-              {/* Regular Menu Items */}
-              <View style={styles.menuGroup}>
-                <ProfileMenuItem
-                  icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Veranstaltung einsenden"
-                  onPress={() => router.push('/submit-event')}
-                />
-                <ProfileMenuItem
-                  icon={<ListIcon size={20} color={colors.textPrimary} />}
-                  label="Meine Veranstaltungen"
-                  onPress={() => router.push('/my-events')}
-                />
-                <ProfileMenuItem
-                  icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Feedback geben"
-                  onPress={() => router.push('/feedback')}
-                />
+                  {isOrg ? (
+                    <View style={styles.menuGroup}>
+                      <ProfileMenuItem
+                        icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Feedback geben"
+                        onPress={() => router.push('/feedback')}
+                      />
+                      <ProfileMenuItem
+                        icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Benachrichtigungen"
+                        onPress={() => router.push('/notifications' as any)}
+                      />
+                      <ProfileMenuItem
+                        icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Hilfe"
+                        onPress={() => router.push('/help')}
+                      />
+                      <ProfileMenuItem
+                        icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Datenschutz"
+                        onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.menuGroup}>
+                        {/* "Veranstaltung einsenden" lives in the action grid for
+                            citizen / aspiring-citizen modes; tourists still see it
+                            here since their layout has no grid. */}
+                        {!isCitizen && !isAspiringCitizen && (
+                          <ProfileMenuItem
+                            icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
+                            label="Veranstaltung einsenden"
+                            onPress={() => router.push('/submit-event')}
+                          />
+                        )}
+                        <ProfileMenuItem
+                          icon={<ListIcon size={20} color={colors.textPrimary} />}
+                          label="Meine Veranstaltungen"
+                          onPress={() => router.push('/my-events')}
+                        />
+                        <ProfileMenuItem
+                          icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Feedback geben"
+                          onPress={() => router.push('/feedback')}
+                        />
+                      </View>
+
+                      <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+
+                      <View style={styles.menuGroup}>
+                        <ProfileMenuItem
+                          icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Mein Profil"
+                          onPress={() => router.push(profileHref as any)}
+                        />
+                        <ProfileMenuItem
+                          icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Einstellungen"
+                          onPress={() => router.push('/settings' as any)}
+                        />
+                        <ProfileMenuItem
+                          icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Hilfe & Tipps"
+                          onPress={() => router.push('/help')}
+                        />
+                        <ProfileMenuItem
+                          icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Über die App"
+                          onPress={() => openBrowserAsync('https://www.roebel.app/about')}
+                        />
+                        <ProfileMenuItem
+                          icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
+                          label="Datenschutz"
+                          onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
+                        />
+                      </View>
+                    </>
+                  )}
+                </View>
               </View>
-
-              <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
-
-              <View style={styles.menuGroup}>
-                <ProfileMenuItem
-                  icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Mein Profil"
-                  onPress={() => {
-                    // Prefer the public profile (X.com/Facebook-style) when the
-                    // user has a username set. Without one, routing to /user/[username]
-                    // would 404 — send them to the editor to create one first.
-                    if (user?.username) {
-                      router.push({ pathname: '/user/[username]', params: { username: user.username } });
-                    } else {
-                      router.push('/edit-profile' as any);
-                    }
-                  }}
-                />
-                <ProfileMenuItem
-                  icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Einstellungen"
-                  onPress={() => router.push('/settings' as any)}
-                />
-                <ProfileMenuItem
-                  icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Hilfe & Tipps"
-                  onPress={() => router.push('/help')}
-                />
-                <ProfileMenuItem
-                  icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Über die App"
-                  onPress={() => openBrowserAsync('https://www.roebel.app/about')}
-                />
-                <ProfileMenuItem
-                  icon={<ShieldUserIcon width={20} height={20} color={colors.textPrimary} />}
-                  label="Datenschutz"
-                  onPress={() => openBrowserAsync('https://www.roebel.app/datenschutz')}
-                />
-              </View>
-            </View>
-          </View>
+            );
+          })()
         )}
 
       </ScrollView>
@@ -497,6 +547,11 @@ const styles = StyleSheet.create({
   },
   menuSection: {
     paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  orgStatusWrap: {
+    marginHorizontal: 16,
+    marginTop: 12,
   },
   promoSection: {
     paddingHorizontal: 16,

@@ -6,16 +6,31 @@ import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
 import { softShadow } from '@/lib/shadow';
 
+export type ProfileHeaderVariant = 'citizen' | 'guest' | 'tourist' | 'org';
+
 interface ProfileHeaderCardProps {
   name: string;
   avatarUrl?: string | null;
-  isCitizen: boolean;
+  variant: ProfileHeaderVariant;
+  pillLabel: string;
   onPress: () => void;
 }
 
-export default function ProfileHeaderCard({ name, avatarUrl, isCitizen, onPress }: ProfileHeaderCardProps) {
+export default function ProfileHeaderCard({
+  name,
+  avatarUrl,
+  variant,
+  pillLabel,
+  onPress,
+}: ProfileHeaderCardProps) {
   const { colors, isDark } = useTheme();
   const cardBg = isDark ? colors.surface : '#FFFFFF';
+
+  // Citizen pill is the only one with the verified shield + primary color.
+  // Other variants use a neutral gray pill.
+  const showShield = variant === 'citizen';
+  const pillBg = variant === 'citizen' ? colors.primaryLight : colors.surfaceSecondary;
+  const pillFg = variant === 'citizen' ? colors.primary : colors.textSecondary;
 
   return (
     <Pressable
@@ -32,15 +47,14 @@ export default function ProfileHeaderCard({ name, avatarUrl, isCitizen, onPress 
         size={56}
         uri={avatarUrl ?? null}
         fallbackInitial={(name || '?').charAt(0).toUpperCase()}
+        disabled={variant === 'org'}
       />
 
       <View style={styles.middle}>
-        {isCitizen && (
-          <View style={[styles.pill, { backgroundColor: colors.primaryLight }]}>
-            <ShieldUserIcon width={12} height={12} color={colors.primary} />
-            <Text style={[styles.pillText, { color: colors.primary }]}>Bürger</Text>
-          </View>
-        )}
+        <View style={[styles.pill, { backgroundColor: pillBg }]}>
+          {showShield && <ShieldUserIcon width={12} height={12} color={pillFg} />}
+          <Text style={[styles.pillText, { color: pillFg }]}>{pillLabel}</Text>
+        </View>
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {name}
         </Text>
