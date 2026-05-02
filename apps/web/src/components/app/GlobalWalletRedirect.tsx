@@ -9,6 +9,7 @@ const EXCLUDED_PREFIXES = [
   "/app",        // Already in the app
   "/api",        // API routes
   "/admin",      // Admin panel
+  "/dashboard",  // Standalone org dashboard (its own layout, not under /app)
   "/datenschutz", // Legal pages
   "/impressum",
   "/privacy",
