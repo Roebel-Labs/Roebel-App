@@ -209,8 +209,10 @@ export function deriveBlockAnchor(
     return Number(aBlock - bBlock);
   });
   const first = candidates[0];
+  const block = first.block_number;
+  if (block === null) return null;
   return {
-    blockNumber: BigInt(first.block_number!),
+    blockNumber: BigInt(block),
     timestampMs: new Date(first.created_at).getTime(),
   };
 }
@@ -223,4 +225,91 @@ export function lowestProposalBlock(proposals: Proposal[]): bigint | null {
     if (lowest === null || b < lowest) lowest = b;
   }
   return lowest;
+}
+
+// ---------- Client-safe serialized shapes ----------
+// React Server Components cannot pass `bigint` across the boundary,
+// so we serialize block numbers and timestamps to plain strings/numbers.
+
+export interface SerializedGovernanceEvent
+  extends Omit<GovernanceEvent, "blockNumber"> {
+  blockNumber: string;
+}
+
+export interface SerializedProposalRef {
+  proposal_id: string;
+  blockchain_proposal_id: string;
+  proposal_number: number;
+  title: string;
+  state: number;
+  for_votes: string;
+  against_votes: string;
+  abstain_votes: string;
+  proposer_address: string;
+  created_at: string;
+}
+
+export interface SerializedProposalGroup {
+  proposalId: string;
+  proposal: SerializedProposalRef | null;
+  events: SerializedGovernanceEvent[];
+  latestBlock: string;
+}
+
+export interface SerializedBlockAnchor {
+  blockNumber: string;
+  timestampMs: number;
+}
+
+export function serializeEvent(
+  e: GovernanceEvent
+): SerializedGovernanceEvent {
+  return { ...e, blockNumber: e.blockNumber.toString() };
+}
+
+export function serializeProposal(
+  p: Proposal
+): SerializedProposalRef {
+  return {
+    proposal_id: p.proposal_id,
+    blockchain_proposal_id: p.blockchain_proposal_id,
+    proposal_number: p.proposal_number,
+    title: p.title,
+    state: p.state,
+    for_votes: p.for_votes,
+    against_votes: p.against_votes,
+    abstain_votes: p.abstain_votes,
+    proposer_address: p.proposer_address,
+    created_at: p.created_at,
+  };
+}
+
+export function serializeGroups(
+  groups: ProposalTimelineGroup[]
+): SerializedProposalGroup[] {
+  return groups.map((g) => ({
+    proposalId: g.proposalId,
+    proposal: g.proposal ? serializeProposal(g.proposal) : null,
+    events: g.events.map(serializeEvent),
+    latestBlock: g.latestBlock.toString(),
+  }));
+}
+
+export function serializeAnchor(
+  anchor: BlockAnchor | null
+): SerializedBlockAnchor | null {
+  if (!anchor) return null;
+  return {
+    blockNumber: anchor.blockNumber.toString(),
+    timestampMs: anchor.timestampMs,
+  };
+}
+
+export function approxTimestampMsFromSerialized(
+  blockNumber: string,
+  anchor: SerializedBlockAnchor | null
+): number | null {
+  if (!anchor) return null;
+  const blockDiff = Number(BigInt(blockNumber) - BigInt(anchor.blockNumber));
+  return anchor.timestampMs + blockDiff * BASE_BLOCK_TIME_SECONDS * 1000;
 }

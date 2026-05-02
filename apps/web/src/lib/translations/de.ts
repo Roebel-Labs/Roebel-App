@@ -362,6 +362,11 @@ export const de = {
     unknownProposal: "Vorschlag",
     emptyState:
       "Es liegen noch keine On-Chain-Ereignisse vor. Sobald der erste Vorschlag eingereicht wird, erscheint er hier.",
+
+    canvasHint: "Blockchain der Bürgervertretung",
+    canvasHintSub:
+      "Älteste Vorschläge links, neueste rechts. Scrolle, ziehe und zoome wie auf einer Karte.",
+    openProposal: "Vorschlag öffnen",
   },
 
   errors: {
