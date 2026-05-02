@@ -10,6 +10,13 @@ export type PostCategory =
   | "im_angebot"
   | "generell";
 
+export type PostType =
+  | "user"
+  | "mecky"
+  | "event_share"
+  | "marketplace_share"
+  | "event_experience";
+
 export const POST_CATEGORIES: { id: PostCategory; label: string }[] = [
   { id: "frage", label: "Frage" },
   { id: "empfehlungen", label: "Empfehlungen" },
@@ -32,6 +39,18 @@ export interface Post {
   comments_count: number;
   created_at: string;
   updated_at: string;
+  post_type: PostType;
+  linked_event_id: string | null;
+  linked_experience_id: string | null;
+}
+
+export interface LinkedEventPreview {
+  id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  location: string;
+  image_url: string | null;
 }
 
 export interface PostWithAuthor extends Post {
@@ -48,6 +67,7 @@ export interface PostWithEngagement extends PostWithAuthor {
   is_liked_by_viewer: boolean;
   is_reported_by_viewer: boolean;
   poll: PollWithResults | null;
+  linked_event: LinkedEventPreview | null;
 }
 
 export interface PostLink {

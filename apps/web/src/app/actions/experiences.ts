@@ -114,6 +114,24 @@ export async function createExperience(
 
     if (error) throw error
 
+    // Mirror to posts so the experience surfaces in the main feed.
+    // Best-effort: log errors but still return the experience.
+    const { error: postError } = await supabase.from("posts").insert({
+      wallet_address: experience.wallet_address,
+      content: experience.content,
+      media_urls: experience.media_urls ?? [],
+      video_url: experience.video_url ?? null,
+      category: "generell",
+      feed_type: "main",
+      post_type: "event_experience",
+      linked_event_id: experience.event_id,
+      linked_experience_id: experience.id,
+      status: "published",
+    })
+    if (postError) {
+      console.error("Error mirroring experience to feed:", postError)
+    }
+
     // Fetch author info
     const { data: author } = await supabase
       .from("users")
@@ -123,6 +141,7 @@ export async function createExperience(
 
     revalidatePath(`/events/${input.event_id}`)
     revalidatePath(`/app/events/${input.event_id}`)
+    revalidatePath("/app")
 
     return {
       success: true,
@@ -161,8 +180,18 @@ export async function deleteExperience(
 
     if (error) throw error
 
+    // Cascade soft-delete to the mirrored feed post.
+    const { error: postError } = await supabase
+      .from("posts")
+      .update({ status: "deleted" })
+      .eq("linked_experience_id", experienceId)
+    if (postError) {
+      console.error("Error soft-deleting paired feed post:", postError)
+    }
+
     revalidatePath("/events")
     revalidatePath("/app/events")
+    revalidatePath("/app")
 
     return { success: true }
   } catch (error) {

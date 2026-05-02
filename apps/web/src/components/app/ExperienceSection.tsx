@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useRef, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { useActiveAccount } from "thirdweb/react";
 import {
@@ -19,11 +19,13 @@ import { createClient } from "@/lib/supabase/client";
 const CURATED_EMOJIS = ["😍", "🎉", "😂", "👍", "🤩", "❤️", "🙏", "🌟"];
 const MAX_IMAGES = 4;
 const PAGE_SIZE = 15;
+const MAX_AUTO_PAGES = 5;
 
 interface ExperienceSectionProps {
   eventId: string;
   initialExperiences: EventExperience[];
   initialCount: number;
+  highlightExperienceId?: string;
 }
 
 // ============================================
@@ -90,10 +92,12 @@ function ExperienceItem({
   experience,
   currentWallet,
   onDelete,
+  isHighlighted,
 }: {
   experience: EventExperience;
   currentWallet?: string;
   onDelete: (id: string) => void;
+  isHighlighted?: boolean;
 }) {
   const shortAddress = `${experience.wallet_address.slice(0, 4)}...${experience.wallet_address.slice(-3)}`;
   const isAuthor =
@@ -104,7 +108,14 @@ function ExperienceItem({
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div
+      data-experience-id={experience.id}
+      className={`rounded-lg border bg-card p-4 transition-colors duration-700 ${
+        isHighlighted
+          ? "ring-2 ring-primary border-primary bg-primary/5"
+          : "border-border"
+      }`}
+    >
       {experience.emoji && (
         <div className="text-3xl mb-2">{experience.emoji}</div>
       )}
@@ -479,6 +490,7 @@ export function ExperienceSection({
   eventId,
   initialExperiences,
   initialCount,
+  highlightExperienceId,
 }: ExperienceSectionProps) {
   const account = useActiveAccount();
   const [experiences, setExperiences] =
@@ -486,6 +498,9 @@ export function ExperienceSection({
   const [totalCount, setTotalCount] = useState(initialCount);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(initialCount > initialExperiences.length);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const autoPaginatedRef = useRef(false);
 
   const handleLoadMore = async () => {
     if (isLoadingMore) return;
@@ -501,6 +516,53 @@ export function ExperienceSection({
 
     setIsLoadingMore(false);
   };
+
+  // Deep-link: scroll to & briefly highlight a specific experience.
+  // If the experience isn't on the current page, auto-paginate up to 5x.
+  useEffect(() => {
+    if (!highlightExperienceId) return;
+
+    const present = experiences.some((e) => e.id === highlightExperienceId);
+
+    if (present) {
+      const node = containerRef.current?.querySelector(
+        `[data-experience-id="${highlightExperienceId}"]`
+      );
+      if (node) {
+        (node as HTMLElement).scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+      setHighlightedId(highlightExperienceId);
+      const timeout = window.setTimeout(() => setHighlightedId(null), 2200);
+      return () => window.clearTimeout(timeout);
+    }
+
+    // Not present yet — try auto-paginating.
+    if (autoPaginatedRef.current) return;
+    autoPaginatedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      let offset = experiences.length;
+      for (let i = 0; i < MAX_AUTO_PAGES; i++) {
+        const result = await getExperiences(eventId, PAGE_SIZE, offset);
+        if (cancelled) return;
+        if (!result.success || !result.data || result.data.length === 0) break;
+        const fetched = result.data;
+        setExperiences((prev) => [...prev, ...fetched]);
+        if (fetched.length < PAGE_SIZE) setHasMore(false);
+        offset += fetched.length;
+        if (fetched.some((e) => e.id === highlightExperienceId)) break;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightExperienceId, experiences]);
 
   const handleCreated = (experience: EventExperience) => {
     setExperiences((prev) => {
@@ -540,7 +602,7 @@ export function ExperienceSection({
   };
 
   return (
-    <div className="space-y-4">
+    <div ref={containerRef} className="space-y-4">
       {/* Section header */}
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-primary" />
@@ -565,6 +627,7 @@ export function ExperienceSection({
               experience={experience}
               currentWallet={account?.address}
               onDelete={handleDelete}
+              isHighlighted={experience.id === highlightedId}
             />
           ))}
         </div>

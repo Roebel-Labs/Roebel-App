@@ -69,10 +69,13 @@ async function getInterestCount(eventId: string): Promise<number> {
 
 export default async function EventDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ experienceId?: string }>
 }) {
   const { id } = await params
+  const { experienceId } = await searchParams
   const [event, interestCount, experiencesResult, experienceCountResult] = await Promise.all([
     getEvent(id),
     getInterestCount(id),
@@ -236,6 +239,7 @@ export default async function EventDetailPage({
           eventId={id}
           initialExperiences={experiencesResult.data || []}
           initialCount={experienceCountResult.count || 0}
+          highlightExperienceId={experienceId}
         />
       </div>
     </div>

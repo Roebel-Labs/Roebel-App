@@ -74,11 +74,12 @@ export default async function EventDetailPage({
   searchParams 
 }: { 
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ from?: string }> 
+  searchParams?: Promise<{ from?: string; experienceId?: string }>
 }) {
   const { id } = await params
   const search = await searchParams
   const from = search?.from || '/'
+  const experienceId = search?.experienceId
   const [event, experiencesResult, experienceCountResult] = await Promise.all([
     getEvent(id),
     getExperiences(id),
@@ -225,6 +226,7 @@ export default async function EventDetailPage({
               eventId={id}
               initialExperiences={experiencesResult.data || []}
               initialCount={experienceCountResult.count || 0}
+              highlightExperienceId={experienceId}
             />
           </div>
         </div>

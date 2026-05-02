@@ -10,6 +10,7 @@ import { PostComposer } from "@/components/app/PostComposer";
 import { FeedFilters } from "@/components/app/FeedFilters";
 import { FeedCard } from "@/components/app/FeedCard";
 import { PostCard } from "@/components/app/PostCard";
+import { FeedExperienceCard } from "@/components/app/FeedExperienceCard";
 import { HorizontalRow } from "@/components/app/HorizontalRow";
 import { AlertCard } from "@/components/app/AlertCard";
 import { ContextBar } from "@/components/app/ContextBar";
@@ -942,6 +943,14 @@ export default function AppHomePage() {
 
             // Post card
             if (item.postItem) {
+              if (item.postItem.post_type === "event_experience") {
+                return (
+                  <FeedExperienceCard
+                    key={`exp-${item.postItem.id}`}
+                    post={item.postItem}
+                  />
+                );
+              }
               return (
                 <PostCard
                   key={`post-${item.postItem.id}`}

@@ -8,6 +8,8 @@ import type {
   PostLink,
   PostComment,
   PostCategory,
+  PostType,
+  LinkedEventPreview,
   PollWithResults,
   CreatePostInput,
   CreateCommentInput,
@@ -198,9 +200,37 @@ export async function getPostsForFeed(
       }
     }
 
+    // Batch fetch linked events for event_experience posts
+    const linkedEventIds = [...new Set(
+      posts
+        .filter(
+          (p: Record<string, unknown>) =>
+            (p.post_type as string) === "event_experience" && p.linked_event_id
+        )
+        .map((p: Record<string, unknown>) => p.linked_event_id as string)
+    )]
+    const eventMap = new Map<string, LinkedEventPreview>()
+    if (linkedEventIds.length > 0) {
+      const { data: events } = await supabase
+        .from("events")
+        .select("id, title, date, time, location, image_url")
+        .in("id", linkedEventIds)
+      for (const e of events || []) {
+        eventMap.set(e.id as string, {
+          id: e.id as string,
+          title: e.title as string,
+          date: e.date as string,
+          time: (e.time as string) || null,
+          location: e.location as string,
+          image_url: (e.image_url as string) || null,
+        })
+      }
+    }
+
     const result: PostWithEngagement[] = posts.map((row: Record<string, unknown>) => {
       const author = authorMap.get(row.wallet_address as string)
       const account = row.account_id ? accountMap.get(row.account_id as string) : null
+      const linkedEventId = (row.linked_event_id as string) || null
       return {
         id: row.id as string,
         wallet_address: row.wallet_address as string,
@@ -214,6 +244,9 @@ export async function getPostsForFeed(
         comments_count: (row.comments_count as number) || 0,
         created_at: row.created_at as string,
         updated_at: row.updated_at as string,
+        post_type: ((row.post_type as string) || "user") as PostType,
+        linked_event_id: linkedEventId,
+        linked_experience_id: (row.linked_experience_id as string) || null,
         author_username: (author?.username as string) || null,
         author_profile_picture_url: (author?.profile_picture_url as string) || null,
         author_neighborhood: (author?.neighborhood as string) || null,
@@ -224,6 +257,7 @@ export async function getPostsForFeed(
         is_liked_by_viewer: likedSet.has(row.id as string),
         is_reported_by_viewer: reportedSet.has(row.id as string),
         poll: pollMap.get(row.id as string) || null,
+        linked_event: linkedEventId ? eventMap.get(linkedEventId) ?? null : null,
       }
     })
 
@@ -287,6 +321,29 @@ export async function getPostById(
       accountData = acc as Record<string, unknown> | null
     }
 
+    // Fetch linked event preview for event_experience posts
+    let linkedEvent: LinkedEventPreview | null = null
+    if (
+      (post.post_type as string) === "event_experience" &&
+      post.linked_event_id
+    ) {
+      const { data: ev } = await supabase
+        .from("events")
+        .select("id, title, date, time, location, image_url")
+        .eq("id", post.linked_event_id as string)
+        .single()
+      if (ev) {
+        linkedEvent = {
+          id: ev.id as string,
+          title: ev.title as string,
+          date: ev.date as string,
+          time: (ev.time as string) || null,
+          location: ev.location as string,
+          image_url: (ev.image_url as string) || null,
+        }
+      }
+    }
+
     // Check viewer like
     let isLiked = false
     let isReported = false
@@ -324,6 +381,9 @@ export async function getPostById(
         comments_count: (post.comments_count as number) || 0,
         created_at: post.created_at as string,
         updated_at: post.updated_at as string,
+        post_type: ((post.post_type as string) || "user") as PostType,
+        linked_event_id: (post.linked_event_id as string) || null,
+        linked_experience_id: (post.linked_experience_id as string) || null,
         author_username: (author?.username as string) || null,
         author_profile_picture_url: (author?.profile_picture_url as string) || null,
         author_neighborhood: (author?.neighborhood as string) || null,
@@ -334,6 +394,7 @@ export async function getPostById(
         is_liked_by_viewer: isLiked,
         is_reported_by_viewer: isReported,
         poll: pollMap.get(postId) || null,
+        linked_event: linkedEvent,
       },
     }
   } catch (error) {
@@ -439,6 +500,9 @@ export async function createPost(
         comments_count: post.comments_count,
         created_at: post.created_at,
         updated_at: post.updated_at,
+        post_type: (post.post_type as PostType) || "user",
+        linked_event_id: post.linked_event_id || null,
+        linked_experience_id: post.linked_experience_id || null,
       },
     }
   } catch (error) {
