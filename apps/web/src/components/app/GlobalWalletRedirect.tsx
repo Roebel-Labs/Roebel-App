@@ -14,6 +14,7 @@ const EXCLUDED_PREFIXES = [
   "/privacy",
   "/delete-account",
   "/login",
+  "/proposals/timeline", // Public verifiable governance timeline
 ];
 
 function isSafeReturnTo(value: string | null): value is string {
