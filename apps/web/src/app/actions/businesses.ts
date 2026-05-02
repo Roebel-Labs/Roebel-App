@@ -234,7 +234,7 @@ export async function createDeal(input: CreateDealInput) {
       image_url: data.image_url || null,
     }).catch(console.error)
 
-    revalidatePath("/app/gewerbe/angebote")
+    revalidatePath("/dashboard/ads")
     return { success: true, data: data as BusinessDeal, message: "Angebot erstellt" }
   } catch (error) {
     console.error("Error creating deal:", error)
@@ -264,7 +264,7 @@ export async function updateDeal(input: UpdateDealInput) {
 
     if (error) throw error
 
-    revalidatePath("/app/gewerbe/angebote")
+    revalidatePath("/dashboard/ads")
     return { success: true, data: data as BusinessDeal, message: "Angebot aktualisiert" }
   } catch (error) {
     console.error("Error updating deal:", error)
@@ -299,7 +299,7 @@ export async function deleteDeal(id: string) {
 
     if (error) throw error
 
-    revalidatePath("/app/gewerbe/angebote")
+    revalidatePath("/dashboard/ads")
     return { success: true, message: "Angebot gelöscht" }
   } catch (error) {
     console.error("Error deleting deal:", error)

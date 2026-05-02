@@ -51,7 +51,7 @@ export async function approveExtern(
   }
 
   revalidatePath("/admin/dashboard/extern-accounts");
-  revalidatePath("/app/org-dashboard");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

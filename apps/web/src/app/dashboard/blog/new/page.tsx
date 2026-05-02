@@ -75,7 +75,7 @@ export default function NewBlogArticlePage() {
         status === "published" ? "Veröffentlicht" : "Entwurf gespeichert",
         { id: t }
       );
-      router.push("/app/org-dashboard/blog");
+      router.push("/dashboard/blog");
     } else {
       toast.error("Fehler", { id: t, description: res.error });
       setLoading(false);

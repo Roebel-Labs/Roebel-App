@@ -88,7 +88,7 @@ export default function PartnerDashboardPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <Link
-        href="/app/org-dashboard"
+        href="/dashboard"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

@@ -86,7 +86,7 @@ export default function CreateOrgPage() {
       } else {
         toast.success("Organisation angelegt", { id: t });
       }
-      router.push("/app/org-dashboard");
+      router.push("/dashboard");
     } catch (err) {
       toast.error("Fehler beim Anlegen", {
         id: t,

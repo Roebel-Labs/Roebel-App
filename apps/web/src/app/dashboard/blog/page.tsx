@@ -110,7 +110,7 @@ export default function OrgBlogListPage() {
         </div>
         <Button
           disabled={!canWrite}
-          onClick={() => router.push("/app/org-dashboard/blog/new")}
+          onClick={() => router.push("/dashboard/blog/new")}
         >
           <Plus className="h-4 w-4 mr-2" />
           Neuer Artikel
@@ -160,7 +160,7 @@ export default function OrgBlogListPage() {
             {canWrite && (
               <Button
                 variant="link"
-                onClick={() => router.push("/app/org-dashboard/blog/new")}
+                onClick={() => router.push("/dashboard/blog/new")}
                 className="mt-2"
               >
                 Ersten Artikel schreiben
@@ -217,7 +217,7 @@ export default function OrgBlogListPage() {
                     </Button>
                   )}
                   <Link
-                    href={`/app/org-dashboard/blog/${article.id}/edit`}
+                    href={`/dashboard/blog/${article.id}/edit`}
                     className="inline-flex items-center px-3 py-1.5 text-sm hover:bg-accent rounded-md"
                   >
                     <Edit className="h-4 w-4 mr-1.5" />

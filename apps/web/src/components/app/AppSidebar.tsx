@@ -7,7 +7,6 @@ import {
   Home,
   Calendar,
   Newspaper,
-  Vote,
   Store,
   Tag,
   ShoppingBag,
@@ -20,9 +19,6 @@ import {
   Plus,
   MapPin,
   Landmark,
-  Wallet,
-  LayoutDashboard,
-  CreditCard,
   Users,
   Compass,
   Bot,
@@ -34,6 +30,10 @@ import { useAccount } from "@/lib/context/AccountContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { isOrgAccount } from "@/types/account";
 import { RoebelCardWidget } from "@/components/app/RoebelCardWidget";
+
+// Org-specific routes (Dashboard, Angebote, Röbel-Card-Partner) live under
+// /dashboard with their own layout. Entry point is the "Dashboard öffnen"
+// CTA in AppRightPanel — no separate citizen-sidebar entries needed.
 
 // --- Navigation item definition ---
 
@@ -63,12 +63,6 @@ const mainNavItems: NavItem[] = [
   { href: "/app/messages", label: "Nachrichten", icon: MessageSquare, modes: ["citizen", "org"] },
   { href: "/app/mecky", label: "Mecky", icon: Bot },
   { href: "/app/profile", label: "Profil", icon: User },
-];
-
-const orgNavItems: NavItem[] = [
-  { href: "/app/org-dashboard", label: "Dashboard", icon: LayoutDashboard, modes: ["org"] },
-  { href: "/app/gewerbe/angebote", label: "Angebote", icon: Tag, modes: ["org"] },
-  { href: "/app/org-dashboard/partner", label: "Röbel Card", icon: CreditCard, modes: ["org"] },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -104,14 +98,7 @@ export function AppSidebar() {
     return item.modes.includes(activeMode);
   };
 
-  const isOrgItemVisible = (item: NavItem) => {
-    if (!item.modes) return true;
-    if (item.modes.includes("org")) return isOrg;
-    return item.modes.includes(activeMode);
-  };
-
   const visibleMainItems = mainNavItems.filter(isVisible);
-  const visibleOrgItems = orgNavItems.filter(isOrgItemVisible);
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -160,34 +147,6 @@ export function AppSidebar() {
             );
           })}
         </div>
-
-        {/* Org-only section */}
-        {visibleOrgItems.length > 0 && (
-          <>
-            <div className="my-4 mx-3 border-t border-border" />
-            <div className="space-y-1">
-              {visibleOrgItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href, item.exact);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors justify-center lg:justify-start ${
-                      active
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    }`}
-                    title={item.label}
-                  >
-                    <Icon className={`h-5 w-5 flex-shrink-0 ${active ? "text-foreground" : "text-muted-foreground"}`} />
-                    <span className="flex-1 hidden lg:block">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </>
-        )}
 
         {/* Contribute button */}
         <div className="mt-6 px-0 lg:px-3">

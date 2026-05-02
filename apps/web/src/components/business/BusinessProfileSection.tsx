@@ -162,7 +162,7 @@ export function BusinessProfileSection({ walletAddress }: BusinessProfileSection
               </Link>
               <div className="w-px bg-muted" />
               <Link
-                href="/app/gewerbe/angebote"
+                href="/dashboard/ads"
                 className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors"
               >
                 <Tag className="h-3.5 w-3.5" />

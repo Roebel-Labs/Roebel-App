@@ -180,7 +180,7 @@ export default function OrgDashboardPage() {
             <p className="text-xs text-muted-foreground">{subLabel}</p>
           </div>
           <Link
-            href="/app/org-dashboard/profile"
+            href="/dashboard/profile"
             className="p-2 rounded-lg hover:bg-accent transition-colors"
             title="Profil bearbeiten"
           >
@@ -253,7 +253,7 @@ export default function OrgDashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {features.blog && canPublishBlog(activeAccount) && (
           <QuickAction
-            href="/app/org-dashboard/blog/new"
+            href="/dashboard/blog/new"
             icon={<Plus className="h-5 w-5 text-primary" />}
             title="Neuer Blog-Artikel"
             subtitle="Schreibe und veröffentliche"
@@ -261,7 +261,7 @@ export default function OrgDashboardPage() {
         )}
         {features.ads && (
           <QuickAction
-            href="/app/gewerbe/angebote"
+            href="/dashboard/ads"
             icon={<Tag className="h-5 w-5 text-orange-500" />}
             title="Angebote verwalten"
             subtitle="Erstelle und verwalte Angebote"
@@ -277,14 +277,14 @@ export default function OrgDashboardPage() {
         )}
         {features.members && (
           <QuickAction
-            href="/app/org-dashboard/members"
+            href="/dashboard/members"
             icon={<Users className="h-5 w-5 text-blue-500" />}
             title="Mitglieder verwalten"
             subtitle="Einladen und Rollen ändern"
           />
         )}
         <QuickAction
-          href="/app/org-dashboard/profile"
+          href="/dashboard/profile"
           icon={<Settings className="h-5 w-5 text-muted-foreground" />}
           title="Profil bearbeiten"
           subtitle="Name, Bilder, Beschreibung"
@@ -317,7 +317,7 @@ export default function OrgDashboardPage() {
                 </span>
               </div>
               <Link
-                href="/app/org-dashboard/partner"
+                href="/dashboard/partner"
                 className="flex items-center justify-center gap-2 w-full py-2 bg-muted hover:bg-accent text-foreground rounded-lg text-sm font-medium transition-colors"
               >
                 <Handshake className="h-4 w-4" />
@@ -326,7 +326,7 @@ export default function OrgDashboardPage() {
             </div>
           ) : (
             <Link
-              href="/app/org-dashboard/partner"
+              href="/dashboard/partner"
               className="flex items-center justify-center gap-2 w-full py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
             >
               <Handshake className="h-4 w-4" />

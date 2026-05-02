@@ -108,7 +108,7 @@ export default function EditBlogArticlePage({
     const res = await updateBlogArticle(article.id, fd);
     if (res.success) {
       toast.success("Gespeichert", { id: t });
-      router.push("/app/org-dashboard/blog");
+      router.push("/dashboard/blog");
     } else {
       toast.error("Fehler", { id: t, description: res.error });
       setSaving(false);
@@ -125,7 +125,7 @@ export default function EditBlogArticlePage({
     );
     if (res.success) {
       toast.success("Gelöscht", { id: t });
-      router.push("/app/org-dashboard/blog");
+      router.push("/dashboard/blog");
     } else {
       toast.error("Fehler", { id: t, description: res.error });
     }

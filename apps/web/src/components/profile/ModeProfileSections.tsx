@@ -118,13 +118,13 @@ export function ModeProfileSections() {
       {isOrg && (
         <>
           <ProfileCard
-            href="/app/gewerbe/bearbeiten"
+            href="/dashboard"
             icon={<LayoutDashboard className="h-5 w-5 text-primary" />}
             title="Dashboard"
             subtitle="Statistiken & Reichweite"
           />
           <ProfileCard
-            href="/app/gewerbe/angebote"
+            href="/dashboard/ads"
             icon={<Settings className="h-5 w-5 text-orange-500" />}
             title="Verwalten"
             subtitle="Angebote, Events, Mitglieder"

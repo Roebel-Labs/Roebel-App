@@ -607,7 +607,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
             </p>
             <div className="flex flex-col gap-3 items-start">
               <button
-                onClick={() => router.push("/app/gewerbe/angebote")}
+                onClick={() => router.push("/dashboard/ads")}
                 className="bg-[#194383] hover:bg-[#143a72] text-white px-8 py-3.5 rounded-lg font-semibold text-base transition-colors"
               >
                 Jetzt erste Anzeige erstellen

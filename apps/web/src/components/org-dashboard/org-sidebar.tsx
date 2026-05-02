@@ -39,68 +39,68 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
   const items: Item[] = [
     {
       name: "Übersicht",
-      href: "/app/org-dashboard",
+      href: "/dashboard",
       icon: <LayoutDashboard className="h-4 w-4" />,
       visible: true,
     },
     {
       name: "Profil",
-      href: "/app/org-dashboard/profile",
+      href: "/dashboard/profile",
       icon: <UserCog className="h-4 w-4" />,
       visible: true,
     },
     {
       name: "Blog",
-      href: "/app/org-dashboard/blog",
+      href: "/dashboard/blog",
       icon: <FileText className="h-4 w-4" />,
       visible: features.blog,
     },
     {
       name: "Mitglieder",
-      href: "/app/org-dashboard/members",
+      href: "/dashboard/members",
       icon: <Users className="h-4 w-4" />,
       visible: features.members,
     },
     {
       name: "Öffnungszeiten",
-      href: "/app/org-dashboard/opening-hours",
+      href: "/dashboard/opening-hours",
       icon: <Clock className="h-4 w-4" />,
       visible: features.openingHours,
     },
     {
       name: "Produkte",
-      href: "/app/org-dashboard/products",
+      href: "/dashboard/products",
       icon: <Package className="h-4 w-4" />,
       visible: features.products,
     },
     {
       name: "Angebote",
-      href: "/app/org-dashboard/ads",
+      href: "/dashboard/ads",
       icon: <Tag className="h-4 w-4" />,
       visible: features.ads,
     },
     {
       name: "Events",
-      href: "/app/org-dashboard/events",
+      href: "/dashboard/events",
       icon: <Calendar className="h-4 w-4" />,
       visible: features.events,
     },
     {
       name: "Röbel Card Partner",
-      href: "/app/org-dashboard/partner",
+      href: "/dashboard/partner",
       icon: <CreditCard className="h-4 w-4" />,
       visible: features.partner,
     },
     {
       name: "Einstellungen",
-      href: "/app/org-dashboard/settings",
+      href: "/dashboard/settings",
       icon: <Settings className="h-4 w-4" />,
       visible: true,
     },
   ];
 
   const isActive = (href: string) => {
-    if (href === "/app/org-dashboard") return pathname === href;
+    if (href === "/dashboard") return pathname === href;
     return pathname === href || pathname?.startsWith(`${href}/`);
   };
 

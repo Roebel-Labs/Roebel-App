@@ -189,7 +189,7 @@ export function AppRightPanel() {
             Verwalte dein Gewerbe, Angebote und Reichweite.
           </p>
           <Link
-            href="/app/gewerbe/bearbeiten"
+            href="/dashboard"
             className="flex items-center justify-center gap-2 w-full py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-medium transition-colors"
           >
             Dashboard öffnen

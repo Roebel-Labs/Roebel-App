@@ -119,7 +119,7 @@ export default function EditDealPage({
     if (result.success) {
       setSaveSuccess(true)
       setTimeout(() => {
-        router.push("/app/gewerbe/angebote")
+        router.push("/dashboard/ads")
       }, 1000)
     }
     setIsSubmitting(false)
@@ -150,7 +150,7 @@ export default function EditDealPage({
         <Store className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
         <p className="text-muted-foreground font-medium">{error || "Fehler beim Laden"}</p>
         <Link
-          href="/app/gewerbe/angebote"
+          href="/dashboard/ads"
           className="inline-flex items-center gap-1 mt-4 text-sm text-primary hover:text-primary/80"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -164,7 +164,7 @@ export default function EditDealPage({
     <div className="max-w-3xl space-y-4">
       <div>
         <Link
-          href="/app/gewerbe/angebote"
+          href="/dashboard/ads"
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -184,7 +184,7 @@ export default function EditDealPage({
         <div className="bg-card rounded-xl border border-border p-4">
           <DealForm
             onSubmit={handleSave}
-            onCancel={() => router.push("/app/gewerbe/angebote")}
+            onCancel={() => router.push("/dashboard/ads")}
             initialData={{
               title: deal.title,
               description: deal.description || undefined,

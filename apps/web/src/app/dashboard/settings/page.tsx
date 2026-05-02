@@ -39,7 +39,7 @@ export default function OrgSettingsPage() {
           solange du nicht der einzige Inhaber bist.
         </p>
         <Link
-          href="/app/org-dashboard/members"
+          href="/dashboard/members"
           className="text-sm text-primary underline"
         >
           Zur Mitglieder-Verwaltung →

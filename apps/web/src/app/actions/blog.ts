@@ -126,7 +126,7 @@ export async function createBlogArticle(formData: FormData) {
 
     if (error) throw error;
 
-    revalidatePath("/app/org-dashboard/blog");
+    revalidatePath("/dashboard/blog");
     revalidatePath("/app/blog");
 
     return { success: true, data, message: "Artikel erstellt" };
@@ -195,7 +195,7 @@ export async function updateBlogArticle(id: string, formData: FormData) {
 
     if (error) throw error;
 
-    revalidatePath("/app/org-dashboard/blog");
+    revalidatePath("/dashboard/blog");
     revalidatePath(`/app/blog/${id}`);
     revalidatePath("/app/blog");
 
@@ -225,7 +225,7 @@ export async function deleteBlogArticle(
 
     if (error) throw error;
 
-    revalidatePath("/app/org-dashboard/blog");
+    revalidatePath("/dashboard/blog");
     revalidatePath("/app/blog");
 
     return { success: true, message: "Artikel gelöscht" };
@@ -268,7 +268,7 @@ export async function setBlogArticleStatus(
 
     if (error) throw error;
 
-    revalidatePath("/app/org-dashboard/blog");
+    revalidatePath("/dashboard/blog");
     revalidatePath("/app/blog");
 
     return { success: true, message: "Status aktualisiert" };
