@@ -82,7 +82,7 @@ export function TimelineCanvas({ groups }: TimelineCanvasProps) {
 
   if (nodes.length === 0) {
     return (
-      <div className="relative h-[calc(100vh-200px)] rounded-xl border border-border bg-card">
+      <div className="relative h-full w-full bg-card">
         <div className="flex h-full items-center justify-center">
           <p className="max-w-md text-center text-sm text-muted-foreground">
             {de.governance.emptyState}
@@ -96,7 +96,7 @@ export function TimelineCanvas({ groups }: TimelineCanvasProps) {
   }
 
   return (
-    <div className="relative h-[calc(100vh-200px)] overflow-hidden rounded-xl border border-border bg-background">
+    <div className="relative h-full w-full overflow-hidden bg-background">
       <ReactFlow
         nodes={nodes}
         edges={edges}

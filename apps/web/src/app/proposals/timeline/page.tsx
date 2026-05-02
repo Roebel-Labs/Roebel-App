@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Header } from "@/components/layout/Header";
 import { TimelineCanvas } from "@/components/proposals/TimelineCanvas";
 import { getProposals } from "@/lib/supabase";
 import {
@@ -46,11 +45,17 @@ export default async function ProposalsTimelinePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
-      <main className="container mx-auto px-4 pt-6 pb-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="flex h-screen flex-col bg-background">
+      <div className="border-b border-border bg-card shadow-sm">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-medium text-foreground">
+              {de.governance.timelineTitle}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              {de.governance.timelineLead}
+            </p>
+          </div>
           <Link
             href="/proposals"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -58,26 +63,21 @@ export default async function ProposalsTimelinePage() {
             ← {de.proposals.title}
           </Link>
         </div>
+      </div>
 
-        <header className="mb-4">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            {de.governance.timelineTitle}
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {de.governance.timelineLead}
-          </p>
-        </header>
-
+      <div className="relative flex-1 min-h-0">
         {fetchError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-            <p className="text-sm text-red-800 dark:text-red-200">
-              {de.errors.loadingDataFailed}: {fetchError}
-            </p>
+          <div className="flex h-full items-center justify-center px-4">
+            <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                {de.errors.loadingDataFailed}: {fetchError}
+              </p>
+            </div>
           </div>
         ) : (
           <TimelineCanvas groups={serializedGroups} />
         )}
-      </main>
+      </div>
     </div>
   );
 }

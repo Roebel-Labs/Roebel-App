@@ -44,7 +44,11 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 }
 
-function ProposalBlockNodeImpl({ data }: { data: ProposalBlockNodeData }) {
+function ProposalBlockNodeImpl({
+  data,
+}: {
+  readonly data: ProposalBlockNodeData;
+}) {
   const { proposal, proposalId, events } = data;
   const stateColors = proposal ? getProposalStateColor(proposal.state) : null;
   const stateLabel = proposal ? getProposalStateLabel(proposal.state) : null;
@@ -54,8 +58,8 @@ function ProposalBlockNodeImpl({ data }: { data: ProposalBlockNodeData }) {
     `${de.governance.unknownProposal} #${proposalId.slice(0, 8)}…`;
 
   const detailHref = proposal ? `/proposals/${proposal.proposal_id}` : null;
-  const firstBlock = events[0]?.blockNumber;
-  const lastBlock = events[events.length - 1]?.blockNumber;
+  const firstBlock = events.at(0)?.blockNumber;
+  const lastBlock = events.at(-1)?.blockNumber;
 
   return (
     <div className="w-[320px] rounded-xl border border-border bg-card shadow-md">
@@ -99,7 +103,7 @@ function ProposalBlockNodeImpl({ data }: { data: ProposalBlockNodeData }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title={`${KIND_LABEL[event.kind]} · Block #${event.blockNumber} · ${shortHash(event.txHash)}`}
-                className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-xs leading-none text-foreground transition-colors hover:border-primary hover:text-primary"
+                className="nodrag nopan inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-xs leading-none text-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 <span aria-hidden>{KIND_ICON[event.kind]}</span>
                 <span className="font-mono">
@@ -136,7 +140,7 @@ function ProposalBlockNodeImpl({ data }: { data: ProposalBlockNodeData }) {
         <footer className="border-t border-border px-4 py-2">
           <Link
             href={detailHref}
-            className="text-xs font-medium text-primary hover:underline"
+            className="nodrag nopan text-xs font-medium text-primary hover:underline"
           >
             {de.governance.openProposal} →
           </Link>
