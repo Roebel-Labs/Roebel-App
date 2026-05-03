@@ -78,7 +78,7 @@ export function AccountSwitcher() {
         <>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild className="cursor-pointer">
-            <Link href="/app/org/erstellen" className="flex items-center gap-2">
+            <Link href="/app/org/create" className="flex items-center gap-2">
               <PlusCircle className="h-4 w-4" />
               <span>Neue Organisation erstellen</span>
             </Link>
