@@ -7,6 +7,11 @@ import {
   RefreshControl,
   ViewToken,
 } from 'react-native';
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { useFeed } from '@/hooks/useFeed';
 import { usePostActions } from '@/hooks/usePostActions';
@@ -56,10 +61,29 @@ type Props = {
   onCompose: () => void;
   onMore: (post: PostRecord) => void;
   listHeader?: React.ReactNode;
+  /** Shared value tracking the floating header translateY. Updated on scroll. */
+  headerTranslateY?: SharedValue<number>;
+  /** Total height of the floating header — used as the upper clamp for the translate. */
+  headerHeight?: number;
+  /** Additional top inset (e.g. status bar) added to the header padding. */
+  topPadding?: number;
+  /** Additional bottom inset (e.g. bottom nav) added to the footer padding. */
+  bottomPadding?: number;
 };
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
-  { feedType, isCitizen, walletAddress, onCompose, onMore, listHeader },
+  {
+    feedType,
+    isCitizen,
+    walletAddress,
+    onCompose,
+    onMore,
+    listHeader,
+    headerTranslateY,
+    headerHeight = 0,
+    topPadding = 0,
+    bottomPadding = 0,
+  },
   ref,
 ) {
   const { colors } = useTheme();
@@ -243,20 +267,49 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
+  // Track this list's own scroll position so swipes between pager pages
+  // don't produce phantom scroll deltas on the shared header value.
+  const lastScrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      if (!headerTranslateY) return;
+      const y = e.contentOffset.y;
+      if (y <= 0) {
+        // Pulled to top — fully reveal the header.
+        headerTranslateY.value = 0;
+        lastScrollY.value = 0;
+        return;
+      }
+      const delta = y - lastScrollY.value;
+      const next = headerTranslateY.value - delta;
+      headerTranslateY.value =
+        next > 0 ? 0 : next < -headerHeight ? -headerHeight : next;
+      lastScrollY.value = y;
+    },
+  });
+
   return (
-    <FlatList
+    <Animated.FlatList
       data={items}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ListHeaderComponent={listHeader ? <>{listHeader}</> : undefined}
       style={{ backgroundColor: colors.feedBackground }}
       refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.primary} />
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={refresh}
+          tintColor={colors.primary}
+          progressViewOffset={topPadding}
+        />
       }
+      onScroll={scrollHandler}
+      scrollEventThrottle={16}
       onEndReached={hasMore ? loadMore : undefined}
       onEndReachedThreshold={0.3}
       onViewableItemsChanged={onViewableItemsChanged}
       viewabilityConfig={viewabilityConfig.current}
+      scrollIndicatorInsets={{ top: topPadding, bottom: bottomPadding }}
       ListEmptyComponent={
         isLoading ? (
           <View style={styles.skeletonList}>
@@ -272,10 +325,14 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         isLoadingMore ? (
           <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
         ) : (
-          <View style={styles.bottomPadding} />
+          <View style={{ height: bottomPadding + 40 }} />
         )
       }
-      contentContainerStyle={[styles.feedContent, items.length === 0 && styles.emptyContainer]}
+      contentContainerStyle={[
+        styles.feedContent,
+        { paddingTop: topPadding + 8 },
+        items.length === 0 && [styles.emptyContainer, { paddingTop: topPadding }],
+      ]}
     />
   );
 });

@@ -7,17 +7,21 @@ import {
   ScrollView,
   UIManager,
   useWindowDimensions,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, {
   useAnimatedScrollHandler,
+  useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
@@ -179,6 +183,31 @@ export default function FeedHome() {
   const { totalUnreadCount } = useNotificationsContext();
   const { unreadCount: unreadMessages } = useMessaging();
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const headerTranslateY = useSharedValue(0);
+
+  const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.height;
+    setHeaderHeight((prev) => (prev === next ? prev : next));
+  }, []);
+
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: headerTranslateY.value }],
+  }));
+
+  // Bottom nav slides off only when the header is fully collapsed.
+  const bottomNavTranslateY = useDerivedValue(() => {
+    if (headerHeight === 0) return 0;
+    const collapsed = headerTranslateY.value <= -headerHeight + 1;
+    return withTiming(collapsed ? BOTTOM_NAV_HEIGHT + insets.bottom + 16 : 0, {
+      duration: 180,
+    });
+  });
+  const bottomNavAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bottomNavTranslateY.value }],
+  }));
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
@@ -286,7 +315,15 @@ export default function FeedHome() {
   };
 
   const appHeader = (
-    <View style={[styles.headerWrapper, { backgroundColor: colors.background }]}>
+    <Animated.View
+      onLayout={onHeaderLayout}
+      style={[
+        styles.headerWrapper,
+        styles.headerFloating,
+        { backgroundColor: colors.background },
+        headerAnimatedStyle,
+      ]}
+    >
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
         <View style={styles.headerActions}>
@@ -327,13 +364,19 @@ export default function FeedHome() {
       {isCitizen && (
         <FeedTabBar activeTab={activeTab} onTabChange={handleTabChange} scrollProgress={scrollProgress} />
       )}
-    </View>
+    </Animated.View>
   );
+
+  const bottomPadding = BOTTOM_NAV_HEIGHT + insets.bottom;
+  const feedListProps = {
+    headerTranslateY,
+    headerHeight,
+    topPadding: headerHeight,
+    bottomPadding,
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {appHeader}
-
       {isCitizen ? (
         <Pager
           ref={pagerRef}
@@ -351,6 +394,7 @@ export default function FeedHome() {
               onCompose={handleCompose}
               onMore={handleMore}
               listHeader={<EventStoryBar />}
+              {...feedListProps}
             />
           </View>
           <View key="rathaus" style={[styles.page, { width: screenWidth }]} collapsable={false}>
@@ -361,6 +405,7 @@ export default function FeedHome() {
               walletAddress={walletAddress}
               onCompose={handleCompose}
               onMore={handleMore}
+              {...feedListProps}
             />
           </View>
           <View key="app" style={[styles.page, { width: screenWidth }]} collapsable={false}>
@@ -371,6 +416,7 @@ export default function FeedHome() {
               walletAddress={walletAddress}
               onCompose={handleCompose}
               onMore={handleMore}
+              {...feedListProps}
             />
           </View>
         </Pager>
@@ -384,9 +430,12 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             listHeader={<EventStoryBar />}
+            {...feedListProps}
           />
         </View>
       )}
+
+      {appHeader}
 
       {walletAddress && <FeedFAB onPress={handleCompose} />}
 
@@ -430,7 +479,15 @@ export default function FeedHome() {
         />
       )}
 
-      <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} />
+      <Animated.View
+        style={[
+          styles.bottomFloating,
+          { backgroundColor: colors.background },
+          bottomNavAnimatedStyle,
+        ]}
+      >
+        <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} />
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -441,6 +498,20 @@ const styles = StyleSheet.create({
   },
   headerWrapper: {
     zIndex: 1,
+  },
+  headerFloating: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  bottomFloating: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
   header: {
     flexDirection: 'row',
