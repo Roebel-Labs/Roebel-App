@@ -7,6 +7,7 @@ import type {
   PublicProfile,
 } from "./user-types";
 import { DEFAULT_PRIVACY_SETTINGS } from "./user-types";
+import type { PrivacySettings, VisibilityLevel } from "./user-types";
 import { createPersonalAccount } from "@/lib/supabase-accounts";
 
 /**
@@ -396,7 +397,8 @@ export async function deleteUser(
   }
 }
 /**
- * Get privacy-filtered public profile via Supabase RPC
+ * Get privacy-filtered public profile by querying the users table directly
+ * and applying privacy_settings in TypeScript.
  */
 export async function getPublicProfile(
   targetWallet: string,
@@ -405,22 +407,76 @@ export async function getPublicProfile(
   console.log("🔍 [Supabase Users] Fetching public profile:", targetWallet);
 
   try {
-    const { data, error } = await supabase.rpc("get_public_profile", {
-      p_target_wallet: targetWallet.toLowerCase(),
-      p_viewer_wallet: viewerWallet?.toLowerCase() || null,
-    });
+    const { data: row, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("wallet_address", targetWallet.toLowerCase())
+      .maybeSingle();
 
     if (error) {
       console.error("❌ [Supabase Users] Error fetching public profile:", error);
       return { success: false, error: error.message };
     }
 
-    if (!data) {
+    if (!row) {
       return { success: false, error: "Profile not found" };
     }
 
+    const tier = (row.tier as string) || "guest";
+    const privacy: PrivacySettings = {
+      ...DEFAULT_PRIVACY_SETTINGS,
+      ...((row.privacy_settings as Partial<PrivacySettings>) || {}),
+    };
+
+    const isSelf =
+      !!viewerWallet &&
+      viewerWallet.toLowerCase() === targetWallet.toLowerCase();
+
+    let viewerIsCitizen = false;
+    if (!isSelf && viewerWallet) {
+      const { data: viewer } = await supabase
+        .from("users")
+        .select("is_verified_citizen")
+        .eq("wallet_address", viewerWallet.toLowerCase())
+        .maybeSingle();
+      viewerIsCitizen = !!viewer?.is_verified_citizen;
+    }
+
+    const canSee = (level: VisibilityLevel) =>
+      isSelf ||
+      level === "public" ||
+      (level === "citizens" && viewerIsCitizen);
+
+    const profile: PublicProfile = {
+      wallet_address: row.wallet_address,
+      username: row.username ?? null,
+      profile_picture_url: row.profile_picture_url ?? null,
+      cover_image_url: row.cover_image_url ?? null,
+      role: tier as PublicProfile["role"],
+      tier: tier as PublicProfile["tier"],
+      is_verified_citizen: !!row.is_verified_citizen,
+      nft_balance: Number(row.nft_balance ?? 0),
+      created_at: row.created_at,
+      bio: canSee(privacy.bio) ? row.bio ?? null : null,
+      neighborhood: canSee(privacy.neighborhood)
+        ? row.neighborhood ?? null
+        : null,
+      interests: canSee(privacy.interests) ? row.interests ?? [] : [],
+      vereine: canSee(privacy.vereine) ? row.vereine ?? [] : [],
+      email: canSee(privacy.email) ? row.email ?? null : null,
+      total_votes_cast: canSee(privacy.voting_history)
+        ? Number(row.total_votes_cast ?? 0)
+        : undefined,
+      voting_streak: canSee(privacy.voting_history)
+        ? Number(row.voting_streak ?? 0)
+        : undefined,
+      gamification_points: canSee(privacy.gamification_points)
+        ? Number(row.gamification_points ?? 0)
+        : undefined,
+    };
+
     console.log("✅ [Supabase Users] Public profile fetched successfully");
-    return { success: true, data: data as PublicProfile };
+    return { success: true, data: profile };
   } catch (error) {
     console.error("❌ [Supabase Users] Unexpected error:", error);
     return {
