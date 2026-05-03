@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import MoreIcon from '@/assets/icons/more-02.svg';
 import type { ImageSource } from 'expo-image';
 import type { PostAuthor, PostCategory } from '@/lib/types/feed';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
@@ -20,6 +21,8 @@ type Props = {
   avatarOverride?: string | ImageSource;
   /** Extra label shown after the author name (e.g., "Gesponsert") */
   badge?: string;
+  /** Optional more (dots) button rendered at the right end of the row. */
+  onMore?: () => void;
 };
 
 export default function PostAuthorRow({
@@ -29,6 +32,7 @@ export default function PostAuthorRow({
   nameOverride,
   avatarOverride,
   badge,
+  onMore,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -104,6 +108,18 @@ export default function PostAuthorRow({
           </Text>
         </View>
       </View>
+
+      {onMore && (
+        <Pressable
+          onPress={onMore}
+          hitSlop={10}
+          style={styles.moreBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Mehr Optionen"
+        >
+          <MoreIcon width={18} height={18} color={colors.textPrimary} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -175,5 +191,10 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+  },
+  moreBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
 });

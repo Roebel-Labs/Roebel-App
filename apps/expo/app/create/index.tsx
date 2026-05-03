@@ -24,7 +24,7 @@ import type { PostCategory, FeedType } from '@/lib/types/feed';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 
-import CanvasIcon from '@/assets/icons/canvas.svg';
+import ImageIcon from '@/assets/icons/image-01.svg';
 import LocationIcon from '@/assets/icons/location-small.svg';
 import MarketsIcon from '@/assets/icons/markets.svg';
 import CalendarIcon from '@/assets/icons/calendar.svg';
@@ -32,6 +32,7 @@ import CommunityIcon from '@/assets/icons/community.svg';
 import EmojiIcon from '@/assets/icons/emoji.svg';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 
 const MAX_CONTENT_LENGTH = 500;
 
@@ -279,11 +280,11 @@ export default function CreateScreen() {
         >
           {/* Author row */}
           <View style={styles.authorRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {user?.username?.charAt(0)?.toUpperCase() || '?'}
-              </Text>
-            </View>
+            <UserAvatarWithFrame
+              size={40}
+              uri={user?.profile_picture_url ?? null}
+              fallbackInitial={user?.username?.charAt(0)?.toUpperCase() || '?'}
+            />
             <View>
               <Text style={[styles.authorName, { color: colors.textPrimary }]}>
                 {user?.username || 'Unbekannt'}
@@ -435,7 +436,7 @@ export default function CreateScreen() {
               disabled={draft.images.length >= 4 || draft.isUploading || !!draft.videoUrl}
               accessibilityLabel="Bilder anhängen"
             >
-              <CanvasIcon
+              <ImageIcon
                 width={22}
                 height={22}
                 color={
@@ -595,17 +596,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
   },
   authorName: {
     fontSize: 15,

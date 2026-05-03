@@ -275,6 +275,7 @@ export default function PostDetailScreen() {
         author={post.author}
         category={post.category}
         createdAt={post.created_at}
+        onMore={() => setOptionsDrawerVisible(true)}
       />
 
       <Text style={[styles.postContent, { color: colors.textPrimary }]}>{post.content}</Text>
@@ -310,7 +311,6 @@ export default function PostDetailScreen() {
         onLike={() => toggleLike(post.id, post.likes_count)}
         onComment={() => {}}
         onShare={() => sharePost(post.id, post.content)}
-        onMore={() => setOptionsDrawerVisible(true)}
       />
 
       {/* Comments header */}

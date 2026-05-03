@@ -32,7 +32,8 @@ import PostOptionsDrawer from './PostOptionsDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
-import MailIcon from '@/assets/icons/mail.svg';
+import MailIcon from '@/assets/icons/mail-01.svg';
+import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
@@ -287,6 +288,13 @@ export default function FeedHome() {
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
         <View style={styles.headerActions}>
+          <Pressable
+            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceSecondary }]}
+            accessibilityLabel="Kalender"
+            onPress={() => router.push('/calendar' as any)}
+          >
+            <CalendarIcon width={20} height={20} color={colors.textPrimary} />
+          </Pressable>
           <Pressable
             style={[styles.headerIconBtn, { backgroundColor: colors.surfaceSecondary }]}
             accessibilityLabel="Nachrichten"

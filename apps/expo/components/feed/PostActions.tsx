@@ -1,19 +1,14 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 
-import FavouriteIcon from '@/assets/icons/favourite.svg';
-import FavouriteFilledIcon from '@/assets/icons/favourite_filled.svg';
+import HeartIcon from '@/assets/icons/heart-02.svg';
+import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
 import CommentIcon from '@/assets/icons/comment-02.svg';
-import SendIcon from '@/assets/icons/sent.svg';
+import ShareIcon from '@/assets/icons/share-02.svg';
+
+const HEART_PNG = require('@/assets/icons/Heart.png');
 
 type Props = {
   likesCount: number;
@@ -22,7 +17,6 @@ type Props = {
   onLike: () => void;
   onComment: () => void;
   onShare: () => void;
-  onMore?: () => void;
 };
 
 export default function PostActions({
@@ -32,63 +26,135 @@ export default function PostActions({
   onLike,
   onComment,
   onShare,
-  onMore,
 }: Props) {
   const { colors } = useTheme();
-  const heartScale = useSharedValue(1);
 
-  const heartAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartScale.value }],
-  }));
+  const pngScale = useRef(new Animated.Value(0)).current;
+  const pngRotate = useRef(new Animated.Value(0)).current;
+  const pngOpacity = useRef(new Animated.Value(0)).current;
+  const filledScale = useRef(new Animated.Value(isLiked ? 1 : 0)).current;
+  const outlineOpacity = useRef(new Animated.Value(isLiked ? 0 : 1)).current;
+
+  // Keep the static layers in sync when isLiked is changed externally
+  // (optimistic update from parent, server reconciliation, etc.)
+  useEffect(() => {
+    outlineOpacity.setValue(isLiked ? 0 : 1);
+    filledScale.setValue(isLiked ? 1 : 0);
+  }, [isLiked, outlineOpacity, filledScale]);
+
+  const rotateInterpolation = pngRotate.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: ['0deg', '-15deg', '5deg'],
+  });
 
   const handleLikePress = () => {
     if (!isLiked) {
-      heartScale.value = withSequence(
-        withSpring(1.3, { damping: 10, stiffness: 400 }),
-        withSpring(1, { damping: 12, stiffness: 300 })
-      );
+      // Activate animation: outline hides → Heart.png plops → filled appears
+      outlineOpacity.setValue(0);
+      pngOpacity.setValue(1);
+      pngScale.setValue(0);
+      pngRotate.setValue(0);
+
+      Animated.spring(pngScale, {
+        toValue: 1.5,
+        damping: 6,
+        stiffness: 250,
+        useNativeDriver: true,
+      }).start();
+      Animated.spring(pngRotate, {
+        toValue: 1,
+        damping: 6,
+        stiffness: 250,
+        useNativeDriver: true,
+      }).start();
+
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.spring(pngScale, {
+            toValue: 0.85,
+            damping: 10,
+            stiffness: 200,
+            useNativeDriver: true,
+          }),
+          Animated.spring(pngRotate, {
+            toValue: 2,
+            damping: 10,
+            stiffness: 200,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }, 350);
+
+      setTimeout(() => {
+        Animated.timing(pngOpacity, {
+          toValue: 0,
+          duration: 100,
+          useNativeDriver: true,
+        }).start();
+        filledScale.setValue(0.85);
+        Animated.spring(filledScale, {
+          toValue: 1,
+          damping: 12,
+          stiffness: 200,
+          useNativeDriver: true,
+        }).start();
+      }, 500);
     } else {
-      heartScale.value = withSequence(
-        withTiming(0.85, { duration: 100 }),
-        withSpring(1, { damping: 14, stiffness: 300 })
-      );
+      filledScale.setValue(0);
+      Animated.timing(outlineOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
     }
     onLike();
   };
 
   return (
     <View style={[styles.container, { borderTopColor: colors.border }]}>
-      <Pressable onPress={handleLikePress} style={styles.action}>
-        <Animated.View style={heartAnimatedStyle}>
-          {isLiked ? (
-            <FavouriteFilledIcon width={20} height={20} color={colors.error} />
-          ) : (
-            <FavouriteIcon width={20} height={20} color={colors.textSecondary} />
-          )}
-        </Animated.View>
-        {likesCount > 0 && (
-          <Text style={[styles.count, { color: isLiked ? colors.error : colors.textSecondary }]}>
-            {likesCount}
-          </Text>
-        )}
-      </Pressable>
-
       <Pressable onPress={onComment} style={styles.action}>
-        <CommentIcon width={20} height={20} color={colors.textSecondary} />
+        <CommentIcon width={22} height={22} color={colors.textPrimary} />
         {commentsCount > 0 && (
-          <Text style={[styles.count, { color: colors.textSecondary }]}>{commentsCount}</Text>
+          <Text style={[styles.count, { color: colors.textPrimary }]}>{commentsCount}</Text>
         )}
       </Pressable>
 
       <Pressable onPress={onShare} style={styles.action}>
-        <SendIcon width={20} height={20} color={colors.textSecondary} />
+        <ShareIcon width={22} height={22} color={colors.textPrimary} />
       </Pressable>
 
-      {onMore && (
-        <Pressable onPress={onMore} style={styles.moreButton}>
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
-        </Pressable>
-      )}
+      <Pressable onPress={handleLikePress} style={[styles.action, styles.heartAction]}>
+        {likesCount > 0 && (
+          <Text style={[styles.count, { color: colors.textPrimary }]}>{likesCount}</Text>
+        )}
+        <View style={styles.heartIconWrap}>
+          <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
+            <HeartIcon width={22} height={22} color={colors.textPrimary} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.iconMid,
+              {
+                opacity: isLiked ? 1 : 0,
+                transform: [{ scale: filledScale }],
+              },
+            ]}
+          >
+            <HeartFilledIcon width={22} height={22} color={colors.textPrimary} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.iconTop,
+              {
+                opacity: pngOpacity,
+                transform: [{ scale: pngScale }, { rotate: rotateInterpolation }],
+              },
+            ]}
+          >
+            <Image source={HEART_PNG} style={styles.pngImage} contentFit="contain" />
+          </Animated.View>
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -105,17 +171,38 @@ const styles = StyleSheet.create({
   action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     paddingVertical: 4,
     paddingHorizontal: 2,
+  },
+  heartAction: {
+    marginLeft: 'auto',
   },
   count: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
   },
-  moreButton: {
-    marginLeft: 'auto',
-    paddingVertical: 4,
-    paddingHorizontal: 2,
+  heartIconWrap: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  iconBottom: {
+    position: 'absolute',
+    zIndex: 0,
+  },
+  iconMid: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  iconTop: {
+    position: 'absolute',
+    zIndex: 2,
+  },
+  pngImage: {
+    width: 28,
+    height: 28,
   },
 });

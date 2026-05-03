@@ -37,13 +37,14 @@ export default function EventStoryBar() {
           style={[
             styles.card,
             styles.createCard,
-            { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            { backgroundColor: colors.background, borderColor: colors.background },
           ]}
         >
+          <View style={[styles.createCardTopHalf, { backgroundColor: colors.feedBackground }]} />
           <View style={[styles.plusCircle, { backgroundColor: colors.primary }]}>
             <Text style={[styles.plusText, { color: colors.background }]}>+</Text>
           </View>
-          <Text style={[styles.createLabel, { color: colors.textSecondary }]}>
+          <Text style={[styles.createLabel, { color: colors.textPrimary }]}>
             {'Veranstaltung\nerstellen'}
           </Text>
         </Pressable>
@@ -135,19 +136,28 @@ const styles = StyleSheet.create({
   },
   createCard: {
     borderWidth: 1.5,
-    borderStyle: 'dashed',
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 10,
   },
+  createCardTopHalf: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    borderTopLeftRadius: 13,
+    borderTopRightRadius: 13,
+  },
   plusCircle: {
     position: 'absolute',
-    top: 28,
+    top: 50,
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 2,
   },
   plusText: {
     fontSize: 24,

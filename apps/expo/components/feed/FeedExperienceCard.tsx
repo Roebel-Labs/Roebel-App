@@ -55,7 +55,7 @@ export default function FeedExperienceCard({
         eventTitle ? `Erlebnis bei ${eventTitle} öffnen` : 'Erlebnis öffnen'
       }
     >
-      <PostAuthorRow author={post.author} createdAt={post.created_at} />
+      <PostAuthorRow author={post.author} createdAt={post.created_at} onMore={onMore} />
 
       {eventTitle && (
         <View style={styles.eventLabelRow}>
@@ -108,7 +108,6 @@ export default function FeedExperienceCard({
         onLike={onLike}
         onComment={openEvent}
         onShare={onShare}
-        onMore={onMore}
       />
     </Pressable>
   );

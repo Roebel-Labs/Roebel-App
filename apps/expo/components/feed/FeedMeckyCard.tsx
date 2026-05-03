@@ -66,6 +66,7 @@ export default function FeedMeckyCard({
         nameOverride="Mecky Bot"
         avatarOverride={MECKY_AVATAR}
         badge="Bot"
+        onMore={onMore}
       />
 
       <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
@@ -87,7 +88,6 @@ export default function FeedMeckyCard({
         onLike={onLike}
         onComment={handleComment}
         onShare={onShare}
-        onMore={onMore}
       />
 
       <ImageZoomModal

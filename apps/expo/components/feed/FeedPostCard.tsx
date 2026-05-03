@@ -63,6 +63,7 @@ export default function FeedPostCard({
         author={post.author}
         category={post.category}
         createdAt={post.created_at}
+        onMore={onMore}
       />
 
       <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
@@ -105,7 +106,6 @@ export default function FeedPostCard({
         onLike={onLike}
         onComment={handleComment}
         onShare={onShare}
-        onMore={onMore}
       />
 
       <ImageZoomModal

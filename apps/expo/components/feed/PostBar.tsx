@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import ImageIcon from '@/assets/icons/image-01.svg';
 
 type Props = {
   avatarUrl: string | null;
@@ -28,7 +28,7 @@ export default function PostBar({ avatarUrl, onPress }: Props) {
         <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
           Teile etwas mit Röbel
         </Text>
-        <Ionicons name="image-outline" size={20} color={colors.textTertiary} />
+        <ImageIcon width={20} height={20} color={colors.textTertiary} />
       </View>
     </Pressable>
   );
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 12,
     gap: 8,
   },
   placeholder: {
