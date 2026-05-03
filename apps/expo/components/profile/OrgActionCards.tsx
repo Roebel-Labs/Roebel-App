@@ -44,6 +44,7 @@ export default function OrgActionCards() {
   const wideItems: WideItem[] = [
     { label: 'Anzeigen', emoji: '🏷️', onPress: () => router.push('/org/ads' as any) },
     { label: 'Dashboard', emoji: '📊', onPress: () => router.push('/org/dashboard' as any) },
+    { label: 'Einstellungen', emoji: '⚙️', onPress: () => router.push('/org/settings' as any) },
   ];
 
   return (

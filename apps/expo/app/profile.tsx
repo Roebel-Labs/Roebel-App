@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Modal, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
@@ -12,6 +12,7 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import BottomDrawer from '@/components/BottomDrawer';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
@@ -57,6 +58,7 @@ export default function ProfileScreen() {
   const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
   const userBusiness = businessRecord;
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
@@ -428,64 +430,70 @@ const handleRefresh = async () => {
       />
 
       {/* Account Switcher Sheet */}
-      <Modal visible={showAccountSheet} transparent animationType="fade" onRequestClose={() => setShowAccountSheet(false)}>
-        <Pressable style={accountSheetStyles.backdrop} onPress={() => setShowAccountSheet(false)}>
-          <Pressable style={[accountSheetStyles.sheet, { backgroundColor: colors.background }]} onPress={e => e.stopPropagation()}>
-            <Text style={[accountSheetStyles.title, { color: colors.textPrimary }]}>Account wechseln</Text>
+      <BottomDrawer
+        visible={showAccountSheet}
+        onClose={() => setShowAccountSheet(false)}
+        snapPoint={0.7}
+      >
+        <Text style={[accountSheetStyles.title, { color: colors.textPrimary }]}>Account wechseln</Text>
 
-            {ownedAccounts.map((acc) => {
-              const isActive = activeAccount?.id === acc.id;
-              const SUB_TYPE_EMOJI: Record<string, string> = { restaurant: '🍽️', unternehmen: '🏢', verein: '🤝', partei: '🏛️', fraktion: '⚖️' };
-              const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
-              const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
-              const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
-              const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url);
-              const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 12 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {ownedAccounts.map((acc) => {
+            const isActive = activeAccount?.id === acc.id;
+            const SUB_TYPE_EMOJI: Record<string, string> = { restaurant: '🍽️', unternehmen: '🏢', verein: '🤝', partei: '🏛️', fraktion: '⚖️' };
+            const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
+            const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
+            const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
+            const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url);
+            const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
 
-              return (
-                <Pressable
-                  key={acc.id}
-                  onPress={() => { switchAccount(acc.id); setShowAccountSheet(false); }}
-                  style={[
-                    accountSheetStyles.accountRow,
-                    { borderColor: isActive ? colors.primary : colors.border },
-                    isActive && { backgroundColor: colors.primaryLight },
-                  ]}
-                >
-                  {avatarSource ? (
-                    <Image source={{ uri: avatarSource }} style={accountSheetStyles.accountAvatar} />
-                  ) : (
-                    <View style={[accountSheetStyles.accountIcon, { backgroundColor: colors.surfaceSecondary }]}>
-                      <Text style={accountSheetStyles.accountEmoji}>{emoji}</Text>
-                    </View>
-                  )}
-                  <View style={accountSheetStyles.accountInfo}>
-                    <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{acc.name}</Text>
-                    <Text style={[accountSheetStyles.accountType, { color: colors.textSecondary }]}>{typeLabel}</Text>
+            return (
+              <Pressable
+                key={acc.id}
+                onPress={() => { switchAccount(acc.id); setShowAccountSheet(false); }}
+                style={[
+                  accountSheetStyles.accountRow,
+                  { borderColor: isActive ? colors.primary : colors.border },
+                  isActive && { backgroundColor: colors.primaryLight },
+                ]}
+              >
+                {avatarSource ? (
+                  <Image source={{ uri: avatarSource }} style={accountSheetStyles.accountAvatar} />
+                ) : (
+                  <View style={[accountSheetStyles.accountIcon, { backgroundColor: colors.surfaceSecondary }]}>
+                    <Text style={accountSheetStyles.accountEmoji}>{emoji}</Text>
                   </View>
-                  {accIsPending && (
-                    <View style={[accountSheetStyles.statusPill, { backgroundColor: colors.warningBackground }]}>
-                      <Text style={[accountSheetStyles.statusPillText, { color: colors.warning }]}>In Prüfung</Text>
-                    </View>
-                  )}
-                  {isActive && <Text style={[accountSheetStyles.checkmark, { color: colors.primary }]}>✓</Text>}
-                </Pressable>
-              );
-            })}
+                )}
+                <View style={accountSheetStyles.accountInfo}>
+                  <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{acc.name}</Text>
+                  <Text style={[accountSheetStyles.accountType, { color: colors.textSecondary }]}>{typeLabel}</Text>
+                </View>
+                {accIsPending && (
+                  <View style={[accountSheetStyles.statusPill, { backgroundColor: colors.warningBackground }]}>
+                    <Text style={[accountSheetStyles.statusPillText, { color: colors.warning }]}>In Prüfung</Text>
+                  </View>
+                )}
+                {isActive && <Text style={[accountSheetStyles.checkmark, { color: colors.primary }]}>✓</Text>}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
-            <View style={[accountSheetStyles.divider, { backgroundColor: colors.border }]} />
-            <Pressable
-              onPress={() => {
-                setShowAccountSheet(false);
-                if (wallet) disconnect(wallet);
-              }}
-              style={accountSheetStyles.logoutButton}
-            >
-              <Text style={accountSheetStyles.logoutText}>Ausloggen</Text>
-            </Pressable>
-          </Pressable>
+        <View style={[accountSheetStyles.divider, { backgroundColor: colors.border }]} />
+        <Pressable
+          onPress={() => {
+            setShowAccountSheet(false);
+            if (wallet) disconnect(wallet);
+          }}
+          style={[accountSheetStyles.logoutButton, { paddingBottom: 14 + insets.bottom }]}
+        >
+          <Text style={accountSheetStyles.logoutText}>Ausloggen</Text>
         </Pressable>
-      </Modal>
+      </BottomDrawer>
     </SafeAreaView>
   );
 }
@@ -604,17 +612,6 @@ const styles = StyleSheet.create({
 });
 
 const accountSheetStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',

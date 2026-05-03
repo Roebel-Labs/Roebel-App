@@ -8,6 +8,7 @@ import {
   switchActiveAccount as switchActiveAccountDB,
   inviteOwner as inviteOwnerDB,
   removeOwner as removeOwnerDB,
+  deleteAccount as deleteAccountDB,
   type CreateOrgAccountOptions,
 } from '@/lib/supabase-accounts';
 import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
@@ -27,6 +28,7 @@ interface AccountContextValue {
   ) => Promise<Account>;
   inviteCitizen: (accountId: string, walletAddress: string) => Promise<void>;
   removeCitizen: (accountId: string, walletAddress: string) => Promise<void>;
+  deleteOrgAccount: (accountId: string) => Promise<void>;
   isOwnerOf: (accountId: string | null) => boolean;
   isLoading: boolean;
   refreshAccounts: () => Promise<void>;
@@ -150,6 +152,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const deleteOrgAccount = useCallback(
+    async (accountId: string) => {
+      await deleteAccountDB(accountId);
+      setOwnedAccounts((prev) => prev.filter((a) => a.id !== accountId));
+      setActiveAccount((curr) => (curr?.id === accountId ? null : curr));
+    },
+    []
+  );
+
   const isOwnerOf = useCallback(
     (accountId: string | null): boolean => {
       if (!accountId) return false;
@@ -167,11 +178,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       createOrgAccount,
       inviteCitizen,
       removeCitizen,
+      deleteOrgAccount,
       isOwnerOf,
       isLoading,
       refreshAccounts,
     }),
-    [activeAccount, ownedAccounts, roleInActiveAccount, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, isOwnerOf, isLoading, refreshAccounts]
+    [activeAccount, ownedAccounts, roleInActiveAccount, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, deleteOrgAccount, isOwnerOf, isLoading, refreshAccounts]
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

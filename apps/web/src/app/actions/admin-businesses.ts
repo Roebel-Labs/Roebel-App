@@ -59,6 +59,8 @@ export async function approveBusiness(id: string) {
 
     if (error) throw error
 
+    await syncBusinessVerification(supabase, data, true)
+
     // Create activity notification
     createAppNotification({
       type: "business_new",
@@ -79,6 +81,33 @@ export async function approveBusiness(id: string) {
   }
 }
 
+// Mirror approval/rejection state into the new accounts system.
+// businesses ↔ accounts have no FK; match by owner wallet + name.
+async function syncBusinessVerification(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  business: { owner_wallet_address?: string | null; name?: string | null },
+  isVerified: boolean
+) {
+  if (!business.owner_wallet_address || !business.name) return
+
+  const { data: ownerRows } = await supabase
+    .from("account_owners")
+    .select("account_id, accounts:account_id(id, account_type, name, is_verified)")
+    .eq("wallet_address", business.owner_wallet_address.toLowerCase())
+
+  const matchedIds = (ownerRows ?? [])
+    .map((r: any) => r.accounts)
+    .filter((a: any) => a && a.account_type === "organisation" && a.name === business.name)
+    .map((a: any) => a.id)
+
+  if (matchedIds.length === 0) return
+
+  await supabase
+    .from("accounts")
+    .update({ is_verified: isVerified, updated_at: new Date().toISOString() })
+    .in("id", matchedIds)
+}
+
 export async function rejectBusiness(id: string, notes?: string) {
   try {
     const supabase = await createClient()
@@ -94,6 +123,8 @@ export async function rejectBusiness(id: string, notes?: string) {
       .single()
 
     if (error) throw error
+
+    await syncBusinessVerification(supabase, data, false)
 
     revalidatePath("/admin/dashboard/gewerbe")
     revalidatePath(`/admin/dashboard/gewerbe/${id}`)

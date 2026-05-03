@@ -250,6 +250,20 @@ export async function removeOwner(accountId: string, walletAddress: string): Pro
   }
 }
 
+// ── Delete ───────────────────────────────────────────────────
+
+export async function deleteAccount(accountId: string): Promise<void> {
+  const { error } = await supabase
+    .from('accounts' as any)
+    .delete()
+    .eq('id', accountId);
+
+  if (error) {
+    console.error('deleteAccount error:', error);
+    throw error;
+  }
+}
+
 // ── Update ───────────────────────────────────────────────────
 
 export async function updateAccount(
