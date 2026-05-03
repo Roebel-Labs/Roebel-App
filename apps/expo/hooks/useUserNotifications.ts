@@ -5,6 +5,7 @@ import { useAccount } from '@/context/AccountContext';
 import {
   fetchUserNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
   getUnreadNotificationCount,
 } from '@/lib/supabase-member-notifications';
 import { acceptInvite, declineInvite } from '@/lib/supabase-invites';
@@ -97,6 +98,17 @@ export default function useUserNotifications() {
     setUnreadCount((prev) => Math.max(0, prev - 1));
   }, []);
 
+  const markAllAsRead = useCallback(async () => {
+    if (!walletAddress) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+    try {
+      await markAllNotificationsRead(walletAddress);
+    } catch (err) {
+      console.error('Failed to mark all notifications as read:', err);
+    }
+  }, [walletAddress]);
+
   const handleAcceptInvite = useCallback(
     async (notification: UserNotification) => {
       if (!walletAddress) return;
@@ -137,6 +149,7 @@ export default function useUserNotifications() {
     refresh,
     loadMore,
     markAsRead,
+    markAllAsRead,
     acceptInvite: handleAcceptInvite,
     declineInvite: handleDeclineInvite,
   };

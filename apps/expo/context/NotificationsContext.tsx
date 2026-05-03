@@ -1,14 +1,20 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useCallback, useContext } from 'react';
 import useNotifications, { UseNotificationsReturn } from '@/hooks/useNotifications';
 import { useNotificationInbox } from '@/hooks/useNotificationInbox';
 import useUserNotifications from '@/hooks/useUserNotifications';
 
+type InboxState = ReturnType<typeof useNotificationInbox>;
+type UserNotifsState = ReturnType<typeof useUserNotifications>;
+
 type NotificationsContextValue = UseNotificationsReturn & {
+  inbox: InboxState;
+  userNotifs: UserNotifsState;
   unreadCount: number;
   userUnreadCount: number;
   totalUnreadCount: number;
   refreshInbox: () => Promise<void>;
   refreshUserNotifications: () => Promise<void>;
+  markAllAsRead: () => Promise<void>;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
@@ -18,15 +24,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const inbox = useNotificationInbox();
   const userNotifs = useUserNotifications();
 
+  const markAllAsRead = useCallback(async () => {
+    await Promise.all([inbox.markAllAsRead(), userNotifs.markAllAsRead()]);
+  }, [inbox.markAllAsRead, userNotifs.markAllAsRead]);
+
   return (
     <NotificationsContext.Provider
       value={{
         ...notifications,
+        inbox,
+        userNotifs,
         unreadCount: inbox.unreadCount,
         userUnreadCount: userNotifs.unreadCount,
         totalUnreadCount: inbox.unreadCount + userNotifs.unreadCount,
         refreshInbox: inbox.refresh,
         refreshUserNotifications: userNotifs.refresh,
+        markAllAsRead,
       }}
     >
       {children}

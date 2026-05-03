@@ -22,6 +22,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
+import { useMessaging } from '@/context/MessagingContext';
 import { deletePost } from '@/lib/supabase-posts';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation from '@/components/BottomNavigation';
@@ -175,7 +176,8 @@ export default function FeedHome() {
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
-  const { unreadCount } = useNotificationsContext();
+  const { totalUnreadCount } = useNotificationsContext();
+  const { unreadCount: unreadMessages } = useMessaging();
   const { width: screenWidth } = useWindowDimensions();
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
@@ -289,28 +291,31 @@ export default function FeedHome() {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
         <View style={styles.headerActions}>
           <Pressable
-            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceSecondary }]}
+            style={styles.headerIconBtn}
             accessibilityLabel="Kalender"
             onPress={() => router.push('/calendar' as any)}
           >
-            <CalendarIcon width={20} height={20} color={colors.textPrimary} />
+            <CalendarIcon width={22} height={22} color={colors.textPrimary} />
           </Pressable>
           <Pressable
-            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceSecondary }]}
+            style={styles.headerIconBtn}
             accessibilityLabel="Nachrichten"
             onPress={() => router.push('/messages' as any)}
           >
-            <MailIcon width={20} height={20} color={colors.textPrimary} />
+            <MailIcon width={22} height={22} color={colors.textPrimary} />
+            {unreadMessages > 0 && <View style={styles.dot} />}
           </Pressable>
           <Pressable
-            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceSecondary }]}
+            style={styles.headerIconBtn}
             accessibilityLabel="Benachrichtigungen"
             onPress={() => router.push('/notifications' as any)}
           >
-            <NotificationIcon width={20} height={20} color={colors.textPrimary} />
-            {unreadCount > 0 && (
+            <NotificationIcon width={22} height={22} color={colors.textPrimary} />
+            {totalUnreadCount > 0 && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                <Text style={styles.badgeText}>
+                  {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                </Text>
               </View>
             )}
           </Pressable>
@@ -455,7 +460,6 @@ const styles = StyleSheet.create({
   headerIconBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -467,11 +471,11 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 2,
-    right: 2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#DC2626',
     justifyContent: 'center',
     alignItems: 'center',
@@ -481,6 +485,15 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 10,
     fontFamily: 'Inter-Medium',
-    lineHeight: 14,
+    lineHeight: 12,
+  },
+  dot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#DC2626',
   },
 });

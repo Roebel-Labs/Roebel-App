@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useNotificationInbox } from '@/hooks/useNotificationInbox';
-import useUserNotifications from '@/hooks/useUserNotifications';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useNotificationsContext } from '@/context/NotificationsContext';
 import NotificationCard from '@/components/NotificationCard';
 import InviteNotificationCard from '@/components/InviteNotificationCard';
 import { NotificationCardSkeleton } from '@/components/SkeletonLoader';
@@ -28,8 +27,16 @@ type MergedItem =
 export default function NotificationsInboxScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const pushInbox = useNotificationInbox();
-  const userNotifs = useUserNotifications();
+  const { inbox: pushInbox, userNotifs, markAllAsRead } = useNotificationsContext();
+
+  // Clear the header badge whenever the inbox is focused. Both server-side
+  // (user notifications) and local (push log readIds) state are flipped to
+  // read; new notifications arriving after this point will re-show the count.
+  useFocusEffect(
+    useCallback(() => {
+      markAllAsRead();
+    }, [markAllAsRead])
+  );
 
   const isLoading = pushInbox.isLoading || userNotifs.isLoading;
   const isRefreshing = pushInbox.isRefreshing || userNotifs.isRefreshing;
