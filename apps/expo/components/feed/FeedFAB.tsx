@@ -5,21 +5,28 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 
 import PencilIcon from '@/assets/icons/pencil.svg';
 
+type AnimatedScalar = { readonly value: number };
+
 type Props = {
   onPress: () => void;
+  /** Visibility scale driven externally (1 = visible, 0 = hidden). */
+  visibilityScale?: AnimatedScalar;
 };
 
-export default function FeedFAB({ onPress }: Props) {
+export default function FeedFAB({ onPress, visibilityScale }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: scale.value * (visibilityScale?.value ?? 1) }],
+    opacity: visibilityScale?.value ?? 1,
   }));
 
   const handlePressIn = () => {
@@ -31,7 +38,13 @@ export default function FeedFAB({ onPress }: Props) {
   };
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
+    <Animated.View
+      style={[
+        styles.container,
+        { bottom: BOTTOM_NAV_HEIGHT + insets.bottom + 24 },
+        animatedStyle,
+      ]}
+    >
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
@@ -49,7 +62,6 @@ export default function FeedFAB({ onPress }: Props) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: BOTTOM_NAV_HEIGHT + 40,
     right: 16,
     zIndex: 10,
   },

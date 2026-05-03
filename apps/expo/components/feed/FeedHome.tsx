@@ -21,7 +21,6 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
@@ -29,7 +28,7 @@ import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
 import { deletePost } from '@/lib/supabase-posts';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
-import BottomNavigation from '@/components/BottomNavigation';
+import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
@@ -209,6 +208,14 @@ export default function FeedHome() {
     transform: [{ translateY: bottomNavTranslateY.value }],
   }));
 
+  // FAB shrinks away alongside the bottom nav so it doesn't float in
+  // empty space when the chrome is hidden.
+  const fabVisibilityScale = useDerivedValue(() => {
+    if (headerHeight === 0) return 1;
+    const collapsed = headerTranslateY.value <= -headerHeight + 1;
+    return withTiming(collapsed ? 0 : 1, { duration: 180 });
+  });
+
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
   const [reportDrawerVisible, setReportDrawerVisible] = useState(false);
@@ -320,7 +327,7 @@ export default function FeedHome() {
       style={[
         styles.headerWrapper,
         styles.headerFloating,
-        { backgroundColor: colors.background },
+        { backgroundColor: colors.background, paddingTop: insets.top },
         headerAnimatedStyle,
       ]}
     >
@@ -376,7 +383,10 @@ export default function FeedHome() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['left', 'right']}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       {isCitizen ? (
         <Pager
           ref={pagerRef}
@@ -437,7 +447,9 @@ export default function FeedHome() {
 
       {appHeader}
 
-      {walletAddress && <FeedFAB onPress={handleCompose} />}
+      {walletAddress && (
+        <FeedFAB onPress={handleCompose} visibilityScale={fabVisibilityScale} />
+      )}
 
       <PostOptionsDrawer
         visible={optionsDrawerVisible}
@@ -482,7 +494,7 @@ export default function FeedHome() {
       <Animated.View
         style={[
           styles.bottomFloating,
-          { backgroundColor: colors.background },
+          { backgroundColor: colors.background, paddingBottom: insets.bottom },
           bottomNavAnimatedStyle,
         ]}
       >
