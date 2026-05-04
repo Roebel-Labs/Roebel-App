@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -36,6 +36,11 @@ export default function OrgSettingsScreen() {
       router.replace('/profile');
     } catch (err) {
       console.error('Failed to delete account', err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Konto konnte nicht gelöscht werden.';
+      Alert.alert('Fehler beim Löschen', message);
       setIsDeleting(false);
     }
   };

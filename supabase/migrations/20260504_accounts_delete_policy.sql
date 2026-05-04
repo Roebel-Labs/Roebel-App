@@ -1,0 +1,15 @@
+-- Allow client-side deletion of accounts.
+--
+-- Migration 005 enabled RLS on `accounts` and created select/insert/update
+-- policies but no DELETE policy. Postgres default-denies operations without
+-- a matching policy, so `DELETE FROM accounts WHERE id = $1` from the anon
+-- client returned success with 0 rows affected. The expo "Konto löschen"
+-- flow appeared to work locally (the org disappeared from in-memory state),
+-- but the DB row remained and continued to surface in the web account
+-- switcher and admin views.
+--
+-- This policy mirrors the permissive convention used for
+-- `account_owners_delete` (USING (true)). Security relies on client-side
+-- wallet-ownership checks. Tighten if/when the app moves to Supabase JWT
+-- auth and can use auth.uid() in policies.
+CREATE POLICY "accounts_delete" ON accounts FOR DELETE USING (true);

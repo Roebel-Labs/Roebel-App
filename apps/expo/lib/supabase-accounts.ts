@@ -253,14 +253,24 @@ export async function removeOwner(accountId: string, walletAddress: string): Pro
 // ── Delete ───────────────────────────────────────────────────
 
 export async function deleteAccount(accountId: string): Promise<void> {
-  const { error } = await supabase
+  // .select() forces Supabase to return the deleted rows so we can verify
+  // the operation actually affected the DB. RLS without a DELETE policy
+  // silently denies the statement (success, 0 rows) — without this check
+  // the caller would think it succeeded and de-sync local state from the DB.
+  const { data, error } = await supabase
     .from('accounts' as any)
     .delete()
-    .eq('id', accountId);
+    .eq('id', accountId)
+    .select('id');
 
   if (error) {
     console.error('deleteAccount error:', error);
     throw error;
+  }
+  if (!data || data.length === 0) {
+    throw new Error(
+      'Konto konnte nicht gelöscht werden (keine Berechtigung oder bereits entfernt).',
+    );
   }
 }
 
