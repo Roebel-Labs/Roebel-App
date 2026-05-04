@@ -34,16 +34,27 @@ export function ProfileDropdown() {
   const displayName = user ? getUserDisplayName(user) : account.address.slice(0, 6) + "...";
   const initial = user?.username ? getInitial(user.username) : getInitial(displayName);
 
+  // Mirror expo: when an org account is active, show the org's avatar/name instead
+  // of the wallet owner's personal profile picture. Falls back to cover_url when
+  // avatar_url is empty (matches apps/expo/app/profile.tsx).
+  const isOrg = !!currentAccount && isOrgAccount(currentAccount);
+  const headerAvatarUrl = isOrg
+    ? currentAccount!.avatar_url ?? currentAccount!.cover_url ?? null
+    : user?.profile_picture_url ?? null;
+  const headerName = isOrg ? currentAccount!.name : displayName;
+  const headerInitial = isOrg ? getInitial(currentAccount!.name) : initial;
+  const profileHref = isOrg ? "/dashboard/profile" : `/app/profile/${account.address}`;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="relative rounded-full hover:opacity-80 transition-opacity outline-none">
           <Avatar className="h-8 w-8">
-            {user?.profile_picture_url && (
-              <AvatarImage src={user.profile_picture_url} alt={displayName} />
+            {headerAvatarUrl && (
+              <AvatarImage src={headerAvatarUrl} alt={headerName} />
             )}
             <AvatarFallback className="bg-muted-foreground/20 text-foreground text-sm font-medium">
-              {initial}
+              {headerInitial}
             </AvatarFallback>
           </Avatar>
           <span className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center h-4 w-4 rounded-full bg-card border border-border shadow-sm">
@@ -56,21 +67,21 @@ export function ProfileDropdown() {
         {/* Profile header */}
         <div className="flex flex-col items-center gap-1 px-4 py-4">
           <Avatar className="h-14 w-14">
-            {user?.profile_picture_url && (
-              <AvatarImage src={user.profile_picture_url} alt={displayName} />
+            {headerAvatarUrl && (
+              <AvatarImage src={headerAvatarUrl} alt={headerName} />
             )}
             <AvatarFallback className="bg-muted-foreground/20 text-foreground text-xl font-medium">
-              {initial}
+              {headerInitial}
             </AvatarFallback>
           </Avatar>
           <div className="text-center mt-1">
-            <p className="text-sm font-semibold">{displayName}</p>
-            {user?.neighborhood && (
+            <p className="text-sm font-semibold">{headerName}</p>
+            {!isOrg && user?.neighborhood && (
               <p className="text-xs text-muted-foreground">{user.neighborhood}</p>
             )}
           </div>
           <Link
-            href={`/app/profile/${account.address}`}
+            href={profileHref}
             className="mt-2 px-4 py-1.5 text-xs font-medium rounded-full border border-border hover:bg-accent transition-colors"
           >
             Profil ansehen
