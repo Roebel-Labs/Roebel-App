@@ -61,7 +61,15 @@ export async function createChargeFromQr(input: {
     } as any,
   );
 
-  if (error) throw error;
+  if (error) {
+    console.error('createChargeFromQr error:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    throw error;
+  }
   return data as RoebelCardChargeRow;
 }
 
@@ -175,11 +183,36 @@ export async function declineCharge(
 }
 
 /**
- * Map the Postgres error message strings (thrown as exception names in the
- * RPC functions) to German user-facing messages.
+ * Map RPC errors to German user-facing messages.
+ *
+ * Primary path: SQLSTATE code from the RPC's `using errcode = 'P0xxx'` clauses
+ * in 20260419_roebel_card_rpc_wallet_param.sql — stable contract.
+ * Fallback: legacy substring match on message text.
+ * Final fallback includes the raw code/message so device logs and screenshots
+ * are self-diagnosing.
  */
 export function chargeErrorMessage(err: unknown): string {
-  const msg = (err as { message?: string })?.message ?? '';
+  const e = err as { code?: string; message?: string } | null;
+  const code = e?.code ?? '';
+  const msg = e?.message ?? '';
+
+  switch (code) {
+    case 'P0001': return 'Nicht angemeldet';
+    case 'P0002': return 'Zahlung nicht gefunden';
+    case 'P0003': return 'Zahlung ist nicht mehr offen';
+    case 'P0004': return 'Zahlung ist abgelaufen';
+    case 'P0005': return 'Karte nicht gefunden';
+    case 'P0006': return 'Nicht berechtigt';
+    case 'P0007': return 'Karte ist nicht aktiv';
+    case 'P0008': return 'Guthaben nicht ausreichend';
+    case 'P0010': return 'Ungültiger Betrag';
+    case 'P0011': return 'Betrag zu hoch (max. 10.000 €)';
+    case 'P0012': return 'QR-Code konnte nicht gelesen werden';
+    case 'P0013': return 'QR-Code ist ungültig oder manipuliert';
+    case 'P0014': return 'QR-Code ist abgelaufen. Bitte neu scannen.';
+    case 'P0015': return 'Dein Partnerzugang ist nicht freigeschaltet. Bitte warte auf Admin-Freigabe.';
+  }
+
   if (msg.includes('guthaben_nicht_ausreichend')) return 'Guthaben nicht ausreichend';
   if (msg.includes('zahlung_abgelaufen')) return 'Zahlung ist abgelaufen';
   if (msg.includes('zahlung_nicht_offen')) return 'Zahlung ist nicht mehr offen';
@@ -194,5 +227,7 @@ export function chargeErrorMessage(err: unknown): string {
   if (msg.includes('qr_abgelaufen')) return 'QR-Code ist abgelaufen. Bitte neu scannen.';
   if (msg.includes('qr_ungueltig')) return 'QR-Code konnte nicht gelesen werden';
   if (msg.includes('partner_nicht_freigeschaltet')) return 'Dein Partnerzugang ist nicht freigeschaltet';
-  return 'Etwas ist schiefgelaufen';
+
+  const tag = code || msg || 'unbekannt';
+  return `Etwas ist schiefgelaufen (${tag})`;
 }

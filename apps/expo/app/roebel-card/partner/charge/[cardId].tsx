@@ -134,6 +134,7 @@ export default function PartnerChargeScreen() {
       setPhase('waiting');
       startPolling(newCharge.id, newCharge.expires_at);
     } catch (err) {
+      console.error('Partner charge submit failed:', err);
       Alert.alert('Fehler', chargeErrorMessage(err));
       setPhase('entry');
     }
