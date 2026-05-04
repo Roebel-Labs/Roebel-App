@@ -32,7 +32,7 @@ import SentIcon from '@/assets/icons/profile/sent.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import HelpCircleIcon from '@/assets/icons/profile/help-circle.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
-import SettingsIcon from '@/assets/icons/profile/settings.svg';
+import SettingsIcon from '@/assets/icons/settings-01.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
@@ -315,6 +315,11 @@ const handleRefresh = async () => {
                         icon={<NotificationIcon width={20} height={20} color={colors.textPrimary} />}
                         label="Benachrichtigungen"
                         onPress={() => router.push('/notifications' as any)}
+                      />
+                      <ProfileMenuItem
+                        icon={<SettingsIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Einstellungen"
+                        onPress={() => router.push('/org/settings' as any)}
                       />
                       <ProfileMenuItem
                         icon={<HelpCircleIcon width={20} height={20} color={colors.textPrimary} />}

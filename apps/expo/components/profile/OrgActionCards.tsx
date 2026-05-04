@@ -7,6 +7,8 @@ import { softShadow } from '@/lib/shadow';
 const ROEBEL_CARD = require('../../assets/illustration/profile/01.png');
 const ANZEIGE = require('../../assets/illustration/profile/05.png');
 const DIENSTLEISTUNG = require('../../assets/illustration/profile/06.png');
+const ADS_ILLUSTRATION = require('../../assets/illustration/profile/ads.png');
+const DASHBOARD_ILLUSTRATION = require('../../assets/illustration/profile/dashboard.png');
 
 type GridItem = {
   label: string;
@@ -16,7 +18,7 @@ type GridItem = {
 
 type WideItem = {
   label: string;
-  emoji: string;
+  icon: any;
   onPress: () => void;
 };
 
@@ -42,9 +44,8 @@ export default function OrgActionCards() {
   ];
 
   const wideItems: WideItem[] = [
-    { label: 'Anzeigen', emoji: '🏷️', onPress: () => router.push('/org/ads' as any) },
-    { label: 'Dashboard', emoji: '📊', onPress: () => router.push('/org/dashboard' as any) },
-    { label: 'Einstellungen', emoji: '⚙️', onPress: () => router.push('/org/settings' as any) },
+    { label: 'Anzeigen', icon: ADS_ILLUSTRATION, onPress: () => router.push('/org/ads' as any) },
+    { label: 'Dashboard', icon: DASHBOARD_ILLUSTRATION, onPress: () => router.push('/org/dashboard' as any) },
   ];
 
   return (
@@ -79,7 +80,7 @@ export default function OrgActionCards() {
             accessibilityRole="button"
             accessibilityLabel={item.label}
           >
-            <Text style={styles.wideEmoji}>{item.emoji}</Text>
+            <Image source={item.icon} style={styles.wideIcon} resizeMode="contain" />
             <Text style={[styles.wideLabel, { color: colors.textPrimary }]}>{item.label}</Text>
           </Pressable>
         ))}
@@ -131,8 +132,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 16,
   },
-  wideEmoji: {
-    fontSize: 22,
+  wideIcon: {
+    width: 32,
+    height: 32,
   },
   wideLabel: {
     fontFamily: 'Inter-Medium',
