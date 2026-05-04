@@ -130,6 +130,12 @@ export default function PartnerChargeScreen() {
         walletAddress: thirdwebAccount?.address ?? '',
       });
 
+      console.log('[partner-charge] createChargeFromQr success', {
+        chargeId: newCharge.id,
+        card_id: newCharge.card_id,
+        amount_cents: newCharge.amount_cents,
+        expires_at: newCharge.expires_at,
+      });
       setCharge(newCharge);
       setPhase('waiting');
       startPolling(newCharge.id, newCharge.expires_at);

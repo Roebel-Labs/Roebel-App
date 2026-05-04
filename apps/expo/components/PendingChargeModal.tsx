@@ -85,6 +85,13 @@ export default function PendingChargeModal({ charge, walletAddress, onResolved }
 
   if (!charge) return null;
 
+  console.log('[PendingChargeModal] render', {
+    id: charge.id,
+    partner: charge.partner_name,
+    amount_cents: charge.amount_cents,
+    secondsLeft,
+  });
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={handleDecline}>
       <View style={styles.backdrop}>

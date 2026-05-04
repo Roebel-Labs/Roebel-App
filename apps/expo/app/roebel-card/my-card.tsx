@@ -213,11 +213,21 @@ export default function MyRoebelCardScreen() {
   const walletAddress = activeAccount?.address?.toLowerCase() ?? '';
 
   const refreshQr = useCallback(async () => {
-    if (!card || !walletAddress) return;
+    if (!card || !walletAddress) {
+      console.log('[my-card] refreshQr skipped', {
+        hasCard: !!card,
+        hasWallet: !!walletAddress,
+      });
+      return;
+    }
     try {
       const payload = await fetchSignedCardQr(card.card_id, walletAddress);
       setQrPayload(payload);
       setQrError(null);
+      console.log('[my-card] refreshQr success', {
+        card_id: card.card_id,
+        payloadHead: payload.slice(0, 32),
+      });
     } catch (err) {
       console.error('fetchSignedCardQr error:', err);
       setQrError('QR-Code konnte nicht geladen werden.');
@@ -256,10 +266,12 @@ export default function MyRoebelCardScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      console.log('[my-card] focus');
       startPolling();
       void loadHistory();
       void loadPartners();
       return () => {
+        console.log('[my-card] blur');
         stopPolling();
         stopQrRefresh();
       };
@@ -275,7 +287,13 @@ export default function MyRoebelCardScreen() {
   }, [card]);
 
   useEffect(() => {
+    console.log('[my-card] pending state', {
+      hasPending: !!pending,
+      pendingId: pending?.id ?? null,
+      qrModalVisible,
+    });
     if (pending && qrModalVisible) {
+      console.log('[my-card] auto-close QR sheet');
       setQrModalVisible(false);
       stopQrRefresh();
     }
@@ -310,11 +328,13 @@ export default function MyRoebelCardScreen() {
   };
 
   const handleOpenQr = () => {
+    console.log('[my-card] handleOpenQr');
     setQrModalVisible(true);
     startQrRefresh();
   };
 
   const handleCloseQr = () => {
+    console.log('[my-card] handleCloseQr');
     setQrModalVisible(false);
     stopQrRefresh();
   };
