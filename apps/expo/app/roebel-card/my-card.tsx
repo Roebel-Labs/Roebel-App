@@ -190,8 +190,23 @@ export default function MyRoebelCardScreen() {
   }, []);
 
   const pollPending = useCallback(async () => {
-    if (!card) return;
+    if (!card) {
+      console.log('[my-card] pollPending skipped: no card loaded');
+      return;
+    }
     const rows = await fetchPendingChargesForCard(card.card_id);
+    console.log('[my-card] pollPending', {
+      card_id: card.card_id,
+      rowCount: rows.length,
+      first: rows[0]
+        ? {
+            id: rows[0].id,
+            partner: rows[0].partner_name,
+            amount_cents: rows[0].amount_cents,
+            expires_at: rows[0].expires_at,
+          }
+        : null,
+    });
     setPending(rows.length > 0 ? rows[0] : null);
   }, [card]);
 

@@ -75,7 +75,14 @@ export function RoebelCardProvider({ children }: { children: React.ReactNode }) 
         }
         setCard(null);
       } else {
-        setCard((data as RoebelCardRow | null) ?? null);
+        const row = (data as RoebelCardRow | null) ?? null;
+        console.log('[RoebelCardContext] loaded card', {
+          wallet: walletAddress,
+          card_id: row?.card_id ?? null,
+          status: row?.status ?? null,
+          balance_cents: row?.balance_cents ?? null,
+        });
+        setCard(row);
       }
     } catch (err) {
       console.error('Unexpected error loading Röbel Card overview:', err);
