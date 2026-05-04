@@ -387,6 +387,24 @@ export default function FeedHome() {
       edges={['left', 'right']}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
+      {/* Static safe-area bands. They sit beneath the floating header /
+          bottom nav (zIndex 9 < 10) so when those slide away on scroll
+          the OS status bar / home-indicator areas keep a solid surface
+          fill instead of revealing the gray feed beneath. */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.topSafeBand,
+          { height: insets.top, backgroundColor: colors.background },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.bottomSafeBand,
+          { height: insets.bottom, backgroundColor: colors.background },
+        ]}
+      />
       {isCitizen ? (
         <Pager
           ref={pagerRef}
@@ -524,6 +542,20 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+  },
+  topSafeBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9,
+  },
+  bottomSafeBand: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9,
   },
   header: {
     flexDirection: 'row',
