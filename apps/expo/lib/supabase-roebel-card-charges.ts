@@ -119,36 +119,58 @@ export async function fetchPendingChargesForCard(
 ): Promise<PendingChargeWithPartner[]> {
   const nowIso = new Date().toISOString();
 
+  // Step 1: charges only. No PostgREST embed — schema-cache /
+  // relationship-resolution issues silently dropped rows here in the past.
   const { data, error } = await supabase
     .from('roebel_card_charges' as any)
-    .select(
-      '*, roebel_card_partners!inner(id, accounts!inner(name))',
-    )
+    .select('*')
     .eq('card_id', cardId)
     .eq('status', 'pending')
     .gt('expires_at', nowIso)
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('fetchPendingChargesForCard error:', error);
+    console.error('fetchPendingChargesForCard error:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     return [];
   }
 
-  return (data as any[]).map((row) => {
-    const partnerAccount = row.roebel_card_partners?.accounts;
-    const partnerName: string | null =
-      partnerAccount && typeof partnerAccount === 'object'
-        ? (partnerAccount.name as string | null) ?? null
-        : null;
-    const {
-      roebel_card_partners: _partner,
-      ...rest
-    } = row;
-    return {
-      ...(rest as RoebelCardChargeRow),
-      partner_name: partnerName,
-    };
+  const charges = (data ?? []) as RoebelCardChargeRow[];
+  console.log('[fetchPendingChargesForCard]', {
+    cardId,
+    nowIso,
+    rowCount: charges.length,
   });
+  if (charges.length === 0) return [];
+
+  // Step 2: fan out to partner names with one round-trip per unique
+  // partner_id. Uses .in() so it's still a single query.
+  const partnerIds = Array.from(new Set(charges.map((c) => c.partner_id)));
+  const partnerNameById = new Map<string, string | null>();
+  const { data: partnerRows, error: partnerError } = await supabase
+    .from('roebel_card_partners' as any)
+    .select('id, accounts(name)')
+    .in('id', partnerIds);
+
+  if (partnerError) {
+    console.error('fetchPendingChargesForCard partner lookup error:', partnerError);
+  } else {
+    for (const row of (partnerRows ?? []) as any[]) {
+      const acc = row.accounts;
+      const name: string | null =
+        acc && typeof acc === 'object' ? (acc.name as string | null) ?? null : null;
+      partnerNameById.set(row.id as string, name);
+    }
+  }
+
+  return charges.map((c) => ({
+    ...c,
+    partner_name: partnerNameById.get(c.partner_id) ?? null,
+  }));
 }
 
 /**
