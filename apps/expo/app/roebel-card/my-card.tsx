@@ -259,6 +259,13 @@ export default function MyRoebelCardScreen() {
     }
   }, [card]);
 
+  useEffect(() => {
+    if (pending && qrModalVisible) {
+      setQrModalVisible(false);
+      stopQrRefresh();
+    }
+  }, [pending, qrModalVisible]);
+
   useFocusEffect(
     useCallback(() => {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
