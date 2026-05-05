@@ -36,12 +36,16 @@ import PostOptionsDrawer from './PostOptionsDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
+import { Image } from 'expo-image';
 import MailIcon from '@/assets/icons/mail-01.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
 import { usePostActions } from '@/hooks/usePostActions';
+
+const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
+const HANDWRITTEN_DARK = require('@/assets/handwritten/dark-mode.png');
 
 const TAB_ORDER: FeedType[] = ['main', 'rathaus', 'app'];
 
@@ -174,7 +178,7 @@ const Pager = (NativePager ?? ScrollPager) as React.ForwardRefExoticComponent<
 >;
 
 export default function FeedHome() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
@@ -332,7 +336,13 @@ export default function FeedHome() {
       ]}
     >
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Röbel</Text>
+        <Image
+          source={isDark ? HANDWRITTEN_DARK : HANDWRITTEN_LIGHT}
+          style={styles.headerWordmark}
+          contentFit="contain"
+          accessibilityIgnoresInvertColors
+          accessibilityLabel="Moin!"
+        />
         <View style={styles.headerActions}>
           <Pressable
             style={styles.headerIconBtn}
@@ -564,9 +574,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+  headerWordmark: {
+    width: 84,
+    height: 36,
   },
   headerActions: {
     flexDirection: 'row',
