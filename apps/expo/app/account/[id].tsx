@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import AvatarStack from '@/components/AvatarStack';
+import { QualityStampSection } from '@/components/QualityStampSection';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import type { Account, MemberWithProfile, OrgSubType } from '@/lib/types';
@@ -207,6 +208,8 @@ export default function PublicAccountScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <QualityStampSection title="Organisationen sind geprüft auf Qualität" />
       </ScrollView>
     </SafeAreaView>
   );

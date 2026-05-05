@@ -30,6 +30,7 @@ import {
   ShareIcon,
 } from '@/components/Icons';
 import BusinessDealCard from '@/components/BusinessDealCard';
+import { QualityStampSection } from '@/components/QualityStampSection';
 import type { BusinessRecord, BusinessDealRecord, OpeningHours } from '@/lib/types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -401,6 +402,8 @@ export default function BusinessDetailScreen() {
               </Pressable>
             )}
           </View>
+
+          <QualityStampSection title="Unternehmen sind geprüft auf Qualität" />
 
           <View style={{ height: 40 }} />
         </View>

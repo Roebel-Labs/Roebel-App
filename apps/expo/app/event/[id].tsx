@@ -20,6 +20,7 @@ import ExperienceSection from '@/components/events/ExperienceSection';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
 import MeckyNotFound from '@/components/MeckyNotFound';
+import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { useActiveAccount } from 'thirdweb/react';
@@ -483,6 +484,8 @@ export default function EventDetails() {
                 />
               </View>
             )}
+
+            <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
 
         </View>
       </View>
