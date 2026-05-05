@@ -1,14 +1,24 @@
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Image, ImageSourcePropType } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWelcomeWizard, PreferredRole } from '@/context/WelcomeWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
 
-const ROLES: { value: PreferredRole; emoji: string; label: string; desc: string }[] = [
-  { value: 'buerger', emoji: '🏡', label: 'Bürger:in', desc: 'Ich wohne in Röbel.' },
-  { value: 'tourist', emoji: '🧳', label: 'Tourist:in', desc: 'Ich besuche Röbel.' },
+const ROLES: { value: PreferredRole; image: ImageSourcePropType; label: string; desc: string }[] = [
+  {
+    value: 'buerger',
+    image: require('../../assets/illustration/onboarding/buerger.png'),
+    label: 'Bürger:in',
+    desc: 'Ich wohne in Röbel.',
+  },
+  {
+    value: 'tourist',
+    image: require('../../assets/illustration/onboarding/suitcase.png'),
+    label: 'Tourist:in',
+    desc: 'Ich besuche Röbel.',
+  },
 ];
 
 export default function WelcomeRoleScreen() {
@@ -19,7 +29,7 @@ export default function WelcomeRoleScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2 von 4</Text>
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2 von 3</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Was trifft auf dich zu?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wir zeigen dir passende Funktionen. Du kannst die Auswahl später ändern.
@@ -41,7 +51,7 @@ export default function WelcomeRoleScreen() {
                   },
                 ]}
               >
-                <Text style={styles.cardEmoji}>{role.emoji}</Text>
+                <Image source={role.image} style={styles.cardImage} resizeMode="contain" accessibilityIgnoresInvertColors />
                 <View style={styles.cardText}>
                   <Text style={[styles.cardLabel, { color: colors.textPrimary }]}>{role.label}</Text>
                   <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>{role.desc}</Text>
@@ -54,9 +64,9 @@ export default function WelcomeRoleScreen() {
 
       <WizardFooter
         step={2}
-        totalSteps={4}
+        totalSteps={3}
         onBack={() => router.back()}
-        onNext={() => state.preferredRole && router.push('/welcome/features' as any)}
+        onNext={() => state.preferredRole && router.push('/welcome/consent' as any)}
         nextDisabled={!state.preferredRole}
       />
     </SafeAreaView>
@@ -103,8 +113,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
-  cardEmoji: {
-    fontSize: 32,
+  cardImage: {
+    width: 48,
+    height: 48,
   },
   cardText: {
     flex: 1,

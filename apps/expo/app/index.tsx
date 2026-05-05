@@ -28,6 +28,8 @@ import { useLivestream } from '@/hooks/useLivestream';
 import { useAnnouncements } from '@/hooks/useAnnouncements';
 import LivestreamBanner from '@/components/LivestreamBanner';
 import AnnouncementModal from '@/components/AnnouncementModal';
+import NotificationSheet from '@/components/onboarding/NotificationSheet';
+import { isNotificationPromptPending, clearNotificationPromptPending } from '@/lib/onboarding-storage';
 
 function useDebounced<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -41,7 +43,29 @@ function useDebounced<T>(value: T, delayMs: number): T {
 export default function HomeScreen() {
   // Feed is the home screen for ALL modes (spec section 2)
   // Content adapts per mode via the feed algorithm
-  return <FeedHome />;
+  const [showNotificationSheet, setShowNotificationSheet] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    isNotificationPromptPending().then((pending) => {
+      if (!cancelled && pending) setShowNotificationSheet(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleNotificationDismiss = async () => {
+    await clearNotificationPromptPending();
+    setShowNotificationSheet(false);
+  };
+
+  return (
+    <>
+      <FeedHome />
+      <NotificationSheet visible={showNotificationSheet} onDismiss={handleNotificationDismiss} />
+    </>
+  );
 }
 
 function DefaultHome() {

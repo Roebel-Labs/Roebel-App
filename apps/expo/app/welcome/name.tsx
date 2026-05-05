@@ -36,7 +36,7 @@ export default function WelcomeNameScreen() {
         enableOnAndroid
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1 von 4</Text>
+        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1 von 3</Text>
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie heißt du?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Dein Name erscheint auf deinem Profil. Du kannst ihn später jederzeit ändern.
@@ -64,7 +64,7 @@ export default function WelcomeNameScreen() {
 
       <WizardFooter
         step={1}
-        totalSteps={4}
+        totalSteps={3}
         onBack={() => router.back()}
         onNext={handleNext}
         nextLabel="Weiter"

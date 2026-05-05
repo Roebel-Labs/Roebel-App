@@ -116,6 +116,7 @@ const handleRefresh = async () => {
   const citizenRequest = userRequests.find((r: any) => r.nft_type === 'citizen') || null;
   const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
+  const wantsToBeCitizen = user?.preferred_role === 'buerger';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -223,7 +224,7 @@ const handleRefresh = async () => {
             const isAspiringCitizen = !isOrg && !isCitizen && !!citizenRequest;
             const orgPillLabel = isOrg
               ? ORG_TYPE_LABELS[activeAccount?.sub_type || ''] || 'Organisation'
-              : 'Tourist';
+              : 'Tourist:in';
 
             const profileHref = user?.username
               ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
@@ -269,11 +270,23 @@ const handleRefresh = async () => {
                       name={displayName || 'Gast'}
                       avatarUrl={user?.profile_picture_url ?? null}
                       variant="guest"
-                      pillLabel="Gast"
+                      pillLabel="Antrag läuft"
                       onPress={() => router.push(profileHref as any)}
                     />
                     <CoinsCard />
                     <ProfileActionGrid />
+                  </>
+                ) : wantsToBeCitizen ? (
+                  <>
+                    {/* Selected "Bürger" during onboarding but no citizen NFT yet */}
+                    <ProfileHeaderCard
+                      name={displayName || 'Bürger'}
+                      avatarUrl={user?.profile_picture_url ?? null}
+                      variant="unverified"
+                      pillLabel="Nicht verifiziert"
+                      onPress={() => router.push(profileHref as any)}
+                    />
+                    <TouristActionRow />
                   </>
                 ) : (
                   <>
@@ -282,7 +295,7 @@ const handleRefresh = async () => {
                       name={displayName || 'Tourist'}
                       avatarUrl={user?.profile_picture_url ?? null}
                       variant="tourist"
-                      pillLabel="Tourist"
+                      pillLabel="Tourist:in"
                       onPress={() => router.push(profileHref as any)}
                     />
                     <TouristActionRow />
@@ -396,9 +409,9 @@ const handleRefresh = async () => {
 
       </ScrollView>
 
-      {/* Bürger werden FAB — shown for connected non-citizens */}
+      {/* Bürger werden FAB — only for users who chose "Bürger" in onboarding and aren't yet verified */}
       <MapFAB
-        visible={isConnected && !isCitizen}
+        visible={isConnected && !isCitizen && wantsToBeCitizen}
         label="Bürger werden"
         href="/verification/request-citizen"
         accessibilityLabel="Bürger werden"

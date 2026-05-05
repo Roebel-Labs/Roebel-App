@@ -6,18 +6,23 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
+  Modal,
+  Image,
   Platform,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { useTheme } from '@/context/ThemeContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function WelcomeNotificationsScreen() {
-  const router = useRouter();
+type NotificationSheetProps = {
+  visible: boolean;
+  onDismiss: () => void;
+};
+
+export default function NotificationSheet({ visible, onDismiss }: NotificationSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [marketingOptIn, setMarketingOptIn] = useState(true);
@@ -25,12 +30,14 @@ export default function WelcomeNotificationsScreen() {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
+    if (!visible) return;
+    translateY.setValue(SCREEN_HEIGHT);
     Animated.timing(translateY, {
       toValue: 0,
       duration: 320,
       useNativeDriver: true,
     }).start();
-  }, [translateY]);
+  }, [visible, translateY]);
 
   const dismiss = () => {
     Animated.timing(translateY, {
@@ -38,7 +45,7 @@ export default function WelcomeNotificationsScreen() {
       duration: 240,
       useNativeDriver: true,
     }).start(() => {
-      router.replace('/profile');
+      onDismiss();
     });
   };
 
@@ -69,55 +76,60 @@ export default function WelcomeNotificationsScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={styles.backdrop}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityLabel="Schließen" />
-      <Animated.View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: colors.background,
-            transform: [{ translateY }],
-            paddingBottom: insets.bottom + 24,
-          },
-        ]}
-      >
-        <View style={styles.handle} />
-        <Pressable style={styles.closeButton} onPress={dismiss} accessibilityLabel="Schließen">
-          <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>✕</Text>
-        </Pressable>
-
-        <View style={styles.heroIcon}>
-          <Text style={styles.heroEmoji}>🔔</Text>
-        </View>
-
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Benachrichtigungen aktivieren</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Verpasse keine wichtigen Nachrichten wie Event-Updates und Aktivitäten deines Accounts.
-        </Text>
-
-        <Pressable
-          onPress={() => setMarketingOptIn((v) => !v)}
-          style={[styles.toggleRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: marketingOptIn }}
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityLabel="Schließen" />
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.background,
+              transform: [{ translateY }],
+              paddingBottom: insets.bottom + 24,
+            },
+          ]}
         >
-          <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
-            Erhalte auch Tipps, Angebote und Empfehlungen.
-          </Text>
-          <CustomToggle value={marketingOptIn} onChange={setMarketingOptIn} />
-        </Pressable>
+          <View style={styles.handle} />
+          <Pressable style={styles.closeButton} onPress={dismiss} accessibilityLabel="Schließen">
+            <Text style={[styles.closeIcon, { color: colors.textSecondary }]}>✕</Text>
+          </Pressable>
 
-        <Pressable
-          onPress={handleEnable}
-          disabled={submitting}
-          style={[styles.primaryButton, { backgroundColor: colors.textPrimary }, submitting && { opacity: 0.6 }]}
-        >
-          <Text style={[styles.primaryButtonText, { color: colors.background }]}>
-            Ja, benachrichtigen
+          <View style={styles.heroIcon}>
+            <Image
+              source={require('../../assets/illustration/onboarding/bell.png')}
+              style={styles.bellImage}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
+          </View>
+
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Benachrichtigungen aktivieren</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Verpasse keine wichtigen Nachrichten wie Event-Updates und Aktivitäten deines Accounts.
           </Text>
-        </Pressable>
-      </Animated.View>
-    </SafeAreaView>
+
+          <Pressable
+            onPress={() => setMarketingOptIn((v) => !v)}
+            style={[styles.toggleRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: marketingOptIn }}
+          >
+            <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+              Erhalte auch Tipps, Angebote und Empfehlungen.
+            </Text>
+            <CustomToggle value={marketingOptIn} onChange={setMarketingOptIn} />
+          </Pressable>
+
+          <Pressable
+            onPress={handleEnable}
+            disabled={submitting}
+            style={[styles.primaryButton, { backgroundColor: colors.textPrimary }, submitting && { opacity: 0.6 }]}
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.background }]}>Ja, benachrichtigen</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -182,12 +194,12 @@ const toggleStyles = StyleSheet.create({
   check: {
     color: '#194383',
     fontSize: 12,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Inter-SemiBold',
   },
 });
 
 const styles = StyleSheet.create({
-  backdrop: {
+  overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
@@ -230,12 +242,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 20,
   },
-  heroEmoji: {
-    fontSize: 44,
+  bellImage: {
+    width: 64,
+    height: 64,
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
     marginBottom: 8,
   },

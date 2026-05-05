@@ -1,80 +1,111 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, StyleSheet, ImageBackground, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '@/context/ThemeContext';
+import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 
 export default function WelcomeIntroScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { openExit } = useWelcomeWizard();
+
+  const certImage = isDark
+    ? require('../../assets/illustration/onboarding/cert-dark-mode.png')
+    : require('../../assets/illustration/onboarding/cert-light-mode.png');
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={styles.content}>
-        <Image
-          source={require('../../assets/illustration/mecky/welcome.png')}
-          style={styles.illustration}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Text style={[styles.heading, { color: colors.textPrimary }]}>
-          Willkommen in Röbel.
-        </Text>
-        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-          Ich bin Mecky — ich zeige dir alles Wichtige.
-        </Text>
-      </View>
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <ImageBackground
+        source={require('../../assets/illustration/onboarding/roebel-bg.png')}
+        style={styles.background}
+        resizeMode="cover"
+      >
+        <View style={[styles.headlineWrap, { paddingTop: insets.top + 24 }]}>
+          <Text style={styles.headline}>Willkommen{'\n'}in Röbel</Text>
+        </View>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => router.push('/welcome/name' as any)}
-          style={[styles.button, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Weiter</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+        <View style={[styles.card, { backgroundColor: colors.background, paddingBottom: insets.bottom + 32 }]}>
+          <Image source={certImage} style={styles.cert} resizeMode="contain" accessibilityIgnoresInvertColors />
+
+          <Text style={[styles.cardHeadline, { color: colors.textPrimary }]}>
+            Röbel neu erleben{'\n'}und mitgestalten
+          </Text>
+
+          <Pressable
+            onPress={() => router.push('/welcome/name' as any)}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Loslegen</Text>
+          </Pressable>
+
+          <Pressable onPress={openExit} style={styles.textButton} accessibilityRole="button">
+            <Text style={[styles.textButtonLabel, { color: colors.primary }]}>Zurück zur Startseite</Text>
+          </Pressable>
+        </View>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
   },
-  content: {
+  background: {
     flex: 1,
+    justifyContent: 'space-between',
+  },
+  headlineWrap: {
     paddingHorizontal: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  illustration: {
-    width: 220,
-    height: 220,
-    marginBottom: 32,
+  headline: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 60,
+    lineHeight: 64,
+    letterSpacing: -1.2,
   },
-  heading: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    marginBottom: 12,
-    textAlign: 'center',
+  card: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 32,
   },
-  subheading: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    paddingHorizontal: 16,
+  cert: {
+    height: 56,
+    width: '100%',
+    alignSelf: 'center',
   },
-  footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  button: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  buttonText: {
-    fontSize: 14,
+  cardHeadline: {
+    marginTop: 8,
     fontFamily: 'Inter-Medium',
+    fontSize: 32,
+    lineHeight: 38,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    marginTop: 32,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+  },
+  textButton: {
+    marginTop: 8,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textButtonLabel: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
   },
 });

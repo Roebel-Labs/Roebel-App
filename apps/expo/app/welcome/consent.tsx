@@ -7,6 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
+import { setNotificationPromptPending } from '@/lib/onboarding-storage';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -27,7 +28,8 @@ export default function WelcomeConsentScreen() {
   const handleAccept = async () => {
     if (!user?.wallet_address) {
       await acceptAll('welcome_terms');
-      router.replace('/welcome/notifications' as any);
+      await setNotificationPromptPending();
+      router.replace('/');
       return;
     }
     setSubmitting(true);
@@ -40,7 +42,9 @@ export default function WelcomeConsentScreen() {
       });
       await acceptAll('welcome_terms');
       await refreshUser();
-      router.replace('/welcome/notifications' as any);
+      await setNotificationPromptPending();
+      dispatch({ type: 'RESET' });
+      router.replace('/');
     } catch (err) {
       console.error('Failed to save onboarding consent:', err);
       Alert.alert('Fehler', 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuche es erneut.');

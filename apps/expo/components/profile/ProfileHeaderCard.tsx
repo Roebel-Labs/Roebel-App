@@ -6,7 +6,7 @@ import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
 import ShieldUserIcon from '@/assets/icons/profile/shield-user.svg';
 import { softShadow } from '@/lib/shadow';
 
-export type ProfileHeaderVariant = 'citizen' | 'guest' | 'tourist' | 'org';
+export type ProfileHeaderVariant = 'citizen' | 'guest' | 'tourist' | 'unverified' | 'org';
 
 interface ProfileHeaderCardProps {
   name: string;
