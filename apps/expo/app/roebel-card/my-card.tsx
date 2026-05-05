@@ -32,9 +32,11 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
 import {
+  fetchPartnerName,
   fetchPendingChargesForCard,
   fetchSignedCardQr,
   type PendingChargeWithPartner,
+  type RoebelCardChargeRow,
 } from '@/lib/supabase-roebel-card-charges';
 import {
   fetchApprovedPartners,
@@ -57,7 +59,6 @@ import RoebelCardSheet, {
 import PartnersGrid from './_components/PartnersGrid';
 import RoebelCardRedeemSheet from './_components/RoebelCardRedeemSheet';
 
-const POLL_INTERVAL_MS = 2000;
 const QR_REFRESH_INTERVAL_MS = 30_000;
 const CARD_PEEK_HEIGHT = 72;
 const TOP_BAR_HEIGHT = 48;
@@ -94,7 +95,6 @@ export default function MyRoebelCardScreen() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [sheetHeight, setSheetHeight] = useState(0);
   const sheetTranslateY = useSharedValue(0);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const TOP_BAR_BOTTOM = insets.top + TOP_BAR_HEIGHT + TOP_BAR_GAP;
@@ -189,27 +189,6 @@ export default function MyRoebelCardScreen() {
     setPartners(result);
   }, []);
 
-  const pollPending = useCallback(async () => {
-    if (!card) {
-      console.log('[my-card] pollPending skipped: no card loaded');
-      return;
-    }
-    const rows = await fetchPendingChargesForCard(card.card_id);
-    console.log('[my-card] pollPending', {
-      card_id: card.card_id,
-      rowCount: rows.length,
-      first: rows[0]
-        ? {
-            id: rows[0].id,
-            partner: rows[0].partner_name,
-            amount_cents: rows[0].amount_cents,
-            expires_at: rows[0].expires_at,
-          }
-        : null,
-    });
-    setPending(rows.length > 0 ? rows[0] : null);
-  }, [card]);
-
   const walletAddress = activeAccount?.address?.toLowerCase() ?? '';
 
   const refreshQr = useCallback(async () => {
@@ -235,19 +214,6 @@ export default function MyRoebelCardScreen() {
     }
   }, [card, walletAddress]);
 
-  const stopPolling = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    void pollPending();
-    pollingRef.current = setInterval(() => void pollPending(), POLL_INTERVAL_MS);
-  }, [pollPending]);
-
   const stopQrRefresh = () => {
     if (qrRefreshRef.current) {
       clearInterval(qrRefreshRef.current);
@@ -267,20 +233,92 @@ export default function MyRoebelCardScreen() {
   useFocusEffect(
     useCallback(() => {
       console.log('[my-card] focus');
-      startPolling();
       void loadHistory();
       void loadPartners();
       return () => {
         console.log('[my-card] blur');
-        stopPolling();
         stopQrRefresh();
       };
-    }, [startPolling, loadHistory, loadPartners]),
+    }, [loadHistory, loadPartners]),
+  );
+
+  // Initial fetch + Realtime subscription for pending charges.
+  // Replaces the old 2s setInterval poll. Scoped to card.card_id so each
+  // card gets its own channel; we tear it down on focus/blur and on card
+  // change.
+  useFocusEffect(
+    useCallback(() => {
+      if (!card) return;
+      const cardId = card.card_id;
+      let cancelled = false;
+
+      void (async () => {
+        const rows = await fetchPendingChargesForCard(cardId);
+        console.log('[my-card] initial pending fetch', {
+          card_id: cardId,
+          rowCount: rows.length,
+        });
+        if (cancelled) return;
+        setPending(rows.length > 0 ? rows[0] : null);
+      })();
+
+      const channel = supabase
+        .channel(`roebel_card_charges:${cardId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'roebel_card_charges',
+            filter: `card_id=eq.${cardId}`,
+          },
+          async (payload) => {
+            const row = payload.new as RoebelCardChargeRow;
+            console.log('[my-card] realtime INSERT', {
+              id: row.id,
+              card_id: row.card_id,
+              status: row.status,
+              amount_cents: row.amount_cents,
+            });
+            if (row.status !== 'pending') return;
+            if (new Date(row.expires_at).getTime() <= Date.now()) return;
+            const partner_name = await fetchPartnerName(row.partner_id);
+            if (cancelled) return;
+            setPending({ ...row, partner_name });
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'roebel_card_charges',
+            filter: `card_id=eq.${cardId}`,
+          },
+          (payload) => {
+            const row = payload.new as RoebelCardChargeRow;
+            console.log('[my-card] realtime UPDATE', {
+              id: row.id,
+              status: row.status,
+            });
+            if (row.status !== 'pending') {
+              setPending((cur) => (cur?.id === row.id ? null : cur));
+            }
+          },
+        )
+        .subscribe((status) => {
+          console.log('[my-card] realtime', status, { card_id: cardId });
+        });
+
+      return () => {
+        cancelled = true;
+        void supabase.removeChannel(channel);
+      };
+    }, [card]),
   );
 
   useEffect(() => {
     if (!card) {
-      stopPolling();
       stopQrRefresh();
       setQrPayload(null);
     }

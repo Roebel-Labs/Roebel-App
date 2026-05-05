@@ -174,6 +174,31 @@ export async function fetchPendingChargesForCard(
 }
 
 /**
+ * Resolve a partner's display name (= their account.name) from the
+ * partner id. Used by the Realtime path on my-card to enrich the bare
+ * charge row delivered by `postgres_changes` (which carries no joined
+ * data). Returns null if the lookup fails or the partner has no name.
+ */
+export async function fetchPartnerName(
+  partnerId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('roebel_card_partners' as any)
+    .select('accounts(name)')
+    .eq('id', partnerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('fetchPartnerName error:', error);
+    return null;
+  }
+  const acc = (data as any)?.accounts;
+  return acc && typeof acc === 'object'
+    ? ((acc.name as string | null) ?? null)
+    : null;
+}
+
+/**
  * Call the approve RPC. Throws on any business-logic error
  * (insufficient balance, expired, not owner, etc.).
  */
