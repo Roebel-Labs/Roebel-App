@@ -125,7 +125,14 @@ export default function PostActions({
 
       <Pressable onPress={handleLikePress} style={[styles.action, styles.heartAction]}>
         {likesCount > 0 && (
-          <Text style={[styles.count, { color: colors.textPrimary }]}>{likesCount}</Text>
+          <Text
+            style={[
+              styles.count,
+              { color: isLiked ? colors.error : colors.textPrimary },
+            ]}
+          >
+            {likesCount}
+          </Text>
         )}
         <View style={styles.heartIconWrap}>
           <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
@@ -140,7 +147,7 @@ export default function PostActions({
               },
             ]}
           >
-            <HeartFilledIcon width={22} height={22} color={colors.textPrimary} />
+            <HeartFilledIcon width={22} height={22} color={colors.error} />
           </Animated.View>
           <Animated.View
             style={[

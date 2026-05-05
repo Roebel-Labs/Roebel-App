@@ -46,6 +46,9 @@ import { usePostActions } from '@/hooks/usePostActions';
 
 const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
 const HANDWRITTEN_DARK = require('@/assets/handwritten/dark-mode.png');
+// Tinting the source guarantees the strokes always contrast with the
+// active surface even if either asset gets re-exported with a slightly
+// different alpha/anti-alias ramp.
 
 const TAB_ORDER: FeedType[] = ['main', 'rathaus', 'app'];
 
@@ -340,6 +343,7 @@ export default function FeedHome() {
           source={isDark ? HANDWRITTEN_DARK : HANDWRITTEN_LIGHT}
           style={styles.headerWordmark}
           contentFit="contain"
+          tintColor={colors.textPrimary}
           accessibilityIgnoresInvertColors
           accessibilityLabel="Moin!"
         />
