@@ -133,22 +133,63 @@ export async function fetchPartnerByAccountId(
   return (data as RoebelCardPartnerRow | null) ?? null;
 }
 
+/**
+ * Find all `roebel_card_partners` rows that belong to any org the given
+ * wallet is a member of (creator OR invited admin OR member). Used to
+ * decide whether to show the partner dashboard or the registration ad.
+ *
+ * Implemented as two simple queries to dodge PostgREST's flaky chained
+ * `!inner` embeds — the previous single-query version with
+ * `accounts!inner(account_owners!inner(...))` only resolved the partner
+ * for the org's *creator*, not for invited admins added later via
+ * acceptInvite (both end up in account_owners with the same shape, but
+ * the chained embed-filter silently dropped non-creator rows).
+ */
 export async function fetchPartnersByWallet(
   walletAddress: string,
 ): Promise<RoebelCardPartnerRow[]> {
-  // Join via account_owners so we find partner rows for all orgs the wallet owns.
-  const { data, error } = await supabase
-    .from('roebel_card_partners' as any)
-    .select(
-      '*, accounts!inner(id, name, avatar_url, sub_type, account_owners!inner(wallet_address))',
-    )
-    .eq('accounts.account_owners.wallet_address', walletAddress.toLowerCase());
+  const normalized = walletAddress.toLowerCase();
 
-  if (error) {
-    console.error('fetchPartnersByWallet error:', error);
+  // Step 1: every account this wallet has access to.
+  const { data: ownerRows, error: ownerError } = await supabase
+    .from('account_owners' as any)
+    .select('account_id')
+    .eq('wallet_address', normalized);
+
+  if (ownerError) {
+    console.error('fetchPartnersByWallet owners error:', ownerError);
     return [];
   }
-  return (data as any[]) as RoebelCardPartnerRow[];
+
+  const accountIds = Array.from(
+    new Set(
+      ((ownerRows ?? []) as { account_id: string }[]).map((r) => r.account_id),
+    ),
+  );
+  console.log('[fetchPartnersByWallet] owners', {
+    wallet: normalized,
+    accountCount: accountIds.length,
+  });
+  if (accountIds.length === 0) return [];
+
+  // Step 2: partner rows for those accounts.
+  const { data, error } = await supabase
+    .from('roebel_card_partners' as any)
+    .select('*')
+    .in('account_id', accountIds);
+
+  if (error) {
+    console.error('fetchPartnersByWallet partners error:', error);
+    return [];
+  }
+
+  const rows = (data ?? []) as RoebelCardPartnerRow[];
+  console.log('[fetchPartnersByWallet] partners', {
+    wallet: normalized,
+    partnerCount: rows.length,
+    statuses: rows.map((r) => r.status),
+  });
+  return rows;
 }
 
 /**
