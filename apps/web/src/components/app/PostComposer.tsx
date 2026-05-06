@@ -233,10 +233,17 @@ export function PostComposer({
         if (url) uploadedImageUrls.push(url);
       }
 
-      // Upload video directly to Supabase Storage
+      // Upload video directly to Supabase Storage. If a video was attached
+      // and the upload fails, abort the whole submit so we don't end up with
+      // a text-only ghost post the user didn't ask for. uploadToStorage has
+      // already toasted the error.
       let uploadedVideoUrl: string | null = null;
       if (videoFile) {
         uploadedVideoUrl = await uploadToStorage(videoFile, "video");
+        if (!uploadedVideoUrl) {
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       // Extract URLs from content

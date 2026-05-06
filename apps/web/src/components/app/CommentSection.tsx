@@ -274,6 +274,10 @@ export function CommentSection({
         } finally {
           setVideoUploadProgress(null);
         }
+        // Abort comment submit if video upload failed (toast already shown).
+        if (!uploadedVideoUrl) {
+          return;
+        }
       }
 
       // Optimistic comment

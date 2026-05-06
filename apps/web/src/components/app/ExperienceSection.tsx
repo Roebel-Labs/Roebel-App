@@ -326,6 +326,11 @@ function ExperienceComposer({
         } finally {
           setVideoUploadProgress(null);
         }
+        // Abort experience submit if video upload failed (toast already shown).
+        if (!uploadedVideoUrl) {
+          setIsUploading(false);
+          return;
+        }
       }
 
       // Optimistic experience
