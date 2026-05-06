@@ -645,7 +645,7 @@ export function PostComposer({
 
         <button
           onClick={handleSubmit}
-          disabled={!content.trim() || !category || isSubmitting || isPending || videoUploadProgress != null}
+          disabled={!content.trim() || isSubmitting || isPending || videoUploadProgress != null}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {(isSubmitting || isPending) && (
