@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
     fontSize: 60,
     lineHeight: 64,
     letterSpacing: -1.2,
+    textAlign: 'center',
   },
   card: {
     borderTopLeftRadius: 32,
