@@ -19,6 +19,7 @@ import TicketSmallSvg from '@/assets/icons/ticket-small.svg';
 import CalendarSvg from '@/assets/icons/calendar.svg';
 import ArrowLeftSvg from '@/assets/icons/arrow-left.svg';
 import ArrowRightSvg from '@/assets/icons/arrow-right.svg';
+import InformationCircleSvg from '@/assets/icons/information-circle.svg';
 import CallSvg from '@/assets/icons/call.svg';
 import UserSvg from '@/assets/icons/user.svg';
 import MailSvg from '@/assets/icons/mail.svg';
@@ -95,6 +96,7 @@ export const HomeIcon = ({ size = 24, ...props }: IconProps) => <HomeSvg width={
 export const TicketIcon = ({ size = 24, ...props }: IconProps) => <TicketSvg width={size} height={size} {...props} />;
 export const TicketSmallIcon = ({ size = 16, ...props }: IconProps) => <TicketSmallSvg width={size} height={size} {...props} />;
 export const ArrowLeftIcon = ({ size = 24, ...props }: IconProps) => <ArrowLeftSvg width={size} height={size} {...props} />;
+export const InformationCircleIcon = ({ size = 24, ...props }: IconProps) => <InformationCircleSvg width={size} height={size} {...props} />;
 export const CallIcon = ({ size = 24, ...props }: IconProps) => <CallSvg width={size} height={size} {...props} />;
 export const UserIcon = ({ size = 24, ...props }: IconProps) => <UserSvg width={size} height={size} {...props} />;
 export const MailIcon = ({ size = 24, ...props }: IconProps) => <MailSvg width={size} height={size} {...props} />;

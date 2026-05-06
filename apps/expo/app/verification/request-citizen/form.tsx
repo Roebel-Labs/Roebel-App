@@ -5,7 +5,8 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,26 +16,29 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import RequestSuccessModal from '@/components/RequestSuccessModal';
 import ErrorDrawer from '@/components/ErrorDrawer';
-import { ArrowLeftIcon } from '@/components/Icons';
+import { InformationCircleIcon } from '@/components/Icons';
+
+const DEFAULT_REASON = 'Bürger in Röbel';
 
 export default function RequestCitizenScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const account = useActiveAccount();
   const { hasCitizenNFT, activePendingRequest, refresh } = useVerificationContext();
   const { createRequest, isLoading } = useCreateCitizenRequest();
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [reason, setReason] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdRequestId, setCreatedRequestId] = useState<number | null>(null);
 
-  // Error drawer state
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
 
+  const certImage = isDark
+    ? require('@/assets/illustration/onboarding/cert-dark-mode.png')
+    : require('@/assets/illustration/onboarding/cert-light-mode.png');
+
   const handleSubmit = async () => {
-    // Validation
     if (!name.trim()) {
       setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihren Namen ein.' });
       return;
@@ -45,27 +49,19 @@ export default function RequestCitizenScreen() {
       return;
     }
 
-    if (!reason.trim()) {
-      setErrorDrawer({ visible: true, message: 'Bitte geben Sie einen Grund an.' });
-      return;
-    }
-
     if (!account) {
       setErrorDrawer({ visible: true, message: 'Bitte verbinden Sie Ihre Wallet.' });
       return;
     }
 
     try {
-      // Create request
       const result = await createRequest(
         { name: name.trim(), address: address.trim() },
-        reason.trim()
+        DEFAULT_REASON
       );
 
-      // Refresh context to update verification status (await to ensure data is loaded)
       await refresh();
 
-      // Show custom success modal
       setCreatedRequestId(result.requestId);
       setShowSuccessModal(true);
     } catch (error) {
@@ -77,7 +73,6 @@ export default function RequestCitizenScreen() {
     }
   };
 
-  // Redirect if already verified
   if (hasCitizenNFT) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -92,7 +87,6 @@ export default function RequestCitizenScreen() {
     );
   }
 
-  // Redirect if already has pending request
   if (activePendingRequest) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -111,100 +105,104 @@ export default function RequestCitizenScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
-          <ArrowLeftIcon size={24} color={colors.textPrimary} />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.closeButton}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Schließen"
+        >
+          <Ionicons name="close" size={28} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürger-Pass</Text>
-        <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAwareScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
-        {/* Info Box */}
-        <View style={[styles.infoBox, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
-          <Text style={styles.infoTitle}>&#x1F4DD; Informationen</Text>
-          <Text style={styles.infoText}>
-            Um ein verifizierter Bürger zu werden, benötigen Sie:{'\n'}
-            • 1 Bescheiniger-Unterschrift{'\n'}
-            • 1 Bürger-Unterschrift{'\n\n'}
-            Ihre persönlichen Daten (Name und Adresse) werden verschlüsselt gespeichert und nur Sie können sie entschlüsseln.
-          </Text>
+      <KeyboardAwareScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={100}
+        extraHeight={150}
+      >
+        <View style={styles.privacyHeader}>
+          <Image source={certImage} style={styles.certImage} resizeMode="contain" accessibilityIgnoresInvertColors />
+          <View style={styles.privacyText}>
+            <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Datenschutz</Text>
+            <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
+              Ihr Name und Adresse werden mit Ende-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten später sehen.
+            </Text>
+          </View>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>Vollständiger Name *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.borderSecondary, color: colors.textPrimary }]}
-              placeholder="Max Mustermann"
-              placeholderTextColor={colors.textTertiary}
-              value={name}
-              onChangeText={setName}
-              editable={!isLoading}
-              autoCapitalize="words"
-            />
-          </View>
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Vollständiger Name *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Max Mustermann"
+            placeholderTextColor={colors.textTertiary}
+            value={name}
+            onChangeText={setName}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+        </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>Adresse in Röbel/Müritz *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.borderSecondary, color: colors.textPrimary }]}
-              placeholder="Musterstraße 123, 17207 Röbel"
-              placeholderTextColor={colors.textTertiary}
-              value={address}
-              onChangeText={setAddress}
-              editable={!isLoading}
-              autoCapitalize="words"
-              multiline
-              numberOfLines={2}
-            />
-          </View>
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Adresse in Röbel/Müritz *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Musterstraße 123, 17207 Röbel"
+            placeholderTextColor={colors.textTertiary}
+            value={address}
+            onChangeText={setAddress}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+        </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.textPrimary }]}>Grund für den Antrag *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea, { backgroundColor: colors.surface, borderColor: colors.borderSecondary, color: colors.textPrimary }]}
-              placeholder="Ich bin Bürger von Röbel/Müritz und möchte an der Stadtentwicklung teilnehmen."
-              placeholderTextColor={colors.textTertiary}
-              value={reason}
-              onChangeText={setReason}
-              editable={!isLoading}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-            <Text style={[styles.hint, { color: colors.textTertiary }]}>
-              Dieser Text ist öffentlich sichtbar für alle Bescheiniger und Bürger.
-            </Text>
+        <View style={styles.infoBanner}>
+          <View style={[styles.infoIconCircle, { backgroundColor: colors.surface }]}>
+            <InformationCircleIcon size={18} color={colors.primary} />
           </View>
-
-          {/* Privacy Notice */}
-          <View style={[styles.privacyBox, { backgroundColor: colors.successBackground, borderColor: colors.success }]}>
-            <Text style={styles.privacyTitle}>&#x1F512; Datenschutz</Text>
-            <Text style={styles.privacyText}>
-              Ihr Name und Ihre Adresse werden mit Ende-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten entschlüsseln. Der Grund für Ihren Antrag ist öffentlich sichtbar.
-            </Text>
-          </View>
-
-          {/* Submit Button */}
-          <Pressable
-            style={[styles.submitButton, { backgroundColor: colors.primary }, isLoading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={colors.onPrimary} />
-            ) : (
-              <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>Antrag einreichen</Text>
-            )}
-          </Pressable>
+          <Text style={[styles.infoText, { color: colors.textPrimary }]}>
+            Nach dem Antrag erhalten Sie einen QR-Code um Signaturen einzusammeln.
+          </Text>
         </View>
       </KeyboardAwareScrollView>
 
-      {/* Success Modal */}
+      <View style={styles.footer}>
+        <Pressable
+          style={[styles.submitButton, { backgroundColor: colors.primary }, isLoading && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={isLoading}
+          accessibilityRole="button"
+        >
+          {isLoading ? (
+            <ActivityIndicator color={colors.onPrimary} />
+          ) : (
+            <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>Absenden</Text>
+          )}
+        </Pressable>
+      </View>
+
       <RequestSuccessModal
         visible={showSuccessModal}
         requestId={createdRequestId}
@@ -218,7 +216,6 @@ export default function RequestCitizenScreen() {
         }}
       />
 
-      {/* Error Drawer */}
       <ErrorDrawer
         visible={errorDrawer.visible}
         message={errorDrawer.message}
@@ -233,102 +230,99 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    height: 56,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 16,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Medium',
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
-  content: {
+  scroll: {
     flex: 1,
   },
-  infoBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    margin: 16,
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
-  infoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#1565C0',
-    marginBottom: 8,
+  privacyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 32,
   },
-  infoText: {
-    fontSize: 14,
+  certImage: {
+    width: 64,
+    height: 64,
+  },
+  privacyText: {
+    flex: 1,
+  },
+  privacyTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 22,
+    marginBottom: 6,
+  },
+  privacyBody: {
     fontFamily: 'Inter-Regular',
-    color: '#1976D2',
+    fontSize: 14,
     lineHeight: 20,
   },
-  form: {
-    padding: 16,
-  },
   formGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
-    fontSize: 14,
     fontFamily: 'Inter-Medium',
+    fontSize: 14,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
   },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 16,
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 8,
   },
-  hint: {
-    fontSize: 12,
+  infoIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoText: {
+    flex: 1,
     fontFamily: 'Inter-Regular',
-    marginTop: 6,
+    fontSize: 15,
+    lineHeight: 22,
   },
-  privacyBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  privacyTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#2E7D32',
-    marginBottom: 8,
-  },
-  privacyText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#388E3C',
-    lineHeight: 18,
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    paddingTop: 8,
   },
   submitButton: {
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginBottom: 32,
+    justifyContent: 'center',
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
+    fontFamily: 'Inter-SemiBold',
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
   },
   messageContainer: {
     flex: 1,

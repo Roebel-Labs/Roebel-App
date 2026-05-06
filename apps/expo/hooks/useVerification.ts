@@ -6,7 +6,16 @@
 
 import { useState, useCallback } from 'react';
 import { useActiveAccount } from 'thirdweb/react';
-import { prepareContractCall, readContract, sendTransaction } from 'thirdweb';
+import {
+  prepareContractCall,
+  prepareEvent,
+  parseEventLogs,
+  readContract,
+  sendTransaction,
+  waitForReceipt,
+} from 'thirdweb';
+import { base } from 'thirdweb/chains';
+import { client } from '@/constants/thirdweb';
 import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
 import {
   createEncryptedEvidence,
@@ -66,16 +75,28 @@ export function useCreateCitizenRequest() {
 
         console.log('✅ Transaction submitted:', transactionHash);
 
-        // 3. Wait for transaction and get request ID
-        // Note: In production, you'd listen for the event or query the contract
-        // For now, we'll use requestCount - 1 as the request ID
-        const requestCount = await readContract({
-          contract: citizenNFTContract,
-          method: 'function requestCount() view returns (uint256)',
-          params: [],
+        // 3. Wait for receipt and read the actual requestId from the event log.
+        // Using requestCount() races against other users (and against tx mining),
+        // which causes duplicate (request_id, contract_type) inserts in Supabase.
+        const receipt = await waitForReceipt({
+          client,
+          chain: base,
+          transactionHash,
         });
 
-        const requestId = Number(requestCount) - 1;
+        const requestCreatedEvent = prepareEvent({
+          signature:
+            'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
+        });
+        const events = parseEventLogs({
+          events: [requestCreatedEvent],
+          logs: receipt.logs,
+        });
+        const created = events[0];
+        if (!created) {
+          throw new Error('Could not read request ID from transaction receipt');
+        }
+        const requestId = Number(created.args.requestId);
 
         // 4. Upload evidence to Supabase
         const evidenceURI = await uploadEncryptedEvidence(evidence, requestId);
