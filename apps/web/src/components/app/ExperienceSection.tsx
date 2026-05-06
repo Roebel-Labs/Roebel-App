@@ -15,11 +15,14 @@ import type { EventExperience } from "@/types/event-experience";
 import { Send, ImagePlus, Video, X, Trash2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { uploadResumable } from "@/lib/storage/resumable-upload";
 
 const CURATED_EMOJIS = ["😍", "🎉", "😂", "👍", "🤩", "❤️", "🙏", "🌟"];
 const MAX_IMAGES = 4;
 const PAGE_SIZE = 15;
 const MAX_AUTO_PAGES = 5;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_VIDEO_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB (matches bucket cap)
 
 interface ExperienceSectionProps {
   eventId: string;
@@ -49,25 +52,44 @@ function formatRelativeTime(dateStr: string): string {
 
 async function uploadToStorage(
   file: File,
-  type: "image" | "video"
+  type: "image" | "video",
+  onVideoProgress?: (pct: number) => void
 ): Promise<string | null> {
-  const maxSize = type === "video" ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+  const maxSize = type === "video" ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
   if (file.size > maxSize) {
     toast.error(
       type === "video"
-        ? "Video darf maximal 50MB groß sein"
+        ? "Video darf maximal 5 GB groß sein"
         : "Bild darf maximal 5MB groß sein"
     );
     return null;
   }
 
-  const supabase = createClient();
   const fileExt =
     file.name.split(".").pop() || (type === "video" ? "mp4" : "jpg");
   const prefix =
     type === "video" ? "experience-videos" : "experience-images";
   const fileName = `${prefix}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
+  if (type === "video") {
+    try {
+      onVideoProgress?.(0);
+      const url = await uploadResumable({
+        file,
+        bucket: "images",
+        path: fileName,
+        contentType: file.type || "video/mp4",
+        onProgress: (pct) => onVideoProgress?.(pct),
+      });
+      return url;
+    } catch (err) {
+      console.error("Resumable upload error:", err);
+      toast.error("Video-Upload fehlgeschlagen. Bitte versuche es erneut.");
+      return null;
+    }
+  }
+
+  const supabase = createClient();
   const { error: uploadError } = await supabase.storage
     .from("images")
     .upload(fileName, file, { cacheControl: "3600", upsert: false });
@@ -212,6 +234,7 @@ function ExperienceComposer({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -250,8 +273,8 @@ function ExperienceComposer({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("Video darf maximal 50MB groß sein");
+    if (file.size > MAX_VIDEO_SIZE) {
+      toast.error("Video darf maximal 5 GB groß sein");
       return;
     }
 
@@ -296,7 +319,13 @@ function ExperienceComposer({
 
       let uploadedVideoUrl: string | null = null;
       if (videoFile) {
-        uploadedVideoUrl = await uploadToStorage(videoFile, "video");
+        try {
+          uploadedVideoUrl = await uploadToStorage(videoFile, "video", (pct) =>
+            setVideoUploadProgress(pct)
+          );
+        } finally {
+          setVideoUploadProgress(null);
+        }
       }
 
       // Optimistic experience
@@ -424,6 +453,21 @@ function ExperienceComposer({
               >
                 <X className="h-3 w-3" />
               </button>
+              {videoUploadProgress != null && (
+                <>
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <span className="text-white text-[10px] font-medium">
+                      {videoUploadProgress < 100 ? `${videoUploadProgress}%` : "…"}
+                    </span>
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 h-0.5 bg-white/20">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${videoUploadProgress}%` }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

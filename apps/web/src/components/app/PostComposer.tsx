@@ -11,6 +11,7 @@ import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3, Home, Landmark, Sparkles, Check } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { uploadResumable } from "@/lib/storage/resumable-upload";
 import { PollCreator } from "@/components/app/PollCreator";
 import { CategorySelector } from "@/components/app/CategorySelector";
 import { GuidelinesBanner, GuidelinesInfoButton } from "@/components/app/CommunityGuidelines";
@@ -18,6 +19,8 @@ import type { OGMetadata, CreatePollInput, PostCategory, FeedType } from "@/type
 
 const MAX_CHARS = 250;
 const MAX_IMAGES = 10;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_VIDEO_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB (matches bucket cap)
 const URL_REGEX = /https?:\/\/[^\s]+/g;
 
 const FEED_OPTIONS: { id: FeedType; label: string; icon: typeof Home }[] = [
@@ -56,6 +59,7 @@ export function PostComposer({
   const [category, setCategory] = useState<PostCategory | null>(null);
   const [feedType, setFeedType] = useState<FeedType>(defaultFeedType);
   const [feedMenuOpen, setFeedMenuOpen] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -135,8 +139,8 @@ export function PostComposer({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error("Video darf maximal 50MB groß sein");
+    if (file.size > MAX_VIDEO_SIZE) {
+      toast.error("Video darf maximal 5 GB groß sein");
       return;
     }
 
@@ -162,23 +166,45 @@ export function PostComposer({
     setLinkPreviews((prev) => prev.filter((p) => p.url !== url));
   };
 
-  // Upload a file directly to Supabase Storage (bypasses Vercel body size limit)
+  // Upload a file directly to Supabase Storage (bypasses Vercel body size limit).
+  // Images use the simple non-resumable path; videos use TUS resumable so multi-
+  // hundred-MB uploads survive flaky networks and don't hit the per-request cap.
   const uploadToStorage = async (file: File, type: "image" | "video"): Promise<string | null> => {
-    const maxSize = type === "video" ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+    const maxSize = type === "video" ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
     if (file.size > maxSize) {
       toast.error(
         type === "video"
-          ? "Video darf maximal 50MB groß sein"
+          ? "Video darf maximal 5 GB groß sein"
           : "Bild darf maximal 5MB groß sein"
       );
       return null;
     }
 
-    const supabase = createClient();
     const fileExt = file.name.split(".").pop() || (type === "video" ? "mp4" : "jpg");
     const prefix = type === "video" ? "post-videos" : "post-images";
     const fileName = `${prefix}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
+    if (type === "video") {
+      try {
+        setVideoUploadProgress(0);
+        const url = await uploadResumable({
+          file,
+          bucket: "images",
+          path: fileName,
+          contentType: file.type || "video/mp4",
+          onProgress: (pct) => setVideoUploadProgress(pct),
+        });
+        return url;
+      } catch (err) {
+        console.error("Resumable upload error:", err);
+        toast.error("Video-Upload fehlgeschlagen. Bitte versuche es erneut.");
+        return null;
+      } finally {
+        setVideoUploadProgress(null);
+      }
+    }
+
+    const supabase = createClient();
     const { error: uploadError } = await supabase.storage
       .from("images")
       .upload(fileName, file, { cacheControl: "3600", upsert: false });
@@ -506,6 +532,23 @@ export function PostComposer({
             >
               <X className="h-4 w-4" />
             </button>
+            {videoUploadProgress != null && (
+              <>
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {videoUploadProgress < 100
+                      ? `Hochladen… ${videoUploadProgress}%`
+                      : "Verarbeite…"}
+                  </span>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${videoUploadProgress}%` }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -601,7 +644,7 @@ export function PostComposer({
 
         <button
           onClick={handleSubmit}
-          disabled={!content.trim() || !category || isSubmitting || isPending}
+          disabled={!content.trim() || !category || isSubmitting || isPending || videoUploadProgress != null}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {(isSubmitting || isPending) && (
