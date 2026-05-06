@@ -8,23 +8,35 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { createPost } from "@/app/actions/posts";
 import { useAccount } from "@/lib/context/AccountContext";
 import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
-import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3 } from "lucide-react";
+import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3, Home, Landmark, Sparkles, Check } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { PollCreator } from "@/components/app/PollCreator";
 import { CategorySelector } from "@/components/app/CategorySelector";
 import { GuidelinesBanner, GuidelinesInfoButton } from "@/components/app/CommunityGuidelines";
-import type { OGMetadata, CreatePollInput, PostCategory } from "@/types/post";
+import type { OGMetadata, CreatePollInput, PostCategory, FeedType } from "@/types/post";
 
 const MAX_CHARS = 250;
 const MAX_IMAGES = 10;
 const URL_REGEX = /https?:\/\/[^\s]+/g;
 
+const FEED_OPTIONS: { id: FeedType; label: string; icon: typeof Home }[] = [
+  { id: "main", label: "Alles", icon: Home },
+  { id: "rathaus", label: "Stadt", icon: Landmark },
+  { id: "app", label: "App", icon: Sparkles },
+];
+
 interface PostComposerProps {
   onPostCreated?: () => void;
+  defaultFeedType?: FeedType;
+  requireVerified?: boolean;
 }
 
-export function PostComposer({ onPostCreated }: PostComposerProps) {
+export function PostComposer({
+  onPostCreated,
+  defaultFeedType = "main",
+  requireVerified = true,
+}: PostComposerProps) {
   const account = useActiveAccount();
   const { isVerified, isLoading: verificationLoading } = useVerificationStatus();
   const { user } = useUserProfile();
@@ -42,8 +54,17 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
   const [fetchedUrls, setFetchedUrls] = useState<Set<string>>(new Set());
   const [pollInput, setPollInput] = useState<CreatePollInput | null>(null);
   const [category, setCategory] = useState<PostCategory | null>(null);
+  const [feedType, setFeedType] = useState<FeedType>(defaultFeedType);
+  const [feedMenuOpen, setFeedMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Keep local feed selection in sync when the active tab changes
+  useEffect(() => {
+    setFeedType(defaultFeedType);
+  }, [defaultFeedType]);
+
+  const canPostToRathaus = isVerified || isPostingAsOrg;
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -200,12 +221,16 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
         ? { ...pollInput, options: pollInput.options.filter((o) => o.trim()) }
         : undefined;
 
+      const targetFeedType: FeedType =
+        feedType === "rathaus" && !canPostToRathaus ? "main" : feedType;
+
       startTransition(async () => {
         const result = await createPost({
           wallet_address: account.address,
           account_id: activeAccount?.id,
           content: content.trim(),
           category: category || "generell",
+          feed_type: targetFeedType,
           media_urls: uploadedImageUrls,
           video_url: uploadedVideoUrl,
           link_urls: linkUrls,
@@ -222,6 +247,7 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
           setFetchedUrls(new Set());
           setPollInput(null);
           setCategory(null);
+          setFeedType(defaultFeedType);
           setIsExpanded(false);
           toast.success("Beitrag veröffentlicht!");
           onPostCreated?.();
@@ -236,8 +262,8 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
     }
   };
 
-  // Non-citizen state
-  if (!verificationLoading && account && !isVerified) {
+  // Non-citizen state — only blocks when the parent feed requires verification
+  if (requireVerified && !verificationLoading && account && !isVerified && !isPostingAsOrg) {
     return (
       <div className="bg-card rounded-lg border border-border p-4">
         <div className="flex items-center gap-3">
@@ -345,6 +371,61 @@ export function PostComposer({ onPostCreated }: PostComposerProps) {
 
       {/* Community Guidelines Banner (first-time only) */}
       <GuidelinesBanner />
+
+      {/* Feed-target selector */}
+      <div className="px-4 pb-2">
+        <div className="relative inline-block">
+          <button
+            type="button"
+            onClick={() => setFeedMenuOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+          >
+            <span className="text-muted-foreground">An:</span>
+            {(() => {
+              const opt = FEED_OPTIONS.find((o) => o.id === feedType)!;
+              const Icon = opt.icon;
+              return (
+                <>
+                  <Icon className="h-3.5 w-3.5" />
+                  {opt.label}
+                </>
+              );
+            })()}
+            <span className="text-muted-foreground">▾</span>
+          </button>
+          {feedMenuOpen && (
+            <div className="absolute z-10 mt-1 w-40 rounded-md border border-border bg-card shadow-md py-1">
+              {FEED_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const disabled = opt.id === "rathaus" && !canPostToRathaus;
+                const selected = feedType === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return;
+                      setFeedType(opt.id);
+                      setFeedMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
+                      disabled
+                        ? "text-muted-foreground cursor-not-allowed opacity-60"
+                        : "text-foreground hover:bg-accent"
+                    }`}
+                    title={disabled ? "Nur für verifizierte Bürger" : undefined}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="flex-1">{opt.label}</span>
+                    {selected && <Check className="h-3.5 w-3.5 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Textarea */}
       <div className="px-4 pb-2">

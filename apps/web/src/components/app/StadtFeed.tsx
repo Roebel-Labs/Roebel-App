@@ -5,29 +5,36 @@ import Link from "next/link";
 import { useActiveAccount } from "thirdweb/react";
 import { createClient } from "@/lib/supabase/client";
 import { getPostsForFeed } from "@/app/actions/posts";
+import { fetchProposalsForFeed } from "@/app/actions/proposals-feed";
+import { fetchRecentProposalComments } from "@/app/actions/proposal-comments";
 import { PostComposer } from "@/components/app/PostComposer";
 import { PostCard } from "@/components/app/PostCard";
+import { FeedExperienceCard } from "@/components/app/FeedExperienceCard";
 import { AlertCard } from "@/components/app/AlertCard";
+import { FeedProposalCard } from "@/components/app/FeedProposalCard";
+import { FeedProposalCommentCard } from "@/components/app/FeedProposalCommentCard";
 import type { ServiceAlert } from "@/app/actions/alerts";
-import type { PostWithEngagement } from "@/types/post";
+import type {
+  PostWithEngagement,
+  ProposalFeedItem,
+  ProposalCommentFeedItem,
+} from "@/types/post";
 import { useAppMode } from "@/lib/context/AppModeContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { Landmark, Vote, ArrowRight, ShieldCheck } from "lucide-react";
+import { Landmark, ShieldCheck } from "lucide-react";
 
-interface RathausProposal {
-  id: string;
-  title: string;
-  status: string;
-  created_at: string;
-  vote_count?: number;
-}
+type StadtFeedItem =
+  | { kind: "post"; data: PostWithEngagement; created_at: string }
+  | { kind: "proposal"; data: ProposalFeedItem; created_at: string }
+  | { kind: "proposal_comment"; data: ProposalCommentFeedItem; created_at: string };
 
-export function RathausFeed() {
+export function StadtFeed() {
   const account = useActiveAccount();
   const { activeMode } = useAppMode();
   const { user } = useUserProfile();
   const [posts, setPosts] = useState<PostWithEngagement[]>([]);
-  const [proposals, setProposals] = useState<RathausProposal[]>([]);
+  const [proposals, setProposals] = useState<ProposalFeedItem[]>([]);
+  const [proposalComments, setProposalComments] = useState<ProposalCommentFeedItem[]>([]);
   const [alerts, setAlerts] = useState<ServiceAlert[]>([]);
   const [announcements, setAnnouncements] = useState<{ id: string; title: string; content: string; created_at: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,24 +52,20 @@ export function RathausFeed() {
   }, []);
 
   useEffect(() => {
-    async function fetchRathaus() {
+    async function fetchStadt() {
       setLoading(true);
       const supabase = createClient();
 
-      const [alertsRes, postsResult, proposalsRes, announcementsRes] = await Promise.all([
+      const [alertsRes, postsResult, proposalsList, commentsList, announcementsRes] = await Promise.all([
         supabase
           .from("service_alerts")
           .select("*")
           .eq("status", "active")
           .order("severity", { ascending: true })
           .limit(3),
-        getPostsForFeed(15, 0, account?.address, "rathaus"),
-        supabase
-          .from("proposals")
-          .select("id, title, status, created_at")
-          .in("status", ["active", "pending"])
-          .order("created_at", { ascending: false })
-          .limit(5),
+        getPostsForFeed({ limit: 30, viewerWallet: account?.address, feedType: "rathaus" }),
+        fetchProposalsForFeed(20),
+        fetchRecentProposalComments(30),
         supabase
           .from("announcements")
           .select("id, title, content, created_at")
@@ -75,12 +78,23 @@ export function RathausFeed() {
       if (postsResult.success && postsResult.data) {
         setPosts(postsResult.data);
       }
-      setProposals((proposalsRes.data || []) as RathausProposal[]);
+      setProposals(proposalsList);
+      setProposalComments(commentsList);
       setAnnouncements(announcementsRes.data || []);
       setLoading(false);
     }
-    fetchRathaus();
+    fetchStadt();
   }, [refreshKey, account?.address]);
+
+  const merged: StadtFeedItem[] = [
+    ...posts.map((p) => ({ kind: "post" as const, data: p, created_at: p.created_at })),
+    ...proposals.map((p) => ({ kind: "proposal" as const, data: p, created_at: p.created_at })),
+    ...proposalComments.map((c) => ({
+      kind: "proposal_comment" as const,
+      data: c,
+      created_at: c.created_at,
+    })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (loading) {
     return (
@@ -100,10 +114,10 @@ export function RathausFeed() {
           <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">
-              Werde Bürger, um im Rathaus teilzunehmen
+              Werde Bürger, um in der Stadt teilzunehmen
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Verifizierte Bürger und Organisationen können im Rathaus posten und abstimmen.
+              Verifizierte Bürger und Organisationen können in der Stadt posten und abstimmen.
             </p>
             <Link
               href="/app/verifizierung"
@@ -116,14 +130,19 @@ export function RathausFeed() {
       )}
 
       {/* Post composer — citizens and orgs only */}
-      {canPost && <PostComposer onPostCreated={handlePostCreated} />}
+      {canPost && (
+        <PostComposer
+          onPostCreated={handlePostCreated}
+          defaultFeedType="rathaus"
+        />
+      )}
 
-      {/* Active alerts */}
+      {/* Active alerts — pinned */}
       {alerts.map((alert) => (
         <AlertCard key={`alert-${alert.id}`} {...alert} />
       ))}
 
-      {/* Announcements */}
+      {/* Announcements — pinned summary */}
       {announcements.length > 0 && (
         <div className="bg-card rounded-lg border border-border p-4">
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
@@ -144,59 +163,38 @@ export function RathausFeed() {
         </div>
       )}
 
-      {/* Active proposals */}
-      {proposals.length > 0 && (
-        <div className="bg-card rounded-lg border border-border p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Vote className="h-4 w-4 text-primary" />
-              Aktive Abstimmungen
-            </h3>
-            <Link
-              href="/app/proposals"
-              className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
-            >
-              Alle <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {proposals.map((p) => (
-              <Link
-                key={p.id}
-                href={`/app/proposals/${p.id}`}
-                className="block p-3 rounded-md border border-border hover:bg-accent transition-colors"
-              >
-                <p className="text-sm font-medium text-foreground line-clamp-1">{p.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    p.status === "active"
-                      ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400"
-                      : "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400"
-                  }`}>
-                    {p.status === "active" ? "Aktiv" : "Ausstehend"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(p.created_at).toLocaleDateString("de-DE", { day: "numeric", month: "short" })}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Civic posts */}
-      {posts.length > 0 ? (
-        posts.map((post) => (
-          <PostCard key={`post-${post.id}`} {...post} onDeleted={handlePostDeleted} />
-        ))
-      ) : (
+      {/* Merged feed: posts + proposals + proposal_comments by created_at desc */}
+      {merged.length === 0 ? (
         <div className="bg-card rounded-lg border border-border p-8 text-center">
           <Landmark className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
           <p className="text-muted-foreground text-sm">
-            Noch keine Beiträge im Rathaus. {canPost ? "Sei der Erste!" : ""}
+            Noch keine Beiträge in der Stadt. {canPost ? "Sei der Erste!" : ""}
           </p>
         </div>
+      ) : (
+        merged.map((item) => {
+          if (item.kind === "post") {
+            if (item.data.post_type === "event_experience") {
+              return <FeedExperienceCard key={`exp-${item.data.id}`} post={item.data} />;
+            }
+            return (
+              <PostCard
+                key={`post-${item.data.id}`}
+                {...item.data}
+                onDeleted={handlePostDeleted}
+              />
+            );
+          }
+          if (item.kind === "proposal") {
+            return <FeedProposalCard key={`proposal-${item.data.id}`} proposal={item.data} />;
+          }
+          return (
+            <FeedProposalCommentCard
+              key={`pcomment-${item.data.id}`}
+              comment={item.data}
+            />
+          );
+        })
       )}
     </div>
   );

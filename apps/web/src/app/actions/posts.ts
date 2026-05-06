@@ -9,6 +9,7 @@ import type {
   PostComment,
   PostCategory,
   PostType,
+  FeedType,
   LinkedEventPreview,
   PollWithResults,
   CreatePostInput,
@@ -86,12 +87,18 @@ async function buildPollMap(
 // Read operations
 // ============================================
 
-export async function getPostsForFeed(
-  limit = 20,
-  offset = 0,
-  viewerWallet?: string,
+export interface GetPostsForFeedOptions {
+  limit?: number
+  offset?: number
+  viewerWallet?: string
+  feedType?: FeedType
   category?: string
+}
+
+export async function getPostsForFeed(
+  options: GetPostsForFeedOptions = {}
 ): Promise<{ success: boolean; data?: PostWithEngagement[]; error?: string }> {
+  const { limit = 20, offset = 0, viewerWallet, feedType, category } = options
   try {
     const supabase = await createClient()
 
@@ -101,6 +108,10 @@ export async function getPostsForFeed(
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
+
+    if (feedType) {
+      query = query.eq("feed_type", feedType)
+    }
 
     if (category && category !== "all") {
       query = query.eq("category", category)
@@ -245,6 +256,7 @@ export async function getPostsForFeed(
         created_at: row.created_at as string,
         updated_at: row.updated_at as string,
         post_type: ((row.post_type as string) || "user") as PostType,
+        feed_type: ((row.feed_type as string) || "main") as FeedType,
         linked_event_id: linkedEventId,
         linked_experience_id: (row.linked_experience_id as string) || null,
         author_username: (author?.username as string) || null,
@@ -382,6 +394,7 @@ export async function getPostById(
         created_at: post.created_at as string,
         updated_at: post.updated_at as string,
         post_type: ((post.post_type as string) || "user") as PostType,
+        feed_type: ((post.feed_type as string) || "main") as FeedType,
         linked_event_id: (post.linked_event_id as string) || null,
         linked_experience_id: (post.linked_experience_id as string) || null,
         author_username: (author?.username as string) || null,
@@ -420,6 +433,7 @@ export async function createPost(
         account_id: input.account_id || null,
         content: input.content,
         category: input.category || "generell",
+        feed_type: input.feed_type || "main",
         media_urls: input.media_urls || [],
         video_url: input.video_url || null,
       })
@@ -501,6 +515,7 @@ export async function createPost(
         created_at: post.created_at,
         updated_at: post.updated_at,
         post_type: (post.post_type as PostType) || "user",
+        feed_type: ((post.feed_type as string) || "main") as FeedType,
         linked_event_id: post.linked_event_id || null,
         linked_experience_id: post.linked_experience_id || null,
       },

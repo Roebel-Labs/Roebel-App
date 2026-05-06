@@ -14,7 +14,8 @@ import { FeedExperienceCard } from "@/components/app/FeedExperienceCard";
 import { HorizontalRow } from "@/components/app/HorizontalRow";
 import { AlertCard } from "@/components/app/AlertCard";
 import { ContextBar } from "@/components/app/ContextBar";
-import { RathausFeed } from "@/components/app/RathausFeed";
+import { StadtFeed } from "@/components/app/StadtFeed";
+import { AppFeed } from "@/components/app/AppFeed";
 import type { ServiceAlert } from "@/app/actions/alerts";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { BusinessCard } from "@/components/business/BusinessCard";
@@ -27,6 +28,7 @@ import {
   ClipboardList,
   Landmark,
   Home,
+  Sparkles,
 } from "lucide-react";
 import type { ListingWithSeller } from "@/types/marketplace";
 import type { Business } from "@/types/business";
@@ -226,7 +228,7 @@ function buildFeedWithRows(
 
 export default function AppHomePage() {
   const account = useActiveAccount();
-  const [activeTab, setActiveTab] = useState<"feed" | "rathaus">("feed");
+  const [activeTab, setActiveTab] = useState<"main" | "rathaus" | "app">("main");
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
@@ -255,6 +257,10 @@ export default function AppHomePage() {
   }, []);
 
   useEffect(() => {
+    if (activeTab !== "main") {
+      // StadtFeed and AppFeed manage their own data fetching
+      return;
+    }
     async function fetchFeed() {
       setLoading(true);
       const supabase = createClient();
@@ -427,7 +433,12 @@ export default function AppHomePage() {
       let fetchedPosts: PostWithEngagement[] = [];
       if (showPosts) {
         const categoryFilter = activeFilter === "posts" && activeCategory !== "all" ? activeCategory : undefined;
-        const postsResult = await getPostsForFeed(20, 0, account?.address, categoryFilter);
+        const postsResult = await getPostsForFeed({
+          limit: 20,
+          viewerWallet: account?.address,
+          feedType: "main",
+          category: categoryFilter,
+        });
         if (postsResult.success && postsResult.data) {
           fetchedPosts = postsResult.data;
         }
@@ -565,7 +576,7 @@ export default function AppHomePage() {
     }
 
     fetchFeed();
-  }, [activeFilter, activeCategory, refreshKey, account?.address]);
+  }, [activeTab, activeFilter, activeCategory, refreshKey, account?.address]);
 
   const feedWithRows = buildFeedWithRows(
     feedItems,
@@ -584,18 +595,18 @@ export default function AppHomePage() {
       {/* Context bar */}
       <ContextBar />
 
-      {/* Top tabs: Für Dich / Rathaus */}
+      {/* Top tabs: Alles / Stadt / App */}
       <div className="flex gap-1 bg-card rounded-lg border border-border p-1">
         <button
-          onClick={() => setActiveTab("feed")}
+          onClick={() => setActiveTab("main")}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === "feed"
+            activeTab === "main"
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-accent"
           }`}
         >
           <Home className="h-4 w-4" />
-          Für Dich
+          Alles
         </button>
         <button
           onClick={() => setActiveTab("rathaus")}
@@ -606,16 +617,28 @@ export default function AppHomePage() {
           }`}
         >
           <Landmark className="h-4 w-4" />
-          Rathaus
+          Stadt
+        </button>
+        <button
+          onClick={() => setActiveTab("app")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "app"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+          }`}
+        >
+          <Sparkles className="h-4 w-4" />
+          App
         </button>
       </div>
 
-      {/* Rathaus tab */}
       {activeTab === "rathaus" ? (
-        <RathausFeed />
+        <StadtFeed />
+      ) : activeTab === "app" ? (
+        <AppFeed />
       ) : (
       <>
-      <PostComposer onPostCreated={handlePostCreated} />
+      <PostComposer onPostCreated={handlePostCreated} defaultFeedType="main" />
       <FeedFilters
         activeFilter={activeFilter}
         onFilterChange={handleFilterChange}

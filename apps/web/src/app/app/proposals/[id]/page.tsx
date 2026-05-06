@@ -17,6 +17,7 @@ import { VoteResults } from "@/components/proposals/VoteResults";
 import { VotingPanel } from "@/components/proposals/VotingPanel";
 import { ProposalContent } from "@/components/proposals/ProposalContent";
 import { ProposalTimeline } from "@/components/proposals/ProposalTimeline";
+import { ProposalCommentSection } from "@/components/proposals/ProposalCommentSection";
 import Link from "next/link";
 import { de } from "@/lib/translations/de";
 
@@ -299,6 +300,9 @@ export default function ProposalDetailPage() {
             userAddress={account?.address}
             onVote={handleVote}
           />
+
+          {/* Comment Section */}
+          <ProposalCommentSection proposalId={proposal.proposal_id} />
         </div>
 
         {/* Right Column - Metadata & Timeline Sidebar */}
