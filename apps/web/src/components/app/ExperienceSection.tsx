@@ -442,6 +442,7 @@ function ExperienceComposer({
               <video
                 src={videoPreview}
                 className="w-full h-full object-contain"
+                controls
                 muted
                 playsInline
               />

@@ -389,6 +389,7 @@ export function CommentSection({
                   <video
                     src={videoPreview}
                     className="w-full h-full object-contain"
+                    controls
                     muted
                     playsInline
                   />

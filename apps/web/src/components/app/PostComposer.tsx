@@ -522,6 +522,7 @@ export function PostComposer({
             <video
               src={videoPreview}
               className="w-full max-h-40 object-contain"
+              controls
               muted
               playsInline
             />
@@ -650,7 +651,11 @@ export function PostComposer({
           {(isSubmitting || isPending) && (
             <Loader2 className="h-4 w-4 animate-spin" />
           )}
-          Veröffentlichen
+          {videoUploadProgress != null
+            ? videoUploadProgress < 100
+              ? `Hochladen ${videoUploadProgress}%`
+              : "Verarbeite…"
+            : "Veröffentlichen"}
         </button>
       </div>
 
