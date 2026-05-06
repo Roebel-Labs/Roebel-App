@@ -32,7 +32,6 @@ import {
   MailIcon,
 } from '@/components/Icons';
 import MarketplaceCard from '@/components/MarketplaceCard';
-import { QualityStampSection } from '@/components/QualityStampSection';
 import type { MarketplaceListingRecord } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -405,8 +404,6 @@ export default function ListingDetailScreen() {
               </ScrollView>
             </View>
           )}
-
-          <QualityStampSection title="Anzeigen sind geprüft auf Qualität" />
 
           <View style={{ height: 40 }} />
         </View>
