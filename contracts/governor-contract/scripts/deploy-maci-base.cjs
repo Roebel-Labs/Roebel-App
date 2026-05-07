@@ -28,19 +28,27 @@ const MESSAGE_BATCH_SIZE = 5 ** MESSAGE_BATCH_DEPTH;
 // EMode: 0 = QV, 1 = NON_QV (per maci-contracts ts/constants.ts)
 const MODE_NON_QV = 1;
 
-const REQUIRED_ENV = [
+const REUSE_INFRA = process.env.REUSE_INFRA === "1";
+
+const REQUIRED_ENV_BASE = [
   "ATTESTER_NFT_ADDRESS",
   "CITIZEN_NFT_ADDRESS",
   "COORDINATOR_ADDRESS",
   "COORDINATOR_PUBKEY_X",
   "COORDINATOR_PUBKEY_Y",
-  "ZKEY_PROCESS_MESSAGES",
-  "ZKEY_TALLY_VOTES",
   "VOTING_PERIOD_SECONDS",
   "QUORUM_PERCENTAGE",
+  "QUORUM_ABSOLUTE",
   "TALLY_GRACE_PERIOD_SECONDS",
   "TIMELOCK_MIN_DELAY_SECONDS",
 ];
+// Only required for full (non-reuse) deploys — the prebuilt VKs are already set
+// on the existing VkRegistry when REUSE_INFRA=1.
+const REQUIRED_ENV_FULL = ["ZKEY_PROCESS_MESSAGES", "ZKEY_TALLY_VOTES"];
+
+const REQUIRED_ENV = REUSE_INFRA
+  ? REQUIRED_ENV_BASE
+  : [...REQUIRED_ENV_BASE, ...REQUIRED_ENV_FULL];
 
 function readEnv() {
   const missing = [];
@@ -111,6 +119,58 @@ async function deployLinked(name, signer, libraries, ...args) {
   return c;
 }
 
+async function deployGovernorAndTimelock({ env, hre, deployer, deployerAddr, infra }) {
+  const { ethers } = hre;
+
+  console.log("\n[T] TimelockController…");
+  const timelock = await deployContract(
+    "TimelockController",
+    deployer,
+    BigInt(env.TIMELOCK_MIN_DELAY_SECONDS),
+    [],
+    [ethers.ZeroAddress],
+    deployerAddr
+  );
+  const timelockAddr = await timelock.getAddress();
+  console.log("      → " + timelockAddr);
+
+  console.log("[G] MaciAttesterGovernor…");
+  const governor = await deployContract("MaciAttesterGovernor", deployer, {
+    attesterNFT: env.ATTESTER_NFT_ADDRESS,
+    citizenNFT: env.CITIZEN_NFT_ADDRESS,
+    maci: infra.maci,
+    verifier: infra.verifier,
+    vkRegistry: infra.vkRegistry,
+    coordinator: env.COORDINATOR_ADDRESS,
+    coordinatorPubKey: { x: env.COORDINATOR_PUBKEY_X, y: env.COORDINATOR_PUBKEY_Y },
+    treeDepths: {
+      intStateTreeDepth: INT_STATE_TREE_DEPTH,
+      messageTreeSubDepth: MESSAGE_BATCH_DEPTH,
+      messageTreeDepth: MESSAGE_TREE_DEPTH,
+      voteOptionTreeDepth: VOTE_OPTION_TREE_DEPTH,
+    },
+    mode: MODE_NON_QV,
+    timelock: timelockAddr,
+    votingPeriod: BigInt(env.VOTING_PERIOD_SECONDS),
+    quorumPercentage: BigInt(env.QUORUM_PERCENTAGE),
+    quorumAbsolute: BigInt(env.QUORUM_ABSOLUTE),
+    tallyGracePeriod: BigInt(env.TALLY_GRACE_PERIOD_SECONDS),
+  });
+  const governorAddr = await governor.getAddress();
+  console.log("      → " + governorAddr);
+
+  console.log("\nGranting timelock roles to Governor + renouncing deployer admin…");
+  const PROPOSER_ROLE = await timelock.PROPOSER_ROLE();
+  const CANCELLER_ROLE = await timelock.CANCELLER_ROLE();
+  const DEFAULT_ADMIN_ROLE = await timelock.DEFAULT_ADMIN_ROLE();
+  await (await timelock.grantRole(PROPOSER_ROLE, governorAddr)).wait();
+  await (await timelock.grantRole(CANCELLER_ROLE, governorAddr)).wait();
+  await (await timelock.renounceRole(DEFAULT_ADMIN_ROLE, deployerAddr)).wait();
+  console.log("→ Timelock locked down.\n");
+
+  return { governorAddr, timelockAddr };
+}
+
 async function main() {
   const env = readEnv();
   const { ethers, network } = hre;
@@ -123,13 +183,70 @@ async function main() {
   const deployerAddr = await deployer.getAddress();
   const startingBalance = await ethers.provider.getBalance(deployerAddr);
 
-  console.log("\n=== Deploying MACI v2 to " + network.name + " ===");
+  console.log("\n=== Deploying MACI v2 to " + network.name + (REUSE_INFRA ? " (REUSE_INFRA mode — Governor + Timelock only)" : "") + " ===");
   console.log("Deployer:    " + deployerAddr);
   console.log("Balance:     " + ethers.formatEther(startingBalance) + " ETH");
   console.log("AttesterNFT: " + env.ATTESTER_NFT_ADDRESS);
   console.log("CitizenNFT:  " + env.CITIZEN_NFT_ADDRESS);
   console.log("Coordinator: " + env.COORDINATOR_ADDRESS + "\n");
 
+  // ---- REUSE_INFRA branch: redeploy Governor + Timelock only ----
+  if (REUSE_INFRA) {
+    const baseJsonPath = path.resolve(__dirname, "../deployments", network.name + ".json");
+    if (!fs.existsSync(baseJsonPath)) {
+      throw new Error("REUSE_INFRA=1 requires existing " + baseJsonPath);
+    }
+    const prior = JSON.parse(fs.readFileSync(baseJsonPath, "utf8"));
+    const a = prior.addresses;
+    const infra = { maci: a.maci, verifier: a.verifier, vkRegistry: a.vkRegistry };
+    console.log("Reusing infra from " + baseJsonPath + ":");
+    console.log("  MACI:       " + a.maci);
+    console.log("  Verifier:   " + a.verifier);
+    console.log("  VkRegistry: " + a.vkRegistry);
+    console.log("  Gatekeeper: " + a.gatekeeper);
+    console.log("  VoiceCredit:" + a.voiceCreditProxy);
+
+    const { governorAddr, timelockAddr } = await deployGovernorAndTimelock({
+      env, hre, deployer, deployerAddr, infra
+    });
+
+    // Preserve the previous Governor + Timelock under archival keys.
+    const archived = { ...a };
+    if (a.maciAttesterGovernor) {
+      const tag = "maciAttesterGovernor_archived_" + new Date().toISOString().replace(/[:.]/g, "-");
+      archived[tag] = a.maciAttesterGovernor;
+    }
+    if (a.timelock) {
+      const tag = "timelock_archived_" + new Date().toISOString().replace(/[:.]/g, "-");
+      archived[tag] = a.timelock;
+    }
+    archived.maciAttesterGovernor = governorAddr;
+    archived.timelock = timelockAddr;
+
+    const out = {
+      ...prior,
+      deployedAt: new Date().toISOString(),
+      deployer: deployerAddr,
+      addresses: archived,
+      parameters: {
+        ...prior.parameters,
+        votingPeriod: Number(env.VOTING_PERIOD_SECONDS),
+        quorumPercentage: Number(env.QUORUM_PERCENTAGE),
+        quorumAbsolute: Number(env.QUORUM_ABSOLUTE),
+        tallyGracePeriod: Number(env.TALLY_GRACE_PERIOD_SECONDS),
+        timelockMinDelay: Number(env.TIMELOCK_MIN_DELAY_SECONDS),
+      },
+    };
+    fs.writeFileSync(baseJsonPath, JSON.stringify(out, null, 2));
+    console.log("Updated " + baseJsonPath);
+
+    const endingBalance = await ethers.provider.getBalance(deployerAddr);
+    console.log("\nGas spent (Governor+Timelock redeploy): " + ethers.formatEther(startingBalance - endingBalance) + " ETH");
+    console.log("\n=== DONE (REUSE_INFRA) ===\n");
+    return;
+  }
+
+  // ---- Full deploy path (unchanged) ----
   assertFile(env.ZKEY_PROCESS_MESSAGES);
   assertFile(env.ZKEY_TALLY_VOTES);
 
@@ -223,53 +340,12 @@ async function main() {
   ).wait();
   console.log("      → " + vkRegistryAddr);
 
-  // 8. TimelockController
-  console.log("[8/9] TimelockController…");
-  const timelock = await deployContract(
-    "TimelockController",
-    deployer,
-    BigInt(env.TIMELOCK_MIN_DELAY_SECONDS),
-    [], // proposers granted below
-    [ethers.ZeroAddress], // any-executor
-    deployerAddr // admin, renounced after wiring
-  );
-  const timelockAddr = await timelock.getAddress();
-  console.log("      → " + timelockAddr);
-
-  // 9. MaciAttesterGovernor
-  console.log("[9/9] MaciAttesterGovernor…");
-  const governor = await deployContract("MaciAttesterGovernor", deployer, {
-    attesterNFT: env.ATTESTER_NFT_ADDRESS,
-    citizenNFT: env.CITIZEN_NFT_ADDRESS,
-    maci: maciAddr,
-    verifier: verifierAddr,
-    vkRegistry: vkRegistryAddr,
-    coordinator: env.COORDINATOR_ADDRESS,
-    coordinatorPubKey: { x: env.COORDINATOR_PUBKEY_X, y: env.COORDINATOR_PUBKEY_Y },
-    treeDepths: {
-      intStateTreeDepth: INT_STATE_TREE_DEPTH,
-      messageTreeSubDepth: MESSAGE_BATCH_DEPTH,
-      messageTreeDepth: MESSAGE_TREE_DEPTH,
-      voteOptionTreeDepth: VOTE_OPTION_TREE_DEPTH,
-    },
-    mode: MODE_NON_QV,
-    timelock: timelockAddr,
-    votingPeriod: BigInt(env.VOTING_PERIOD_SECONDS),
-    quorumPercentage: BigInt(env.QUORUM_PERCENTAGE),
-    tallyGracePeriod: BigInt(env.TALLY_GRACE_PERIOD_SECONDS),
+  // 8 + 9. TimelockController + MaciAttesterGovernor
+  console.log("[8-9/9] TimelockController + MaciAttesterGovernor…");
+  const { governorAddr, timelockAddr } = await deployGovernorAndTimelock({
+    env, hre, deployer, deployerAddr,
+    infra: { maci: maciAddr, verifier: verifierAddr, vkRegistry: vkRegistryAddr },
   });
-  const governorAddr = await governor.getAddress();
-  console.log("      → " + governorAddr);
-
-  // Wire Timelock roles
-  console.log("\nGranting timelock roles to Governor + renouncing deployer admin…");
-  const PROPOSER_ROLE = await timelock.PROPOSER_ROLE();
-  const CANCELLER_ROLE = await timelock.CANCELLER_ROLE();
-  const DEFAULT_ADMIN_ROLE = await timelock.DEFAULT_ADMIN_ROLE();
-  await (await timelock.grantRole(PROPOSER_ROLE, governorAddr)).wait();
-  await (await timelock.grantRole(CANCELLER_ROLE, governorAddr)).wait();
-  await (await timelock.renounceRole(DEFAULT_ADMIN_ROLE, deployerAddr)).wait();
-  console.log("→ Timelock locked down.\n");
 
   const out = {
     network: network.name,
@@ -304,6 +380,7 @@ async function main() {
       mode: "NON_QV",
       votingPeriod: Number(env.VOTING_PERIOD_SECONDS),
       quorumPercentage: Number(env.QUORUM_PERCENTAGE),
+      quorumAbsolute: Number(env.QUORUM_ABSOLUTE),
       tallyGracePeriod: Number(env.TALLY_GRACE_PERIOD_SECONDS),
       timelockMinDelay: Number(env.TIMELOCK_MIN_DELAY_SECONDS),
       coordinatorPubKey: {

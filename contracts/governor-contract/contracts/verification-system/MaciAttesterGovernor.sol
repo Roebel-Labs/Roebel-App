@@ -36,8 +36,8 @@ interface IAttesterNFT {
     function hasAttesterNFT(address account) external view returns (bool);
 }
 
-interface ICitizenNFTSupply {
-    function totalSupply() external view returns (uint256);
+interface IMACINumSignUps {
+    function numSignUps() external view returns (uint256);
 }
 
 interface ITallyRead {
@@ -90,6 +90,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     Params.TreeDepths public treeDepths;
     DomainObjs.Mode public mode;
     uint256 public quorumPercentage;
+    uint256 public quorumAbsolute;
     uint256 public tallyGracePeriod;
 
     uint256 public constant VOTE_OPTION_AGAINST = 0;
@@ -125,6 +126,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         TimelockController timelock;
         uint32 votingPeriod;
         uint256 quorumPercentage;
+        uint256 quorumAbsolute;
         uint256 tallyGracePeriod;
     }
 
@@ -143,6 +145,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         treeDepths = a.treeDepths;
         mode = a.mode;
         quorumPercentage = a.quorumPercentage;
+        quorumAbsolute = a.quorumAbsolute;
         tallyGracePeriod = a.tallyGracePeriod;
     }
 
@@ -188,11 +191,15 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     }
 
     /// @notice Quorum is the minimum total voice credits spent across all options.
-    /// @dev With ConstantInitialVoiceCreditProxy(1), each signup spends ≤ 1 credit, so this
-    ///      effectively requires `quorumPercentage` of citizens to have voted.
+    /// @dev Reads from MACI's signup count rather than CitizenNFT.totalSupply (which the
+    ///      Roebel CitizenNFT does not expose — it inherits ERC721 + ERC721Votes, not
+    ///      ERC721Enumerable). This means the denominator is "citizens who actually
+    ///      registered with MACI" rather than "all citizens"; the absolute floor protects
+    ///      against trivially-passable proposals when signup counts are very low.
     function quorum(uint256) public view override returns (uint256) {
-        uint256 totalCitizens = ICitizenNFTSupply(citizenNFT).totalSupply();
-        return (totalCitizens * quorumPercentage) / 100;
+        uint256 signups = IMACINumSignUps(address(maci)).numSignUps();
+        uint256 fromPercent = (signups * quorumPercentage) / 100;
+        return fromPercent < quorumAbsolute ? quorumAbsolute : fromPercent;
     }
 
     /// @inheritdoc Governor
