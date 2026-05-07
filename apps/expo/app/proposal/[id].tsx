@@ -14,12 +14,13 @@ import { useTheme } from '@/context/ThemeContext';
 import ProposalStateBadge from '@/components/ProposalStateBadge';
 import ProposalContent from '@/components/ProposalContent';
 import VotingStats from '@/components/VotingStats';
-import VoteButtonsEnhanced from '@/components/VoteButtonsEnhanced';
+import VoteButtons from '@/components/VoteButtons';
 import ProposalTimers from '@/components/ProposalTimers';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ProposalOnchainLinks from '@/components/proposals/ProposalOnchainLinks';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import { governorContractAddress } from '@/constants/thirdweb';
 
 export default function ProposalDetailScreen() {
@@ -98,6 +99,19 @@ export default function ProposalDetailScreen() {
     const month = date.toLocaleDateString('de-DE', { month: 'short' });
     const year = date.getFullYear();
     return `${day}. ${month} ${year}`;
+  };
+
+  // Defensive: convert the proposal's on-chain numeric id (string) to BigInt
+  // without throwing if it's missing/malformed. Components downstream guard
+  // against `0n` (treat as "not yet linked") and don't render any state.
+  const parseProposalIdSafe = (p: { blockchainProposalId?: string | number | null; proposalId?: string | number | null }): bigint => {
+    const raw = p?.blockchainProposalId ?? p?.proposalId;
+    if (raw === null || raw === undefined || raw === '') return 0n;
+    try {
+      return BigInt(raw as any);
+    } catch {
+      return 0n;
+    }
   };
 
   if (loading) {
@@ -199,28 +213,34 @@ export default function ProposalDetailScreen() {
         />
 
         {/* Voting Statistics */}
-        <VotingStats
-          votes={{
-            forVotes: proposal.forVotes,
-            againstVotes: proposal.againstVotes,
-            abstainVotes: proposal.abstainVotes,
-          }}
-        />
+        <InlineErrorBoundary label="VotingStats">
+          <VotingStats
+            votes={{
+              forVotes: proposal.forVotes,
+              againstVotes: proposal.againstVotes,
+              abstainVotes: proposal.abstainVotes,
+            }}
+          />
+        </InlineErrorBoundary>
 
-        {/* Enhanced Vote Buttons with Edge Cases */}
-        <VoteButtonsEnhanced
-          proposalId={BigInt(proposal.blockchainProposalId || proposal.proposalId)}
-          proposalState={proposal.state}
-          hasVoted={userVoteStatus?.hasVoted || false}
-          isCitizen={isCitizen}
-          onVoteSuccess={handleVoteSuccess}
-        />
+        {/* MACI-aware vote buttons */}
+        <InlineErrorBoundary label="VoteButtons">
+          <VoteButtons
+            proposalId={parseProposalIdSafe(proposal)}
+            proposalState={proposal.state}
+            hasVoted={userVoteStatus?.hasVoted || false}
+            isCitizen={isCitizen}
+            onVoteSuccess={handleVoteSuccess}
+          />
+        </InlineErrorBoundary>
 
-        {/* Voting Timer at bottom */}
-        <ProposalTimers
-          proposalId={BigInt(proposal.blockchainProposalId || proposal.proposalId)}
-          proposalState={proposal.state}
-        />
+        {/* Voting timer */}
+        <InlineErrorBoundary label="ProposalTimers">
+          <ProposalTimers
+            proposalId={parseProposalIdSafe(proposal)}
+            proposalState={proposal.state}
+          />
+        </InlineErrorBoundary>
 
         {/* Discussion */}
         {proposalId && (

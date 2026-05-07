@@ -84,6 +84,7 @@ export default function VoteButtons({
 
   // Resolve the per-proposal Poll address from the Governor.
   useEffect(() => {
+    if (!proposalId || proposalId === 0n) return;
     let cancelled = false;
     (async () => {
       try {
