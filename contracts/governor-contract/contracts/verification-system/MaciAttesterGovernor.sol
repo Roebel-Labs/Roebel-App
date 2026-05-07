@@ -1,16 +1,36 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 import { Governor } from "@openzeppelin/contracts/governance/Governor.sol";
 import { GovernorSettings } from "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol";
 import { GovernorTimelockControl } from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-import { IMACI } from "@maci-protocol/contracts/contracts/interfaces/IMACI.sol";
-import { Params } from "@maci-protocol/contracts/contracts/utilities/Params.sol";
-import { DomainObjs } from "@maci-protocol/contracts/contracts/utilities/DomainObjs.sol";
+import { Params } from "maci-contracts/contracts/utilities/Params.sol";
+import { DomainObjs } from "maci-contracts/contracts/utilities/DomainObjs.sol";
+import { IMACI } from "maci-contracts/contracts/interfaces/IMACI.sol";
 
-import { CitizenNFTPolicy } from "./CitizenNFTPolicy.sol";
+interface IMACIDeploy {
+    function deployPoll(
+        uint256 _duration,
+        Params.TreeDepths memory _treeDepths,
+        DomainObjs.PubKey memory _coordinatorPubKey,
+        address _verifier,
+        address _vkRegistry,
+        DomainObjs.Mode _mode
+    ) external;
+
+    function nextPollId() external view returns (uint256);
+
+    function getPoll(uint256 _pollId) external view returns (PollContracts memory);
+
+    struct PollContracts {
+        address poll;
+        address messageProcessor;
+        address tally;
+    }
+}
 
 interface IAttesterNFT {
     function hasAttesterNFT(address account) external view returns (bool);
@@ -26,38 +46,48 @@ interface ITallyRead {
     function tallyResults(uint256 voteOption) external view returns (uint256 value, bool flag);
 }
 
-/// @title MaciAttesterGovernor
-/// @notice DAO governor that uses MACI for private, collusion-resistant voting.
+/// @title MaciAttesterGovernor (MACI v2)
+/// @notice DAO governor that uses MACI v2 for private, collusion-resistant voting on Base.
 ///         Replaces AttesterGovernor (which used GovernorCountingSimple + ERC721Votes).
 ///
 /// VOTING MODEL
-/// - Proposal creation is restricted to Attester NFT holders (unchanged from AttesterGovernor)
-/// - Each proposal deploys its own MACI Poll. Voters cast encrypted ballots on the Poll
-///   contract directly; this Governor's castVote* functions are disabled and revert.
+/// - Proposal creation is restricted to Attester NFT holders.
+/// - Each proposal triggers a fresh MACI v2 Poll. Citizens vote on the Poll directly with
+///   encrypted ballots; this Governor's castVote* functions are disabled and revert.
 /// - Quorum/success is read from the MACI Tally contract once the off-chain coordinator
 ///   has submitted the ZK-SNARK tally proof on-chain.
 ///
-/// VOTE OPTION ENCODING (per proposal Poll)
+/// VOTE OPTION ENCODING
 ///   0 = Against, 1 = For, 2 = Abstain
 ///
+/// V2 SPECIFICS
+/// - The MACI sign-up gatekeeper (one global instance, e.g. stock SignUpTokenGatekeeper bound
+///   to CitizenNFT) gates who can sign up. There is no per-poll gatekeeper in v2.
+/// - The voice credit proxy (one global instance, e.g. stock ConstantInitialVoiceCreditProxy)
+///   issues 1 credit per signup in non-QV mode.
+/// - MACI v2 Polls have no voting delay: voting starts at deployPoll() call time and lasts
+///   exactly `duration` seconds. We set OZ votingDelay = 0 to align both timers.
+/// - The MessageProcessor and Tally are Ownable. Whoever calls MACI.deployPoll() becomes
+///   their owner. propose() therefore transfers ownership of MP and Tally to the configured
+///   coordinator address (an EOA or Safe operated by the Coordinator Service) so the
+///   coordinator can submit proofs without going through this Governor.
+///
 /// STATE OVERRIDE
-/// - During the voting period, state() returns Active.
-/// - After the voting deadline, state() stays Active for an additional `tallyGracePeriod`
-///   to give the coordinator time to submit the tally. If the tally arrives in that window,
-///   state resolves to Succeeded or Defeated based on the on-chain tally results.
-/// - If the grace period elapses without a tally, the proposal is Defeated.
+/// - Until the OZ deadline elapses: state() = Active.
+/// - After the OZ deadline, while the tally is not yet on-chain: state() stays Active for
+///   `tallyGracePeriod` seconds to give the coordinator time to post the ZK proof.
+/// - Once the Tally is published, _quorumReached / _voteSucceeded resolve the proposal to
+///   Succeeded or Defeated based on tally.totalSpent and tally.tallyResults.
 contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockControl {
     IAttesterNFT public immutable attesterNFT;
     address public immutable citizenNFT;
-    IMACI public immutable maci;
+    IMACIDeploy public immutable maci;
     address public immutable verifier;
     address public immutable vkRegistry;
-    address public immutable initialVoiceCreditProxy;
+    address public immutable coordinator;
 
     DomainObjs.PubKey public coordinatorPubKey;
     Params.TreeDepths public treeDepths;
-    uint8 public messageBatchSize;
-    uint256 public voteOptions;
     DomainObjs.Mode public mode;
     uint256 public quorumPercentage;
     uint256 public tallyGracePeriod;
@@ -71,7 +101,6 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         address poll;
         address messageProcessor;
         address tally;
-        address policy;
         uint256 deadline;
     }
 
@@ -79,7 +108,6 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
 
     error OnlyAttestersCanPropose(address proposer);
     error VotingHappensOnMaciPoll(address poll);
-    error MaciPollNotLinked(uint256 proposalId);
 
     event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId);
     event ProposalCreatedByAttester(uint256 indexed proposalId, address indexed attester, string description);
@@ -87,17 +115,14 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     struct InitArgs {
         IAttesterNFT attesterNFT;
         address citizenNFT;
-        IMACI maci;
+        IMACIDeploy maci;
         address verifier;
         address vkRegistry;
-        address initialVoiceCreditProxy;
+        address coordinator;
         DomainObjs.PubKey coordinatorPubKey;
         Params.TreeDepths treeDepths;
-        uint8 messageBatchSize;
-        uint256 voteOptions;
         DomainObjs.Mode mode;
         TimelockController timelock;
-        uint48 votingDelay;
         uint32 votingPeriod;
         uint256 quorumPercentage;
         uint256 tallyGracePeriod;
@@ -105,7 +130,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
 
     constructor(InitArgs memory a)
         Governor("Roebel/Mueritz MACI DAO")
-        GovernorSettings(a.votingDelay, a.votingPeriod, 0)
+        GovernorSettings(0, a.votingPeriod, 0)
         GovernorTimelockControl(a.timelock)
     {
         attesterNFT = a.attesterNFT;
@@ -113,11 +138,9 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         maci = a.maci;
         verifier = a.verifier;
         vkRegistry = a.vkRegistry;
-        initialVoiceCreditProxy = a.initialVoiceCreditProxy;
+        coordinator = a.coordinator;
         coordinatorPubKey = a.coordinatorPubKey;
         treeDepths = a.treeDepths;
-        messageBatchSize = a.messageBatchSize;
-        voteOptions = a.voteOptions;
         mode = a.mode;
         quorumPercentage = a.quorumPercentage;
         tallyGracePeriod = a.tallyGracePeriod;
@@ -142,47 +165,31 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     }
 
     function _deployPollFor(uint256 proposalId) internal {
-        CitizenNFTPolicy policy = new CitizenNFTPolicy(citizenNFT);
-
-        uint256 voteStart = proposalSnapshot(proposalId);
         uint256 voteEnd = proposalDeadline(proposalId);
+        uint256 duration = voteEnd - block.timestamp;
 
-        IMACI.DeployPollArgs memory args = IMACI.DeployPollArgs({
-            startDate: voteStart,
-            endDate: voteEnd,
-            treeDepths: treeDepths,
-            messageBatchSize: messageBatchSize,
-            coordinatorPubKey: coordinatorPubKey,
-            verifier: verifier,
-            vkRegistry: vkRegistry,
-            mode: mode,
-            policy: address(policy),
-            initialVoiceCreditProxy: initialVoiceCreditProxy,
-            relayers: new address[](0),
-            voteOptions: voteOptions
-        });
-
-        IMACI.PollContracts memory deployed = maci.deployPoll(args);
-        policy.setTarget(deployed.poll);
+        maci.deployPoll(duration, treeDepths, coordinatorPubKey, verifier, vkRegistry, mode);
 
         uint256 pollId = maci.nextPollId() - 1;
+        IMACIDeploy.PollContracts memory pc = maci.getPoll(pollId);
+
+        Ownable(pc.messageProcessor).transferOwnership(coordinator);
+        Ownable(pc.tally).transferOwnership(coordinator);
 
         proposalPolls[proposalId] = ProposalPoll({
             pollId: pollId,
-            poll: deployed.poll,
-            messageProcessor: deployed.messageProcessor,
-            tally: deployed.tally,
-            policy: address(policy),
+            poll: pc.poll,
+            messageProcessor: pc.messageProcessor,
+            tally: pc.tally,
             deadline: voteEnd
         });
 
-        emit PollLinked(proposalId, deployed.poll, deployed.tally, pollId);
+        emit PollLinked(proposalId, pc.poll, pc.tally, pollId);
     }
 
-    /// @notice Quorum is the minimum total spent voice credits (i.e. votes cast in non-QV mode).
-    /// @dev Returns the same value regardless of timepoint — citizens snapshot is whatever the
-    ///      current count is when this is read; for fairness, frontends should display the
-    ///      number cached at proposal-creation time.
+    /// @notice Quorum is the minimum total voice credits spent across all options.
+    /// @dev With ConstantInitialVoiceCreditProxy(1), each signup spends ≤ 1 credit, so this
+    ///      effectively requires `quorumPercentage` of citizens to have voted.
     function quorum(uint256) public view override returns (uint256) {
         uint256 totalCitizens = ICitizenNFTSupply(citizenNFT).totalSupply();
         return (totalCitizens * quorumPercentage) / 100;
@@ -211,8 +218,6 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         return 0;
     }
 
-    /// @dev OZ's castVote pipeline must not be reachable. _countVote is unreachable because
-    ///      the public castVote* overrides revert before getting here.
     function _countVote(uint256, address, uint8, uint256, bytes memory) internal pure override returns (uint256) {
         revert("MaciAttesterGovernor: counting handled by MACI Tally");
     }

@@ -1,5 +1,7 @@
 node_modules
 .env
+.env.*
+!.env.example
 coverage
 coverage.json
 typechain
@@ -8,3 +10,11 @@ typechain-types
 #Hardhat files
 cache*
 artifacts*
+
+# zKey artifacts (~1.5GB tarball + extracted zkeys, fetched by scripts/download-zkeys.sh)
+zkeys/
+*.tar.gz
+*.zkey
+
+# Deployment outputs (contains live addresses, safe to commit but kept local by default)
+deployments/

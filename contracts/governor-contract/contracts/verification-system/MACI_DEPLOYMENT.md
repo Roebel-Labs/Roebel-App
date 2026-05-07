@@ -1,157 +1,154 @@
-# MACI Privacy-Voting Governor — Deployment Guide
+# MACI v2 Privacy-Voting Governor — Base Mainnet Deployment
 
-This directory now contains three new contracts that swap the public-vote `AttesterGovernor` for a MACI v3 privacy-voting governor while reusing the existing `AttesterNFT` and `CitizenNFT` deployments on Base mainnet.
+This guide walks you through deploying a complete MACI v2 privacy-voting stack on **Base mainnet**, wired to your existing on-chain `AttesterNFT` (`0xa06F09Cb…`) and `CitizenNFT` (`0xe2d39ffd…`).
 
-## What changed
+The MACI v2 trusted-setup ceremony is complete (per [MACI docs](https://maci.pse.dev/docs/security/trusted-setup)) — production zKeys exist and the cryptographic security model holds. We deliberately stayed on v2 instead of the unreleased v3 because v3's ceremony "has not started yet."
 
-| File | Status | Purpose |
-|---|---|---|
-| [AttesterNFT.sol](AttesterNFT.sol) | unchanged | Soulbound attester NFT (live: `0xa06F09Cb406880512326318fbC09Cdb28631DA73`) |
-| [CitizenNFT.sol](CitizenNFT.sol) | unchanged | Soulbound voter NFT (live: `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`) |
-| [AttesterGovernor.sol](AttesterGovernor.sol) | unchanged, kept for history | Old public-vote governor (live: `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b`) |
-| [CitizenNFTPolicy.sol](CitizenNFTPolicy.sol) | **new** | Excubiae `IBasePolicy` that gates MACI signup/poll-join by CitizenNFT ownership |
-| [CitizenNFTVoiceCreditsProxy.sol](CitizenNFTVoiceCreditsProxy.sol) | **new** | `IInitialVoiceCreditProxy` returning 1 credit per CitizenNFT |
-| [MaciAttesterGovernor.sol](MaciAttesterGovernor.sol) | **new** | OZ Governor whose `propose()` deploys a fresh MACI Poll; reads tally for quorum/success |
+## Files in this commit
 
-The old `/contracts/maci/` and `/contracts/HomeTownMaciGovernor.sol` (stub-based, never worked) have been deleted.
-
-## Prerequisites — what you must deploy *before* this Governor
-
-MACI cannot run without its own infrastructure. PSE does **not** maintain pre-deployed MACI contracts on Base — you deploy them yourself, **once**, then reuse for every poll. This step is Hardhat-only (Remix can't compile circuits or run the deployer task chain).
-
-Deploy on **Base Sepolia first** for end-to-end testing, then on **Base mainnet** when green.
-
-You need:
-
-1. **Poseidon hash libraries** (T3, T4, T5, T6) — deploy from [`node_modules/@maci-protocol/contracts/contracts/crypto/`](../../node_modules/@maci-protocol/contracts/contracts/crypto/). MACI's hardhat tasks (`npx hardhat deploy-full`) handle this automatically.
-2. **Verifier** + **VkRegistry** + zKey artifacts — installed from PSE's S3 by the MACI CLI.
-3. **PollFactory**, **MessageProcessorFactory**, **TallyFactory** — deployed by the same task.
-4. **MACI core** — its constructor takes the three factories + the **global** `CitizenNFTPolicy` (deploy that first; see step A below).
-5. **Coordinator Service** — Docker container (Fly.io recommended) holding the Babyjubjub coordinator key. See [`apps/coordinator/`](../../../../apps/coordinator/) (separate workstream).
-
-The full MACI infra deployment is documented at https://maci.pse.dev/docs/quick-start — drop the deployer's private key into a `.env` file in this package and run `npx hardhat deploy-full --network baseSepolia`.
-
-## Deployment order via Remix
-
-Once MACI infrastructure exists on the target chain, **everything below can be done in Remix**. Open Remix, create a workspace from this folder (or use Remix's GitHub import on `roebel/roebel`), set the compiler to **Solidity 0.8.28** with optimizer **enabled, runs=200, viaIR=true**, and connect Remix to your thirdweb deployer wallet on Base.
-
-### Step A — Global CitizenNFTPolicy
-
-Deploy [CitizenNFTPolicy.sol](CitizenNFTPolicy.sol).
-
-Constructor args:
-- `_citizenNFT`: `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` (Base mainnet) or your fresh CitizenNFT on Sepolia.
-
-This single instance is the **MACI sign-up policy**: it gates who can sign up to MACI itself. After MACI is deployed in Step B you'll call `setTarget(MACI_address)` on this instance once.
-
-> **⚠️** Hand this policy's address to the MACI infrastructure deployer task — it goes into MACI's constructor.
-
-### Step B — MACI core deployment (Hardhat, not Remix)
-
-Run the MACI deployer with the policy address from Step A. The output is a JSON file with addresses for `MACI`, `Verifier`, `VkRegistry`, `PollFactory`, `MessageProcessorFactory`, `TallyFactory`, and the deployed Poseidon libraries.
-
-After deployment, in Remix call `CitizenNFTPolicy.setTarget(MACI_address)` on the Step-A policy. The policy is now bound; it will reject any caller that isn't MACI.
-
-### Step C — Shared CitizenNFTVoiceCreditsProxy
-
-Deploy [CitizenNFTVoiceCreditsProxy.sol](CitizenNFTVoiceCreditsProxy.sol). One instance suffices for every poll, forever.
-
-Constructor args:
-- `_citizenNFT`: same as Step A
-- `_creditsPerNFT`: `1` (1 NFT = 1 voice credit, non-quadratic)
-
-### Step D — Fresh TimelockController (optional)
-
-If you want a separate timelock from the legacy `0xed1680…` one, deploy `@openzeppelin/contracts/governance/TimelockController.sol` via Remix.
-
-Constructor args:
-- `minDelay`: `172800` (2 days; tweak to taste)
-- `proposers`: `[]` (empty; the Governor will be granted PROPOSER_ROLE post-deployment)
-- `executors`: `[address(0)]` (anyone can execute, common pattern)
-- `admin`: your deployer EOA (you'll renounce after handover)
-
-### Step E — MaciAttesterGovernor
-
-Deploy [MaciAttesterGovernor.sol](MaciAttesterGovernor.sol).
-
-Constructor takes a single `InitArgs` struct. Fill it with:
-
-| Field | Value |
+| File | Role |
 |---|---|
-| `attesterNFT` | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` (mainnet) |
-| `citizenNFT` | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` (mainnet) |
-| `maci` | from Step B |
-| `verifier` | from Step B |
-| `vkRegistry` | from Step B |
-| `initialVoiceCreditProxy` | from Step C |
-| `coordinatorPubKey` | `(x, y)` pair from `maci-cli generateMaciKeypair` (run on the Coordinator Service host) |
-| `treeDepths` | `(stateTreeDepth, voteOptionTreeDepth)` matching the zKeys you downloaded — typically `(10, 2)` for the default Base profile |
-| `messageBatchSize` | `20` (default) |
-| `voteOptions` | `3` (Against / For / Abstain) |
-| `mode` | `0` for non-QV, `1` for QV. Use **0** for the Roebel 1-citizen-1-vote model. |
-| `timelock` | from Step D, or the existing `0xed1680…` |
-| `votingDelay` | `86400` seconds (1 day) |
-| `votingPeriod` | `604800` seconds (7 days) |
-| `quorumPercentage` | `10` (10% of citizens must cast a ballot) |
-| `tallyGracePeriod` | `604800` seconds (7 days for the coordinator to submit the tally) |
+| [MaciAttesterGovernor.sol](MaciAttesterGovernor.sol) | OZ Governor: Attester-gated `propose()`, deploys a fresh MACI Poll per proposal, reads tally for quorum/success, hands MP/Tally ownership to the coordinator address |
+| [AttesterNFT.sol](AttesterNFT.sol) / [CitizenNFT.sol](CitizenNFT.sol) | unchanged — already live on Base mainnet |
+| [AttesterGovernor.sol](AttesterGovernor.sol) | unchanged — old public-vote governor stays for proposal history |
+| [../../scripts/deploy-maci-base.ts](../../scripts/deploy-maci-base.ts) | full deploy chain: gatekeeper → voice credit proxy → MACI core → Verifier → VkRegistry → Timelock → Governor |
+| [../../scripts/download-zkeys.sh](../../scripts/download-zkeys.sh) | fetches the 1.5 GB production-ceremony tarball and extracts to `./zkeys/` |
+| [../../scripts/generate-coordinator-keypair.ts](../../scripts/generate-coordinator-keypair.ts) | one-shot Babyjubjub keypair generator for the coordinator |
+| [../../.env.example](../../.env.example) | template for the deployer's local `.env` |
+| [../../hardhat.config.js](../../hardhat.config.js) | Base + Base Sepolia networks, multi-compiler |
 
-### Step F — Wire Timelock roles
+We deliberately use **stock MACI v2 contracts** (no custom Solidity beyond the Governor) for the gatekeeper and voice-credit proxy:
+- `SignUpTokenGatekeeper(citizenNFT)` — built into `maci-contracts@2.5.0`. Gates MACI signups by CitizenNFT ownership: each token can sign up exactly once.
+- `ConstantInitialVoiceCreditProxy(1)` — built in. Issues 1 voice credit per signup (non-QV → 1 NFT = 1 vote).
 
-If you deployed a fresh Timelock in Step D, grant the Governor `PROPOSER_ROLE` and `CANCELLER_ROLE`, then renounce the admin role:
+## Step-by-step deployment
 
-```solidity
-timelock.grantRole(timelock.PROPOSER_ROLE(), maciGovernor);
-timelock.grantRole(timelock.CANCELLER_ROLE(), maciGovernor);
-timelock.renounceRole(timelock.DEFAULT_ADMIN_ROLE(), deployer);
+All commands run from `contracts/governor-contract/`.
+
+### 1. Configure environment
+
+```bash
+cp .env.example .env
+$EDITOR .env
 ```
 
-### Step G — Frontend address swap
+Required values:
+- `DEPLOYER_PRIVATE_KEY` — the EOA paying gas for the deploy. Needs ~0.01 ETH on Base for the full chain.
+- `BASE_RPC_URL` — public `https://mainnet.base.org` works; for higher reliability use Alchemy/QuickNode.
+- `ATTESTER_NFT_ADDRESS` / `CITIZEN_NFT_ADDRESS` — pre-filled with the live Base mainnet addresses.
+- `COORDINATOR_ADDRESS` — see step 3.
+- `COORDINATOR_PUBKEY_X` / `COORDINATOR_PUBKEY_Y` — see step 3.
+- Governance parameters (defaults: 7-day voting, 10% quorum, 7-day tally grace, 2-day timelock).
 
-Update `packages/blockchain/addresses.ts` with the new `maciGovernor` address. Both apps will pick it up. The old `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` AttesterGovernor stays on-chain for history.
+### 2. Download the production ceremony zKeys
+
+```bash
+bash scripts/download-zkeys.sh
+```
+
+This pulls `maci_artifacts_14-9-2-3_prod.tar.gz` (~1.5 GB) from PSE's S3 and extracts to `./zkeys/`. Idempotent — re-run anytime; it skips if already extracted.
+
+The `14-9-2-3` parameter set means: state tree depth 14 (max 16,384 signups — plenty for ~6,500 Roebel/Müritz citizens), int state tree depth 9, message tree depth 2, vote option tree depth 3. These match what we hard-code in [scripts/deploy-maci-base.ts](../../scripts/deploy-maci-base.ts).
+
+### 3. Generate the coordinator keypair
+
+**Do this on the machine that will host the Coordinator Service**, not on your dev laptop. The private key is the secret that decrypts every encrypted ballot:
+
+```bash
+npx ts-node scripts/generate-coordinator-keypair.ts \
+    > coordinator.pub \
+    2> coordinator.priv
+```
+
+Then:
+1. Copy the `COORDINATOR_PUBKEY_X` / `COORDINATOR_PUBKEY_Y` lines from `coordinator.pub` into your `.env`.
+2. Move `coordinator.priv` into your secret manager (Fly secrets / 1Password / hardware key) and shred the file.
+3. Decide what `COORDINATOR_ADDRESS` will be — this is the *Ethereum* EOA (or Safe) that signs `tallyVotes` and `processMessages` transactions. It can be:
+   - **v1:** a single EOA derived from a separate secret. Cheap, simple.
+   - **v1.1 (recommended for Devcon):** a 3-of-5 Gnosis Safe owned by your founding attesters. Adds a per-tally human approval gate; doesn't require contract changes.
+
+Set `COORDINATOR_ADDRESS` in `.env` accordingly.
+
+### 4. Run the deploy
+
+```bash
+npx hardhat run scripts/deploy-maci-base.ts --network base
+```
+
+This deploys, in order:
+1. `SignUpTokenGatekeeper(citizenNFT)`
+2. `ConstantInitialVoiceCreditProxy(1)`
+3. `PoseidonT3` / `T4` / `T5` / `T6`
+4. `PollFactory`, `MessageProcessorFactory`, `TallyFactory` (Poseidon-linked)
+5. `MACI` core (state tree depth 14)
+6. `Verifier`
+7. `VkRegistry` + uploads the production non-QV process & tally VKs
+8. `TimelockController` (2-day default delay)
+9. `MaciAttesterGovernor`
+
+Final action: grants the Governor the timelock's `PROPOSER_ROLE` and `CANCELLER_ROLE`, then renounces the deployer's `DEFAULT_ADMIN_ROLE`. After that the timelock is fully autonomous.
+
+Output: `deployments/base.json` with every address.
+
+Approximate gas cost on Base at ~0.05 gwei: **0.001 ETH (~$2.50)**. Linked Poseidon contracts are the bulk of the spend.
+
+### 5. Wire into the apps
+
+Update `packages/blockchain/addresses.ts` with `maciAttesterGovernor` from `deployments/base.json`. The frontend now points at the new Governor; the old `0x84D8ab0Fc…` AttesterGovernor stays on chain for past proposals.
 
 ## Per-proposal lifecycle
 
-Once deployed, the flow is fully on-chain:
-
-1. **Attester proposes** → `MaciAttesterGovernor.propose(targets, values, calldatas, description)`. The Governor:
-   - reverts if the caller doesn't hold an AttesterNFT
-   - calls OZ's `super.propose(...)` to register the proposal
-   - deploys a fresh per-poll `CitizenNFTPolicy`
-   - calls `MACI.deployPoll(args)` → returns `(poll, messageProcessor, tally)`
-   - calls `policy.setTarget(poll)`
+1. **Attester proposes** → `MaciAttesterGovernor.propose(targets, values, calldatas, description)`:
+   - reverts unless caller holds an AttesterNFT
+   - calls `super.propose(...)` to register the OZ proposal
+   - calls `MACI.deployPoll(duration, treeDepths, coordinatorPubKey, verifier, vkRegistry, NON_QV)` — voting period = `votingPeriod()` from settings
+   - reads the new `pollId = MACI.nextPollId() - 1` and the `(poll, mp, tally)` triple
+   - **transfers ownership of `MessageProcessor` and `Tally` to `coordinator`** so the coordinator can submit proofs without proxying through the Governor
    - emits `PollLinked(proposalId, poll, tally, pollId)`
 
-2. **Citizens sign up** (one-time per MACI instance) → frontend generates a Babyjubjub keypair via `@maci-protocol/sdk`, calls `MACI.signUp(pubKey, "")` from the thirdweb smart account.
+2. **Citizens sign up** (one-time per MACI instance):
+   - frontend generates a Babyjubjub keypair via `maci-domainobjs`
+   - smart account calls `MACI.signUp(pubKey, abi.encode(tokenId), "")` — `tokenId` is the citizen's CitizenNFT id; `SignUpTokenGatekeeper` enforces ownership and one-shot use
 
-3. **Citizens vote** → frontend encrypts the ballot to the coordinator pubkey, calls `Poll.publishMessage(message, ephemeralPubKey)`. Voters can re-publish to change their vote until `endDate`.
+3. **Citizens vote**:
+   - frontend encrypts ballot to `coordinatorPubKey`
+   - smart account calls `Poll.publishMessage(message, ephemeralPubKey)` — voters can re-publish to change their vote until `endDate`
 
-4. **Coordinator finalizes** → after `endDate`, the Coordinator Service:
-   - decrypts all messages
-   - generates a ZK-SNARK proof of correct tally
-   - submits via `Tally.tallyVotes(...)` then `Tally.addTallyResults(...)`
-   - on-chain Tally now has `isTallied() == true` and `tallyResults(0..2)` populated
+4. **Coordinator finalizes** (after voting period):
+   - decrypts messages off-chain
+   - generates ZK proofs (Process + Tally circuits)
+   - submits via `MessageProcessor.processMessages(...)` then `Tally.tallyVotes(...)` then `Tally.addTallyResults(...)`
+   - on-chain Tally now exposes `isTallied() == true` and `tallyResults(0..2)`
 
-5. **Anyone executes** → call `MaciAttesterGovernor.queue(...)` then (after timelock delay) `execute(...)`. The Governor's `_quorumReached` and `_voteSucceeded` overrides read directly from the Tally.
+5. **Anyone executes**:
+   - call `governor.queue(...)` then (after the timelock min-delay) `governor.execute(...)`
+   - Governor's `_quorumReached` reads `Tally.totalSpent() >= quorum(0)`
+   - Governor's `_voteSucceeded` reads `Tally.tallyResults(1).value > Tally.tallyResults(0).value`
 
-If the coordinator misses the `tallyGracePeriod` window, the proposal is `Defeated` and cannot execute — fail-safe.
+If the coordinator doesn't post the tally within `tallyGracePeriod` after the deadline, the proposal moves to `Defeated` and cannot execute — fail-safe.
 
 ## thirdweb smart-wallet compatibility
 
-Every user-facing call (`signUp`, `publishMessage`, `propose`) authenticates via `msg.sender`. The thirdweb `inAppWallet + smartAccount` pair makes the smart account `msg.sender`, holds the CitizenNFT, and pays gas via the bundler/paymaster. **Nothing in this contract suite requires an EOA.**
+Every user-facing call (`signUp`, `publishMessage`, `propose`) authenticates only via `msg.sender`. The thirdweb `inAppWallet + smartAccount` pair makes the smart account `msg.sender`, holds the CitizenNFT, and pays gas through your bundler/paymaster. **No EOA dependency anywhere in the user flow.**
 
 ## Verification checklist
 
-Before announcing the new Governor:
+Before pointing real proposals at the new Governor:
 
-- [ ] `npx hardhat compile` clean (warnings only)
-- [ ] Step A policy deployed; `trait()` returns `"CitizenNFT"`; `setTarget` callable once
-- [ ] Step C voice-credits proxy returns `1` for a known citizen address, `0` for a non-citizen
-- [ ] Step E Governor's `quorum(0)` returns `(totalCitizens * 10) / 100`
-- [ ] Test proposal on Sepolia: `PollLinked` event fires, `proposalPolls(proposalId).poll != 0x0`
-- [ ] 5 test citizens sign up + vote + change one vote
-- [ ] Coordinator submits tally → `governor.state(proposalId)` flips from `Active` to `Succeeded`
-- [ ] `queue` + `execute` succeed; Timelock fires the proposal action
+- [ ] `npx hardhat compile` clean (warnings about unreachable `_countVote` are expected)
+- [ ] `bash scripts/download-zkeys.sh` finished, both .zkey files present
+- [ ] `deployments/base.json` contains all 12 addresses
+- [ ] `gatekeeper.maci()` returns the MACI core address
+- [ ] `vkRegistry.hasNonQvProcessVk(...)` returns true (or equivalent — check via Basescan)
+- [ ] `governor.attesterNFT()` returns `0xa06F09Cb…`
+- [ ] `governor.coordinator()` returns the address you set
+- [ ] `timelock.hasRole(PROPOSER_ROLE, governor) == true` and `hasRole(DEFAULT_ADMIN_ROLE, deployer) == false`
+- [ ] **Pilot proposal**: an attester proposes a no-op (e.g. `governor.updateVotingPeriod(...)` itself). Verify `PollLinked` fires, `MACI.polls(0)` returns non-zero addresses, and the Tally's owner equals `coordinator`.
 
-## Future hardening
+## Layered coordinator hardening (post-v1)
 
-- **Multi-attester coordinator** — see plan v1.1: Tally-submitter Safe (3-of-5 founding attesters) and Shamir-split Babyjubjub key. The Governor itself does not change; only the Coordinator Service backend changes.
+The MaciAttesterGovernor contract does **not** change between layers — only the off-chain coordinator setup does:
+
+- **Layer 1 (do this for Devcon):** swap `COORDINATOR_ADDRESS` from a single EOA to a 3-of-5 Gnosis Safe of founding attesters. Each tally submission requires their explicit approval. Safe address is set in `.env` *before* deploy and baked into the Governor immutably.
+- **Layer 2 (v1.1):** Shamir-split the Babyjubjub coordinator privkey across 5 attesters. Each tally is a coordinated event on an ephemeral Fly.io machine; reconstruction happens in memory only, then the machine self-destructs. Trust assumption: ≤2 attesters compromised at the tally window.
+- **Layer 3 (when v3 ceremony lands):** swap to MPC-based threshold decryption — no key reconstruction at all. Requires a contracts upgrade once v3 is production-ready.

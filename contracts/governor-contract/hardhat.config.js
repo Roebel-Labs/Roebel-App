@@ -1,44 +1,13 @@
-require("@matterlabs/hardhat-zksync-solc");
-require("@matterlabs/hardhat-zksync-verify");
+require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config();
 
+const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+const BASE_SEPOLIA_RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
+const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  zksolc: {
-    version: "1.4.1",
-    compilerSource: "binary",
-    settings: {
-      optimizer: {
-        enabled: true,
-      },
-    },
-  },
-  networks: {
-    zkSyncbaseTestnet: {
-      url: "https://base.era.zksync.dev",
-      ethNetwork: "base",
-      zksync: true,
-      chainId: 300,
-      verifyURL:
-        "https://explorer.base.era.zksync.dev/contract_verification",
-    },
-    zkSyncMainnet: {
-      url: "https://mainnet.era.zksync.io",
-      ethNetwork: "mainnet",
-      zksync: true,
-      chainId: 324,
-      verifyURL:
-        "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
-    },
-  },
-  paths: {
-    artifacts: "./artifacts-zk",
-    cache: "./cache-zk",
-    // Scope compile to verification-system only. The legacy /semaphore tree imports
-    // OZ v4's Counters.sol (removed in v5) and is out of scope for the MACI work.
-    sources: "./contracts/verification-system",
-    tests: "./test",
-  },
   solidity: {
     compilers: [
       {
@@ -58,6 +27,52 @@ module.exports = {
         version: "0.8.20",
         settings: {
           optimizer: { enabled: true, runs: 200 },
+          viaIR: true,
+        },
+      },
+    ],
+  },
+  paths: {
+    artifacts: "./artifacts",
+    cache: "./cache",
+    sources: "./contracts/verification-system",
+    tests: "./test",
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337,
+    },
+    base: {
+      url: BASE_RPC_URL,
+      chainId: 8453,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
+    baseSepolia: {
+      url: BASE_SEPOLIA_RPC_URL,
+      chainId: 84532,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
+  },
+  etherscan: {
+    apiKey: {
+      base: BASESCAN_API_KEY,
+      baseSepolia: BASESCAN_API_KEY,
+    },
+    customChains: [
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org",
+        },
+      },
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org",
         },
       },
     ],
