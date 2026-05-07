@@ -19,6 +19,7 @@ import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
+import { MaciProvider } from '@/context/MaciContext';
 import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
 import '@/lib/patch-text';
@@ -290,6 +291,7 @@ function Layout() {
                       <RewardsProvider>
                       <MeckyProvider>
                       <GovernanceTestProvider>
+                      <MaciProvider>
                       <InterestProvider>
                       <BookmarksProvider>
                         <LocationProvider>
@@ -300,6 +302,7 @@ function Layout() {
                         </LocationProvider>
                       </BookmarksProvider>
                       </InterestProvider>
+                      </MaciProvider>
                       </GovernanceTestProvider>
                       </MeckyProvider>
                       </RewardsProvider>

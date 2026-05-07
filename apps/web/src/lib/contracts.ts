@@ -6,15 +6,25 @@ import { base } from "thirdweb/chains";
 export const OLD_NFT_CONTRACT_ADDRESS = "0x976966e2669b3bF3c99B38cA4259a864f85191A1";
 export const OLD_GOVERNOR_CONTRACT_ADDRESS = "0x767f7b996E54248F88944DAc344Ab74e93E21cdB";
 
-// NEW Röbel/Müritz DAO contract addresses (Base Mainnet) - 1 Attester + 1 Citizen rule
-export const CITIZEN_NFT_ADDRESS = "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7"; // CitizenNFT (1+1 rule)
-export const ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b"; // AttesterGovernor (1h voting, 10% quorum)
+// Röbel/Müritz DAO contracts (Base Mainnet)
+export const CITIZEN_NFT_ADDRESS = "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7";
+export const ATTESTER_NFT_ADDRESS = "0xa06F09Cb406880512326318fbC09Cdb28631DA73";
 
-// Legacy exports (for compatibility with existing code)
+// Legacy public-vote AttesterGovernor — kept for historical proposals only.
+export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
+
+// Current MACI v2 privacy-voting governor — proposal creation + voting target.
+// Source of truth: contracts/governor-contract/deployments/base.json
+export const MACI_GOVERNOR_ADDRESS = "0xc637C95623837319584aA1a2fCb54C7BFDe315A6";
+export const MACI_ADDRESS = "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
+
+// Convenience aliases — existing imports keep working but now point at the
+// new MACI Governor.
+export const ATTESTER_GOVERNOR_ADDRESS = MACI_GOVERNOR_ADDRESS;
 export const NFT_CONTRACT_ADDRESS = CITIZEN_NFT_ADDRESS;
-export const GOVERNOR_CONTRACT_ADDRESS = ATTESTER_GOVERNOR_ADDRESS;
+export const GOVERNOR_CONTRACT_ADDRESS = MACI_GOVERNOR_ADDRESS;
 
-// Contract instances - now using new Röbel/Müritz contracts
+// Contract instances
 export const nftContract = getContract({
   client,
   chain: base,
@@ -24,7 +34,19 @@ export const nftContract = getContract({
 export const governorContract = getContract({
   client,
   chain: base,
-  address: ATTESTER_GOVERNOR_ADDRESS,
+  address: MACI_GOVERNOR_ADDRESS,
+});
+
+export const legacyGovernorContract = getContract({
+  client,
+  chain: base,
+  address: LEGACY_ATTESTER_GOVERNOR_ADDRESS,
+});
+
+export const maciContract = getContract({
+  client,
+  chain: base,
+  address: MACI_ADDRESS,
 });
 
 // Proposal states mapping

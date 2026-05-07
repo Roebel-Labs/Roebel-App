@@ -20,12 +20,20 @@ import { de } from "@/lib/translations/de";
 
 type UploadStage = "idle" | "uploading" | "submitting" | "confirming" | "success" | "error";
 
+interface PollInfo {
+  proposalId: string;
+  pollId: string;
+  pollAddress: string;
+  tallyAddress: string;
+}
+
 export default function CreateProposalPage() {
   const account = useActiveAccount();
   const router = useRouter();
   const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [error, setError] = useState<string>("");
   const [irysUrl, setIrysUrl] = useState<string>("");
+  const [pollInfo, setPollInfo] = useState<PollInfo | null>(null);
 
   const { mutate: sendTransaction, isPending } = useSendTransaction();
   const { isAttester, isLoading: statusLoading } = useVerificationStatus();
@@ -149,6 +157,38 @@ export default function CreateProposalPage() {
 
             console.log("🔢 Extracted numeric proposalId:", numericProposalId);
             console.log("📊 Vote period:", voteStart, "to", voteEnd);
+
+            // MACI-specific: decode PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)
+            try {
+              const POLL_LINKED_TOPIC = ethers.id("PollLinked(uint256,address,address,uint256)");
+              const pollLinkedLog = receipt.logs.find((log) =>
+                log.address.toLowerCase() === governorContract.address.toLowerCase() &&
+                log.topics[0] === POLL_LINKED_TOPIC
+              );
+              if (pollLinkedLog) {
+                const pollIface = new ethers.Interface([
+                  "event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)"
+                ]);
+                const decodedPoll = pollIface.parseLog({
+                  topics: pollLinkedLog.topics,
+                  data: pollLinkedLog.data,
+                });
+                if (decodedPoll) {
+                  const info: PollInfo = {
+                    proposalId: numericProposalId,
+                    pollId: decodedPoll.args.pollId.toString(),
+                    pollAddress: decodedPoll.args.poll,
+                    tallyAddress: decodedPoll.args.tally,
+                  };
+                  console.log("🔐 MACI PollLinked:", info);
+                  setPollInfo(info);
+                }
+              } else {
+                console.warn("PollLinked event not found — is the new MACI Governor wired correctly?");
+              }
+            } catch (pollErr) {
+              console.warn("PollLinked decode failed (proposal still on-chain):", pollErr);
+            }
 
             // Step 3: Store in Supabase for fast retrieval
             try {
@@ -283,29 +323,66 @@ export default function CreateProposalPage() {
                   Bescheiniger werden →
                 </Link>
               </div>
-            ) : !hasDelegated ? (
-              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-8 text-center">
-                <div className="text-4xl mb-4">⚠️</div>
-                <h2 className="text-xl font-medium text-yellow-900 mb-2">
-                  Stimmrecht delegieren
-                </h2>
-                <p className="text-yellow-800 mb-6">
-                  Du musst deine Stimmrechte delegieren, um Vorschläge zu erstellen
-                </p>
-                <Link
-                  href="/delegate"
-                  className="inline-block bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-                >
-                  Jetzt delegieren →
-                </Link>
-              </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                  <p className="text-sm font-medium text-blue-900">
+                    Verschlüsselte Abstimmung (MACI v2)
+                  </p>
                   <p className="text-sm text-blue-800">
-                    Erstelle einen Vorschlag, über den die Community abstimmen kann. Deine Beschreibung wird dauerhaft auf Irys (Arweave) gespeichert.
+                    Vorschläge laufen ab jetzt mit privater, kollusionsresistenter Abstimmung
+                    auf Base Mainnet. Sobald du diesen Vorschlag einreichst, wird automatisch
+                    eine eigene MACI-Abstimmung erzeugt — Bürger:innen stimmen verschlüsselt ab
+                    und nur das aggregierte Endergebnis erscheint öffentlich auf der Blockchain.
+                  </p>
+                  <p className="text-sm text-blue-800">
+                    Deine Beschreibung wird dauerhaft auf Irys (Arweave) gespeichert.
                   </p>
                 </div>
+
+                {pollInfo && uploadStage === "success" && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="text-2xl leading-none">🔐</div>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm font-medium text-emerald-900">
+                          Verschlüsselte Abstimmung erfolgreich erzeugt
+                        </p>
+                        <p className="text-sm text-emerald-800">
+                          Bürger:innen können in der mobilen App ab sofort verschlüsselt
+                          abstimmen. Nach Ablauf der Frist veröffentlicht der Koordinator das
+                          Ergebnis mit einem Zero-Knowledge-Beweis on-chain.
+                        </p>
+                        <dl className="text-xs text-emerald-900 space-y-1 font-mono">
+                          <div className="flex gap-2">
+                            <dt className="opacity-70 w-24">Proposal ID:</dt>
+                            <dd className="break-all">{pollInfo.proposalId}</dd>
+                          </div>
+                          <div className="flex gap-2">
+                            <dt className="opacity-70 w-24">MACI Poll ID:</dt>
+                            <dd>{pollInfo.pollId}</dd>
+                          </div>
+                          <div className="flex gap-2">
+                            <dt className="opacity-70 w-24">Poll:</dt>
+                            <dd className="break-all">
+                              <a href={`https://basescan.org/address/${pollInfo.pollAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                                {pollInfo.pollAddress}
+                              </a>
+                            </dd>
+                          </div>
+                          <div className="flex gap-2">
+                            <dt className="opacity-70 w-24">Tally:</dt>
+                            <dd className="break-all">
+                              <a href={`https://basescan.org/address/${pollInfo.tallyAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                                {pollInfo.tallyAddress}
+                              </a>
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <IrysBalanceCard />
 
