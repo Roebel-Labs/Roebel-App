@@ -1,19 +1,24 @@
 /**
  * Proposal Timers Component
  *
- * Displays real-time countdown timers for voting delay and voting period
- * - Voting Delay: 43200 blocks = 1 day (time until voting starts)
- * - Voting Period: 216000 blocks = 5 days (time until voting ends)
+ * Displays a real-time countdown for the voting-delay and voting-period
+ * windows.
+ *
+ * Reads the governor's own `clock()` rather than the chain's block height,
+ * so it works regardless of whether the governor is in block-number mode
+ * (legacy AttesterGovernor) or timestamp mode (current MACI Governor).
+ *
+ * For the current MACI Governor:
+ *   CLOCK_MODE() = "mode=timestamp"
+ *   clock(), proposalSnapshot(), proposalDeadline() all return Unix seconds.
  */
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useReadContract } from 'thirdweb/react';
-import { readContract, eth_blockNumber } from 'thirdweb';
-import { governorContract, client } from '@/constants/thirdweb';
+import { readContract } from 'thirdweb';
+import { governorContract } from '@/constants/thirdweb';
 import { ProposalState } from '@/lib/governance-types';
-import { base } from 'thirdweb/chains';
-import { getRpcClient } from 'thirdweb/rpc';
 import { useTheme } from '@/context/ThemeContext';
 
 interface ProposalTimersProps {
@@ -21,123 +26,126 @@ interface ProposalTimersProps {
   proposalState: ProposalState;
 }
 
-// Base chain block time: ~2 seconds per block
+// Base chain block time — only used as a unit conversion when the governor's
+// CLOCK_MODE is block-number rather than timestamp.
 const BLOCK_TIME_SECONDS = 2;
-const VOTING_DELAY_BLOCKS = 43200; // 1 day
-const VOTING_PERIOD_BLOCKS = 216000; // 5 days
 
 export default function ProposalTimers({ proposalId, proposalState }: ProposalTimersProps) {
-  const [currentBlock, setCurrentBlock] = useState<bigint | null>(null);
+  const [clockNow, setClockNow] = useState<bigint | null>(null);
+  const [clockMode, setClockMode] = useState<'timestamp' | 'blocknumber'>('timestamp');
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const { colors } = useTheme();
 
-  // Get proposal snapshot (start block + delay)
-  const { data: snapshotBlock } = useReadContract({
+  // Voting-window endpoints, in whatever unit CLOCK_MODE uses.
+  const { data: snapshotClock } = useReadContract({
     contract: governorContract,
     method: 'function proposalSnapshot(uint256 proposalId) view returns (uint256)',
     params: [proposalId],
     queryOptions: { enabled: !!proposalId },
   });
 
-  // Get proposal deadline (end block)
-  const { data: deadlineBlock } = useReadContract({
+  const { data: deadlineClock } = useReadContract({
     contract: governorContract,
     method: 'function proposalDeadline(uint256 proposalId) view returns (uint256)',
     params: [proposalId],
     queryOptions: { enabled: !!proposalId },
   });
 
-  // Poll current block number using thirdweb RPC
+  // Detect mode once.
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    const fetchCurrentBlock = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const rpcRequest = getRpcClient({ client, chain: base });
-        const blockNumber = await eth_blockNumber(rpcRequest);
-        setCurrentBlock(blockNumber);
-      } catch (error) {
-        console.error('Error fetching current block:', error);
+        const mode = (await readContract({
+          contract: governorContract,
+          method: 'function CLOCK_MODE() view returns (string)',
+          params: [],
+        })) as string;
+        if (cancelled) return;
+        setClockMode(mode.includes('mode=blocknumber') ? 'blocknumber' : 'timestamp');
+      } catch (err) {
+        // CLOCK_MODE missing → assume legacy block-number governor.
+        if (!cancelled) setClockMode('blocknumber');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Poll the governor's own clock so the timer matches what the contract sees.
+  useEffect(() => {
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const fetchClock = async () => {
+      try {
+        const value = (await readContract({
+          contract: governorContract,
+          method: 'function clock() view returns (uint48)',
+          params: [],
+        })) as bigint;
+        if (!cancelled) setClockNow(value);
+      } catch (err) {
+        console.warn('[ProposalTimers] clock() read failed:', err);
       }
     };
 
-    fetchCurrentBlock();
-    // Update every 15 seconds
-    interval = setInterval(fetchCurrentBlock, 15000);
+    fetchClock();
+    interval = setInterval(fetchClock, 15000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
-  // Calculate time remaining
+  // Calculate time remaining.
   useEffect(() => {
-    if (!snapshotBlock || !deadlineBlock || !currentBlock) return;
-
-    let blocksRemaining = 0n;
-    let phase = '';
-
-    // Pending state - voting hasn't started yet (voting delay period)
-    // Note: proposalSnapshot() returns the block when voting STARTS (not creation block)
-    // So snapshotBlock already includes the voting delay
-    if (proposalState === ProposalState.Pending) {
-      blocksRemaining = snapshotBlock - currentBlock;
-      phase = 'delay';
-    }
-    // Active state - voting is ongoing
-    else if (proposalState === ProposalState.Active) {
-      blocksRemaining = deadlineBlock - currentBlock;
-      phase = 'voting';
-    }
-
-    if (blocksRemaining <= 0n) {
+    if (!snapshotClock || !deadlineClock || !clockNow) {
       setTimeRemaining('');
       return;
     }
 
-    const secondsRemaining = Number(blocksRemaining) * BLOCK_TIME_SECONDS;
-    const formatted = formatTimeRemaining(secondsRemaining);
-    setTimeRemaining(formatted);
-  }, [currentBlock, snapshotBlock, deadlineBlock, proposalState]);
+    let unitsRemaining = 0n;
+    if (proposalState === ProposalState.Pending) {
+      unitsRemaining = snapshotClock - clockNow;
+    } else if (proposalState === ProposalState.Active) {
+      unitsRemaining = deadlineClock - clockNow;
+    }
 
-  // Format seconds into human-readable time
+    if (unitsRemaining <= 0n) {
+      setTimeRemaining('');
+      return;
+    }
+
+    const secondsRemaining =
+      clockMode === 'timestamp'
+        ? Number(unitsRemaining)
+        : Number(unitsRemaining) * BLOCK_TIME_SECONDS;
+
+    setTimeRemaining(formatTimeRemaining(secondsRemaining));
+  }, [clockNow, snapshotClock, deadlineClock, proposalState, clockMode]);
+
+  // Format seconds into human-readable time.
   const formatTimeRemaining = (seconds: number): string => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
 
-    if (days > 0) {
-      return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else {
-      return `${minutes}m`;
-    }
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
   };
 
-  // Calculate progress percentage
-  const getProgress = (): number => {
-    if (!snapshotBlock || !deadlineBlock || !currentBlock) return 0;
-
-    if (proposalState === ProposalState.Pending) {
-      const votingStartBlock = snapshotBlock + BigInt(VOTING_DELAY_BLOCKS);
-      const totalBlocks = VOTING_DELAY_BLOCKS;
-      const elapsed = Number(currentBlock - snapshotBlock);
-      return Math.min((elapsed / totalBlocks) * 100, 100);
-    } else if (proposalState === ProposalState.Active) {
-      const votingStartBlock = snapshotBlock + BigInt(VOTING_DELAY_BLOCKS);
-      const totalBlocks = VOTING_PERIOD_BLOCKS;
-      const elapsed = Number(currentBlock - votingStartBlock);
-      return Math.min((elapsed / totalBlocks) * 100, 100);
-    }
-
-    return 0;
-  };
-
-  // Don't show timer for completed/cancelled proposals
+  // Don't show timer for completed/cancelled proposals.
   if (![ProposalState.Pending, ProposalState.Active].includes(proposalState)) {
     return null;
   }
 
-  if (!timeRemaining || !snapshotBlock || !deadlineBlock) {
+  if (!timeRemaining || !snapshotClock || !deadlineClock) {
     return null;
   }
 
