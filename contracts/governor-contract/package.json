@@ -11,6 +11,9 @@
     "hardhat": "^2.19.1"
   },
   "dependencies": {
+    "@excubiae/contracts": "0.13.0",
+    "@maci-protocol/contracts": "0.0.0-ci.26f28d6",
+    "@openzeppelin/contracts": "5.2.0",
     "@semaphore-protocol/contracts": "^4.14.0",
     "@thirdweb-dev/contracts": "^3.8.0",
     "zksync-ethers": "^5.7.0"

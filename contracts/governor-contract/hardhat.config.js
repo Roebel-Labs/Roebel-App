@@ -34,16 +34,32 @@ module.exports = {
   paths: {
     artifacts: "./artifacts-zk",
     cache: "./cache-zk",
-    sources: "./contracts",
+    // Scope compile to verification-system only. The legacy /semaphore tree imports
+    // OZ v4's Counters.sol (removed in v5) and is out of scope for the MACI work.
+    sources: "./contracts/verification-system",
     tests: "./test",
   },
   solidity: {
-    version: "0.8.23",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.28",
+        settings: {
+          optimizer: { enabled: true, runs: 200 },
+          viaIR: true,
+        },
       },
-    },
+      {
+        version: "0.8.23",
+        settings: {
+          optimizer: { enabled: true, runs: 200 },
+        },
+      },
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: { enabled: true, runs: 200 },
+        },
+      },
+    ],
   },
 };
