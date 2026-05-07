@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.*
+!.env.example
+*.tar.gz
+*.zkey
+proofs/
+.git
+.DS_Store
+README.md

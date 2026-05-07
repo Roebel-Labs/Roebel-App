@@ -1,0 +1,64 @@
+# Fly.io app for the Roebel MACI coordinator.
+# Region fra (Frankfurt) for latency to German users.
+#
+# Memory: 4 GB. ZK proof generation for MACI v2 batches needs ~3 GB peak; 4 GB
+# leaves headroom.
+# Storage: 5 GB volume mounted at /app/proofs for incremental proof artifacts so
+# we can resume mid-finalization if the machine restarts.
+#
+# Secrets to set with `fly secrets set <KEY>=<VALUE>` BEFORE first deploy:
+#   COORDINATOR_PRIV         — macisk.<…> Babyjubjub privkey from generate-coordinator-keypair.ts
+#   COORDINATOR_ETH_PRIV     — Ethereum private key for the EOA owning MP/Tally
+#   BASE_RPC_URL             — JSON-RPC endpoint (Alchemy/QuickNode recommended)
+#   MACI_ADDRESS             — from contracts/governor-contract/deployments/base.json
+#   VERIFIER_ADDRESS         — same
+#   VK_REGISTRY_ADDRESS      — same
+#
+# Layer-1 hardening: replace COORDINATOR_ETH_PRIV with SAFE_API_TOKEN +
+# SAFE_ADDRESS once the 3-of-5 attester Safe is set up. Then finalize-poll.js
+# proposes a tx instead of broadcasting directly.
+
+app = "roebel-maci-coordinator"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ZKEY_DIR = "/app/zkeys"
+  PROOF_DIR = "/app/proofs"
+  PORT = "8080"
+
+[[mounts]]
+  source = "coordinator_proofs"
+  destination = "/app/proofs"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory = "4gb"
