@@ -288,18 +288,29 @@ export default function ProposalDetailPage() {
             abstainVotes={proposalVotes?.[2]?.toString() || "0"}
           />
 
-          {/* Voting Panel */}
-          <VotingPanel
-            canVote={canVote}
-            hasVoted={hasVoted || false}
-            hasNFT={hasNFT}
-            votingPower={votingPower}
-            isPending={isPending}
-            isVoting={isVoting}
-            proposalState={effectiveState}
-            userAddress={account?.address}
-            onVote={handleVote}
-          />
+          {/* Voting moved to the Expo app for MACI privacy. The new MACI
+              Governor reverts on castVote() with VotingHappensOnMaciPoll. */}
+          <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl leading-none">📱</div>
+              <div className="flex-1 space-y-2">
+                <h3 className="text-lg font-medium text-foreground">
+                  Verschlüsselt abstimmen — in der Roebel-App
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Damit deine Stimme privat und kollusionsresistent gezählt
+                  werden kann, läuft das Abstimmen ausschließlich über die
+                  mobile App. Vorschläge werden weiterhin hier im Web
+                  erstellt, aber gewählt wird verschlüsselt auf dem Handy.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Öffne die Roebel-App, melde dich einmalig bei MACI an und
+                  gib deine Stimme ab — du kannst sie bis zum Ende der
+                  Frist beliebig oft ändern.
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Comment Section */}
           <ProposalCommentSection proposalId={proposal.proposal_id} />

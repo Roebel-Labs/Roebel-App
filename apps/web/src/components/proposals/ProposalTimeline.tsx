@@ -1,26 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Proposal } from "@/lib/proposal-types";
 import { useReadContract } from "thirdweb/react";
+import { readContract } from "thirdweb";
 import { governorContract } from "@/lib/contracts";
 import { ProposalCountdown } from "./ProposalCountdown";
-import { eth_blockNumber } from "thirdweb/rpc";
-import { getRpcClient } from "thirdweb/rpc";
-import { base } from "thirdweb/chains";
-import { client } from "@/app/client";
 
 interface ProposalTimelineProps {
   proposal: Proposal;
 }
 
-const BASE_BLOCK_TIME = 2; // 2 seconds per block on Base
+/**
+ * Reads the governor's own `clock()` and `CLOCK_MODE()` so dates are correct
+ * regardless of whether we're talking to the legacy block-number governor or
+ * the current MACI Governor (which uses Unix timestamps as its clock).
+ */
+const BASE_BLOCK_TIME = 2; // seconds per block, only used in block-number mode
+
+type ClockMode = "timestamp" | "blocknumber";
 
 export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
-  const [currentBlock, setCurrentBlock] = useState<bigint>(BigInt(0));
   const blockchainProposalId = proposal?.blockchain_proposal_id;
+  const [clockMode, setClockMode] = useState<ClockMode>("timestamp");
+  const [clockNow, setClockNow] = useState<bigint>(BigInt(0));
 
-  // Fetch governance parameters
   const { data: votingDelay } = useReadContract({
     contract: governorContract,
     method: "function votingDelay() view returns (uint256)",
@@ -33,7 +37,6 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
     params: [],
   });
 
-  // Get proposal snapshot (creation block)
   const { data: proposalSnapshot } = useReadContract({
     contract: governorContract,
     method: "function proposalSnapshot(uint256 proposalId) view returns (uint256)",
@@ -41,7 +44,6 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
     queryOptions: { enabled: !!blockchainProposalId },
   });
 
-  // Get proposal deadline
   const { data: proposalDeadline } = useReadContract({
     contract: governorContract,
     method: "function proposalDeadline(uint256 proposalId) view returns (uint256)",
@@ -49,72 +51,127 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
     queryOptions: { enabled: !!blockchainProposalId },
   });
 
-  // Get current block number
+  // CLOCK_MODE — once.
   useEffect(() => {
-    const fetchCurrentBlock = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const rpcRequest = getRpcClient({ client, chain: base });
-        const block = await eth_blockNumber(rpcRequest);
-        setCurrentBlock(block);
-      } catch (error) {
-        console.error("Failed to fetch current block:", error);
+        const mode = (await readContract({
+          contract: governorContract,
+          method: "function CLOCK_MODE() view returns (string)",
+          params: [],
+        })) as string;
+        if (!cancelled) setClockMode(mode.includes("mode=blocknumber") ? "blocknumber" : "timestamp");
+      } catch {
+        if (!cancelled) setClockMode("blocknumber");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Poll governor's clock so the timeline always agrees with what the contract sees.
+  useEffect(() => {
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const fetchClock = async () => {
+      try {
+        const value = (await readContract({
+          contract: governorContract,
+          method: "function clock() view returns (uint48)",
+          params: [],
+        })) as bigint;
+        if (!cancelled) setClockNow(value);
+      } catch (err) {
+        console.warn("[ProposalTimeline] clock() read failed:", err);
       }
     };
 
-    fetchCurrentBlock();
-    const interval = setInterval(fetchCurrentBlock, 10000); // Update every 10 seconds
-
-    return () => clearInterval(interval);
+    fetchClock();
+    interval = setInterval(fetchClock, 10000);
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
-  const blockToTimestamp = (blockNumber: bigint): Date => {
-    const blockDiff = blockNumber - currentBlock;
+  // Convert (clockUnit) -> wall-clock Date.
+  const clockUnitToDate = (target: bigint): Date => {
+    if (clockMode === "timestamp") {
+      // target is a Unix-seconds timestamp.
+      return new Date(Number(target) * 1000);
+    }
+    // block-number mode: estimate via diff to current block.
+    const blockDiff = target - clockNow;
     const secondsDiff = Number(blockDiff) * BASE_BLOCK_TIME;
     return new Date(Date.now() + secondsDiff * 1000);
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("de-DE", {
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString("de-DE", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
     });
-  };
 
-  // Calculate timeline events
   const createdDate = new Date(proposal.created_at);
-  const votingStartBlock = proposalSnapshot ? proposalSnapshot + (votingDelay || BigInt(0)) : BigInt(0);
-  const votingEndBlock = proposalDeadline || BigInt(0);
 
-  const votingStartDate = proposalSnapshot && votingDelay ? blockToTimestamp(votingStartBlock) : createdDate;
-  const votingEndDate = proposalDeadline ? blockToTimestamp(votingEndBlock) : new Date(createdDate.getTime() + 5 * 24 * 60 * 60 * 1000);
+  // proposalSnapshot is the moment voting STARTS (snapshot block/time).
+  const votingStartUnit = proposalSnapshot ?? BigInt(0);
+  const votingEndUnit = proposalDeadline ?? BigInt(0);
+  const votingStartDate = proposalSnapshot ? clockUnitToDate(votingStartUnit) : createdDate;
+  const votingEndDate = proposalDeadline
+    ? clockUnitToDate(votingEndUnit)
+    : new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // Determine current phase
-  const isPending = currentBlock < votingStartBlock;
-  const isActive = currentBlock >= votingStartBlock && currentBlock <= votingEndBlock;
-  const isEnded = currentBlock > votingEndBlock;
+  // Phase + countdown
+  const isPending = clockNow > 0n && clockNow < votingStartUnit;
+  const isActive = clockNow > 0n && clockNow >= votingStartUnit && clockNow <= votingEndUnit;
+  const isEnded = clockNow > 0n && clockNow > votingEndUnit;
+
+  const unitsToSeconds = (n: bigint) =>
+    clockMode === "timestamp" ? Number(n) : Number(n) * BASE_BLOCK_TIME;
+
+  // Both votingDelay and votingPeriod are in clock units. In timestamp mode
+  // they are seconds directly; in block-number mode multiply by block time.
+  const votingDelaySeconds = votingDelay ? unitsToSeconds(votingDelay) : 0;
+  const votingPeriodSeconds = votingPeriod ? unitsToSeconds(votingPeriod) : 0;
+
+  const secondsToStart = isPending ? unitsToSeconds(votingStartUnit - clockNow) : 0;
+  const secondsToEnd = isActive ? unitsToSeconds(votingEndUnit - clockNow) : 0;
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds <= 0) return "—";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
 
   return (
     <div className="space-y-6">
-      {/* Countdown Component */}
-      {currentBlock > BigInt(0) && (
+      {/* Countdown */}
+      {clockNow > 0n && (
         <>
-          {isPending && proposalSnapshot && votingDelay && (
+          {isPending && proposalSnapshot && (
             <ProposalCountdown
-              targetBlock={votingStartBlock}
-              currentBlock={currentBlock}
-              label="Voting starts in"
-              isPending={true}
+              secondsRemaining={secondsToStart}
+              totalSeconds={votingDelaySeconds || 86400}
+              label="Abstimmung startet in"
+              isPending
             />
           )}
           {isActive && proposalDeadline && (
             <ProposalCountdown
-              targetBlock={votingEndBlock}
-              currentBlock={currentBlock}
-              label="Voting ends in"
-              isPending={false}
+              secondsRemaining={secondsToEnd}
+              totalSeconds={votingPeriodSeconds || 1800}
+              label="Abstimmung endet in"
             />
           )}
         </>
@@ -137,28 +194,25 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
               <div className="w-0.5 h-full bg-muted mt-2" />
             </div>
             <div className="flex-1 pb-2">
-              <div className="font-medium text-foreground mb-1">Created</div>
+              <div className="font-medium text-foreground mb-1">Erstellt</div>
               <div className="text-sm text-muted-foreground">{formatDate(createdDate)}</div>
-              {proposalSnapshot && (
-                <div className="text-xs text-muted-foreground mt-1">Block #{proposalSnapshot.toString()}</div>
-              )}
             </div>
           </div>
 
           {/* Voting Start */}
           <div className="flex gap-4">
             <div className="flex flex-col items-center">
-              <div className={`w-3 h-3 rounded-full ${isActive || isEnded ? 'bg-black' : 'bg-yellow-500'}`} />
+              <div className={`w-3 h-3 rounded-full ${isActive || isEnded ? "bg-black" : "bg-yellow-500"}`} />
               <div className="w-0.5 h-full bg-muted mt-2" />
             </div>
             <div className="flex-1 pb-2">
-              <div className={`font-medium mb-1 ${isActive || isEnded ? 'text-foreground' : 'text-yellow-600'}`}>
-                Voting Start {isPending && "⏳"}
+              <div className={`font-medium mb-1 ${isActive || isEnded ? "text-foreground" : "text-yellow-600"}`}>
+                Abstimmung beginnt {isPending && "⏳"}
               </div>
               <div className="text-sm text-muted-foreground">{formatDate(votingStartDate)}</div>
-              {votingDelay && (
+              {votingDelay && votingDelay > 0n && (
                 <div className="text-xs text-muted-foreground mt-1">
-                  Delay: {votingDelay.toString()} blocks (~{Number(votingDelay) * BASE_BLOCK_TIME / 3600} hours)
+                  Vorlaufzeit: {formatDuration(votingDelaySeconds)}
                 </div>
               )}
             </div>
@@ -167,18 +221,16 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
           {/* Voting End */}
           <div className="flex gap-4">
             <div className="flex flex-col items-center">
-              <div className={`w-3 h-3 rounded-full ${isEnded ? 'bg-black' : 'bg-muted'}`} />
+              <div className={`w-3 h-3 rounded-full ${isEnded ? "bg-black" : "bg-muted"}`} />
             </div>
             <div className="flex-1">
-              <div className={`font-medium mb-1 ${isEnded ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Voting End {isActive && "🗳️"}
+              <div className={`font-medium mb-1 ${isEnded ? "text-foreground" : "text-muted-foreground"}`}>
+                Abstimmung endet {isActive && "🗳️"}
               </div>
-              <div className={`text-sm ${isEnded ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
-                {formatDate(votingEndDate)}
-              </div>
+              <div className="text-sm text-muted-foreground">{formatDate(votingEndDate)}</div>
               {votingPeriod && (
                 <div className="text-xs text-muted-foreground mt-1">
-                  Period: {votingPeriod.toString()} blocks (~{Number(votingPeriod) * BASE_BLOCK_TIME / 86400} days)
+                  Dauer: {formatDuration(votingPeriodSeconds)}
                 </div>
               )}
             </div>
@@ -188,12 +240,20 @@ export function ProposalTimeline({ proposal }: ProposalTimelineProps) {
         {/* Governance Parameters Info */}
         <div className="mt-6 pt-6 border-t border-border">
           <div className="text-xs text-muted-foreground space-y-1">
-            <div>Current Block: #{currentBlock.toString()}</div>
-            {votingDelay && (
-              <div>Voting Delay: {votingDelay.toString()} blocks (1 day)</div>
+            <div>
+              {clockMode === "timestamp" ? "Zeit (Unix s)" : "Block"}: {clockNow.toString()}
+            </div>
+            {votingDelay !== undefined && (
+              <div>
+                Vorlaufzeit: {formatDuration(votingDelaySeconds)}
+                {clockMode === "timestamp" ? "" : ` (${votingDelay.toString()} blocks)`}
+              </div>
             )}
-            {votingPeriod && (
-              <div>Voting Period: {votingPeriod.toString()} blocks (5 days)</div>
+            {votingPeriod !== undefined && (
+              <div>
+                Abstimmungsdauer: {formatDuration(votingPeriodSeconds)}
+                {clockMode === "timestamp" ? "" : ` (${votingPeriod.toString()} blocks)`}
+              </div>
             )}
           </div>
         </div>

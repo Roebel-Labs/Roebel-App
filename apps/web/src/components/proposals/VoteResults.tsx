@@ -56,10 +56,11 @@ export function VoteResults({ forVotes, againstVotes, abstainVotes }: VoteResult
 
       {totalVotes === 0n ? (
         <div className="text-center py-6">
-          <p className="text-muted-foreground mb-2">No votes with weight yet</p>
+          <p className="text-muted-foreground mb-2">Noch keine veröffentlichten Stimmen</p>
           <p className="text-xs text-muted-foreground">
-            Votes may have been cast but with zero voting power.<br />
-            Make sure you delegated before the proposal was created!
+            Stimmen werden verschlüsselt abgegeben und vom Koordinator erst
+            nach Ende der Abstimmung mit einem Zero-Knowledge-Beweis
+            on-chain veröffentlicht.
           </p>
         </div>
       ) : (
