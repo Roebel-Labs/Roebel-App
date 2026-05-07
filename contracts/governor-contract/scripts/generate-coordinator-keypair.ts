@@ -25,7 +25,7 @@ function main(): void {
   const keypair = new Keypair();
   const pubKeySerialized = keypair.pubKey.serialize();
   const privKeySerialized = keypair.privKey.serialize();
-  const [pubX, pubY] = keypair.pubKey.asContractParam();
+  const { x: pubX, y: pubY } = keypair.pubKey.asContractParam();
 
   // Public — safe to log to stdout
   console.log("=== MACI Coordinator Public Key ===");

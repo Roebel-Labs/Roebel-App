@@ -16,5 +16,10 @@ zkeys/
 *.tar.gz
 *.zkey
 
-# Deployment outputs (contains live addresses, safe to commit but kept local by default)
-deployments/
+# Deployment outputs — JSON address records are committed; everything else local
+deployments/*
+!deployments/*.json
+
+# maci-contracts deploy-task scratch files (auto-created on hardhat boot, unused)
+deploy-config.json
+deployed-contracts.json

@@ -1,7 +1,10 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
-const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+const RAW_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+const PRIVATE_KEY = RAW_PRIVATE_KEY
+  ? (RAW_PRIVATE_KEY.startsWith("0x") ? RAW_PRIVATE_KEY : "0x" + RAW_PRIVATE_KEY)
+  : undefined;
 const BASE_RPC_URL = process.env.BASE_RPC_URL || "https://mainnet.base.org";
 const BASE_SEPOLIA_RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
 const BASESCAN_API_KEY = process.env.BASESCAN_API_KEY || "";
