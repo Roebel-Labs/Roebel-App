@@ -80,11 +80,14 @@ export default function ProposalTimers({ proposalId, proposalState }: ProposalTi
 
     const fetchClock = async () => {
       try {
-        const value = (await readContract({
+        // uint48 returns as `number` in thirdweb's typegen; coerce to bigint
+        // so it can be subtracted from snapshot/deadline (which are uint256).
+        const raw = await readContract({
           contract: governorContract,
           method: 'function clock() view returns (uint48)',
           params: [],
-        })) as bigint;
+        });
+        const value = BigInt(raw as unknown as number | bigint | string);
         if (!cancelled) setClockNow(value);
       } catch (err) {
         console.warn('[ProposalTimers] clock() read failed:', err);
