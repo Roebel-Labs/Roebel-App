@@ -2,10 +2,9 @@
 
 export const dynamic = "force-dynamic";
 
-import { useActiveAccount, useReadContract, useSendTransaction } from "thirdweb/react";
-import { governorContract, nftContract, VoteType } from "@/lib/contracts";
+import { useActiveAccount, useReadContract } from "thirdweb/react";
+import { governorContract, nftContract } from "@/lib/contracts";
 import { balanceOf } from "thirdweb/extensions/erc721";
-import { prepareContractCall } from "thirdweb";
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { getProposal } from "@/lib/supabase";
@@ -14,7 +13,6 @@ import type { Proposal } from "@/lib/proposal-types";
 import { ProposalHero } from "@/components/proposals/ProposalHero";
 import { ProposalMetadata } from "@/components/proposals/ProposalMetadata";
 import { VoteResults } from "@/components/proposals/VoteResults";
-import { VotingPanel } from "@/components/proposals/VotingPanel";
 import { ProposalContent } from "@/components/proposals/ProposalContent";
 import { ProposalTimeline } from "@/components/proposals/ProposalTimeline";
 import { ProposalCommentSection } from "@/components/proposals/ProposalCommentSection";
@@ -32,9 +30,6 @@ export default function ProposalDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isVoting, setIsVoting] = useState(false);
-
-  const { mutate: sendTransaction, isPending } = useSendTransaction();
 
   // Fetch proposal from Supabase
   useEffect(() => {
@@ -179,42 +174,11 @@ export default function ProposalDetailPage() {
     });
   }, [proposalId, blockchainProposalId, proposalVotes, votingPower, hasVoted, isLoadingVotes, votesError]);
 
-  // Use blockchain state if available, otherwise fallback to Supabase state
-  // This ensures voting UI works even if blockchain RPC is slow/down
+  // Voting moved to the Expo app for MACI privacy. The web detail page is
+  // read-only — no castVote handler, no transaction signer hook. Removing the
+  // dead code closes the door on the VotingHappensOnMaciPoll revert path
+  // even if a stale Vercel build is briefly served from cache.
   const effectiveState = proposalState ?? proposal?.state;
-
-  // State 0 = Pending (but voting starts immediately), State 1 = Active
-  const canVote = hasNFT && (effectiveState === 0 || effectiveState === 1) && !hasVoted;
-
-  // Handle vote submission
-  const handleVote = async (support: VoteType) => {
-    if (!account || !canVote || !proposal) return;
-
-    setIsVoting(true);
-
-    // Use the numeric blockchain_proposal_id from Supabase for blockchain calls
-    const numericProposalId = proposal.blockchain_proposal_id;
-    console.log("🗳️ Submitting vote for proposal:", numericProposalId);
-
-    const transaction = prepareContractCall({
-      contract: governorContract,
-      method: "function castVote(uint256 proposalId, uint8 support) public returns (uint256)",
-      params: [BigInt(numericProposalId), support],
-    });
-
-    sendTransaction(transaction, {
-      onSuccess: () => {
-        console.log("✅ Vote submitted successfully");
-        setTimeout(() => {
-          setIsVoting(false);
-        }, 2000);
-      },
-      onError: (error) => {
-        console.error("❌ Voting failed:", error);
-        setIsVoting(false);
-      },
-    });
-  };
 
   // Loading state
   if (isLoading) {

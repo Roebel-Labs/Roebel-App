@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, ActivityIndicator } from 'react-native';
 import RenderHTML from 'react-native-render-html';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,8 +22,25 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
   }
 
   // Check if content is HTML (starts with < tag) or markdown
-  const trimmedContent = content.trim();
+  const trimmedContent = (content ?? '').trim();
   const isHTML = trimmedContent.startsWith('<');
+
+  // Empty body — neither Irys content nor a Supabase summary/description was
+  // available. Show an explicit fallback so the user doesn't stare at a blank
+  // gray box and can find the source content via the on-chain links.
+  if (trimmedContent.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.fallbackTitle, { color: colors.textPrimary }]}>
+          Inhalt nicht verfügbar
+        </Text>
+        <Text style={[styles.fallbackBody, { color: colors.textSecondary }]}>
+          Der Vorschlagstext konnte nicht geladen werden. Verwende den
+          Transaktion- oder Governor-Vertrag-Link oben, um den Originalinhalt zu prüfen.
+        </Text>
+      </View>
+    );
+  }
 
   // Dynamic HTML styles that respond to theme
   const htmlStyles = {
@@ -203,5 +220,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fallbackTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 6,
+  },
+  fallbackBody: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
   },
 });

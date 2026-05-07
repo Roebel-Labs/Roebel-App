@@ -9,7 +9,7 @@ import {
   getPollContract,
 } from '@/constants/thirdweb';
 import { VoteType, ProposalState } from '@/lib/governance-types';
-import { isProposalActive } from '@/lib/governance-utils';
+import { isProposalActive, toBigInt, getStateMessage } from '@/lib/governance-utils';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
 import { useTheme } from '@/context/ThemeContext';
@@ -221,8 +221,9 @@ export default function VoteButtons({
       setPhase('encrypting-vote');
 
       // VoteType.For = 1, VoteType.Against = 0, VoteType.Abstain = 2 — matches
-      // MACI option indices on the Poll's vote-option tree.
-      const optionIndex = BigInt(support);
+      // MACI option indices on the Poll's vote-option tree. `toBigInt` routes
+      // via String to dodge Hermes' refusal of BigInt(<Number>).
+      const optionIndex = toBigInt(support);
       const { message, encPubKey } = buildVoteMessage({
         voterKeypair: kp,
         voterStateIndex: signUpState.stateIndex,
@@ -296,11 +297,33 @@ export default function VoteButtons({
     );
   }
 
-  if (!isActive) {
+  // Pending: voting hasn't started yet. With votingDelay=0 this is a brief
+  // window between propose() and the next block; show "starts in a moment"
+  // rather than the misleading "voting closed".
+  if (proposalState === ProposalState.Pending) {
+    const msg = getStateMessage(proposalState);
     return (
       <Container colors={colors}>
+        <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
+          {msg.label}
+        </Text>
         <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          Die Abstimmung für diesen Vorschlag ist geschlossen.
+          {msg.detail}
+        </Text>
+      </Container>
+    );
+  }
+
+  // Anything that isn't Active or Pending → voting closed, with state-specific copy.
+  if (!isActive) {
+    const msg = getStateMessage(proposalState);
+    return (
+      <Container colors={colors}>
+        <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
+          {msg.label}
+        </Text>
+        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
+          {msg.detail}
         </Text>
       </Container>
     );

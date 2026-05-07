@@ -19,6 +19,7 @@ import { useReadContract } from 'thirdweb/react';
 import { readContract } from 'thirdweb';
 import { governorContract } from '@/constants/thirdweb';
 import { ProposalState } from '@/lib/governance-types';
+import { toBigInt } from '@/lib/governance-utils';
 import { useTheme } from '@/context/ThemeContext';
 
 interface ProposalTimersProps {
@@ -80,15 +81,14 @@ export default function ProposalTimers({ proposalId, proposalState }: ProposalTi
 
     const fetchClock = async () => {
       try {
-        // uint48 returns as `number` in thirdweb's typegen; coerce to bigint
-        // so it can be subtracted from snapshot/deadline (which are uint256).
+        // uint48 returns as a JS Number in thirdweb's typegen; Hermes can't
+        // do BigInt(<Number>), so route via toBigInt → String → BigInt.
         const raw = await readContract({
           contract: governorContract,
           method: 'function clock() view returns (uint48)',
           params: [],
         });
-        const value = BigInt(raw as unknown as number | bigint | string);
-        if (!cancelled) setClockNow(value);
+        if (!cancelled) setClockNow(toBigInt(raw));
       } catch (err) {
         console.warn('[ProposalTimers] clock() read failed:', err);
       }
@@ -110,11 +110,15 @@ export default function ProposalTimers({ proposalId, proposalState }: ProposalTi
       return;
     }
 
+    // Coerce in case useReadContract delivers a Number rather than bigint.
+    const snapshotBig = toBigInt(snapshotClock);
+    const deadlineBig = toBigInt(deadlineClock);
+
     let unitsRemaining = 0n;
     if (proposalState === ProposalState.Pending) {
-      unitsRemaining = snapshotClock - clockNow;
+      unitsRemaining = snapshotBig - clockNow;
     } else if (proposalState === ProposalState.Active) {
-      unitsRemaining = deadlineClock - clockNow;
+      unitsRemaining = deadlineBig - clockNow;
     }
 
     if (unitsRemaining <= 0n) {

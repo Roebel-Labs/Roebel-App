@@ -136,6 +136,94 @@ export function formatBigInt(value: bigint): string {
 }
 
 /**
+ * Hermes-safe coercion to bigint.
+ *
+ * Hermes (React Native's JS engine) does not accept `BigInt(<Number>)` for
+ * runtime values — only `bigint`, `string`, or `boolean` arguments. Passing
+ * a JS Number (which is what thirdweb's typegen returns for any uint < 53
+ * bits, including `clock()` → uint48) throws
+ *   `TypeError: Cannot convert N to BigInt`
+ *
+ * Routing through `String(...)` always succeeds because `BigInt("123")` is
+ * universally supported. Use this for any contract read whose ABI return type
+ * isn't already pre-narrowed to bigint.
+ */
+export function toBigInt(raw: unknown): bigint {
+  if (typeof raw === 'bigint') return raw;
+  if (raw === null || raw === undefined) return 0n;
+  return BigInt(String(raw));
+}
+
+/**
+ * Human-readable German label + tone for a proposal state.
+ * Used to drive UI copy in vote panels, list items, and badges.
+ */
+export type ProposalStateMessage = {
+  label: string;
+  detail: string;
+  tone: 'pending' | 'active' | 'success' | 'failure' | 'neutral';
+};
+
+export function getStateMessage(state: ProposalState | undefined): ProposalStateMessage {
+  switch (state) {
+    case ProposalState.Pending:
+      return {
+        label: 'Abstimmung beginnt gleich',
+        detail: 'Die Abstimmung startet, sobald der nächste Block verarbeitet wurde. Komm gleich zurück.',
+        tone: 'pending',
+      };
+    case ProposalState.Active:
+      return {
+        label: 'Abstimmung läuft',
+        detail: 'Du kannst jetzt verschlüsselt abstimmen. Stimmen können bis zum Ende der Frist geändert werden.',
+        tone: 'active',
+      };
+    case ProposalState.Succeeded:
+      return {
+        label: 'Vorschlag angenommen',
+        detail: 'Die Mehrheit hat dafür gestimmt. Der Vorschlag wartet auf die Ausführung im Timelock.',
+        tone: 'success',
+      };
+    case ProposalState.Defeated:
+      return {
+        label: 'Vorschlag abgelehnt',
+        detail: 'Es gab nicht genug Ja-Stimmen oder das Quorum wurde nicht erreicht.',
+        tone: 'failure',
+      };
+    case ProposalState.Queued:
+      return {
+        label: 'In Timelock-Warteschlange',
+        detail: 'Der Vorschlag wurde angenommen und wartet auf das Ablaufen der Timelock-Frist.',
+        tone: 'success',
+      };
+    case ProposalState.Executed:
+      return {
+        label: 'Ausgeführt',
+        detail: 'Der Vorschlag wurde erfolgreich auf der Blockchain ausgeführt.',
+        tone: 'success',
+      };
+    case ProposalState.Canceled:
+      return {
+        label: 'Zurückgezogen',
+        detail: 'Dieser Vorschlag wurde vor Ablauf der Frist zurückgezogen.',
+        tone: 'neutral',
+      };
+    case ProposalState.Expired:
+      return {
+        label: 'Frist abgelaufen',
+        detail: 'Die Frist zur Ausführung ist abgelaufen, ohne dass der Vorschlag ausgeführt wurde.',
+        tone: 'neutral',
+      };
+    default:
+      return {
+        label: 'Status wird geladen…',
+        detail: 'Die Daten zu diesem Vorschlag sind noch nicht vollständig.',
+        tone: 'neutral',
+      };
+  }
+}
+
+/**
  * Calculate reading time estimate in minutes
  */
 export function calculateReadingTime(text: string): number {
