@@ -128,29 +128,31 @@ async function main() {
   const pollIdBig = BigInt(pollId);
 
   // genProofs makes 4 unbatched queryFilter calls (SignUp, DeployPoll,
-  // MergeMessageAq, MergeMaciState) before the batched state-rebuild. Public
-  // RPCs cap eth_getLogs at ~10k blocks per call, so the `startBlock` we
-  // pass needs to be within ~10k of `latest` at runtime. We compute that
-  // window dynamically. To still cover earlier SignUp events, BASE_REFERENCE_TX
-  // (a Base tx hash from BEFORE the first SignUp) overrides fromBlock for
-  // the batched state-rebuild scan, which paginates via BLOCKS_PER_BATCH.
+  // MergeMessageAq, MergeMaciState) before the batched state-rebuild. We
+  // make those scans tiny (~100 blocks) so any public RPC returns in <1s
+  // and parallel-call timeouts don't fire. The unbatched results aren't
+  // actually needed: we pass `startBlock`, `endBlock`, and `transactionHash`
+  // explicitly so the SDK's defaultStartBlock/defaultEndBlock are ignored,
+  // and the batched genMaciStateFromContract scan paginates via blocksPerBatch
+  // from the reference tx's block (well before the first SignUp) to latest.
   const latestBlock = await logSigner.provider.getBlockNumber();
   const queryWindow = process.env.QUERY_WINDOW_BLOCKS
     ? Number(process.env.QUERY_WINDOW_BLOCKS)
-    : 9000;
+    : 100;
   const startBlock = Math.max(0, latestBlock - queryWindow);
+  const endBlock = latestBlock;
   const blocksPerBatch = process.env.BLOCKS_PER_BATCH
     ? Number(process.env.BLOCKS_PER_BATCH)
     : 5000;
   const transactionHash = process.env.BASE_REFERENCE_TX || undefined;
   if (!transactionHash) {
     console.warn(
-      "WARNING: BASE_REFERENCE_TX not set — genProofs will start its batched scan from " +
+      "WARNING: BASE_REFERENCE_TX not set — genProofs's batched state scan will start at " +
         `block ${startBlock} and miss any SignUp events older than that. Set BASE_REFERENCE_TX ` +
         "to any Base tx hash from before the first SignUp to cover the full state.",
     );
   }
-  console.log(`[scan] latest=${latestBlock} startBlock=${startBlock} window=${queryWindow}`);
+  console.log(`[scan] latest=${latestBlock} startBlock=${startBlock} endBlock=${endBlock} window=${queryWindow}`);
 
   // mergeSignups + mergeMessages each throw if the corresponding tree was
   // already merged (Poll.stateMerged() / Poll.mergedMessageAq()). That's a
@@ -194,6 +196,7 @@ async function main() {
       useWasm: true,
       useQuadraticVoting: false,
       startBlock,
+      endBlock,
       blocksPerBatch,
       transactionHash,
       quiet: false,
