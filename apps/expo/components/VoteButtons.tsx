@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
-import { prepareContractCall, readContract, sendTransaction } from 'thirdweb';
+import { prepareContractCall, readContract, sendAndConfirmTransaction, sendTransaction } from 'thirdweb';
+import { keccak256, toHex } from 'thirdweb/utils';
 import {
   governorContract,
   maciContract,
@@ -67,6 +68,7 @@ export default function VoteButtons({
     signUpState,
     generateAndStoreKeypair,
     refreshSignUp,
+    markSignedUp,
     getKeypair,
   } = useMaci();
 
@@ -198,8 +200,41 @@ export default function VoteButtons({
         ],
       });
 
-      await sendTransaction({ transaction: tx, account });
-      await refreshSignUp();
+      // sendAndConfirmTransaction returns the full receipt with logs so we
+      // can parse the SignUp event and learn the assigned stateIndex without
+      // racing the RPC's view of post-tx state.
+      const receipt = await sendAndConfirmTransaction({ transaction: tx, account });
+
+      // SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX,
+      //         uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance,
+      //         uint256 _timestamp)
+      const SIGN_UP_TOPIC = keccak256(
+        toHex('SignUp(uint256,uint256,uint256,uint256,uint256)'),
+      );
+      const pubX = BigInt(serializedKeypair.pubX);
+      const pubY = BigInt(serializedKeypair.pubY);
+      const log = receipt.logs.find(
+        (l) =>
+          l.address.toLowerCase() === maciContract.address.toLowerCase() &&
+          l.topics[0] === SIGN_UP_TOPIC &&
+          l.topics[1] !== undefined &&
+          BigInt(l.topics[1]) === pubX &&
+          l.topics[2] !== undefined &&
+          BigInt(l.topics[2]) === pubY,
+      );
+
+      if (log) {
+        // First non-indexed uint256 in `data` is _stateIndex.
+        const data = log.data.replace(/^0x/, '');
+        const stateIndex = BigInt('0x' + data.slice(0, 64));
+        const kp = getKeypair();
+        const pubKeyHash = kp ? (kp.pubKey.hash() as bigint) : 0n;
+        markSignedUp(pubKeyHash, stateIndex);
+      } else {
+        // Fallback if the log can't be matched — let MACI tell us directly.
+        await refreshSignUp();
+      }
+
       setSuccessDrawer({
         visible: true,
         message:
@@ -208,13 +243,36 @@ export default function VoteButtons({
       });
     } catch (err) {
       console.error('[VoteButtons] signUp failed:', err);
-      setErrorDrawer({
-        visible: true,
-        message:
-          err instanceof Error
-            ? err.message
-            : 'Anmeldung bei MACI ist fehlgeschlagen.',
-      });
+
+      // 0x3a81d6fc = AlreadyRegistered() from SignUpTokenGatekeeper.
+      // The user already signed up earlier (RPC race or duplicate tap) — pull
+      // their state index from MACI and quietly promote them. No scary alert.
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
+        try {
+          await refreshSignUp();
+          setSuccessDrawer({
+            visible: true,
+            message:
+              'Dein Bürger-Pass ist bereits bei MACI angemeldet. Du kannst jetzt verschlüsselt abstimmen.',
+            action: null,
+          });
+        } catch (refreshErr) {
+          setErrorDrawer({
+            visible: true,
+            message:
+              'Anmeldung war erfolgreich, aber der Status konnte nicht aktualisiert werden. Lade die Seite neu.',
+          });
+        }
+      } else {
+        setErrorDrawer({
+          visible: true,
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Anmeldung bei MACI ist fehlgeschlagen.',
+        });
+      }
     } finally {
       setPhase('idle');
     }

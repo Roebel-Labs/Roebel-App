@@ -49,6 +49,10 @@ interface MaciContextShape {
   clearKeypair: () => Promise<void>;
   /** Re-query `MACI.getStateIndex(...)` for the current keypair. */
   refreshSignUp: () => Promise<void>;
+  /** Optimistically promote state to `signed-up` after a confirmed signUp tx,
+   *  using the stateIndex parsed from the SignUp event log. Bypasses the RPC
+   *  race window between tx confirmation and receipt visibility. */
+  markSignedUp: (pubKeyHash: bigint, stateIndex: bigint) => void;
   /** Get a reconstructed Keypair object (decrypted from secure-store). */
   getKeypair: () => Keypair | null;
 }
@@ -120,6 +124,11 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     refreshSignUp().catch((err) => console.warn("[MaciContext] refreshSignUp:", err));
   }, [serializedKeypair, account?.address, refreshSignUp]);
 
+  const markSignedUp = useCallback((pubKeyHash: bigint, stateIndex: bigint) => {
+    lastCheckedHash.current = pubKeyHash;
+    setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
+  }, []);
+
   const generateAndStoreKeypair = useCallback(async () => {
     const fresh = generateMaciKeypair();
     await SecureStore.setItemAsync(SECURE_KEY, JSON.stringify(fresh));
@@ -151,9 +160,10 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       generateAndStoreKeypair,
       clearKeypair,
       refreshSignUp,
+      markSignedUp,
       getKeypair,
     }),
-    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, getKeypair],
+    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, markSignedUp, getKeypair],
   );
 
   return <MaciContext.Provider value={value}>{children}</MaciContext.Provider>;
