@@ -15,15 +15,16 @@ export const CONTRACTS = {
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
   // Current MACI v2 privacy-voting governance (apps target this)
-  maciAttesterGovernor: "0x11ed03Db610c88b010FfE38B13142D3657f2E84f",
-  maciTimelock: "0x41FC07b94070aA7319516C7f193Cca05D06Ee28b",
+  maciAttesterGovernor: "0x61E89990225114b941A23cD2a0864C52ddc1E60B",
+  maciTimelock: "0xc50C8E2d7b8d13169aB2FAcb5000004d8Eb28465",
 
   // MACI v2 infrastructure (MACI core, Verifier, gatekeeper, voice credit
-  // proxy reused; VkRegistry rotated 2026-05-08 to fix the messageBatchSize=5
-  // mismatch with the production-ceremony zKey).
+  // proxy reused; VkRegistry rotated 2026-05-08 (twice) to align all four
+  // tree depths with the production-ceremony zKey signatures
+  // ProcessMessagesNonQv_14-9-2-3 + TallyVotesNonQv_14-5-3.
   maci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
   maciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
-  maciVkRegistry: "0x26Eddb1d4c45e7cA516B54Ed4105e252cc608BAc",
+  maciVkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
   maciGatekeeper: "0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee",
   maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
 
@@ -44,13 +45,16 @@ export const MACI_COORDINATOR_PUBKEY = {
 } as const;
 
 // MACI poll parameters baked into the deployed VkRegistry's verifying keys.
-// Matches the 14-9-2-3 production-ceremony zKey artifacts. See
-// contracts/governor-contract/deployments/base.json for the source of truth.
+// Matches the production-ceremony zKey signatures:
+//   ProcessMessagesNonQv(14, 9, 2, 3) → msgTreeDepth=9, msgBatchDepth=2
+//   TallyVotesNonQv     (14, 5, 3)    → intStateTreeDepth=5
+// Source of truth: the circuit templates in maci-circuits, mirrored into
+// contracts/governor-contract/scripts/deploy-maci-base.cjs.
 export const MACI_TREE_DEPTHS = {
   stateTreeDepth: 14,
-  intStateTreeDepth: 9,
+  intStateTreeDepth: 5,
   messageTreeSubDepth: 2,
-  messageTreeDepth: 2,
+  messageTreeDepth: 9,
   voteOptionTreeDepth: 3,
   messageBatchSize: 25,
 } as const;

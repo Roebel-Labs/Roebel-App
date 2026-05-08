@@ -27,9 +27,16 @@ const hre = require("hardhat");
 const { extractVk } = require("maci-circuits");
 const { VerifyingKey } = require("maci-domainobjs");
 
+// Param order matches the circuit template signatures, not the zKey filename:
+//   ProcessMessagesNonQv_14-9-2-3 = (stateTreeDepth=14, msgTreeDepth=9,
+//                                    msgBatchDepth=2, voteOptionTreeDepth=3)
+//   TallyVotesNonQv_14-5-3        = (stateTreeDepth=14, intStateTreeDepth=5,
+//                                    voteOptionTreeDepth=3)
+// VkRegistry signature for setVerifyingKeys is
+//   (stateTreeDepth, intStateTreeDepth, messageTreeDepth, voteOptionTreeDepth, messageBatchSize)
 const STATE_TREE_DEPTH = 14;
-const INT_STATE_TREE_DEPTH = 9;
-const MESSAGE_TREE_DEPTH = 2;
+const INT_STATE_TREE_DEPTH = 5;
+const MESSAGE_TREE_DEPTH = 9;
 const VOTE_OPTION_TREE_DEPTH = 3;
 const MESSAGE_BATCH_SIZE = 25;
 const MODE_NON_QV = 1;

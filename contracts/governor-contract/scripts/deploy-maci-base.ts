@@ -29,15 +29,14 @@ import {
 import { extractVk } from "maci-circuits";
 import { VerifyingKey } from "maci-domainobjs";
 
-// MACI ceremony parameter set 14-9-2-3 (matches downloaded prod zKeys)
+// MACI ceremony parameter set — see deploy-maci-base.cjs for the full
+// derivation. The 4-tuple in each zKey filename maps directly to the circuit
+// template params, NOT the Poll.treeDepths field order.
 const STATE_TREE_DEPTH = 14;
-const INT_STATE_TREE_DEPTH = 9;
-const MESSAGE_TREE_DEPTH = 2;
+const INT_STATE_TREE_DEPTH = 5;     // tally circuit: TallyVotesNonQv_14-5-3
+const MESSAGE_TREE_DEPTH = 9;       // process circuit: msgTreeDepth in 14-9-2-3
+const MESSAGE_BATCH_DEPTH = 2;      // process circuit: msgBatchDepth
 const VOTE_OPTION_TREE_DEPTH = 3;
-// Must match the messageBatchTreeDepth of the production zKey
-// (ProcessMessagesNonQv_14-9-2-3 → depth 2 → batch size 5^2 = 25). Mirrors
-// deploy-maci-base.cjs.
-const MESSAGE_BATCH_DEPTH = 2;
 const MESSAGE_BATCH_SIZE = 5 ** MESSAGE_BATCH_DEPTH;
 
 interface RequiredEnv {

@@ -15,7 +15,7 @@ export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461
 
 // Current MACI v2 privacy-voting governor — proposal creation + voting target.
 // Source of truth: contracts/governor-contract/deployments/base.json
-export const MACI_GOVERNOR_ADDRESS = "0x11ed03Db610c88b010FfE38B13142D3657f2E84f";
+export const MACI_GOVERNOR_ADDRESS = "0x61E89990225114b941A23cD2a0864C52ddc1E60B";
 export const MACI_ADDRESS = "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
 
 // Convenience aliases — existing imports keep working but now point at the
