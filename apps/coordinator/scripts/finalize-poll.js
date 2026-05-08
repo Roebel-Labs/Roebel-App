@@ -81,8 +81,8 @@ function check() {
   }
 }
 
-function buildSigner() {
-  const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+function buildSigner(rpcUrl) {
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const raw = process.env.COORDINATOR_ETH_PRIV;
   const pk = raw.startsWith("0x") ? raw : "0x" + raw;
   return new ethers.Wallet(pk, provider);
@@ -111,22 +111,43 @@ async function main() {
     );
   };
 
-  const signer = buildSigner();
+  // Two RPC channels:
+  //   BASE_RPC_URL          — used for transactions (merge*, proveOnChain).
+  //                           Alchemy is fine here.
+  //   BASE_ARCHIVE_RPC_URL  — used by genProofs for the SignUp+PublishMessage
+  //                           log scan. Alchemy free tier caps eth_getLogs to
+  //                           ~10 blocks per call, which would require ~5M
+  //                           round-trips. Set this to a public archive node
+  //                           (e.g. https://base-rpc.publicnode.com) so the
+  //                           scan can use larger batches.
+  const txRpc = process.env.BASE_RPC_URL;
+  const logRpc = process.env.BASE_ARCHIVE_RPC_URL || process.env.BASE_RPC_URL;
+  const txSigner = buildSigner(txRpc);
+  const logSigner = logRpc === txRpc ? txSigner : buildSigner(logRpc);
   const maciAddress = process.env.MACI_ADDRESS;
   const pollIdBig = BigInt(pollId);
 
+  // MACI deploy block — scanning the entire chain from genesis is slow even
+  // on archive nodes. Pin to the deploy block to bound the range.
+  const startBlock = process.env.MACI_DEPLOY_BLOCK
+    ? Number(process.env.MACI_DEPLOY_BLOCK)
+    : undefined;
+  const blocksPerBatch = process.env.BLOCKS_PER_BATCH
+    ? Number(process.env.BLOCKS_PER_BATCH)
+    : 5000;
+
   try {
     console.log(`\n[mergeSignups] poll=${pollId}`);
-    await mergeSignups({ pollId: pollIdBig, maciAddress, signer, quiet: false });
+    await mergeSignups({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false });
 
     console.log(`\n[mergeMessages] poll=${pollId}`);
-    await mergeMessages({ pollId: pollIdBig, maciAddress, signer, quiet: false });
+    await mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false });
 
-    console.log(`\n[genProofs] poll=${pollId}`);
+    console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch}`);
     const tallyData = await genProofs({
       pollId: pollIdBig,
       maciAddress,
-      signer,
+      signer: logSigner,
       coordinatorPrivKey: process.env.COORDINATOR_PRIV,
       processZkey: ZKEY_PROCESS,
       tallyZkey: ZKEY_TALLY,
@@ -136,6 +157,8 @@ async function main() {
       outputDir: proofDir,
       useWasm: true,
       useQuadraticVoting: false,
+      startBlock,
+      blocksPerBatch,
       quiet: false,
     });
 
@@ -143,7 +166,7 @@ async function main() {
     await proveOnChain({
       pollId: pollIdBig,
       maciAddress,
-      signer,
+      signer: txSigner,
       proofDir,
       tallyFile,
       quiet: false,
@@ -153,7 +176,7 @@ async function main() {
     await verify({
       pollId: pollIdBig,
       maciAddress,
-      signer,
+      signer: logSigner,
       tallyData,
       quiet: false,
     });
