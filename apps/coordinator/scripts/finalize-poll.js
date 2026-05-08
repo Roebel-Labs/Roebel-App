@@ -129,22 +129,28 @@ async function main() {
 
   // genProofs makes 4 unbatched queryFilter calls (SignUp, DeployPoll,
   // MergeMessageAq, MergeMaciState) before the batched state-rebuild. Public
-  // RPCs cap eth_getLogs at ~10k blocks per call, so MACI_DEPLOY_BLOCK has
-  // to be within ~10k blocks of `latest` for those to succeed. We bump it
-  // forward (configurable via MACI_DEPLOY_BLOCK) and rely on the next two
-  // hooks to still cover earlier SignUp events:
-  //
-  //   - BASE_REFERENCE_TX: a Base tx hash from BEFORE the earliest SignUp.
-  //     genProofs uses this to override `fromBlock` for the batched state-
-  //     rebuild scan, which paginates internally via blocksPerBatch.
-  //   - BLOCKS_PER_BATCH: chunk size for the batched scan.
-  const startBlock = process.env.MACI_DEPLOY_BLOCK
-    ? Number(process.env.MACI_DEPLOY_BLOCK)
-    : undefined;
+  // RPCs cap eth_getLogs at ~10k blocks per call, so the `startBlock` we
+  // pass needs to be within ~10k of `latest` at runtime. We compute that
+  // window dynamically. To still cover earlier SignUp events, BASE_REFERENCE_TX
+  // (a Base tx hash from BEFORE the first SignUp) overrides fromBlock for
+  // the batched state-rebuild scan, which paginates via BLOCKS_PER_BATCH.
+  const latestBlock = await logSigner.provider.getBlockNumber();
+  const queryWindow = process.env.QUERY_WINDOW_BLOCKS
+    ? Number(process.env.QUERY_WINDOW_BLOCKS)
+    : 9000;
+  const startBlock = Math.max(0, latestBlock - queryWindow);
   const blocksPerBatch = process.env.BLOCKS_PER_BATCH
     ? Number(process.env.BLOCKS_PER_BATCH)
     : 5000;
   const transactionHash = process.env.BASE_REFERENCE_TX || undefined;
+  if (!transactionHash) {
+    console.warn(
+      "WARNING: BASE_REFERENCE_TX not set — genProofs will start its batched scan from " +
+        `block ${startBlock} and miss any SignUp events older than that. Set BASE_REFERENCE_TX ` +
+        "to any Base tx hash from before the first SignUp to cover the full state.",
+    );
+  }
+  console.log(`[scan] latest=${latestBlock} startBlock=${startBlock} window=${queryWindow}`);
 
   // mergeSignups + mergeMessages each throw if the corresponding tree was
   // already merged (Poll.stateMerged() / Poll.mergedMessageAq()). That's a
