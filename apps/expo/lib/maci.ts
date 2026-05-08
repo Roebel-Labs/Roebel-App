@@ -50,6 +50,13 @@ export interface SerializedKeypair {
   pubKey: string; // macipk.<hex>
   pubX: string; // decimal big-int as string
   pubY: string;
+  /** Filled in after a successful MACI.signUp tx — the stateIndex MACI
+   *  assigned to this pubKey. Persisting locally bypasses both the chain
+   *  read on every cold-start and MACI v2's lack of a getStateIndex view. */
+  stateIndex?: string;
+  /** Cached Poseidon hash of the pubkey so we don't recompute it on every
+   *  refresh. */
+  pubKeyHash?: string;
 }
 
 export function generateMaciKeypair(): SerializedKeypair {

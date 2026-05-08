@@ -229,9 +229,9 @@ export default function VoteButtons({
         const stateIndex = BigInt('0x' + data.slice(0, 64));
         const kp = getKeypair();
         const pubKeyHash = kp ? (kp.pubKey.hash() as bigint) : 0n;
-        markSignedUp(pubKeyHash, stateIndex);
+        await markSignedUp(pubKeyHash, stateIndex);
       } else {
-        // Fallback if the log can't be matched — let MACI tell us directly.
+        // Fallback if the log can't be matched — recover via the event scan.
         await refreshSignUp();
       }
 
@@ -245,25 +245,17 @@ export default function VoteButtons({
       console.error('[VoteButtons] signUp failed:', err);
 
       // 0x3a81d6fc = AlreadyRegistered() from SignUpTokenGatekeeper.
-      // The user already signed up earlier (RPC race or duplicate tap) — pull
-      // their state index from MACI and quietly promote them. No scary alert.
+      // The user already signed up earlier; refreshSignUp will recover the
+      // stateIndex from the SignUp event and persist it locally.
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
-        try {
-          await refreshSignUp();
-          setSuccessDrawer({
-            visible: true,
-            message:
-              'Dein Bürger-Pass ist bereits bei MACI angemeldet. Du kannst jetzt verschlüsselt abstimmen.',
-            action: null,
-          });
-        } catch (refreshErr) {
-          setErrorDrawer({
-            visible: true,
-            message:
-              'Anmeldung war erfolgreich, aber der Status konnte nicht aktualisiert werden. Lade die Seite neu.',
-          });
-        }
+        await refreshSignUp();
+        setSuccessDrawer({
+          visible: true,
+          message:
+            'Dein Bürger-Pass ist bereits bei MACI angemeldet. Du kannst jetzt verschlüsselt abstimmen.',
+          action: null,
+        });
       } else {
         setErrorDrawer({
           visible: true,

@@ -11,24 +11,28 @@
  *
  * Sign-up lifecycle:
  *   - Each citizen signs up to MACI exactly once. After signup, MACI assigns a
- *     state index (uint256) to their pubkey hash. The Process circuit needs
- *     that index when the citizen votes.
- *   - We refresh `signUpState` on demand from `MACI.getStateIndex(pubKeyHash)`,
- *     which reverts if the user hasn't signed up yet — we treat the revert as
- *     "not signed up" and clear it.
+ *     state index (uint256) to their pubkey hash.
+ *   - MACI v2 has NO public view to look up an existing user's stateIndex from
+ *     their pubkey (that's a v3-only addition). The canonical sources are the
+ *     `SignUp` event log emitted at signup time.
+ *   - We resolve `signUpState` in three layers (fastest first):
+ *       1. Local cache: serializedKeypair.stateIndex matches the current
+ *          pubKeyHash → use it directly. No network.
+ *       2. Event scan: query MACI's SignUp logs filtered by the indexed
+ *          pubX/pubY topics. If we find one, persist its stateIndex into
+ *          secure-store so future sessions hit the cache.
+ *       3. Otherwise: needs-signup.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { readContract } from "thirdweb";
+import { getContractEvents, prepareEvent } from "thirdweb";
 import { useActiveAccount } from "thirdweb/react";
-import { maciContract } from "@/constants/thirdweb";
+import { MACI_DEPLOY_BLOCK, maciContract } from "@/constants/thirdweb";
 import {
   deserializeKeypair,
   generateMaciKeypair,
-  serializeKeypair,
   type SerializedKeypair,
   Keypair,
-  PubKey,
 } from "@/lib/maci";
 
 const SECURE_KEY = "roebel.maci.keypair.v1";
@@ -43,17 +47,13 @@ interface MaciContextShape {
   serializedKeypair: SerializedKeypair | null;
   keypairLoading: boolean;
   signUpState: SignUpState;
-  /** Generate a fresh BabyJubjub keypair and persist it in secure storage. */
   generateAndStoreKeypair: () => Promise<SerializedKeypair>;
-  /** Wipe the local keypair (use with caution — vote-binding is per-key). */
   clearKeypair: () => Promise<void>;
-  /** Re-query `MACI.getStateIndex(...)` for the current keypair. */
   refreshSignUp: () => Promise<void>;
   /** Optimistically promote state to `signed-up` after a confirmed signUp tx,
-   *  using the stateIndex parsed from the SignUp event log. Bypasses the RPC
-   *  race window between tx confirmation and receipt visibility. */
-  markSignedUp: (pubKeyHash: bigint, stateIndex: bigint) => void;
-  /** Get a reconstructed Keypair object (decrypted from secure-store). */
+   *  using the stateIndex parsed from the SignUp event log. Also persists
+   *  the stateIndex to secure-store so cold-starts can skip the chain. */
+  markSignedUp: (pubKeyHash: bigint, stateIndex: bigint) => Promise<void>;
   getKeypair: () => Keypair | null;
 }
 
@@ -91,31 +91,75 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  /** Persist a keypair update + return the new serialized form. */
+  const persistKeypair = useCallback(async (next: SerializedKeypair) => {
+    await SecureStore.setItemAsync(SECURE_KEY, JSON.stringify(next));
+    setSerializedKeypair(next);
+    return next;
+  }, []);
+
   const refreshSignUp = useCallback(async () => {
     if (!serializedKeypair) {
       setSignUpState({ status: "needs-keypair" });
       return;
     }
-    try {
-      const kp = deserializeKeypair(serializedKeypair);
-      const pubKeyHash = kp.pubKey.hash() as bigint;
 
-      // MACI.getStateIndex(pubKeyHash) → uint256. Reverts if not signed up.
-      const stateIndex = (await readContract({
-        contract: maciContract,
-        method: "function getStateIndex(uint256 _pubKeyHash) external view returns (uint256)",
-        params: [pubKeyHash],
-      })) as bigint;
+    const kp = deserializeKeypair(serializedKeypair);
+    const pubKeyHash = kp.pubKey.hash() as bigint;
+    const pubX = BigInt(serializedKeypair.pubX);
+    const pubY = BigInt(serializedKeypair.pubY);
 
+    // Layer 1 — local cache. Fast path: secure-store already knows the
+    // stateIndex for this exact keypair.
+    if (
+      serializedKeypair.stateIndex !== undefined &&
+      serializedKeypair.pubKeyHash === pubKeyHash.toString()
+    ) {
+      const stateIndex = BigInt(serializedKeypair.stateIndex);
       lastCheckedHash.current = pubKeyHash;
       setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
+      console.log("[MaciContext] refreshSignUp: cache hit", { stateIndex: stateIndex.toString() });
+      return;
+    }
+
+    // Layer 2 — event scan. MACI v2 has no getStateIndex(pubKeyHash) view, so
+    // we filter SignUp logs by the indexed pubX/pubY topics. Each pubkey can
+    // appear at most once (the gatekeeper enforces uniqueness).
+    try {
+      const signUpEvent = prepareEvent({
+        signature:
+          "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
+        filters: { _userPubKeyX: pubX, _userPubKeyY: pubY },
+      });
+      const events = await getContractEvents({
+        contract: maciContract,
+        events: [signUpEvent],
+        fromBlock: MACI_DEPLOY_BLOCK,
+      });
+
+      if (events.length > 0) {
+        const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
+        const stateIndex = ev.args._stateIndex ?? 0n;
+        // Persist for future cold starts.
+        await persistKeypair({
+          ...serializedKeypair,
+          stateIndex: stateIndex.toString(),
+          pubKeyHash: pubKeyHash.toString(),
+        });
+        lastCheckedHash.current = pubKeyHash;
+        setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
+        console.log("[MaciContext] refreshSignUp: event scan hit", { stateIndex: stateIndex.toString() });
+        return;
+      }
+
+      // No log found.
+      setSignUpState({ status: "needs-signup", pubKeyHash });
+      console.log("[MaciContext] refreshSignUp: no event, status=needs-signup");
     } catch (err) {
-      // Most common cause: the citizen hasn't signed up yet (call reverts).
-      const kp = deserializeKeypair(serializedKeypair);
-      const pubKeyHash = kp.pubKey.hash() as bigint;
+      console.warn("[MaciContext] refreshSignUp: event scan failed", err);
       setSignUpState({ status: "needs-signup", pubKeyHash });
     }
-  }, [serializedKeypair]);
+  }, [serializedKeypair, persistKeypair]);
 
   // Refresh signup whenever the keypair changes or wallet reconnects.
   useEffect(() => {
@@ -124,21 +168,30 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     refreshSignUp().catch((err) => console.warn("[MaciContext] refreshSignUp:", err));
   }, [serializedKeypair, account?.address, refreshSignUp]);
 
-  const markSignedUp = useCallback((pubKeyHash: bigint, stateIndex: bigint) => {
-    lastCheckedHash.current = pubKeyHash;
-    setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
-  }, []);
+  const markSignedUp = useCallback(
+    async (pubKeyHash: bigint, stateIndex: bigint) => {
+      if (serializedKeypair) {
+        await persistKeypair({
+          ...serializedKeypair,
+          stateIndex: stateIndex.toString(),
+          pubKeyHash: pubKeyHash.toString(),
+        });
+      }
+      lastCheckedHash.current = pubKeyHash;
+      setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
+    },
+    [serializedKeypair, persistKeypair],
+  );
 
   const generateAndStoreKeypair = useCallback(async () => {
     const fresh = generateMaciKeypair();
-    await SecureStore.setItemAsync(SECURE_KEY, JSON.stringify(fresh));
-    setSerializedKeypair(fresh);
+    const persisted = await persistKeypair(fresh);
     setSignUpState({
       status: "needs-signup",
       pubKeyHash: deserializeKeypair(fresh).pubKey.hash() as bigint,
     });
-    return fresh;
-  }, []);
+    return persisted;
+  }, [persistKeypair]);
 
   const clearKeypair = useCallback(async () => {
     await SecureStore.deleteItemAsync(SECURE_KEY);
