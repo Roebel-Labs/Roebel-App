@@ -10,39 +10,30 @@
  *                       ceremony zKeys mounted at $ZKEY_DIR
  *   4. proveOnChain   — submit the process and tally proofs to MessageProcessor
  *                       and Tally
- *   5. verify         — sanity-check the on-chain results match the local tally.json
+ *   5. verify         — sanity-check the on-chain results match the local tally
  *
  * Run:
  *   node scripts/finalize-poll.js <pollId>
  *
- * Required env (set as Fly secrets):
- *   COORDINATOR_PRIV       — macisk.<…> Babyjubjub privkey
- *   COORDINATOR_ETH_PRIV   — Ethereum privkey for the address that owns MP and Tally
- *   BASE_RPC_URL           — JSON-RPC endpoint
- *   MACI_ADDRESS           — from contracts/governor-contract/deployments/base.json
- *   VERIFIER_ADDRESS       — same
- *   VK_REGISTRY_ADDRESS    — same
- *
- * Optional:
- *   PROOF_DIR              — defaults to /app/proofs
- *   ZKEY_DIR               — defaults to /app/zkeys
- *
- * Layer-1 hardening (TODO): when SAFE_ADDRESS is set, this script should propose
- * the proveOnChain transactions to the Safe Transaction Service instead of
- * broadcasting directly. Until that's wired up, the configured EOA broadcasts.
+ * We import maci-cli's SDK functions directly and inject an explicit
+ * ethers.Wallet bound to BASE_RPC_URL, instead of routing through `npx maci-cli`
+ * + Hardhat's getDefaultSigner(). The CLI path resolves hardhat.config.js from
+ * its own package directory rather than cwd, which made HARDHAT_NETWORK=base
+ * useless and stalled finalization at HH100.
  */
 
-const { spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const { ethers } = require("ethers");
+const { mergeSignups, mergeMessages, verify } = require("maci-cli/build/ts/sdk");
+const { genProofs } = require("maci-cli/build/ts/commands/genProofs");
+const { proveOnChain } = require("maci-cli/build/ts/commands/proveOnChain");
 
 const REQUIRED_ENV = [
   "COORDINATOR_PRIV",
   "COORDINATOR_ETH_PRIV",
   "BASE_RPC_URL",
   "MACI_ADDRESS",
-  "VERIFIER_ADDRESS",
-  "VK_REGISTRY_ADDRESS",
 ];
 
 const ZKEY_DIR = process.env.ZKEY_DIR || "/app/zkeys";
@@ -64,7 +55,6 @@ const WASM_TALLY = path.join(
   ZKEY_DIR,
   "TallyVotesNonQv_14-5-3/TallyVotesNonQv_14-5-3_js/TallyVotesNonQv_14-5-3.wasm"
 );
-const RAPIDSNARK = "/usr/local/bin/rapidsnark"; // optional native prover; falls back to snarkjs
 
 function check() {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
@@ -80,36 +70,14 @@ function check() {
   }
 }
 
-function run(cmd, args, label) {
-  console.log(`\n[${label}] $ ${cmd} ${args.join(" ")}`);
-  const res = spawnSync(cmd, args, { stdio: "inherit", env: process.env });
-  if (res.status !== 0) {
-    throw new Error(`[${label}] failed with exit ${res.status}`);
-  }
+function buildSigner() {
+  const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+  const raw = process.env.COORDINATOR_ETH_PRIV;
+  const pk = raw.startsWith("0x") ? raw : "0x" + raw;
+  return new ethers.Wallet(pk, provider);
 }
 
-function maciCli(args, label) {
-  // maci-cli routes through Hardhat for signer resolution
-  // (maci-contracts.getDefaultSigner -> hre.ethers.getSigners). We need a
-  // hardhat.config.js in the cwd that defines a `base` network, plus
-  // HARDHAT_NETWORK=base on the env so Hardhat picks it.
-  const env = {
-    ...process.env,
-    PRIVATE_KEY: process.env.COORDINATOR_ETH_PRIV,
-    HARDHAT_NETWORK: process.env.HARDHAT_NETWORK || "base",
-  };
-  console.log(`\n[${label}] $ HARDHAT_NETWORK=${env.HARDHAT_NETWORK} npx maci-cli ${args.join(" ")}`);
-  const res = require("child_process").spawnSync(
-    "npx",
-    ["maci-cli", ...args],
-    { stdio: "inherit", env, cwd: "/app" },
-  );
-  if (res.status !== 0) {
-    throw new Error(`[${label}] failed with exit ${res.status}`);
-  }
-}
-
-function main() {
+async function main() {
   check();
 
   const pollId = process.argv[2];
@@ -132,74 +100,57 @@ function main() {
     );
   };
 
+  const signer = buildSigner();
+  const maciAddress = process.env.MACI_ADDRESS;
+  const pollIdBig = BigInt(pollId);
+
   try {
-    // mergeSignups + mergeMessages: signer comes from PRIVATE_KEY env via getSigner().
-    maciCli(
-      [
-        "mergeSignups",
-        "--maci-address", process.env.MACI_ADDRESS,
-        "--poll-id", pollId,
-        "--rpc-provider", process.env.BASE_RPC_URL,
-      ],
-      "mergeSignups"
-    );
+    console.log(`\n[mergeSignups] poll=${pollId}`);
+    await mergeSignups({ pollId: pollIdBig, maciAddress, signer, quiet: false });
 
-    maciCli(
-      [
-        "mergeMessages",
-        "--maci-address", process.env.MACI_ADDRESS,
-        "--poll-id", pollId,
-        "--rpc-provider", process.env.BASE_RPC_URL,
-      ],
-      "mergeMessages"
-    );
+    console.log(`\n[mergeMessages] poll=${pollId}`);
+    await mergeMessages({ pollId: pollIdBig, maciAddress, signer, quiet: false });
 
-    // genProofs: --privkey is the COORDINATOR's MACI Babyjubjub key (decrypts ballots).
-    // RPC flag is -p / --rpc-provider here (note: NOT -r like the others).
-    maciCli(
-      [
-        "genProofs",
-        "--privkey", process.env.COORDINATOR_PRIV,
-        "--maci-address", process.env.MACI_ADDRESS,
-        "--poll-id", pollId,
-        "--rpc-provider", process.env.BASE_RPC_URL,
-        "--process-zkey", ZKEY_PROCESS,
-        "--process-wasm", WASM_PROCESS,
-        "--tally-zkey", ZKEY_TALLY,
-        "--tally-wasm", WASM_TALLY,
-        "--tally-file", tallyFile,
-        "--output", proofDir,
-        "--use-quadratic-voting", "false",
-      ],
-      "genProofs"
-    );
+    console.log(`\n[genProofs] poll=${pollId}`);
+    const tallyData = await genProofs({
+      pollId: pollIdBig,
+      maciAddress,
+      signer,
+      coordinatorPrivKey: process.env.COORDINATOR_PRIV,
+      processZkey: ZKEY_PROCESS,
+      tallyZkey: ZKEY_TALLY,
+      processWasm: WASM_PROCESS,
+      tallyWasm: WASM_TALLY,
+      tallyFile,
+      outputDir: proofDir,
+      useWasm: true,
+      useQuadraticVoting: false,
+      quiet: false,
+    });
 
-    maciCli(
-      [
-        "proveOnChain",
-        "--maci-address", process.env.MACI_ADDRESS,
-        "--poll-id", pollId,
-        "--rpc-provider", process.env.BASE_RPC_URL,
-        "--proof-dir", proofDir,
-      ],
-      "proveOnChain"
-    );
+    console.log(`\n[proveOnChain] poll=${pollId}`);
+    await proveOnChain({
+      pollId: pollIdBig,
+      maciAddress,
+      signer,
+      proofDir,
+      tallyFile,
+      quiet: false,
+    });
 
-    maciCli(
-      [
-        "verify",
-        "--maci-address", process.env.MACI_ADDRESS,
-        "--poll-id", pollId,
-        "--rpc-provider", process.env.BASE_RPC_URL,
-        "--tally-file", tallyFile,
-      ],
-      "verify"
-    );
+    console.log(`\n[verify] poll=${pollId}`);
+    await verify({
+      pollId: pollIdBig,
+      maciAddress,
+      signer,
+      tallyData,
+      quiet: false,
+    });
 
     writeStatus("succeeded", { tallyFile });
     console.log("\n✓ Finalization complete.");
   } catch (err) {
-    writeStatus("failed", { error: String(err) });
+    writeStatus("failed", { error: String(err && err.stack ? err.stack : err) });
     console.error(`\n✗ Finalization failed: ${err}`);
     process.exit(1);
   }
