@@ -212,15 +212,9 @@ export default function ProposalDetailScreen() {
           isLoading={proposalContent.loading}
         />
 
-        {/* Voting Statistics */}
+        {/* Voting Statistics — self-fetching from on-chain Tally. */}
         <InlineErrorBoundary label="VotingStats">
-          <VotingStats
-            votes={{
-              forVotes: proposal.forVotes,
-              againstVotes: proposal.againstVotes,
-              abstainVotes: proposal.abstainVotes,
-            }}
-          />
+          <VotingStats proposalId={parseProposalIdSafe(proposal)} />
         </InlineErrorBoundary>
 
         {/* MACI-aware vote buttons */}
