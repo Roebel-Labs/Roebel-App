@@ -1,0 +1,663 @@
+# Roebel/Müritz On-Chain e-Governance — Architecture
+
+**Status:** production on Base mainnet (chainId 8453) since 2026-05-07.
+**Last revised:** 2026-05-08 after the third VkRegistry/Governor rotation aligned all four MACI tree depths with the production-ceremony zKey signatures.
+
+This document is the canonical reference for the full stack: identity (AttesterNFT + CitizenNFT) → governance (Governor + Timelock) → privacy (MACI v2) → coordinator → apps. It covers what each component does, how they fit together, the contract addresses on Base, and the operational runbook for keeping it running. If this doc and any other doc disagree, this one wins.
+
+---
+
+## 1. TL;DR
+
+Roebel/Müritz is a small German town (population ~5,000). The system lets verified citizens vote on local proposals from their phone, with three guarantees:
+
+1. **Sybil resistance** — only humans verified by the local culture committee can vote, enforced by a soulbound `CitizenNFT`.
+2. **Ballot privacy** — votes are encrypted on chain. Even the coordinator that decrypts them can't link a vote to a citizen, and they can't fake the result either.
+3. **Public verifiability** — anyone can check the result on Basescan: a single zk-SNARK proof on the `Tally` contract attests that the published numbers are the honest sum of the encrypted ballots.
+
+Architecturally:
+
+```
+         ┌──────────────────────────────────────────────────────────────┐
+         │   IDENTITY LAYER (Soulbound NFTs)                            │
+         │   AttesterNFT  ──issues──▶  CitizenNFT                       │
+         └──────────────────────────────────────────────────────────────┘
+                                │ controls who can { propose, vote }
+                                ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │   GOVERNANCE LAYER (OZ Governor + Timelock, Base mainnet)    │
+         │   MaciAttesterGovernor → propose() → MACI.deployPoll()       │
+         └──────────────────────────────────────────────────────────────┘
+                                │ each proposal owns one Poll
+                                ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │   PRIVACY LAYER (MACI v2)                                    │
+         │   MACI core │ Poll │ MessageProcessor │ Tally │ VkRegistry   │
+         │   Citizen → publishMessage(encrypted ballot)                 │
+         │   Coordinator → mergeSignups → mergeMessages → genProofs     │
+         │              → proveOnChain → verify                         │
+         └──────────────────────────────────────────────────────────────┘
+                                │ ballots tallied with ZK proof
+                                ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │   COORDINATOR (off-chain, Fly.io machine)                    │
+         │   GitHub Actions cron (15 min) → /finalize-pending           │
+         │   → scan-and-finalize → finalize-poll.js (per pending Poll)  │
+         └──────────────────────────────────────────────────────────────┘
+                                │ Tally.tallyResults(0/1/2) populated
+                                ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │   APPS                                                       │
+         │   Web (Next.js)  — proposal creation by Attesters            │
+         │   Expo (RN)      — citizen sign-up + voting + result display │
+         └──────────────────────────────────────────────────────────────┘
+```
+
+Live addresses: see [§5](#5-smart-contracts--current-base-mainnet-addresses).
+
+---
+
+## 2. System overview by layer
+
+| Layer | What it is | Where it runs | Trust assumption |
+|---|---|---|---|
+| Identity | Two soulbound NFTs (Attester, Citizen) issued via on-chain signatures | Base mainnet | A majority of attesters are honest |
+| Governance | OpenZeppelin Governor with MACI-aware `state()` + a Timelock | Base mainnet | OZ Governor is unmodified except for documented overrides |
+| Privacy | MACI v2 — global signup pool, per-poll Polls, encrypted `publishMessage`, ZK-proven tally | Base mainnet | Coordinator's MACI Babyjubjub privkey isn't leaked; ZK trusted-setup ceremony was honest |
+| Coordinator | Holds the MACI Babyjubjub privkey, computes proofs, submits tallies | Fly.io single machine (auto-stop) | Trusted **only for liveness** (publishing the tally); ballot privacy holds even if the operator goes rogue |
+| Apps | Next.js web (proposal creation) + Expo mobile (voting) | Vercel + EAS Update | Standard front-end trust — match what the contracts on chain say |
+
+Why MACI? Without it, every vote is public on chain — a citizen's wallet → vote linkage is permanent. Quadratic-voting research (PSE) developed MACI specifically so a trusted but limited coordinator can publish a verifiable tally without ever revealing individual ballots, and so vote-buying becomes impossible because the buyer can't verify they got what they paid for.
+
+---
+
+## 3. Identity layer — AttesterNFT + CitizenNFT
+
+Source: [`contracts/governor-contract/contracts/verification-system/`](../contracts/governor-contract/contracts/verification-system/).
+
+### 3.1 AttesterNFT — `0xa06F09Cb406880512326318fbC09Cdb28631DA73`
+
+A soulbound (non-transferable) ERC-721 held by members of Roebel's culture committee. Holding it grants the right to **attest** other people. There's no on-chain voting power tied to AttesterNFT alone — Attesters who want to vote also hold a CitizenNFT.
+
+Issuance is decentralized: `createAttestationRequest(evidenceURI)` opens a request, then **2 existing Attesters** must `approveRequest(requestId)`. After two approvals the contract mints. Bootstrap: 3 founding committee members are seeded by the deployer at construction time so the system can start without an existing attester pool.
+
+Revocation has the same shape (2-Attester approval) so a rogue attester can be removed.
+
+Key entry points:
+- `createAttestationRequest(string evidenceURI) → uint256 requestId`
+- `approveRequest(uint256 requestId)` — 2/N rule, attester-gated
+- `rejectRequest(uint256 requestId)`
+- `hasAttesterNFT(address) view returns (bool)`
+
+### 3.2 CitizenNFT — `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`
+
+The civic ID. Soulbound ERC-721 + ERC-721Votes (the token weight is unused now that voting moved to MACI, but the standard hook stays). Holding it is the prerequisite for **signing up to MACI** and therefore for voting.
+
+Issuance rule: **1 Attester + 1 Citizen** must each sign off on `approveRequest`. Dual NFT holders (Attester + Citizen) explicitly choose which role they're signing as via the `signAsAttester` flag — this prevents a single dual-holder from satisfying both halves of the 2-of-2 rule.
+
+Why this rule? The town's social fabric is dense enough that any prospective citizen knows at least one current citizen and one attester. The pair signature stops bots and forces real-world verification. Governance scaling: as the citizen count grows the rule stays cheap (no quorum adjustment required).
+
+Key entry points:
+- `createAttestationRequest(string evidenceURI) → uint256 requestId`
+- `approveRequest(uint256 requestId, bool signAsAttester)`
+- `hasCitizenNFT(address) view returns (bool)`
+- `getVotes(address) view returns (uint256)` — present but unused for MACI polls
+
+### 3.3 Why these are soulbound
+
+Transferable identity NFTs trivialize Sybil attacks (buy 100 wallets, transfer 100 NFTs). The contracts override `_beforeTokenTransfer` to revert on any transfer except mint/burn. The voting weight + sign-up gate therefore cannot be moved or sold.
+
+---
+
+## 4. Privacy layer — MACI v2 (Minimal Anti-Collusion Infrastructure)
+
+[MACI](https://maci.pse.dev) is a research project from the [Privacy & Scaling Explorations](https://pse.dev) team. Brief mental model:
+
+- Every voter generates a **MACI Babyjubjub keypair** locally.
+- They `signUp` to MACI — the contract emits a `SignUp` event indexed by their pubkey and assigns them a `stateIndex`.
+- For each Poll, the voter computes an **encrypted message** containing `(stateIndex, voteOption, voiceCredits, nonce, signature)`, encrypted to the **coordinator's** pubkey via ECDH.
+- They call `Poll.publishMessage` to put the encrypted message on chain.
+- The voter can re-vote any number of times before the deadline. Only the highest-nonce signed command per voter wins (the on-chain process circuit enforces this).
+- After the deadline, the **coordinator** (off-chain) decrypts, runs the process circuit + tally circuit locally to get per-option vote counts, and posts the resulting commitments + a Groth16 proof to the on-chain `MessageProcessor` and `Tally` contracts. The on-chain Verifier checks the proof. If valid, `Tally.tallyResults(voteOption)` is updated.
+
+What this buys us:
+
+1. **Privacy from third parties.** Anyone reading the chain sees encrypted blobs.
+2. **Privacy from a passive coordinator.** They can decrypt individual ballots, but they can't prove to a vote-buyer who voted what (the voter could have re-voted later — the buyer only sees the final tally).
+3. **Coordinator can't fake a result.** The Groth16 proof verifies that the published tally is the honest sum of the on-chain encrypted ballots. A dishonest coordinator can refuse to publish (DoS) but cannot publish a wrong result.
+
+Source: [`maci-cli@2.5.0`](https://www.npmjs.com/package/maci-cli) and [`maci-contracts@2.5.0`](https://www.npmjs.com/package/maci-contracts), pinned in [`apps/coordinator/Dockerfile`](../apps/coordinator/Dockerfile).
+
+### 4.1 Production ceremony parameters
+
+We use the production trusted-setup zKeys distributed at `https://maci-develop-fra.s3.eu-central-1.amazonaws.com/v2.0.0/maci_artifacts_14-9-2-3_prod.tar.gz`. Two zKeys, named after their circuit signatures (NOT the order they appear in `Poll.treeDepths`):
+
+| zKey filename | Circuit template | Params |
+|---|---|---|
+| `ProcessMessagesNonQv_14-9-2-3.zkey` | `ProcessMessagesNonQv(stateTreeDepth, msgTreeDepth, msgBatchDepth, voteOptionTreeDepth)` | `(14, 9, 2, 3)` |
+| `TallyVotesNonQv_14-5-3.zkey` | `TallyVotesNonQv(stateTreeDepth, intStateTreeDepth, voteOptionTreeDepth)` | `(14, 5, 3)` |
+
+The `Poll.treeDepths` struct on chain therefore must be:
+
+| Field | Value | Source |
+|---|---|---|
+| `stateTreeDepth` | 14 | both circuits' first param |
+| `intStateTreeDepth` | 5 | tally circuit second param |
+| `messageTreeSubDepth` (= `msgBatchDepth`) | 2 | process circuit third param → batch size = 5² = 25 |
+| `messageTreeDepth` (= `msgTreeDepth`) | 9 | process circuit second param |
+| `voteOptionTreeDepth` | 3 | both circuits' last param |
+
+**This took three rotations to get right.** The history is in [§11.4](#114-history-of-the-three-rotations) — read that before changing depths again.
+
+---
+
+## 5. Smart contracts — current Base-mainnet addresses
+
+All addresses live in [`contracts/governor-contract/deployments/base.json`](../contracts/governor-contract/deployments/base.json) (canonical source of truth). Archived addresses from prior rotations are kept under `addresses.<name>_archived_<timestamp>`.
+
+### 5.1 Identity
+
+| Contract | Address |
+|---|---|
+| AttesterNFT | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` |
+| CitizenNFT | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` |
+
+### 5.2 MACI v2 infrastructure
+
+These get deployed once and stay forever (assuming no protocol-version bump):
+
+| Contract | Address | Purpose |
+|---|---|---|
+| MACI core | `0x2922e42945a10d1F765E3f9Cab136421d4556D30` | Global signup pool; `deployPoll` factory |
+| Verifier | `0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8` | Groth16 proof verifier |
+| VkRegistry | `0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED` | Stores process + tally VKs keyed by tree depths |
+| SignUpTokenGatekeeper | `0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee` | "You can sign up iff you hold CitizenNFT" |
+| ConstantInitialVoiceCreditProxy | `0x5b358A77E89FF3d699607b4fC235b381d67f3d05` | Issues 1 voice credit per signup (non-QV) |
+| PoseidonT3 | `0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3` | Linked into PollFactory + MACI |
+| PoseidonT4 | `0x71f05e914Aa4E8Bc19c0c98073e5B0a59b2Ef0C6` | … |
+| PoseidonT5 | `0xf076977DBa20db18328f1a8E7aeE9A207d3E8207` | … |
+| PoseidonT6 | `0xC6a65aE90Aec79cB14a287092EB4709612860997` | … |
+| PollFactory | `0x604B8b61488e02b2EEeeB4993825afD436D526fE` | Deploys per-proposal Poll |
+| MessageProcessorFactory | `0x34EDb8C26cc759D3e63C2580323eDcB0A136dAAb` | Deploys per-poll MP |
+| TallyFactory | `0xC6351B4470CE0C1fab41b45a902554A8040Df463` | Deploys per-poll Tally |
+
+VkRegistry is the only one that's been rotated since first deploy (twice — see §11.4). MACI core, Verifier, the gatekeeper, the voice-credit proxy, and the Poseidon libs are immutable and reused across all rotations.
+
+### 5.3 Governance
+
+| Contract | Address | Purpose |
+|---|---|---|
+| MaciAttesterGovernor | `0x61E89990225114b941A23cD2a0864C52ddc1E60B` | OZ Governor + MACI-aware state() override |
+| TimelockController | `0xc50C8E2d7b8d13169aB2FAcb5000004d8Eb28465` | OZ Timelock (currently 2-day min delay) |
+
+Coordinator EOA (Fly machine wallet): `0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C`. Owns each Poll's MessageProcessor + Tally contracts (set in `_deployPollFor`).
+
+### 5.4 MaciAttesterGovernor — what it does differently
+
+Source: [`contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol`](../contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol).
+
+Standard OZ Governor with these overrides:
+
+1. **`propose()` is restricted to AttesterNFT holders.** A regular OZ Governor lets any token-holder propose; we delegate that gate to attesters. Reverts with `OnlyAttestersCanPropose(address)`.
+
+2. **`propose()` deploys a per-proposal Poll** via `MACI.deployPoll(duration, treeDepths, coordinatorPubKey, verifier, vkRegistry, mode)`. The resulting `(pollId, poll, messageProcessor, tally, deadline)` tuple is stored in `proposalPolls[proposalId]`. Voting happens on that Poll, not on the Governor.
+
+3. **`castVote*` is disabled.** Reverts with `VotingHappensOnMaciPoll(address)`. There's no on-chain `castVote` — that's the whole point.
+
+4. **`_quorumReached` and `_voteSucceeded` read from `Tally`.** OZ's default reads `proposalVotes` (which is always 0/0/0 here because no public votes are cast). We override:
+   - `_quorumReached` returns `Tally.totalSpent() >= quorum(0)` (only after `Tally.isTallied()` is true).
+   - `_voteSucceeded` returns `Tally.tallyResults(FOR).value > Tally.tallyResults(AGAINST).value` (only after `isTallied()`).
+
+5. **`state()` keeps the proposal Active during the tally grace period.** OZ's default would flip to `Defeated` immediately at deadline since `_quorumReached` is false until the tally lands. We override: if the standard logic returns `Defeated` AND the tally hasn't landed AND we're within `tallyGracePeriod` seconds of the deadline, return `Active` instead. Once the grace expires without a tally, the proposal is genuinely `Defeated` (timed out).
+
+   This is critical for the UX: badge says "AKTIV" while the coordinator computes the tally; flips to "ABGELEHNT" / "ERFOLGREICH" once the tally lands.
+
+6. **`tallyGracePeriod`** is configurable at deploy time. Currently 7 days on mainnet; was 30 min during the test cycle.
+
+### 5.5 Per-proposal contracts
+
+Each `propose()` deploys three new contracts via the factories:
+
+| Contract | What it does |
+|---|---|
+| Poll | Holds the encrypted message queue, the snapshotted state tree root, the deadline, and the tree depths. `publishMessage` is the citizen-facing entry point. |
+| MessageProcessor | Receives the process-circuit ZK proof from the coordinator. Verifies it on chain via Verifier + the process VK looked up from VkRegistry. |
+| Tally | Receives the tally-circuit ZK proof + the per-option results. After `addTallyResult` is called, `tallyResults(voteOption)` returns `(value, true)`. |
+
+The Coordinator EOA owns the MP + Tally for each proposal (via `transferOwnership` inside `_deployPollFor`), so it can submit proofs without needing to go through the Governor.
+
+---
+
+## 6. Coordinator — off-chain ZK proof generator
+
+Source: [`apps/coordinator/`](../apps/coordinator/).
+
+### 6.1 What it is
+
+A single Fly.io machine (region `fra`, 4 GB RAM, 2 shared CPUs, auto-stop) running a Node 20 container with the production zKeys mounted at `/app/zkeys`. It holds **two private keys**, both as Fly secrets:
+
+| Secret | Purpose |
+|---|---|
+| `COORDINATOR_PRIV` | The MACI Babyjubjub privkey used to ECDH-decrypt every published ballot. Public counterpart: `coordinatorPubKey` baked into every Poll. |
+| `COORDINATOR_ETH_PRIV` | The Ethereum privkey for the EOA that owns each MP/Tally and submits the on-chain `proveOnChain` transactions. Public address: `0x5e6528…84C`. |
+
+Both are equally sensitive. Compromise of `COORDINATOR_PRIV` breaks **ballot privacy** (the attacker can decrypt any past or future ballot encrypted to that key). Compromise of `COORDINATOR_ETH_PRIV` breaks **liveness** (the attacker can refuse to submit tallies, but can't fake them — the Verifier still checks the ZK proof).
+
+### 6.2 The finalize pipeline
+
+`finalize-poll.js <pollId>` runs five steps in sequence:
+
+1. **`mergeSignups`** — calls `Poll.mergeMaciState()` on chain. Snapshots MACI's global state tree into the poll. Idempotent.
+2. **`mergeMessages`** — calls `Poll.mergeMessageAqSubRoots()` + `mergeMessageAq()` on chain. Collapses the message accumulator. Idempotent.
+3. **`genProofs`** — off-chain. Re-builds the MACI state from `SignUp` + `PublishMessage` events, runs the process circuit per batch (25 messages each) + tally circuit, writes per-batch JSON proofs to `/app/proofs/poll-<id>/`. This is the slow step (proof generation can take minutes).
+4. **`proveOnChain`** — submits each process proof to MessageProcessor and each tally proof to Tally. The on-chain Verifier checks each one. After the last batch lands, `Tally.totalTallyResults > 0` and `tallyResults(0/1/2)` are populated.
+5. **`verify`** — sanity check: re-reads `tallyResults` and confirms they match the local `tally.json`.
+
+Steps 1–2 are idempotent: the script catches the SDK's "already merged" error and continues. Steps 3–5 are deterministic given the on-chain state, so a re-run from a partial failure picks up where it left off.
+
+### 6.3 Why the script bypasses Hardhat
+
+The `maci-cli` binary resolves its signer through `hre.ethers.getSigners()` and looks for `hardhat.config.js` in its own package directory. We tried mounting a `hardhat.config.js` at `/app` and setting `HARDHAT_NETWORK=base`, but the CLI ignored both. Instead we `require("maci-cli")` directly and inject an `ethers.Wallet(COORDINATOR_ETH_PRIV, JsonRpcProvider(BASE_RPC_URL))` as the `signer` argument. This is set up in [`finalize-poll.js`](../apps/coordinator/scripts/finalize-poll.js).
+
+### 6.4 RPC channel split
+
+Two providers, both ethers v6 with `batchMaxCount: 1` (Base public RPCs silently mishandle batched eth_calls):
+
+- **`BASE_RPC_URL`** — for transactions (merges + proveOnChain). Alchemy is fine here.
+- **`BASE_ARCHIVE_RPC_URL`** — for `genProofs`'s log scan. Set to `https://mainnet.base.org`. Alchemy free tier caps `eth_getLogs` at 10 blocks per call, which would require ~5 M round-trips for a fresh-MACI scan.
+
+The unbatched `queryFilter` calls inside `genProofs` are constrained by computing `startBlock = latest - QUERY_WINDOW_BLOCKS` (default 100 blocks) at runtime. The batched state-rebuild scan inside `genMaciStateFromContract` then uses `BASE_REFERENCE_TX` (a Base tx hash older than the first SignUp on this MACI) to reset its starting block, paginating with `BLOCKS_PER_BATCH` (default 5000).
+
+### 6.5 Auto-finalize cron
+
+Two pieces:
+
+1. **GitHub Actions cron** — [`.github/workflows/coordinator-cron.yml`](../.github/workflows/coordinator-cron.yml). Runs every 15 minutes (GH throttles `*/15` schedules to ~80-min cadence in practice). Curls `POST /finalize-pending` on the Fly machine with the `X-Finalize-Token` header. The HTTPS request auto-wakes the machine (it's `auto_stop_machines = "stop"` with `auto_start_machines = true`).
+
+2. **`/finalize-pending` endpoint** — implemented in [`scripts/healthcheck.js`](../apps/coordinator/scripts/healthcheck.js). Auth-gated by the `FINALIZE_TOKEN` Fly secret. Spawns `scan-and-finalize.js` as a child process and returns `202 Accepted` immediately so the curl doesn't time out waiting for proof generation.
+
+`scan-and-finalize.js` walks every poll on MACI core (`0..nextPollId-1`) and finalizes any poll where:
+- `messageTreeSubDepth == 2` (matches our zKey — skips legacy polls from earlier rotations),
+- voting deadline has passed,
+- `numMessages > 0` (skip empty polls),
+- `Tally.totalTallyResults() == 0` (real "not yet tallied" signal — `isTallied()` is unreliable, see [§11.3](#113-isTallied-is-vacuously-true)).
+
+For each pending poll, it spawns `node /app/scripts/finalize-poll.js <pollId>`. Idempotent across runs.
+
+### 6.6 Setting up the cron from scratch
+
+```bash
+# 1. Generate a shared random token.
+TOKEN=$(openssl rand -hex 32)
+
+# 2. Set it on Fly (used by the /finalize-pending handler).
+fly secrets set FINALIZE_TOKEN="$TOKEN" --app roebel-maci-coordinator
+
+# 3. Set it on GitHub (used by the cron workflow).
+gh secret set COORDINATOR_FINALIZE_TOKEN --body "$TOKEN"
+# OR via the UI: Settings → Secrets and variables → Actions → New repository secret
+```
+
+If the secret is missing, the workflow now exits with `::error::COORDINATOR_FINALIZE_TOKEN secret is not set on this repository (...)`. (Earlier behavior was a silent `exit 0`; that masked an outage for hours.)
+
+---
+
+## 7. Apps
+
+### 7.1 Web — Next.js, proposal creation only
+
+Path: [`apps/web/`](../apps/web/). Deployed at `https://www.roebel.app`.
+
+Critical routes:
+- `/app/proposals/create` — Attester-gated form. Calls `governorContract.propose([target], [value], [calldata], description)`. Mirror to Supabase via `/api/proposals/store` so we have searchable metadata + Irys content URLs.
+- `/app/proposals/[id]` — read-only proposal page. Reads on-chain state via the Governor + Supabase metadata.
+
+Constants: [`apps/web/src/lib/contracts.ts`](../apps/web/src/lib/contracts.ts). The `MACI_GOVERNOR_ADDRESS` constant is the only thing that changes when we rotate the Governor.
+
+The web app does **not** vote. Voting is mobile-only by design — the keypair must live in secure-store on the citizen's phone, which is also the device that signs MACI commands.
+
+### 7.2 Expo — React Native, voting + result display
+
+Path: [`apps/expo/`](../apps/expo/). Deployed via EAS Update.
+
+Critical screens:
+- `app/proposal/[id].tsx` — single-proposal view: state badge, title/metadata, content, [VotingStats](../apps/expo/components/VotingStats.tsx), [VoteButtons](../apps/expo/components/VoteButtons.tsx), [ProposalTimeline](../apps/expo/components/ProposalTimeline.tsx), comments.
+- `context/MaciContext.tsx` — the per-citizen MACI state machine. Manages the Babyjubjub keypair (in `expo-secure-store`), the on-chain stateIndex (cached), and the local `lastVote` cache (so the user sees what they voted for after re-rendering).
+
+Citizen lifecycle in the app:
+
+1. **No keypair yet** — VoteButtons shows "Schritt 1 von 2 — Schlüssel erstellen". Tap → `generateMaciKeypair` → write to secure-store under `roebel.maci.keypair.v1`.
+2. **Keypair exists, not signed up to MACI** — "Schritt 2 von 2 — Bei MACI anmelden". Tap → `MACI.signUp((pubKeyX, pubKeyY), gatekeeperData = abi.encode(citizenTokenId), voiceCreditData = "")` from the citizen's smart wallet. The `SignUp` event is parsed from the receipt to learn the assigned `stateIndex`, which is persisted next to the keypair.
+3. **Signed up + voting open** — three-button row (Dafür/Dagegen/Enthalten). Tap → `buildVoteMessage` (encrypts to coordinator's pubkey) → `Poll.publishMessage(message, encPubKey)`. After success, the local `recordVote(pollAddress, optionIndex, nonce, txHash)` writes to secure-store under `roebel.maci.votes.v1`. The next render shows a [LastVoteCard](../apps/expo/components/LastVoteCard.tsx) with the recorded vote + a "Stimme ändern" affordance that re-reveals the buttons. Re-voting bumps the nonce; the on-chain process circuit takes the highest signed nonce per voter.
+4. **Voting closed, tally not landed** — VoteButtons shows "Abstimmung beendet — der Koordinator entschlüsselt jetzt die Stimmen…".
+5. **Tally landed** — VotingStats shows real percentages from `Tally.tallyResults(0/1/2)` plus a small "On-chain prüfen ↗" link to the Tally on Basescan. ProposalStateBadge reads `governor.state(proposalId)` every 30 s so it flips to `Defeated`/`Succeeded` automatically.
+
+Three orphan / edge states the UI handles explicitly:
+- **Proposal on a deprecated Governor** (post-rotation) — `proposalPolls(id)` returns the zero address. Both VoteButtons and VotingStats render an "ältere Governor – nicht mehr aktiv" card with a Basescan link to the current Governor's `readContract` page.
+- **Votes encrypted, deadline passed, tally not yet on chain** — VotingStats stays hidden (active vote and pre-tally show nothing); VoteButtons shows the closed-state card.
+- **Pending → Active transition** — ProposalTimeline reads `governor.clock()` + `proposalSnapshot()` + `proposalDeadline()` every 30 s and ticks locally at 1 Hz between resyncs, so the countdown is fluid.
+
+Constants: [`apps/expo/constants/thirdweb.ts`](../apps/expo/constants/thirdweb.ts). All addresses fall back to baked-in defaults so the EAS bundle works without a `.env`.
+
+---
+
+## 8. End-to-end flows
+
+### 8.1 New citizen onboarding
+
+```
+Prospective citizen      Existing Attester        Existing Citizen        On chain
+─────────────────────    ──────────────────       ──────────────────      ───────────────────────
+1. Visit web app
+2. Connect wallet
+3. Pin "I'm a citizen"
+   evidence to Irys
+4. createAttestationRequest(evidenceURI) ───────────────────────────▶  CitizenNFT
+                                                                          ↳ AttestationRequestCreated
+                         5. Reviews evidence
+                         6. approveRequest(id, signAsAttester=true)  ▶  +1 attester sig
+                                                  7. Reviews evidence
+                                                  8. approveRequest(id, signAsAttester=false) ▶  +1 citizen sig → mint
+                                                                                                  ↳ CitizenNFTMinted
+9. Open Expo app
+10. Generate MACI keypair
+11. signUp(pubKey, gatekeeperData = citizenTokenId)  ─────────────▶  MACI.signUp()
+                                                                       ↳ SignUp event (stateIndex, pubKeyX, pubKeyY)
+                                                                       Citizen now eligible to vote on every poll.
+```
+
+### 8.2 New proposal
+
+```
+Attester                                                            On chain
+──────────────────────                                              ─────────────────────────────
+1. Open web app /app/proposals/create
+2. Write title + description
+3. Pin description to Irys
+4. propose([target], [0], [calldata], description) ────────────▶   MaciAttesterGovernor.propose
+                                                                     ↳ checks AttesterNFT
+                                                                     ↳ ProposalCreated event
+                                                                     ↳ _deployPollFor(proposalId):
+                                                                       MACI.deployPoll(...)
+                                                                       proposalPolls[id] = (pollId, poll, mp, tally, deadline)
+                                                                       PollLinked event
+                                                                     ↳ MP.transferOwnership(coordinator)
+                                                                     ↳ Tally.transferOwnership(coordinator)
+5. /api/proposals/store  ───────────────────────────────────▶      Supabase row (UI metadata + Irys URL)
+```
+
+### 8.3 Voting
+
+```
+Citizen (Expo)                                                       On chain
+──────────────────────                                               ─────────────────────────────
+1. Open /proposal/[id]
+2. ProposalStateBadge polls governor.state(id)        ◀──────       Reads from Governor.
+3. VoteButtons fetches proposalPolls(id)             ◀──────        Reads (pollId, poll, …, deadline).
+4. Tap "Dafür"
+5. nonce = getNextNonce(pollAddress)                                (read from secure-store, default 1n)
+6. buildVoteMessage(keypair, stateIndex, pollId,
+                   voteOptionIndex=1, voiceCredits=1, nonce)
+   → ECDH-encrypt to coordinatorPubKey
+7. publishMessage(message, encPubKey) ─────────────────────▶       Poll.publishMessage
+                                                                     ↳ PublishMessage event (encrypted blob)
+8. recordVote(pollAddress, 1, nonce, txHash)
+   → write to secure-store roebel.maci.votes.v1
+9. LastVoteCard renders "Du hast „Dafür" gestimmt"
+```
+
+Re-voting: same flow, nonce = previous + 1. The citizen sees the LastVoteCard update; on chain there's another `PublishMessage` event with a higher signed nonce.
+
+### 8.4 Tally finalization
+
+Triggered by either the GH-Actions cron (every 15 min) or a manual `fly ssh console -C "node /app/scripts/finalize-poll.js <pollId>"`.
+
+```
+Coordinator (Fly)                                                    On chain
+──────────────────────                                               ─────────────────────────────
+1. mergeSignups(pollId, maciAddress, signer)   ───────────────▶    Poll.mergeMaciState()
+2. mergeMessages(pollId, maciAddress, signer)  ───────────────▶    Poll.mergeMessageAqSubRoots() + mergeMessageAq()
+3. genProofs(...)                                                    [off-chain]
+   - genMaciStateFromContract scans SignUp + PublishMessage events
+   - For each batch (size 25), runs process circuit
+   - For each ballot batch (size 5⁵=3125), runs tally circuit
+   - Writes process_<n>.json + tally.json to /app/proofs/poll-<id>/
+4. proveOnChain(...)  ─────────────────────────────────────────▶   For each batch:
+                                                                     - MessageProcessor.processMessages(proof, ...)
+                                                                     - Tally.tallyVotes(proof, ...)
+                                                                       Verifier checks Groth16 proof against VK from VkRegistry.
+                                                                     Final batch: Tally.addTallyResult(option, value, ...)
+                                                                       ↳ tallyResults(0/1/2) populated, totalTallyResults > 0
+5. verify(...)         ─────────────────────────────────────────▶   Reads tallyResults back, asserts == local tally.json
+6. Writes /app/proofs/last-run.json with status=succeeded
+```
+
+### 8.5 Reading the result
+
+```
+Citizen reopens /proposal/[id] in Expo                              On chain
+──────────────────────                                               ─────────────────────────────
+1. ProposalStateBadge poll                              ◀──────    governor.state(id) → Succeeded or Defeated
+   (the contract's state() now sees Tally.isTallied()=true and falls through to OZ default)
+2. VotingStats fetches proposalPolls(id)               ◀──────     Reads tally addr.
+3. VotingStats reads Tally.isTallied()                 ◀──────     true (real tally landed)
+4. VotingStats reads Tally.tallyResults(0/1/2)         ◀──────     (against, for, abstain)
+5. Renders percentages + "On-chain prüfen ↗" link to Tally on Basescan.
+```
+
+---
+
+## 9. Operational runbook
+
+### 9.1 Deploying a new Governor
+
+We rotate the Governor when `treeDepths`, `votingPeriod`, `quorumAbsolute`, `tallyGracePeriod`, or `coordinatorPubKey` need to change. MACI core, Verifier, gatekeeper, and (usually) VkRegistry are reused.
+
+```bash
+cd contracts/governor-contract
+# Optional inline overrides (else .env values apply):
+QUORUM_ABSOLUTE=2 VOTING_PERIOD_SECONDS=1800 \
+  REUSE_INFRA=1 npx hardhat run scripts/deploy-maci-base.cjs --network base
+```
+
+The script:
+1. Reads `deployments/base.json` for existing infra addresses.
+2. Deploys new Timelock + new MaciAttesterGovernor wired to the existing MACI/Verifier/VkRegistry/Gatekeeper/VoiceCreditProxy.
+3. Grants Timelock proposer/canceller roles to the new Governor; deployer renounces admin.
+4. Archives the old Governor + Timelock under timestamped keys; updates the canonical `addresses.maciAttesterGovernor` + `addresses.timelock`.
+
+After the script returns, propagate the new Governor address to:
+- [`apps/web/src/lib/contracts.ts`](../apps/web/src/lib/contracts.ts) — `MACI_GOVERNOR_ADDRESS`
+- [`apps/expo/constants/thirdweb.ts`](../apps/expo/constants/thirdweb.ts) — fallback in `governorContractAddress`
+- [`packages/blockchain/src/index.ts`](../packages/blockchain/src/index.ts) — `CONTRACTS.maciAttesterGovernor` + `CONTRACTS.maciTimelock`
+
+Then:
+- Push to `main` → Vercel auto-redeploys web.
+- Run `cd apps/expo && eas update --branch production` to ship the Expo bundle.
+
+Existing proposals on the old Governor become orphans — the [VoteButtons](../apps/expo/components/VoteButtons.tsx) + [VotingStats](../apps/expo/components/VotingStats.tsx) orphan branches handle this gracefully.
+
+### 9.2 Rotating the VkRegistry (rare)
+
+Only needed when the production zKey changes (new ceremony) or we discover a tree-depth mismatch with the existing zKey. Both have happened.
+
+```bash
+cd contracts/governor-contract
+npx hardhat run scripts/register-vk-batch25.cjs --network base
+# Then redeploy the Governor (it stores the registry address immutably).
+QUORUM_ABSOLUTE=2 REUSE_INFRA=1 npx hardhat run scripts/deploy-maci-base.cjs --network base
+# Update the Fly secret so finalize-poll.js sees the new registry.
+fly secrets set VK_REGISTRY_ADDRESS=0x<new> --app roebel-maci-coordinator
+```
+
+### 9.3 Manually finalizing a stuck poll
+
+```bash
+fly ssh console --app roebel-maci-coordinator -C "node /app/scripts/finalize-poll.js <pollId>"
+```
+
+If the SSH session drops mid-run, the process dies (Fly auto-stops the machine when idle). To detach, use:
+
+```bash
+fly ssh console --app roebel-maci-coordinator -C \
+  "sh -c 'setsid node /app/scripts/finalize-poll.js <pollId> > /app/proofs/manual-<pollId>.log 2>&1 < /dev/null & echo started'"
+# Then check:
+fly ssh console --app roebel-maci-coordinator -C "tail -f /app/proofs/manual-<pollId>.log"
+```
+
+Or trigger the auto-finalize endpoint:
+
+```bash
+curl -X POST -H "X-Finalize-Token: $TOKEN" \
+     https://roebel-maci-coordinator.fly.dev/finalize-pending
+curl https://roebel-maci-coordinator.fly.dev/status
+```
+
+### 9.4 When the cron silently does nothing
+
+Symptom: `lastScan` on `/status` is hours behind, but the GH workflow shows "success". Two failure modes:
+- **`COORDINATOR_FINALIZE_TOKEN` missing or wrong.** Workflow now fails loudly with `::error::` (post-`18f4267`). Re-set both Fly's `FINALIZE_TOKEN` and the GH repo secret to the same value.
+- **Fly machine wouldn't wake.** Check `fly status --app roebel-maci-coordinator`. Auto-start can fail if the build is broken; redeploy with `fly deploy --remote-only`.
+
+### 9.5 When the Expo app shows infinite "Lade verschlüsselte Abstimmung…"
+
+This is the orphan state: `proposalPolls(id)` returned the zero address. After a Governor rotation, all pre-rotation proposals are orphans on the new Governor. Either:
+- The web bundle is stale (Vercel didn't redeploy). Hard-refresh the web app (`⌘⇧R`) and verify the proposal-creation tx targets the current Governor (`base.json → addresses.maciAttesterGovernor`).
+- The proposal genuinely lives on a deprecated Governor. Show the user the orphan card (already automatic) and create a new proposal on the current Governor.
+
+---
+
+## 10. Security model
+
+### 10.1 What's trustless
+
+- **Governor + Timelock + MACI contracts** are immutable bytecode on Base. No upgrade paths, no admin keys.
+- **The ZK tally proof** is verified on chain. A malicious coordinator can't publish a wrong result; the Verifier rejects.
+- **CitizenNFT issuance** requires two unrelated humans (1 Attester + 1 Citizen). Single-key compromise can't mint.
+- **Vote privacy** holds against any adversary who only reads the chain.
+
+### 10.2 What's trusted
+
+- **A majority of the founding 3 attesters are honest.** They were seeded by the deployer at construction time. As the attester set grows, this becomes a 2-of-N rule on the actual count.
+- **The coordinator's Babyjubjub privkey isn't leaked.** Compromise breaks ballot privacy retroactively. Mitigation roadmap: split the key with Shamir among the founding attesters (Layer 2 hardening).
+- **The coordinator is online enough to publish tallies before `tallyGracePeriod` expires.** Compromise breaks liveness only — proposals would time out as Defeated. Mitigation roadmap: replace the EOA with a 3-of-5 attester Safe that proposes the `proveOnChain` tx (Layer 1 hardening).
+- **The MACI v2 trusted-setup ceremony was honest.** PSE ran this in 2024 with public participation; we use the resulting zKeys verbatim. The `processVk` and `tallyVk` registered in our VkRegistry are extracted directly from those zKey files.
+- **Front-end deployment integrity.** Vercel + EAS Update sign their builds; we don't have IPFS-pinned reproducible builds yet. A compromised front-end could steer voters toward the wrong proposalId. Mitigation: a citizen who's worried about this can verify the on-chain `proposalPolls(id).poll` and `Tally.tallyResults` directly on Basescan.
+
+### 10.3 Threat model — what an attacker can and cannot do
+
+| Attack | Defense | Outcome |
+|---|---|---|
+| Buy citizen votes | Coordinator-as-trusted re-voting + MACI's nullifier construction means the buyer can't tell what the seller actually voted | Fails — vote-buying becomes uneconomic |
+| Steal a citizen's wallet key | The CitizenNFT is soulbound, but the MACI keypair is in `expo-secure-store` on the device | Attacker can sign one ballot per stolen key; the legitimate citizen can re-vote with a higher nonce until the deadline |
+| Compromise the coordinator's MACI privkey | Decrypts every past + future ballot encrypted to that key | Privacy broken retroactively for past polls; new polls need a new coordinatorPubKey (full Governor rotation) |
+| Compromise the coordinator's ETH key | Can refuse to publish, can submit only valid (ZK-checked) tallies | Liveness break only — proposals time out as Defeated; result correctness preserved |
+| Fake an attestation | 1-Att + 1-Cit signing rule with `signAsAttester` flag | Fails — collusion of 2 unrelated humans required |
+| Modify a proposal's content after creation | `description` is hashed into the proposalId via OZ Governor; Irys URLs are content-addressed | Fails — any change produces a different proposalId |
+
+---
+
+## 11. Appendix
+
+### 11.1 Glossary
+
+| Term | Meaning |
+|---|---|
+| **MACI** | Minimal Anti-Collusion Infrastructure — the privacy + collusion-resistance protocol from PSE that we use for voting |
+| **Babyjubjub** | The elliptic curve MACI uses for keypairs (different from Ethereum's secp256k1; chosen because it's efficient inside Groth16 circuits) |
+| **State tree** | Per-MACI-instance Merkle tree of registered `(pubKey, voiceCredits)` pairs. New signups append leaves. Depth 14 → ~6 B leaves capacity |
+| **Ballot tree** | Per-Poll Merkle tree of one ballot per signup. Each ballot is `(voteOptionTreeRoot, nonce)` |
+| **Message tree** | Per-Poll Merkle tree of encrypted messages. Depth 9 + sub-depth 2 → 5⁹ ≈ 2 M total messages, batch-processed 5² = 25 at a time |
+| **Vote-option tree** | Per-Poll Merkle tree of vote options; depth 3 → 5³ = 125 options. We use 3 (Against/For/Abstain) |
+| **`stateIndex`** | The leaf position of a citizen in the state tree, assigned by MACI on signup |
+| **`numSignUps`** | The state-tree leaf count on a Poll (zero before `mergeMaciState`) |
+| **`tallyBatchNum`** | How many tally batches have been proven on a Tally contract (zero before any `tallyVotes` proof lands) |
+| **`totalTallyResults`** | How many `(voteOption, value)` pairs have been added on a Tally contract (zero before `addTallyResult`). The real "is the tally done" signal |
+| **Coordinator** | The off-chain operator who decrypts ballots and posts the tally proof |
+| **`tallyGracePeriod`** | Seconds the Governor will continue reporting Active after the voting deadline, while waiting for the coordinator's tally |
+| **Orphan proposal** | A proposal that was created on an earlier (now-rotated) Governor; the current Governor's `proposalPolls(id)` returns the zero address |
+
+### 11.2 Cryptographic parameters
+
+The single source of truth for tree depths is the circuit signature:
+
+```
+ProcessMessagesNonQv(stateTreeDepth, msgTreeDepth, msgBatchDepth, voteOptionTreeDepth)
+TallyVotesNonQv     (stateTreeDepth, intStateTreeDepth, voteOptionTreeDepth)
+```
+
+The zKey filename `ProcessMessagesNonQv_14-9-2-3.zkey` encodes the params **in template-signature order**, NOT in `Poll.treeDepths` order. Mapping table:
+
+| `Poll.treeDepths` field | Production zKey value |
+|---|---|
+| `intStateTreeDepth` | **5** (TallyVotesNonQv_14-**5**-3) |
+| `messageTreeSubDepth` (= `msgBatchDepth`) | **2** (ProcessMessagesNonQv_14-9-**2**-3) |
+| `messageTreeDepth` (= `msgTreeDepth`) | **9** (ProcessMessagesNonQv_14-**9**-2-3) |
+| `voteOptionTreeDepth` | **3** |
+
+Capacity implications:
+- State tree (depth 14): 5¹⁴ ≈ 6.1 B citizens — comfortably more than Roebel's 5,000.
+- Message batch (5²): 25 encrypted ballots per process-circuit invocation.
+- Total messages per Poll (5⁹): ≈ 2 M.
+- Voting options (5³): 125 — three of them used (Against/For/Abstain).
+
+### 11.3 `isTallied()` is vacuously true
+
+`Tally.isTallied()` is computed as `tallyBatchNum * 5^intStateTreeDepth >= numSignUps`. For a poll where `mergeSignups` was never called, `numSignUps = 0`, so the predicate is `0 >= 0 = true` even though no actual tally has been submitted.
+
+We discovered this when [`scan-and-finalize.js`](../apps/coordinator/scripts/scan-and-finalize.js) was silently skipping a fresh poll. The fix is to use `Tally.totalTallyResults() > 0` as the real "results landed on chain" signal — that's only non-zero after `addTallyResult` has actually been called.
+
+Don't use `isTallied()` anywhere except inside the contract's own `_quorumReached` / `_voteSucceeded` (where `numSignUps > 0` is guaranteed by the post-deadline check).
+
+### 11.4 History of the three rotations (2026-05-08)
+
+In sequence, why each was needed:
+
+1. **First Governor deploy** (2026-05-07, archived as `0x3B13…45c2e`). Worked for the public-vote tests. Rotated when we moved to MACI.
+
+2. **Second Governor** (`0xc637C9…315A6`). First MACI deploy. `messageTreeSubDepth = 1` → batch size 5. Rotated to fix this.
+
+3. **Third Governor** (`0xE7123B…D9d6F`). 7-day voting period. `messageTreeSubDepth = 2` ✓ (batch size 25), but a fresh `VkRegistry` was deployed alongside because tally-VK signatures collide on the same key regardless of `messageBatchSize`. Tally for Test 5/6/7 worked. Rotated for the 30-min testing window.
+
+4. **Fourth Governor** (`0x11ed03Db…E84f`). 30-min voting period. Same `VkRegistry` as #3. **Failed at `genProofs`** with `The number of leaves must be less than the tree capacity` — root cause: `messageTreeDepth = 2` (off-chain message tree had capacity exactly equal to `messageBatchSize=25`) and `intStateTreeDepth = 9` (didn't match the tally zKey's 5).
+
+5. **Fifth Governor** (`0x61E899…E60B`, current). 30-min voting period. New `VkRegistry`. All four tree depths aligned with the zKey signatures. Verified end-to-end.
+
+Lessons for the next rotation:
+- The zKey filename's number ordering matches the **circuit template signature**, not the `Poll.treeDepths` struct order. Always verify against `node_modules/maci-circuits/circom/core/non-qv/{processMessages,tallyVotes}.circom`.
+- The `setVerifyingKeysBatch` signature on `VkRegistry` registers process + tally VKs together. The tally VK's key ignores `messageBatchSize` (uses only `(stateTreeDepth, intStateTreeDepth, voteOptionTreeDepth)`), so re-registering at a new batch size collides on the tally side. Deploy a fresh `VkRegistry` instead.
+
+### 11.5 File index
+
+| Path | Role |
+|---|---|
+| [`contracts/governor-contract/contracts/verification-system/AttesterNFT.sol`](../contracts/governor-contract/contracts/verification-system/AttesterNFT.sol) | 2-of-N attester soulbound NFT |
+| [`contracts/governor-contract/contracts/verification-system/CitizenNFT.sol`](../contracts/governor-contract/contracts/verification-system/CitizenNFT.sol) | 1-Att + 1-Cit citizen soulbound NFT |
+| [`contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol`](../contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol) | OZ Governor with MACI hooks |
+| [`contracts/governor-contract/scripts/deploy-maci-base.cjs`](../contracts/governor-contract/scripts/deploy-maci-base.cjs) | Full + REUSE_INFRA deploy |
+| [`contracts/governor-contract/scripts/register-vk-batch25.cjs`](../contracts/governor-contract/scripts/register-vk-batch25.cjs) | One-off VkRegistry rotation |
+| [`contracts/governor-contract/deployments/base.json`](../contracts/governor-contract/deployments/base.json) | Canonical mainnet addresses |
+| [`apps/coordinator/Dockerfile`](../apps/coordinator/Dockerfile) | Coordinator container build |
+| [`apps/coordinator/fly.toml`](../apps/coordinator/fly.toml) | Fly.io machine config |
+| [`apps/coordinator/scripts/finalize-poll.js`](../apps/coordinator/scripts/finalize-poll.js) | Per-poll finalize pipeline |
+| [`apps/coordinator/scripts/scan-and-finalize.js`](../apps/coordinator/scripts/scan-and-finalize.js) | Walk all polls, finalize pending |
+| [`apps/coordinator/scripts/healthcheck.js`](../apps/coordinator/scripts/healthcheck.js) | `/healthz` + `/status` + `/finalize-pending` |
+| [`.github/workflows/coordinator-cron.yml`](../.github/workflows/coordinator-cron.yml) | 15-min auto-finalize cron |
+| [`apps/web/src/lib/contracts.ts`](../apps/web/src/lib/contracts.ts) | Web app contract addresses |
+| [`apps/web/src/app/app/proposals/create/page.tsx`](../apps/web/src/app/app/proposals/create/page.tsx) | Attester proposal-creation form |
+| [`apps/expo/constants/thirdweb.ts`](../apps/expo/constants/thirdweb.ts) | Expo app contract addresses |
+| [`apps/expo/context/MaciContext.tsx`](../apps/expo/context/MaciContext.tsx) | Per-citizen MACI state machine |
+| [`apps/expo/components/VoteButtons.tsx`](../apps/expo/components/VoteButtons.tsx) | Citizen voting UI |
+| [`apps/expo/components/VotingStats.tsx`](../apps/expo/components/VotingStats.tsx) | Tally results UI |
+| [`apps/expo/components/ProposalTimeline.tsx`](../apps/expo/components/ProposalTimeline.tsx) | Real-time countdown + timeline |
+| [`apps/expo/components/LastVoteCard.tsx`](../apps/expo/components/LastVoteCard.tsx) | "Du hast … gestimmt" + Stimme ändern |
+| [`apps/expo/components/ProposalStateBadge.tsx`](../apps/expo/components/ProposalStateBadge.tsx) | Live chain-state badge |
+| [`packages/blockchain/src/index.ts`](../packages/blockchain/src/index.ts) | Cross-app contract registry |
+
+### 11.6 External references
+
+- MACI v2 docs: https://maci.pse.dev
+- Production trusted-setup ceremony: https://maci.pse.dev/blog/maci-v2-ceremony (PSE)
+- ZK proof system: Groth16 with Babyjubjub-friendly Poseidon hashes
+- Base mainnet (chainId 8453): https://basescan.org
+- OpenZeppelin Governor: https://docs.openzeppelin.com/contracts/5.x/governance

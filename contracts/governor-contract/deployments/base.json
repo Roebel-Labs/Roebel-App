@@ -34,8 +34,9 @@
   },
   "parameters": {
     "stateTreeDepth": 14,
-    "intStateTreeDepth": 9,
-    "messageTreeDepth": 2,
+    "intStateTreeDepth": 5,
+    "messageTreeDepth": 9,
+    "messageTreeSubDepth": 2,
     "voteOptionTreeDepth": 3,
     "messageBatchSize": 25,
     "mode": "NON_QV",

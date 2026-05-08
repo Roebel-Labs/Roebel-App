@@ -64,8 +64,10 @@ pnpm dev:expo
 
 - **Blockchain**: Base L2 + Thirdweb Smart Wallets (invisible Web3 — users never see a wallet)
 - **Backend**: Supabase (Postgres, Auth, Realtime, Edge Functions)
-- **Governance**: Soulbound NFT Voting (CitizenNFT = 1 vote) proposed by Attesters, executed through a Timelock
+- **Governance**: MACI v2 privacy-preserving voting. Attesters (soulbound NFT) propose; Citizens (soulbound NFT) vote with encrypted ballots that an off-chain coordinator tallies + posts a ZK proof for. Executed through a Timelock.
 - **AI**: Claude API powering the Mecky chatbot assistant
+
+> 📘 **Full architecture reference:** [docs/MACI_E_GOVERNANCE.md](docs/MACI_E_GOVERNANCE.md) — canonical, current source of truth for the MACI v2 stack: live addresses on Base mainnet, identity layer (AttesterNFT + CitizenNFT), privacy layer (MACI core + Poll + MessageProcessor + Tally + VkRegistry), the off-chain coordinator + auto-finalize cron, the citizen onboarding / proposal / voting / tally flows end-to-end, the production zKey parameters, the operational runbook, and the security model.
 
 ---
 
