@@ -74,7 +74,9 @@ export default function VoteButtons({
   const [votingFor, setVotingFor] = useState<VoteType | null>(null);
   const [pollAddress, setPollAddress] = useState<string | null>(null);
   const [pollId, setPollId] = useState<bigint | null>(null);
+  const [pollDeadline, setPollDeadline] = useState<bigint | null>(null);
   const [voteNonce, setVoteNonce] = useState<bigint>(1n);
+  const [nowSec, setNowSec] = useState<bigint>(BigInt(Math.floor(Date.now() / 1000)));
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
   const [successDrawer, setSuccessDrawer] = useState({
     visible: false,
@@ -82,7 +84,7 @@ export default function VoteButtons({
     action: null as (() => void) | null,
   });
 
-  // Resolve the per-proposal Poll address from the Governor.
+  // Resolve the per-proposal Poll address + deadline from the Governor.
   useEffect(() => {
     if (!proposalId || proposalId === 0n) return;
     let cancelled = false;
@@ -95,10 +97,11 @@ export default function VoteButtons({
           params: [proposalId],
         })) as readonly [bigint, string, string, string, bigint];
         if (cancelled) return;
-        const [pId, pAddr] = result;
+        const [pId, pAddr, , , deadline] = result;
         if (pAddr && pAddr !== '0x0000000000000000000000000000000000000000') {
           setPollId(pId);
           setPollAddress(pAddr);
+          setPollDeadline(toBigInt(deadline));
         }
       } catch (err) {
         console.warn('[VoteButtons] proposalPolls lookup failed:', err);
@@ -109,13 +112,21 @@ export default function VoteButtons({
     };
   }, [proposalId]);
 
-  const isActive = isProposalActive(proposalState);
-  const canVote =
-    !!account &&
-    isCitizen &&
-    isActive &&
-    !!pollAddress &&
-    signUpState.status === 'signed-up';
+  // Tick local "now" once a second so the open/closed boundary doesn't lag.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNowSec(BigInt(Math.floor(Date.now() / 1000)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // The MACI Poll accepts publishMessage from the moment it's deployed
+  // (deployTime) until deployTime + duration. The Governor's stored deadline
+  // matches the Poll's voting end. Gate voting on the deadline rather than the
+  // OZ Pending/Active flag — which lags by 1-2 seconds at proposal start.
+  const isVotingOpen = !!pollAddress && pollDeadline !== null && nowSec <= pollDeadline;
+  const isVotingClosed = !!pollAddress && pollDeadline !== null && nowSec > pollDeadline;
+  const canVote = !!account && isCitizen && isVotingOpen && signUpState.status === 'signed-up';
 
   // Ensure refreshSignUp is called when prerequisites change.
   useEffect(() => {
@@ -179,7 +190,7 @@ export default function VoteButtons({
       const tx = prepareContractCall({
         contract: maciContract,
         method:
-          'function signUp(((uint256 x, uint256 y) _pubKey), bytes _signUpGatekeeperData, bytes _initialVoiceCreditProxyData)',
+          'function signUp((uint256 x, uint256 y) _pubKey, bytes _signUpGatekeeperData, bytes _initialVoiceCreditProxyData)',
         params: [
           { x: BigInt(serializedKeypair.pubX), y: BigInt(serializedKeypair.pubY) },
           signUpData,
@@ -235,11 +246,13 @@ export default function VoteButtons({
 
       setPhase('submitting-vote');
       const poll = getPollContract(pollAddress);
+      // ABI requires uint256[10] (fixed length); coerce from bigint[] for TS.
+      const messageFixed = message as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
       const tx = prepareContractCall({
         contract: poll,
         method:
           'function publishMessage((uint256[10] data) _message, (uint256 x, uint256 y) _encPubKey)',
-        params: [{ data: message }, encPubKey],
+        params: [{ data: messageFixed }, encPubKey],
       });
       const receipt = await sendTransaction({ transaction: tx, account });
 
@@ -297,44 +310,32 @@ export default function VoteButtons({
     );
   }
 
-  // Pending: voting hasn't started yet. With votingDelay=0 this is a brief
-  // window between propose() and the next block; show "starts in a moment"
-  // rather than the misleading "voting closed".
-  if (proposalState === ProposalState.Pending) {
-    const msg = getStateMessage(proposalState);
-    return (
-      <Container colors={colors}>
-        <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
-          {msg.label}
-        </Text>
-        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          {msg.detail}
-        </Text>
-      </Container>
-    );
-  }
-
-  // Anything that isn't Active or Pending → voting closed, with state-specific copy.
-  if (!isActive) {
-    const msg = getStateMessage(proposalState);
-    return (
-      <Container colors={colors}>
-        <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
-          {msg.label}
-        </Text>
-        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          {msg.detail}
-        </Text>
-      </Container>
-    );
-  }
-
+  // No poll resolved yet — either the Governor mapping hasn't been fetched
+  // or this proposal predates the MACI migration. Show a loader.
   if (!pollAddress) {
     return (
       <Container colors={colors}>
         <ActivityIndicator color={colors.textSecondary} />
         <Text style={[styles.messageText, { color: colors.textSecondary, marginTop: 8 }]}>
           Lade verschlüsselte Abstimmung…
+        </Text>
+      </Container>
+    );
+  }
+
+  // Voting closed by Poll deadline. We use the Poll's own end time rather
+  // than the OZ proposalState because the cached state from Supabase lags
+  // behind chain — a proposal can be on-chain Active while Supabase still
+  // has it as Pending.
+  if (isVotingClosed) {
+    const msg = getStateMessage(proposalState);
+    return (
+      <Container colors={colors}>
+        <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
+          Abstimmung beendet
+        </Text>
+        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
+          {msg.detail || 'Diese Abstimmung ist geschlossen. Der Koordinator veröffentlicht das Ergebnis auf der Blockchain.'}
         </Text>
       </Container>
     );
