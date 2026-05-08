@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
 import { prepareContractCall, readContract, sendAndConfirmTransaction, sendTransaction } from 'thirdweb';
 import { keccak256, toHex } from 'thirdweb/utils';
@@ -81,6 +81,11 @@ export default function VoteButtons({
   const [pollAddress, setPollAddress] = useState<string | null>(null);
   const [pollId, setPollId] = useState<bigint | null>(null);
   const [pollDeadline, setPollDeadline] = useState<bigint | null>(null);
+  // 'pending' = lookup in flight; 'live' = governor returned a real poll; 'orphan'
+  // = governor returned the zero address. Orphan happens when the proposal was
+  // created on a previous Governor (rotation) — we render a clear fallback
+  // instead of an infinite spinner.
+  const [pollLookupState, setPollLookupState] = useState<'pending' | 'live' | 'orphan'>('pending');
   // `changing` flips when the user taps "Stimme ändern" on the LastVoteCard,
   // collapsing the card and re-revealing the 3-button row.
   const [changing, setChanging] = useState(false);
@@ -94,8 +99,12 @@ export default function VoteButtons({
 
   // Resolve the per-proposal Poll address + deadline from the Governor.
   useEffect(() => {
-    if (!proposalId || proposalId === 0n) return;
+    if (!proposalId || proposalId === 0n) {
+      setPollLookupState('orphan');
+      return;
+    }
     let cancelled = false;
+    setPollLookupState('pending');
     (async () => {
       try {
         const result = (await readContract({
@@ -106,13 +115,19 @@ export default function VoteButtons({
         })) as readonly [bigint, string, string, string, bigint];
         if (cancelled) return;
         const [pId, pAddr, , , deadline] = result;
-        if (pAddr && pAddr !== '0x0000000000000000000000000000000000000000') {
+        if (pAddr && pAddr.toLowerCase() !== '0x0000000000000000000000000000000000000000') {
           setPollId(pId);
           setPollAddress(pAddr);
           setPollDeadline(toBigInt(deadline));
+          setPollLookupState('live');
+        } else {
+          setPollLookupState('orphan');
         }
       } catch (err) {
         console.warn('[VoteButtons] proposalPolls lookup failed:', err);
+        // Don't permanently lock to orphan on a transient RPC error — the user
+        // can pull-to-refresh. But surface it so we don't spin forever.
+        setPollLookupState('orphan');
       }
     })();
     return () => {
@@ -374,9 +389,8 @@ export default function VoteButtons({
     );
   }
 
-  // No poll resolved yet — either the Governor mapping hasn't been fetched
-  // or this proposal predates the MACI migration. Show a loader.
-  if (!pollAddress) {
+  // Lookup in flight — brief loader while we resolve proposalPolls(id).
+  if (pollLookupState === 'pending') {
     return (
       <Container colors={colors}>
         <ActivityIndicator color={colors.textSecondary} />
@@ -384,6 +398,34 @@ export default function VoteButtons({
           Lade verschlüsselte Abstimmung…
         </Text>
       </Container>
+    );
+  }
+
+  // The Governor returned the zero address — proposal isn't on the current
+  // Governor (likely created on an older Governor that's since been rotated).
+  // Render a clear terminal state instead of an infinite spinner.
+  if (pollLookupState === 'orphan' || !pollAddress) {
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Abstimmung nicht aufrufbar</Text>
+        <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
+          <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
+            Diese Abstimmung wurde auf einem früheren Governor erstellt und ist nicht mehr
+            aktiv. Erstelle einen neuen Vorschlag auf dem aktuellen Governor, um abzustimmen.
+          </Text>
+          <Pressable
+            onPress={() =>
+              Linking.openURL(`https://basescan.org/address/${governorContract.address}#readContract`)
+            }
+            hitSlop={6}
+            style={styles.basescanRow}
+          >
+            <Text style={[styles.basescanLink, { color: colors.textSecondary }]}>
+              Aktuellen Governor auf Basescan prüfen ↗
+            </Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
@@ -692,5 +734,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  basescanRow: {
+    marginTop: 12,
+  },
+  basescanLink: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
   },
 });

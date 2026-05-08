@@ -14,6 +14,9 @@ interface TallyState {
   pollAddress: string | null;
   tallyAddress: string | null;
   isTallied: boolean;
+  /** Governor returned no poll/tally for this proposalId — the proposal was
+   *  created on a previous Governor (rotation) or the Supabase row is stale. */
+  orphan: boolean;
   forVotes: bigint;
   againstVotes: bigint;
   abstainVotes: bigint;
@@ -26,6 +29,7 @@ const INITIAL_STATE: TallyState = {
   pollAddress: null,
   tallyAddress: null,
   isTallied: false,
+  orphan: false,
   forVotes: 0n,
   againstVotes: 0n,
   abstainVotes: 0n,
@@ -64,7 +68,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
         const [, pollAddr, , tallyAddr] = polls;
         if (cancelled) return;
         if (!tallyAddr || tallyAddr.toLowerCase() === ZERO_ADDR) {
-          setState({ ...INITIAL_STATE, loading: false });
+          setState({ ...INITIAL_STATE, loading: false, orphan: true });
           return;
         }
         const tally = getTallyContract(tallyAddr);
@@ -80,6 +84,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
             pollAddress: pollAddr,
             tallyAddress: tallyAddr,
             isTallied: false,
+            orphan: false,
             forVotes: 0n,
             againstVotes: 0n,
             abstainVotes: 0n,
@@ -110,6 +115,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
           pollAddress: pollAddr,
           tallyAddress: tallyAddr,
           isTallied: true,
+          orphan: false,
           forVotes: toBigInt(forR[0]),
           againstVotes: toBigInt(against[0]),
           abstainVotes: toBigInt(abstain[0]),
@@ -156,7 +162,15 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
         </View>
       ) : null}
 
-      {!state.loading && !state.isTallied ? (
+      {!state.loading && state.orphan ? (
+        <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Diese Abstimmung gehört zu einem älteren Governor – Wahlergebnisse nicht verfügbar.
+          </Text>
+        </View>
+      ) : null}
+
+      {!state.loading && !state.isTallied && !state.orphan ? (
         <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>
             Verschlüsselte Stimmen werden nach Ablauf der Frist von einem unabhängigen
