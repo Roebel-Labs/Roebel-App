@@ -89,7 +89,15 @@ function run(cmd, args, label) {
 }
 
 function maciCli(args, label) {
-  run("npx", ["maci-cli", ...args], label);
+  // maci-cli reads the Ethereum signer's private key from `PRIVATE_KEY` (the
+  // Hardhat default) via maci-contracts' getSigner(). We expose
+  // COORDINATOR_ETH_PRIV under that name for the duration of the child.
+  const env = { ...process.env, PRIVATE_KEY: process.env.COORDINATOR_ETH_PRIV };
+  console.log(`\n[${label}] $ npx maci-cli ${args.join(" ")}`);
+  const res = require("child_process").spawnSync("npx", ["maci-cli", ...args], { stdio: "inherit", env });
+  if (res.status !== 0) {
+    throw new Error(`[${label}] failed with exit ${res.status}`);
+  }
 }
 
 function main() {
@@ -116,17 +124,13 @@ function main() {
   };
 
   try {
+    // mergeSignups + mergeMessages: signer comes from PRIVATE_KEY env via getSigner().
     maciCli(
       [
         "mergeSignups",
-        "--maci-address",
-        process.env.MACI_ADDRESS,
-        "--poll-id",
-        pollId,
-        "--rpc",
-        process.env.BASE_RPC_URL,
-        "--privkey",
-        process.env.COORDINATOR_ETH_PRIV,
+        "--maci-address", process.env.MACI_ADDRESS,
+        "--poll-id", pollId,
+        "--rpc-provider", process.env.BASE_RPC_URL,
       ],
       "mergeSignups"
     );
@@ -134,45 +138,29 @@ function main() {
     maciCli(
       [
         "mergeMessages",
-        "--maci-address",
-        process.env.MACI_ADDRESS,
-        "--poll-id",
-        pollId,
-        "--rpc",
-        process.env.BASE_RPC_URL,
-        "--privkey",
-        process.env.COORDINATOR_ETH_PRIV,
+        "--maci-address", process.env.MACI_ADDRESS,
+        "--poll-id", pollId,
+        "--rpc-provider", process.env.BASE_RPC_URL,
       ],
       "mergeMessages"
     );
 
+    // genProofs: --privkey is the COORDINATOR's MACI Babyjubjub key (decrypts ballots).
+    // RPC flag is -p / --rpc-provider here (note: NOT -r like the others).
     maciCli(
       [
         "genProofs",
-        "--privkey",
-        process.env.COORDINATOR_PRIV,
-        "--maci-address",
-        process.env.MACI_ADDRESS,
-        "--poll-id",
-        pollId,
-        "--rpc",
-        process.env.BASE_RPC_URL,
-        "--coordinator-private-key",
-        process.env.COORDINATOR_ETH_PRIV,
-        "--process-zkey",
-        ZKEY_PROCESS,
-        "--process-wasm",
-        WASM_PROCESS,
-        "--tally-zkey",
-        ZKEY_TALLY,
-        "--tally-wasm",
-        WASM_TALLY,
-        "--tally-file",
-        tallyFile,
-        "--output",
-        proofDir,
-        "--use-quadratic-voting",
-        "false",
+        "--privkey", process.env.COORDINATOR_PRIV,
+        "--maci-address", process.env.MACI_ADDRESS,
+        "--poll-id", pollId,
+        "--rpc-provider", process.env.BASE_RPC_URL,
+        "--process-zkey", ZKEY_PROCESS,
+        "--process-wasm", WASM_PROCESS,
+        "--tally-zkey", ZKEY_TALLY,
+        "--tally-wasm", WASM_TALLY,
+        "--tally-file", tallyFile,
+        "--output", proofDir,
+        "--use-quadratic-voting", "false",
       ],
       "genProofs"
     );
@@ -180,16 +168,10 @@ function main() {
     maciCli(
       [
         "proveOnChain",
-        "--maci-address",
-        process.env.MACI_ADDRESS,
-        "--poll-id",
-        pollId,
-        "--rpc",
-        process.env.BASE_RPC_URL,
-        "--privkey",
-        process.env.COORDINATOR_ETH_PRIV,
-        "--proof-dir",
-        proofDir,
+        "--maci-address", process.env.MACI_ADDRESS,
+        "--poll-id", pollId,
+        "--rpc-provider", process.env.BASE_RPC_URL,
+        "--proof-dir", proofDir,
       ],
       "proveOnChain"
     );
@@ -197,14 +179,10 @@ function main() {
     maciCli(
       [
         "verify",
-        "--maci-address",
-        process.env.MACI_ADDRESS,
-        "--poll-id",
-        pollId,
-        "--rpc",
-        process.env.BASE_RPC_URL,
-        "--tally-file",
-        tallyFile,
+        "--maci-address", process.env.MACI_ADDRESS,
+        "--poll-id", pollId,
+        "--rpc-provider", process.env.BASE_RPC_URL,
+        "--tally-file", tallyFile,
       ],
       "verify"
     );
