@@ -82,7 +82,11 @@ function check() {
 }
 
 function buildSigner(rpcUrl) {
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // Disable JSON-RPC batching. ethers v6 defaults to coalescing concurrent
+  // eth_calls into a single batch payload, which several public Base RPCs
+  // (mainnet.base.org, publicnode) silently mis-handle — the client gets
+  // back "missing revert data" for view calls that work fine in isolation.
+  const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { batchMaxCount: 1 });
   const raw = process.env.COORDINATOR_ETH_PRIV;
   const pk = raw.startsWith("0x") ? raw : "0x" + raw;
   return new ethers.Wallet(pk, provider);
