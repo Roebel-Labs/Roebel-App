@@ -25,9 +25,20 @@
 const path = require("path");
 const fs = require("fs");
 const { ethers } = require("ethers");
-const { mergeSignups, mergeMessages, verify } = require("maci-cli/build/ts/sdk");
-const { genProofs } = require("maci-cli/build/ts/commands/genProofs");
-const { proveOnChain } = require("maci-cli/build/ts/commands/proveOnChain");
+// `maci-cli` re-exports every command (mergeSignups, mergeMessages, genProofs,
+// proveOnChain, verify, …) from its main entry. We use that rather than
+// `maci-cli/sdk` because the SDK subpath only re-exports a subset (no
+// genProofs/proveOnChain). Importing the main entry has a side effect of
+// setting process.env.HARDHAT_CONFIG to maci-cli's bundled hardhat.config.js,
+// but that's only consulted by getDefaultSigner() — which we never call,
+// since each SDK function takes our explicit ethers.Wallet as `signer`.
+const {
+  mergeSignups,
+  mergeMessages,
+  genProofs,
+  proveOnChain,
+  verify,
+} = require("maci-cli");
 
 const REQUIRED_ENV = [
   "COORDINATOR_PRIV",
