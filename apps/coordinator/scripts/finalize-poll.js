@@ -127,14 +127,24 @@ async function main() {
   const maciAddress = process.env.MACI_ADDRESS;
   const pollIdBig = BigInt(pollId);
 
-  // MACI deploy block — scanning the entire chain from genesis is slow even
-  // on archive nodes. Pin to the deploy block to bound the range.
+  // genProofs makes 4 unbatched queryFilter calls (SignUp, DeployPoll,
+  // MergeMessageAq, MergeMaciState) before the batched state-rebuild. Public
+  // RPCs cap eth_getLogs at ~10k blocks per call, so MACI_DEPLOY_BLOCK has
+  // to be within ~10k blocks of `latest` for those to succeed. We bump it
+  // forward (configurable via MACI_DEPLOY_BLOCK) and rely on the next two
+  // hooks to still cover earlier SignUp events:
+  //
+  //   - BASE_REFERENCE_TX: a Base tx hash from BEFORE the earliest SignUp.
+  //     genProofs uses this to override `fromBlock` for the batched state-
+  //     rebuild scan, which paginates internally via blocksPerBatch.
+  //   - BLOCKS_PER_BATCH: chunk size for the batched scan.
   const startBlock = process.env.MACI_DEPLOY_BLOCK
     ? Number(process.env.MACI_DEPLOY_BLOCK)
     : undefined;
   const blocksPerBatch = process.env.BLOCKS_PER_BATCH
     ? Number(process.env.BLOCKS_PER_BATCH)
     : 5000;
+  const transactionHash = process.env.BASE_REFERENCE_TX || undefined;
 
   // mergeSignups + mergeMessages each throw if the corresponding tree was
   // already merged (Poll.stateMerged() / Poll.mergedMessageAq()). That's a
@@ -163,7 +173,7 @@ async function main() {
       mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
     );
 
-    console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch}`);
+    console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch} refTx=${transactionHash ?? "none"}`);
     const tallyData = await genProofs({
       pollId: pollIdBig,
       maciAddress,
@@ -179,6 +189,7 @@ async function main() {
       useQuadraticVoting: false,
       startBlock,
       blocksPerBatch,
+      transactionHash,
       quiet: false,
     });
 
