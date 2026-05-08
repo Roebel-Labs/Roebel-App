@@ -1,7 +1,7 @@
 {
   "network": "base",
   "chainId": 8453,
-  "deployedAt": "2026-05-08T15:43:19.369Z",
+  "deployedAt": "2026-05-08T16:52:16.383Z",
   "deployer": "0xd5028284017A32C672CbD73Fe35aCD897bA874cf",
   "addresses": {
     "attesterNFT": "0xa06F09Cb406880512326318fbC09Cdb28631DA73",
@@ -18,14 +18,16 @@
     "pollFactory": "0x604B8b61488e02b2EEeeB4993825afD436D526fE",
     "messageProcessorFactory": "0x34EDb8C26cc759D3e63C2580323eDcB0A136dAAb",
     "tallyFactory": "0xC6351B4470CE0C1fab41b45a902554A8040Df463",
-    "timelock": "0xA4E366bF1Ce6BE74b6965f89E5513a5c42bcd892",
-    "maciAttesterGovernor": "0xE7123B3190f42914b92045308687AF49Cc3d9d6F",
+    "timelock": "0x41FC07b94070aA7319516C7f193Cca05D06Ee28b",
+    "maciAttesterGovernor": "0x11ed03Db610c88b010FfE38B13142D3657f2E84f",
     "coordinator": "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
     "maciAttesterGovernor_archived_2026-05-07T21-05-08-322Z": "0x3B13913efe6E8bAACeE51f98cc83892320445c2e",
     "timelock_archived_2026-05-07T21-05-08-322Z": "0x62a32e9933790a5063AB5545012a7F8c307a2e4A",
     "vkRegistry_archived_2026-05-08T15-42-39-576Z": "0x585AAbaAE0CfAD7d11EbF89f470B03135BF88e38",
     "maciAttesterGovernor_archived_2026-05-08T15-43-19-369Z": "0xc637C95623837319584aA1a2fCb54C7BFDe315A6",
-    "timelock_archived_2026-05-08T15-43-19-369Z": "0x6C5dc64eB88D6Dcd8807965c4F2Df38661B777dF"
+    "timelock_archived_2026-05-08T15-43-19-369Z": "0x6C5dc64eB88D6Dcd8807965c4F2Df38661B777dF",
+    "maciAttesterGovernor_archived_2026-05-08T16-52-16-383Z": "0xE7123B3190f42914b92045308687AF49Cc3d9d6F",
+    "timelock_archived_2026-05-08T16-52-16-383Z": "0xA4E366bF1Ce6BE74b6965f89E5513a5c42bcd892"
   },
   "parameters": {
     "stateTreeDepth": 14,
@@ -34,7 +36,7 @@
     "voteOptionTreeDepth": 3,
     "messageBatchSize": 25,
     "mode": "NON_QV",
-    "votingPeriod": 604800,
+    "votingPeriod": 1800,
     "quorumPercentage": 10,
     "tallyGracePeriod": 604800,
     "timelockMinDelay": 172800,
