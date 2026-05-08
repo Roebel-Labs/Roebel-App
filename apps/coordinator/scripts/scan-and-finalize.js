@@ -50,9 +50,15 @@ const POLL_ABI = [
   "function getDeployTimeAndDuration() view returns (uint256, uint256)",
   "function stateMerged() view returns (bool)",
   "function treeDepths() view returns (uint8 intStateTreeDepth, uint8 messageTreeSubDepth, uint8 messageTreeDepth, uint8 voteOptionTreeDepth)",
+  "function numMessages() view returns (uint256)",
 ];
 const TALLY_ABI = [
-  "function isTallied() view returns (bool)",
+  // isTallied() is unreliable as a "done" check: it's
+  // tallyBatchNum * 5^intStateTreeDepth >= numSignUps, which is vacuously
+  // true (0 >= 0) for any poll that hasn't had mergeSignups run yet —
+  // even when no tally has actually been submitted on chain. Use
+  // totalTallyResults > 0 as the real "results landed" signal.
+  "function totalTallyResults() view returns (uint256)",
 ];
 
 // Must match the production zKey we have mounted (ProcessMessagesNonQv_14-9-2-3
@@ -84,9 +90,15 @@ async function listPendingPolls(provider) {
       const dd = await poll.getDeployTimeAndDuration();
       const end = Number(dd[0]) + Number(dd[1]);
       if (now < end) continue;
-      const tallied = await tally.isTallied();
-      if (tallied) continue;
-      result.push({ pollId: i, pollAddr, tallyAddr, deadline: end });
+      const numMessages = Number(await poll.numMessages());
+      if (numMessages === 0) {
+        // Empty poll — nothing to tally, no point spending gas to merge an
+        // empty queue. Skip without flagging as an error.
+        continue;
+      }
+      const totalTallyResults = Number(await tally.totalTallyResults());
+      if (totalTallyResults > 0) continue;
+      result.push({ pollId: i, pollAddr, tallyAddr, deadline: end, numMessages });
     } catch (err) {
       console.warn(`[scan] poll ${i}: skipped (${err.message})`);
       skipped.push({ pollId: i, reason: err.message });

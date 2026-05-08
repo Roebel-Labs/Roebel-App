@@ -27,9 +27,12 @@ jobs:
         env:
           TOKEN: ${{ secrets.COORDINATOR_FINALIZE_TOKEN }}
         run: |
+          # Fail loudly (not silently) when the secret is missing — otherwise
+          # every scheduled run reports "success" while never actually
+          # finalizing anything, and the issue stays invisible.
           if [ -z "$TOKEN" ]; then
-            echo "::warning::COORDINATOR_FINALIZE_TOKEN secret is not set; skipping."
-            exit 0
+            echo "::error::COORDINATOR_FINALIZE_TOKEN secret is not set on this repository (Settings → Secrets and variables → Actions). Add it with the same value held in the FINALIZE_TOKEN Fly secret."
+            exit 1
           fi
           # --max-time bounds wake-from-cold; --retry handles the 503 the
           # machine returns while booting.
