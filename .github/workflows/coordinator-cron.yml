@@ -1,0 +1,41 @@
+name: Coordinator finalize cron
+
+# Wakes the (auto-stopped) Fly coordinator machine and asks it to finalize
+# any polls whose voting period has ended but whose tally hasn't been
+# proven on chain yet. Idempotent — see apps/coordinator/scripts/scan-and-finalize.js.
+#
+# The HTTPS request to roebel-maci-coordinator.fly.dev auto-starts the
+# machine via Fly's "auto_start_machines = true" setting; the machine
+# auto-stops again after the soft-limit grace period.
+#
+# Required GitHub repo secrets:
+#   COORDINATOR_FINALIZE_TOKEN — must equal the FINALIZE_TOKEN Fly secret.
+
+on:
+  schedule:
+    # Every 15 minutes. The voting period is 30 min, tally grace 30 min,
+    # so a worst-case 15-min lag still finalizes within the grace window.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST /finalize-pending
+        env:
+          TOKEN: ${{ secrets.COORDINATOR_FINALIZE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::COORDINATOR_FINALIZE_TOKEN secret is not set; skipping."
+            exit 0
+          fi
+          # --max-time bounds wake-from-cold; --retry handles the 503 the
+          # machine returns while booting.
+          curl --fail --retry 3 --retry-all-errors --retry-delay 10 \
+               --max-time 90 \
+               -X POST \
+               -H "X-Finalize-Token: $TOKEN" \
+               https://roebel-maci-coordinator.fly.dev/finalize-pending
+          echo
