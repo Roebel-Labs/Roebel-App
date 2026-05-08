@@ -136,12 +136,32 @@ async function main() {
     ? Number(process.env.BLOCKS_PER_BATCH)
     : 5000;
 
+  // mergeSignups + mergeMessages each throw if the corresponding tree was
+  // already merged (Poll.stateMerged() / Poll.mergedMessageAq()). That's a
+  // re-run of an already-finalized step, not a real failure, so swallow it.
+  const tolerateAlreadyMerged = async (label, fn) => {
+    try {
+      await fn();
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (/already been merged/i.test(msg)) {
+        console.log(`[${label}] skipping — already merged on chain`);
+        return;
+      }
+      throw err;
+    }
+  };
+
   try {
     console.log(`\n[mergeSignups] poll=${pollId}`);
-    await mergeSignups({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false });
+    await tolerateAlreadyMerged("mergeSignups", () =>
+      mergeSignups({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
+    );
 
     console.log(`\n[mergeMessages] poll=${pollId}`);
-    await mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false });
+    await tolerateAlreadyMerged("mergeMessages", () =>
+      mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
+    );
 
     console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch}`);
     const tallyData = await genProofs({
