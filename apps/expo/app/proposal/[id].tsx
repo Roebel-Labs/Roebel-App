@@ -173,9 +173,13 @@ export default function ProposalDetailScreen() {
           />
         }
       >
-        {/* Status Badge */}
+        {/* Status Badge — drives off live governor.state(id) so it doesn't
+            stay stuck on Supabase's cached value after voting ends. */}
         <View style={styles.statusContainer}>
-          <ProposalStateBadge state={proposal.state} />
+          <ProposalStateBadge
+            state={proposal.state}
+            proposalId={parseProposalIdSafe(proposal)}
+          />
         </View>
 
         {/* Title */}

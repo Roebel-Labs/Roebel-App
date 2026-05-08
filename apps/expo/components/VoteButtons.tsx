@@ -434,14 +434,18 @@ export default function VoteButtons({
   // behind chain — a proposal can be on-chain Active while Supabase still
   // has it as Pending.
   if (isVotingClosed) {
-    const msg = getStateMessage(proposalState);
+    // Don't fall back to getStateMessage(proposalState) here — that uses the
+    // cached Supabase state, which can still say Pending even after voting
+    // ended (the result was the contradictory "voting starts soon" copy).
+    // Use a fixed message that reflects the real post-deadline pipeline.
     return (
       <Container colors={colors}>
         <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>
           Abstimmung beendet
         </Text>
         <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          {msg.detail || 'Diese Abstimmung ist geschlossen. Der Koordinator veröffentlicht das Ergebnis auf der Blockchain.'}
+          Der Koordinator entschlüsselt jetzt die Stimmen und veröffentlicht das
+          Ergebnis innerhalb von ca. 15 Minuten auf der Blockchain.
         </Text>
       </Container>
     );

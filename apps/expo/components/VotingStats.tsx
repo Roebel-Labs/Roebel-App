@@ -17,12 +17,15 @@ interface TallyState {
   /** Governor returned no poll/tally for this proposalId — the proposal was
    *  created on a previous Governor (rotation) or the Supabase row is stale. */
   orphan: boolean;
+  /** Unix-seconds end of the voting window; null while polls() hasn't loaded. */
+  deadline: number | null;
   forVotes: bigint;
   againstVotes: bigint;
   abstainVotes: bigint;
 }
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+const TALLY_REFRESH_MS = 30_000;
 
 const INITIAL_STATE: TallyState = {
   loading: true,
@@ -30,6 +33,7 @@ const INITIAL_STATE: TallyState = {
   tallyAddress: null,
   isTallied: false,
   orphan: false,
+  deadline: null,
   forVotes: 0n,
   againstVotes: 0n,
   abstainVotes: 0n,
@@ -56,8 +60,9 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
       return;
     }
     let cancelled = false;
-    (async () => {
-      setState((s) => ({ ...s, loading: true }));
+
+    const fetchOnce = async (isFirstFetch: boolean) => {
+      if (isFirstFetch) setState((s) => ({ ...s, loading: true }));
       try {
         const polls = (await readContract({
           contract: governorContract,
@@ -65,12 +70,13 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
             'function proposalPolls(uint256) view returns (uint256 pollId, address poll, address messageProcessor, address tally, uint256 deadline)',
           params: [proposalId],
         })) as readonly [bigint, string, string, string, bigint];
-        const [, pollAddr, , tallyAddr] = polls;
+        const [, pollAddr, , tallyAddr, deadlineRaw] = polls;
         if (cancelled) return;
         if (!tallyAddr || tallyAddr.toLowerCase() === ZERO_ADDR) {
           setState({ ...INITIAL_STATE, loading: false, orphan: true });
           return;
         }
+        const deadline = Number(toBigInt(deadlineRaw));
         const tally = getTallyContract(tallyAddr);
         const tallied = (await readContract({
           contract: tally,
@@ -85,6 +91,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
             tallyAddress: tallyAddr,
             isTallied: false,
             orphan: false,
+            deadline,
             forVotes: 0n,
             againstVotes: 0n,
             abstainVotes: 0n,
@@ -116,17 +123,25 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
           tallyAddress: tallyAddr,
           isTallied: true,
           orphan: false,
+          deadline,
           forVotes: toBigInt(forR[0]),
           againstVotes: toBigInt(against[0]),
           abstainVotes: toBigInt(abstain[0]),
         });
       } catch (err) {
         console.warn('[VotingStats] fetch failed:', err);
-        if (!cancelled) setState({ ...INITIAL_STATE, loading: false });
+        if (!cancelled && isFirstFetch) setState({ ...INITIAL_STATE, loading: false });
       }
-    })();
+    };
+
+    fetchOnce(true);
+    // Re-fetch every 30 s so the bars flip from "Wahlergebnis wird berechnet"
+    // to real values automatically once the auto-finalize cron submits the
+    // tally — no pull-to-refresh needed.
+    const id = setInterval(() => fetchOnce(false), TALLY_REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [proposalId]);
 
@@ -140,13 +155,20 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
   const againstPct = pct(state.againstVotes);
   const abstainPct = pct(state.abstainVotes);
 
-  // Hide the section entirely until either the tally has landed on chain OR
-  // the proposal is on a deprecated Governor (orphan — explained inline). The
-  // pre-tally caption ("encrypted votes will be decrypted") was visual noise:
-  // VoteButtons already explains the same thing where the user actually
-  // takes action.
+  // Three render modes after loading:
+  //   1. Orphan       → Wahlergebnisse with explanatory caption (proposal on
+  //                     a deprecated Governor; no tally will ever land).
+  //   2. Tallied      → Wahlergebnisse with real percentages + Basescan link.
+  //   3. Voting ended → Wahlergebnisse with "wird berechnet" caption + 0 bars.
+  //                     Polls every 30 s; flips to mode 2 once the cron runs.
+  // During an active vote (deadline still in the future and !isTallied), the
+  // section is hidden — bars at 0 with no caption are misleading visual noise.
   if (state.loading) return null;
-  if (!state.isTallied && !state.orphan) return null;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const votingEnded = state.deadline !== null && nowSec >= state.deadline;
+  const showPendingTally = !state.isTallied && !state.orphan && votingEnded;
+  const visible = state.isTallied || state.orphan || showPendingTally;
+  if (!visible) return null;
 
   return (
     <View style={styles.container}>
@@ -168,6 +190,16 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
         <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>
             Diese Abstimmung gehört zu einem älteren Governor – Wahlergebnisse nicht verfügbar.
+          </Text>
+        </View>
+      ) : null}
+
+      {showPendingTally ? (
+        <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Wahlergebnis wird berechnet. Der Koordinator entschlüsselt die Stimmen
+            und veröffentlicht das Ergebnis innerhalb von ca. 15 Minuten auf der
+            Blockchain – diese Seite aktualisiert sich automatisch.
           </Text>
         </View>
       ) : null}
