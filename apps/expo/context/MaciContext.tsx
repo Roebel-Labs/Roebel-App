@@ -36,12 +36,33 @@ import {
 } from "@/lib/maci";
 
 const SECURE_KEY = "roebel.maci.keypair.v1";
+const VOTES_KEY = "roebel.maci.votes.v1";
 
 type SignUpState =
   | { status: "unknown" } // not yet checked
   | { status: "needs-keypair" } // no keypair generated yet
   | { status: "needs-signup"; pubKeyHash: bigint } // keypair exists, MACI doesn't know it
   | { status: "signed-up"; pubKeyHash: bigint; stateIndex: bigint };
+
+/**
+ * Locally-cached record of the citizen's most recent vote on a poll.
+ *
+ * MACI's process circuit takes the highest-nonce signed command per voter, so
+ * the LATEST publishMessage wins. We persist what they actually picked so the
+ * UI can show "Du hast Dafür gestimmt" after a re-render — neither the Poll
+ * contract nor anyone else can decrypt their choice. This is a UX cache, not
+ * authoritative state. Wiped on app reinstall (acceptable: revoting is free
+ * until the deadline).
+ */
+export interface VoteRecord {
+  pollAddress: string;   // lower-cased
+  optionIndex: number;   // VoteType: 0=Against, 1=For, 2=Abstain
+  nonce: string;         // bigint serialized as decimal string
+  txHash: string;
+  votedAt: number;       // epoch seconds (Date.now() / 1000)
+}
+
+type VotesMap = Record<string, VoteRecord>;
 
 interface MaciContextShape {
   serializedKeypair: SerializedKeypair | null;
@@ -55,6 +76,15 @@ interface MaciContextShape {
    *  the stateIndex to secure-store so cold-starts can skip the chain. */
   markSignedUp: (pubKeyHash: bigint, stateIndex: bigint) => Promise<void>;
   getKeypair: () => Keypair | null;
+  /** Record the citizen's latest vote on a poll. Persisted to secure-store
+   *  so re-opening the app shows "Du hast … gestimmt" without a chain read. */
+  recordVote: (pollAddress: string, optionIndex: number, nonce: bigint, txHash: string) => Promise<void>;
+  /** Latest cached vote for this poll, or null if none recorded on this device. */
+  getLastVote: (pollAddress: string) => VoteRecord | null;
+  /** Suggested nonce for the next publishMessage on this poll. Returns
+   *  lastVote.nonce + 1 if a vote exists, else 1n — so re-voting bumps the
+   *  nonce monotonically across cold-starts. */
+  getNextNonce: (pollAddress: string) => bigint;
 }
 
 const MaciContext = createContext<MaciContextShape | null>(null);
@@ -64,20 +94,30 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
   const [serializedKeypair, setSerializedKeypair] = useState<SerializedKeypair | null>(null);
   const [keypairLoading, setKeypairLoading] = useState(true);
   const [signUpState, setSignUpState] = useState<SignUpState>({ status: "unknown" });
+  const [votes, setVotes] = useState<VotesMap>({});
   const lastCheckedHash = useRef<bigint | null>(null);
 
-  // Load keypair from secure store on mount.
+  // Load keypair + votes from secure store on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const raw = await SecureStore.getItemAsync(SECURE_KEY);
+        const [rawKeypair, rawVotes] = await Promise.all([
+          SecureStore.getItemAsync(SECURE_KEY),
+          SecureStore.getItemAsync(VOTES_KEY),
+        ]);
         if (cancelled) return;
-        if (raw) {
-          const parsed = JSON.parse(raw) as SerializedKeypair;
-          setSerializedKeypair(parsed);
+        if (rawKeypair) {
+          setSerializedKeypair(JSON.parse(rawKeypair) as SerializedKeypair);
         } else {
           setSignUpState({ status: "needs-keypair" });
+        }
+        if (rawVotes) {
+          try {
+            setVotes(JSON.parse(rawVotes) as VotesMap);
+          } catch (err) {
+            console.warn("[MaciContext] failed to parse votes cache:", err);
+          }
         }
       } catch (err) {
         console.warn("[MaciContext] failed to load keypair:", err);
@@ -195,8 +235,10 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
 
   const clearKeypair = useCallback(async () => {
     await SecureStore.deleteItemAsync(SECURE_KEY);
+    await SecureStore.deleteItemAsync(VOTES_KEY);
     setSerializedKeypair(null);
     setSignUpState({ status: "needs-keypair" });
+    setVotes({});
     lastCheckedHash.current = null;
   }, []);
 
@@ -204,6 +246,47 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     if (!serializedKeypair) return null;
     return deserializeKeypair(serializedKeypair);
   }, [serializedKeypair]);
+
+  const recordVote = useCallback(
+    async (pollAddress: string, optionIndex: number, nonce: bigint, txHash: string) => {
+      const key = pollAddress.toLowerCase();
+      const next: VotesMap = {
+        ...votes,
+        [key]: {
+          pollAddress: key,
+          optionIndex,
+          nonce: nonce.toString(),
+          txHash,
+          votedAt: Math.floor(Date.now() / 1000),
+        },
+      };
+      setVotes(next);
+      try {
+        await SecureStore.setItemAsync(VOTES_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn("[MaciContext] failed to persist vote record:", err);
+      }
+    },
+    [votes],
+  );
+
+  const getLastVote = useCallback(
+    (pollAddress: string): VoteRecord | null => votes[pollAddress.toLowerCase()] ?? null,
+    [votes],
+  );
+
+  const getNextNonce = useCallback(
+    (pollAddress: string): bigint => {
+      const last = votes[pollAddress.toLowerCase()];
+      if (!last) return 1n;
+      try {
+        return BigInt(last.nonce) + 1n;
+      } catch {
+        return 1n;
+      }
+    },
+    [votes],
+  );
 
   const value = useMemo<MaciContextShape>(
     () => ({
@@ -215,8 +298,11 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       refreshSignUp,
       markSignedUp,
       getKeypair,
+      recordVote,
+      getLastVote,
+      getNextNonce,
     }),
-    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, markSignedUp, getKeypair],
+    [serializedKeypair, keypairLoading, signUpState, generateAndStoreKeypair, clearKeypair, refreshSignUp, markSignedUp, getKeypair, recordVote, getLastVote, getNextNonce],
   );
 
   return <MaciContext.Provider value={value}>{children}</MaciContext.Provider>;

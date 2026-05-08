@@ -13,6 +13,7 @@ import { VoteType, ProposalState } from '@/lib/governance-types';
 import { isProposalActive, toBigInt, getStateMessage } from '@/lib/governance-utils';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
+import LastVoteCard from './LastVoteCard';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
 import { Events, track } from '@/lib/analytics';
@@ -70,6 +71,9 @@ export default function VoteButtons({
     refreshSignUp,
     markSignedUp,
     getKeypair,
+    recordVote,
+    getLastVote,
+    getNextNonce,
   } = useMaci();
 
   const [phase, setPhase] = useState<Phase>('idle');
@@ -77,7 +81,9 @@ export default function VoteButtons({
   const [pollAddress, setPollAddress] = useState<string | null>(null);
   const [pollId, setPollId] = useState<bigint | null>(null);
   const [pollDeadline, setPollDeadline] = useState<bigint | null>(null);
-  const [voteNonce, setVoteNonce] = useState<bigint>(1n);
+  // `changing` flips when the user taps "Stimme ändern" on the LastVoteCard,
+  // collapsing the card and re-revealing the 3-button row.
+  const [changing, setChanging] = useState(false);
   const [nowSec, setNowSec] = useState<bigint>(BigInt(Math.floor(Date.now() / 1000)));
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
   const [successDrawer, setSuccessDrawer] = useState({
@@ -285,13 +291,18 @@ export default function VoteButtons({
       // MACI option indices on the Poll's vote-option tree. `toBigInt` routes
       // via String to dodge Hermes' refusal of BigInt(<Number>).
       const optionIndex = toBigInt(support);
+      // Pull next nonce from the persistent vote cache so cold-starts after
+      // re-installation still bump monotonically. Process circuit picks the
+      // highest-nonce signed command per voter, so a stale local nonce would
+      // get its publishMessage silently shadowed by an older vote.
+      const nonce = getNextNonce(pollAddress);
       const { message, encPubKey } = buildVoteMessage({
         voterKeypair: kp,
         voterStateIndex: signUpState.stateIndex,
         pollId,
         voteOptionIndex: optionIndex,
         voiceCredits: 1n, // 1 NFT = 1 credit, all-in
-        nonce: voteNonce,
+        nonce,
       });
 
       setPhase('submitting-vote');
@@ -310,13 +321,16 @@ export default function VoteButtons({
         proposal_id: proposalId.toString(),
         poll_id: pollId.toString(),
         vote_type: VoteType[support] ?? String(support),
-        nonce: voteNonce.toString(),
+        nonce: nonce.toString(),
         tx_hash: receipt.transactionHash,
         encrypted: true,
       });
 
-      // Bump the nonce so the next call (re-vote) supersedes this one.
-      setVoteNonce((n) => n + 1n);
+      // Persist the choice locally so the LastVoteCard can show it. The vote
+      // itself stays encrypted on chain — this cache is purely UX.
+      await recordVote(pollAddress, support, nonce, receipt.transactionHash);
+      setChanging(false);
+
       setSuccessDrawer({
         visible: true,
         message:
@@ -459,13 +473,28 @@ export default function VoteButtons({
   }
 
   // signed-up & active: full vote UI
+  const lastVote = pollAddress ? getLastVote(pollAddress) : null;
+  // Show the 3-button row when the user has no recorded vote OR they tapped
+  // "Stimme ändern". Otherwise show the LastVoteCard alone.
+  const showButtons = !lastVote || changing;
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: colors.textPrimary }]}>Abstimmen</Text>
+      {lastVote ? (
+        <LastVoteCard
+          vote={lastVote}
+          canChange={isVotingOpen && !changing}
+          onChangeVote={() => setChanging(true)}
+        />
+      ) : null}
+      {!showButtons ? renderDrawers() : null}
+      {showButtons ? (
+      <>
       <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary }]}>
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-          Verschlüsselte Stimme. Du kannst deine Wahl bis zum Ende der Frist beliebig oft
-          ändern — nur die letzte zählt.
+          {lastVote
+            ? 'Wähle erneut. Nur deine letzte Stimme zählt — die vorherige wird durch die neue überschrieben.'
+            : 'Verschlüsselte Stimme. Du kannst deine Wahl bis zum Ende der Frist beliebig oft ändern — nur die letzte zählt.'}
         </Text>
       </View>
       <View style={styles.buttonsContainer}>
@@ -526,6 +555,8 @@ export default function VoteButtons({
         </Text>
       )}
       {renderDrawers()}
+      </>
+      ) : null}
     </View>
   );
 
