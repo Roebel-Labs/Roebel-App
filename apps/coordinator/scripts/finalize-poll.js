@@ -89,12 +89,21 @@ function run(cmd, args, label) {
 }
 
 function maciCli(args, label) {
-  // maci-cli reads the Ethereum signer's private key from `PRIVATE_KEY` (the
-  // Hardhat default) via maci-contracts' getSigner(). We expose
-  // COORDINATOR_ETH_PRIV under that name for the duration of the child.
-  const env = { ...process.env, PRIVATE_KEY: process.env.COORDINATOR_ETH_PRIV };
-  console.log(`\n[${label}] $ npx maci-cli ${args.join(" ")}`);
-  const res = require("child_process").spawnSync("npx", ["maci-cli", ...args], { stdio: "inherit", env });
+  // maci-cli routes through Hardhat for signer resolution
+  // (maci-contracts.getDefaultSigner -> hre.ethers.getSigners). We need a
+  // hardhat.config.js in the cwd that defines a `base` network, plus
+  // HARDHAT_NETWORK=base on the env so Hardhat picks it.
+  const env = {
+    ...process.env,
+    PRIVATE_KEY: process.env.COORDINATOR_ETH_PRIV,
+    HARDHAT_NETWORK: process.env.HARDHAT_NETWORK || "base",
+  };
+  console.log(`\n[${label}] $ HARDHAT_NETWORK=${env.HARDHAT_NETWORK} npx maci-cli ${args.join(" ")}`);
+  const res = require("child_process").spawnSync(
+    "npx",
+    ["maci-cli", ...args],
+    { stdio: "inherit", env, cwd: "/app" },
+  );
   if (res.status !== 0) {
     throw new Error(`[${label}] failed with exit ${res.status}`);
   }

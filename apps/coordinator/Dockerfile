@@ -35,6 +35,7 @@ WORKDIR /app
 RUN npm i -g pnpm@9 \
     && pnpm add maci-cli@2.5.0 maci-contracts@2.5.0 maci-circuits@2.5.0 \
                 maci-domainobjs@2.5.0 maci-crypto@2.5.0 \
+                hardhat@^2.22.15 @nomicfoundation/hardhat-toolbox@^5.0.0 \
                 ethers@^6.13.4 dotenv
 
 FROM deps AS zkeys
@@ -53,8 +54,11 @@ WORKDIR /app
 
 COPY --from=zkeys /app/zkeys /app/zkeys
 COPY scripts/ /app/scripts/
+COPY hardhat.config.js /app/hardhat.config.js
 
 ENV ZKEY_DIR=/app/zkeys
+# Tell maci-cli (via Hardhat) which network to use when resolving the signer.
+ENV HARDHAT_NETWORK=base
 
 EXPOSE 8080
 
