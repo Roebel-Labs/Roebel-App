@@ -15,13 +15,15 @@ export const CONTRACTS = {
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
   // Current MACI v2 privacy-voting governance (apps target this)
-  maciAttesterGovernor: "0xc637C95623837319584aA1a2fCb54C7BFDe315A6",
-  maciTimelock: "0x6C5dc64eB88D6Dcd8807965c4F2Df38661B777dF",
+  maciAttesterGovernor: "0xE7123B3190f42914b92045308687AF49Cc3d9d6F",
+  maciTimelock: "0xA4E366bF1Ce6BE74b6965f89E5513a5c42bcd892",
 
-  // MACI v2 infrastructure (one-time deploy, shared across all polls)
+  // MACI v2 infrastructure (MACI core, Verifier, gatekeeper, voice credit
+  // proxy reused; VkRegistry rotated 2026-05-08 to fix the messageBatchSize=5
+  // mismatch with the production-ceremony zKey).
   maci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
   maciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
-  maciVkRegistry: "0x585AAbaAE0CfAD7d11EbF89f470B03135BF88e38",
+  maciVkRegistry: "0x26Eddb1d4c45e7cA516B54Ed4105e252cc608BAc",
   maciGatekeeper: "0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee",
   maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
 
@@ -47,10 +49,10 @@ export const MACI_COORDINATOR_PUBKEY = {
 export const MACI_TREE_DEPTHS = {
   stateTreeDepth: 14,
   intStateTreeDepth: 9,
-  messageTreeSubDepth: 1,
+  messageTreeSubDepth: 2,
   messageTreeDepth: 2,
   voteOptionTreeDepth: 3,
-  messageBatchSize: 5,
+  messageBatchSize: 25,
 } as const;
 
 export const MACI_VOTE_OPTIONS = {

@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
- * @title HomeTownVotingNFT
+ * @title Governor
  * @dev Soulbound NFT with built-in voting power for DAO governance
  *
  * SECURITY FEATURES:

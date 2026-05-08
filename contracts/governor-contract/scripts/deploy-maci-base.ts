@@ -34,7 +34,10 @@ const STATE_TREE_DEPTH = 14;
 const INT_STATE_TREE_DEPTH = 9;
 const MESSAGE_TREE_DEPTH = 2;
 const VOTE_OPTION_TREE_DEPTH = 3;
-const MESSAGE_BATCH_DEPTH = 1; // batch size = 5 ** 1 = 5
+// Must match the messageBatchTreeDepth of the production zKey
+// (ProcessMessagesNonQv_14-9-2-3 → depth 2 → batch size 5^2 = 25). Mirrors
+// deploy-maci-base.cjs.
+const MESSAGE_BATCH_DEPTH = 2;
 const MESSAGE_BATCH_SIZE = 5 ** MESSAGE_BATCH_DEPTH;
 
 interface RequiredEnv {

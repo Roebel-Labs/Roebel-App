@@ -22,7 +22,12 @@ const STATE_TREE_DEPTH = 14;
 const INT_STATE_TREE_DEPTH = 9;
 const MESSAGE_TREE_DEPTH = 2;
 const VOTE_OPTION_TREE_DEPTH = 3;
-const MESSAGE_BATCH_DEPTH = 1; // batch size = 5 ** 1 = 5
+// Must match the messageBatchTreeDepth of the production zKey
+// (ProcessMessagesNonQv_14-9-2-3 → depth 2 → batch size 5^2 = 25). The previous
+// value (1) didn't, which is why polls deployed before 2026-05-08 couldn't be
+// finalized: their on-chain messageTreeSubDepth=1 generated a 5-message batch,
+// but the circuit demanded 25.
+const MESSAGE_BATCH_DEPTH = 2;
 const MESSAGE_BATCH_SIZE = 5 ** MESSAGE_BATCH_DEPTH;
 
 // EMode: 0 = QV, 1 = NON_QV (per maci-contracts ts/constants.ts)
