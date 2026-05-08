@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Linking, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Linking, Pressable } from 'react-native';
 import { readContract } from 'thirdweb';
 import { governorContract, getTallyContract } from '@/constants/thirdweb';
 import { useTheme } from '@/context/ThemeContext';
@@ -140,6 +140,14 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
   const againstPct = pct(state.againstVotes);
   const abstainPct = pct(state.abstainVotes);
 
+  // Hide the section entirely until either the tally has landed on chain OR
+  // the proposal is on a deprecated Governor (orphan — explained inline). The
+  // pre-tally caption ("encrypted votes will be decrypted") was visual noise:
+  // VoteButtons already explains the same thing where the user actually
+  // takes action.
+  if (state.loading) return null;
+  if (!state.isTallied && !state.orphan) return null;
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -156,26 +164,10 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
         ) : null}
       </View>
 
-      {state.loading ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.textSecondary} />
-        </View>
-      ) : null}
-
-      {!state.loading && state.orphan ? (
+      {state.orphan ? (
         <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>
             Diese Abstimmung gehört zu einem älteren Governor – Wahlergebnisse nicht verfügbar.
-          </Text>
-        </View>
-      ) : null}
-
-      {!state.loading && !state.isTallied && !state.orphan ? (
-        <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
-          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-            Verschlüsselte Stimmen werden nach Ablauf der Frist von einem unabhängigen
-            Koordinator entschlüsselt und zusammen mit einem Zero-Knowledge-Beweis auf
-            der Blockchain veröffentlicht.
           </Text>
         </View>
       ) : null}
@@ -250,10 +242,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     textDecorationLine: 'underline',
-  },
-  loadingRow: {
-    paddingVertical: 12,
-    alignItems: 'center',
   },
   statusCard: {
     padding: 12,

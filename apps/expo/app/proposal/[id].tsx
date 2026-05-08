@@ -15,7 +15,7 @@ import ProposalStateBadge from '@/components/ProposalStateBadge';
 import ProposalContent from '@/components/ProposalContent';
 import VotingStats from '@/components/VotingStats';
 import VoteButtons from '@/components/VoteButtons';
-import ProposalTimers from '@/components/ProposalTimers';
+import ProposalTimeline from '@/components/ProposalTimeline';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import ProposalOnchainLinks from '@/components/proposals/ProposalOnchainLinks';
@@ -228,11 +228,12 @@ export default function ProposalDetailScreen() {
           />
         </InlineErrorBoundary>
 
-        {/* Voting timer */}
-        <InlineErrorBoundary label="ProposalTimers">
-          <ProposalTimers
+        {/* Voting timeline + countdown — mirrors the web's ProposalTimeline. */}
+        <InlineErrorBoundary label="ProposalTimeline">
+          <ProposalTimeline
             proposalId={parseProposalIdSafe(proposal)}
             proposalState={proposal.state}
+            createdAt={proposal.createdAt}
           />
         </InlineErrorBoundary>
 
