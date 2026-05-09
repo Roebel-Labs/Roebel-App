@@ -9,11 +9,17 @@ This document is the canonical reference for the full stack: identity (AttesterN
 
 ## 1. TL;DR
 
-Roebel/Müritz is a small German town (population ~5,000). The system lets verified citizens vote on local proposals from their phone, with three guarantees:
+Roebel/Müritz is a small German town (population ~5,000). The system lets verified citizens vote on local proposals from their phone, with these guarantees:
 
 1. **Sybil resistance** — only humans verified by the local culture committee can vote, enforced by a soulbound `CitizenNFT`.
-2. **Ballot privacy** — votes are encrypted on chain. Even the coordinator that decrypts them can't link a vote to a citizen, and they can't fake the result either.
-3. **Public verifiability** — anyone can check the result on Basescan: a single zk-SNARK proof on the `Tally` contract attests that the published numbers are the honest sum of the encrypted ballots.
+2. **Anti-collusion / vote-buying resistance** — even though the coordinator decrypts ballots, it cannot prove to a vote-buyer or a coercer who voted what. A voter can re-vote any number of times before the deadline; only the highest-nonce signed command wins. The buyer can't tell whether the seller voted as instructed and then changed their mind. This guarantee holds today against any single coordinator.
+3. **Public verifiability of the result** — anyone can check the published tally on Basescan: a Groth16 proof in the `Tally` contract attests that the numbers are the honest sum of the encrypted ballots. A dishonest coordinator cannot fake a result; they can only refuse to publish (DoS).
+4. **Privacy from third parties on chain** — anyone reading the chain sees encrypted blobs only.
+
+What is **not** yet guaranteed in the current production setup, and is on the [roadmap](#12-roadmap-to-maximal-trustlessness--decentralization):
+
+- **Privacy from the coordinator.** Today a single Fly.io machine holds both private keys (the Babyjubjub decryption key and the on-chain submitter key). The operator can decrypt a citizen's vote and link it to their wallet via the on-chain `SignUp` event. Mitigation path: split the Babyjubjub key with Shamir's secret sharing across the founding attesters, so no single party can decrypt — see [§12 Phase 1](#phase-1--before-pilot-scaling).
+- **Coordinator liveness without a single operator.** Currently a GitHub Actions schedule + a Fly.io machine + the coordinator EOA are all single-operator. A compromise breaks liveness (not result correctness — the on-chain Verifier still rejects bad proofs). Hardening path: move tally-tx submission behind a 3-of-5 attester Safe — see [§12 Phase 1](#phase-1--before-pilot-scaling).
 
 Architecturally:
 
@@ -147,7 +153,7 @@ The `Poll.treeDepths` struct on chain therefore must be:
 | `messageTreeDepth` (= `msgTreeDepth`) | 9 | process circuit second param |
 | `voteOptionTreeDepth` | 3 | both circuits' last param |
 
-**This took three rotations to get right.** The history is in [§11.4](#114-history-of-the-three-rotations) — read that before changing depths again.
+**This took three rotations to get right.** The history is in [§12.4](#124-history-of-the-rotations) — read that before changing depths again.
 
 ---
 
@@ -181,7 +187,7 @@ These get deployed once and stay forever (assuming no protocol-version bump):
 | MessageProcessorFactory | `0x34EDb8C26cc759D3e63C2580323eDcB0A136dAAb` | Deploys per-poll MP |
 | TallyFactory | `0xC6351B4470CE0C1fab41b45a902554A8040Df463` | Deploys per-poll Tally |
 
-VkRegistry is the only one that's been rotated since first deploy (twice — see §11.4). MACI core, Verifier, the gatekeeper, the voice-credit proxy, and the Poseidon libs are immutable and reused across all rotations.
+VkRegistry is the only one that's been rotated since first deploy (twice — see §12.4). MACI core, Verifier, the gatekeeper, the voice-credit proxy, and the Poseidon libs are immutable and reused across all rotations.
 
 ### 5.3 Governance
 
@@ -280,7 +286,7 @@ Two pieces:
 - `messageTreeSubDepth == 2` (matches our zKey — skips legacy polls from earlier rotations),
 - voting deadline has passed,
 - `numMessages > 0` (skip empty polls),
-- `Tally.totalTallyResults() == 0` (real "not yet tallied" signal — `isTallied()` is unreliable, see [§11.3](#113-isTallied-is-vacuously-true)).
+- `Tally.totalTallyResults() == 0` (real "not yet tallied" signal — `isTallied()` is unreliable, see [§12.3](#123-istallied-is-vacuously-true)).
 
 For each pending poll, it spawns `node /app/scripts/finalize-poll.js <pollId>`. Idempotent across runs.
 
@@ -557,9 +563,101 @@ This is the orphan state: `proposalPolls(id)` returned the zero address. After a
 
 ---
 
-## 11. Appendix
+## 11. Roadmap to maximal trustlessness + decentralization
 
-### 11.1 Glossary
+This section is the **honest delta** between what's deployed today and what the system needs to become before it can carry binding civic decisions. Each item lists a trigger (when it must ship) and a measurable definition of done.
+
+What's already shipped is in [§5](#5-smart-contracts--current-base-mainnet-addresses) and [§6](#6-coordinator--off-chain-zk-proof-generator) — production zKey integration, tree-depth-aligned Governor, chunked `addTallyResults`, fail-loud cron, idempotent finalize pipeline, MACI-aware `state()` override, orphan-proposal UX, and the admin dashboard with live infra + cron health surfacing.
+
+### Phase 1 — before pilot scaling
+
+These are the items that block scaling beyond the founding pilot. They are open issues that an external reviewer (Devcon attendee, BfDI, professional auditor) is right to flag today.
+
+#### 1.1 Shamir-split coordinator MACI key (the privacy unlock)
+
+**Trigger**: before the citizen base exceeds ~50, or before the system carries any vote whose outcome creates real-world enforcement.
+**Done when**: the Babyjubjub decryption key is reconstructed only in a multi-party-computation protocol across N≥3 founding-attester custodians, with M-of-N threshold reconstruction. No single machine ever holds the full secret.
+**Notes**: requires either (a) running the proof-generation step inside the threshold-MPC ceremony for each finalize, or (b) a per-poll throwaway key derivation pattern. (a) is simpler operationally; (b) limits blast radius if a single key leaks. Either resolves the §10.2 trust assumption "the coordinator's Babyjubjub privkey isn't leaked" and lets the [§1 TL;DR](#1-tldr) reclaim "privacy from the coordinator" honestly.
+
+#### 1.2 3-of-5 attester Safe as Tally submitter
+
+**Trigger**: same as 1.1.
+**Done when**: the on-chain `proveOnChain` transactions are proposed to a Gnosis Safe owned by the founding attesters and confirmed before broadcast. The current single coordinator EOA goes from "trusted for liveness AND submission authority" to "trusted only for proof generation."
+**Notes**: result-correctness is already trustless (the on-chain Verifier rejects bad proofs); this only hardens the submission step against single-operator coercion or compromise.
+
+#### 1.3 Professional audit of `MaciAttesterGovernor`
+
+**Trigger**: before the first treasury-bearing proposal (any proposal whose `execute()` moves funds, mints NFTs, or upgrades a contract).
+**Done when**: at least one external audit report (Cyfrin, Trail of Bits, Hats, ChainSecurity, etc.) covering specifically the OZ Governor overrides — `state()`, `_quorumReached`, `_voteSucceeded`, `propose()` attester gate, `_deployPollFor` ownership transfer to coordinator. OZ Governor base + MACI v2 contracts already have public audits; only our overrides are new code.
+
+#### 1.4 Expand the founding attester set to ≥7
+
+**Trigger**: within 4 weeks of public launch. Until then, the bootstrap 3 + 2-of-N rule is structurally a 2-of-3 multisig — collusion-resistant against one, not two.
+**Done when**: 7 active AttesterNFT holders, with at least 3 from each of the town's existing civic structures (Stadtrat, Kulturverein, Jugendvertretung, etc.) so social-fabric collusion is harder than a 2-of-3 friend group.
+
+#### 1.5 Documented disaster-recovery procedure
+
+**Trigger**: before scaling beyond pilot.
+**Done when**: a written, rehearsed runbook covers: Fly account loss, deployer-EOA loss (the wallet that deployed everything), coordinator-EOA loss, Babyjubjub key loss, and the founder bus factor. Includes off-site encrypted backups of all secrets and a documented succession path that doesn't require any one person to be alive.
+
+### Phase 2 — production-grade hardening
+
+#### 2.1 Move auto-finalize off GitHub Actions
+
+**Trigger**: any rotation with `tallyGracePeriod < 7d` (which we should also tighten — see 2.4).
+**Done when**: the cron trigger is one of:
+  - A small VPS with `systemd` timers (operationally simplest; still single-operator).
+  - A Chainlink Automation upkeep or Gelato Web3 Function (decentralized, costs ~$5–10/month per upkeep).
+**Why**: GitHub Actions explicitly throttles `*/15` schedules — we observed 60–90 min effective cadence. For a 30-min-period proposal, that's a real liveness risk: a missed 15-min window means the tally lands after grace and the proposal becomes Defeated by timeout.
+
+#### 2.2 Vote-receipt UX in Expo
+
+**Trigger**: anytime — purely additive, no rotation needed.
+**Done when**: [`LastVoteCard.tsx`](apps/expo/components/LastVoteCard.tsx) shows, in addition to the tx hash, a one-tap inclusion check: parse the `PublishMessage` event from the tx receipt to confirm the encrypted ballot ended up in `Poll.numMessages` at the expected index. Optionally compute a Merkle proof against the message tree post-merge so a citizen can prove their ballot is in the tallied set.
+
+#### 2.3 Documented coordinator key rotation procedure
+
+**Trigger**: before the first scheduled key rotation (recommend every 6 months).
+**Done when**: written procedure, rehearsed once on testnet, covers: generate fresh Babyjubjub keypair via the founding-attester ceremony → redeploy `MaciAttesterGovernor` with new `coordinatorPubKey` (current path; expensive) OR design a per-poll coordinator-key pattern that makes routine rotation cheap. The current architecture forces a Governor redeploy because `coordinatorPubKey` is an immutable constructor arg passed into every `MACI.deployPoll` call.
+
+#### 2.4 Tighten `tallyGracePeriod` from 7 days to ≤24 hours
+
+**Trigger**: after Phase 2.1 (decentralized cron) ships.
+**Done when**: `tallyGracePeriod` is `≤86_400` and the cron has been running cleanly for at least 4 weeks. The current 7 days was set conservatively while the cron path was unproven; after Phase 2.1 it's overengineered and widens the window in which a coordinator-side mistake can affect the recorded outcome.
+
+#### 2.5 Reproducible front-end builds + IPFS pinning
+
+**Trigger**: before any binding vote.
+**Done when**: the Expo bundle and the `apps/web` build are reproducible from source (lockfiles, deterministic builds, hash published on chain), and the IPFS-pinned bundle is available as an alternative entry point. Defends against a Vercel / EAS supply-chain compromise pointing voters at a wrong proposal.
+
+### Phase 3 — long-term decentralization
+
+These are not pilot-blockers but they shape the long-term integrity of the system.
+
+#### 3.1 Citizen-initiated proposals (or escape hatch)
+
+**Trigger**: politically: when the citizen base passes ~200 and a non-attester wants to propose something the attesters won't.
+**Done when**: either (a) a parallel `propose()` path opens for citizens with N-of-M citizen co-sponsorship (e.g. 10 citizens), or (b) a documented escape hatch that lets the community fork the system if attesters become a captured class.
+
+#### 3.2 Governance over MACI parameter changes
+
+**Trigger**: post-pilot.
+**Done when**: changing `votingPeriod`, `quorumAbsolute`, `tallyGracePeriod` requires going through the existing on-chain governance flow itself, not a deployer redeploy. Currently it's `REUSE_INFRA=1` from a privileged EOA — a single point of authority over the rules.
+
+#### 3.3 Legal status clarified in README
+
+**Trigger**: before public launch.
+**Done when**: README states explicitly whether a Roebel vote is a `Verein` internal decision, a non-binding `Bürgerbefragung`, an input to `Stadtrat` resolutions, or something else, and what the legal liability of the founders is for a wrong tally. Citizens deserve to know how to interpret the on-chain outcome.
+
+### Cosmetic dead code
+
+**`CitizenNFT` inherits `ERC721Votes`** (`getVotes(address)`, `delegates(address)`) from when the original public-vote `AttesterGovernor` was the live governor. The current `MaciAttesterGovernor` doesn't read it — voting weight is read from `Tally` instead. The hook is still callable but Roebel governance does not consult it. The risk surface is: someone deploys a *different* governance contract pointing at `CitizenNFT.getVotes` to siphon citizen voting weight into an unrelated DAO. Citizens would still need to interact with that contract for it to matter (no automatic exposure), so the surface is cosmetic. We'll keep it documented; if/when CitizenNFT is redeployed for an unrelated reason, drop the inheritance.
+
+---
+
+## 12. Appendix
+
+### 12.1 Glossary
 
 | Term | Meaning |
 |---|---|
@@ -577,7 +675,7 @@ This is the orphan state: `proposalPolls(id)` returned the zero address. After a
 | **`tallyGracePeriod`** | Seconds the Governor will continue reporting Active after the voting deadline, while waiting for the coordinator's tally |
 | **Orphan proposal** | A proposal that was created on an earlier (now-rotated) Governor; the current Governor's `proposalPolls(id)` returns the zero address |
 
-### 11.2 Cryptographic parameters
+### 12.2 Cryptographic parameters
 
 The single source of truth for tree depths is the circuit signature:
 
@@ -601,7 +699,7 @@ Capacity implications:
 - Total messages per Poll (5⁹): ≈ 2 M.
 - Voting options (5³): 125 — three of them used (Against/For/Abstain).
 
-### 11.3 `isTallied()` is vacuously true
+### 12.3 `isTallied()` is vacuously true
 
 `Tally.isTallied()` is computed as `tallyBatchNum * 5^intStateTreeDepth >= numSignUps`. For a poll where `mergeSignups` was never called, `numSignUps = 0`, so the predicate is `0 >= 0 = true` even though no actual tally has been submitted.
 
@@ -609,7 +707,7 @@ We discovered this when [`scan-and-finalize.js`](../apps/coordinator/scripts/sca
 
 Don't use `isTallied()` anywhere — including inside `MaciAttesterGovernor._quorumReached` / `_voteSucceeded` / `state()`, which originally trusted it (rotation #6 fixed that).
 
-### 11.4 History of the rotations
+### 12.4 History of the rotations
 
 In sequence, why each was needed:
 
@@ -629,7 +727,7 @@ Lessons for the next rotation:
 - The zKey filename's number ordering matches the **circuit template signature**, not the `Poll.treeDepths` struct order. Always verify against `node_modules/maci-circuits/circom/core/non-qv/{processMessages,tallyVotes}.circom`.
 - The `setVerifyingKeysBatch` signature on `VkRegistry` registers process + tally VKs together. The tally VK's key ignores `messageBatchSize` (uses only `(stateTreeDepth, intStateTreeDepth, voteOptionTreeDepth)`), so re-registering at a new batch size collides on the tally side. Deploy a fresh `VkRegistry` instead.
 
-### 11.5 File index
+### 12.5 File index
 
 | Path | Role |
 |---|---|
@@ -656,7 +754,7 @@ Lessons for the next rotation:
 | [`apps/expo/components/ProposalStateBadge.tsx`](../apps/expo/components/ProposalStateBadge.tsx) | Live chain-state badge |
 | [`packages/blockchain/src/index.ts`](../packages/blockchain/src/index.ts) | Cross-app contract registry |
 
-### 11.6 External references
+### 12.6 External references
 
 - MACI v2 docs: https://maci.pse.dev
 - Production trusted-setup ceremony: https://maci.pse.dev/blog/maci-v2-ceremony (PSE)
