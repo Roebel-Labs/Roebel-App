@@ -1,12 +1,30 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
+const path = require('path');
 const { getDefaultConfig } = require("expo/metro-config");
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Required so the deep `thirdweb/dist/esm/...` imports used by lib/wallet-key.ts
-// resolve. Thirdweb's package "exports" map doesn't expose ./dist/*, and Metro
-// in Expo SDK 55 enforces it by default.
-config.resolver.unstable_enablePackageExports = false;
+// Sentinel module names → real file paths inside thirdweb's `dist/esm/`.
+// Used by lib/wallet-key.ts to reach internal helpers that thirdweb's package
+// "exports" map does not publish. We locate the package via its (public)
+// package.json and join from there — Node's require.resolve refuses deep
+// `dist/*` paths since they are not in `exports`. Re-validate on every
+// thirdweb upgrade.
+const thirdwebRoot = path.dirname(require.resolve('thirdweb/package.json'));
+const THIRDWEB_INTERNAL = {
+  'thirdweb-internal/retrieval': path.join(
+    thirdwebRoot,
+    'dist/esm/wallets/in-app/native/helpers/wallet/retrieval.js'
+  ),
+  'thirdweb-internal/client-scoped-storage': path.join(
+    thirdwebRoot,
+    'dist/esm/wallets/in-app/core/authentication/client-scoped-storage.js'
+  ),
+  'thirdweb-internal/native-storage': path.join(
+    thirdwebRoot,
+    'dist/esm/utils/storage/nativeStorage.js'
+  ),
+};
 
 // SVG transformer configuration
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer');
@@ -44,6 +62,11 @@ config.resolver.blockList = [
 
 // Custom resolver to exclude problematic modules from bundle
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Redirect thirdweb-internal/* sentinels to the real internal files.
+  if (moduleName in THIRDWEB_INTERNAL) {
+    return { type: 'sourceFile', filePath: THIRDWEB_INTERNAL[moduleName] };
+  }
+
   // Exclude react-native-mmkv (all platforms)
   if (moduleName === 'react-native-mmkv' || moduleName.includes('react-native-mmkv')) {
     return { type: 'empty' };
