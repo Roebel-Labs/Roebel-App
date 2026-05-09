@@ -90,6 +90,12 @@ export default function VoteButtons({
   // collapsing the card and re-revealing the 3-button row.
   const [changing, setChanging] = useState(false);
   const [nowSec, setNowSec] = useState<bigint>(BigInt(Math.floor(Date.now() / 1000)));
+  // Live on-chain state used to gate the post-deadline "Koordinator entschlüsselt…"
+  // copy. It's a duplicate read of what ProposalStateBadge already polls, but
+  // VoteButtons needs its own copy to know whether the result has landed —
+  // showing the wait message after the tally is on chain just confuses voters.
+  // null = not loaded yet; otherwise mirrors governor.state(proposalId).
+  const [liveState, setLiveState] = useState<ProposalState | null>(null);
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
   const [successDrawer, setSuccessDrawer] = useState({
     visible: false,
@@ -142,6 +148,34 @@ export default function VoteButtons({
     }, 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Poll governor.state(proposalId) every 30 s. We only use it inside the
+  // post-deadline branch to differentiate "tally still pending" (state ==
+  // Active during grace) from "tally landed" (state ∈ Defeated/Succeeded/…).
+  useEffect(() => {
+    if (!proposalId || proposalId === 0n) return;
+    let cancelled = false;
+    const fetchState = async () => {
+      try {
+        const raw = await readContract({
+          contract: governorContract,
+          method: 'function state(uint256 proposalId) view returns (uint8)',
+          params: [proposalId],
+        });
+        if (cancelled) return;
+        const numeric = Number(raw);
+        if (!Number.isNaN(numeric)) setLiveState(numeric as ProposalState);
+      } catch (err) {
+        console.warn('[VoteButtons] state() read failed:', err);
+      }
+    };
+    fetchState();
+    const id = setInterval(fetchState, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [proposalId]);
 
   // The MACI Poll accepts publishMessage from the moment it's deployed
   // (deployTime) until deployTime + duration. The Governor's stored deadline
@@ -434,10 +468,23 @@ export default function VoteButtons({
   // behind chain — a proposal can be on-chain Active while Supabase still
   // has it as Pending.
   if (isVotingClosed) {
-    // Don't fall back to getStateMessage(proposalState) here — that uses the
-    // cached Supabase state, which can still say Pending even after voting
-    // ended (the result was the contradictory "voting starts soon" copy).
-    // Use a fixed message that reflects the real post-deadline pipeline.
+    // Once the chain has resolved the proposal (Defeated/Succeeded/Executed/
+    // Canceled/Queued/Expired) the result is on chain and the badge plus
+    // Wahlergebnisse already convey it. Drop the duplicate "Koordinator
+    // entschlüsselt jetzt…" card. It only stays useful while liveState ==
+    // Active — i.e. we're in the post-deadline grace window with no tally yet.
+    const TERMINAL_STATES = new Set<ProposalState>([
+      ProposalState.Defeated,
+      ProposalState.Succeeded,
+      ProposalState.Queued,
+      ProposalState.Executed,
+      ProposalState.Canceled,
+      ProposalState.Expired,
+    ]);
+    if (liveState !== null && TERMINAL_STATES.has(liveState)) {
+      return null;
+    }
+
     return (
       <Container colors={colors}>
         <Text style={[styles.title, { color: colors.textPrimary, marginBottom: 4 }]}>

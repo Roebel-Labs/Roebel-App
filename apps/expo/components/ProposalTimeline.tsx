@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { readContract } from 'thirdweb';
-import { governorContract } from '@/constants/thirdweb';
+import { governorContract, getTallyContract } from '@/constants/thirdweb';
 import { ProposalState } from '@/lib/governance-types';
 import { useTheme } from '@/context/ThemeContext';
 import { toBigInt } from '@/lib/governance-utils';
@@ -42,6 +42,11 @@ interface Anchors {
   /** Voting period in seconds. */
   votingPeriodSeconds: number;
   clockMode: ClockMode;
+  /** Real on-chain tally state. `tallyAddress` is null while the proposal isn't
+   *  on the current Governor (orphan); `published === true` once the
+   *  coordinator has called addTallyResults at least once. */
+  tallyAddress: string | null;
+  tallyPublished: boolean;
 }
 
 function formatDuration(seconds: number): string {
@@ -89,7 +94,7 @@ export default function ProposalTimeline({
 
     const anchor = async () => {
       try {
-        const [modeRaw, clockRaw, snapshotRaw, deadlineRaw, delayRaw, periodRaw] = await Promise.all([
+        const [modeRaw, clockRaw, snapshotRaw, deadlineRaw, delayRaw, periodRaw, pollsRaw] = await Promise.all([
           readContract({
             contract: governorContract,
             method: 'function CLOCK_MODE() view returns (string)',
@@ -120,6 +125,12 @@ export default function ProposalTimeline({
             method: 'function votingPeriod() view returns (uint256)',
             params: [],
           }),
+          readContract({
+            contract: governorContract,
+            method:
+              'function proposalPolls(uint256) view returns (uint256 pollId, address poll, address messageProcessor, address tally, uint256 deadline)',
+            params: [proposalId],
+          }) as Promise<readonly [bigint, string, string, string, bigint]>,
         ]);
         if (cancelledRef.current) return;
 
@@ -131,6 +142,29 @@ export default function ProposalTimeline({
         const deadlineUnits = toBigInt(deadlineRaw);
         const votingDelay = toBigInt(delayRaw);
         const votingPeriod = toBigInt(periodRaw);
+        const tallyAddrRaw = pollsRaw[3];
+        const tallyAddress =
+          tallyAddrRaw && tallyAddrRaw.toLowerCase() !== '0x0000000000000000000000000000000000000000'
+            ? tallyAddrRaw
+            : null;
+
+        // Read totalTallyResults if we have a tally addr — gates the
+        // "Ergebnis veröffentlicht" stage. Cheap (one chain read) and
+        // rolls into the same 30 s anchor refresh.
+        let tallyPublished = false;
+        if (tallyAddress) {
+          try {
+            const total = (await readContract({
+              contract: getTallyContract(tallyAddress),
+              method: 'function totalTallyResults() view returns (uint256)',
+              params: [],
+            })) as bigint;
+            tallyPublished = toBigInt(total) > 0n;
+          } catch (err) {
+            console.warn('[ProposalTimeline] totalTallyResults read failed:', err);
+          }
+          if (cancelledRef.current) return;
+        }
 
         const unitsToSeconds = (n: bigint): number =>
           clockMode === 'timestamp' ? Number(n) : Number(n) * BLOCK_TIME_SECONDS;
@@ -154,6 +188,8 @@ export default function ProposalTimeline({
           votingDelaySeconds: unitsToSeconds(votingDelay),
           votingPeriodSeconds: unitsToSeconds(votingPeriod),
           clockMode,
+          tallyAddress,
+          tallyPublished,
         });
       } catch (err) {
         console.warn('[ProposalTimeline] anchor read failed:', err);
@@ -257,7 +293,7 @@ export default function ProposalTimeline({
       >
         <View style={styles.timelineHeader}>
           <Text style={[styles.timelineHeaderEmoji, { color: colors.textSecondary }]}>🕐</Text>
-          <Text style={[styles.timelineHeaderText, { color: colors.textSecondary }]}>TIMELINE</Text>
+          <Text style={[styles.timelineHeaderText, { color: colors.textSecondary }]}>VERLAUF</Text>
         </View>
 
         <Stage
@@ -285,6 +321,7 @@ export default function ProposalTimeline({
 
         <Stage
           dotColor={isEnded ? colors.textPrimary : colors.disabled}
+          showConnector
           colors={colors}
           title={`Abstimmung endet ${isActive ? '🗳️' : ''}`.trim()}
           titleColor={isEnded ? colors.textPrimary : colors.textSecondary}
@@ -292,7 +329,21 @@ export default function ProposalTimeline({
           tertiary={`Dauer: ${formatDuration(anchors.votingPeriodSeconds)}`}
         />
 
-        {isEnded ? (
+        <Stage
+          dotColor={anchors.tallyPublished ? colors.textPrimary : colors.disabled}
+          colors={colors}
+          title={anchors.tallyPublished ? 'Ergebnis veröffentlicht' : 'Ergebnis ausstehend'}
+          titleColor={anchors.tallyPublished ? colors.textPrimary : colors.textSecondary}
+          subtitle={
+            anchors.tallyPublished
+              ? 'auf der Blockchain'
+              : isEnded
+                ? 'Koordinator berechnet…'
+                : '—'
+          }
+        />
+
+        {isEnded && !anchors.tallyPublished ? (
           <Text style={[styles.endedNote, { color: colors.textSecondary }]}>{endedMessage}</Text>
         ) : null}
       </View>
