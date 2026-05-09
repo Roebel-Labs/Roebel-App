@@ -57,6 +57,9 @@ import {
   REQUEST_STATUS_COLORS,
   REQUEST_STATUS_LABELS,
 } from "@/components/admin/dao/colors";
+import { MaciInfraCard } from "@/components/admin/dao/MaciInfraCard";
+import { CoordinatorHealthCard } from "@/components/admin/dao/CoordinatorHealthCard";
+import { RotationHistoryCard } from "@/components/admin/dao/RotationHistoryCard";
 
 export const dynamic = "force-dynamic";
 
@@ -432,6 +435,12 @@ export default function DaoDashboardPage() {
         />
       </div>
 
+      {/* MACI infrastructure + coordinator service status — high-leverage
+          info for an admin auditing the on-chain governance pipeline. */}
+      <MaciInfraCard />
+
+      <CoordinatorHealthCard />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="bg-card border border-border shadow-none lg:col-span-2">
           <CardHeader>
@@ -682,6 +691,8 @@ export default function DaoDashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <RotationHistoryCard />
 
       {dao.stats && proposalsForChart.length > 0 && (
         <Card className="bg-card border border-border shadow-none">
