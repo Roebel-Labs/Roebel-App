@@ -1,17 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as LocalAuthentication from 'expo-local-authentication';
+import { openBrowserAsync } from 'expo-web-browser';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getProfiles, getUserEmail } from 'thirdweb/wallets/in-app';
 
@@ -19,8 +12,9 @@ import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { client } from '@/constants/thirdweb';
 import { shortenAddress } from '@/lib/governance-utils';
-import { reconstructEoaPrivateKey } from '@/lib/wallet-key';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+
+const REVEAL_URL = 'https://www.roebel.app/wallet/reveal';
 
 const PROVIDER_LABELS: Record<string, string> = {
   email: 'E-Mail',
@@ -44,23 +38,7 @@ export default function RevealKeyScreen() {
   const smartAddress = account?.address;
   const isInAppWallet = wallet?.id === 'inApp';
 
-  const [privateKey, setPrivateKey] = useState<`0x${string}` | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [bioReady, setBioReady] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<{ provider: string; email?: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const ok =
-        (await LocalAuthentication.hasHardwareAsync()) &&
-        (await LocalAuthentication.isEnrolledAsync());
-      if (!cancelled) setBioReady(ok);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!isInAppWallet) {
@@ -92,45 +70,18 @@ export default function RevealKeyScreen() {
     };
   }, [isInAppWallet]);
 
-  // Hide the key whenever the screen loses focus.
-  useFocusEffect(
-    useCallback(() => {
-      return () => setPrivateKey(null);
-    }, [])
-  );
-
-  // Hide the key if the user logs out while the screen is mounted.
-  useEffect(() => {
-    if (!account) setPrivateKey(null);
-  }, [account]);
-
   const onCopy = async (value: string, label: string) => {
     await Clipboard.setStringAsync(value);
     showSnackbar({ message: `${label} kopiert` });
   };
 
-  const onReveal = async () => {
-    if (busy) return;
-    setBusy(true);
+  const onOpenReveal = async () => {
     try {
-      if (bioReady) {
-        const r = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Privatschlüssel anzeigen',
-          cancelLabel: 'Abbrechen',
-        });
-        if (!r.success) return;
-      }
-      const pk = await reconstructEoaPrivateKey();
-      setPrivateKey(pk);
-    } catch (e: any) {
-      showSnackbar({
-        message:
-          e?.message === 'MISSING_SHARES'
-            ? 'Schlüssel kann nicht rekonstruiert werden. Bitte erneut anmelden.'
-            : 'Fehler beim Laden des Privatschlüssels.',
+      await openBrowserAsync(REVEAL_URL, {
+        presentationStyle: undefined,
       });
-    } finally {
-      setBusy(false);
+    } catch {
+      showSnackbar({ message: 'Browser konnte nicht geöffnet werden.' });
     }
   };
 
@@ -187,77 +138,44 @@ export default function RevealKeyScreen() {
           )}
         </Section>
 
-        {isInAppWallet && (
-          <Section title="PRIVATER SCHLÜSSEL" colors={colors}>
-            <View style={styles.keyContainer}>
-              {privateKey ? (
-                <>
-                  <Text
-                    selectable
-                    style={[styles.keyText, { color: colors.textPrimary }]}
-                  >
-                    {privateKey}
-                  </Text>
-                  <View style={styles.keyActions}>
-                    <Pressable
-                      style={[styles.actionButton, { backgroundColor: colors.primary }]}
-                      onPress={() => onCopy(privateKey, 'Privatschlüssel')}
-                    >
-                      <Ionicons name="copy-outline" size={16} color={colors.onPrimary} />
-                      <Text style={[styles.actionLabel, { color: colors.onPrimary }]}>
-                        Kopieren
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.actionButton,
-                        { backgroundColor: colors.surfaceSecondary },
-                      ]}
-                      onPress={() => setPrivateKey(null)}
-                    >
-                      <Ionicons name="eye-off-outline" size={16} color={colors.textPrimary} />
-                      <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>
-                        Verbergen
-                      </Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <Pressable
-                  style={[styles.revealBox, { borderColor: colors.borderSecondary }]}
-                  onPress={onReveal}
-                  disabled={busy}
-                >
-                  <Text
-                    style={[styles.maskedKey, { color: colors.textTertiary }]}
-                    numberOfLines={1}
-                  >
-                    {'•'.repeat(40)}
-                  </Text>
-                  <View style={styles.revealHint}>
-                    {busy ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <Ionicons
-                        name={bioReady ? 'finger-print' : 'eye-outline'}
-                        size={18}
-                        color={colors.primary}
-                      />
-                    )}
-                    <Text style={[styles.revealHintText, { color: colors.primary }]}>
-                      {busy ? 'Lädt …' : 'Antippen zum Anzeigen'}
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
+        <Section title="PRIVATEN SCHLÜSSEL EXPORTIEREN" colors={colors}>
+          <View style={styles.exportContent}>
+            <Text style={[styles.exportLead, { color: colors.textPrimary }]}>
+              Der Export erfolgt über die offizielle Thirdweb-Oberfläche im Browser.
+            </Text>
+            <View style={styles.steps}>
+              <Step
+                index={1}
+                text="Im Browser mit derselben Anmeldemethode anmelden (z. B. gleiche E-Mail oder Google-Konto)."
+                colors={colors}
+              />
+              <Step
+                index={2}
+                text="Auf die Wallet-Adresse oben rechts klicken."
+                colors={colors}
+              />
+              <Step
+                index={3}
+                text='„Manage Wallet" → „Export Private Key" auswählen.'
+                colors={colors}
+              />
             </View>
-          </Section>
-        )}
+            <Pressable
+              style={[styles.cta, { backgroundColor: colors.primary }]}
+              onPress={onOpenReveal}
+            >
+              <Ionicons name="open-outline" size={18} color={colors.onPrimary} />
+              <Text style={[styles.ctaLabel, { color: colors.onPrimary }]}>
+                Im Browser fortfahren
+              </Text>
+            </Pressable>
+          </View>
+        </Section>
 
         <View style={styles.footerNote}>
           <Text style={[styles.footerNoteText, { color: colors.textTertiary }]}>
-            Es gibt keine Recovery-Phrase. Importieren Sie diesen Schlüssel z. B. in MetaMask, um
-            Ihr Wallet wiederherzustellen.
+            Es gibt keine Recovery-Phrase. Importieren Sie den Schlüssel z. B. in MetaMask, um Ihr
+            Wallet wiederherzustellen.
           </Text>
         </View>
 
@@ -317,12 +235,34 @@ function Row({ label, value, colors, onCopy, isLast }: RowProps) {
   );
 }
 
+function Step({
+  index,
+  text,
+  colors,
+}: {
+  index: number;
+  text: string;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <View style={styles.stepRow}>
+      <View
+        style={[
+          styles.stepBullet,
+          { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+        ]}
+      >
+        <Text style={[styles.stepBulletText, { color: colors.primary }]}>{index}</Text>
+      </View>
+      <Text style={[styles.stepText, { color: colors.textPrimary }]}>{text}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex1: { flex: 1 },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+  scrollContent: { paddingBottom: 40 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -337,10 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
-  },
+  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
   headerSpacer: { width: 40 },
   warning: {
     flexDirection: 'row',
@@ -351,20 +288,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  warningIcon: {
-    marginRight: 10,
-    marginTop: 1,
-  },
+  warningIcon: { marginRight: 10, marginTop: 1 },
   warningText: {
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     lineHeight: 18,
   },
-  sectionContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-  },
+  sectionContainer: { paddingHorizontal: 16, paddingTop: 24 },
   sectionTitle: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
@@ -372,90 +303,57 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  sectionContent: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
+  sectionContent: { borderRadius: 12, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  rowText: {
-    flex: 1,
-    marginRight: 12,
-  },
-  rowLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginBottom: 2,
-  },
-  rowValue: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
+  rowText: { flex: 1, marginRight: 12 },
+  rowLabel: { fontSize: 12, fontFamily: 'Inter-Regular', marginBottom: 2 },
+  rowValue: { fontSize: 15, fontFamily: 'Inter-Medium' },
   rowAction: {
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  revealBox: {
-    minHeight: 88,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  maskedKey: {
+  exportContent: { paddingHorizontal: 16, paddingVertical: 16 },
+  exportLead: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    letterSpacing: 2,
-    marginBottom: 8,
-  },
-  revealHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  revealHintText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  keyText: {
-    fontFamily: 'Courier',
-    fontSize: 13,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  keyActions: {
-    flexDirection: 'row',
-    gap: 8,
+  steps: { gap: 10, marginBottom: 16 },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  stepBullet: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
   },
-  actionButton: {
+  stepBulletText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  stepText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 18,
+  },
+  cta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
-  actionLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  footerNote: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-  },
+  ctaLabel: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  footerNote: { paddingHorizontal: 16, paddingTop: 24 },
   footerNoteText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',

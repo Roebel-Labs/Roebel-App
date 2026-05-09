@@ -185,26 +185,43 @@ async function main() {
       mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
     );
 
-    console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch} refTx=${transactionHash ?? "none"}`);
-    const tallyData = await genProofs({
-      pollId: pollIdBig,
-      maciAddress,
-      signer: logSigner,
-      coordinatorPrivKey: process.env.COORDINATOR_PRIV,
-      processZkey: ZKEY_PROCESS,
-      tallyZkey: ZKEY_TALLY,
-      processWasm: WASM_PROCESS,
-      tallyWasm: WASM_TALLY,
-      tallyFile,
-      outputDir: proofDir,
-      useWasm: true,
-      useQuadraticVoting: false,
-      startBlock,
-      endBlock,
-      blocksPerBatch,
-      transactionHash,
-      quiet: false,
-    });
+    // Skip genProofs if a complete proof set already exists on disk from a
+    // previous (partial) run. genProofs is the slow step (~10 min process +
+    // ~10 min tally on WASM), and rerunning it is wasted work — proveOnChain
+    // is idempotent against MessageProcessor.numBatchesProcessed and
+    // Tally.tallyBatchNum, so submitting cached proofs that have already
+    // landed is a no-op, and the only thing left to submit will be the tally
+    // batches that haven't yet.
+    const cachedTallyExists = fs.existsSync(tallyFile);
+    const cachedProcessExists = fs.existsSync(path.join(proofDir, "process_0.json"));
+    const useCachedProofs = cachedTallyExists && cachedProcessExists;
+
+    let tallyData;
+    if (useCachedProofs) {
+      console.log(`\n[genProofs] poll=${pollId} reusing cached proofs from ${proofDir}`);
+      tallyData = JSON.parse(fs.readFileSync(tallyFile, "utf8"));
+    } else {
+      console.log(`\n[genProofs] poll=${pollId} startBlock=${startBlock ?? "0"} blocksPerBatch=${blocksPerBatch} refTx=${transactionHash ?? "none"}`);
+      tallyData = await genProofs({
+        pollId: pollIdBig,
+        maciAddress,
+        signer: logSigner,
+        coordinatorPrivKey: process.env.COORDINATOR_PRIV,
+        processZkey: ZKEY_PROCESS,
+        tallyZkey: ZKEY_TALLY,
+        processWasm: WASM_PROCESS,
+        tallyWasm: WASM_TALLY,
+        tallyFile,
+        outputDir: proofDir,
+        useWasm: true,
+        useQuadraticVoting: false,
+        startBlock,
+        endBlock,
+        blocksPerBatch,
+        transactionHash,
+        quiet: false,
+      });
+    }
 
     console.log(`\n[proveOnChain] poll=${pollId}`);
     await proveOnChain({
