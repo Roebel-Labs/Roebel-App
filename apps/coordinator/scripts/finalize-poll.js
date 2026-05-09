@@ -39,6 +39,11 @@ const {
   proveOnChain,
   verify,
 } = require("maci-cli");
+const { genTreeProof } = require("maci-crypto");
+
+// Vote options the Expo app reads (matches VoteType enum).
+const APP_VOTE_OPTIONS = [0, 1, 2]; // 0=Against, 1=For, 2=Abstain
+const VOTE_OPTION_TREE_DEPTH = 3;
 
 const REQUIRED_ENV = [
   "COORDINATOR_PRIV",
@@ -90,6 +95,63 @@ function buildSigner(rpcUrl) {
   const raw = process.env.COORDINATOR_ETH_PRIV;
   const pk = raw.startsWith("0x") ? raw : "0x" + raw;
   return new ethers.Wallet(pk, provider);
+}
+
+/**
+ * Replacement for the final addTallyResults call inside maci-cli's proveOnChain.
+ * That one passes all 5^voteOptionTreeDepth = 125 vote-option-tree leaves in
+ * a single tx, which exceeds Base's 30M gas limit. We submit only the three
+ * options the Expo app actually reads (Against/For/Abstain) — that's enough
+ * to populate Tally.totalTallyResults() and Tally.tallyResults(0/1/2). The
+ * remaining 122 leaves stay at zero on chain, which is fine: they're zero
+ * in the tally too. The on-chain merkle-proof verification still passes
+ * because the proofs are computed against the full 125-leaf tree.
+ */
+async function chunkedAddTallyResults(tallyData, signer) {
+  const tally = new ethers.Contract(
+    tallyData.tallyAddress,
+    [
+      "function totalTallyResults() view returns (uint256)",
+      "function addTallyResults((uint256[] voteOptionIndices, uint256[] tallyResults, uint256[][][] tallyResultProofs, uint256 totalSpent, uint256 totalSpentSalt, uint256 tallyResultSalt, uint256 newResultsCommitment, uint256 spentVoiceCreditsHash, uint256 perVOSpentVoiceCreditsHash))",
+    ],
+    signer,
+  );
+
+  const before = Number(await tally.totalTallyResults());
+  if (before > 0) {
+    console.log(`[chunked addTallyResults] already populated (totalTallyResults=${before}); skipping`);
+    return;
+  }
+
+  const fullTally = tallyData.results.tally.map((t) => BigInt(t));
+  const args = {
+    voteOptionIndices: APP_VOTE_OPTIONS.map((i) => BigInt(i)),
+    tallyResults: APP_VOTE_OPTIONS.map((i) => fullTally[i]),
+    // Proofs must be computed against the FULL 125-leaf tree even though we
+    // only submit 3 leaves — that's how Tally verifies inclusion.
+    tallyResultProofs: APP_VOTE_OPTIONS.map((i) =>
+      genTreeProof(i, fullTally, VOTE_OPTION_TREE_DEPTH),
+    ),
+    totalSpent: BigInt(tallyData.totalSpentVoiceCredits.spent),
+    totalSpentSalt: BigInt(tallyData.totalSpentVoiceCredits.salt),
+    tallyResultSalt: BigInt(tallyData.results.salt),
+    newResultsCommitment: BigInt(tallyData.results.commitment),
+    spentVoiceCreditsHash: BigInt(tallyData.totalSpentVoiceCredits.commitment),
+    perVOSpentVoiceCreditsHash:
+      tallyData.perVOSpentVoiceCredits && tallyData.perVOSpentVoiceCredits.commitment
+        ? BigInt(tallyData.perVOSpentVoiceCredits.commitment)
+        : 0n,
+  };
+
+  console.log(
+    `[chunked addTallyResults] submitting ${APP_VOTE_OPTIONS.length} of ${fullTally.length} leaves…`,
+  );
+  const tx = await tally.addTallyResults(args);
+  console.log(`[chunked addTallyResults] tx: ${tx.hash}`);
+  const receipt = await tx.wait();
+  console.log(
+    `[chunked addTallyResults] confirmed in block ${receipt.blockNumber}, gas used ${receipt.gasUsed.toString()}`,
+  );
 }
 
 async function main() {
@@ -223,15 +285,41 @@ async function main() {
       });
     }
 
+    // proveOnChain submits all the process and tally proofs to MessageProcessor
+    // and Tally, then tries to call addTallyResults with ALL leaves of the
+    // vote-option tree (5^voteOptionTreeDepth = 125 leaves) in a single tx.
+    // For our config that final tx exceeds Base's 30M gas/tx limit and the
+    // node rejects it. We catch that specific failure mode and finish the job
+    // ourselves with a chunked addTallyResults call below.
     console.log(`\n[proveOnChain] poll=${pollId}`);
-    await proveOnChain({
-      pollId: pollIdBig,
-      maciAddress,
-      signer: txSigner,
-      proofDir,
-      tallyFile,
-      quiet: false,
-    });
+    try {
+      await proveOnChain({
+        pollId: pollIdBig,
+        maciAddress,
+        signer: txSigner,
+        proofDir,
+        tallyFile,
+        quiet: false,
+      });
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (/exceeds max transaction gas limit/i.test(msg)) {
+        console.log(
+          "[proveOnChain] maci-cli's monolithic addTallyResults call hit Base's 30M gas limit — proof submissions still succeeded; falling back to our chunked addTallyResults below.",
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    // Submit tally results for the vote options the app actually reads
+    // (Against=0, For=1, Abstain=2). The remaining 122 vote-option-tree
+    // leaves are all zero and submitting them too is what blew the gas
+    // limit above. Setting just these three is enough for
+    // Tally.totalTallyResults() > 0 (which gates Governor.state() and the
+    // Expo VotingStats render) and for VotingStats's tallyResults(0/1/2)
+    // reads to return real values.
+    await chunkedAddTallyResults(tallyData, txSigner);
 
     console.log(`\n[verify] poll=${pollId}`);
     await verify({

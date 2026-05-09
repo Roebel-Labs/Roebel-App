@@ -36,9 +36,14 @@ primary_region = "fra"
 [[services]]
   internal_port = 8080
   protocol = "tcp"
-  auto_stop_machines = "stop"
+  # Keep the machine running 24/7. We tried `auto_stop_machines = "stop"` with
+  # `min_machines_running = 0` to save cost, but Fly auto-stops the machine
+  # while finalize-poll.js is mid-genProofs (the WASM proof gen takes ~20 min
+  # without HTTP traffic). The auto-stop SIGINT kills the child process and
+  # we lose the ~10 min of process-proof work each time. ~$15/mo is worth it.
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[services.ports]]
     port = 80
