@@ -3,6 +3,11 @@ const { getDefaultConfig } = require("expo/metro-config");
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
+// Required so the deep `thirdweb/dist/esm/...` imports used by lib/wallet-key.ts
+// resolve. Thirdweb's package "exports" map doesn't expose ./dist/*, and Metro
+// in Expo SDK 55 enforces it by default.
+config.resolver.unstable_enablePackageExports = false;
+
 // SVG transformer configuration
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer');
 config.resolver.assetExts = config.resolver.assetExts.filter((ext) => ext !== 'svg');

@@ -91,6 +91,23 @@ export default function SettingsScreen() {
           ))}
         </Section>
 
+        <Section title="WALLET" colors={colors}>
+          <Pressable
+            style={styles.themeOptionRow}
+            onPress={() => router.push('/settings/reveal-key' as any)}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Privatschlüssel anzeigen
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Nur mit biometrischer Bestätigung sichtbar.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
+        </Section>
+
         <Section title="DATENSCHUTZ" colors={colors}>
           <Pressable
             style={[
