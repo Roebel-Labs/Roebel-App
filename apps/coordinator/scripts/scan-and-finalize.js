@@ -61,11 +61,13 @@ const TALLY_ABI = [
   "function totalTallyResults() view returns (uint256)",
 ];
 
-// Must match the production zKey we have mounted (ProcessMessagesNonQv_14-9-2-3
-// → messageBatchTreeDepth=2). Polls whose on-chain treeDepths.messageTreeSubDepth
-// differs cannot be tallied with the available circuits and are skipped — see
-// the 2026-05-08 root-cause writeup in the commit log.
-const REQUIRED_MSG_TREE_SUB_DEPTH = 2;
+// Must match the production zKey we have mounted (ProcessMessagesNonQv_14-9-2-3).
+// The 4-tuple in the zKey filename maps to the circuit template signature, NOT
+// to Poll.treeDepths field order — see docs/MACI_E_GOVERNANCE.md §11.4. Polls
+// whose on-chain depths don't match are unrecoverable with the available zKey
+// and are skipped without flagging as errors so the cron doesn't keep retrying.
+const REQUIRED_MSG_TREE_SUB_DEPTH = 2; // = msgBatchDepth in 14-9-2-3
+const REQUIRED_MSG_TREE_DEPTH = 9;     // = msgTreeDepth in 14-9-2-3
 
 async function listPendingPolls(provider) {
   const maci = new ethers.Contract(process.env.MACI_ADDRESS, MACI_ABI, provider);
@@ -83,8 +85,12 @@ async function listPendingPolls(provider) {
       const tally = new ethers.Contract(tallyAddr, TALLY_ABI, provider);
       const td = await poll.treeDepths();
       const subDepth = Number(td[1]); // messageTreeSubDepth
-      if (subDepth !== REQUIRED_MSG_TREE_SUB_DEPTH) {
-        skipped.push({ pollId: i, reason: `messageTreeSubDepth=${subDepth} (need ${REQUIRED_MSG_TREE_SUB_DEPTH})` });
+      const msgTreeDepth = Number(td[2]); // messageTreeDepth
+      if (subDepth !== REQUIRED_MSG_TREE_SUB_DEPTH || msgTreeDepth !== REQUIRED_MSG_TREE_DEPTH) {
+        skipped.push({
+          pollId: i,
+          reason: `treeDepths(sub=${subDepth},msg=${msgTreeDepth}) need (sub=${REQUIRED_MSG_TREE_SUB_DEPTH},msg=${REQUIRED_MSG_TREE_DEPTH})`,
+        });
         continue;
       }
       const dd = await poll.getDeployTimeAndDuration();

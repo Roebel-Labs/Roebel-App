@@ -41,7 +41,12 @@ interface IMACINumSignUps {
 }
 
 interface ITallyRead {
-    function isTallied() external view returns (bool);
+    /// @notice Real "results landed on chain" predicate. Non-zero only after
+    ///         `addTallyResult` has actually been called for at least one vote option.
+    ///         Use this instead of `isTallied()` — that one is `tallyBatchNum *
+    ///         5^intStateTreeDepth >= numSignUps`, which is vacuously true (0 >= 0)
+    ///         for any poll where `mergeSignups` hasn't been run yet.
+    function totalTallyResults() external view returns (uint256);
     function totalSpent() external view returns (uint256);
     function tallyResults(uint256 voteOption) external view returns (uint256 value, bool flag);
 }
@@ -206,7 +211,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     function _quorumReached(uint256 proposalId) internal view override returns (bool) {
         address tally = proposalPolls[proposalId].tally;
         if (tally == address(0)) return false;
-        if (!ITallyRead(tally).isTallied()) return false;
+        if (ITallyRead(tally).totalTallyResults() == 0) return false;
         return ITallyRead(tally).totalSpent() >= quorum(0);
     }
 
@@ -214,7 +219,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     function _voteSucceeded(uint256 proposalId) internal view override returns (bool) {
         address tally = proposalPolls[proposalId].tally;
         if (tally == address(0)) return false;
-        if (!ITallyRead(tally).isTallied()) return false;
+        if (ITallyRead(tally).totalTallyResults() == 0) return false;
         (uint256 forVotes, ) = ITallyRead(tally).tallyResults(VOTE_OPTION_FOR);
         (uint256 againstVotes, ) = ITallyRead(tally).tallyResults(VOTE_OPTION_AGAINST);
         return forVotes > againstVotes;
@@ -270,8 +275,16 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     }
 
     /// @dev Keep proposal Active during the post-deadline tally window. Once the tally
-    ///      lands, the standard OZ logic resolves Succeeded/Defeated based on our
-    ///      _quorumReached / _voteSucceeded overrides.
+    ///      actually lands on chain (totalTallyResults > 0), the standard OZ logic
+    ///      resolves Succeeded/Defeated based on our _quorumReached / _voteSucceeded
+    ///      overrides.
+    ///
+    ///      We deliberately use totalTallyResults() rather than isTallied(): the
+    ///      latter is `tallyBatchNum * 5^intStateTreeDepth >= numSignUps`, which is
+    ///      vacuously true (0 >= 0) on any poll where mergeSignups hasn't run yet —
+    ///      so it would trip the early pass-through here BEFORE the grace check
+    ///      and leave un-tallied proposals stuck on Defeated the moment the
+    ///      voting deadline passes.
     function state(uint256 proposalId)
         public
         view
@@ -283,7 +296,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
 
         address tally = proposalPolls[proposalId].tally;
         if (tally == address(0)) return s;
-        if (ITallyRead(tally).isTallied()) return s;
+        if (ITallyRead(tally).totalTallyResults() > 0) return s;
 
         uint256 deadline = proposalPolls[proposalId].deadline;
         if (block.timestamp <= deadline + tallyGracePeriod) {

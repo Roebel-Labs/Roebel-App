@@ -187,8 +187,8 @@ VkRegistry is the only one that's been rotated since first deploy (twice — see
 
 | Contract | Address | Purpose |
 |---|---|---|
-| MaciAttesterGovernor | `0x61E89990225114b941A23cD2a0864C52ddc1E60B` | OZ Governor + MACI-aware state() override |
-| TimelockController | `0xc50C8E2d7b8d13169aB2FAcb5000004d8Eb28465` | OZ Timelock (currently 2-day min delay) |
+| MaciAttesterGovernor | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` | OZ Governor + MACI-aware state() override |
+| TimelockController | `0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe` | OZ Timelock (currently 2-day min delay) |
 
 Coordinator EOA (Fly machine wallet): `0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C`. Owns each Poll's MessageProcessor + Tally contracts (set in `_deployPollFor`).
 
@@ -607,9 +607,9 @@ Capacity implications:
 
 We discovered this when [`scan-and-finalize.js`](../apps/coordinator/scripts/scan-and-finalize.js) was silently skipping a fresh poll. The fix is to use `Tally.totalTallyResults() > 0` as the real "results landed on chain" signal — that's only non-zero after `addTallyResult` has actually been called.
 
-Don't use `isTallied()` anywhere except inside the contract's own `_quorumReached` / `_voteSucceeded` (where `numSignUps > 0` is guaranteed by the post-deadline check).
+Don't use `isTallied()` anywhere — including inside `MaciAttesterGovernor._quorumReached` / `_voteSucceeded` / `state()`, which originally trusted it (rotation #6 fixed that).
 
-### 11.4 History of the three rotations (2026-05-08)
+### 11.4 History of the rotations
 
 In sequence, why each was needed:
 
@@ -621,7 +621,9 @@ In sequence, why each was needed:
 
 4. **Fourth Governor** (`0x11ed03Db…E84f`). 30-min voting period. Same `VkRegistry` as #3. **Failed at `genProofs`** with `The number of leaves must be less than the tree capacity` — root cause: `messageTreeDepth = 2` (off-chain message tree had capacity exactly equal to `messageBatchSize=25`) and `intStateTreeDepth = 9` (didn't match the tally zKey's 5).
 
-5. **Fifth Governor** (`0x61E899…E60B`, current). 30-min voting period. New `VkRegistry`. All four tree depths aligned with the zKey signatures. Verified end-to-end.
+5. **Fifth Governor** (`0x61E899…E60B`). 30-min voting period. New `VkRegistry`. All four tree depths aligned with the zKey signatures. Worked end-to-end **for the test where the tally landed**, but Test 10 surfaced a contract-side bug:
+
+6. **Sixth Governor** (`0x5983F6…30F3`, current, 2026-05-09). 30-min voting period. Same `VkRegistry` as #5. The contract's `state()` override and `_quorumReached`/`_voteSucceeded` trusted the same vacuous `Tally.isTallied()` predicate that we'd already patched out of [`scan-and-finalize.js`](../apps/coordinator/scripts/scan-and-finalize.js). For un-merged polls (numSignUps=0), `isTallied()` returns true vacuously, so the grace-period override was skipped and the badge flipped to `ABGELEHNT` the moment the deadline passed even before the coordinator had a chance to run. Rotation #6 swaps every internal `isTallied()` check for `totalTallyResults() > 0`, which is only non-zero after `addTallyResult` has actually been called. Verified by deploying then watching the badge stay `AKTIV` past the deadline.
 
 Lessons for the next rotation:
 - The zKey filename's number ordering matches the **circuit template signature**, not the `Poll.treeDepths` struct order. Always verify against `node_modules/maci-circuits/circom/core/non-qv/{processMessages,tallyVotes}.circom`.

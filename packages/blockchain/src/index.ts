@@ -15,8 +15,8 @@ export const CONTRACTS = {
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
   // Current MACI v2 privacy-voting governance (apps target this)
-  maciAttesterGovernor: "0x61E89990225114b941A23cD2a0864C52ddc1E60B",
-  maciTimelock: "0xc50C8E2d7b8d13169aB2FAcb5000004d8Eb28465",
+  maciAttesterGovernor: "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
+  maciTimelock: "0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe",
 
   // MACI v2 infrastructure (MACI core, Verifier, gatekeeper, voice credit
   // proxy reused; VkRegistry rotated 2026-05-08 (twice) to align all four

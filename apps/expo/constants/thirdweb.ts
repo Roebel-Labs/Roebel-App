@@ -42,7 +42,7 @@ export const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0xa06
 export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7";
 
 export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x61E89990225114b941A23cD2a0864C52ddc1E60B";
+export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3";
 
 // MACI v2 infrastructure
 export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
