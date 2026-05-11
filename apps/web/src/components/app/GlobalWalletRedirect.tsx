@@ -15,6 +15,7 @@ const EXCLUDED_PREFIXES = [
   "/privacy",
   "/delete-account",
   "/login",
+  "/wallet",     // Export-key flow stays put after connect
   "/proposals/timeline", // Public verifiable governance timeline
 ];
 

@@ -66,13 +66,21 @@ export default function RevealKeyPage() {
             client={client}
             chain={activeChain}
             wallets={wallets}
+            theme="light"
+            connectButton={{
+              label: "Mit Röbel-Konto anmelden",
+              style: {
+                backgroundColor: "#194383",
+                color: "#ffffff",
+                minWidth: 240,
+              },
+            }}
             connectModal={{
               title: "Mit Röbel-Konto anmelden",
               size: "compact",
             }}
             detailsModal={{
               hideSwitchWallet: true,
-              hideDisconnect: false,
             }}
           />
         </div>
