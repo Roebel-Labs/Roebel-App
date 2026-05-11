@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, UserCog, Map, Vote } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, UserCog, Map, Vote } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { NotificationDot } from "@/components/ui/notification-dot"
 import { toast } from "@/hooks/use-toast"
 import { useNotificationCounts } from "@/hooks/useNotificationCounts"
@@ -15,6 +16,7 @@ import type { NotificationCounts } from "@/app/actions/notification-counts"
 export function AdminSidebar() {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isWeitereOpen, setIsWeitereOpen] = useState(false)
   const isMobile = typeof window !== "undefined" ? window.innerWidth < 768 : false
   const { counts } = useNotificationCounts(60000) // Poll every 60 seconds
 
@@ -78,22 +80,18 @@ export function AdminSidebar() {
     return pathname === path || pathname?.startsWith(path)
   }
 
-  const mainLinks: {
+  type NavLink = {
     name: string
     href: string
     icon: React.ReactNode
     badgeKey: keyof NotificationCounts | null
-  }[] = [
+  }
+
+  const mainLinks: NavLink[] = [
     {
       name: "Übersicht",
       href: "/admin/dashboard",
       icon: <LayoutDashboard className="h-5 w-5" />,
-      badgeKey: null,
-    },
-    {
-      name: "Röbel Card",
-      href: "/admin/dashboard/roebel-card",
-      icon: <CreditCard className="h-5 w-5" />,
       badgeKey: null,
     },
     {
@@ -127,6 +125,27 @@ export function AdminSidebar() {
       badgeKey: "speisekarten",
     },
     {
+      name: "Ankündigungen",
+      href: "/admin/dashboard/announcements",
+      icon: <Megaphone className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
+      name: "Mecky Bot",
+      href: "/admin/dashboard/mecky",
+      icon: <Bot className="h-5 w-5" />,
+      badgeKey: "meckyDrafts",
+    },
+  ]
+
+  const extraLinks: NavLink[] = [
+    {
+      name: "Röbel Card",
+      href: "/admin/dashboard/roebel-card",
+      icon: <CreditCard className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
       name: "Gewerbe",
       href: "/admin/dashboard/gewerbe",
       icon: <Store className="h-5 w-5" />,
@@ -157,12 +176,6 @@ export function AdminSidebar() {
       badgeKey: "alerts",
     },
     {
-      name: "Ankündigungen",
-      href: "/admin/dashboard/announcements",
-      icon: <Megaphone className="h-5 w-5" />,
-      badgeKey: null,
-    },
-    {
       name: "Gemeldete Beiträge",
       href: "/admin/dashboard/flagged-posts",
       icon: <Flag className="h-5 w-5" />,
@@ -173,12 +186,6 @@ export function AdminSidebar() {
       href: "/admin/dashboard/notifications",
       icon: <Bell className="h-5 w-5" />,
       badgeKey: "pushNotifications",
-    },
-    {
-      name: "Mecky Bot",
-      href: "/admin/dashboard/mecky",
-      icon: <Bot className="h-5 w-5" />,
-      badgeKey: "meckyDrafts",
     },
     {
       name: "Hilfe & Tipps",
@@ -194,11 +201,71 @@ export function AdminSidebar() {
     },
   ]
 
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-weitere-open")
+    if (stored === "open" || stored === "closed") {
+      setIsWeitereOpen(stored === "open")
+    }
+  }, [])
+
+  useEffect(() => {
+    if (extraLinks.some((l) => isActive(l.href))) {
+      setIsWeitereOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
+  const handleWeitereOpenChange = (open: boolean) => {
+    setIsWeitereOpen(open)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("sidebar-weitere-open", open ? "open" : "closed")
+    }
+  }
+
   const closeMobileSidebar = () => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       document.dispatchEvent(new CustomEvent("sidebar-toggle"))
     }
   }
+
+  const renderLink = (link: NavLink) => (
+    <Link
+      key={link.href}
+      href={link.href}
+      className={`flex items-center px-3 py-2 text-sm font-medium rounded-md group transition-colors ${
+        isActive(link.href)
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      }`}
+      title={isCollapsed ? link.name : undefined}
+      onClick={closeMobileSidebar}
+    >
+      <span className={`relative mr-3 ${isActive(link.href) ? "text-foreground" : "text-muted-foreground"}`}>
+        {link.icon}
+        {isCollapsed && link.badgeKey && counts && counts[link.badgeKey] > 0 && (
+          <NotificationDot
+            count={counts[link.badgeKey]}
+            size="sm"
+            className="absolute -top-1 -right-1"
+          />
+        )}
+      </span>
+      {!isCollapsed && (
+        <>
+          <span className="flex-1">{link.name}</span>
+          {link.badgeKey && counts && counts[link.badgeKey] > 0 && (
+            <NotificationDot
+              count={counts[link.badgeKey]}
+              showNumber
+              size="md"
+              className="mr-2"
+            />
+          )}
+          {isActive(link.href) && <ChevronRight className="h-4 w-4" />}
+        </>
+      )}
+    </Link>
+  )
 
   return (
     <div
@@ -226,44 +293,31 @@ export function AdminSidebar() {
             <h3 className="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Hauptseiten</h3>
           )}
           <nav className="space-y-1">
-            {mainLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md group transition-colors ${
-                  isActive(link.href)
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-                title={isCollapsed ? link.name : undefined}
-                onClick={closeMobileSidebar}
-              >
-                <span className={`relative mr-3 ${isActive(link.href) ? "text-foreground" : "text-muted-foreground"}`}>
-                  {link.icon}
-                  {isCollapsed && link.badgeKey && counts && counts[link.badgeKey] > 0 && (
-                    <NotificationDot
-                      count={counts[link.badgeKey]}
-                      size="sm"
-                      className="absolute -top-1 -right-1"
+            {mainLinks.map(renderLink)}
+
+            {isCollapsed ? (
+              <>
+                <div className="my-2 border-t border-border" />
+                {extraLinks.map(renderLink)}
+              </>
+            ) : (
+              <Collapsible open={isWeitereOpen} onOpenChange={handleWeitereOpenChange}>
+                <CollapsibleTrigger
+                  className="flex w-full items-center px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  aria-label="Weitere"
+                >
+                  <span className="relative mr-3 text-muted-foreground">
+                    <ChevronDown
+                      className={`h-5 w-5 transition-transform ${isWeitereOpen ? "" : "-rotate-90"}`}
                     />
-                  )}
-                </span>
-                {!isCollapsed && (
-                  <>
-                    <span className="flex-1">{link.name}</span>
-                    {link.badgeKey && counts && counts[link.badgeKey] > 0 && (
-                      <NotificationDot
-                        count={counts[link.badgeKey]}
-                        showNumber
-                        size="md"
-                        className="mr-2"
-                      />
-                    )}
-                    {isActive(link.href) && <ChevronRight className="h-4 w-4" />}
-                  </>
-                )}
-              </Link>
-            ))}
+                  </span>
+                  <span className="flex-1 text-left">Weitere</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-1 mt-1">
+                  {extraLinks.map(renderLink)}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </nav>
         </div>
       </div>
