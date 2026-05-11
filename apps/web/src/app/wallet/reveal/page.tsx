@@ -55,7 +55,7 @@ export default function RevealKeyPage() {
             </li>
             <li>
               <span className="font-medium">3.</span> Wählen Sie{" "}
-              <span className="font-medium">„Manage Wallet" → „Export Private Key"</span> und
+              <span className="font-medium">&bdquo;Manage Wallet&ldquo; &rarr; &bdquo;Export Private Key&ldquo;</span> und
               bestätigen Sie den Export.
             </li>
           </ol>
