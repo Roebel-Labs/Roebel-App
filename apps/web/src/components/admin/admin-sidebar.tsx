@@ -208,13 +208,6 @@ export function AdminSidebar() {
     }
   }, [])
 
-  useEffect(() => {
-    if (extraLinks.some((l) => isActive(l.href))) {
-      setIsWeitereOpen(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
-
   const handleWeitereOpenChange = (open: boolean) => {
     setIsWeitereOpen(open)
     if (typeof window !== "undefined") {
