@@ -55,7 +55,7 @@ export default function PostDetailScreen() {
   const goBack = useGoBack();
   const { colors } = useTheme();
   const { user } = useUser();
-  const { activeAccount } = useAccount();
+  const { activeAccount, isOwnerOf } = useAccount();
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
 
@@ -78,7 +78,10 @@ export default function PostDetailScreen() {
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
-  const isOwnPost = !!walletAddress && post?.wallet_address === walletAddress;
+  const isOwnPost = !!walletAddress && !!post && (
+    post.wallet_address?.toLowerCase() === walletAddress.toLowerCase() ||
+    isOwnerOf(post.account_id ?? null)
+  );
 
   // Load post + initial comments
   useEffect(() => {

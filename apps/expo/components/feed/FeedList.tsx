@@ -52,6 +52,7 @@ import FeedProposalCommentCard from './FeedProposalCommentCard';
 
 export type FeedListHandle = {
   refresh: () => void;
+  removePost: (postId: string) => void;
 };
 
 type Props = {
@@ -88,12 +89,12 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 ) {
   const { colors } = useTheme();
 
-  const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore } =
+  const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost } =
     useFeed(feedType);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, initLikes } = usePostActions(walletAddress);
 
-  useImperativeHandle(ref, () => ({ refresh }), [refresh]);
+  useImperativeHandle(ref, () => ({ refresh, removePost }), [refresh, removePost]);
 
   const visibleDeals = useRef(new Set<string>());
   const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());

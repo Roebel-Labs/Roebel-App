@@ -222,14 +222,19 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
  * Delete (soft-delete) a post by setting status to 'deleted'
  */
 export async function deletePost(postId: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('posts')
     .update({ status: 'deleted' })
-    .eq('id', postId);
+    .eq('id', postId)
+    .select('id');
 
   if (error) {
     console.error('Error deleting post:', error);
     throw error;
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Beitrag konnte nicht gelöscht werden');
   }
 }
 

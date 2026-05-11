@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
@@ -185,6 +186,7 @@ export default function FeedHome() {
   const router = useRouter();
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
+  const { isOwnerOf } = useAccount();
   const { showSnackbar } = useSnackbar();
   const { totalUnreadCount } = useNotificationsContext();
   const { unreadCount: unreadMessages } = useMessaging();
@@ -249,6 +251,22 @@ export default function FeedHome() {
     nonCitizenListRef.current?.refresh();
   }, []);
 
+  const removePostEverywhere = useCallback((postId: string) => {
+    mainListRef.current?.removePost(postId);
+    rathausListRef.current?.removePost(postId);
+    appListRef.current?.removePost(postId);
+    nonCitizenListRef.current?.removePost(postId);
+  }, []);
+
+  const isOwnPost = useCallback(
+    (post: PostRecord | null): boolean => {
+      if (!post || !walletAddress) return false;
+      if (post.wallet_address?.toLowerCase() === walletAddress.toLowerCase()) return true;
+      return isOwnerOf(post.account_id ?? null);
+    },
+    [walletAddress, isOwnerOf],
+  );
+
   const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
 
   const handleTabChange = (tab: FeedType) => {
@@ -294,8 +312,10 @@ export default function FeedHome() {
 
   const confirmDeletePost = async () => {
     if (!selectedPost) return;
+    const postId = selectedPost.id;
     try {
-      await deletePost(selectedPost.id);
+      await deletePost(postId);
+      removePostEverywhere(postId);
       showSnackbar({ message: 'Beitrag gelöscht' });
       setDeleteConfirmVisible(false);
       setSelectedPost(null);
@@ -486,7 +506,7 @@ export default function FeedHome() {
       <PostOptionsDrawer
         visible={optionsDrawerVisible}
         onClose={() => setOptionsDrawerVisible(false)}
-        isOwner={!!walletAddress && selectedPost?.wallet_address === walletAddress}
+        isOwner={isOwnPost(selectedPost)}
         onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onReport={handleOpenReport}

@@ -205,6 +205,15 @@ export function useFeed(feedType: FeedType) {
     fetchInitial();
   }, [fetchInitial]);
 
+  const removePost = useCallback((postId: string) => {
+    setItems((prev) =>
+      prev.filter((item) => {
+        if (item.type !== 'post' && item.type !== 'mecky') return true;
+        return (item.data as PostRecord).id !== postId;
+      }),
+    );
+  }, []);
+
   return {
     items,
     isLoading,
@@ -213,5 +222,6 @@ export function useFeed(feedType: FeedType) {
     hasMore,
     refresh,
     loadMore,
+    removePost,
   };
 }
