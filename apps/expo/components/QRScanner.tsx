@@ -4,10 +4,10 @@
  * Camera-based QR code scanner for verification requests
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import ErrorDrawer from './ErrorDrawer';
 
 export type QRScanResult = {
@@ -92,6 +92,16 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
   const [scanned, setScanned] = useState(false);
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
 
+  // Re-arm the scanner every time the screen gains focus. Without this, the
+  // `scanned` flag stays true after a successful scan→push, and any preserved
+  // scanner instance (back-nav, native-stack reuse) silently no-ops because
+  // CameraView's onBarcodeScanned is set to undefined when scanned is true.
+  useFocusEffect(
+    useCallback(() => {
+      setScanned(false);
+    }, []),
+  );
+
   const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
@@ -135,7 +145,11 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       router.push(`/order/${result.slug}/${result.tableNumber}` as any);
       return;
     } else if (result.type === 'verification' && result.id) {
-      router.push(`/verification/request/${result.id}?type=${result.nftType}` as any);
+      router.push({
+        pathname: '/verification/request/[id]',
+        params: { id: result.id, type: result.nftType ?? 'citizen' },
+      });
+      return;
     } else if (result.type === 'checkpoint') {
       // Handled by parent via onScan
       setScanned(false);

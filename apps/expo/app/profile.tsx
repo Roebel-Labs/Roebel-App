@@ -16,7 +16,7 @@ import BottomDrawer from '@/components/BottomDrawer';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
-import MapFAB from '@/components/MapFAB';
+import BuergerWerdenBanner from '@/components/profile/BuergerWerdenBanner';
 import BusinessStatusBanner from '@/components/BusinessStatusBanner';
 import RewardsCTABanner from '@/components/profile/RewardsCTABanner';
 import ProfileHeaderCard from '@/components/profile/ProfileHeaderCard';
@@ -279,6 +279,7 @@ const handleRefresh = async () => {
                 ) : wantsToBeCitizen ? (
                   <>
                     {/* Selected "Bürger" during onboarding but no citizen NFT yet */}
+                    <BuergerWerdenBanner />
                     <ProfileHeaderCard
                       name={displayName || 'Bürger'}
                       avatarUrl={user?.profile_picture_url ?? null}
@@ -408,14 +409,6 @@ const handleRefresh = async () => {
         )}
 
       </ScrollView>
-
-      {/* Bürger werden FAB — only for users who chose "Bürger" in onboarding and aren't yet verified */}
-      <MapFAB
-        visible={isConnected && !isCitizen && wantsToBeCitizen}
-        label="Bürger werden"
-        href="/verification/request-citizen"
-        accessibilityLabel="Bürger werden"
-      />
 
       {/* QR Code Scanner FAB - only for verified users */}
       {hasAnyNFT && (
