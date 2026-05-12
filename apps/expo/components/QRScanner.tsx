@@ -95,18 +95,30 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
+  // Bumping this on each focus forces CameraView to remount — a documented
+  // workaround for Android where `onBarcodeScanned` silently stops firing
+  // after the screen has been left and re-entered, even after the camera UI
+  // appears to render normally again.
+  const [cameraKey, setCameraKey] = useState(0);
+  // Diagnostic counters — surfaced in a small HUD over the camera so we can
+  // tell remotely whether the barcode callback is firing on the user's
+  // device at all. Remove once verification scanning is confirmed working.
+  const [diag, setDiag] = useState({
+    ready: false,
+    mountErr: '' as string,
+    events: 0,
+    lastData: '' as string,
+  });
 
-  // Re-arm the scanner every time the screen gains focus. Without this, the
-  // `scanned` flag stays true after a successful scan→push, and any preserved
-  // scanner instance (back-nav, native-stack reuse) silently no-ops because
-  // CameraView's onBarcodeScanned is set to undefined when scanned is true.
   useFocusEffect(
     useCallback(() => {
       setScanned(false);
+      setCameraKey((k) => k + 1);
     }, []),
   );
 
   const handleBarCodeScanned = useCallback(({ data }: { type: string; data: string }) => {
+    setDiag((d) => ({ ...d, events: d.events + 1, lastData: data.slice(0, 60) }));
     if (scanned) return;
     setScanned(true);
 
@@ -188,11 +200,28 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
   return (
     <View style={styles.container}>
       <CameraView
+        key={cameraKey}
         style={styles.camera}
         facing="back"
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={BARCODE_SCANNER_SETTINGS}
+        onCameraReady={() => setDiag((d) => ({ ...d, ready: true }))}
+        onMountError={(e) =>
+          setDiag((d) => ({ ...d, mountErr: String(e?.message ?? e) }))
+        }
       >
+        {/* Diagnostic HUD — temporary, remove once verification scanning is confirmed working */}
+        <View style={styles.diagHud} pointerEvents="none">
+          <Text style={styles.diagText}>
+            {`ready=${diag.ready ? '1' : '0'}  err=${diag.mountErr || '–'}  events=${diag.events}`}
+          </Text>
+          {diag.lastData ? (
+            <Text style={styles.diagText} numberOfLines={2}>
+              {`last: ${diag.lastData}`}
+            </Text>
+          ) : null}
+        </View>
+
         {/* Overlay */}
         <View style={styles.overlay}>
           {/* Top overlay */}
@@ -245,6 +274,22 @@ const styles = StyleSheet.create({
   },
   camera: {
     flex: 1,
+  },
+  diagHud: {
+    position: 'absolute',
+    top: 70,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    zIndex: 20,
+  },
+  diagText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
   },
   overlay: {
     flex: 1,
