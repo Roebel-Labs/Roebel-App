@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { softShadow } from '@/lib/shadow';
 
-const PASS_ILLUSTRATION = require('../../assets/illustration/pass.png');
+const BUERGERUMFRAGEN_ILLUSTRATION = require('../../assets/illustration/buergerumfragen.png');
 
 interface CitizenVerificationBannerProps {
   /**
@@ -20,13 +20,14 @@ export default function CitizenVerificationBanner({ pending }: CitizenVerificati
 
   const title = pending ? 'Verifizierung läuft' : 'Verifizieren Sie sich als Bürger';
   const ctaLabel = pending ? 'Status ansehen' : 'Jetzt beantragen';
-  const onPress = () => router.push('/verification/request-citizen' as any);
+  const onPress = () =>
+    router.push((pending ? '/verification/my-request' : '/verification/request-citizen') as any);
 
   return (
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.primaryLight },
+        { backgroundColor: colors.surface },
         softShadow(2, isDark),
       ]}
     >
@@ -46,7 +47,7 @@ export default function CitizenVerificationBanner({ pending }: CitizenVerificati
       </View>
 
       <Image
-        source={PASS_ILLUSTRATION}
+        source={BUERGERUMFRAGEN_ILLUSTRATION}
         style={styles.illustration}
         resizeMode="contain"
         accessible={false}

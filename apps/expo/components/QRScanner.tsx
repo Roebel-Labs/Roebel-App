@@ -4,11 +4,15 @@
  * Camera-based QR code scanner for verification requests
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useFocusEffect } from 'expo-router';
 import ErrorDrawer from './ErrorDrawer';
+
+// Module-level constant so CameraView doesn't see a new object on every
+// render — a fresh prop identity can stall barcode detection on some devices.
+const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
   type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'unknown';
@@ -102,7 +106,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
     }, []),
   );
 
-  const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = useCallback(({ data }: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
 
@@ -157,7 +161,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       // Handled by parent via onScan
       setScanned(false);
     }
-  };
+  }, [scanned, allowedTypes, onScan, router]);
 
   // No automatic error drawer for camera permission
   // The UI already shows a message and button to request permission
@@ -185,10 +189,9 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
     <View style={styles.container}>
       <CameraView
         style={styles.camera}
+        facing="back"
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ['qr'],
-        }}
+        barcodeScannerSettings={BARCODE_SCANNER_SETTINGS}
       >
         {/* Overlay */}
         <View style={styles.overlay}>
