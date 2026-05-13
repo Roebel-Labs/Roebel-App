@@ -48,14 +48,24 @@ export const BUSINESS_CATEGORY_LABELS: Record<string, string> = {
 
 // German labels for marketplace categories
 export const MARKETPLACE_CATEGORY_LABELS: Record<string, string> = {
-  elektronik: 'Elektronik',
+  // Product categories
   moebel: 'Möbel',
+  elektronik: 'Elektronik',
   kleidung: 'Kleidung',
   fahrzeuge: 'Fahrzeuge',
-  sport_freizeit: 'Sport & Freizeit',
-  haus_garten: 'Haus & Garten',
-  familie_kind: 'Familie & Kind',
-  haustiere: 'Haustiere',
+  sport: 'Sport',
+  garten: 'Garten',
+  haushalt: 'Haushalt',
+  spielzeug: 'Spielzeug',
+  buecher: 'Bücher',
+  immobilien: 'Immobilien',
+  // Service categories
+  handwerk: 'Handwerk',
+  transport: 'Transport',
+  reinigung: 'Reinigung',
+  betreuung: 'Betreuung',
+  nachhilfe: 'Nachhilfe',
+  // Legacy
   dienstleistungen: 'Dienstleistungen',
   sonstiges: 'Sonstiges',
 };

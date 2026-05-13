@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import type { BusinessCategory } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const CATEGORIES: { value: BusinessCategory; label: string }[] = [
   { value: 'gastronomie', label: 'Gastronomie' },
@@ -51,7 +52,7 @@ export default function CreateOrgInfoScreen() {
         extraScrollHeight={100}
         extraHeight={150}
       >
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2</Text>
+        <StoryProgress step={2} totalSteps={6} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Erzähl uns mehr</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wie heißt deine Organisation und was macht sie aus?
@@ -121,7 +122,6 @@ export default function CreateOrgInfoScreen() {
       </KeyboardAwareScrollView>
 
       <WizardFooter
-        step={2}
         onBack={() => router.back()}
         onNext={handleNext}
         nextDisabled={!canProceed}
@@ -138,13 +138,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

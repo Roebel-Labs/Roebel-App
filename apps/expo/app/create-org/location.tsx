@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { geocodeLocation } from '@/lib/utils/geocoding';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function CreateOrgLocationScreen() {
   const router = useRouter();
@@ -84,7 +85,7 @@ export default function CreateOrgLocationScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAwareScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" enableOnAndroid={true} enableAutomaticScroll={true} extraScrollHeight={100} extraHeight={150}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 3</Text>
+        <StoryProgress step={3} totalSteps={6} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wo befindet ihr euch?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Gib eure Adresse ein — wir finden die genauen Koordinaten automatisch.
@@ -160,7 +161,6 @@ export default function CreateOrgLocationScreen() {
       </KeyboardAwareScrollView>
 
       <WizardFooter
-        step={3}
         onBack={() => router.back()}
         onNext={geocoded ? handleNext : handleSaveLocation}
         nextLabel={geocoded ? 'Weiter' : 'Ort speichern'}
@@ -179,13 +179,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

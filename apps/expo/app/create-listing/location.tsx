@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function CreateListingLocationScreen() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function CreateListingLocationScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 5</Text>
+        <StoryProgress step={5} totalSteps={6} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Wo ist dein Angebot?
         </Text>
@@ -48,8 +49,6 @@ export default function CreateListingLocationScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={5}
-        totalSteps={6}
         onBack={() => router.back()}
         onNext={handleNext}
         nextDisabled={false}
@@ -66,13 +65,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

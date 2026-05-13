@@ -30,7 +30,7 @@ export default function WelcomeLayout() {
   return (
     <WelcomeWizardProvider>
       <WizardHeader />
-      <TransitionStack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
         <TransitionStack.Screen name="index" />
         <TransitionStack.Screen name="name" />
         <TransitionStack.Screen name="role" />

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 1000;
@@ -30,7 +31,7 @@ export default function CreateListingDetailsScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 2</Text>
+          <StoryProgress step={2} totalSteps={6} />
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
             Erzähl uns mehr
           </Text>
@@ -91,8 +92,6 @@ export default function CreateListingDetailsScreen() {
         </ScrollView>
 
         <WizardFooter
-          step={2}
-          totalSteps={6}
           onBack={() => router.back()}
           onNext={handleNext}
           nextDisabled={!title.trim()}
@@ -113,13 +112,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

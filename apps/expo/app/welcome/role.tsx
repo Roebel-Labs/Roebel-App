@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useWelcomeWizard, PreferredRole } from '@/context/WelcomeWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const ROLES: { value: PreferredRole; image: ImageSourcePropType; label: string; desc: string }[] = [
   {
@@ -29,7 +30,7 @@ export default function WelcomeRoleScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 2 von 3</Text>
+        <StoryProgress step={2} totalSteps={3} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Was trifft auf dich zu?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wir zeigen dir passende Funktionen. Du kannst die Auswahl später ändern.
@@ -63,8 +64,6 @@ export default function WelcomeRoleScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={2}
-        totalSteps={3}
         onBack={() => router.back()}
         onNext={() => state.preferredRole && router.push('/welcome/consent' as any)}
         nextDisabled={!state.preferredRole}
@@ -84,13 +83,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

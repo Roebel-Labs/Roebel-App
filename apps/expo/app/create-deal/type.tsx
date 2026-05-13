@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCreateDealWizard } from '@/context/CreateDealWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 import type { DealTypeChoice } from '@/context/CreateDealWizardContext';
 
 const DEAL_TYPES: { value: DealTypeChoice; emoji: string; label: string; desc: string }[] = [
@@ -30,7 +31,7 @@ export default function CreateDealTypeScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 1</Text>
+        <StoryProgress step={1} totalSteps={5} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Was für ein Angebot?
         </Text>
@@ -66,8 +67,6 @@ export default function CreateDealTypeScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={1}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={handleNext}
         nextDisabled={!dealType}
@@ -84,13 +83,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

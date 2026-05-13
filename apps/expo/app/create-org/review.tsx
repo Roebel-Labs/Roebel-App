@@ -12,6 +12,7 @@ import { updateAccount } from '@/lib/supabase-accounts';
 import { createRestaurant } from '@/lib/supabase-restaurants';
 import type { OrgSubType } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const ORG_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   restaurant: { emoji: '🍽️', label: 'Restaurant' },
@@ -120,7 +121,7 @@ export default function CreateOrgReviewScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 6</Text>
+        <StoryProgress step={6} totalSteps={6} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Prüfe deine Angaben bevor du den Antrag einreichst.
@@ -191,7 +192,6 @@ export default function CreateOrgReviewScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={6}
         onBack={() => router.back()}
         onNext={handleSubmit}
         nextLabel="Antrag einreichen"
@@ -229,13 +229,6 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   sectionCard: {

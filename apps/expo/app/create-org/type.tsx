@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCreateOrgWizard, OrgTypeChoice } from '@/context/CreateOrgWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const ORG_TYPES: { value: OrgTypeChoice; emoji: string; label: string; desc: string }[] = [
   { value: 'restaurant', emoji: '🍽️', label: 'Restaurant', desc: 'Gastronomie mit Speisekarte' },
@@ -33,7 +34,7 @@ export default function CreateOrgTypeScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1</Text>
+        <StoryProgress step={1} totalSteps={6} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Welcher Typ passt?
         </Text>
@@ -119,7 +120,6 @@ export default function CreateOrgTypeScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={1}
         onBack={() => router.back()}
         onNext={() => state.orgType && router.push('/create-org/info')}
         nextDisabled={!state.orgType}
@@ -131,9 +131,6 @@ export default function CreateOrgTypeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12, fontFamily: 'Inter-Medium', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1,
-  },
   heading: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subheading: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

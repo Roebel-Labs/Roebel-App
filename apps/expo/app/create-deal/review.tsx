@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateDealWizard } from '@/context/CreateDealWizardContext';
 import { createDeal } from '@/lib/supabase-deals';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const DEAL_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   discount: { emoji: '🏷️', label: 'Rabatt' },
@@ -57,7 +58,7 @@ export default function CreateDealReviewScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 5</Text>
+        <StoryProgress step={5} totalSteps={5} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
 
         {/* Art */}
@@ -110,8 +111,6 @@ export default function CreateDealReviewScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={5}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={handleSubmit}
         nextLabel="Angebot erstellen"
@@ -149,13 +148,6 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 24 },
   sectionCard: {
     borderRadius: 16,

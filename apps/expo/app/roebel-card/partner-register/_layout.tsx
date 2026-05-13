@@ -57,7 +57,7 @@ export default function PartnerRegisterLayout() {
   return (
     <PartnerRegisterWizardProvider>
       <WizardHeader />
-      <TransitionStack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
         <TransitionStack.Screen name="index" />
         <TransitionStack.Screen name="business" />
         <TransitionStack.Screen name="info" />

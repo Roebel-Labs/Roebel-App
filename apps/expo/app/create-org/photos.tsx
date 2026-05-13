@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import { supabase } from '@/lib/supabase';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 async function uploadImage(uri: string, folder: string): Promise<string | null> {
   try {
@@ -77,7 +78,7 @@ export default function CreateOrgPhotosScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 5</Text>
+        <StoryProgress step={5} totalSteps={6} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Zeigt euch von eurer besten Seite</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Ein gutes Profilbild und Cover machen den Unterschied.
@@ -119,7 +120,6 @@ export default function CreateOrgPhotosScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={5}
         onBack={() => router.back()}
         onNext={handleNext}
       />
@@ -130,13 +130,6 @@ export default function CreateOrgPhotosScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: {
     fontSize: 26,
     fontFamily: 'Inter-Bold',

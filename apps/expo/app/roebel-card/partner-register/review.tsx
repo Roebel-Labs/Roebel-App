@@ -22,6 +22,7 @@ import {
 import { maskIban } from '@/lib/iban';
 import { buildAgreementMetadata } from '@/lib/roebel-card-agreement-metadata';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function PartnerRegisterReviewScreen() {
   const router = useRouter();
@@ -81,7 +82,7 @@ export default function PartnerRegisterReviewScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 5 von 5</Text>
+        <StoryProgress step={5} totalSteps={5} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Prüfe deine Angaben, bevor du den Partnerantrag einreichst.
@@ -142,8 +143,6 @@ export default function PartnerRegisterReviewScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={5}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={handleSubmit}
         nextLabel="Partnerantrag absenden"
@@ -185,13 +184,6 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   sectionCard: {

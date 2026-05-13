@@ -11,6 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { usePartnerRegisterWizard } from '@/context/PartnerRegisterWizardContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 import type { Account } from '@/lib/types';
 
 const SUB_TYPE_EMOJI: Record<string, string> = {
@@ -93,7 +94,7 @@ export default function BusinessPickerScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1 von 5</Text>
+        <StoryProgress step={1} totalSteps={5} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Welcher Betrieb?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Wähle das Unternehmen aus, das du als Röbel Card Partner registrieren möchtest.
@@ -120,8 +121,6 @@ export default function BusinessPickerScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={1}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={() => router.push('/roebel-card/partner-register/info' as any)}
         nextDisabled={!state.selectedAccountId}
@@ -191,13 +190,6 @@ function capitalise(s: string): string {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   list: { gap: 12 },

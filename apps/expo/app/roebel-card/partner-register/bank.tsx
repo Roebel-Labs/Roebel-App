@@ -9,6 +9,7 @@ import { useAccount } from '@/context/AccountContext';
 import { usePartnerRegisterWizard } from '@/context/PartnerRegisterWizardContext';
 import { isValidIban, formatIban, normalizeIban } from '@/lib/iban';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const BIC_REGEX = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
 
@@ -57,7 +58,7 @@ export default function PartnerRegisterBankScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 3 von 5</Text>
+        <StoryProgress step={3} totalSteps={5} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Bankverbindung</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Wir zahlen deine Umsätze monatlich auf dein Konto aus. Innerhalb der ersten fünf
@@ -146,8 +147,6 @@ export default function PartnerRegisterBankScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={3}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={handleNext}
         nextDisabled={!canContinue}
@@ -159,13 +158,6 @@ export default function PartnerRegisterBankScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   label: {

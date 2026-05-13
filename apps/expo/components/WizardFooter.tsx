@@ -1,10 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 
 type Props = {
-  step: number;
-  totalSteps?: number;
   onBack: () => void;
   onNext: () => void;
   nextLabel?: string;
@@ -13,8 +11,6 @@ type Props = {
 };
 
 export default function WizardFooter({
-  step,
-  totalSteps = 6,
   onBack,
   onNext,
   nextLabel = 'Weiter',
@@ -22,64 +18,30 @@ export default function WizardFooter({
   nextContent,
 }: Props) {
   const { colors } = useTheme();
-  const widthAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: (step / totalSteps) * 100,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
-  }, [step]);
 
   return (
-    <View>
-      {/* Progress bar as top border of footer */}
-      <View style={[styles.progressTrack, { backgroundColor: colors.surface }]}>
-        <Animated.View
-          style={[
-            styles.progressFill,
-            {
-              backgroundColor: colors.primary,
-              width: widthAnim.interpolate({
-                inputRange: [0, 100],
-                outputRange: ['0%', '100%'],
-              }),
-            },
-          ]}
-        />
-      </View>
-
-      {/* Button row */}
-      <View style={styles.buttonRow}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={[styles.backText, { color: colors.textSecondary }]}>Zurück</Text>
-        </Pressable>
-        <Pressable
-          onPress={onNext}
-          disabled={nextDisabled}
-          style={[
-            styles.nextButton,
-            { backgroundColor: colors.primary },
-            nextDisabled && styles.disabled,
-          ]}
-        >
-          {nextContent || (
-            <Text style={[styles.nextText, { color: colors.onPrimary }]}>{nextLabel}</Text>
-          )}
-        </Pressable>
-      </View>
+    <View style={styles.buttonRow}>
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <Text style={[styles.backText, { color: colors.textSecondary }]}>Zurück</Text>
+      </Pressable>
+      <Pressable
+        onPress={onNext}
+        disabled={nextDisabled}
+        style={[
+          styles.nextButton,
+          { backgroundColor: colors.primary },
+          nextDisabled && styles.disabled,
+        ]}
+      >
+        {nextContent || (
+          <Text style={[styles.nextText, { color: colors.onPrimary }]}>{nextLabel}</Text>
+        )}
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  progressTrack: {
-    height: 3,
-  },
-  progressFill: {
-    height: 3,
-  },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

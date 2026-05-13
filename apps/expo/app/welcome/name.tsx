@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function WelcomeNameScreen() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function WelcomeNameScreen() {
         enableOnAndroid
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 1 von 3</Text>
+        <StoryProgress step={1} totalSteps={3} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie heißt du?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Dein Name erscheint auf deinem Profil. Du kannst ihn später jederzeit ändern.
@@ -63,8 +64,6 @@ export default function WelcomeNameScreen() {
       </KeyboardAwareScrollView>
 
       <WizardFooter
-        step={1}
-        totalSteps={3}
         onBack={() => router.back()}
         onNext={handleNext}
         nextLabel="Weiter"
@@ -84,13 +83,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

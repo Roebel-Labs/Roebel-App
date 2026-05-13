@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { usePartnerRegisterWizard } from '@/context/PartnerRegisterWizardContext';
 import { AGREEMENT_VERSION } from '@/lib/roebel-card-agreement-metadata';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const AGB_TEXT = `Röbel Card Partner-Vereinbarung (${AGREEMENT_VERSION})
 
@@ -61,7 +62,7 @@ export default function PartnerRegisterAgreementScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.headerSection}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 4 von 5</Text>
+        <StoryProgress step={4} totalSteps={5} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>AGB bestätigen</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Lies die Partner-Vereinbarung und bestätige mit den beiden Kästchen unten.
@@ -94,8 +95,6 @@ export default function PartnerRegisterAgreementScreen() {
       </View>
 
       <WizardFooter
-        step={4}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={handleNext}
         nextDisabled={!canContinue}
@@ -141,13 +140,6 @@ function Checkbox({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   headerSection: { paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 16 },
   agbScroll: {

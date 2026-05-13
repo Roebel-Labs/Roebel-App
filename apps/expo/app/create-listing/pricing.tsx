@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import type { PriceTypeChoice, ConditionChoice } from '@/context/CreateListingWizardContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const PRICE_TYPES: { key: PriceTypeChoice; label: string }[] = [
   { key: 'fixed', label: 'Festpreis' },
@@ -44,7 +45,7 @@ export default function PricingScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 3</Text>
+        <StoryProgress step={3} totalSteps={6} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Preis & Zustand</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Lege deinen Preis fest und beschreibe den Zustand.
@@ -130,8 +131,6 @@ export default function PricingScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={3}
-        totalSteps={6}
         onBack={() => router.back()}
         onNext={handleNext}
       />
@@ -142,12 +141,6 @@ export default function PricingScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
   title: {
     fontSize: 26,
     fontFamily: 'Inter-Bold',

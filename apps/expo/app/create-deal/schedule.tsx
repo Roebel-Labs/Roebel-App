@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCreateDealWizard } from '@/context/CreateDealWizardContext';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function CreateDealScheduleScreen() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function CreateDealScheduleScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 4</Text>
+          <StoryProgress step={4} totalSteps={5} />
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
             Zeitraum & Status
           </Text>
@@ -121,8 +122,6 @@ export default function CreateDealScheduleScreen() {
         </ScrollView>
 
         <WizardFooter
-          step={4}
-          totalSteps={5}
           onBack={() => router.back()}
           onNext={handleNext}
         />
@@ -142,13 +141,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,

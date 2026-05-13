@@ -14,6 +14,7 @@ import { isProposalActive, toBigInt, getStateMessage } from '@/lib/governance-ut
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
 import LastVoteCard from './LastVoteCard';
+import StoryProgress from './StoryProgress';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
 import { Events, track } from '@/lib/analytics';
@@ -514,7 +515,7 @@ export default function VoteButtons({
       <View style={styles.container}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Verschlüsselt abstimmen</Text>
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
-          <Text style={[styles.stepLabel, { color: colors.textSecondary }]}>Schritt 1 von 2</Text>
+          <StoryProgress step={1} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
             Erstelle einen privaten MACI-Schlüssel auf deinem Gerät. Damit verschlüsselst du
             später deine Stimmen — niemand außer dem Koordinator kann sie lesen, und auch der
@@ -542,7 +543,7 @@ export default function VoteButtons({
       <View style={styles.container}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Verschlüsselt abstimmen</Text>
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
-          <Text style={[styles.stepLabel, { color: colors.textSecondary }]}>Schritt 2 von 2</Text>
+          <StoryProgress step={2} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
             Einmalige Anmeldung bei MACI. Dein Bürger-Pass wird auf der Blockchain registriert,
             damit du privat abstimmen kannst. Nur dieses Wallet zählt danach für genau eine
@@ -709,13 +710,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 6,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   stepBody: {
     fontSize: 14,

@@ -10,6 +10,7 @@ import { useCreateDealWizard } from '@/context/CreateDealWizardContext';
 import { useUser } from '@/context/UserContext';
 import { uploadMediaFile } from '@/lib/upload-media';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 export default function CreateDealImageScreen() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function CreateDealImageScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 3</Text>
+        <StoryProgress step={3} totalSteps={5} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>
           Füge ein Bild hinzu
         </Text>
@@ -84,8 +85,6 @@ export default function CreateDealImageScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={3}
-        totalSteps={5}
         onBack={() => router.back()}
         onNext={() => router.push('/create-deal/schedule')}
         nextDisabled={false}
@@ -97,13 +96,6 @@ export default function CreateDealImageScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   heading: {
     fontSize: 26,
     fontFamily: 'Inter-Bold',

@@ -10,21 +10,8 @@ import MeckyNotFound from '@/components/MeckyNotFound';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import type { MarketplaceListingRecord, MarketplacePriceType, MarketplaceCondition } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-
-const CATEGORIES = [
-  { key: 'moebel', label: 'Möbel' },
-  { key: 'elektronik', label: 'Elektronik' },
-  { key: 'kleidung', label: 'Kleidung' },
-  { key: 'fahrzeuge', label: 'Fahrzeuge' },
-  { key: 'sport', label: 'Sport' },
-  { key: 'garten', label: 'Garten' },
-  { key: 'haushalt', label: 'Haushalt' },
-  { key: 'spielzeug', label: 'Spielzeug' },
-  { key: 'buecher', label: 'Bücher' },
-  { key: 'dienstleistungen', label: 'Dienstleistungen' },
-  { key: 'immobilien', label: 'Immobilien' },
-  { key: 'sonstiges', label: 'Sonstiges' },
-];
+import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from '@/constants/listing-categories';
+import { MARKETPLACE_CATEGORY_LABELS } from '@/lib/map/constants';
 
 const CONDITIONS = [
   { key: 'neu', label: 'Neu' },
@@ -58,9 +45,7 @@ const PRICE_TYPE_LABELS: Record<string, string> = {
   free: 'Zu verschenken',
 };
 
-const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
-  CATEGORIES.map(c => [c.key, c.label])
-);
+const CATEGORY_LABELS = MARKETPLACE_CATEGORY_LABELS;
 
 const CONDITION_LABELS: Record<string, string> = Object.fromEntries(
   CONDITIONS.map(c => [c.key, c.label])
@@ -231,7 +216,8 @@ export default function MarketplaceEditScreen() {
     );
   }
 
-  const isService = category === 'dienstleistungen';
+  const isService = listing?.listing_type === 'service' || category === 'dienstleistungen';
+  const CATEGORIES = isService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

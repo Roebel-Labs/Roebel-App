@@ -10,6 +10,7 @@ import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import { useUser } from '@/context/UserContext';
 import { uploadMediaFile } from '@/lib/upload-media';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const MAX_IMAGES = 5;
 
@@ -61,7 +62,7 @@ export default function PhotosScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 4</Text>
+        <StoryProgress step={4} totalSteps={6} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Zeig, was du anbietest</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Bis zu 5 Fotos. Das erste wird als Titelbild verwendet.
@@ -101,8 +102,6 @@ export default function PhotosScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={4}
-        totalSteps={6}
         onBack={() => router.back()}
         onNext={handleNext}
       />
@@ -113,12 +112,6 @@ export default function PhotosScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
   title: {
     fontSize: 26,
     fontFamily: 'Inter-Bold',

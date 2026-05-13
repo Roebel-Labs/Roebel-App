@@ -48,7 +48,7 @@ export default function CreateListingLayout() {
   return (
     <CreateListingWizardProvider>
       <WizardHeader />
-      <TransitionStack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <TransitionStack screenOptions={{ headerShown: false, animation: 'none' }}>
         <TransitionStack.Screen name="index" />
         <TransitionStack.Screen name="type" />
         <TransitionStack.Screen name="details" />

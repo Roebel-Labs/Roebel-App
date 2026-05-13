@@ -8,26 +8,15 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import { createMarketplaceListing, createOrgListing } from '@/lib/supabase-marketplace';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
+import { MARKETPLACE_CATEGORY_LABELS } from '@/lib/map/constants';
 
 const LISTING_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   product: { emoji: '📦', label: 'Produkt' },
   service: { emoji: '🛠️', label: 'Dienstleistung' },
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  moebel: 'Möbel',
-  elektronik: 'Elektronik',
-  kleidung: 'Kleidung',
-  fahrzeuge: 'Fahrzeuge',
-  sport: 'Sport',
-  garten: 'Garten',
-  haushalt: 'Haushalt',
-  spielzeug: 'Spielzeug',
-  buecher: 'Bücher',
-  dienstleistungen: 'Dienstleistungen',
-  immobilien: 'Immobilien',
-  sonstiges: 'Sonstiges',
-};
+const CATEGORY_LABELS = MARKETPLACE_CATEGORY_LABELS;
 
 const PRICE_TYPE_LABELS: Record<string, string> = {
   fixed: 'Festpreis',
@@ -96,7 +85,7 @@ export default function CreateListingReviewScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>SCHRITT 6</Text>
+        <StoryProgress step={6} totalSteps={6} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Alles richtig?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Prüfe deine Angaben bevor du die Anzeige erstellst.
@@ -171,8 +160,6 @@ export default function CreateListingReviewScreen() {
       </ScrollView>
 
       <WizardFooter
-        step={6}
-        totalSteps={6}
         onBack={() => router.back()}
         onNext={handleSubmit}
         nextLabel="Anzeige erstellen"
@@ -210,13 +197,6 @@ function SectionCard({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
   title: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subtitle: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   sectionCard: {

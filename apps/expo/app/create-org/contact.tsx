@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 import type { OpeningHours } from '@/lib/types';
 import WizardFooter from '@/components/WizardFooter';
+import StoryProgress from '@/components/StoryProgress';
 
 const DAYS: { key: keyof OpeningHours; label: string }[] = [
   { key: 'monday', label: 'Montag' },
@@ -63,7 +64,7 @@ export default function CreateOrgContactScreen() {
         extraScrollHeight={100}
         extraHeight={150}
       >
-        <Text style={[styles.stepLabel, { color: colors.textTertiary }]}>Schritt 4</Text>
+        <StoryProgress step={4} totalSteps={6} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie erreicht man euch?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wie können Besucher dich erreichen?
@@ -162,7 +163,6 @@ export default function CreateOrgContactScreen() {
       </KeyboardAwareScrollView>
 
       <WizardFooter
-        step={4}
         onBack={() => router.back()}
         onNext={handleNext}
       />
@@ -178,13 +178,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   heading: {
     fontSize: 26,
