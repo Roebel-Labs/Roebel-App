@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,12 +15,6 @@ export default function CreateListingTypeScreen() {
   const { colors } = useTheme();
 
   const [category, setCategory] = useState<string | null>(state.category);
-
-  useEffect(() => {
-    if (!state.listingType) {
-      router.replace('/create-listing');
-    }
-  }, [state.listingType]);
 
   const isService = state.listingType === 'service';
   const categories = isService ? SERVICE_CATEGORIES : PRODUCT_CATEGORIES;

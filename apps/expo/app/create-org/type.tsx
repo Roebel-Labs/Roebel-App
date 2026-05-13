@@ -6,14 +6,15 @@ import { useCreateOrgWizard, OrgTypeChoice } from '@/context/CreateOrgWizardCont
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
+import OrgCategoryIcon from '@/components/OrgCategoryIcon';
 
-const ORG_TYPES: { value: OrgTypeChoice; emoji: string; label: string; desc: string }[] = [
-  { value: 'restaurant', emoji: '🍽️', label: 'Restaurant', desc: 'Gastronomie mit Speisekarte' },
-  { value: 'unternehmen', emoji: '🏪', label: 'Unternehmen', desc: 'Gewerbe & Dienstleistungen' },
-  { value: 'verein', emoji: '🤝', label: 'Verein', desc: 'Sport, Kultur, Soziales' },
-  { value: 'partei', emoji: '🏛️', label: 'Partei', desc: 'Politische Parteien' },
-  { value: 'fraktion', emoji: '⚖️', label: 'Fraktion', desc: 'Fraktionen im Stadtrat' },
-  { value: 'journalist', emoji: '📝', label: 'Journalist:in', desc: 'Redaktion oder freischaffend' },
+const ORG_TYPES: { value: OrgTypeChoice; icon: string; label: string; desc: string }[] = [
+  { value: 'restaurant', icon: 'restaurant-01', label: 'Restaurant', desc: 'Gastronomie mit Speisekarte' },
+  { value: 'unternehmen', icon: 'store-01', label: 'Unternehmen', desc: 'Gewerbe & Dienstleistungen' },
+  { value: 'verein', icon: 'agreement-02', label: 'Verein', desc: 'Sport, Kultur, Soziales' },
+  { value: 'partei', icon: 'flag-02', label: 'Partei', desc: 'Politische Parteien' },
+  { value: 'fraktion', icon: 'balance-scale', label: 'Fraktion', desc: 'Fraktionen im Stadtrat' },
+  { value: 'journalist', icon: 'license-draft', label: 'Journalist:in', desc: 'Redaktion oder freischaffend' },
 ];
 
 export default function CreateOrgTypeScreen() {
@@ -51,21 +52,27 @@ export default function CreateOrgTypeScreen() {
                 onPress={() => dispatch({ type: 'SET_ORG_TYPE', payload: org.value })}
                 style={[
                   styles.card,
-                  selected
-                    ? { borderColor: colors.primary, backgroundColor: colors.surface, borderWidth: 2 }
-                    : { borderColor: colors.border, backgroundColor: colors.surface, borderWidth: 2 },
+                  { backgroundColor: selected ? colors.primaryLight : colors.surface },
                 ]}
               >
-                <Text style={styles.cardEmoji}>{org.emoji}</Text>
-                <Text style={[styles.cardLabel, { color: colors.textPrimary }]}>{org.label}</Text>
-                <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>{org.desc}</Text>
+                <OrgCategoryIcon
+                  name={org.icon}
+                  size={28}
+                  color={selected ? colors.primary : colors.textPrimary}
+                />
+                <View>
+                  <Text style={[styles.cardLabel, { color: selected ? colors.primary : colors.textPrimary }]}>
+                    {org.label}
+                  </Text>
+                  <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>{org.desc}</Text>
+                </View>
               </Pressable>
             );
           })}
         </View>
 
         {/* Extern toggle */}
-        <View style={[styles.externCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.externCard}>
           <View style={styles.externRow}>
             <View style={styles.externText}>
               <Text style={[styles.externTitle, { color: colors.textPrimary }]}>
@@ -134,15 +141,11 @@ const styles = StyleSheet.create({
   heading: { fontSize: 26, fontFamily: 'Inter-Bold', marginBottom: 8 },
   subheading: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  card: { width: '48%', borderRadius: 16, padding: 16 },
-  cardEmoji: { fontSize: 22, marginBottom: 8 },
+  card: { width: '48%', borderRadius: 16, padding: 16, gap: 8 },
   cardLabel: { fontSize: 14, fontFamily: 'Inter-Medium' },
   cardDesc: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 4 },
   externCard: {
     marginTop: 24,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
     marginBottom: 24,
   },
   externRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },

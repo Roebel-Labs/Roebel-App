@@ -7,24 +7,6 @@ import { useCreateListingWizard } from '@/context/CreateListingWizardContext';
 import type { ListingTypeChoice } from '@/context/CreateListingWizardContext';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
 
-const STEPS = [
-  {
-    title: 'Beschreibe dein Angebot',
-    desc: 'Typ, Kategorie, Titel und Fotos',
-    illustration: require('@/assets/illustration/small/product-listing.png'),
-  },
-  {
-    title: 'Setze deinen Preis',
-    desc: 'Festpreis, VB oder zu verschenken',
-    illustration: require('@/assets/illustration/small/sale-tag.png'),
-  },
-  {
-    title: 'Werde sichtbar',
-    desc: 'Sofort im Marktplatz für alle sichtbar',
-    illustration: require('@/assets/illustration/small/mecky-thumbs-up.png'),
-  },
-];
-
 export default function CreateListingIntroScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -34,6 +16,27 @@ export default function CreateListingIntroScreen() {
     listingType?: string;
     accountId?: string;
   }>();
+
+  const isService = params.listingType === 'service';
+  const STEPS = [
+    {
+      title: 'Beschreibe dein Angebot',
+      desc: 'Kategorie, Titel und Fotos',
+      illustration: isService
+        ? require('@/assets/illustration/small/services.png')
+        : require('@/assets/illustration/small/product-listing.png'),
+    },
+    {
+      title: 'Setze deinen Preis',
+      desc: 'Festpreis, VB oder zu verschenken',
+      illustration: require('@/assets/illustration/small/sale-tag.png'),
+    },
+    {
+      title: 'Werde sichtbar',
+      desc: 'Sofort im Marktplatz für alle sichtbar',
+      illustration: require('@/assets/illustration/small/mecky-thumbs-up.png'),
+    },
+  ];
 
   // Pre-set type and account from route params (org-originated flows)
   useEffect(() => {

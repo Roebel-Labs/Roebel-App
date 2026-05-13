@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import BottomDrawer from '@/components/BottomDrawer';
 
 type Props = {
   visible: boolean;
@@ -13,45 +14,36 @@ export default function ExitWizardSheet({ visible, onDelete, onSaveAndExit, onCa
   const { colors } = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={[styles.sheet, { backgroundColor: colors.background }]} onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Wirklich abbrechen?</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>
-            Du kannst deinen Fortschritt speichern und später fortfahren, oder alles löschen und von vorne beginnen.
-          </Text>
+    <BottomDrawer visible={visible} onClose={onCancel}>
+      <View style={styles.body}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Wirklich abbrechen?</Text>
+        <Text style={[styles.description, { color: colors.textSecondary }]}>
+          Du kannst deinen Fortschritt speichern und später fortfahren, oder alles löschen und von vorne beginnen.
+        </Text>
 
-          <Pressable onPress={onSaveAndExit} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Speichern und Abbrechen</Text>
-          </Pressable>
-
-          <Pressable onPress={onDelete} style={[styles.deleteButton, { borderColor: colors.border }]}>
-            <Text style={[styles.deleteButtonText, { color: colors.error }]}>Löschen</Text>
-          </Pressable>
+        <Pressable onPress={onSaveAndExit} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Speichern und Abbrechen</Text>
         </Pressable>
-      </Pressable>
-    </Modal>
+
+        <Pressable onPress={onDelete} style={[styles.deleteButton, { borderColor: colors.border }]}>
+          <Text style={[styles.deleteButtonText, { color: colors.error }]}>Löschen</Text>
+        </Pressable>
+      </View>
+    </BottomDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+  body: {
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     marginBottom: 8,
   },
-  body: {
+  description: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
