@@ -18,10 +18,6 @@ import type {
   MarketplaceListingRecord,
 } from '@/lib/types';
 
-import { useUser } from '@/context/UserContext';
-import MiniGamesSection from '@/components/games/MiniGamesSection';
-import FortuneCardsBanner from '@/components/games/FortuneCardsBanner';
-import HoroscopeBanner from '@/components/games/HoroscopeBanner';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import ExploreSearchBar from '@/components/ExploreSearchBar';
 import ExploreCategoryChips from '@/components/ExploreCategoryChips';
@@ -42,8 +38,6 @@ import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { tier } = useUser();
-  const isNotTourist = tier !== 'tourist' && tier !== 'guest';
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -211,9 +205,6 @@ export default function ExploreScreen() {
             {/* This Week Events - Horizontal */}
             <ThisWeekEventsHorizontal events={futureEvents} />
 
-            {/* All Events - Horizontal */}
-            <AllEventsHorizontal events={futureEvents} />
-
             {/* Movies */}
             <MovieSection movies={movies} />
 
@@ -226,9 +217,6 @@ export default function ExploreScreen() {
             {/* News */}
             <NewsSection articles={newsArticles} />
 
-            {/* Horoscope Banner (Extended Mode) */}
-            {isNotTourist && <HoroscopeBanner />}
-
             {/* Local Businesses */}
             <BusinessSection businesses={businesses} />
 
@@ -238,11 +226,8 @@ export default function ExploreScreen() {
             {/* Nearby Events */}
             <NearbyEventsSection events={nearbyEvents} />
 
-            {/* Fortune Cards Banner (Extended Mode) */}
-            {isNotTourist && <FortuneCardsBanner />}
-
-            {/* Mini Games (Extended Mode) */}
-            {isNotTourist && <MiniGamesSection />}
+            {/* All Events - Horizontal */}
+            <AllEventsHorizontal events={futureEvents} />
           </>
         )}
 
