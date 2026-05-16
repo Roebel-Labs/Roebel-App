@@ -7,24 +7,27 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Share } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
 interface VerificationQRCodeProps {
   requestId: number;
   nftType: 'citizen' | 'attester';
+  attesterCount: number;
+  citizenCount: number;
   size?: number;
 }
 
 export default function VerificationQRCode({
   requestId,
   nftType,
-  size = 200,
+  attesterCount,
+  citizenCount,
+  size = 180,
 }: VerificationQRCodeProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
-  // Generate web URL for roebel.app
   const webUrl = `https://www.roebel.app/verifizierung/nachweis/${requestId}?contract=${nftType}`;
-  // Generate deep link URL for QR code
   const deepLink = `roebel://verification/request/${requestId}?type=${nftType}`;
 
   const handleShare = async () => {
@@ -38,120 +41,119 @@ export default function VerificationQRCode({
     }
   };
 
+  const cardBg = isDark ? colors.surface : '#ffffff';
+
   return (
     <View style={styles.container}>
-      {/* QR Code */}
-      <View style={[styles.qrContainer, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}>
-        <QRCode
-          value={deepLink}
-          size={size}
-          backgroundColor="white"
-          color="black"
-        />
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: colors.borderSecondary }]}>
+        <View style={styles.qrWrap}>
+          <QRCode value={deepLink} size={size} backgroundColor="#ffffff" color="#000000" />
+        </View>
+
+        <View style={[styles.progressRow, { borderTopColor: colors.borderSecondary }]}>
+          <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bescheiniger</Text>
+          <Text style={[styles.progressValue, { color: colors.textPrimary }]}>
+            {attesterCount} / 1
+          </Text>
+        </View>
+
+        {nftType === 'citizen' && (
+          <View style={[styles.progressRow, { borderTopColor: colors.borderSecondary }]}>
+            <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bürger</Text>
+            <Text style={[styles.progressValue, { color: colors.textPrimary }]}>
+              {citizenCount} / 1
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Info */}
       <View style={styles.infoContainer}>
         <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>QR-Code scannen lassen</Text>
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-          Lassen Sie andere Bürger und Bescheiniger diesen QR-Code scannen, um Ihren Antrag zu unterschreiben.
+          Lassen Sie andere Bürger diesen QR-Code scannen, um Ihren Antrag zu unterschreiben.
         </Text>
       </View>
 
-      {/* Request Info */}
-      <View style={[styles.detailsBox, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Antrag-ID:</Text>
-        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>#{requestId}</Text>
-      </View>
-
-      <View style={[styles.detailsBox, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Typ:</Text>
-        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
-          {nftType === 'citizen' ? 'Bürger-Pass' : 'Bescheiniger-Pass'}
-        </Text>
-      </View>
-
-      {/* Share Button */}
-      <Pressable style={[styles.shareButton, { backgroundColor: colors.primary }]} onPress={handleShare}>
-        <Text style={[styles.shareButtonText, { color: colors.onPrimary }]}>📤 Link teilen</Text>
+      <Pressable
+        style={[styles.shareButton, { backgroundColor: colors.primary }]}
+        onPress={handleShare}
+        accessibilityRole="button"
+        accessibilityLabel="Link teilen"
+      >
+        <Text style={[styles.shareButtonText, { color: colors.onPrimary }]}>Link teilen</Text>
+        <Ionicons name="paper-plane" size={16} color={colors.onPrimary} style={styles.shareIcon} />
       </Pressable>
-
-      {/* Web Link (for copying) */}
-      <Text style={[styles.linkText, { color: colors.textTertiary }]} selectable>
-        {webUrl}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  qrContainer: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 24,
-    // Shadow for iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    // Shadow for Android
-    elevation: 6,
-  },
-  infoContainer: {
-    marginBottom: 24,
     paddingHorizontal: 16,
   },
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingTop: 24,
+    paddingBottom: 4,
+    alignItems: 'stretch',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  qrWrap: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+  },
+  progressValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  infoContainer: {
+    marginTop: 24,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
   infoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   infoText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
-    lineHeight: 20,
-  },
-  detailsBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    lineHeight: 19,
   },
   shareButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    marginTop: 16,
-    marginBottom: 16,
-    width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   shareButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'Inter-SemiBold',
   },
-  linkText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    paddingHorizontal: 16,
+  shareIcon: {
+    marginLeft: 8,
   },
 });

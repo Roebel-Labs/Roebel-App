@@ -14,7 +14,6 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useCreateCitizenRequest } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
-import RequestSuccessModal from '@/components/RequestSuccessModal';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
 
@@ -22,21 +21,17 @@ const DEFAULT_REASON = 'Bürger in Röbel';
 
 export default function RequestCitizenScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const account = useActiveAccount();
   const { hasCitizenNFT, activePendingRequest, refresh } = useVerificationContext();
   const { createRequest, isLoading } = useCreateCitizenRequest();
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [createdRequestId, setCreatedRequestId] = useState<number | null>(null);
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
 
-  const certImage = isDark
-    ? require('@/assets/illustration/onboarding/cert-dark-mode.png')
-    : require('@/assets/illustration/onboarding/cert-light-mode.png');
+  const lockIcon = require('@/assets/illustration/small/encryption.png');
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -62,8 +57,10 @@ export default function RequestCitizenScreen() {
 
       await refresh();
 
-      setCreatedRequestId(result.requestId);
-      setShowSuccessModal(true);
+      router.replace({
+        pathname: '/verification/request-citizen/success' as any,
+        params: { requestId: String(result.requestId) },
+      });
     } catch (error) {
       console.error('Failed to create request:', error);
       setErrorDrawer({
@@ -129,13 +126,11 @@ export default function RequestCitizenScreen() {
         extraHeight={150}
       >
         <View style={styles.privacyHeader}>
-          <Image source={certImage} style={styles.certImage} resizeMode="contain" accessibilityIgnoresInvertColors />
-          <View style={styles.privacyText}>
-            <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Datenschutz</Text>
-            <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
-              Ihr Name und Adresse werden mit Ende-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten später sehen.
-            </Text>
-          </View>
+          <Image source={lockIcon} style={styles.lockIcon} resizeMode="contain" accessibilityIgnoresInvertColors />
+          <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Antrag stellen</Text>
+          <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
+            Ihr Name und Adresse werden mit End-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten später sehen.
+          </Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -203,19 +198,6 @@ export default function RequestCitizenScreen() {
         </Pressable>
       </View>
 
-      <RequestSuccessModal
-        visible={showSuccessModal}
-        requestId={createdRequestId}
-        onViewQR={() => {
-          setShowSuccessModal(false);
-          router.replace('/verification/my-request' as any);
-        }}
-        onDismiss={() => {
-          setShowSuccessModal(false);
-          router.back();
-        }}
-      />
-
       <ErrorDrawer
         visible={errorDrawer.visible}
         message={errorDrawer.message}
@@ -248,23 +230,18 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   privacyHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 28,
   },
-  certImage: {
-    width: 64,
-    height: 64,
-  },
-  privacyText: {
-    flex: 1,
+  lockIcon: {
+    width: 56,
+    height: 56,
+    marginBottom: 16,
   },
   privacyTitle: {
     fontFamily: 'Inter-SemiBold',
-    fontSize: 22,
-    marginBottom: 6,
+    fontSize: 26,
+    marginBottom: 10,
   },
   privacyBody: {
     fontFamily: 'Inter-Regular',
@@ -289,9 +266,10 @@ const styles = StyleSheet.create({
   },
   infoBanner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
-    marginTop: 8,
+    marginTop: 12,
+    paddingVertical: 12,
   },
   infoIconCircle: {
     width: 32,
@@ -303,8 +281,8 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontFamily: 'Inter-Regular',
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 19,
   },
   footer: {
     paddingHorizontal: 24,

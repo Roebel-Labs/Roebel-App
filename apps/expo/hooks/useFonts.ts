@@ -8,6 +8,8 @@ export default function useInterFonts() {
     'Inter-Regular': require('@/assets/fonts/Inter-Regular.ttf'),
     'Inter-Medium': require('@/assets/fonts/Inter-Medium.ttf'),
     'Inter-SemiBold': require('@/assets/fonts/Inter-SemiBold.ttf'),
+    'GeistMono-Regular': require('@/assets/fonts/GeistMono-Regular.ttf'),
+    'GeistMono-Medium': require('@/assets/fonts/GeistMono-Medium.ttf'),
   });
 
   useEffect(() => {

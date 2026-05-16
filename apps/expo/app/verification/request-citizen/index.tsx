@@ -1,24 +1,25 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
 const STEPS = [
   {
     title: 'Antrag stellen',
-    desc: 'Name und Adresse werden mit End-zu-Ende-Verschlüsselung gesichert.',
-    illustration: require('@/assets/illustration/small/encryption.png'),
+    desc: 'Name und Adresse werden mit Ende-zu-Ende-Verschlüsselung gesichert.',
+    icon: require('@/assets/illustration/small/encryption.png'),
   },
   {
     title: 'Digitale Unterschriften einholen',
     desc: 'Holen Sie zwei Unterschriften von weiteren Bürgern ein.',
-    illustration: require('@/assets/illustration/small/signatures.png'),
+    icon: require('@/assets/illustration/small/signatures.png'),
   },
   {
     title: 'Verifiziert',
     desc: 'Sie können nun an Bürgerumfragen anonym teilnehmen.',
-    illustration: require('@/assets/illustration/small/verification-badge.png'),
+    icon: require('@/assets/illustration/small/verification-badge.png'),
   },
 ];
 
@@ -27,74 +28,139 @@ export default function VerifyCitizenIntroScreen() {
   const { colors } = useTheme();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.closeButton}>
-          <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <Image
+        source={require('@/assets/illustration/buergerumfragen.png')}
+        style={styles.hero}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+      />
+
+      <SafeAreaView style={styles.heroOverlay} edges={['top']} pointerEvents="box-none">
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.closeButton, { backgroundColor: colors.background }]}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Schließen"
+        >
+          <Ionicons name="close" size={22} color={colors.textPrimary} />
         </Pressable>
-      </View>
-      <View style={styles.content}>
-        <View>
+      </SafeAreaView>
+
+      <SafeAreaView style={styles.contentArea} edges={['left', 'right', 'bottom']}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
             So einfach ist die{'\n'}Verifizierung
           </Text>
 
           <View style={styles.stepsContainer}>
             {STEPS.map((step, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.stepRow,
-                  i < STEPS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.stepNumber, { color: colors.textPrimary }]}>{i + 1}</Text>
+              <View key={i} style={styles.stepRow}>
+                <View style={styles.stepIconBox}>
+                  <Image source={step.icon} style={styles.stepIcon} resizeMode="contain" />
+                </View>
                 <View style={styles.stepText}>
                   <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>{step.title}</Text>
                   <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
                 </View>
-                <View style={styles.stepIllustrationBox}>
-                  <Image source={step.illustration} style={styles.stepIllustration} resizeMode="contain" />
-                </View>
               </View>
             ))}
           </View>
-        </View>
-      </View>
+        </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => router.push('/verification/request-citizen/form' as any)}
-          style={[styles.button, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Loslegen</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+        <View style={styles.footer}>
+          <Pressable
+            onPress={() => router.push('/verification/request-citizen/form' as any)}
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  headerRow: { paddingHorizontal: 24, paddingTop: 8 },
-  closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  closeIcon: { fontSize: 20, fontFamily: 'Inter-Regular' },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  heading: { fontSize: 32, fontFamily: 'Inter-Bold', marginBottom: 32, lineHeight: 38 },
-  stepsContainer: {},
+  root: { flex: 1 },
+  hero: {
+    width: '100%',
+    height: 320,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  heroOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  contentArea: {
+    flex: 1,
+    marginTop: 320,
+  },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
+  heading: {
+    fontSize: 28,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 34,
+    marginBottom: 24,
+  },
+  stepsContainer: { gap: 20 },
   stepRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 16,
-    paddingVertical: 20,
   },
-  stepNumber: { fontSize: 16, fontFamily: 'Inter-SemiBold', width: 24, alignSelf: 'flex-start', paddingTop: 4 },
+  stepIconBox: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepIcon: { width: 36, height: 36 },
   stepText: { flex: 1 },
-  stepTitle: { fontSize: 17, fontFamily: 'Inter-Medium' },
-  stepDesc: { fontSize: 14, fontFamily: 'Inter-Regular', marginTop: 4, lineHeight: 19 },
-  stepIllustrationBox: { width: 80, height: 80, justifyContent: 'center', alignItems: 'center' },
-  stepIllustration: { width: 80, height: 80 },
-  footer: { paddingHorizontal: 24, paddingBottom: 24 },
-  button: { borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  buttonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  stepTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 4,
+  },
+  stepDesc: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 19,
+  },
+  footer: { paddingHorizontal: 24, paddingBottom: 8, paddingTop: 12 },
+  button: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
 });
