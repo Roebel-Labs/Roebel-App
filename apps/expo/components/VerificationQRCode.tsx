@@ -7,8 +7,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Share } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
+import { softShadow } from '@/lib/shadow';
+import SentWhiteIcon from '@/assets/icons/sent-white.svg';
 
 interface VerificationQRCodeProps {
   requestId: number;
@@ -23,7 +24,7 @@ export default function VerificationQRCode({
   nftType,
   attesterCount,
   citizenCount,
-  size = 180,
+  size = 210,
 }: VerificationQRCodeProps) {
   const { colors, isDark } = useTheme();
 
@@ -41,29 +42,30 @@ export default function VerificationQRCode({
     }
   };
 
-  const cardBg = isDark ? colors.surface : '#ffffff';
+  const cardBg = isDark ? colors.surface : '#FFFFFF';
+  const rowTextColor = isDark ? '#FFFFFF' : '#000000';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : '#EAEAEA';
 
   return (
     <View style={styles.container}>
-      <View style={[styles.card, { backgroundColor: cardBg, borderColor: colors.borderSecondary }]}>
+      <View style={[styles.card, { backgroundColor: cardBg }, softShadow(2, isDark)]}>
         <View style={styles.qrWrap}>
-          <QRCode value={deepLink} size={size} backgroundColor="#ffffff" color="#000000" />
+          <QRCode value={deepLink} size={size} backgroundColor="#FFFFFF" color="#000000" />
         </View>
 
-        <View style={[styles.progressRow, { borderTopColor: colors.borderSecondary }]}>
-          <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bescheiniger</Text>
-          <Text style={[styles.progressValue, { color: colors.textPrimary }]}>
-            {attesterCount} / 1
-          </Text>
+        <View style={styles.progressRow}>
+          <Text style={[styles.progressLabel, { color: rowTextColor }]}>Bescheiniger</Text>
+          <Text style={[styles.progressValue, { color: rowTextColor }]}>{attesterCount} / 1</Text>
         </View>
 
         {nftType === 'citizen' && (
-          <View style={[styles.progressRow, { borderTopColor: colors.borderSecondary }]}>
-            <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bürger</Text>
-            <Text style={[styles.progressValue, { color: colors.textPrimary }]}>
-              {citizenCount} / 1
-            </Text>
-          </View>
+          <>
+            <View style={[styles.rowDivider, { backgroundColor: dividerColor }]} />
+            <View style={styles.progressRow}>
+              <Text style={[styles.progressLabel, { color: rowTextColor }]}>Bürger</Text>
+              <Text style={[styles.progressValue, { color: rowTextColor }]}>{citizenCount} / 1</Text>
+            </View>
+          </>
         )}
       </View>
 
@@ -81,7 +83,7 @@ export default function VerificationQRCode({
         accessibilityLabel="Link teilen"
       >
         <Text style={[styles.shareButtonText, { color: colors.onPrimary }]}>Link teilen</Text>
-        <Ionicons name="paper-plane" size={16} color={colors.onPrimary} style={styles.shareIcon} />
+        <SentWhiteIcon width={20} height={20} style={styles.shareIcon} />
       </Pressable>
     </View>
   );
@@ -90,48 +92,47 @@ export default function VerificationQRCode({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
+    alignItems: 'center',
   },
   card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingTop: 24,
+    alignSelf: 'center',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 4,
-    alignItems: 'stretch',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
   },
   qrWrap: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingBottom: 12,
   },
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   progressLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   progressValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  rowDivider: {
+    height: 1,
+    marginHorizontal: 4,
   },
   infoContainer: {
-    marginTop: 24,
+    marginTop: 28,
     marginBottom: 20,
     paddingHorizontal: 8,
+    alignSelf: 'stretch',
   },
   infoTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     textAlign: 'center',
     marginBottom: 6,
   },
@@ -148,10 +149,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
   },
   shareButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
   shareIcon: {
     marginLeft: 8,

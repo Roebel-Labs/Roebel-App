@@ -30,7 +30,7 @@ export default function VerifyCitizenIntroScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <Image
-        source={require('@/assets/illustration/buergerumfragen.png')}
+        source={require('@/assets/illustration/verification/hero.png')}
         style={styles.hero}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
@@ -125,27 +125,27 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
   heading: {
     fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     lineHeight: 34,
     marginBottom: 24,
   },
-  stepsContainer: { gap: 20 },
+  stepsContainer: { gap: 24 },
   stepRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 16,
   },
   stepIconBox: {
-    width: 36,
-    height: 36,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepIcon: { width: 36, height: 36 },
+  stepIcon: { width: 64, height: 64 },
   stepText: { flex: 1 },
   stepTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     marginBottom: 4,
   },
   stepDesc: {
@@ -161,6 +161,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
 });

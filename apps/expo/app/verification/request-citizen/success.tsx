@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 24,
     fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     textAlign: 'center',
   },
   description: {
@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
 });

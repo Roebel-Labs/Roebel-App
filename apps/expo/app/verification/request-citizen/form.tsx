@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   privacyTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     fontSize: 26,
     marginBottom: 10,
   },
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitButtonText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     fontSize: 16,
   },
   messageContainer: {

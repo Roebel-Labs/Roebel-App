@@ -7,16 +7,18 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useRequestDetails } from '@/hooks/useVerification';
 import { useTheme } from '@/context/ThemeContext';
 import VerificationQRCode from '@/components/VerificationQRCode';
+import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function MyRequestScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { activePendingRequest, hasCitizenNFT, refresh } = useVerificationContext();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -43,103 +45,122 @@ export default function MyRequestScreen() {
     setRefreshing(false);
   };
 
+  const gradientColors: readonly [string, string] = isDark
+    ? ['#1a2335', '#202124']
+    : ['#E4F2FF', '#FFFFFF'];
+
   if (hasCitizenNFT) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.messageContainer}>
-          <Text style={[styles.messageTitle, { color: colors.textPrimary }]}>&#x2713; Bereits verifiziert</Text>
-          <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-            Sie sind bereits ein verifizierter Bürger!
-          </Text>
-          <Pressable style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
-            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zurück</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <LinearGradient colors={gradientColors} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}>
+        <SafeAreaView style={styles.flex}>
+          <View style={styles.messageContainer}>
+            <Text style={[styles.messageTitle, { color: colors.textPrimary }]}>&#x2713; Bereits verifiziert</Text>
+            <Text style={[styles.messageText, { color: colors.textSecondary }]}>
+              Sie sind bereits ein verifizierter Bürger!
+            </Text>
+            <Pressable style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+              <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Zurück</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
     );
   }
 
   if (!activePendingRequest) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.messageContainer}>
-          <Text style={[styles.messageTitle, { color: colors.textPrimary }]}>Kein Antrag</Text>
-          <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-            Sie haben keinen ausstehenden Verifizierungsantrag.
-          </Text>
-          <Pressable
-            style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => router.push('/verification/request-citizen' as any)}
-          >
-            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Antrag erstellen</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <LinearGradient colors={gradientColors} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}>
+        <SafeAreaView style={styles.flex}>
+          <View style={styles.messageContainer}>
+            <Text style={[styles.messageTitle, { color: colors.textPrimary }]}>Kein Antrag</Text>
+            <Text style={[styles.messageText, { color: colors.textSecondary }]}>
+              Sie haben keinen ausstehenden Verifizierungsantrag.
+            </Text>
+            <Pressable
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/verification/request-citizen' as any)}
+            >
+              <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Antrag erstellen</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
     );
   }
 
+  const backButtonBg = isDark ? colors.surface : '#FFFFFF';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.12)' : colors.borderSecondary;
+  const disclaimerIconColor = isDark ? '#9aa0a6' : '#6e7277';
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
+    <LinearGradient colors={gradientColors} style={styles.container} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}>
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.backButton, { backgroundColor: backButtonBg }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Zurück"
+          >
+            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Antrag</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentInner}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.textSecondary} />
+          }
         >
-          <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Antrag</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentInner}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Lade Antrag...</Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.qrSection}>
-              <VerificationQRCode
-                requestId={requestId as number}
-                nftType={nftType}
-                attesterCount={activePendingRequest.attester_signatures || 0}
-                citizenCount={activePendingRequest.citizen_signatures || 0}
-              />
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Lade Antrag...</Text>
             </View>
-
-            {decryptedData && (
-              <View style={styles.privateDataCard}>
-                <View style={styles.privateRow}>
-                  <Text style={styles.privateLabel}>Name:</Text>
-                  <Text style={styles.privateValue}>{decryptedData.name}</Text>
-                </View>
-                <View style={styles.privateRow}>
-                  <Text style={styles.privateLabel}>Adresse:</Text>
-                  <Text style={styles.privateValue}>{decryptedData.address}</Text>
-                </View>
-                <View style={styles.privateDisclaimerRow}>
-                  <Ionicons name="lock-closed" size={12} color="#9aa0a6" />
-                  <Text style={styles.privateDisclaimer}>
-                    Diese Daten sind verschlüsselt. Nur Sie können Sie sehen.
-                  </Text>
-                </View>
+          ) : (
+            <>
+              <View style={styles.qrSection}>
+                <VerificationQRCode
+                  requestId={requestId as number}
+                  nftType={nftType}
+                  attesterCount={activePendingRequest.attester_signatures || 0}
+                  citizenCount={activePendingRequest.citizen_signatures || 0}
+                />
               </View>
-            )}
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+
+              {decryptedData && (
+                <View style={styles.privateSection}>
+                  <View style={[styles.shortDivider, { backgroundColor: dividerColor }]} />
+
+                  <View style={styles.privateDataCard}>
+                    <View style={styles.privateRow}>
+                      <Text style={styles.privateLabel}>Name:</Text>
+                      <Text style={styles.privateValue}>{decryptedData.name}</Text>
+                    </View>
+                    <View style={styles.privateRow}>
+                      <Text style={styles.privateLabel}>Adresse:</Text>
+                      <Text style={styles.privateValue}>{decryptedData.address}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.privateDisclaimerRow}>
+                    <Ionicons name="lock-closed" size={12} color={disclaimerIconColor} />
+                    <Text style={[styles.privateDisclaimer, { color: disclaimerIconColor }]}>
+                      Diese Daten sind verschlüsselt. Nur Sie können Sie sehen.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -147,26 +168,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  flex: {
+    flex: 1,
+  },
   header: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     textAlign: 'center',
   },
   headerSpacer: {
-    width: 44,
+    width: 48,
   },
   content: {
     flex: 1,
@@ -187,15 +212,23 @@ const styles = StyleSheet.create({
   },
   qrSection: {
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  privateSection: {
+    marginTop: 20,
+  },
+  shortDivider: {
+    height: 1,
+    width: 160,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   privateDataCard: {
-    backgroundColor: '#0f1011',
-    borderRadius: 16,
+    backgroundColor: '#000000',
+    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginHorizontal: 16,
-    marginTop: 8,
   },
   privateRow: {
     flexDirection: 'row',
@@ -206,12 +239,12 @@ const styles = StyleSheet.create({
   privateLabel: {
     fontFamily: 'GeistMono-Regular',
     fontSize: 13,
-    color: '#e8eaed',
+    color: '#E8EAED',
   },
   privateValue: {
     fontFamily: 'GeistMono-Regular',
     fontSize: 13,
-    color: '#ffffff',
+    color: '#E8EAED',
     textAlign: 'right',
     flex: 1,
     marginLeft: 12,
@@ -220,15 +253,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-    paddingTop: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
   },
   privateDisclaimer: {
     fontFamily: 'Inter-Regular',
     fontSize: 11,
-    color: '#9aa0a6',
     flex: 1,
   },
   messageContainer: {
@@ -239,7 +269,7 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     marginBottom: 12,
   },
   messageText: {
@@ -256,6 +286,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
 });
