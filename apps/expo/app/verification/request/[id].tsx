@@ -1,25 +1,28 @@
 /**
- * Request Details Screen
+ * Request Sign Screen
  *
- * View and approve/reject verification requests
+ * Dark backdrop with a bottom sheet that lets a Bürger or Bescheiniger
+ * approve or reject another user's pending verification request.
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useActiveAccount } from 'thirdweb/react';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useRequestDetails, useApproveRequest, useRejectRequest } from '@/hooks/useVerification';
-import { useTheme } from '@/context/ThemeContext';
-import RoleSelector from '@/components/RoleSelector';
 import { RequestStatus } from '@/lib/verification-types';
-import ConfirmationDrawer from '@/components/ConfirmationDrawer';
+import { useTheme } from '@/context/ThemeContext';
+import SignRequestSheet from '@/components/SignRequestSheet';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import SuccessDrawer from '@/components/SuccessDrawer';
 import MeckyNotFound from '@/components/MeckyNotFound';
 
-export default function RequestDetailsScreen() {
+type Role = 'attester' | 'citizen';
+
+export default function RequestSignScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const params = useLocalSearchParams();
@@ -29,46 +32,45 @@ export default function RequestDetailsScreen() {
   const requestId = parseInt(params.id as string, 10);
   const nftType = (params.type as 'citizen' | 'attester') || 'citizen';
 
-  const { request, evidence, decryptedData, isLoading, fetchRequest } = useRequestDetails(requestId, nftType);
+  const { request, isLoading, fetchRequest } = useRequestDetails(requestId, nftType);
   const { approveRequest, isLoading: isApproving } = useApproveRequest();
   const { rejectRequest, isLoading: isRejecting } = useRejectRequest();
 
-  const [selectedRole, setSelectedRole] = useState<'attester' | 'citizen'>('citizen');
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Drawer states
+  const [selectedRole, setSelectedRole] = useState<Role>(() => (hasAttesterNFT ? 'attester' : 'citizen'));
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
-  const [confirmApprovalDrawer, setConfirmApprovalDrawer] = useState(false);
-  const [confirmRejectDrawer, setConfirmRejectDrawer] = useState(false);
-  const [successDrawer, setSuccessDrawer] = useState({ visible: false, message: '', action: null as (() => void) | null });
-
-  const isOwner = account?.address?.toLowerCase() === request?.requester.toLowerCase();
-  const isDualHolder = hasCitizenNFT && hasAttesterNFT;
+  const [successDrawer, setSuccessDrawer] = useState({
+    visible: false,
+    message: '',
+    action: null as (() => void) | null,
+  });
 
   useEffect(() => {
     fetchRequest();
   }, [requestId, nftType]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await fetchRequest();
-    setRefreshing(false);
-  };
+  // Resync default role once NFT flags resolve asynchronously
+  useEffect(() => {
+    if (hasAttesterNFT && !hasCitizenNFT && selectedRole !== 'attester') {
+      setSelectedRole('attester');
+    } else if (hasCitizenNFT && !hasAttesterNFT && selectedRole !== 'citizen') {
+      setSelectedRole('citizen');
+    }
+  }, [hasAttesterNFT, hasCitizenNFT]);
+
+  const isOwner = account?.address?.toLowerCase() === request?.requester.toLowerCase();
+  const isDualHolder = hasCitizenNFT && hasAttesterNFT;
+
+  const closeScreen = () => router.back();
 
   const handleApprove = async () => {
     if (!hasAnyNFT) {
       setErrorDrawer({
         visible: true,
-        message: 'Sie benötigen ein Bürger- oder Bescheiniger-NFT, um Anträge zu genehmigen.'
+        message: 'Sie benötigen ein Bürger- oder Bescheiniger-NFT, um Anträge zu genehmigen.',
       });
       return;
     }
 
-    setConfirmApprovalDrawer(true);
-  };
-
-  const executeApproval = async () => {
-    setConfirmApprovalDrawer(false);
     const signAsAttester = isDualHolder ? selectedRole === 'attester' : hasAttesterNFT;
 
     try {
@@ -76,16 +78,13 @@ export default function RequestDetailsScreen() {
       setSuccessDrawer({
         visible: true,
         message: 'Sie haben den Antrag erfolgreich genehmigt.',
-        action: () => {
-          fetchRequest();
-          router.back();
-        }
+        action: closeScreen,
       });
     } catch (error) {
       console.error('Failed to approve:', error);
       setErrorDrawer({
         visible: true,
-        message: error instanceof Error ? error.message : 'Die Genehmigung ist fehlgeschlagen.'
+        message: error instanceof Error ? error.message : 'Die Genehmigung ist fehlgeschlagen.',
       });
     }
   };
@@ -94,451 +93,172 @@ export default function RequestDetailsScreen() {
     if (!hasAnyNFT) {
       setErrorDrawer({
         visible: true,
-        message: 'Sie benötigen ein Bürger- oder Bescheiniger-NFT, um Anträge abzulehnen.'
+        message: 'Sie benötigen ein Bürger- oder Bescheiniger-NFT, um Anträge abzulehnen.',
       });
       return;
     }
-
-    setConfirmRejectDrawer(true);
-  };
-
-  const executeRejection = async () => {
-    setConfirmRejectDrawer(false);
 
     try {
       await rejectRequest(requestId, nftType);
       setSuccessDrawer({
         visible: true,
         message: 'Sie haben den Antrag abgelehnt.',
-        action: () => router.back()
+        action: closeScreen,
       });
     } catch (error) {
       console.error('Failed to reject:', error);
       setErrorDrawer({
         visible: true,
-        message: error instanceof Error ? error.message : 'Die Ablehnung ist fehlgeschlagen.'
+        message: error instanceof Error ? error.message : 'Die Ablehnung ist fehlgeschlagen.',
       });
     }
   };
 
-  const getStatusBadge = () => {
-    if (!request) return null;
+  const renderFallback = (message: string) => (
+    <View style={styles.fallbackCard}>
+      <Text style={styles.fallbackText}>{message}</Text>
+      <Pressable style={styles.fallbackButton} onPress={closeScreen} accessibilityRole="button">
+        <Text style={styles.fallbackButtonText}>Schließen</Text>
+      </Pressable>
+    </View>
+  );
 
-    switch (request.status) {
-      case RequestStatus.Pending:
-        return <View style={[styles.statusBadge, styles.pendingBadge]}><Text style={[styles.statusText, { color: colors.textPrimary }]}>Ausstehend</Text></View>;
-      case RequestStatus.Approved:
-        return <View style={[styles.statusBadge, { backgroundColor: colors.successBackground }]}><Text style={[styles.statusText, { color: colors.textPrimary }]}>Genehmigt</Text></View>;
-      case RequestStatus.Rejected:
-        return <View style={[styles.statusBadge, styles.rejectedBadge]}><Text style={[styles.statusText, { color: colors.textPrimary }]}>Abgelehnt</Text></View>;
-      case RequestStatus.Executed:
-        return <View style={[styles.statusBadge, { backgroundColor: colors.primaryLight }]}><Text style={[styles.statusText, { color: colors.textPrimary }]}>Ausgeführt</Text></View>;
-      default:
-        return null;
-    }
-  };
-
-  const shortenAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Lade Antrag...</Text>
+  const renderBody = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
         </View>
-      </SafeAreaView>
-    );
-  }
+      );
+    }
 
-  if (!request) {
+    if (!request) {
+      return (
+        <View style={styles.centered}>
+          <MeckyNotFound title="Antrag nicht gefunden" />
+        </View>
+      );
+    }
+
+    if (isOwner) {
+      return renderFallback('Sie können Ihren eigenen Antrag nicht unterschreiben.');
+    }
+
+    if (request.status !== RequestStatus.Pending) {
+      return renderFallback('Dieser Antrag wurde bereits genehmigt oder abgelehnt.');
+    }
+
+    if (!hasAnyNFT) {
+      return renderFallback('Sie benötigen ein Bürger- oder Bescheiniger-Pass, um Anträge zu unterzeichnen.');
+    }
+
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <MeckyNotFound title="Antrag nicht gefunden" />
-      </SafeAreaView>
+      <SignRequestSheet
+        visible
+        onClose={closeScreen}
+        hasCitizenNFT={hasCitizenNFT}
+        hasAttesterNFT={hasAttesterNFT}
+        selectedRole={selectedRole}
+        onSelectRole={setSelectedRole}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        isApproving={isApproving}
+        isRejecting={isRejecting}
+      />
     );
-  }
-
-  const isPending = request.status === RequestStatus.Pending;
-  const canApprove = hasAnyNFT && !isOwner && isPending;
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={[styles.backButton, { color: colors.primary }]}>&#x2190; Zurück</Text>
+    <View style={styles.root}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <Pressable
+          onPress={closeScreen}
+          hitSlop={12}
+          style={styles.topClose}
+          accessibilityRole="button"
+          accessibilityLabel="Schließen"
+        >
+          <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Antrag #{requestId}</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      </SafeAreaView>
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Status */}
-        <View style={[styles.statusContainer, { borderBottomColor: colors.border }]}>
-          {getStatusBadge()}
-          <Text style={[styles.nftTypeText, { color: colors.textSecondary }]}>
-            {nftType === 'citizen' ? 'Bürger-Pass' : 'Bescheiniger-Pass'}
-          </Text>
-        </View>
+      {renderBody()}
 
-        {/* Target Address */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Antragsteller</Text>
-          <View style={[styles.addressCard, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.addressText, { color: colors.textPrimary }]}>{shortenAddress(request.target)}</Text>
-            {isOwner && <Text style={[styles.youBadge, { color: colors.primary, backgroundColor: colors.primaryLight }]}>Sie</Text>}
-          </View>
-        </View>
-
-        {/* Signature Progress */}
-        {isPending && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Unterschriften-Fortschritt</Text>
-            <View style={[styles.progressCard, { backgroundColor: colors.surface }]}>
-              <View style={styles.progressItem}>
-                <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bescheiniger</Text>
-                <Text style={[styles.progressValue, { color: colors.primary }]}>
-                  {request.attesterSignatures} / {nftType === 'citizen' ? '1' : '2'}
-                </Text>
-              </View>
-              {nftType === 'citizen' && (
-                <View style={styles.progressItem}>
-                  <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Bürger</Text>
-                  <Text style={[styles.progressValue, { color: colors.primary }]}>
-                    {request.citizenSignatures} / 1
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Personal Data (Owner View) */}
-        {isOwner && decryptedData && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Ihre Daten (verschlüsselt)</Text>
-            <View style={[styles.dataCard, { backgroundColor: colors.successBackground, borderColor: colors.success }]}>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Name:</Text>
-                <Text style={styles.dataValue}>{decryptedData.name}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Adresse:</Text>
-                <Text style={styles.dataValue}>{decryptedData.address}</Text>
-              </View>
-            </View>
-            <Text style={styles.dataHint}>
-              &#x1F512; Diese Daten sind verschlüsselt. Nur Sie können sie sehen.
-            </Text>
-          </View>
-        )}
-
-        {/* Public Metadata */}
-        {evidence?.metadata && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Grund (öffentlich)</Text>
-            <View style={[styles.metadataCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.metadataText, { color: colors.textPrimary }]}>{evidence.metadata.reason}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Role Selector (for dual NFT holders) */}
-        {canApprove && isDualHolder && (
-          <View style={styles.section}>
-            <RoleSelector
-              selectedRole={selectedRole}
-              onSelectRole={setSelectedRole}
-              disabled={isApproving || isRejecting}
-            />
-          </View>
-        )}
-
-        {/* Action Buttons */}
-        {canApprove && (
-          <View style={styles.actionSection}>
-            <Pressable
-              style={[styles.approveButton, { backgroundColor: colors.success }, (isApproving || isRejecting) && styles.buttonDisabled]}
-              onPress={handleApprove}
-              disabled={isApproving || isRejecting}
-            >
-              {isApproving ? (
-                <ActivityIndicator color={colors.onPrimary} />
-              ) : (
-                <Text style={[styles.approveButtonText, { color: colors.onPrimary }]}>&#x2713; Antrag genehmigen</Text>
-              )}
-            </Pressable>
-
-            <Pressable
-              style={[styles.rejectButton, { backgroundColor: colors.background, borderColor: colors.error }, (isApproving || isRejecting) && styles.buttonDisabled]}
-              onPress={handleReject}
-              disabled={isApproving || isRejecting}
-            >
-              {isRejecting ? (
-                <ActivityIndicator color={colors.error} />
-              ) : (
-                <Text style={[styles.rejectButtonText, { color: colors.error }]}>&#x2715; Antrag ablehnen</Text>
-              )}
-            </Pressable>
-          </View>
-        )}
-
-        {/* Info for non-approvers */}
-        {!canApprove && !isOwner && (
-          <View style={[styles.infoBox, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
-            <Text style={styles.infoText}>
-              {!hasAnyNFT
-                ? 'Sie benötigen ein Bürger- oder Bescheiniger-Pass, um Anträge zu genehmigen.'
-                : 'Dieser Antrag wurde bereits genehmigt oder abgelehnt.'}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Error Drawer */}
       <ErrorDrawer
         visible={errorDrawer.visible}
         message={errorDrawer.message}
         onDismiss={() => setErrorDrawer({ visible: false, message: '' })}
       />
 
-      {/* Approval Confirmation Drawer */}
-      <ConfirmationDrawer
-        visible={confirmApprovalDrawer}
-        variant="success"
-        title="Antrag genehmigen?"
-        message={`Möchten Sie diesen Antrag wirklich genehmigen?\n\nSie unterschreiben als: ${
-          isDualHolder ? (selectedRole === 'attester' ? 'Bescheiniger' : 'Bürger') : (hasAttesterNFT ? 'Bescheiniger' : 'Bürger')
-        }`}
-        confirmText="Genehmigen"
-        cancelText="Abbrechen"
-        onConfirm={executeApproval}
-        onCancel={() => setConfirmApprovalDrawer(false)}
-        isLoading={isApproving}
-      />
-
-      {/* Rejection Confirmation Drawer */}
-      <ConfirmationDrawer
-        visible={confirmRejectDrawer}
-        variant="destructive"
-        title="Antrag ablehnen?"
-        message="Möchten Sie diesen Antrag wirklich ablehnen?"
-        confirmText="Ablehnen"
-        cancelText="Abbrechen"
-        onConfirm={executeRejection}
-        onCancel={() => setConfirmRejectDrawer(false)}
-        isLoading={isRejecting}
-      />
-
-      {/* Success Drawer */}
       <SuccessDrawer
         visible={successDrawer.visible}
         message={successDrawer.message}
         primaryButtonText="OK"
         onPrimaryAction={() => {
+          const action = successDrawer.action;
           setSuccessDrawer({ visible: false, message: '', action: null });
-          if (successDrawer.action) successDrawer.action();
+          if (action) action();
         }}
         onDismiss={() => {
+          const action = successDrawer.action;
           setSuccessDrawer({ visible: false, message: '', action: null });
-          if (successDrawer.action) successDrawer.action();
+          if (action) action();
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
+    backgroundColor: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  safeArea: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
   },
-  backButton: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Medium',
-  },
-  content: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
+  topClose: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    marginTop: 12,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  pendingBadge: {
-    backgroundColor: '#FFFBEB',
-  },
-  rejectedBadge: {
-    backgroundColor: '#FFEBEE',
-  },
-  statusText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  nftTypeText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 12,
-  },
-  addressCard: {
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  addressText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
-  youBadge: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  progressCard: {
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  progressItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  progressValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-  },
-  dataCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  dataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dataLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#2E7D32',
-  },
-  dataValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#1B5E20',
-    flex: 1,
-    textAlign: 'right',
-  },
-  dataHint: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#388E3C',
     marginTop: 8,
   },
-  metadataCard: {
-    borderRadius: 12,
-    padding: 16,
-  },
-  metadataText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-  },
-  actionSection: {
-    paddingHorizontal: 16,
-    marginTop: 32,
-    marginBottom: 32,
-    gap: 12,
-  },
-  approveButton: {
-    borderRadius: 12,
-    padding: 16,
+  centered: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
-  approveButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-  },
-  rejectButton: {
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 16,
+  fallbackCard: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
     alignItems: 'center',
+    gap: 16,
   },
-  rejectButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  infoBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  infoText: {
-    fontSize: 14,
+  fallbackText: {
     fontFamily: 'Inter-Regular',
-    color: '#1976D2',
-    lineHeight: 20,
+    fontSize: 15,
+    color: '#1F2937',
     textAlign: 'center',
+    lineHeight: 21,
+  },
+  fallbackButton: {
+    backgroundColor: '#194383',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  fallbackButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Medium',
+    fontSize: 15,
   },
 });
