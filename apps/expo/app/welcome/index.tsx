@@ -4,13 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '@/context/ThemeContext';
-import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 
 export default function WelcomeIntroScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { openExit } = useWelcomeWizard();
 
   const certImage = isDark
     ? require('../../assets/illustration/onboarding/cert-dark-mode.png')
@@ -41,10 +39,6 @@ export default function WelcomeIntroScreen() {
             accessibilityRole="button"
           >
             <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Loslegen</Text>
-          </Pressable>
-
-          <Pressable onPress={openExit} style={styles.textButton} accessibilityRole="button">
-            <Text style={[styles.textButtonLabel, { color: colors.primary }]}>Zurück zur Startseite</Text>
           </Pressable>
         </View>
       </ImageBackground>
@@ -96,16 +90,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButtonText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-  },
-  textButton: {
-    marginTop: 8,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textButtonLabel: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
   },

@@ -8,6 +8,7 @@ import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { setNotificationPromptPending } from '@/lib/onboarding-storage';
+import StoryProgress from '@/components/StoryProgress';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -83,6 +84,7 @@ export default function WelcomeConsentScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <StoryProgress step={3} totalSteps={3} />
         <Image
           source={require('../../assets/icons/Heart.png')}
           style={styles.illustration}
@@ -100,9 +102,8 @@ export default function WelcomeConsentScreen() {
         </Text>
 
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          Ich behandle alle Mitglieder der Röbel-Gemeinschaft — unabhängig von Herkunft, Religion,
-          Nationalität, Hautfarbe, Beeinträchtigung, Geschlecht, Geschlechtsidentität, sexueller
-          Orientierung oder Alter — mit Respekt und ohne Vorurteile.
+          Ich trage zu Röbel als Gemeinschaft bei — durch den Schutz der Privatsphäre, demokratische
+          Mitwirkung, Anerkennung von Leistung, kommunale Souveränität und nachhaltiges Handeln.
         </Text>
 
         <Text style={[styles.body, { color: colors.textSecondary }]}>
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 24,
     paddingBottom: 24,
   },
   illustration: {

@@ -16,7 +16,7 @@ export default function BuergerWerdenBanner() {
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.surface },
+        { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
         softShadow(2, isDark),
       ]}
     >
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontFamily: 'Inter-Medium',
-    fontSize: 14,
+    fontSize: 12,
   },
   illustration: {
     width: 120,

@@ -123,9 +123,9 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
           <Pressable
             onPress={handleEnable}
             disabled={submitting}
-            style={[styles.primaryButton, { backgroundColor: colors.textPrimary }, submitting && { opacity: 0.6 }]}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }, submitting && { opacity: 0.6 }]}
           >
-            <Text style={[styles.primaryButtonText, { color: colors.background }]}>Ja, benachrichtigen</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Ja, benachrichtigen</Text>
           </Pressable>
         </Animated.View>
       </View>
