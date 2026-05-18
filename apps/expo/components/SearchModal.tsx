@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import {
   BusinessDealWithBusiness,
   MarketplaceListingRecord,
   MovieRecord,
-  UserRecord,
 } from '@/lib/types';
 import EventCard from './EventCard';
 import NewsCard from './NewsCard';
@@ -30,7 +29,8 @@ import BusinessCardCompact from './BusinessCardCompact';
 import BusinessDealCard from './BusinessDealCard';
 import MarketplaceCard from './MarketplaceCard';
 import MovieCard from './MovieCard';
-import UserSearchCard from './UserSearchCard';
+import AccountSearchRow from './messages/AccountSearchRow';
+import { searchAccounts, type AccountSearchResult } from '@/lib/supabase-account-search';
 import AppSectionTile from './AppSectionTile';
 import { useRouter } from 'expo-router';
 import { logSearch } from '@/lib/firebase';
@@ -44,9 +44,10 @@ type Props = {
 type SearchResults = {
   events: EventRecord[];
   news: NewsArticle[];
+  people: AccountSearchResult[];
+  orgs: AccountSearchResult[];
   restaurants: RestaurantRecord[];
   businesses: BusinessRecord[];
-  users: UserRecord[];
   deals: BusinessDealWithBusiness[];
   marketplace: MarketplaceListingRecord[];
   movies: MovieRecord[];
@@ -55,20 +56,22 @@ type SearchResults = {
 const EMPTY_RESULTS: SearchResults = {
   events: [],
   news: [],
+  people: [],
+  orgs: [],
   restaurants: [],
   businesses: [],
-  users: [],
   deals: [],
   marketplace: [],
   movies: [],
 };
 
 const RESULT_SECTIONS: { key: keyof SearchResults; label: string }[] = [
+  { key: 'people', label: 'Personen' },
+  { key: 'orgs', label: 'Organisationen' },
   { key: 'events', label: 'Veranstaltungen' },
   { key: 'news', label: 'Neuigkeiten' },
   { key: 'restaurants', label: 'Gastronomie' },
   { key: 'businesses', label: 'Unternehmen' },
-  { key: 'users', label: 'Personen' },
   { key: 'deals', label: 'Angebote' },
   { key: 'marketplace', label: 'Marktplatz' },
   { key: 'movies', label: 'Kino' },
@@ -125,12 +128,20 @@ export default function SearchModal({ visible, onClose }: Props) {
   const [searchResults, setSearchResults] = useState<SearchResults>(EMPTY_RESULTS);
   const [isSearching, setIsSearching] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const inputRef = useRef<TextInput>(null);
 
   const debouncedQuery = useDebounced(searchQuery, 300);
 
   useEffect(() => {
     if (visible) {
       loadRecentSearches();
+      // autoFocus inside a React Native Modal is unreliable on iOS (the
+      // keyboard often doesn't pop). Wait one frame after the modal mounts
+      // and focus imperatively instead.
+      const raf = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
     }
   }, [visible]);
 
@@ -157,7 +168,7 @@ export default function SearchModal({ visible, onClose }: Props) {
         newsRes,
         restaurantsRes,
         businessesRes,
-        usersRes,
+        accountsRes,
         dealsRes,
         marketplaceRes,
         moviesRes,
@@ -190,12 +201,7 @@ export default function SearchModal({ visible, onClose }: Props) {
           .or(`name.ilike.${like},description.ilike.${like},address.ilike.${like}`)
           .order('name', { ascending: true })
           .limit(5),
-        supabase
-          .from('users')
-          .select('*')
-          .not('username', 'is', null)
-          .or(`username.ilike.${like},bio.ilike.${like},neighborhood.ilike.${like}`)
-          .limit(5),
+        searchAccounts(query, 'all', null),
         supabase
           .from('business_deals')
           .select('*, business:businesses(id, name, slug, logo_url, category)')
@@ -220,12 +226,17 @@ export default function SearchModal({ visible, onClose }: Props) {
           .limit(5),
       ]);
 
+      const accounts = accountsRes as AccountSearchResult[];
+      const people = accounts.filter((a) => a.accountType === 'personal').slice(0, 5);
+      const orgs = accounts.filter((a) => a.accountType === 'organisation').slice(0, 5);
+
       const results: SearchResults = {
         events: (eventsRes.data as EventRecord[]) || [],
         news: (newsRes.data as NewsArticle[]) || [],
+        people,
+        orgs,
         restaurants: (restaurantsRes.data as RestaurantRecord[]) || [],
         businesses: (businessesRes.data as BusinessRecord[]) || [],
-        users: (usersRes.data as UserRecord[]) || [],
         deals: (dealsRes.data as BusinessDealWithBusiness[]) || [],
         marketplace: (marketplaceRes.data as MarketplaceListingRecord[]) || [],
         movies: (moviesRes.data as MovieRecord[]) || [],
@@ -305,9 +316,17 @@ export default function SearchModal({ visible, onClose }: Props) {
                 <BusinessCardCompact business={business} compact={false} />
               </Pressable>
             ))}
-          {key === 'users' &&
-            (items as UserRecord[]).map((user) => (
-              <UserSearchCard key={user.id} user={user} onPress={handleClose} />
+          {(key === 'people' || key === 'orgs') &&
+            (items as AccountSearchResult[]).map((acc, i) => (
+              <AccountSearchRow
+                key={acc.id}
+                result={acc}
+                index={i}
+                onPress={() => {
+                  handleClose();
+                  router.push(`/account/${acc.id}` as any);
+                }}
+              />
             ))}
           {key === 'deals' &&
             (items as BusinessDealWithBusiness[]).map((deal) => (
@@ -349,11 +368,11 @@ export default function SearchModal({ visible, onClose }: Props) {
             <SearchIcon size={20} color={colors.textTertiary} />
             <View style={styles.inputWrapper}>
               <TextInput
+                ref={inputRef}
                 style={[styles.searchInput, { color: colors.textPrimary }]}
                 placeholder=""
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                autoFocus
                 returnKeyType="search"
               />
               {searchQuery.length === 0 && (
@@ -472,7 +491,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     paddingHorizontal: 16,
     gap: 12,
   },
