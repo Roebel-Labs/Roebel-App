@@ -5,14 +5,17 @@ import {
   FlatList,
   Image,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 
 import { useTheme } from '@/context/ThemeContext';
+import { useLocation } from '@/context/LocationContext';
 import { LocationIcon, CalendarIcon, CallIcon } from '@/components/Icons';
 import { isRestaurantOpen } from '@/lib/utils';
 import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
@@ -170,6 +173,25 @@ function Card({
   onNavigate: () => void;
 }) {
   const imageUrl = getImageUrl(item);
+  const { location, hasLocationPermission, requestLocation } = useLocation();
+
+  const handleRoutePress = async () => {
+    let coords = location?.coords;
+    if (!coords) {
+      const granted = hasLocationPermission || (await requestLocation());
+      if (granted) {
+        try {
+          const fresh = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          coords = fresh.coords;
+        } catch (err) {
+          console.warn('Failed to read current location for route', err);
+        }
+      }
+    }
+    openRoute(item.lat, item.lon, coords?.latitude, coords?.longitude);
+  };
 
   return (
     <View style={[styles.card, { backgroundColor: colors.background }]}>
@@ -191,6 +213,17 @@ function Card({
               onPress={onNavigate}
             >
               <Text style={styles.detailsButtonText}>{getButtonLabel(item)}</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.routeButton,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              onPress={handleRoutePress}
+            >
+              <Text style={[styles.routeButtonText, { color: colors.textPrimary }]}>
+                Route
+              </Text>
             </Pressable>
             {item.entityType === 'poi' && item.data.phone ? (
               <Pressable
@@ -405,6 +438,25 @@ function getButtonLabel(item: CarouselItem): string {
   }
 }
 
+function openRoute(
+  destLat: number,
+  destLon: number,
+  originLat?: number,
+  originLon?: number
+) {
+  const dest = `${destLat},${destLon}`;
+  const origin = originLat != null && originLon != null ? `${originLat},${originLon}` : null;
+  const url =
+    Platform.OS === 'ios'
+      ? `maps://?daddr=${dest}&dirflg=d${origin ? `&saddr=${origin}` : ''}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving${
+          origin ? `&origin=${origin}` : ''
+        }`;
+  Linking.openURL(url).catch((err) => {
+    console.warn('Failed to open maps app', err);
+  });
+}
+
 function navigate(item: CarouselItem, router: ReturnType<typeof useRouter>) {
   switch (item.entityType) {
     case 'event':
@@ -481,6 +533,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     color: '#ffffff',
+  },
+  routeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  routeButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   callButton: {
     width: 32,
