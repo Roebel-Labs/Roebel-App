@@ -128,6 +128,95 @@ export function useCreateCitizenRequest() {
 }
 
 /**
+ * Hook to create a revocation request (Attester or Citizen NFT)
+ *
+ * The encrypted reason is stuffed into the PersonalData shape so we can reuse
+ * the existing V2 encryption + Irys upload pipeline. Target address is also
+ * carried inside the encrypted blob (public on-chain anyway) for symmetry with
+ * decryption helpers.
+ */
+export function useCreateRevocationRequest() {
+  const account = useActiveAccount();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const createRevocation = useCallback(
+    async (params: {
+      contractType: 'attester' | 'citizen';
+      target: string;
+      reason: string;
+    }) => {
+      if (!account) {
+        throw new Error('No wallet connected');
+      }
+
+      const { contractType, target, reason } = params;
+
+      if (!target || !/^0x[a-fA-F0-9]{40}$/.test(target)) {
+        throw new Error('Ungültige Zieladresse');
+      }
+      if (!reason || reason.trim().length < 20) {
+        throw new Error('Begründung muss mindestens 20 Zeichen enthalten');
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log(`🚀 Creating ${contractType} revocation request for ${target}...`);
+
+        const evidence = await createEncryptedEvidenceV2(
+          { name: reason.trim(), address: target.toLowerCase() },
+          'Mitgliedschaftsentziehung',
+          contractType,
+          account
+        );
+
+        const contract = contractType === 'citizen' ? citizenNFTContract : attesterNFTContract;
+
+        const transaction = prepareContractCall({
+          contract,
+          method: 'function createRevocationRequest(address target, string evidenceURI)',
+          params: [target, 'supabase://pending'],
+        });
+
+        const { transactionHash } = await sendTransaction({ transaction, account });
+        console.log('✅ Revocation transaction submitted:', transactionHash);
+
+        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
+
+        const revocationEvent = prepareEvent({
+          signature:
+            'event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
+        });
+        const events = parseEventLogs({ events: [revocationEvent], logs: receipt.logs });
+        const created = events[0];
+        if (!created) {
+          throw new Error('Konnte Antrags-ID nicht aus der Transaktion lesen');
+        }
+        const requestId = Number(created.args.requestId);
+
+        await uploadEncryptedEvidence(evidence, requestId);
+
+        console.log(`✅ Revocation request created! ID: ${requestId}`);
+
+        setIsLoading(false);
+        return { requestId, transactionHash };
+      } catch (err) {
+        console.error('❌ Failed to create revocation request:', err);
+        const error = err instanceof Error ? err : new Error('Unknown error');
+        setError(error);
+        setIsLoading(false);
+        throw error;
+      }
+    },
+    [account]
+  );
+
+  return { createRevocation, isLoading, error };
+}
+
+/**
  * Hook to approve a request
  */
 export function useApproveRequest() {

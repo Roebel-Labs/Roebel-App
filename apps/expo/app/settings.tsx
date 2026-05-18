@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Linking } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
+import { useVerificationContext } from '@/context/VerificationContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
@@ -65,6 +66,7 @@ const themeOptions: { value: ThemePreference; label: string; description?: strin
 export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
+  const { hasAnyNFT } = useVerificationContext();
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -107,6 +109,25 @@ export default function SettingsScreen() {
             <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
           </Pressable>
         </Section>
+
+        {hasAnyNFT ? (
+          <Section title="MITGLIEDSCHAFT" colors={colors}>
+            <Pressable
+              style={styles.themeOptionRow}
+              onPress={() => router.push('/settings/revoke-membership' as any)}
+            >
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Mitgliedschaft verwalten
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Entziehung der eigenen Rolle oder eines anderen Mitglieds beantragen.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          </Section>
+        ) : null}
 
         <Section title="DATENSCHUTZ" colors={colors}>
           <Pressable

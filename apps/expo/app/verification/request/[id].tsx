@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useActiveAccount } from 'thirdweb/react';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useRequestDetails, useApproveRequest, useRejectRequest } from '@/hooks/useVerification';
-import { RequestStatus } from '@/lib/verification-types';
+import { RequestStatus, RequestType } from '@/lib/verification-types';
 import { useTheme } from '@/context/ThemeContext';
 import SignRequestSheet from '@/components/SignRequestSheet';
 import ErrorDrawer from '@/components/ErrorDrawer';
@@ -58,7 +58,9 @@ export default function RequestSignScreen() {
   }, [hasAttesterNFT, hasCitizenNFT]);
 
   const isOwner = account?.address?.toLowerCase() === request?.requester.toLowerCase();
+  const isTarget = account?.address?.toLowerCase() === request?.target?.toLowerCase();
   const isDualHolder = hasCitizenNFT && hasAttesterNFT;
+  const isRevocation = request?.requestType === RequestType.Revocation;
 
   const closeScreen = () => router.back();
 
@@ -77,7 +79,9 @@ export default function RequestSignScreen() {
       await approveRequest(requestId, signAsAttester, nftType);
       setSuccessDrawer({
         visible: true,
-        message: 'Sie haben den Antrag erfolgreich genehmigt.',
+        message: isRevocation
+          ? 'Sie haben die Entziehung bestätigt.'
+          : 'Sie haben den Antrag erfolgreich genehmigt.',
         action: closeScreen,
       });
     } catch (error) {
@@ -102,7 +106,9 @@ export default function RequestSignScreen() {
       await rejectRequest(requestId, nftType);
       setSuccessDrawer({
         visible: true,
-        message: 'Sie haben den Antrag abgelehnt.',
+        message: isRevocation
+          ? 'Sie haben die Entziehung abgelehnt.'
+          : 'Sie haben den Antrag abgelehnt.',
         action: closeScreen,
       });
     } catch (error) {
@@ -140,31 +146,53 @@ export default function RequestSignScreen() {
       );
     }
 
-    if (isOwner) {
+    if (isRevocation && isTarget) {
+      return renderFallback('Sie können Ihre eigene Entziehung nicht bestätigen.');
+    }
+
+    if (!isRevocation && isOwner) {
       return renderFallback('Sie können Ihren eigenen Antrag nicht unterschreiben.');
     }
 
     if (request.status !== RequestStatus.Pending) {
-      return renderFallback('Dieser Antrag wurde bereits genehmigt oder abgelehnt.');
+      return renderFallback(
+        isRevocation
+          ? 'Diese Entziehung wurde bereits bestätigt oder abgelehnt.'
+          : 'Dieser Antrag wurde bereits genehmigt oder abgelehnt.'
+      );
     }
 
     if (!hasAnyNFT) {
       return renderFallback('Sie benötigen ein Bürger- oder Bescheiniger-Pass, um Anträge zu unterzeichnen.');
     }
 
+    if (isRevocation && !hasAttesterNFT) {
+      return renderFallback('Nur Bescheiniger können Entziehungen bestätigen.');
+    }
+
     return (
-      <SignRequestSheet
-        visible
-        onClose={closeScreen}
-        hasCitizenNFT={hasCitizenNFT}
-        hasAttesterNFT={hasAttesterNFT}
-        selectedRole={selectedRole}
-        onSelectRole={setSelectedRole}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        isApproving={isApproving}
-        isRejecting={isRejecting}
-      />
+      <>
+        {isRevocation ? (
+          <View style={styles.revocationBanner} pointerEvents="none">
+            <Ionicons name="warning" size={18} color="#FFFFFF" />
+            <Text style={styles.revocationBannerText}>
+              Entziehungsantrag — bei Bestätigung wird die NFT dauerhaft eingezogen.
+            </Text>
+          </View>
+        ) : null}
+        <SignRequestSheet
+          visible
+          onClose={closeScreen}
+          hasCitizenNFT={hasCitizenNFT}
+          hasAttesterNFT={hasAttesterNFT}
+          selectedRole={selectedRole}
+          onSelectRole={setSelectedRole}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          isApproving={isApproving}
+          isRejecting={isRejecting}
+        />
+      </>
     );
   };
 
@@ -260,5 +288,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Inter-Medium',
     fontSize: 15,
+  },
+  revocationBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    zIndex: 5,
+  },
+  revocationBannerText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
