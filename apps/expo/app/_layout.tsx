@@ -285,34 +285,34 @@ function Layout() {
               <ConditionalPostHogProvider>
                 <ThirdwebProvider>
                   <AutoConnectHandler />
-                  <MessagingProvider>
-                    <VerificationProvider>
-                      <UserProvider>
-                      <AccountProvider>
-                      <NotificationsProvider>
-                      <RewardsProvider>
-                      <MeckyProvider>
-                      <GovernanceTestProvider>
-                      <MaciProvider>
-                      <InterestProvider>
-                      <BookmarksProvider>
-                        <LocationProvider>
-                          <SnackbarProvider>
-                            <ConsentGate />
-                            <ThemedLayout />
-                          </SnackbarProvider>
-                        </LocationProvider>
-                      </BookmarksProvider>
-                      </InterestProvider>
-                      </MaciProvider>
-                      </GovernanceTestProvider>
-                      </MeckyProvider>
-                      </RewardsProvider>
-                      </NotificationsProvider>
-                      </AccountProvider>
-                      </UserProvider>
-                    </VerificationProvider>
-                  </MessagingProvider>
+                  <VerificationProvider>
+                    <UserProvider>
+                    <AccountProvider>
+                    <MessagingProvider>
+                    <NotificationsProvider>
+                    <RewardsProvider>
+                    <MeckyProvider>
+                    <GovernanceTestProvider>
+                    <MaciProvider>
+                    <InterestProvider>
+                    <BookmarksProvider>
+                      <LocationProvider>
+                        <SnackbarProvider>
+                          <ConsentGate />
+                          <ThemedLayout />
+                        </SnackbarProvider>
+                      </LocationProvider>
+                    </BookmarksProvider>
+                    </InterestProvider>
+                    </MaciProvider>
+                    </GovernanceTestProvider>
+                    </MeckyProvider>
+                    </RewardsProvider>
+                    </NotificationsProvider>
+                    </MessagingProvider>
+                    </AccountProvider>
+                    </UserProvider>
+                  </VerificationProvider>
                 </ThirdwebProvider>
               </ConditionalPostHogProvider>
             </ConsentProvider>
