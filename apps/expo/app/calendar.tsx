@@ -103,30 +103,24 @@ export default function CalendarScreen() {
         key={index}
         style={[
           styles.dayContainer,
-          isSelected && styles.daySelected,
           !isCurrentMonth && styles.dayOutsideMonth,
         ]}
         onPress={() => handleDatePress(date)}
       >
         <View style={[
           styles.dayContent,
-          isTodayDate && { backgroundColor: colors.primary },
+          (isTodayDate || isSelected) && { backgroundColor: colors.surfaceSecondary },
         ]}>
           <Text style={[
             styles.dayText,
             { color: colors.textPrimary },
             !isCurrentMonth && { color: colors.disabled },
-            isSelected && { color: colors.textInverted, fontFamily: 'Inter-Medium' },
-            isTodayDate && { color: colors.textInverted, fontFamily: 'Inter-Medium' },
+            (isTodayDate || isSelected) && { color: colors.textPrimary, fontFamily: 'Inter-Medium' },
           ]}>
             {format(date, 'd')}
           </Text>
           {hasEvents && (
-            <View style={[
-              styles.eventIndicator,
-              { backgroundColor: colors.primary },
-              isSelected && { backgroundColor: colors.textInverted },
-            ]} />
+            <View style={[styles.eventIndicator, { backgroundColor: colors.primary }]} />
           )}
         </View>
       </Pressable>
@@ -138,9 +132,17 @@ export default function CalendarScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Kalender</Text>
-          </View>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Kalender schließen"
+            hitSlop={8}
+          >
+            <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
+          </Pressable>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Kalender</Text>
+          <View style={styles.closeButton} />
         </View>
 
         {/* Calendar */}
@@ -217,12 +219,20 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 16,
   },
-  headerLeft: {
-    flex: 1,
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIcon: {
+    fontSize: 20,
+    fontFamily: 'Inter-Regular',
   },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Medium',
+    textAlign: 'center',
   },
   calendarContainer: {
     marginHorizontal: 16,
@@ -277,9 +287,6 @@ const styles = StyleSheet.create({
   dayText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-  },
-  daySelected: {
-    backgroundColor: 'transparent',
   },
   dayOutsideMonth: {
     opacity: 0.5,
