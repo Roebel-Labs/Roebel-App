@@ -111,23 +111,18 @@ export default function CalendarModal({ visible, onClose }: Props) {
       >
         <View style={[
           styles.dayContent,
-          isTodayDate && { backgroundColor: colors.surfaceSecondary },
-          isSelected && styles.selectedBackground,
+          (isTodayDate || isSelected) && { backgroundColor: colors.surfaceSecondary },
         ]}>
           <Text style={[
             styles.dayText,
             { color: colors.textPrimary },
             !isCurrentMonth && { color: colors.disabled },
-            isTodayDate && { color: colors.textPrimary, fontFamily: 'Inter-Medium' },
-            isSelected && styles.selectedText,
+            (isTodayDate || isSelected) && { color: colors.textPrimary, fontFamily: 'Inter-Medium' },
           ]}>
             {format(date, 'd')}
           </Text>
           {hasEvents && isCurrentMonth && (
-            <View style={[
-              styles.eventIndicator,
-              (isSelected || isTodayDate) && styles.eventIndicatorLight,
-            ]} />
+            <View style={[styles.eventIndicator, { backgroundColor: colors.primary }]} />
           )}
         </View>
       </Pressable>
@@ -149,10 +144,17 @@ export default function CalendarModal({ visible, onClose }: Props) {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Kalender</Text>
-          <Pressable onPress={handleClose} style={styles.cancelButton}>
-            <Text style={[styles.cancelText, { color: colors.primary }]}>Fertig</Text>
+          <Pressable
+            onPress={handleClose}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Kalender schließen"
+            hitSlop={8}
+          >
+            <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
           </Pressable>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Kalender</Text>
+          <View style={styles.closeButton} />
         </View>
 
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -228,13 +230,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: 'Inter-Medium',
   },
-  cancelButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+  closeIcon: {
+    fontSize: 20,
+    fontFamily: 'Inter-Regular',
   },
   scrollView: {
     flex: 1,
@@ -294,23 +298,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
   },
-  selectedBackground: {
-    backgroundColor: '#194383',
-  },
-  selectedText: {
-    color: '#ffffff',
-    fontFamily: 'Inter-Medium',
-  },
   eventIndicator: {
     position: 'absolute',
     bottom: 4,
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#194383',
-  },
-  eventIndicatorLight: {
-    backgroundColor: '#ffffff',
   },
   eventsSection: {
     paddingHorizontal: 16,
