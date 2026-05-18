@@ -587,6 +587,21 @@ export type BusinessDealWithBusiness = BusinessDealRecord & {
   business?: Pick<BusinessRecord, 'id' | 'name' | 'slug' | 'logo_url' | 'category'>;
 };
 
+// App release config — singleton row driving the "Update available" modal.
+export type AppReleaseConfig = {
+  id: number;
+  ios_latest_version: string;
+  android_latest_version: string;
+  ios_store_url: string;
+  android_store_url: string;
+  title_de: string;
+  body_de: string;
+  cta_label_de: string;
+  dismiss_label_de: string;
+  is_active: boolean;
+  updated_at: string;
+};
+
 // Announcement (generic full-screen modal for promotions, updates, etc.)
 export type AnnouncementRecord = {
   id: string;

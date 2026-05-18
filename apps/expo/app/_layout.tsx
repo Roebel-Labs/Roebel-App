@@ -34,6 +34,7 @@ import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
 import { ConsentGate } from '@/components/consent/ConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
+import { AppUpdateGate } from '@/components/AppUpdateGate';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -235,6 +236,15 @@ function ThemedLayout() {
               gestureEnabled: false,
             }}
           />
+          <TransitionStack.Screen
+            name="app-update"
+            options={{
+              headerShown: false,
+              presentation: 'fullScreenModal',
+              animation: 'fade',
+              gestureEnabled: true,
+            }}
+          />
           <TransitionStack.Screen name="settings/consent/index" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
@@ -299,6 +309,7 @@ function Layout() {
                       <LocationProvider>
                         <SnackbarProvider>
                           <ConsentGate />
+                          <AppUpdateGate />
                           <ThemedLayout />
                         </SnackbarProvider>
                       </LocationProvider>
