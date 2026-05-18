@@ -35,8 +35,11 @@ export default function WelcomeConsentScreen() {
     }
     setSubmitting(true);
     try {
+      const trimmedName = state.name?.trim() ?? '';
+      const usernameValid = /^[a-zA-Z0-9_]{3,30}$/.test(trimmedName);
+
       await updateUserOnboarding(user.wallet_address, {
-        username: state.name ? state.name : undefined,
+        username: usernameValid ? trimmedName : undefined,
         preferredRole: state.preferredRole ?? undefined,
         termsAccepted: true,
         markCompleted: true,
@@ -48,7 +51,12 @@ export default function WelcomeConsentScreen() {
       router.replace('/');
     } catch (err) {
       console.error('Failed to save onboarding consent:', err);
-      Alert.alert('Fehler', 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuche es erneut.');
+      Alert.alert(
+        'Fehler',
+        __DEV__
+          ? `Deine Zustimmung konnte nicht gespeichert werden.\n\n${(err as any)?.message ?? err}`
+          : 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuche es erneut.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -78,7 +86,7 @@ export default function WelcomeConsentScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

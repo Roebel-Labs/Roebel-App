@@ -8,18 +8,25 @@ import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
 
+const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
+
 export default function WelcomeNameScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { state, dispatch } = useWelcomeWizard();
   const [name, setName] = useState(state.name);
 
+  const trimmed = name.trim();
+  const usernameValid = USERNAME_REGEX.test(trimmed);
+  const showHint = trimmed.length > 0 && !usernameValid;
+
   const commit = (nextName: string) => {
     dispatch({ type: 'SET_NAME', payload: nextName });
   };
 
   const handleNext = () => {
-    commit(name.trim());
+    if (trimmed.length > 0 && !usernameValid) return;
+    commit(trimmed);
     router.push('/welcome/role' as any);
   };
 
@@ -43,7 +50,12 @@ export default function WelcomeNameScreen() {
           Dein Name erscheint auf deinem Profil. Du kannst ihn später jederzeit ändern.
         </Text>
 
-        <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
+        <View
+          style={[
+            styles.inputContainer,
+            { backgroundColor: colors.surface, borderColor: showHint ? colors.error : colors.borderSecondary },
+          ]}
+        >
           <TextInput
             style={[styles.input, { color: colors.textPrimary }]}
             value={name}
@@ -58,6 +70,12 @@ export default function WelcomeNameScreen() {
           />
         </View>
 
+        {showHint && (
+          <Text style={[styles.hint, { color: colors.textSecondary }]}>
+            Nur Buchstaben (A–Z), Zahlen und Unterstrich, mindestens 3 Zeichen.
+          </Text>
+        )}
+
         <Pressable onPress={handleSkip} style={styles.skipButton} accessibilityRole="button">
           <Text style={[styles.skipText, { color: colors.textSecondary }]}>Überspringen</Text>
         </Pressable>
@@ -67,6 +85,7 @@ export default function WelcomeNameScreen() {
         onBack={() => router.back()}
         onNext={handleNext}
         nextLabel="Weiter"
+        nextDisabled={showHint}
       />
     </SafeAreaView>
   );
@@ -98,13 +117,20 @@ const styles = StyleSheet.create({
   inputContainer: {
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   input: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     paddingHorizontal: 16,
     paddingVertical: 16,
+  },
+  hint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 18,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   skipButton: {
     alignSelf: 'center',

@@ -161,7 +161,14 @@ export async function updateUserOnboarding(
     .single();
 
   if (error) {
-    console.error('Error updating onboarding:', error);
+    console.error('updateUserOnboarding failed', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      patch,
+      walletAddress: walletAddress.toLowerCase(),
+    });
     throw error;
   }
 
