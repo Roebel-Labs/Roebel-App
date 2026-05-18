@@ -421,17 +421,13 @@ export default function FeedHome() {
       edges={['left', 'right']}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      {/* Static safe-area bands. They sit beneath the floating header /
-          bottom nav (zIndex 9 < 10) so when those slide away on scroll
-          the OS status bar / home-indicator areas keep a solid surface
-          fill instead of revealing the gray feed beneath. */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.topSafeBand,
-          { height: insets.top, backgroundColor: colors.background },
-        ]}
-      />
+      {/* Bottom safe-area band sits beneath the floating bottom nav
+          (zIndex 9 < 10) so when the nav slides away on scroll the
+          home-indicator area keeps a solid surface fill instead of
+          revealing the gray feed beneath. The top band is rendered
+          AFTER the header below so it paints above it and the status
+          bar zone stays a constant colors.background regardless of
+          scroll position. */}
       <View
         pointerEvents="none"
         style={[
@@ -498,6 +494,17 @@ export default function FeedHome() {
       )}
 
       {appHeader}
+
+      {/* Status-bar strip painted on top of everything so the zone above
+          the header content always shows colors.background, even mid-
+          scroll while the header is translating away. */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.topSafeBand,
+          { height: insets.top, backgroundColor: colors.background },
+        ]}
+      />
 
       {walletAddress && (
         <FeedFAB onPress={handleCompose} visibilityScale={fabVisibilityScale} />
@@ -582,7 +589,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 9,
+    zIndex: 20,
   },
   bottomSafeBand: {
     position: 'absolute',

@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
-  useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
@@ -268,24 +267,13 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
-  // Track this list's own scroll position so swipes between pager pages
-  // don't produce phantom scroll deltas on the shared header value.
-  const lastScrollY = useSharedValue(0);
+  // Bind translate 1:1 to scroll offset so the header tracks the finger
+  // exactly. Clamped to [0, -headerHeight].
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
-      if (!headerTranslateY) return;
+      if (!headerTranslateY || headerHeight <= 0) return;
       const y = e.contentOffset.y;
-      if (y <= 0) {
-        // Pulled to top — fully reveal the header.
-        headerTranslateY.value = 0;
-        lastScrollY.value = 0;
-        return;
-      }
-      const delta = y - lastScrollY.value;
-      const next = headerTranslateY.value - delta;
-      headerTranslateY.value =
-        next > 0 ? 0 : next < -headerHeight ? -headerHeight : next;
-      lastScrollY.value = y;
+      headerTranslateY.value = -Math.min(Math.max(y, 0), headerHeight);
     },
   });
 
