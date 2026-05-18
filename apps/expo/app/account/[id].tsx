@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +16,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import AvatarStack from '@/components/AvatarStack';
 import MapboxMapView from '@/components/map/MapboxMapView';
+import { Skeleton } from '@/components/SkeletonLoader';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import { fetchAccountPosts, fetchEventsByAccount } from '@/lib/supabase-posts';
@@ -24,16 +24,30 @@ import { fetchOrgListings } from '@/lib/supabase-marketplace';
 import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articles';
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
+import { isRestaurantOpen } from '@/lib/utils';
 import type {
   Account,
   MemberWithProfile,
   OrgSubType,
+  OpeningHours,
   EventRecord,
   BlogArticle,
   MarketplaceListingRecord,
   BusinessDealRecord,
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
+
+const AVATAR_SIZE = 120;
+
+const DAY_LABELS: { key: keyof OpeningHours; label: string }[] = [
+  { key: 'monday', label: 'Mo' },
+  { key: 'tuesday', label: 'Di' },
+  { key: 'wednesday', label: 'Mi' },
+  { key: 'thursday', label: 'Do' },
+  { key: 'friday', label: 'Fr' },
+  { key: 'saturday', label: 'Sa' },
+  { key: 'sunday', label: 'So' },
+];
 
 const SUB_TYPE_LABELS: Partial<Record<OrgSubType, { emoji: string; label: string }>> = {
   verein: { emoji: '🏛️', label: 'Verein' },
@@ -83,7 +97,6 @@ export default function PublicAccountScreen() {
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [orgLocation, setOrgLocation] = useState<OrgLocation | null>(null);
-  const [contentLoading, setContentLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
@@ -114,7 +127,6 @@ export default function PublicAccountScreen() {
     let cancelled = false;
     (async () => {
       try {
-        setContentLoading(true);
         const [postsRes, eventsRes, blogRes, listingsRes, location] = await Promise.all([
           fetchAccountPosts(account.id, { pageSize: 12 }).catch(() => ({ data: [] as PostRecord[], hasMore: false })),
           fetchEventsByAccount(account.id, 12).catch(() => [] as EventRecord[]),
@@ -137,8 +149,6 @@ export default function PublicAccountScreen() {
         }
       } catch (err) {
         console.error('Error loading org content:', err);
-      } finally {
-        if (!cancelled) setContentLoading(false);
       }
     })();
     return () => {
@@ -146,19 +156,17 @@ export default function PublicAccountScreen() {
     };
   }, [account, members]);
 
+  const products = useMemo(
+    () => listings.filter((l) => l.listing_type === 'product'),
+    [listings]
+  );
+  const services = useMemo(
+    () => listings.filter((l) => l.listing_type === 'service'),
+    [listings]
+  );
+
   if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable onPress={goBack} style={styles.backButton}>
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
+    return <AccountPageSkeleton onBack={goBack} />;
   }
 
   if (!account || account.account_type !== 'organisation') {
@@ -185,6 +193,12 @@ export default function PublicAccountScreen() {
   }));
 
   const showExternBadge = account.is_extern && account.extern_status !== 'approved';
+
+  const openingHours: OpeningHours | null =
+    orgLocation?.restaurant?.opening_hours ??
+    orgLocation?.business?.opening_hours ??
+    null;
+  const openStatus = openingHours ? isRestaurantOpen(openingHours) : null;
 
   const openMap = () => {
     if (!orgLocation) return;
@@ -231,8 +245,8 @@ export default function PublicAccountScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Banner */}
-        <View style={[styles.banner, { backgroundColor: colors.cardPlaceholder }]}>
+        {/* Banner with back button */}
+        <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
           {account.cover_url ? (
             <Image
               source={{ uri: account.cover_url }}
@@ -241,13 +255,19 @@ export default function PublicAccountScreen() {
               accessibilityIgnoresInvertColors
             />
           ) : null}
-          <Pressable onPress={goBack} style={[styles.backPill, { backgroundColor: colors.background }]} hitSlop={8}>
-            <ChevronLeftIcon width={20} height={20} color={colors.textPrimary} />
+          <Pressable
+            onPress={goBack}
+            style={[styles.backPill, { backgroundColor: colors.background }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Zurück"
+          >
+            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
         </View>
 
-        {/* Avatar + name */}
-        <View style={styles.avatarSection}>
+        {/* Avatar overlapping banner */}
+        <View style={styles.identityRow}>
           {account.avatar_url ? (
             <Image
               source={{ uri: account.avatar_url }}
@@ -256,11 +276,19 @@ export default function PublicAccountScreen() {
               accessibilityIgnoresInvertColors
             />
           ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.cardPlaceholder, borderColor: colors.background }]}>
-              <UserIcon width={36} height={36} color={colors.textTertiary} />
+            <View
+              style={[
+                styles.avatarPlaceholder,
+                { backgroundColor: colors.cardPlaceholder, borderColor: colors.background },
+              ]}
+            >
+              <UserIcon width={48} height={48} color={colors.textTertiary} />
             </View>
           )}
+        </View>
 
+        {/* Identity block */}
+        <View style={styles.identityBlock}>
           <View style={styles.nameRow}>
             <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>
               {account.name}
@@ -268,36 +296,33 @@ export default function PublicAccountScreen() {
             {account.is_verified && (
               <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
                 <Text style={styles.verifiedCheck}>✓</Text>
-                <Text style={styles.verifiedText}>Verifiziert</Text>
               </View>
             )}
           </View>
 
-          <View style={styles.pillRow}>
-            {subType && (
-              <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
-                <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
-                  {subType.emoji} {subType.label}
-                </Text>
-              </View>
-            )}
-            {showExternBadge && (
-              <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
-                <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
-                  Extern · {account.extern_status === 'pending' ? 'in Prüfung' : 'abgelehnt'}
-                </Text>
-              </View>
-            )}
-          </View>
+          {(subType || showExternBadge) && (
+            <View style={styles.pillRow}>
+              {subType && (
+                <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
+                  <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
+                    {subType.emoji} {subType.label}
+                  </Text>
+                </View>
+              )}
+              {showExternBadge && (
+                <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
+                  <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
+                    Extern · {account.extern_status === 'pending' ? 'in Prüfung' : 'abgelehnt'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {account.bio ? (
+            <Text style={[styles.bioText, { color: colors.textPrimary }]}>{account.bio}</Text>
+          ) : null}
         </View>
-
-        {/* Bio */}
-        {account.bio ? (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über uns</Text>
-            <Text style={[styles.bioText, { color: colors.textSecondary }]}>{account.bio}</Text>
-          </View>
-        ) : null}
 
         {/* Contact */}
         {account.contact_email ? (
@@ -328,12 +353,6 @@ export default function PublicAccountScreen() {
         )}
 
         {/* Posts */}
-        {contentLoading ? (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
-        ) : null}
-
         {posts.length > 0 && (
           <View style={[styles.section, { borderTopColor: colors.border }]}>
             <View style={styles.sectionHeaderRow}>
@@ -435,15 +454,15 @@ export default function PublicAccountScreen() {
           </View>
         )}
 
-        {/* Marketplace listings (products + services) */}
-        {listings.length > 0 && (
+        {/* Produkte */}
+        {products.length > 0 && (
           <View style={[styles.section, { borderTopColor: colors.border }]}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Angebote</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{listings.length}</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Produkte</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{products.length}</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {listings.map((listing) => (
+              {products.map((listing) => (
                 <Pressable
                   key={listing.id}
                   onPress={() => router.push(`/marketplace/${listing.id}` as any)}
@@ -461,7 +480,40 @@ export default function PublicAccountScreen() {
                     </Text>
                     <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
                       {formatPrice(listing.price, listing.price_type)}
-                      {listing.listing_type === 'service' ? ' · Service' : ''}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Services */}
+        {services.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{services.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {services.map((listing) => (
+                <Pressable
+                  key={listing.id}
+                  onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                  accessibilityRole="button"
+                >
+                  {listing.media_urls && listing.media_urls.length > 0 ? (
+                    <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <View style={styles.mediaCardBody}>
+                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {listing.title}
+                    </Text>
+                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {formatPrice(listing.price, listing.price_type)}
                     </Text>
                   </View>
                 </Pressable>
@@ -504,6 +556,43 @@ export default function PublicAccountScreen() {
           </View>
         )}
 
+        {/* Öffnungszeiten */}
+        {openingHours ? (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Öffnungszeiten</Text>
+              {openStatus ? (
+                <Text
+                  style={[
+                    styles.openStatus,
+                    { color: openStatus.isOpen ? colors.success : colors.textTertiary },
+                  ]}
+                >
+                  {openStatus.isOpen
+                    ? `Offen${openStatus.closesAt ? ` · bis ${openStatus.closesAt}` : ''}`
+                    : openStatus.opensAt
+                      ? `Geschlossen · öffnet ${openStatus.opensAt}`
+                      : 'Geschlossen'}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.hoursList}>
+              {DAY_LABELS.map(({ key, label }) => {
+                const day = openingHours[key];
+                const closed = !day || day.closed;
+                return (
+                  <View key={key} style={styles.hoursRow}>
+                    <Text style={[styles.hoursDay, { color: colors.textSecondary }]}>{label}</Text>
+                    <Text style={[styles.hoursTime, { color: colors.textPrimary }]}>
+                      {closed ? 'Geschlossen' : `${day!.open} – ${day!.close}`}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         {/* Standort / map */}
         {orgLocation && mapGeoJSON ? (
           <View style={[styles.section, { borderTopColor: colors.border }]}>
@@ -532,6 +621,62 @@ export default function PublicAccountScreen() {
             </Pressable>
           </View>
         ) : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
+          <Pressable
+            onPress={onBack}
+            style={[styles.backPill, { backgroundColor: colors.background }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Zurück"
+          >
+            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+
+        <View style={styles.identityRow}>
+          <Skeleton
+            width={AVATAR_SIZE}
+            height={AVATAR_SIZE}
+            borderRadius={AVATAR_SIZE / 2}
+            style={{ borderWidth: 4, borderColor: colors.background } as any}
+          />
+        </View>
+
+        <View style={styles.identityBlock}>
+          <Skeleton width={'60%' as any} height={26} borderRadius={6} />
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Skeleton width={90} height={26} borderRadius={13} />
+            <Skeleton width={120} height={26} borderRadius={13} />
+          </View>
+          <Skeleton width={'100%' as any} height={16} borderRadius={4} />
+          <Skeleton width={'85%' as any} height={16} borderRadius={4} />
+        </View>
+
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.section, { borderTopColor: colors.border }]}>
+            <Skeleton width={140} height={20} borderRadius={6} style={{ marginBottom: 12 } as any} />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Skeleton width={200} height={170} borderRadius={14} />
+              <Skeleton width={200} height={170} borderRadius={14} />
+              <Skeleton width={120} height={170} borderRadius={14} />
+            </View>
+          </View>
+        ))}
+
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Skeleton width={120} height={20} borderRadius={6} style={{ marginBottom: 12 } as any} />
+          <Skeleton width={'100%' as any} height={200} borderRadius={14} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -570,9 +715,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  banner: {
+  bannerWrap: {
     width: '100%',
-    height: 160,
+    height: 200,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -580,9 +725,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -591,22 +736,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  avatarSection: {
-    alignItems: 'center',
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     paddingHorizontal: 16,
-    marginTop: -48,
+    marginTop: -(AVATAR_SIZE / 2),
+  },
+  identityBlock: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
     gap: 10,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
     borderWidth: 4,
   },
   avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
     borderWidth: 4,
     justifyContent: 'center',
     alignItems: 'center',
@@ -616,38 +766,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    paddingTop: 4,
-    paddingHorizontal: 16,
   },
   name: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: 'Inter-SemiBold',
-    textAlign: 'center',
+    flexShrink: 1,
   },
   verifiedBadge: {
-    flexDirection: 'row',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    gap: 4,
+    justifyContent: 'center',
   },
   verifiedCheck: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
     color: '#ffffff',
-  },
-  verifiedText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    justifyContent: 'center',
   },
   subTypePill: {
     paddingHorizontal: 12,
@@ -759,5 +899,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
+  },
+  openStatus: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 8,
+  },
+  hoursList: {
+    gap: 6,
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  hoursDay: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    width: 40,
+  },
+  hoursTime: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
 });

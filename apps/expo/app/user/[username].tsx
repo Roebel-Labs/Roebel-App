@@ -147,7 +147,7 @@ export default function PublicUserProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Zurück"
           >
-            <ChevronLeftIcon width={20} height={20} color={colors.textPrimary} />
+            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
           {isOwner && (
             <Pressable
@@ -321,9 +321,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
