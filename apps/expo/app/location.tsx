@@ -85,10 +85,11 @@ const SHEET_LIFT_PX = 200;
 
 export default function LocationScreen() {
   const router = useRouter();
-  const { selectedEventId, focusEntityType, focusEntityId } = useLocalSearchParams<{
+  const { selectedEventId, focusEntityType, focusEntityId, filterOnly } = useLocalSearchParams<{
     selectedEventId?: string;
     focusEntityType?: MapEntityType;
     focusEntityId?: string;
+    filterOnly?: string;
   }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -129,12 +130,19 @@ export default function LocationScreen() {
     }).start();
   }, [carousel, bottomTranslate]);
 
-  const [mapFilter, setMapFilter] = useState<MapFilter>({
-    events: true,
-    restaurants: true,
-    businesses: true,
-    pois: false,
-  });
+  const [mapFilter, setMapFilter] = useState<MapFilter>(
+    filterOnly === 'orgs'
+      ? { events: false, restaurants: true, businesses: true, pois: false }
+      : { events: true, restaurants: true, businesses: true, pois: false }
+  );
+
+  // Re-apply the filter if the deep-link param changes after mount
+  useEffect(() => {
+    if (filterOnly === 'orgs') {
+      setMapFilter({ events: false, restaurants: true, businesses: true, pois: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOnly]);
 
   const geojson = useMemo(
     () =>

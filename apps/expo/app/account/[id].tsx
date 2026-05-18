@@ -12,10 +12,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
+import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
 import MapboxMapView from '@/components/map/MapboxMapView';
+import ProfileTabs from '@/components/profile/ProfileTabs';
+import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
@@ -38,6 +43,8 @@ import type {
 import type { PostRecord } from '@/lib/types/feed';
 
 const AVATAR_SIZE = 120;
+
+type TabKey = 'info' | 'posts';
 
 const DAY_LABELS: { key: keyof OpeningHours; label: string }[] = [
   { key: 'monday', label: 'Mo' },
@@ -86,10 +93,13 @@ export default function PublicAccountScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
+  const { switchAccount } = useAccount();
+  const { user } = useUser();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>('info');
 
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -165,6 +175,16 @@ export default function PublicAccountScreen() {
     [listings]
   );
 
+  const myWallet = user?.wallet_address?.toLowerCase() ?? null;
+  const myRole = useMemo(
+    () =>
+      myWallet
+        ? members.find((m) => m.wallet_address.toLowerCase() === myWallet)?.role ?? null
+        : null,
+    [members, myWallet]
+  );
+  const canEdit = myRole === 'owner' || myRole === 'admin';
+
   if (loading) {
     return <AccountPageSkeleton onBack={goBack} />;
   }
@@ -199,12 +219,27 @@ export default function PublicAccountScreen() {
     orgLocation?.business?.opening_hours ??
     null;
   const openStatus = openingHours ? isRestaurantOpen(openingHours) : null;
+  const supportsOpeningHours =
+    account.sub_type === 'restaurant' || account.sub_type === 'unternehmen';
+
+  const goToOwnerScreen = async (pathname: '/org/settings' | '/org/opening-hours') => {
+    try {
+      await switchAccount(account.id);
+    } catch (err) {
+      console.error('switchAccount failed:', err);
+    }
+    router.push(pathname as any);
+  };
 
   const openMap = () => {
     if (!orgLocation) return;
     router.push({
       pathname: '/location',
-      params: { focusEntityType: orgLocation.entityType, focusEntityId: orgLocation.entityId },
+      params: {
+        focusEntityType: orgLocation.entityType,
+        focusEntityId: orgLocation.entityId,
+        filterOnly: 'orgs',
+      },
     } as any);
   };
 
@@ -241,6 +276,301 @@ export default function PublicAccountScreen() {
         ],
       }
     : null;
+
+  const renderInfoTab = () => (
+    <>
+      {/* Contact */}
+      {account.contact_email ? (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kontakt</Text>
+          <Pressable onPress={handleContactPress} accessibilityRole="link">
+            <Text style={[styles.linkText, { color: colors.primary }]}>{account.contact_email}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Members */}
+      {members.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder</Text>
+          <View style={styles.membersRow}>
+            <AvatarStack
+              users={memberAvatars}
+              totalCount={members.length}
+              maxVisible={3}
+              size="large"
+            />
+            <Text style={[styles.membersCount, { color: colors.textSecondary }]}>
+              {members.length} {members.length === 1 ? 'Mitglied' : 'Mitglieder'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Öffnungszeiten — promoted above all other content sections */}
+      {supportsOpeningHours && (openingHours || canEdit) ? (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Öffnungszeiten</Text>
+            <View style={styles.sectionHeaderRight}>
+              {openStatus ? (
+                <Text
+                  style={[
+                    styles.openStatus,
+                    { color: openStatus.isOpen ? colors.success : colors.textTertiary },
+                  ]}
+                >
+                  {openStatus.isOpen
+                    ? `Offen${openStatus.closesAt ? ` · bis ${openStatus.closesAt}` : ''}`
+                    : openStatus.opensAt
+                      ? `Geschlossen · öffnet ${openStatus.opensAt}`
+                      : 'Geschlossen'}
+                </Text>
+              ) : null}
+              {canEdit ? (
+                <Pressable
+                  onPress={() => goToOwnerScreen('/org/opening-hours')}
+                  style={styles.iconButton}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Öffnungszeiten bearbeiten"
+                >
+                  <PencilEditIcon width={18} height={18} color={colors.textSecondary} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          {openingHours ? (
+            <View style={styles.hoursList}>
+              {DAY_LABELS.map(({ key, label }) => {
+                const day = openingHours[key];
+                const closed = !day || day.closed;
+                return (
+                  <View key={key} style={styles.hoursRow}>
+                    <Text style={[styles.hoursDay, { color: colors.textSecondary }]}>{label}</Text>
+                    <Text style={[styles.hoursTime, { color: colors.textPrimary }]}>
+                      {closed ? 'Geschlossen' : `${day!.open} – ${day!.close}`}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => goToOwnerScreen('/org/opening-hours')}
+              style={[styles.ctaButton, { borderColor: colors.borderSecondary }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.ctaButtonText, { color: colors.primary }]}>
+                Öffnungszeiten festlegen
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
+
+      {/* Events */}
+      {events.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{events.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+            {events.map((event) => (
+              <Pressable
+                key={event.id}
+                onPress={() => router.push(`/event/${event.id}` as any)}
+                style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                accessibilityRole="button"
+              >
+                {event.image_url ? (
+                  <Image source={{ uri: event.image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                )}
+                <View style={styles.mediaCardBody}>
+                  <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {event.title}
+                  </Text>
+                  <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {formatEventDate(event.date, event.time)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Blog */}
+      {blogArticles.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Artikel</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{blogArticles.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+            {blogArticles.map((article) => (
+              <Pressable
+                key={article.id}
+                onPress={() => router.push(`/blog/${article.id}` as any)}
+                style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                accessibilityRole="button"
+              >
+                {article.cover_image_url ? (
+                  <Image source={{ uri: article.cover_image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                )}
+                <View style={styles.mediaCardBody}>
+                  <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {article.title}
+                  </Text>
+                  {article.excerpt ? (
+                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {article.excerpt}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Produkte */}
+      {products.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Produkte</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{products.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+            {products.map((listing) => (
+              <Pressable
+                key={listing.id}
+                onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                accessibilityRole="button"
+              >
+                {listing.media_urls && listing.media_urls.length > 0 ? (
+                  <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                )}
+                <View style={styles.mediaCardBody}>
+                  <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {listing.title}
+                  </Text>
+                  <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {formatPrice(listing.price, listing.price_type)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Services */}
+      {services.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{services.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+            {services.map((listing) => (
+              <Pressable
+                key={listing.id}
+                onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                accessibilityRole="button"
+              >
+                {listing.media_urls && listing.media_urls.length > 0 ? (
+                  <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                )}
+                <View style={styles.mediaCardBody}>
+                  <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {listing.title}
+                  </Text>
+                  <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {formatPrice(listing.price, listing.price_type)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Deals (only when a linked business is found) */}
+      {deals.length > 0 && (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Deals</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{deals.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+            {deals.map((deal) => (
+              <View
+                key={deal.id}
+                style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+              >
+                {deal.image_url ? (
+                  <Image source={{ uri: deal.image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                )}
+                <View style={styles.mediaCardBody}>
+                  <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {deal.title}
+                  </Text>
+                  {deal.deal_value ? (
+                    <Text style={[styles.mediaCardMeta, { color: colors.primary }]} numberOfLines={1}>
+                      {deal.deal_value}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Standort / map */}
+      {orgLocation && mapGeoJSON ? (
+        <View style={[styles.section, { borderTopColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
+          {orgLocation.address ? (
+            <Text style={[styles.bioText, { color: colors.textSecondary, marginBottom: 12 }]}>
+              {orgLocation.address}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={openMap}
+            accessibilityRole="button"
+            accessibilityLabel={`${account.name} auf der Karte ansehen`}
+            style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
+          >
+            <View style={styles.mapInner} pointerEvents="none">
+              <MapboxMapView
+                geojson={mapGeoJSON}
+                onMarkerPress={() => undefined}
+                flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
+              />
+            </View>
+            <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
+              <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
+    </>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -285,6 +615,18 @@ export default function PublicAccountScreen() {
               <UserIcon width={48} height={48} color={colors.textTertiary} />
             </View>
           )}
+          {canEdit ? (
+            <View style={styles.identityActions}>
+              <Pressable
+                onPress={() => goToOwnerScreen('/org/settings')}
+                style={[styles.editPill, { borderColor: colors.borderSecondary, backgroundColor: colors.background }]}
+                accessibilityRole="button"
+                accessibilityLabel="Profil bearbeiten"
+              >
+                <Text style={[styles.editPillText, { color: colors.textPrimary }]}>Bearbeiten</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
         {/* Identity block */}
@@ -324,303 +666,19 @@ export default function PublicAccountScreen() {
           ) : null}
         </View>
 
-        {/* Contact */}
-        {account.contact_email ? (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kontakt</Text>
-            <Pressable onPress={handleContactPress} accessibilityRole="link">
-              <Text style={[styles.linkText, { color: colors.primary }]}>{account.contact_email}</Text>
-            </Pressable>
-          </View>
-        ) : null}
+        {/* Tabs */}
+        <View style={styles.tabsWrap}>
+          <ProfileTabs
+            tabs={[
+              { key: 'info', label: 'Info' },
+              { key: 'posts', label: 'Beiträge', count: posts.length },
+            ]}
+            active={activeTab}
+            onChange={(key) => setActiveTab(key as TabKey)}
+          />
+        </View>
 
-        {/* Members */}
-        {members.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Mitglieder</Text>
-            <View style={styles.membersRow}>
-              <AvatarStack
-                users={memberAvatars}
-                totalCount={members.length}
-                maxVisible={3}
-                size="large"
-              />
-              <Text style={[styles.membersCount, { color: colors.textSecondary }]}>
-                {members.length} {members.length === 1 ? 'Mitglied' : 'Mitglieder'}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Posts */}
-        {posts.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Beiträge</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{posts.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {posts.map((post) => (
-                <Pressable
-                  key={post.id}
-                  onPress={() => router.push(`/post/${post.id}` as any)}
-                  style={[styles.postCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                  accessibilityRole="button"
-                >
-                  {post.media_urls && post.media_urls.length > 0 ? (
-                    <Image source={{ uri: post.media_urls[0] }} style={styles.postImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.postImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <Text
-                    style={[styles.postText, { color: colors.textPrimary }]}
-                    numberOfLines={3}
-                  >
-                    {post.content}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Events */}
-        {events.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{events.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {events.map((event) => (
-                <Pressable
-                  key={event.id}
-                  onPress={() => router.push(`/event/${event.id}` as any)}
-                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                  accessibilityRole="button"
-                >
-                  {event.image_url ? (
-                    <Image source={{ uri: event.image_url }} style={styles.mediaCardImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.mediaCardBody}>
-                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {event.title}
-                    </Text>
-                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {formatEventDate(event.date, event.time)}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Blog */}
-        {blogArticles.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Artikel</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{blogArticles.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {blogArticles.map((article) => (
-                <Pressable
-                  key={article.id}
-                  onPress={() => router.push(`/blog/${article.id}` as any)}
-                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                  accessibilityRole="button"
-                >
-                  {article.cover_image_url ? (
-                    <Image source={{ uri: article.cover_image_url }} style={styles.mediaCardImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.mediaCardBody}>
-                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {article.title}
-                    </Text>
-                    {article.excerpt ? (
-                      <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={2}>
-                        {article.excerpt}
-                      </Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Produkte */}
-        {products.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Produkte</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{products.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {products.map((listing) => (
-                <Pressable
-                  key={listing.id}
-                  onPress={() => router.push(`/marketplace/${listing.id}` as any)}
-                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                  accessibilityRole="button"
-                >
-                  {listing.media_urls && listing.media_urls.length > 0 ? (
-                    <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.mediaCardBody}>
-                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {listing.title}
-                    </Text>
-                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {formatPrice(listing.price, listing.price_type)}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Services */}
-        {services.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{services.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {services.map((listing) => (
-                <Pressable
-                  key={listing.id}
-                  onPress={() => router.push(`/marketplace/${listing.id}` as any)}
-                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                  accessibilityRole="button"
-                >
-                  {listing.media_urls && listing.media_urls.length > 0 ? (
-                    <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.mediaCardBody}>
-                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {listing.title}
-                    </Text>
-                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {formatPrice(listing.price, listing.price_type)}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Deals (only when a linked business is found) */}
-        {deals.length > 0 && (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Deals</Text>
-              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{deals.length}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-              {deals.map((deal) => (
-                <View
-                  key={deal.id}
-                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
-                >
-                  {deal.image_url ? (
-                    <Image source={{ uri: deal.image_url }} style={styles.mediaCardImage} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
-                  )}
-                  <View style={styles.mediaCardBody}>
-                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-                      {deal.title}
-                    </Text>
-                    {deal.deal_value ? (
-                      <Text style={[styles.mediaCardMeta, { color: colors.primary }]} numberOfLines={1}>
-                        {deal.deal_value}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Öffnungszeiten */}
-        {openingHours ? (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Öffnungszeiten</Text>
-              {openStatus ? (
-                <Text
-                  style={[
-                    styles.openStatus,
-                    { color: openStatus.isOpen ? colors.success : colors.textTertiary },
-                  ]}
-                >
-                  {openStatus.isOpen
-                    ? `Offen${openStatus.closesAt ? ` · bis ${openStatus.closesAt}` : ''}`
-                    : openStatus.opensAt
-                      ? `Geschlossen · öffnet ${openStatus.opensAt}`
-                      : 'Geschlossen'}
-                </Text>
-              ) : null}
-            </View>
-            <View style={styles.hoursList}>
-              {DAY_LABELS.map(({ key, label }) => {
-                const day = openingHours[key];
-                const closed = !day || day.closed;
-                return (
-                  <View key={key} style={styles.hoursRow}>
-                    <Text style={[styles.hoursDay, { color: colors.textSecondary }]}>{label}</Text>
-                    <Text style={[styles.hoursTime, { color: colors.textPrimary }]}>
-                      {closed ? 'Geschlossen' : `${day!.open} – ${day!.close}`}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
-
-        {/* Standort / map */}
-        {orgLocation && mapGeoJSON ? (
-          <View style={[styles.section, { borderTopColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
-            {orgLocation.address ? (
-              <Text style={[styles.bioText, { color: colors.textSecondary, marginBottom: 12 }]}>
-                {orgLocation.address}
-              </Text>
-            ) : null}
-            <Pressable
-              onPress={openMap}
-              accessibilityRole="button"
-              accessibilityLabel={`${account.name} auf der Karte ansehen`}
-              style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
-            >
-              <View style={styles.mapInner} pointerEvents="none">
-                <MapboxMapView
-                  geojson={mapGeoJSON}
-                  onMarkerPress={() => undefined}
-                  flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
-                />
-              </View>
-              <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
-                <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
-              </View>
-            </Pressable>
-          </View>
-        ) : null}
+        {activeTab === 'info' ? renderInfoTab() : <AccountPostsList accountId={account.id} />}
       </ScrollView>
     </SafeAreaView>
   );
@@ -739,8 +797,22 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginTop: -(AVATAR_SIZE / 2),
+  },
+  identityActions: {
+    paddingBottom: 8,
+  },
+  editPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  editPillText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
   },
   identityBlock: {
     paddingHorizontal: 16,
@@ -798,6 +870,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Medium',
   },
+  tabsWrap: {
+    marginTop: 20,
+  },
   section: {
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -810,6 +885,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
     fontSize: 16,
@@ -842,22 +929,6 @@ const styles = StyleSheet.create({
   hList: {
     gap: 12,
     paddingRight: 16,
-  },
-  postCard: {
-    width: 220,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  postImage: {
-    width: '100%',
-    height: 120,
-  },
-  postText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 18,
-    padding: 10,
   },
   mediaCard: {
     width: 200,
@@ -903,7 +974,6 @@ const styles = StyleSheet.create({
   openStatus: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    marginBottom: 8,
   },
   hoursList: {
     gap: 6,
@@ -921,5 +991,15 @@ const styles = StyleSheet.create({
   hoursTime: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
+  },
+  ctaButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  ctaButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
   },
 });
