@@ -11,28 +11,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useActiveAccount } from 'thirdweb/react';
 import { useConversation } from '@/hooks/useConversation';
 import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
 import MessageBubble from '@/components/messages/MessageBubble';
 import ChatInput from '@/components/messages/ChatInput';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import { Skeleton } from '@/components/SkeletonLoader';
 import type { Message } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-
-function shortenAddress(addr: string): string {
-  if (!addr) return 'Unbekannt';
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
 
 export default function ChatScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const account = useActiveAccount();
   const { markConversationRead } = useMessaging();
 
   // Mark conversation as read when opened
@@ -48,19 +41,18 @@ export default function ChatScreen() {
     isSending,
     sendMessage,
     loadMore,
-    peerAddress,
-    peerUser,
+    peerAccount,
+    myAccountId,
   } = useConversation(conversationId || '');
 
-  const myAddress = account?.address?.toLowerCase() || '';
-  const peerDisplayName = peerUser?.username || shortenAddress(peerAddress);
+  const peerDisplayName = peerAccount?.name ?? '';
 
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
       message={item}
-      isOwn={item.sender_address.toLowerCase() === myAddress}
-      peerAvatar={peerUser?.profilePictureUrl}
-      peerFrameUrl={peerUser?.equippedFrameUrl ?? null}
+      isOwn={!!myAccountId && item.sender_account_id === myAccountId}
+      peerAvatar={peerAccount?.avatarUrl ?? null}
+      peerFrameUrl={peerAccount?.equippedFrameUrl ?? null}
     />
   );
 
@@ -71,16 +63,34 @@ export default function ChatScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Pressable style={styles.headerCenter} onPress={() => peerAddress && router.push(`/user/${peerAddress}` as any)}>
-          <UserAvatarWithFrame
-            size={32}
-            uri={peerUser?.profilePictureUrl ?? null}
-            fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
-            frameAssetUrl={peerUser?.equippedFrameUrl ?? null}
-          />
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            {peerDisplayName}
-          </Text>
+        <Pressable
+          style={styles.headerCenter}
+          onPress={() =>
+            peerAccount?.id && router.push(`/account/${peerAccount.id}` as any)
+          }
+          disabled={!peerAccount?.id}
+        >
+          {peerAccount ? (
+            <>
+              <UserAvatarWithFrame
+                size={32}
+                uri={peerAccount.avatarUrl}
+                fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
+                frameAssetUrl={peerAccount.equippedFrameUrl}
+              />
+              <Text
+                style={[styles.headerTitle, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {peerDisplayName}
+              </Text>
+            </>
+          ) : (
+            <View style={styles.headerCenterSkeleton}>
+              <Skeleton width={32} height={32} borderRadius={16} />
+              <Skeleton width={120} height={14} borderRadius={4} />
+            </View>
+          )}
         </Pressable>
         <View style={styles.headerRight} />
       </View>
@@ -89,7 +99,6 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
-        {/* Messages */}
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -113,7 +122,6 @@ export default function ChatScreen() {
           />
         )}
 
-        {/* Input */}
         <SafeAreaView edges={['bottom']} style={[styles.inputSafe, { backgroundColor: colors.background }]}>
           <ChatInput onSend={sendMessage} isSending={isSending} />
         </SafeAreaView>
@@ -146,21 +154,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  headerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  headerAvatarFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
+  headerCenterSkeleton: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  headerAvatarText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    gap: 8,
   },
   headerTitle: {
     fontSize: 16,
@@ -191,6 +188,5 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  inputSafe: {
-  },
+  inputSafe: {},
 });

@@ -14,6 +14,8 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
+import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
+import AccountChip from '@/components/messages/AccountChip';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -76,7 +78,10 @@ export default function MessagesScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Nachrichten</Text>
+        <View style={styles.titleBlock}>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Nachrichten</Text>
+          {isConnected && <AccountChip />}
+        </View>
         {isConnected ? (
           <Pressable
             onPress={() => router.push('/messages/new' as any)}
@@ -120,23 +125,31 @@ export default function MessagesScreen() {
           ListHeaderComponent={<MeckyRow />}
           refreshControl={
             <RefreshControl
-              refreshing={isLoading}
+              refreshing={isLoading && conversations.length > 0}
               onRefresh={refreshConversations}
               tintColor={colors.primary}
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                Keine Nachrichten
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                Starten Sie eine neue Unterhaltung
-              </Text>
-            </View>
+            isLoading ? (
+              <View>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <ConversationRowSkeleton key={i} />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                  Keine Nachrichten
+                </Text>
+                <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+                  Starten Sie eine neue Unterhaltung
+                </Text>
+              </View>
+            )
           }
           contentContainerStyle={
-            conversations.length === 0 ? styles.emptyContainer : undefined
+            conversations.length === 0 && !isLoading ? styles.emptyContainer : undefined
           }
           ListFooterComponent={<View style={styles.bottomPadding} />}
         />
@@ -162,6 +175,13 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'flex-start',
+  },
+  titleBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   headerTitle: {
     fontSize: 18,

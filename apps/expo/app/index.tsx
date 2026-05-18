@@ -30,15 +30,7 @@ import LivestreamBanner from '@/components/LivestreamBanner';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import NotificationSheet from '@/components/onboarding/NotificationSheet';
 import { isNotificationPromptPending, clearNotificationPromptPending } from '@/lib/onboarding-storage';
-
-function useDebounced<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-  return debounced;
-}
+import { useDebouncedValue as useDebounced } from '@/hooks/useDebouncedValue';
 
 export default function HomeScreen() {
   // Feed is the home screen for ALL modes (spec section 2)

@@ -1,28 +1,48 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  FlatList,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useActiveAccount } from 'thirdweb/react';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
 import { useTheme } from '@/context/ThemeContext';
-import { findOrCreateConversation, sendMessage } from '@/lib/supabase-messages';
+import { useAccount } from '@/context/AccountContext';
+import { useAccountSearch } from '@/hooks/useAccountSearch';
+import {
+  findOrCreateConversation,
+  sendMessage,
+  fetchPersonalAccountIdByWallet,
+} from '@/lib/supabase-messages';
+import type {
+  AccountSearchResult,
+  AccountSearchScope,
+} from '@/lib/supabase-account-search';
+
+import SearchSegmentedTabs from '@/components/messages/SearchSegmentedTabs';
+import AccountSearchRow from '@/components/messages/AccountSearchRow';
+import AccountRowSkeleton from '@/components/messages/AccountRowSkeleton';
+import { SearchIcon } from '@/components/Icons';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
-function isValidAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
+const SCOPE_OPTIONS: { key: AccountSearchScope; label: string }[] = [
+  { key: 'all', label: 'Alle' },
+  { key: 'personal', label: 'Personen' },
+  { key: 'organisation', label: 'Organisationen' },
+];
 
 export default function NewConversationScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const { activeAccount } = useAccount();
+
   const {
     address: prefillAddress,
     listingId,
@@ -40,38 +60,28 @@ export default function NewConversationScreen() {
     listingImage?: string;
     listingCondition?: string;
   }>();
-  const { colors } = useTheme();
-  const account = useActiveAccount();
-  const [address, setAddress] = useState(prefillAddress || '');
-  const [isChecking, setIsChecking] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+
+  const [query, setQuery] = useState('');
+  const [scope, setScope] = useState<AccountSearchScope>('all');
+  const [isOpening, setIsOpening] = useState<string | null>(null);
   const autoTriggered = useRef(false);
 
-  const handleStartConversation = useCallback(async () => {
-    if (!account?.address) return;
+  const { results, isLoading, hasQuery } = useAccountSearch(
+    query,
+    scope,
+    activeAccount?.id ?? null
+  );
 
-    const trimmedAddress = address.trim();
-    setErrorMessage('');
-
-    if (!isValidAddress(trimmedAddress)) {
-      setErrorMessage('Bitte geben Sie eine gültige Ethereum-Adresse ein (0x...)');
-      return;
-    }
-
-    if (trimmedAddress.toLowerCase() === account.address.toLowerCase()) {
-      setErrorMessage('Sie können keine Nachricht an sich selbst senden');
-      return;
-    }
-
-    setIsChecking(true);
+  const openConversation = async (peerAccountId: string) => {
+    if (!activeAccount?.id) return;
+    if (isOpening) return;
+    setIsOpening(peerAccountId);
+    Keyboard.dismiss();
     try {
-      const convo = await findOrCreateConversation(account.address, trimmedAddress);
-      if (!convo) {
-        setErrorMessage('Unterhaltung konnte nicht erstellt werden. Bitte versuchen Sie es erneut.');
-        return;
-      }
+      const convo = await findOrCreateConversation(activeAccount.id, peerAccountId);
+      if (!convo) return;
 
-      // Auto-send listing inquiry if coming from marketplace
+      // Marketplace inquiry auto-send (deep-link path)
       if (listingId && listingTitle) {
         const inquiryPayload = JSON.stringify({
           type: 'listing_inquiry',
@@ -82,85 +92,137 @@ export default function NewConversationScreen() {
           imageUrl: listingImage || undefined,
           condition: listingCondition || undefined,
         });
-        await sendMessage(convo.id, account.address, inquiryPayload);
+        await sendMessage(convo.id, activeAccount.id, inquiryPayload);
       }
 
       router.replace(`/messages/${convo.id}` as any);
     } catch (err) {
       console.error('Failed to start conversation:', err);
-      setErrorMessage('Unterhaltung konnte nicht erstellt werden. Bitte versuchen Sie es erneut.');
     } finally {
-      setIsChecking(false);
+      setIsOpening(null);
     }
-  }, [account?.address, address, router, listingId, listingTitle, listingPrice, listingPriceType, listingImage, listingCondition]);
+  };
 
-  // Auto-trigger when prefilled from marketplace "Verkäufer kontaktieren"
+  // Marketplace deep-link prefill: resolve wallet → personal account, then
+  // open the conversation immediately. Falls back to manual search if the
+  // peer has no personal account yet.
   useEffect(() => {
-    if (prefillAddress && isValidAddress(prefillAddress) && account?.address && !autoTriggered.current) {
-      autoTriggered.current = true;
-      handleStartConversation();
-    }
-  }, [account?.address, prefillAddress, handleStartConversation]);
+    if (autoTriggered.current) return;
+    if (!prefillAddress || !activeAccount?.id) return;
+    autoTriggered.current = true;
 
-  const canSubmit = address.trim().length > 0 && !isChecking;
+    (async () => {
+      const peerId = await fetchPersonalAccountIdByWallet(prefillAddress);
+      if (peerId) {
+        openConversation(peerId);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillAddress, activeAccount?.id]);
+
+  const renderItem = ({ item, index }: { item: AccountSearchResult; index: number }) => (
+    <AccountSearchRow
+      result={item}
+      index={index}
+      onPress={() => openConversation(item.id)}
+    />
+  );
+
+  const showInitialHint = !hasQuery && results.length === 0;
+  const showSkeletons = hasQuery && isLoading && results.length === 0;
+  const showEmpty = hasQuery && !isLoading && results.length === 0;
+
+  const skeletonRows = useMemo(() => Array.from({ length: 6 }), []);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Pressable onPress={() => router.back()} style={styles.iconButton} hitSlop={8}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Neue Nachricht</Text>
-        <View style={styles.headerRight} />
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          Neue Nachricht
+        </Text>
+        <View style={styles.iconButton} />
       </View>
 
-      {/* Content */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-      <View style={styles.content}>
-        <Text style={[styles.label, { color: colors.textPrimary }]}>Empfänger</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary, borderColor: colors.borderSecondary }]}
-          value={address}
-          onChangeText={(text) => {
-            setAddress(text);
-            setErrorMessage('');
-          }}
-          placeholder="0x... Wallet-Adresse eingeben"
-          placeholderTextColor={colors.textTertiary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus={!prefillAddress}
-        />
-
-        {errorMessage ? (
-          <Text style={[styles.error, { color: colors.error }]}>{errorMessage}</Text>
-        ) : null}
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            { backgroundColor: colors.primary },
-            pressed && styles.buttonPressed,
-            !canSubmit && { backgroundColor: colors.disabled },
+      <View style={styles.searchSection}>
+        <View
+          style={[
+            styles.searchBar,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderSecondary,
+            },
           ]}
-          onPress={handleStartConversation}
-          disabled={!canSubmit}
         >
-          {isChecking ? (
-            <View style={styles.buttonContent}>
-              <ActivityIndicator size="small" color={colors.onPrimary} />
-              <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Wird erstellt...</Text>
-            </View>
-          ) : (
-            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Nachricht senden</Text>
+          <SearchIcon size={18} color={colors.textTertiary} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Personen oder Organisationen suchen"
+            placeholderTextColor={colors.textTertiary}
+            style={[styles.input, { color: colors.textPrimary }]}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8} style={styles.clearButton}>
+              <Text style={[styles.clearText, { color: colors.textSecondary }]}>✕</Text>
+            </Pressable>
           )}
-        </Pressable>
+        </View>
+
+        <View style={styles.tabs}>
+          <SearchSegmentedTabs
+            value={scope}
+            options={SCOPE_OPTIONS}
+            onChange={setScope}
+          />
+        </View>
       </View>
-      </KeyboardAvoidingView>
+
+      {showInitialHint && (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+            Mit jemandem chatten
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Suche nach einem Namen, Nutzernamen oder einer Organisation.
+          </Text>
+        </View>
+      )}
+
+      {showSkeletons && (
+        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(120)}>
+          {skeletonRows.map((_, i) => (
+            <AccountRowSkeleton key={i} />
+          ))}
+        </Animated.View>
+      )}
+
+      {showEmpty && (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+            Keine Ergebnisse
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Für „{query.trim()}“ haben wir nichts gefunden.
+          </Text>
+        </View>
+      )}
+
+      {results.length > 0 && (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.listContent}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -174,63 +236,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backButton: {
+  iconButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
   },
-  headerRight: {
-    width: 40,
-  },
-  flex: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
     gap: 12,
   },
-  label: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    marginTop: 8,
-  },
-  input: {
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontFamily: 'Inter-Regular',
-    fontSize: 15,
-    borderWidth: 1,
-  },
-  error: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-  },
-  button: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonContent: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
   },
-  buttonText: {
+  input: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    padding: 0,
+  },
+  clearButton: {
+    paddingHorizontal: 4,
+  },
+  clearText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+  },
+  tabs: {
+    marginTop: 2,
+  },
+  listContent: {
+    paddingBottom: 24,
+  },
+  emptyState: {
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

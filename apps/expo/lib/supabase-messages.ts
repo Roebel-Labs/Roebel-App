@@ -1,11 +1,15 @@
 import { supabase } from './supabase';
+import type { OrgSubType } from './types';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface Conversation {
   id: string;
-  participant_one: string;
-  participant_two: string;
+  participant_one_account_id: string;
+  participant_two_account_id: string;
+  // Legacy wallet fields — still present in DB but unused by new code.
+  participant_one?: string | null;
+  participant_two?: string | null;
   created_at: string;
 }
 
@@ -19,7 +23,8 @@ export interface MessageStickerRef {
 export interface Message {
   id: string;
   conversation_id: string;
-  sender_address: string;
+  sender_account_id: string;
+  sender_address?: string | null; // legacy
   content: string;
   sticker_reward_id: string | null;
   sticker?: MessageStickerRef | null;
@@ -27,10 +32,20 @@ export interface Message {
 }
 
 export interface ConversationWithLastMessage extends Conversation {
+  // Peer (the OTHER participant relative to the caller's active account).
+  peerAccountId: string;
+  peerAccountType: 'personal' | 'organisation';
+  peerSubType: OrgSubType | null;
+  peerName: string;
+  peerSlug: string | null;
+  peerUsername: string | null;
+  peerIsVerified: boolean;
+  peerAvatarUrl: string | null;
+  peerEquippedFrameUrl: string | null;
+  // Legacy display fields kept so older render code keeps compiling.
   peerAddress: string;
   peerProfilePictureUrl: string | null;
-  peerEquippedFrameUrl: string | null;
-  peerUsername: string | null;
+  peerProfileFrameUrl?: string | null;
   lastMessage: Message | null;
   lastReadAt: string | null;
   hasUnread: boolean;
@@ -38,26 +53,29 @@ export interface ConversationWithLastMessage extends Conversation {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function ordered(a: string, b: string): [string, string] {
-  const la = a.toLowerCase();
-  const lb = b.toLowerCase();
-  return la < lb ? [la, lb] : [lb, la];
+// Conversations are pair-keyed: order the two ids so (a,b) and (b,a) hash
+// to the same row. Plain string compare is stable for uuids.
+function orderedIds(a: string, b: string): [string, string] {
+  return a < b ? [a, b] : [b, a];
 }
 
 // ── Queries ────────────────────────────────────────────────────────
 
 export async function findOrCreateConversation(
-  myAddress: string,
-  peerAddress: string
+  myAccountId: string,
+  peerAccountId: string
 ): Promise<Conversation | null> {
-  const [p1, p2] = ordered(myAddress, peerAddress);
+  if (myAccountId === peerAccountId) return null;
+  const [p1, p2] = orderedIds(myAccountId, peerAccountId);
 
-  // Upsert conversation
   const { data, error } = await supabase
     .from('conversations' as any)
     .upsert(
-      { participant_one: p1, participant_two: p2 } as any,
-      { onConflict: 'participant_one,participant_two' }
+      {
+        participant_one_account_id: p1,
+        participant_two_account_id: p2,
+      } as any,
+      { onConflict: 'participant_one_account_id,participant_two_account_id' }
     )
     .select()
     .single();
@@ -69,32 +87,47 @@ export async function findOrCreateConversation(
 
   const convo = data as Conversation;
 
-  // Ensure participant rows exist for read tracking
-  const myAddr = myAddress.toLowerCase();
-  const peerAddr = peerAddress.toLowerCase();
+  // Ensure participant rows exist for read tracking, one per account.
   await supabase
     .from('conversation_participants' as any)
     .upsert(
       [
-        { conversation_id: convo.id, wallet_address: myAddr },
-        { conversation_id: convo.id, wallet_address: peerAddr },
+        { conversation_id: convo.id, account_id: p1 },
+        { conversation_id: convo.id, account_id: p2 },
       ] as any,
-      { onConflict: 'conversation_id,wallet_address' }
+      { onConflict: 'conversation_id,account_id' }
     );
 
   return convo;
 }
 
-export async function fetchConversations(
-  walletAddress: string
-): Promise<ConversationWithLastMessage[]> {
-  const addr = walletAddress.toLowerCase();
+type AccountFields = {
+  id: string;
+  account_type: 'personal' | 'organisation';
+  sub_type: OrgSubType | null;
+  name: string;
+  slug: string | null;
+  avatar_url: string | null;
+  is_verified: boolean;
+};
 
-  // Get all conversations where user is a participant
+type UserFields = {
+  wallet_address: string;
+  username: string | null;
+  equipped_frame_asset_url: string | null;
+};
+
+export async function fetchConversations(
+  myAccountId: string
+): Promise<ConversationWithLastMessage[]> {
+  if (!myAccountId) return [];
+
   const { data: rawConvos, error } = await supabase
     .from('conversations' as any)
     .select('*')
-    .or(`participant_one.eq.${addr},participant_two.eq.${addr}`)
+    .or(
+      `participant_one_account_id.eq.${myAccountId},participant_two_account_id.eq.${myAccountId}`
+    )
     .order('created_at', { ascending: false });
 
   if (error || !rawConvos?.length) {
@@ -104,42 +137,77 @@ export async function fetchConversations(
 
   const convos = rawConvos as Conversation[];
 
-  // Collect peer wallet addresses so we can batch-fetch their profile fields.
-  const peerAddresses = convos.map((c) =>
-    c.participant_one === addr ? c.participant_two : c.participant_one
-  );
+  // Collect peer account ids so we can batch-fetch their account fields.
+  const peerIds = Array.from(
+    new Set(
+      convos.map((c) =>
+        c.participant_one_account_id === myAccountId
+          ? c.participant_two_account_id
+          : c.participant_one_account_id
+      )
+    )
+  ).filter(Boolean);
 
-  const peerProfileByAddr = new Map<
-    string,
-    { profile_picture_url: string | null; equipped_frame_asset_url: string | null; username: string | null }
-  >();
-  if (peerAddresses.length > 0) {
-    const { data: peers } = await supabase
-      .from('users')
-      .select('wallet_address, profile_picture_url, equipped_frame_asset_url, username')
-      .in('wallet_address', peerAddresses);
-    for (const p of (peers ?? []) as Array<{
-      wallet_address: string;
-      profile_picture_url: string | null;
-      equipped_frame_asset_url: string | null;
-      username: string | null;
-    }>) {
-      peerProfileByAddr.set(p.wallet_address, {
-        profile_picture_url: p.profile_picture_url,
-        equipped_frame_asset_url: p.equipped_frame_asset_url,
-        username: p.username,
-      });
+  const accountById = new Map<string, AccountFields>();
+  if (peerIds.length > 0) {
+    const { data: accounts } = await supabase
+      .from('accounts' as any)
+      .select('id, account_type, sub_type, name, slug, avatar_url, is_verified')
+      .in('id', peerIds);
+    for (const a of (accounts ?? []) as AccountFields[]) {
+      accountById.set(a.id, a);
     }
   }
 
-  // Fetch last message + read tracking for each conversation
+  // For personal peers, additionally pull username + equipped frame from
+  // their owner wallet's `users` row.
+  const personalAccountIds = peerIds.filter(
+    (id) => accountById.get(id)?.account_type === 'personal'
+  );
+  const userByAccountId = new Map<string, UserFields>();
+  if (personalAccountIds.length > 0) {
+    const { data: ownerRows } = await supabase
+      .from('account_owners' as any)
+      .select('account_id, wallet_address')
+      .in('account_id', personalAccountIds);
+    const walletByAccount = new Map<string, string>();
+    for (const r of (ownerRows ?? []) as Array<{ account_id: string; wallet_address: string }>) {
+      // Personal accounts have a single owner; first row wins if duplicates exist.
+      if (!walletByAccount.has(r.account_id)) {
+        walletByAccount.set(r.account_id, r.wallet_address);
+      }
+    }
+    const wallets = Array.from(new Set(walletByAccount.values()));
+    if (wallets.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('wallet_address, username, equipped_frame_asset_url')
+        .in('wallet_address', wallets);
+      const userByWallet = new Map<string, UserFields>();
+      for (const u of (users ?? []) as UserFields[]) {
+        userByWallet.set(u.wallet_address, u);
+      }
+      for (const [accountId, wallet] of walletByAccount.entries()) {
+        const u = userByWallet.get(wallet);
+        if (u) userByAccountId.set(accountId, u);
+      }
+    }
+  }
+
   const results: ConversationWithLastMessage[] = [];
 
   for (const convo of convos) {
-    const peerAddress =
-      convo.participant_one === addr ? convo.participant_two : convo.participant_one;
+    const peerId =
+      convo.participant_one_account_id === myAccountId
+        ? convo.participant_two_account_id
+        : convo.participant_one_account_id;
+    if (!peerId) continue;
 
-    // Last message
+    const peerAccount = accountById.get(peerId);
+    if (!peerAccount) continue; // skip orphans
+
+    const peerUser = userByAccountId.get(peerId);
+
     const { data: msgs } = await supabase
       .from('direct_messages' as any)
       .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
@@ -149,36 +217,46 @@ export async function fetchConversations(
 
     const lastMessage: Message | null = (msgs as Message[] | null)?.[0] ?? null;
 
-    // Read tracking
     const { data: cp } = await supabase
       .from('conversation_participants' as any)
       .select('last_read_at')
       .eq('conversation_id', convo.id)
-      .eq('wallet_address', addr)
-      .single();
+      .eq('account_id', myAccountId)
+      .maybeSingle();
 
     const lastReadAt: string | null = (cp as any)?.last_read_at ?? null;
 
     const hasUnread =
       !!lastMessage &&
-      lastMessage.sender_address !== addr &&
+      lastMessage.sender_account_id !== myAccountId &&
       (!lastReadAt || new Date(lastMessage.created_at) > new Date(lastReadAt));
 
-    const peerProfile = peerProfileByAddr.get(peerAddress);
+    const displayName =
+      peerAccount.name ||
+      peerUser?.username ||
+      '';
 
     results.push({
       ...convo,
-      peerAddress,
-      peerProfilePictureUrl: peerProfile?.profile_picture_url ?? null,
-      peerEquippedFrameUrl: peerProfile?.equipped_frame_asset_url ?? null,
-      peerUsername: peerProfile?.username ?? null,
+      peerAccountId: peerId,
+      peerAccountType: peerAccount.account_type,
+      peerSubType: peerAccount.sub_type,
+      peerName: displayName,
+      peerSlug: peerAccount.slug,
+      peerUsername: peerUser?.username ?? null,
+      peerIsVerified: peerAccount.is_verified,
+      peerAvatarUrl: peerAccount.avatar_url,
+      peerEquippedFrameUrl: peerUser?.equipped_frame_asset_url ?? null,
+      // Legacy mirror fields — keep `peerAddress` semantics as "the peer's
+      // public id" so older render code shows something sensible.
+      peerAddress: peerId,
+      peerProfilePictureUrl: peerAccount.avatar_url,
       lastMessage,
       lastReadAt,
       hasUnread,
     });
   }
 
-  // Sort by last message time (newest first), then by created_at
   results.sort((a, b) => {
     const ta = a.lastMessage?.created_at ?? a.created_at;
     const tb = b.lastMessage?.created_at ?? b.created_at;
@@ -214,7 +292,7 @@ export async function fetchMessages(
 
 export async function sendMessage(
   conversationId: string,
-  senderAddress: string,
+  senderAccountId: string,
   content: string,
   stickerRewardId: string | null = null
 ): Promise<Message | null> {
@@ -222,7 +300,7 @@ export async function sendMessage(
     .from('direct_messages' as any)
     .insert({
       conversation_id: conversationId,
-      sender_address: senderAddress.toLowerCase(),
+      sender_account_id: senderAccountId,
       content,
       sticker_reward_id: stickerRewardId,
     } as any)
@@ -238,25 +316,25 @@ export async function sendMessage(
 
 export async function markConversationRead(
   conversationId: string,
-  walletAddress: string
+  accountId: string
 ): Promise<void> {
   const { error } = await supabase
     .from('conversation_participants' as any)
     .upsert(
       {
         conversation_id: conversationId,
-        wallet_address: walletAddress.toLowerCase(),
+        account_id: accountId,
         last_read_at: new Date().toISOString(),
       } as any,
-      { onConflict: 'conversation_id,wallet_address' }
+      { onConflict: 'conversation_id,account_id' }
     );
 
   if (error) console.error('markConversationRead error:', error);
 }
 
-export async function getUnreadCount(walletAddress: string): Promise<number> {
+export async function getUnreadCount(accountId: string): Promise<number> {
   const { data, error } = await (supabase.rpc as any)('get_unread_count', {
-    p_wallet: walletAddress.toLowerCase(),
+    p_account_id: accountId,
   });
 
   if (error) {
@@ -264,4 +342,41 @@ export async function getUnreadCount(walletAddress: string): Promise<number> {
     return 0;
   }
   return (data as number) ?? 0;
+}
+
+// ── Wallet → personal account resolver ─────────────────────────────
+// Used by deep links that arrive with a peer wallet address (e.g. the
+// marketplace "contact seller" CTA) so we can convert them to the
+// account-keyed conversation model.
+export async function fetchPersonalAccountIdByWallet(
+  walletAddress: string
+): Promise<string | null> {
+  const normalized = walletAddress.toLowerCase();
+  const { data, error } = await supabase
+    .from('account_owners' as any)
+    .select('account_id, accounts:account_id(id, account_type)')
+    .eq('wallet_address', normalized);
+
+  if (error || !data) return null;
+
+  const rows = data as Array<{
+    account_id: string;
+    accounts: { id: string; account_type: 'personal' | 'organisation' } | null;
+  }>;
+  const personal = rows.find((r) => r.accounts?.account_type === 'personal');
+  return personal?.account_id ?? null;
+}
+
+// Hydrate a Message row (e.g. from a realtime payload) with its joined
+// sticker reward when applicable. Exposed so useConversation can call it
+// from the realtime handler.
+export async function hydrateMessageSticker(msg: Message): Promise<Message> {
+  if (!msg.sticker_reward_id) return msg;
+  const { data } = await supabase
+    .from('lootbox_rewards')
+    .select('id, type, name, asset_url')
+    .eq('id', msg.sticker_reward_id)
+    .maybeSingle();
+  if (data) return { ...msg, sticker: data as MessageStickerRef };
+  return msg;
 }

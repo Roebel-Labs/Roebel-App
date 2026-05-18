@@ -54,15 +54,21 @@ function getPreviewText(message: ConversationWithLastMessage['lastMessage']): st
 export default function ConversationListItem({ conversation, onPress }: Props) {
   const { colors } = useTheme();
   const {
+    peerName,
     peerAddress,
-    peerProfilePictureUrl,
+    peerAvatarUrl,
     peerEquippedFrameUrl,
     peerUsername,
+    peerAccountType,
     lastMessage,
     hasUnread,
   } = conversation;
 
-  const displayName = peerUsername || shortenAddress(peerAddress);
+  const displayName =
+    peerName || peerUsername || (peerAddress ? shortenAddress(peerAddress) : 'Unbekannt');
+  // Personal accounts carry an equipped frame from their owner wallet's
+  // users row; orgs never do.
+  const frameUrl = peerAccountType === 'personal' ? peerEquippedFrameUrl : null;
 
   return (
     <Pressable
@@ -75,9 +81,9 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
     >
       <UserAvatarWithFrame
         size={48}
-        uri={peerProfilePictureUrl}
+        uri={peerAvatarUrl}
         fallbackInitial={(displayName[0] || '?').toUpperCase()}
-        frameAssetUrl={peerEquippedFrameUrl}
+        frameAssetUrl={frameUrl}
       />
       <View style={styles.content}>
         <View style={styles.topRow}>

@@ -1,74 +1,112 @@
 /**
  * Hook for a single Supabase conversation.
- * Handles loading messages, sending, real-time streaming, and pagination.
+ * Account-keyed: identity is the user's currently active account, not the
+ * underlying wallet — so an owned org can hold its own chats and replies.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useActiveAccount } from 'thirdweb/react';
 import { supabase } from '@/lib/supabase';
+import { useAccount } from '@/context/AccountContext';
 import {
   fetchMessages,
   sendMessage as sendMsg,
+  hydrateMessageSticker,
   type Message,
 } from '@/lib/supabase-messages';
-import { fetchUserByWallet } from '@/lib/supabase-users';
+import { fetchAccountById } from '@/lib/supabase-accounts';
+import { supabase as sb } from '@/lib/supabase';
+import type { Account, OrgSubType } from '@/lib/types';
 
-export type PeerUser = {
+export type PeerAccount = {
+  id: string;
+  accountType: 'personal' | 'organisation';
+  subType: OrgSubType | null;
+  name: string;
   username: string | null;
-  profilePictureUrl: string | null;
+  avatarUrl: string | null;
   equippedFrameUrl: string | null;
+  isVerified: boolean;
 };
 
 export function useConversation(conversationId: string) {
-  const account = useActiveAccount();
+  const { activeAccount } = useAccount();
+  const myAccountId = activeAccount?.id ?? null;
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [peerAddress, setPeerAddress] = useState('');
-  const [peerUser, setPeerUser] = useState<PeerUser | null>(null);
+  const [peerAccount, setPeerAccount] = useState<PeerAccount | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Load conversation info + initial messages
+  // Load conversation peer + initial messages
   useEffect(() => {
-    if (!conversationId || !account?.address) return;
+    if (!conversationId || !myAccountId) return;
 
     let cancelled = false;
-    const addr = account.address.toLowerCase();
 
     const load = async () => {
       setIsLoading(true);
       try {
-        // Get conversation to derive peer address
         const { data } = await supabase
           .from('conversations' as any)
-          .select('*')
+          .select('participant_one_account_id, participant_two_account_id')
           .eq('id', conversationId)
           .single();
 
-        const convo = data as { participant_one: string; participant_two: string } | null;
-        if (convo && !cancelled) {
-          const peer =
-            convo.participant_one === addr
-              ? convo.participant_two
-              : convo.participant_one;
-          setPeerAddress(peer);
+        const convo = data as {
+          participant_one_account_id: string | null;
+          participant_two_account_id: string | null;
+        } | null;
 
-          // Resolve peer user profile
-          const user = await fetchUserByWallet(peer);
-          if (user && !cancelled) {
-            setPeerUser({
-              username: user.username,
-              profilePictureUrl: user.profile_picture_url,
-              equippedFrameUrl: user.equipped_frame_asset_url ?? null,
-            });
+        let peerId: string | null = null;
+        if (convo) {
+          peerId =
+            convo.participant_one_account_id === myAccountId
+              ? convo.participant_two_account_id
+              : convo.participant_one_account_id;
+        }
+
+        if (peerId && !cancelled) {
+          const acc: Account | null = await fetchAccountById(peerId);
+          if (acc && !cancelled) {
+            // Pull personal-account frame + username from the owner wallet's `users` row.
+            let username: string | null = null;
+            let equippedFrameUrl: string | null = null;
+            if (acc.account_type === 'personal') {
+              const { data: ownerRow } = await sb
+                .from('account_owners' as any)
+                .select('wallet_address')
+                .eq('account_id', acc.id)
+                .limit(1)
+                .maybeSingle();
+              const wallet = (ownerRow as any)?.wallet_address as string | undefined;
+              if (wallet) {
+                const { data: userRow } = await sb
+                  .from('users')
+                  .select('username, equipped_frame_asset_url')
+                  .eq('wallet_address', wallet)
+                  .maybeSingle();
+                username = (userRow as any)?.username ?? null;
+                equippedFrameUrl = (userRow as any)?.equipped_frame_asset_url ?? null;
+              }
+            }
+            if (!cancelled) {
+              setPeerAccount({
+                id: acc.id,
+                accountType: acc.account_type,
+                subType: acc.sub_type,
+                name: acc.name,
+                username,
+                avatarUrl: acc.avatar_url,
+                equippedFrameUrl,
+                isVerified: acc.is_verified,
+              });
+            }
           }
         }
 
-        // Load initial messages
         const msgs = await fetchMessages(conversationId, 50);
-        if (!cancelled) {
-          setMessages(msgs);
-        }
+        if (!cancelled) setMessages(msgs);
       } catch (err) {
         console.error('Failed to load conversation:', err);
       } finally {
@@ -81,7 +119,7 @@ export function useConversation(conversationId: string) {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, account?.address]);
+  }, [conversationId, myAccountId]);
 
   // Realtime subscription for this conversation
   useEffect(() => {
@@ -99,20 +137,10 @@ export function useConversation(conversationId: string) {
         },
         async (payload) => {
           const newMsg = payload.new as Message;
-          // If the row has a sticker FK, hydrate the joined reward before
-          // rendering so the bubble can show the sticker image immediately.
-          let enriched: Message = newMsg;
-          if (newMsg.sticker_reward_id) {
-            const { data } = await supabase
-              .from('lootbox_rewards')
-              .select('id, type, name, asset_url')
-              .eq('id', newMsg.sticker_reward_id)
-              .maybeSingle();
-            if (data) enriched = { ...newMsg, sticker: data as any };
-          }
+          const enriched = await hydrateMessageSticker(newMsg);
           setMessages((prev) => {
             if (prev.some((m) => m.id === enriched.id)) return prev;
-            return [enriched, ...prev]; // Prepend for inverted FlatList
+            return [enriched, ...prev];
           });
         }
       )
@@ -126,37 +154,29 @@ export function useConversation(conversationId: string) {
     };
   }, [conversationId]);
 
-  // Send a message (optionally with an attached sticker reward)
   const sendMessage = useCallback(
     async (text: string, stickerRewardId: string | null = null) => {
-      if (!conversationId || !account?.address) return;
+      if (!conversationId || !myAccountId) return;
       if (!text.trim() && !stickerRewardId) return;
       setIsSending(true);
       try {
-        await sendMsg(conversationId, account.address, text.trim(), stickerRewardId);
+        await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
       } catch (err) {
         console.error('Failed to send message:', err);
       } finally {
         setIsSending(false);
       }
     },
-    [conversationId, account?.address]
+    [conversationId, myAccountId]
   );
 
-  // Load more (older) messages
   const loadMore = useCallback(async () => {
     if (!conversationId || messages.length === 0) return;
-
-    const oldestMessage = messages[messages.length - 1];
+    const oldest = messages[messages.length - 1];
     try {
-      const olderMessages = await fetchMessages(
-        conversationId,
-        30,
-        oldestMessage.created_at
-      );
-
-      if (olderMessages.length > 0) {
-        setMessages((prev) => [...prev, ...olderMessages]);
+      const older = await fetchMessages(conversationId, 30, oldest.created_at);
+      if (older.length > 0) {
+        setMessages((prev) => [...prev, ...older]);
       }
     } catch (err) {
       console.error('Failed to load more messages:', err);
@@ -169,7 +189,7 @@ export function useConversation(conversationId: string) {
     isSending,
     sendMessage,
     loadMore,
-    peerAddress,
-    peerUser,
+    peerAccount,
+    myAccountId,
   };
 }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useActiveAccount } from 'thirdweb/react';
 import { supabase } from '@/lib/supabase';
+import { useAccount } from '@/context/AccountContext';
 import {
   fetchConversations as fetchConvos,
   getUnreadCount as fetchUnread,
@@ -29,44 +29,52 @@ export function useMessaging() {
 }
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
-  const account = useActiveAccount();
+  const { activeAccount } = useAccount();
+  const activeAccountId = activeAccount?.id ?? null;
+
   const [conversations, setConversations] = useState<ConversationWithLastMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const addressRef = useRef<string | null>(null);
+  const accountIdRef = useRef<string | null>(null);
 
-  const loadConversations = useCallback(async (address: string) => {
+  const loadConversations = useCallback(async (accountId: string) => {
     setIsLoading(true);
     try {
-      const convos = await fetchConvos(address);
-      setConversations(convos);
+      const convos = await fetchConvos(accountId);
+      // Guard against stale loads after an account switch.
+      if (accountIdRef.current === accountId) {
+        setConversations(convos);
+      }
     } catch (err) {
       console.error('Failed to load conversations:', err);
     } finally {
-      setIsLoading(false);
+      if (accountIdRef.current === accountId) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
-  const loadUnreadCount = useCallback(async (address: string) => {
+  const loadUnreadCount = useCallback(async (accountId: string) => {
     try {
-      const count = await fetchUnread(address);
-      setUnreadCount(count);
+      const count = await fetchUnread(accountId);
+      if (accountIdRef.current === accountId) {
+        setUnreadCount(count);
+      }
     } catch (err) {
       console.error('Failed to load unread count:', err);
     }
   }, []);
 
   const refreshConversations = useCallback(async () => {
-    const addr = addressRef.current;
-    if (!addr) return;
-    await Promise.all([loadConversations(addr), loadUnreadCount(addr)]);
+    const id = accountIdRef.current;
+    if (!id) return;
+    await Promise.all([loadConversations(id), loadUnreadCount(id)]);
   }, [loadConversations, loadUnreadCount]);
 
   const handleMarkRead = useCallback((conversationId: string) => {
-    const addr = addressRef.current;
-    if (!addr) return;
-    markRead(conversationId, addr);
-    // Optimistically update local state
+    const id = accountIdRef.current;
+    if (!id) return;
+    markRead(conversationId, id);
     setConversations((prev) =>
       prev.map((c) =>
         c.id === conversationId ? { ...c, hasUnread: false, lastReadAt: new Date().toISOString() } : c
@@ -75,35 +83,37 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     setUnreadCount((prev) => Math.max(0, prev - 1));
   }, []);
 
-  // Load data when wallet connects
+  // Load whenever the active account changes (incl. switching between
+  // personal and an owned org). Strict scoping: switching the account
+  // swaps the inbox entirely.
   useEffect(() => {
-    if (!account?.address) {
-      addressRef.current = null;
+    if (!activeAccountId) {
+      accountIdRef.current = null;
       setConversations([]);
       setUnreadCount(0);
       return;
     }
+    accountIdRef.current = activeAccountId;
+    loadConversations(activeAccountId);
+    loadUnreadCount(activeAccountId);
+  }, [activeAccountId, loadConversations, loadUnreadCount]);
 
-    const addr = account.address.toLowerCase();
-    addressRef.current = addr;
-    loadConversations(addr);
-    loadUnreadCount(addr);
-  }, [account?.address, loadConversations, loadUnreadCount]);
-
-  // Supabase Realtime: listen for new messages
+  // Realtime: any new direct_messages insert triggers a refetch scoped to
+  // the active account. fetchConversations does the per-account filtering.
   useEffect(() => {
-    if (!account?.address) return;
-    const addr = account.address.toLowerCase();
+    if (!activeAccountId) return;
 
     const channel = supabase
-      .channel('messaging-realtime')
+      .channel(`messaging-realtime-${activeAccountId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'direct_messages' },
         () => {
-          // Refresh conversations and unread count on any new message
-          loadConversations(addr);
-          loadUnreadCount(addr);
+          const current = accountIdRef.current;
+          if (current) {
+            loadConversations(current);
+            loadUnreadCount(current);
+          }
         }
       )
       .subscribe();
@@ -111,7 +121,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [account?.address, loadConversations, loadUnreadCount]);
+  }, [activeAccountId, loadConversations, loadUnreadCount]);
 
   return (
     <MessagingContext.Provider
