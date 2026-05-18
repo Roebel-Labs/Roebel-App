@@ -272,7 +272,7 @@ export default function RevokeMembershipScreen() {
         message={successDrawer.message}
         primaryButtonText="Schließen"
         onPrimaryAction={closeAndBack}
-        onDismiss={closeAndBack}
+        onDismiss={() => setSuccessDrawer({ visible: false, message: '' })}
       />
     </SafeAreaView>
   );
