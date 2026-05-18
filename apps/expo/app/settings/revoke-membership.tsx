@@ -7,7 +7,7 @@
  *   2. Target-revocation — only available to Attesters; flag someone else for removal.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   Keyboard,
   TouchableWithoutFeedback,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -33,6 +34,34 @@ import SuccessDrawer from '@/components/SuccessDrawer';
 
 type Mode = 'self' | 'target';
 type ContractType = 'attester' | 'citizen';
+
+const MIN_REASON_LENGTH = 5;
+
+function buildShareUrls(requestId: number, contractType: ContractType) {
+  const nftType = contractType;
+  const webUrl = `https://www.roebel.app/verifizierung/nachweis/${requestId}?contract=${nftType}&action=revoke`;
+  const deepLink = `roebel://verification/request/${requestId}?type=${nftType}&action=revoke`;
+  return { webUrl, deepLink };
+}
+
+async function shareRevocationLink(
+  requestId: number,
+  contractType: ContractType,
+  signersNeeded: number
+) {
+  const { webUrl } = buildShareUrls(requestId, contractType);
+  const roleLabel = contractType === 'attester' ? 'Bescheiniger' : 'Bürger';
+  try {
+    await Share.share({
+      title: 'Entziehungsantrag teilen',
+      message:
+        `Bitte unterschreiben Sie diesen ${roleLabel}-Entziehungsantrag ` +
+        `(${signersNeeded} Bescheiniger-Unterschrift${signersNeeded === 1 ? '' : 'en'} benötigt):\n\n${webUrl}`,
+    });
+  } catch (err) {
+    console.error('Failed to share revocation link:', err);
+  }
+}
 
 export default function RevokeMembershipScreen() {
   const router = useRouter();
@@ -52,12 +81,18 @@ export default function RevokeMembershipScreen() {
   const [reason, setReason] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
-  const [successDrawer, setSuccessDrawer] = useState({ visible: false, message: '' });
+  const [successDrawer, setSuccessDrawer] = useState<{
+    visible: boolean;
+    message: string;
+    requestId: number | null;
+    contractType: ContractType;
+  }>({ visible: false, message: '', requestId: null, contractType: 'attester' });
 
   const target = mode === 'self' ? account?.address ?? '' : targetAddress.trim();
 
   const addressValid = useMemo(() => /^0x[a-fA-F0-9]{40}$/.test(target), [target]);
-  const reasonValid = reason.trim().length >= 20;
+  const reasonTrimmedLength = reason.trim().length;
+  const reasonValid = reasonTrimmedLength >= MIN_REASON_LENGTH;
   const canSubmit = !!account && addressValid && reasonValid && !isLoading;
 
   const requiredSignatures = contractType === 'attester' ? 2 : 1;
@@ -65,6 +100,11 @@ export default function RevokeMembershipScreen() {
     contractType === 'attester'
       ? '2 weitere Bescheiniger müssen die Entziehung bestätigen.'
       : '1 Bescheiniger muss die Entziehung bestätigen.';
+
+  const handleShareLink = useCallback(() => {
+    if (successDrawer.requestId == null) return;
+    shareRevocationLink(successDrawer.requestId, successDrawer.contractType, requiredSignatures);
+  }, [successDrawer.requestId, successDrawer.contractType, requiredSignatures]);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -77,10 +117,16 @@ export default function RevokeMembershipScreen() {
       await refresh();
       setSuccessDrawer({
         visible: true,
-        message: `Entziehungsantrag #${requestId} wurde eingereicht. ${requiredSignaturesLabel}`,
+        requestId,
+        contractType,
+        message:
+          `Entziehungsantrag #${requestId} wurde eingereicht. ` +
+          `${requiredSignaturesLabel} Teilen Sie den Link, damit andere unterschreiben können.`,
       });
       setReason('');
       setTargetAddress('');
+      // Auto-open native share sheet so the user immediately sees the shareable link.
+      shareRevocationLink(requestId, contractType, requiredSignatures);
     } catch (err) {
       setErrorDrawer({
         visible: true,
@@ -89,8 +135,8 @@ export default function RevokeMembershipScreen() {
     }
   };
 
-  const closeAndBack = () => {
-    setSuccessDrawer({ visible: false, message: '' });
+  const closeSuccess = () => {
+    setSuccessDrawer({ visible: false, message: '', requestId: null, contractType: 'attester' });
     router.back();
   };
 
@@ -215,7 +261,7 @@ export default function RevokeMembershipScreen() {
               <TextInput
                 value={reason}
                 onChangeText={setReason}
-                placeholder="Mindestens 20 Zeichen, klare Begründung."
+                placeholder={`Mindestens ${MIN_REASON_LENGTH} Zeichen.`}
                 placeholderTextColor={colors.textTertiary}
                 multiline
                 numberOfLines={5}
@@ -225,8 +271,13 @@ export default function RevokeMembershipScreen() {
                   { color: colors.textPrimary, borderColor: colors.borderSecondary },
                 ]}
               />
-              <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>
-                {reason.trim().length}/20
+              <Text
+                style={[
+                  styles.fieldHint,
+                  { color: reasonValid ? colors.textTertiary : colors.error },
+                ]}
+              >
+                {reasonTrimmedLength}/{MIN_REASON_LENGTH}
               </Text>
             </View>
           </Section>
@@ -270,9 +321,11 @@ export default function RevokeMembershipScreen() {
       <SuccessDrawer
         visible={successDrawer.visible}
         message={successDrawer.message}
-        primaryButtonText="Schließen"
-        onPrimaryAction={closeAndBack}
-        onDismiss={() => setSuccessDrawer({ visible: false, message: '' })}
+        primaryButtonText="Link erneut teilen"
+        secondaryButtonText="Schließen"
+        onPrimaryAction={handleShareLink}
+        onSecondaryAction={closeSuccess}
+        onDismiss={closeSuccess}
       />
     </SafeAreaView>
   );
