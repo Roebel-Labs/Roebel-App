@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Platform, Dimensions, KeyboardAvoidingView } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
@@ -14,9 +14,12 @@ import ImageZoomModal from '@/components/ImageZoomModal';
 import { logEventView, logEvent, logCalendarSave } from '@/lib/firebase';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { SvgXml } from 'react-native-svg';
-import ExperienceSection from '@/components/events/ExperienceSection';
+import ExperienceSection, { type ExperienceSectionHandle } from '@/components/events/ExperienceSection';
+import ExperienceInput from '@/components/events/ExperienceInput';
+import CommentScrim from '@/components/feed/CommentScrim';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
 import MeckyNotFound from '@/components/MeckyNotFound';
@@ -54,9 +57,12 @@ export default function EventDetails() {
   const [publisherAccount, setPublisherAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const { showSnackbar } = useSnackbar();
+  const { user } = useUser();
   const activeAccount = useActiveAccount();
   const scrollRef = useRef<ScrollView>(null);
+  const experienceSectionRef = useRef<ExperienceSectionHandle>(null);
 
   const handleShare = async () => {
     if (!event) return;
@@ -238,12 +244,18 @@ export default function EventDetails() {
   const end = formatTime(event.end_time);
 
   return (
-    <ScrollView
-      ref={scrollRef}
+    <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
+      <View style={styles.flex}>
+      <ScrollView
+        ref={scrollRef}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       <Stack.Screen options={{ headerShown: false }} />
       {event.livestream_active && event.livestream_url ? (
         <View style={[styles.livestreamSection, { backgroundColor: colors.background }]}>
@@ -327,7 +339,7 @@ export default function EventDetails() {
             </View>
 
             <View style={styles.infoCards}>
-              <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.infoCard, { borderColor: colors.border }]}>
                 <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                   <CalendarIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
@@ -354,7 +366,7 @@ export default function EventDetails() {
               <Pressable
                 style={({ pressed }) => [
                   styles.infoCard,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  { borderColor: colors.border },
                   pressed && [styles.infoCardPressed, { backgroundColor: colors.cardPlaceholder }]
                 ]}
                 onPress={() => router.push(`/location?selectedEventId=${event.id}`)}
@@ -373,7 +385,7 @@ export default function EventDetails() {
                 </View>
               </Pressable>
 
-              <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.infoCard, { borderColor: colors.border }]}>
                 <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                   <TicketIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
@@ -404,7 +416,7 @@ export default function EventDetails() {
                   }
                   style={({ pressed }) => [
                     styles.publisherRow,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    { borderColor: colors.border },
                     pressed && styles.infoCardPressed,
                   ]}
                   accessibilityRole="button"
@@ -435,7 +447,7 @@ export default function EventDetails() {
                   <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
                 </Pressable>
               )}
-              <View style={[styles.organizerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
+              <View style={[styles.organizerCard, { borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
                 <View style={styles.organizerHeader}>
                   <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
                     <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
@@ -465,6 +477,7 @@ export default function EventDetails() {
 
             {/* Event Experiences Section */}
             <ExperienceSection
+              ref={experienceSectionRef}
               eventId={id as string}
               highlightExperienceId={experienceId}
               scrollViewRef={scrollRef}
@@ -498,7 +511,21 @@ export default function EventDetails() {
           onClose={() => setImageZoomVisible(false)}
         />
       )}
-    </ScrollView>
+      </ScrollView>
+        <CommentScrim visible={composerFocused} />
+      </View>
+
+      {user && (
+        <View style={styles.inputContainer}>
+          <ExperienceInput
+            eventId={id as string}
+            walletAddress={user.wallet_address}
+            onCreated={() => experienceSectionRef.current?.refresh()}
+            onFocusChange={setComposerFocused}
+          />
+        </View>
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -562,6 +589,13 @@ function CompactEventCard({ event }: { event: EventRecord }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  inputContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   scrollContent: {
     paddingBottom: 40,

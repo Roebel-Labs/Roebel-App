@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import { useInterest } from '@/context/InterestContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -16,6 +17,7 @@ const HEART_PNG = require('@/assets/icons/Heart.png');
 
 export default function InterestCTA({ eventId }: InterestCTAProps) {
   const account = useActiveAccount();
+  const router = useRouter();
   const { colors } = useTheme();
   const { isInterested, toggleInterest, getCount, refreshCount, getInterestedUsers } = useInterest();
 
@@ -205,7 +207,16 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
       </Pressable>
 
       {(displayCount > 0 || interested) && (
-        <View style={styles.socialRow}>
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: '/event/[id]/interested' as any, params: { id: eventId } })
+          }
+          disabled={displayCount === 0}
+          hitSlop={8}
+          style={({ pressed }) => [styles.socialRow, pressed && displayCount > 0 && styles.socialRowPressed]}
+          accessibilityRole={displayCount > 0 ? 'button' : undefined}
+          accessibilityLabel={displayCount > 0 ? 'Alle interessierten Personen anzeigen' : undefined}
+        >
           {avatarUsers.length > 0 && (
             <AvatarStack
               users={avatarUsers}
@@ -217,7 +228,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
           <Text style={[styles.socialText, { color: colors.textSecondary }]}>
             {countText}
           </Text>
-        </View>
+        </Pressable>
       )}
     </View>
   );
@@ -276,6 +287,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  socialRowPressed: {
+    opacity: 0.6,
   },
   socialText: {
     fontSize: 12,

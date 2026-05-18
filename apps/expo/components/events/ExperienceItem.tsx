@@ -74,8 +74,8 @@ export default function ExperienceItem({
       ref={cardRef}
       style={[
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
-        showHighlight && { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+        { borderBottomColor: colors.border },
+        showHighlight && { backgroundColor: colors.primaryLight },
       ]}
     >
       {/* Emoji or sticker banner */}
@@ -156,9 +156,7 @@ export default function ExperienceItem({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   emojiBanner: {
     alignItems: 'center',
@@ -172,8 +170,9 @@ const styles = StyleSheet.create({
     height: 140,
   },
   body: {
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
   headerRow: {
     flexDirection: 'row',

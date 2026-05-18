@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, RefObject } from 'react';
-import { View, Text, Pressable, ActivityIndicator, Image, StyleSheet, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useState, useEffect, useCallback, useImperativeHandle, forwardRef, RefObject } from 'react';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fetchEventExperiences, deleteExperience } from '@/lib/supabase-experiences';
 import ExperienceItem from './ExperienceItem';
-import ExperienceComposer from './ExperienceComposer';
 import type { EventExperience } from '@/lib/types/feed';
 
 const MAX_HIGHLIGHT_PAGES = 5;
@@ -18,7 +16,14 @@ type Props = {
   scrollViewRef?: RefObject<ScrollView | null>;
 };
 
-export default function ExperienceSection({ eventId, highlightExperienceId, scrollViewRef }: Props) {
+export type ExperienceSectionHandle = {
+  refresh: () => void;
+};
+
+const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function ExperienceSection(
+  { eventId, highlightExperienceId, scrollViewRef },
+  ref,
+) {
   const { colors } = useTheme();
   const { user } = useUser();
 
@@ -27,7 +32,6 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [composerVisible, setComposerVisible] = useState(false);
 
   const loadExperiences = useCallback(async (pageNum: number, append: boolean = false) => {
     if (pageNum === 0) setLoading(true);
@@ -50,6 +54,13 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
     loadExperiences(0);
   }, [loadExperiences]);
 
+  useImperativeHandle(ref, () => ({
+    refresh: () => {
+      setPage(0);
+      loadExperiences(0);
+    },
+  }), [loadExperiences]);
+
   // Page through experiences until the highlighted one shows up (or give up).
   useEffect(() => {
     if (!highlightExperienceId || loading) return;
@@ -66,11 +77,6 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
     const nextPage = page + 1;
     setPage(nextPage);
     loadExperiences(nextPage, true);
-  };
-
-  const handleExperienceCreated = () => {
-    setPage(0);
-    loadExperiences(0);
   };
 
   const handleDelete = async (experience: EventExperience) => {
@@ -96,31 +102,6 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
         </View>
       </View>
 
-      {/* Comment-input style bar — tapping opens the composer */}
-      {user && (
-        <Pressable
-          onPress={() => setComposerVisible(true)}
-          style={[styles.inputBar, { backgroundColor: colors.surface }]}
-        >
-          {user.profile_picture_url ? (
-            <Image
-              source={{ uri: user.profile_picture_url }}
-              style={styles.inputAvatar}
-            />
-          ) : (
-            <View style={[styles.inputAvatarFallback, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.inputAvatarText, { color: colors.primary }]}>
-                {(user.username || '?').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          <Text style={[styles.inputPlaceholder, { color: colors.textTertiary }]}>
-            Teile dein Erlebnis...
-          </Text>
-          <Ionicons name="camera-outline" size={20} color={colors.textTertiary} />
-        </Pressable>
-      )}
-
       {/* Loading State */}
       {loading && (
         <View style={styles.loadingContainer}>
@@ -130,7 +111,7 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
 
       {/* Empty State */}
       {!loading && experiences.length === 0 && (
-        <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+        <View style={styles.emptyState}>
           <Text style={[styles.emptyTitle, { color: colors.textSecondary }]}>
             Noch keine Erlebnisse
           </Text>
@@ -165,20 +146,11 @@ export default function ExperienceSection({ eventId, highlightExperienceId, scro
       {loadingMore && (
         <ActivityIndicator size="small" color={colors.primary} style={styles.loadingMore} />
       )}
-
-      {/* Composer */}
-      {user && (
-        <ExperienceComposer
-          visible={composerVisible}
-          onClose={() => setComposerVisible(false)}
-          eventId={eventId}
-          walletAddress={user.wallet_address}
-          onExperienceCreated={handleExperienceCreated}
-        />
-      )}
     </View>
   );
-}
+});
+
+export default ExperienceSection;
 
 const styles = StyleSheet.create({
   section: {
@@ -208,42 +180,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  inputAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  inputAvatarFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputAvatarText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-  },
-  inputPlaceholder: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-  },
   loadingContainer: {
     paddingVertical: 24,
     alignItems: 'center',
   },
   emptyState: {
-    borderRadius: 12,
-    padding: 24,
+    paddingVertical: 24,
     alignItems: 'center',
     gap: 4,
   },
@@ -256,7 +198,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   list: {
-    gap: 12,
+    gap: 0,
   },
   loadMoreButton: {
     alignItems: 'center',

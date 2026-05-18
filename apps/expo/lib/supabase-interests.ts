@@ -76,7 +76,18 @@ export async function getInterestedUsers(
   eventId: string,
   limit: number = 5
 ): Promise<InterestedUser[]> {
-  // Step 1: Get wallet addresses of interested users
+  return fetchInterestedUsers(eventId, limit);
+}
+
+/** Fetch all users interested in an event (for the dedicated list screen). */
+export async function listInterestedUsers(eventId: string): Promise<InterestedUser[]> {
+  return fetchInterestedUsers(eventId, 500);
+}
+
+async function fetchInterestedUsers(
+  eventId: string,
+  limit: number
+): Promise<InterestedUser[]> {
   const { data: interests } = await supabase
     .from('event_interests')
     .select('user_wallet')
@@ -88,13 +99,11 @@ export async function getInterestedUsers(
 
   const wallets = interests.map((i) => i.user_wallet.toLowerCase());
 
-  // Step 2: Fetch user profiles for those wallets
   const { data: users } = await supabase
     .from('users')
     .select('wallet_address, username, profile_picture_url')
     .in('wallet_address', wallets);
 
-  // Merge: preserve order from interests, match by wallet
   const userMap = new Map(
     (users ?? []).map((u) => [u.wallet_address.toLowerCase(), u])
   );

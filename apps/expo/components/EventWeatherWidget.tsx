@@ -267,7 +267,7 @@ export default function EventWeatherWidget({ date, latitude, longitude }: Props)
   const translatedCondition = translateWeatherCondition(weather.condition);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}>
+    <View style={[styles.container, { borderColor: colors.borderSecondary }]}>
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <WeatherIcon width={40} height={40} />

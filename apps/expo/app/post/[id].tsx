@@ -41,6 +41,7 @@ import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCa
 import PostActions from '@/components/feed/PostActions';
 import CommentItem from '@/components/feed/CommentItem';
 import CommentInput from '@/components/feed/CommentInput';
+import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton from '@/components/feed/FeedPostSkeleton';
 import PostOptionsDrawer from '@/components/feed/PostOptionsDrawer';
 import PostComposer from '@/components/feed/PostComposer';
@@ -75,6 +76,7 @@ export default function PostDetailScreen() {
   const [deletingComment, setDeletingComment] = useState<PostCommentRecord | null>(null);
   const [deleteCommentConfirmVisible, setDeleteCommentConfirmVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [commentFocused, setCommentFocused] = useState(false);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
@@ -123,7 +125,11 @@ export default function PostDetailScreen() {
     setIsLoadingMoreComments(false);
   }, [id, commentPage, isLoadingMoreComments, hasMoreComments]);
 
-  const handleSubmitComment = async (content: string, stickerRewardId: string | null) => {
+  const handleSubmitComment = async (
+    content: string,
+    stickerRewardId: string | null,
+    imageUrl: string | null,
+  ) => {
     if (!walletAddress || !id) return;
     setIsSubmittingComment(true);
 
@@ -134,6 +140,7 @@ export default function PostDetailScreen() {
         account_id: activeAccount?.id,
         content,
         sticker_reward_id: stickerRewardId,
+        media_urls: imageUrl ? [imageUrl] : undefined,
       });
 
       if (newComment) {
@@ -221,7 +228,11 @@ export default function PostDetailScreen() {
     }
   };
 
-  const handleSubmitEditComment = async (content: string, _stickerRewardId: string | null) => {
+  const handleSubmitEditComment = async (
+    content: string,
+    _stickerRewardId: string | null,
+    _imageUrl: string | null,
+  ) => {
     if (!editingComment) return;
     try {
       const updated = await updateComment(editingComment.id, content);
@@ -350,51 +361,60 @@ export default function PostDetailScreen() {
         style={styles.flex}
         keyboardVerticalOffset={0}
       >
-        {/* Comments list with post as header */}
-        <FlatList
-          data={comments}
-          keyExtractor={(item) => item.id}
-          renderItem={renderComment}
-          ListHeaderComponent={renderHeader}
-          onEndReached={hasMoreComments ? loadMoreComments : undefined}
-          onEndReachedThreshold={0.3}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshingComments}
-              onRefresh={refreshComments}
-              tintColor={colors.primary}
-            />
-          }
-          ListFooterComponent={
-            isLoadingMoreComments ? (
-              <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
-            ) : comments.length === 0 ? (
-              <View style={styles.noComments}>
-                <Text style={[styles.noCommentsText, { color: colors.textTertiary }]}>
-                  Noch keine Kommentare. Sei der Erste!
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.bottomPadding} />
-            )
-          }
-        />
+        <View style={styles.flex}>
+          {/* Comments list with post as header */}
+          <FlatList
+            data={comments}
+            keyExtractor={(item) => item.id}
+            renderItem={renderComment}
+            ListHeaderComponent={renderHeader}
+            onEndReached={hasMoreComments ? loadMoreComments : undefined}
+            onEndReachedThreshold={0.3}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshingComments}
+                onRefresh={refreshComments}
+                tintColor={colors.primary}
+              />
+            }
+            ListFooterComponent={
+              isLoadingMoreComments ? (
+                <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
+              ) : comments.length === 0 ? (
+                <View style={styles.noComments}>
+                  <Text style={[styles.noCommentsText, { color: colors.textTertiary }]}>
+                    Noch keine Kommentare. Sei der Erste!
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.bottomPadding} />
+              )
+            }
+          />
+          <CommentScrim visible={commentFocused} />
+        </View>
 
         {/* Comment input */}
         {walletAddress ? (
-          editingComment ? (
-            <CommentInput
-              onSubmit={handleSubmitEditComment}
-              isSubmitting={false}
-              initialValue={editingComment.content}
-              onCancel={() => setEditingComment(null)}
-            />
-          ) : (
-            <CommentInput
-              onSubmit={handleSubmitComment}
-              isSubmitting={isSubmittingComment}
-            />
-          )
+          <View style={styles.inputContainer}>
+            {editingComment ? (
+              <CommentInput
+                onSubmit={handleSubmitEditComment}
+                isSubmitting={false}
+                initialValue={editingComment.content}
+                onCancel={() => setEditingComment(null)}
+                onFocusChange={setCommentFocused}
+                walletAddress={walletAddress}
+              />
+            ) : (
+              <CommentInput
+                onSubmit={handleSubmitComment}
+                isSubmitting={isSubmittingComment}
+                onFocusChange={setCommentFocused}
+                walletAddress={walletAddress}
+              />
+            )}
+          </View>
         ) : (
           <Pressable
             onPress={() => router.push('/login')}
@@ -530,6 +550,10 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 20,
+  },
+  inputContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   loginPrompt: {
     paddingVertical: 14,
