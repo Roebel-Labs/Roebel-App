@@ -66,6 +66,25 @@ export async function fetchRestaurantBySlug(slug: string): Promise<RestaurantWit
 }
 
 /**
+ * Fetch the published restaurant linked to a given org account, if any.
+ */
+export async function fetchRestaurantByAccount(accountId: string): Promise<RestaurantRecord | null> {
+  const { data, error } = await supabase
+    .from('restaurants')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('status', 'published')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching restaurant by account:', error);
+    return null;
+  }
+
+  return (data as RestaurantRecord | null) ?? null;
+}
+
+/**
  * Fetch a special menu with all details by ID
  */
 export async function fetchSpecialMenuById(id: string): Promise<SpecialMenuWithDetails | null> {

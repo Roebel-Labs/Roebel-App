@@ -51,7 +51,7 @@ export default function AttesterGrid({ attesters, isLoading }: AttesterGridProps
         { width: orgCardWidth, backgroundColor: cardBg, borderColor: colors.borderSecondary },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${org.name} auf der Karte anzeigen`}
+      accessibilityLabel={`${org.name} ansehen`}
     >
       <View style={[styles.orgLogoWrap, { borderColor: colors.borderSecondary }]}>
         {org.avatar_url ? (
@@ -73,7 +73,7 @@ export default function AttesterGrid({ attesters, isLoading }: AttesterGridProps
         </Text>
       )}
       <View style={styles.orgLinkRow}>
-        <Text style={[styles.orgLink, { color: colors.primary }]}>Auf Karte anzeigen </Text>
+        <Text style={[styles.orgLink, { color: colors.primary }]}>Ansehen </Text>
         <Text style={[styles.orgLink, { color: colors.primary }]}>→</Text>
       </View>
     </Pressable>

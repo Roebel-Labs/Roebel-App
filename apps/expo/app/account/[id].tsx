@@ -1,23 +1,47 @@
-import React, { useEffect, useState, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import AvatarStack from '@/components/AvatarStack';
+import MapboxMapView from '@/components/map/MapboxMapView';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
-import type { Account, MemberWithProfile, OrgSubType } from '@/lib/types';
+import { fetchAccountPosts, fetchEventsByAccount } from '@/lib/supabase-posts';
+import { fetchOrgListings } from '@/lib/supabase-marketplace';
+import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articles';
+import { fetchDealsByBusiness } from '@/lib/supabase-deals';
+import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
+import type {
+  Account,
+  MemberWithProfile,
+  OrgSubType,
+  EventRecord,
+  BlogArticle,
+  MarketplaceListingRecord,
+  BusinessDealRecord,
+} from '@/lib/types';
+import type { PostRecord } from '@/lib/types/feed';
 
-const SUB_TYPE_LABELS: Record<OrgSubType, { emoji: string; label: string }> = {
+const SUB_TYPE_LABELS: Partial<Record<OrgSubType, { emoji: string; label: string }>> = {
   verein: { emoji: '🏛️', label: 'Verein' },
   restaurant: { emoji: '🍽️', label: 'Restaurant' },
   partei: { emoji: '🎗️', label: 'Partei' },
   fraktion: { emoji: '📋', label: 'Fraktion' },
   unternehmen: { emoji: '🏢', label: 'Unternehmen' },
+  journalist: { emoji: '📰', label: 'Journalismus' },
 };
 
 function subTypeLabel(subType: OrgSubType | null): { emoji: string; label: string } | null {
@@ -25,26 +49,41 @@ function subTypeLabel(subType: OrgSubType | null): { emoji: string; label: strin
   return SUB_TYPE_LABELS[subType] ?? null;
 }
 
+function formatEventDate(date: string, time: string | null): string {
+  try {
+    const d = new Date(date + 'T' + (time ?? '00:00:00'));
+    const day = d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' });
+    if (!time) return day;
+    const hhmm = time.slice(0, 5);
+    return `${day} · ${hhmm}`;
+  } catch {
+    return date;
+  }
+}
+
+function formatPrice(price: number, priceType: string): string {
+  if (priceType === 'free') return 'Gratis';
+  const formatted = price.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return `${formatted} €${priceType === 'negotiable' ? ' VB' : ''}`;
+}
+
 export default function PublicAccountScreen() {
   const goBack = useGoBack();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      presentation: 'formSheet',
-      sheetAllowedDetents: [0.6, 1.0],
-      sheetInitialDetentIndex: 0,
-      sheetGrabberVisible: true,
-      sheetCornerRadius: 20,
-    } as any);
-  }, [navigation]);
 
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [posts, setPosts] = useState<PostRecord[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
+  const [blogArticles, setBlogArticles] = useState<BlogArticle[]>([]);
+  const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
+  const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
+  const [orgLocation, setOrgLocation] = useState<OrgLocation | null>(null);
+  const [contentLoading, setContentLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
@@ -69,6 +108,43 @@ export default function PublicAccountScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!account || account.account_type !== 'organisation') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setContentLoading(true);
+        const [postsRes, eventsRes, blogRes, listingsRes, location] = await Promise.all([
+          fetchAccountPosts(account.id, { pageSize: 12 }).catch(() => ({ data: [] as PostRecord[], hasMore: false })),
+          fetchEventsByAccount(account.id, 12).catch(() => [] as EventRecord[]),
+          listBlogForAccount(account.id).catch(() => [] as BlogArticle[]),
+          fetchOrgListings(account.id).catch(() => [] as MarketplaceListingRecord[]),
+          resolveOrgLocation(account, members).catch(() => null),
+        ]);
+        if (cancelled) return;
+        setPosts(postsRes.data);
+        setEvents(eventsRes as EventRecord[]);
+        setBlogArticles(blogRes.filter((a) => a.status === 'published'));
+        setListings(listingsRes.filter((l) => l.status === 'active'));
+        setOrgLocation(location);
+
+        if (location?.entityType === 'business' && location.entityId) {
+          const dealsList = await fetchDealsByBusiness(location.entityId).catch(() => []);
+          if (!cancelled) {
+            setDeals(dealsList.filter((d) => d.is_active && d.status === 'active'));
+          }
+        }
+      } catch (err) {
+        console.error('Error loading org content:', err);
+      } finally {
+        if (!cancelled) setContentLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account, members]);
 
   if (loading) {
     return (
@@ -107,6 +183,50 @@ export default function PublicAccountScreen() {
     avatar_url: m.user?.profile_picture_url ?? null,
     username: m.user?.username ?? null,
   }));
+
+  const showExternBadge = account.is_extern && account.extern_status !== 'approved';
+
+  const openMap = () => {
+    if (!orgLocation) return;
+    router.push({
+      pathname: '/location',
+      params: { focusEntityType: orgLocation.entityType, focusEntityId: orgLocation.entityId },
+    } as any);
+  };
+
+  const handleContactPress = () => {
+    if (!account.contact_email) return;
+    Linking.openURL(`mailto:${account.contact_email}`).catch(() => undefined);
+  };
+
+  const mapGeoJSON = orgLocation
+    ? {
+        type: 'FeatureCollection' as const,
+        features: [
+          {
+            type: 'Feature' as const,
+            id: `${orgLocation.entityType}-${orgLocation.entityId}`,
+            geometry: {
+              type: 'Point' as const,
+              coordinates: [orgLocation.lon, orgLocation.lat] as [number, number],
+            },
+            properties: {
+              id: orgLocation.entityId,
+              entityType: orgLocation.entityType,
+              title: account.name,
+              subtitle: orgLocation.address ?? '',
+              category: orgLocation.entityType,
+              image_url: null,
+              date: null,
+              slug: orgLocation.slug,
+              poi_type: null,
+              poi_status: null,
+              maki: orgLocation.entityType === 'restaurant' ? 'restaurant' : 'shop',
+            },
+          },
+        ],
+      }
+    : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -153,13 +273,22 @@ export default function PublicAccountScreen() {
             )}
           </View>
 
-          {subType && (
-            <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
-                {subType.emoji} {subType.label}
-              </Text>
-            </View>
-          )}
+          <View style={styles.pillRow}>
+            {subType && (
+              <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
+                <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
+                  {subType.emoji} {subType.label}
+                </Text>
+              </View>
+            )}
+            {showExternBadge && (
+              <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
+                <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
+                  Extern · {account.extern_status === 'pending' ? 'in Prüfung' : 'abgelehnt'}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Bio */}
@@ -167,6 +296,16 @@ export default function PublicAccountScreen() {
           <View style={[styles.section, { borderTopColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über uns</Text>
             <Text style={[styles.bioText, { color: colors.textSecondary }]}>{account.bio}</Text>
+          </View>
+        ) : null}
+
+        {/* Contact */}
+        {account.contact_email ? (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Kontakt</Text>
+            <Pressable onPress={handleContactPress} accessibilityRole="link">
+              <Text style={[styles.linkText, { color: colors.primary }]}>{account.contact_email}</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -188,25 +327,211 @@ export default function PublicAccountScreen() {
           </View>
         )}
 
-        {/* Actions */}
-        <View style={[styles.section, { borderTopColor: colors.border }]}>
-          <Pressable
-            onPress={() =>
-              router.push({ pathname: '/explore', params: { accountId: account.id } })
-            }
-            style={({ pressed }) => [
-              styles.actionButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.actionButtonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Beiträge und Veranstaltungen dieser Organisation ansehen"
-          >
-            <Text style={[styles.actionButtonText, { color: colors.onPrimary }]}>
-              Beiträge & Veranstaltungen ansehen
-            </Text>
-          </Pressable>
-        </View>
+        {/* Posts */}
+        {contentLoading ? (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : null}
+
+        {posts.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Beiträge</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{posts.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {posts.map((post) => (
+                <Pressable
+                  key={post.id}
+                  onPress={() => router.push(`/post/${post.id}` as any)}
+                  style={[styles.postCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                  accessibilityRole="button"
+                >
+                  {post.media_urls && post.media_urls.length > 0 ? (
+                    <Image source={{ uri: post.media_urls[0] }} style={styles.postImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.postImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <Text
+                    style={[styles.postText, { color: colors.textPrimary }]}
+                    numberOfLines={3}
+                  >
+                    {post.content}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Events */}
+        {events.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{events.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {events.map((event) => (
+                <Pressable
+                  key={event.id}
+                  onPress={() => router.push(`/event/${event.id}` as any)}
+                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                  accessibilityRole="button"
+                >
+                  {event.image_url ? (
+                    <Image source={{ uri: event.image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <View style={styles.mediaCardBody}>
+                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {event.title}
+                    </Text>
+                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {formatEventDate(event.date, event.time)}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Blog */}
+        {blogArticles.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Artikel</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{blogArticles.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {blogArticles.map((article) => (
+                <Pressable
+                  key={article.id}
+                  onPress={() => router.push(`/blog/${article.id}` as any)}
+                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                  accessibilityRole="button"
+                >
+                  {article.cover_image_url ? (
+                    <Image source={{ uri: article.cover_image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <View style={styles.mediaCardBody}>
+                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {article.title}
+                    </Text>
+                    {article.excerpt ? (
+                      <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={2}>
+                        {article.excerpt}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Marketplace listings (products + services) */}
+        {listings.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Angebote</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{listings.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {listings.map((listing) => (
+                <Pressable
+                  key={listing.id}
+                  onPress={() => router.push(`/marketplace/${listing.id}` as any)}
+                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                  accessibilityRole="button"
+                >
+                  {listing.media_urls && listing.media_urls.length > 0 ? (
+                    <Image source={{ uri: listing.media_urls[0] }} style={styles.mediaCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <View style={styles.mediaCardBody}>
+                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {listing.title}
+                    </Text>
+                    <Text style={[styles.mediaCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {formatPrice(listing.price, listing.price_type)}
+                      {listing.listing_type === 'service' ? ' · Service' : ''}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Deals (only when a linked business is found) */}
+        {deals.length > 0 && (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Deals</Text>
+              <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{deals.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
+              {deals.map((deal) => (
+                <View
+                  key={deal.id}
+                  style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+                >
+                  {deal.image_url ? (
+                    <Image source={{ uri: deal.image_url }} style={styles.mediaCardImage} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaCardImage, { backgroundColor: colors.cardPlaceholder }]} />
+                  )}
+                  <View style={styles.mediaCardBody}>
+                    <Text style={[styles.mediaCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {deal.title}
+                    </Text>
+                    {deal.deal_value ? (
+                      <Text style={[styles.mediaCardMeta, { color: colors.primary }]} numberOfLines={1}>
+                        {deal.deal_value}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Standort / map */}
+        {orgLocation && mapGeoJSON ? (
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
+            {orgLocation.address ? (
+              <Text style={[styles.bioText, { color: colors.textSecondary, marginBottom: 12 }]}>
+                {orgLocation.address}
+              </Text>
+            ) : null}
+            <Pressable
+              onPress={openMap}
+              accessibilityRole="button"
+              accessibilityLabel={`${account.name} auf der Karte ansehen`}
+              style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
+            >
+              <View style={styles.mapInner} pointerEvents="none">
+                <MapboxMapView
+                  geojson={mapGeoJSON}
+                  onMarkerPress={() => undefined}
+                  flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
+                />
+              </View>
+              <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
+                <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
+              </View>
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -318,6 +643,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#ffffff',
   },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'center',
+  },
   subTypePill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -334,15 +665,30 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 20,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   sectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
+    marginBottom: 8,
+  },
+  sectionCount: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
     marginBottom: 8,
   },
   bioText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
+  },
+  linkText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
   },
   membersRow: {
     flexDirection: 'row',
@@ -353,16 +699,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
   },
-  actionButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+  hList: {
+    gap: 12,
+    paddingRight: 16,
   },
-  actionButtonPressed: {
-    opacity: 0.9,
+  postCard: {
+    width: 220,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  actionButtonText: {
-    fontSize: 15,
+  postImage: {
+    width: '100%',
+    height: 120,
+  },
+  postText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 18,
+    padding: 10,
+  },
+  mediaCard: {
+    width: 200,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  mediaCardImage: {
+    width: '100%',
+    height: 110,
+  },
+  mediaCardBody: {
+    padding: 10,
+    gap: 4,
+  },
+  mediaCardTitle: {
+    fontSize: 14,
     fontFamily: 'Inter-SemiBold',
+    lineHeight: 18,
+  },
+  mediaCardMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  mapWrap: {
+    height: 200,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  mapInner: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mapOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
 });

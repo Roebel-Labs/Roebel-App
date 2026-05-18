@@ -654,6 +654,44 @@ export async function fetchUpcomingEventsForFeed(limit: number = 5): Promise<any
   return data || [];
 }
 
+// ─── Events for an Org Account ──────────────────────────────
+
+/**
+ * Fetch approved events authored by an organisation account.
+ * Upcoming events first (date >= today, ascending), then past (date < today, descending).
+ */
+export async function fetchEventsByAccount(accountId: string, limit: number = 20): Promise<any[]> {
+  const today = new Date().toISOString().split('T')[0];
+
+  const [upcoming, past] = await Promise.all([
+    supabase
+      .from('events')
+      .select('*, account:accounts(id, name, avatar_url)')
+      .eq('status', 'approved')
+      .eq('account_id', accountId)
+      .gte('date', today)
+      .order('date', { ascending: true })
+      .limit(limit),
+    supabase
+      .from('events')
+      .select('*, account:accounts(id, name, avatar_url)')
+      .eq('status', 'approved')
+      .eq('account_id', accountId)
+      .lt('date', today)
+      .order('date', { ascending: false })
+      .limit(limit),
+  ]);
+
+  if (upcoming.error) {
+    console.error('Error fetching upcoming account events:', upcoming.error);
+  }
+  if (past.error) {
+    console.error('Error fetching past account events:', past.error);
+  }
+
+  return [...(upcoming.data ?? []), ...(past.data ?? [])];
+}
+
 // ─── This Week's Events for Story Bar ───────────────────────
 
 /**

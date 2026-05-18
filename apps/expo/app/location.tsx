@@ -85,7 +85,11 @@ const SHEET_LIFT_PX = 200;
 
 export default function LocationScreen() {
   const router = useRouter();
-  const { selectedEventId } = useLocalSearchParams<{ selectedEventId?: string }>();
+  const { selectedEventId, focusEntityType, focusEntityId } = useLocalSearchParams<{
+    selectedEventId?: string;
+    focusEntityType?: MapEntityType;
+    focusEntityId?: string;
+  }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomBase = Math.max(insets.bottom, 12) + 28;
@@ -207,6 +211,14 @@ export default function LocationScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId, events]);
+
+  // Deep-link for generic entity focus (used e.g. by the org profile page)
+  useEffect(() => {
+    if (!focusEntityType || !focusEntityId) return;
+    if (loading) return;
+    openCarouselFor(focusEntityType, focusEntityId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusEntityType, focusEntityId, loading, events, restaurants, businesses, pois]);
 
   const fetchMapData = async () => {
     try {
