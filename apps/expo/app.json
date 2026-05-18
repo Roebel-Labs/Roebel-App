@@ -2,7 +2,7 @@
   "expo": {
     "name": "roebel-onchain",
     "slug": "roebel-onchain",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "roebel",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.maxbrych.roebelonchain",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "associatedDomains": [
         "applinks:www.roebel.app"
       ],
@@ -40,7 +40,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.maxbrych.roebelonchain",
-      "versionCode": 30,
+      "versionCode": 31,
       "intentFilters": [
         {
           "action": "VIEW",
