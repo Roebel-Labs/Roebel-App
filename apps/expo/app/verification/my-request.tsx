@@ -5,15 +5,18 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useRequestDetails } from '@/hooks/useVerification';
+import { useAttesters } from '@/hooks/useAttesters';
 import { useTheme } from '@/context/ThemeContext';
 import VerificationQRCode from '@/components/VerificationQRCode';
+import AttesterGrid from '@/components/AttesterGrid';
+import MyRequestSkeleton from '@/components/MyRequestSkeleton';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function MyRequestScreen() {
@@ -30,6 +33,8 @@ export default function MyRequestScreen() {
     nftType
   );
 
+  const { attesters, isLoading: attestersLoading, refresh: refreshAttesters } = useAttesters();
+
   useEffect(() => {
     if (requestId) {
       fetchRequest();
@@ -38,10 +43,11 @@ export default function MyRequestScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    if (requestId) {
-      await fetchRequest();
-    }
+    await Promise.all([
+      refresh(),
+      requestId ? fetchRequest() : Promise.resolve(),
+      refreshAttesters(),
+    ]);
     setRefreshing(false);
   };
 
@@ -118,10 +124,7 @@ export default function MyRequestScreen() {
           }
         >
           {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Lade Antrag...</Text>
-            </View>
+            <MyRequestSkeleton />
           ) : (
             <>
               <View style={styles.qrSection}>
@@ -156,6 +159,8 @@ export default function MyRequestScreen() {
                   </View>
                 </View>
               )}
+
+              <AttesterGrid attesters={attesters} isLoading={attestersLoading} />
             </>
           )}
         </ScrollView>

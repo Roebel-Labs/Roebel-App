@@ -50,7 +50,9 @@ export default function VerificationQRCode({
     <View style={styles.container}>
       <View style={[styles.card, { backgroundColor: cardBg }, softShadow(2, isDark)]}>
         <View style={styles.qrWrap}>
-          <QRCode value={deepLink} size={size} backgroundColor="#FFFFFF" color="#000000" />
+          <View style={[styles.qrFrame, { borderColor: colors.borderSecondary }]}>
+            <QRCode value={deepLink} size={size} backgroundColor="#FFFFFF" color="#000000" />
+          </View>
         </View>
 
         <View style={styles.progressRow}>
@@ -97,13 +99,19 @@ const styles = StyleSheet.create({
   card: {
     alignSelf: 'center',
     borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 12,
+    paddingTop: 12,
     paddingBottom: 4,
   },
   qrWrap: {
     alignItems: 'center',
     paddingBottom: 12,
+  },
+  qrFrame: {
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
   },
   progressRow: {
     flexDirection: 'row',
