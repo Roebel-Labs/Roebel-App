@@ -9,11 +9,6 @@ type Props = {
   onPress: () => void;
 };
 
-function shortenAddress(addr: string): string {
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
 function formatTimestamp(isoDate: string): string {
   const date = new Date(isoDate);
   const now = new Date();
@@ -55,7 +50,6 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
   const { colors } = useTheme();
   const {
     peerName,
-    peerAddress,
     peerAvatarUrl,
     peerEquippedFrameUrl,
     peerUsername,
@@ -64,8 +58,7 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
     hasUnread,
   } = conversation;
 
-  const displayName =
-    peerName || peerUsername || (peerAddress ? shortenAddress(peerAddress) : 'Unbekannt');
+  const displayName = peerName || peerUsername || 'Unbekannt';
   // Personal accounts carry an equipped frame from their owner wallet's
   // users row; orgs never do.
   const frameUrl = peerAccountType === 'personal' ? peerEquippedFrameUrl : null;

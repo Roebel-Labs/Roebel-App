@@ -97,9 +97,9 @@ export default function MeckyScreen() {
       {!isEnabled ? (
         <View style={styles.consentEmpty}>
           <Image
-            source={require('@/assets/games/mecky/mecky_main.png')}
-            style={styles.emptyAvatar}
-            contentFit="cover"
+            source={require('@/assets/illustration/mecky/welcome.png')}
+            style={styles.emptyHero}
+            contentFit="contain"
           />
           <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
             Mecky braucht deine Zustimmung
@@ -145,9 +145,9 @@ export default function MeckyScreen() {
             ListEmptyComponent={
               <View style={styles.emptyChat}>
                 <Image
-                  source={require('@/assets/games/mecky/mecky_main.png')}
-                  style={styles.emptyAvatar}
-                  contentFit="cover"
+                  source={require('@/assets/illustration/mecky/welcome.png')}
+                  style={styles.emptyHero}
+                  contentFit="contain"
                 />
                 <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                   Hallo! Ich bin Mecky 👋
@@ -232,6 +232,11 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     marginBottom: 8,
+  },
+  emptyHero: {
+    width: 220,
+    height: 220,
+    marginBottom: 4,
   },
   emptyTitle: {
     fontSize: 20,

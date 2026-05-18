@@ -64,6 +64,7 @@ export default function NewConversationScreen() {
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<AccountSearchScope>('all');
   const [isOpening, setIsOpening] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const autoTriggered = useRef(false);
 
   const { results, isLoading, hasQuery } = useAccountSearch(
@@ -76,10 +77,14 @@ export default function NewConversationScreen() {
     if (!activeAccount?.id) return;
     if (isOpening) return;
     setIsOpening(peerAccountId);
+    setErrorMessage(null);
     Keyboard.dismiss();
     try {
       const convo = await findOrCreateConversation(activeAccount.id, peerAccountId);
-      if (!convo) return;
+      if (!convo) {
+        setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
+        return;
+      }
 
       // Marketplace inquiry auto-send (deep-link path)
       if (listingId && listingTitle) {
@@ -98,6 +103,7 @@ export default function NewConversationScreen() {
       router.replace(`/messages/${convo.id}` as any);
     } catch (err) {
       console.error('Failed to start conversation:', err);
+      setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
     } finally {
       setIsOpening(null);
     }
@@ -159,7 +165,10 @@ export default function NewConversationScreen() {
           <SearchIcon size={18} color={colors.textTertiary} />
           <TextInput
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(t) => {
+              setQuery(t);
+              if (errorMessage) setErrorMessage(null);
+            }}
             placeholder="Personen oder Organisationen suchen"
             placeholderTextColor={colors.textTertiary}
             style={[styles.input, { color: colors.textPrimary }]}
@@ -183,6 +192,14 @@ export default function NewConversationScreen() {
           />
         </View>
       </View>
+
+      {errorMessage && (
+        <View style={[styles.errorBanner, { backgroundColor: colors.errorBackground }]}>
+          <Text style={[styles.errorText, { color: colors.error }]}>
+            {errorMessage}
+          </Text>
+        </View>
+      )}
 
       {showInitialHint && (
         <View style={styles.emptyState}>
@@ -299,5 +316,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  errorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
 });

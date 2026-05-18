@@ -15,7 +15,6 @@ import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
-import AccountChip from '@/components/messages/AccountChip';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -78,10 +77,7 @@ export default function MessagesScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <View style={styles.titleBlock}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Nachrichten</Text>
-          {isConnected && <AccountChip />}
-        </View>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Nachrichten</Text>
         {isConnected ? (
           <Pressable
             onPress={() => router.push('/messages/new' as any)}
@@ -175,13 +171,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'flex-start',
-  },
-  titleBlock: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
   },
   headerTitle: {
     fontSize: 18,
