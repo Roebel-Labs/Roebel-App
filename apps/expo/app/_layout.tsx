@@ -239,6 +239,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/revoke-membership" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
         </TransitionStack>
       </View>
