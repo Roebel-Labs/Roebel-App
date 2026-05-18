@@ -25,6 +25,7 @@ type Props = {
   walletAddress: string;
   onCreated: () => void;
   onFocusChange?: (focused: boolean) => void;
+  autoFocus?: boolean;
 };
 
 export default function ExperienceInput({
@@ -32,6 +33,7 @@ export default function ExperienceInput({
   walletAddress,
   onCreated,
   onFocusChange,
+  autoFocus,
 }: Props) {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
@@ -124,6 +126,7 @@ export default function ExperienceInput({
             onBlur={handleBlur}
             maxLength={MAX_CONTENT_LENGTH}
             multiline
+            autoFocus={autoFocus}
           />
           {showImageIcon && (
             <Pressable

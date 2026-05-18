@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useImperativeHandle, forwardRef, RefObject } from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet, ScrollView, Image } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fetchEventExperiences, deleteExperience } from '@/lib/supabase-experiences';
 import ExperienceItem from './ExperienceItem';
+import ImageIcon from '@/assets/icons/image-01.svg';
 import type { EventExperience } from '@/lib/types/feed';
 
 const MAX_HIGHLIGHT_PAGES = 5;
@@ -14,6 +15,8 @@ type Props = {
   highlightExperienceId?: string;
   /** Parent ScrollView ref so the highlighted item can scroll itself into view */
   scrollViewRef?: RefObject<ScrollView | null>;
+  /** Called when the user taps the in-section composer trigger */
+  onOpenComposer?: () => void;
 };
 
 export type ExperienceSectionHandle = {
@@ -21,7 +24,7 @@ export type ExperienceSectionHandle = {
 };
 
 const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function ExperienceSection(
-  { eventId, highlightExperienceId, scrollViewRef },
+  { eventId, highlightExperienceId, scrollViewRef, onOpenComposer },
   ref,
 ) {
   const { colors } = useTheme();
@@ -102,6 +105,30 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
         </View>
       </View>
 
+      {/* In-section composer trigger */}
+      {user && onOpenComposer && (
+        <Pressable
+          onPress={onOpenComposer}
+          style={[styles.trigger, { backgroundColor: colors.surfaceSecondary }]}
+          accessibilityRole="button"
+          accessibilityLabel="Erlebnis teilen"
+        >
+          {user.profile_picture_url ? (
+            <Image source={{ uri: user.profile_picture_url }} style={styles.triggerAvatar} />
+          ) : (
+            <View style={[styles.triggerAvatarFallback, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.triggerAvatarText, { color: colors.primary }]}>
+                {(user.username || '?').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text style={[styles.triggerPlaceholder, { color: colors.textTertiary }]}>
+            Teile dein Erlebnis...
+          </Text>
+          <ImageIcon width={20} height={20} color={colors.textTertiary} />
+        </Pressable>
+      )}
+
       {/* Loading State */}
       {loading && (
         <View style={styles.loadingContainer}>
@@ -179,6 +206,35 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+  },
+  trigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  triggerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  triggerAvatarFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  triggerAvatarText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  triggerPlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
   loadingContainer: {
     paddingVertical: 24,

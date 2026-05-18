@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Platform, Dimensions, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
@@ -18,8 +18,7 @@ import { useUser } from '@/context/UserContext';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { SvgXml } from 'react-native-svg';
 import ExperienceSection, { type ExperienceSectionHandle } from '@/components/events/ExperienceSection';
-import ExperienceInput from '@/components/events/ExperienceInput';
-import CommentScrim from '@/components/feed/CommentScrim';
+import ExperienceComposerModal from '@/components/events/ExperienceComposerModal';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
 import MeckyNotFound from '@/components/MeckyNotFound';
@@ -57,7 +56,7 @@ export default function EventDetails() {
   const [publisherAccount, setPublisherAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
-  const [composerFocused, setComposerFocused] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const { showSnackbar } = useSnackbar();
   const { user } = useUser();
   const activeAccount = useActiveAccount();
@@ -244,18 +243,12 @@ export default function EventDetails() {
   const end = formatTime(event.end_time);
 
   return (
-    <KeyboardAvoidingView
+    <ScrollView
+      ref={scrollRef}
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.flex}>
-      <ScrollView
-        ref={scrollRef}
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
       <Stack.Screen options={{ headerShown: false }} />
       {event.livestream_active && event.livestream_url ? (
         <View style={[styles.livestreamSection, { backgroundColor: colors.background }]}>
@@ -481,6 +474,7 @@ export default function EventDetails() {
               eventId={id as string}
               highlightExperienceId={experienceId}
               scrollViewRef={scrollRef}
+              onOpenComposer={() => setComposerOpen(true)}
             />
 
             {/* More Events Section */}
@@ -511,21 +505,17 @@ export default function EventDetails() {
           onClose={() => setImageZoomVisible(false)}
         />
       )}
-      </ScrollView>
-        <CommentScrim visible={composerFocused} />
-      </View>
 
       {user && (
-        <View style={styles.inputContainer}>
-          <ExperienceInput
-            eventId={id as string}
-            walletAddress={user.wallet_address}
-            onCreated={() => experienceSectionRef.current?.refresh()}
-            onFocusChange={setComposerFocused}
-          />
-        </View>
+        <ExperienceComposerModal
+          visible={composerOpen}
+          eventId={id as string}
+          walletAddress={user.wallet_address}
+          onClose={() => setComposerOpen(false)}
+          onCreated={() => experienceSectionRef.current?.refresh()}
+        />
       )}
-    </KeyboardAvoidingView>
+    </ScrollView>
   );
 }
 
@@ -589,13 +579,6 @@ function CompactEventCard({ event }: { event: EventRecord }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  inputContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   scrollContent: {
     paddingBottom: 40,

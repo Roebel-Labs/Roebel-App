@@ -347,21 +347,21 @@ export default function PostDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={goBack} style={styles.backButton}>
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Beitrag</Text>
-        <View style={styles.backButton} />
-      </View>
-
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
         keyboardVerticalOffset={0}
       >
         <View style={styles.flex}>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={goBack} style={styles.backButton}>
+              <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Beitrag</Text>
+            <View style={styles.backButton} />
+          </View>
+
           {/* Comments list with post as header */}
           <FlatList
             data={comments}
