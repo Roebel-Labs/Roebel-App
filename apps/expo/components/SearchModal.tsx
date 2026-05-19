@@ -5,6 +5,7 @@ import {
   TextInput,
   StyleSheet,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   ActivityIndicator,
@@ -127,23 +128,9 @@ export default function SearchModal({ visible, onClose }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults>(EMPTY_RESULTS);
   const [isSearching, setIsSearching] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
 
   const debouncedQuery = useDebounced(searchQuery, 300);
-
-  useEffect(() => {
-    if (visible) {
-      loadRecentSearches();
-      // autoFocus inside a React Native Modal is unreliable on iOS (the
-      // keyboard often doesn't pop). Wait one frame after the modal mounts
-      // and focus imperatively instead.
-      const raf = requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
-      return () => cancelAnimationFrame(raf);
-    }
-  }, [visible]);
 
   useEffect(() => {
     if (debouncedQuery.trim()) {
@@ -153,10 +140,6 @@ export default function SearchModal({ visible, onClose }: Props) {
       setIsSearching(false);
     }
   }, [debouncedQuery]);
-
-  const loadRecentSearches = async () => {
-    // In-memory recent searches
-  };
 
   const performSearch = async (query: string) => {
     setIsSearching(true);
@@ -246,10 +229,6 @@ export default function SearchModal({ visible, onClose }: Props) {
 
       const totalCount = Object.values(results).reduce((sum, arr) => sum + arr.length, 0);
       logSearch(query, totalCount);
-
-      if (!recentSearches.includes(query)) {
-        setRecentSearches((prev) => [query, ...prev.slice(0, 4)]);
-      }
     } catch (error) {
       console.error('Search failed:', error);
       setSearchResults(EMPTY_RESULTS);
@@ -264,10 +243,6 @@ export default function SearchModal({ visible, onClose }: Props) {
     setIsSearching(false);
   };
 
-  const handleRecentSearchPress = (query: string) => {
-    setSearchQuery(query);
-  };
-
   const handleClose = () => {
     clearSearch();
     onClose();
@@ -280,7 +255,6 @@ export default function SearchModal({ visible, onClose }: Props) {
 
   const totalResults = Object.values(searchResults).reduce((sum, arr) => sum + arr.length, 0);
   const showResults = searchQuery.trim() !== '';
-  const showRecentSearches = !showResults && recentSearches.length > 0;
 
   const renderResultSection = (key: keyof SearchResults, label: string) => {
     const items = searchResults[key];
@@ -324,7 +298,11 @@ export default function SearchModal({ visible, onClose }: Props) {
                 index={i}
                 onPress={() => {
                   handleClose();
-                  router.push(`/account/${acc.id}` as any);
+                  if (acc.accountType === 'organisation') {
+                    router.push({ pathname: '/account/[id]' as any, params: { id: acc.id } });
+                  } else if (acc.username) {
+                    router.push({ pathname: '/user/[username]', params: { username: acc.username } });
+                  }
                 }}
               />
             ))}
@@ -357,6 +335,13 @@ export default function SearchModal({ visible, onClose }: Props) {
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
+      onShow={() => {
+        if (Platform.OS === 'ios') {
+          inputRef.current?.focus();
+        } else {
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }
+      }}
     >
       <SafeAreaView
         edges={['top']}
@@ -394,23 +379,6 @@ export default function SearchModal({ visible, onClose }: Props) {
 
         {/* Content */}
         <ScrollView style={styles.content} keyboardDismissMode="on-drag">
-          {/* Recent Searches */}
-          {showRecentSearches && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Letzte Suchen</Text>
-              {recentSearches.map((query, index) => (
-                <Pressable
-                  key={index}
-                  style={styles.recentItem}
-                  onPress={() => handleRecentSearchPress(query)}
-                >
-                  <SearchIcon size={20} color={colors.textTertiary} />
-                  <Text style={[styles.recentText, { color: colors.textPrimary }]}>{query}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
           {/* Loading State */}
           {isSearching && (
             <View style={styles.loadingContainer}>
@@ -443,7 +411,7 @@ export default function SearchModal({ visible, onClose }: Props) {
           )}
 
           {/* Suggestions — shown when no query */}
-          {!showResults && !showRecentSearches && (
+          {!showResults && (
             <View style={styles.sectionsWrapper}>
               {APP_SECTIONS.map((section) => (
                 <View key={section.title} style={styles.appSection}>
@@ -538,17 +506,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     marginBottom: 16,
-  },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    gap: 12,
-  },
-  recentText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
   },
   loadingContainer: {
     alignItems: 'center',

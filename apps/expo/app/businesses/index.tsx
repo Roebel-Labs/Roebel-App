@@ -1,34 +1,28 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { fetchBusinesses } from '@/lib/supabase-businesses';
-import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
-import BusinessCardCompact from '@/components/BusinessCardCompact';
+import { fetchOrgAccountsBySubType } from '@/lib/supabase-accounts';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import CheckIcon from '@/assets/icons/check.svg';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import type { BusinessRecord } from '@/lib/types';
-
-const FILTER_OPTIONS: { key: string; label: string }[] = [
-  { key: 'all', label: 'Alle' },
-  ...Object.entries(BUSINESS_CATEGORY_LABELS).map(([key, label]) => ({ key, label })),
-];
+import type { Account } from '@/lib/types';
 
 export default function BusinessesListScreen() {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('all');
 
   const fetchData = async () => {
     try {
-      const data = await fetchBusinesses();
-      setBusinesses(data);
+      const data = await fetchOrgAccountsBySubType('unternehmen');
+      setAccounts(data);
     } catch (error) {
-      console.error('Error fetching businesses:', error);
+      console.error('Error fetching org accounts:', error);
     } finally {
       setLoading(false);
     }
@@ -44,22 +38,51 @@ export default function BusinessesListScreen() {
     setRefreshing(false);
   };
 
-  const filteredBusinesses = useMemo(() => {
-    let list = [...businesses];
-    if (selectedFilter !== 'all') {
-      list = list.filter((b) => b.category === selectedFilter);
-    }
-    // Featured first, then alphabetical
-    return list.sort((a, b) => {
-      if (a.is_featured && !b.is_featured) return -1;
-      if (!a.is_featured && b.is_featured) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [businesses, selectedFilter]);
+  const renderRow = ({ item }: { item: Account }) => (
+    <Pressable
+      onPress={() =>
+        router.push({ pathname: '/account/[id]' as any, params: { id: item.id } })
+      }
+      style={({ pressed }) => [
+        styles.row,
+        { borderBottomColor: colors.border },
+        pressed && { backgroundColor: colors.pressedOverlay },
+      ]}
+    >
+      <UserAvatarWithFrame
+        size={44}
+        uri={item.avatar_url}
+        fallbackInitial={(item.name[0] || '?').toUpperCase()}
+        frameAssetUrl={null}
+      />
+      <View style={styles.rowBody}>
+        <View style={styles.nameRow}>
+          <Text
+            style={[styles.name, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          {item.is_verified && (
+            <View style={[styles.verifiedBadge, { backgroundColor: colors.primary }]}>
+              <CheckIcon width={10} height={10} color={colors.onPrimary} />
+            </View>
+          )}
+        </View>
+        {item.slug && (
+          <Text
+            style={[styles.subtitle, { color: colors.textSecondary }]}
+            numberOfLines={1}
+          >
+            @{item.slug}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
@@ -68,45 +91,14 @@ export default function BusinessesListScreen() {
         <View style={styles.backButton} />
       </View>
 
-      {/* Filter Chips */}
-      <FlatList
-        horizontal
-        data={FILTER_OPTIONS}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setSelectedFilter(item.key)}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: selectedFilter === item.key ? colors.primary : colors.surfaceSecondary,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                { color: selectedFilter === item.key ? colors.onPrimary : colors.textPrimary },
-              ]}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
-        )}
-        keyExtractor={(item) => item.key}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-        style={styles.filterList}
-      />
-
-      {/* Content */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
-          data={filteredBusinesses}
-          renderItem={({ item }) => <BusinessCardCompact business={item} compact={false} />}
+          data={accounts}
+          renderItem={renderRow}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -147,25 +139,41 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
   },
-  filterList: {
-    flexGrow: 0,
-  },
-  filterRow: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingBottom: 12,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  filterChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
   listContent: {
     paddingBottom: 32,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rowBody: {
+    flex: 1,
+    gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  name: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    flexShrink: 1,
+  },
+  verifiedBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
   },
   loadingContainer: {
     flex: 1,

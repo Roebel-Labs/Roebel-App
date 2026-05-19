@@ -55,6 +55,21 @@ export async function fetchAccountById(accountId: string): Promise<Account | nul
   return data as Account;
 }
 
+export async function fetchOrgAccountsBySubType(subType: OrgSubType): Promise<Account[]> {
+  const { data, error } = await supabase
+    .from('accounts' as any)
+    .select('*')
+    .eq('account_type', 'organisation')
+    .eq('sub_type', subType)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('fetchOrgAccountsBySubType error:', error);
+    return [];
+  }
+  return (data as Account[]) ?? [];
+}
+
 export async function fetchOwnedAccounts(walletAddress: string): Promise<Account[]> {
   const { data, error } = await supabase
     .from('account_owners' as any)
