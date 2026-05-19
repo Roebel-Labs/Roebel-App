@@ -135,6 +135,23 @@ export default function VerificationDashboard() {
                       </div>
                     </Link>
                   )}
+
+                  {(isAttester || isCitizen) && (
+                    <Link
+                      href="/verifizierung/widerrufen"
+                      className="flex flex-col p-4 sm:p-6 border-2 border-red-200 rounded-lg hover:border-red-500 hover:shadow-md transition-all group active:scale-95"
+                    >
+                      <h3 className="text-base sm:text-lg font-medium text-foreground mb-2 group-hover:text-red-700 transition-colors">
+                        Mitgliedschaft entziehen
+                      </h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground flex-1">
+                        Beantrage die Entziehung deiner eigenen Rolle oder eines anderen Mitglieds
+                      </p>
+                      <div className="mt-3 sm:mt-4 text-xs sm:text-sm font-medium text-red-700">
+                        Antrag stellen
+                      </div>
+                    </Link>
+                  )}
                 </div>
               </div>
 
