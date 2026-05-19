@@ -2,12 +2,14 @@ import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
+const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/verifizierung/widerrufen';
 
 type SectionProps = {
   title: string;
@@ -114,17 +116,19 @@ export default function SettingsScreen() {
           <Section title="MITGLIEDSCHAFT" colors={colors}>
             <Pressable
               style={styles.themeOptionRow}
-              onPress={() => router.push('/revoke-membership' as any)}
+              onPress={() => {
+                openBrowserAsync(REVOKE_MEMBERSHIP_URL).catch(() => {});
+              }}
             >
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
                   Mitgliedschaft verwalten
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
-                  Entziehung der eigenen Rolle oder eines anderen Mitglieds beantragen.
+                  Entziehung im Browser beantragen — eigene Rolle oder anderes Mitglied.
                 </Text>
               </View>
-              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>↗</Text>
             </Pressable>
           </Section>
         ) : null}
