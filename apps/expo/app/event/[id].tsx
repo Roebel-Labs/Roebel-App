@@ -513,6 +513,7 @@ export default function EventDetails() {
           walletAddress={user.wallet_address}
           onClose={() => setComposerOpen(false)}
           onCreated={(created) => experienceSectionRef.current?.prepend(created)}
+          onError={(message) => showSnackbar({ message, duration: 4000 })}
         />
       )}
     </ScrollView>

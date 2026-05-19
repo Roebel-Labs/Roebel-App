@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  BackHandler,
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -18,6 +19,7 @@ type Props = {
   walletAddress: string;
   onClose: () => void;
   onCreated: (created: EventExperience) => void;
+  onError?: (message: string) => void;
 };
 
 export default function ExperienceComposerModal({
@@ -26,31 +28,23 @@ export default function ExperienceComposerModal({
   walletAddress,
   onClose,
   onCreated,
+  onError,
 }: Props) {
   const { colors } = useTheme();
-  const onCloseRef = useRef(onClose);
   const inputRef = useRef<ExperienceInputHandle>(null);
-  const skipNextHideRef = useRef(false);
-  const isSubmittingRef = useRef(false);
 
+  // Android: single hardware-back press should dismiss the overlay (and any
+  // open keyboard) rather than the system's default "first hide keyboard,
+  // then close modal on next press".
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!visible) return;
-    const sub = Keyboard.addListener('keyboardDidHide', () => {
-      if (skipNextHideRef.current) {
-        skipNextHideRef.current = false;
-        return;
-      }
-      if (isSubmittingRef.current) {
-        return;
-      }
-      onCloseRef.current();
+    if (!visible || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      Keyboard.dismiss();
+      onClose();
+      return true;
     });
     return () => sub.remove();
-  }, [visible]);
+  }, [visible, onClose]);
 
   const handleScrimPress = () => {
     Keyboard.dismiss();
@@ -85,12 +79,7 @@ export default function ExperienceComposerModal({
             ref={inputRef}
             eventId={eventId}
             walletAddress={walletAddress}
-            onImagePickStart={() => {
-              skipNextHideRef.current = true;
-            }}
-            onSubmitStateChange={(submitting) => {
-              isSubmittingRef.current = submitting;
-            }}
+            onError={onError}
             onCreated={(created) => {
               onCreated(created);
               onClose();

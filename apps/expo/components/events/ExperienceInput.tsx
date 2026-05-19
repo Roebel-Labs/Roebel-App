@@ -20,6 +20,7 @@ import SendIcon from '@/assets/icons/sent.svg';
 import ImageIcon from '@/assets/icons/image-01.svg';
 
 const MAX_CONTENT_LENGTH = 500;
+const GENERIC_ERROR = 'Erlebnis konnte nicht gepostet werden';
 
 export type ExperienceInputHandle = {
   focus: () => void;
@@ -30,12 +31,7 @@ type Props = {
   walletAddress: string;
   onCreated: (created: EventExperience) => void;
   onFocusChange?: (focused: boolean) => void;
-  /** Called right before launching the native image picker so the parent can
-   *  ignore the keyboard-hide event that follows. */
-  onImagePickStart?: () => void;
-  /** Called when submission begins (true) and ends (false) so the parent can
-   *  suppress overlay-close logic that races with submission. */
-  onSubmitStateChange?: (submitting: boolean) => void;
+  onError?: (message: string) => void;
 };
 
 const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function ExperienceInput(
@@ -44,8 +40,7 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
     walletAddress,
     onCreated,
     onFocusChange,
-    onImagePickStart,
-    onSubmitStateChange,
+    onError,
   },
   ref,
 ) {
@@ -78,7 +73,6 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
   };
 
   const handlePickImage = async () => {
-    onImagePickStart?.();
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -101,7 +95,6 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setIsSubmitting(true);
-    onSubmitStateChange?.(true);
     try {
       const created = await createExperience({
         event_id: eventId,
@@ -115,10 +108,14 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
         setImageUrl(null);
         Keyboard.dismiss();
         onCreated(created);
+      } else {
+        onError?.(GENERIC_ERROR);
       }
+    } catch (err) {
+      console.error('Error submitting experience:', err);
+      onError?.(GENERIC_ERROR);
     } finally {
       setIsSubmitting(false);
-      onSubmitStateChange?.(false);
     }
   };
 
@@ -169,6 +166,7 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
         <Pressable
           onPress={handleSubmit}
           disabled={!canSubmit}
+          hitSlop={8}
           style={[
             styles.sendButton,
             { backgroundColor: canSubmit ? colors.primary : colors.disabled },
