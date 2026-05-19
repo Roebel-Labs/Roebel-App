@@ -2,15 +2,26 @@
 
 import { ContactCard } from "./ContactCard";
 import { EmptyState } from "./EmptyState";
-import { getUserByWalletAddress } from "@/lib/supabase-users";
-import { useState, useEffect } from "react";
 import type { ConversationWithMeta } from "@/lib/messaging/types";
 
 interface ConversationListProps {
   conversations: ConversationWithMeta[];
   isLoading: boolean;
-  onSelectConversation: (conversationId: string, peerAddress: string) => void;
+  onSelectConversation: (conversationId: string, peerAccountId: string) => void;
   selectedConversationId: string | null;
+}
+
+function previewFor(message: string | null): string | null {
+  if (!message) return null;
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed?.type === "product_inquiry" && parsed.title) {
+      return `📦 ${parsed.title}`;
+    }
+  } catch {
+    // not JSON
+  }
+  return message;
 }
 
 export function ConversationList({
@@ -19,45 +30,6 @@ export function ConversationList({
   onSelectConversation,
   selectedConversationId,
 }: ConversationListProps) {
-  const [peerNames, setPeerNames] = useState<
-    Record<string, { name: string; picture: string | null }>
-  >({});
-
-  // Resolve peer addresses to names from Supabase
-  useEffect(() => {
-    async function resolvePeerNames() {
-      const newNames: Record<
-        string,
-        { name: string; picture: string | null }
-      > = {};
-
-      for (const convo of conversations) {
-        if (convo.peerAddress && !peerNames[convo.peerAddress]) {
-          try {
-            const result = await getUserByWalletAddress(convo.peerAddress);
-            if (result.success && result.data) {
-              newNames[convo.peerAddress] = {
-                name: result.data.username || "",
-                picture: result.data.profile_picture_url,
-              };
-            }
-          } catch {
-            // Ignore
-          }
-        }
-      }
-
-      if (Object.keys(newNames).length > 0) {
-        setPeerNames((prev) => ({ ...prev, ...newNames }));
-      }
-    }
-
-    if (conversations.length > 0) {
-      resolvePeerNames();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations]);
-
   if (isLoading) {
     return (
       <div className="space-y-2 p-3">
@@ -86,36 +58,24 @@ export function ConversationList({
 
   return (
     <div className="divide-y divide-border">
-      {conversations.map((convo) => {
-        const peer = peerNames[convo.peerAddress];
-        // Format product inquiry messages for preview
-        let previewMessage = convo.lastMessage;
-        if (previewMessage) {
-          try {
-            const parsed = JSON.parse(previewMessage);
-            if (parsed?.type === "product_inquiry" && parsed.title) {
-              previewMessage = `📦 ${parsed.title}`;
-            }
-          } catch {
-            // Not JSON, use as-is
+      {conversations.map((convo) => (
+        <ContactCard
+          key={convo.conversation.id}
+          name={convo.peer?.name || "Unbekannt"}
+          profilePictureUrl={convo.peer?.avatarUrl ?? null}
+          fallbackLabel={
+            convo.peer?.username ? `@${convo.peer.username}` : null
           }
-        }
-        return (
-          <ContactCard
-            key={convo.conversation.id}
-            name={peer?.name || ""}
-            address={convo.peerAddress}
-            profilePictureUrl={peer?.picture || null}
-            lastMessage={previewMessage}
-            lastMessageTime={convo.lastMessageTime}
-            unreadCount={convo.unreadCount}
-            onClick={() =>
-              onSelectConversation(convo.conversation.id, convo.peerAddress)
-            }
-            isSelected={selectedConversationId === convo.conversation.id}
-          />
-        );
-      })}
+          lastMessage={previewFor(convo.lastMessage)}
+          lastMessageTime={convo.lastMessageTime}
+          unreadCount={convo.unreadCount}
+          isCitizen={convo.peer?.isVerified}
+          onClick={() =>
+            onSelectConversation(convo.conversation.id, convo.peerAccountId)
+          }
+          isSelected={selectedConversationId === convo.conversation.id}
+        />
+      ))}
     </div>
   );
 }

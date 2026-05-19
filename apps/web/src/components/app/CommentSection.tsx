@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/client";
 import { uploadResumable } from "@/lib/storage/resumable-upload";
 import { PostMediaGrid } from "@/components/app/PostMediaGrid";
 import { VideoPlayer } from "@/components/app/VideoPlayer";
+import { useAccount } from "@/lib/context/AccountContext";
+import { isOrgAccount, ACCOUNT_TYPE_LABELS } from "@/types/account";
 import type { PostComment } from "@/types/post";
 import { Send, ImagePlus, Video, X } from "lucide-react";
 import { toast } from "sonner";
@@ -154,6 +156,8 @@ export function CommentSection({
 }: CommentSectionProps) {
   const account = useActiveAccount();
   const { isVerified } = useVerificationStatus();
+  const { activeAccount } = useAccount();
+  const isCommentingAsOrg = activeAccount ? isOrgAccount(activeAccount) : false;
   const [comments, setComments] = useState<PostComment[]>([]);
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [isLoading, setIsLoading] = useState(false);
@@ -280,18 +284,23 @@ export function CommentSection({
         }
       }
 
-      // Optimistic comment
+      // Optimistic comment — reflect the active account's identity when
+      // commenting as an org, so the optimistic render matches what the
+      // server will persist.
       const optimisticComment: PostComment = {
         id: `temp-${Date.now()}`,
         post_id: postId,
         wallet_address: account.address,
+        account_id: activeAccount?.id ?? null,
         content,
         media_urls: imagePreviews,
         video_url: videoPreview,
         status: "published",
         created_at: new Date().toISOString(),
-        author_username: null,
-        author_profile_picture_url: null,
+        author_username: isCommentingAsOrg ? activeAccount?.name ?? null : null,
+        author_profile_picture_url: isCommentingAsOrg
+          ? activeAccount?.avatar_url ?? null
+          : null,
       };
 
       setComments((prev) => [...prev, optimisticComment]);
@@ -303,6 +312,7 @@ export function CommentSection({
         const result = await createComment({
           post_id: postId,
           wallet_address: account.address,
+          account_id: activeAccount?.id,
           content,
           media_urls:
             uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
@@ -363,6 +373,35 @@ export function CommentSection({
       {/* Comment input */}
       {account && isVerified ? (
         <form onSubmit={handleSubmit} className="border-t border-border">
+          {/* Active-account context — only when commenting as an org */}
+          {isCommentingAsOrg && activeAccount && (
+            <div className="flex items-center gap-2 px-4 pt-2 pb-1">
+              <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {activeAccount.avatar_url ? (
+                  <Image
+                    src={activeAccount.avatar_url}
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="object-cover w-full h-full"
+                  />
+                ) : (
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {activeAccount.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-medium text-foreground">
+                  {activeAccount.name}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Kommentiert als {ACCOUNT_TYPE_LABELS[activeAccount.account_type]}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Media previews */}
           {hasMedia && (
             <div className="px-4 pt-2 flex gap-2 flex-wrap">

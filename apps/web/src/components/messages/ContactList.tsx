@@ -8,17 +8,16 @@ import { getOrCreateConversation } from "@/lib/messaging/api";
 import { useState, useEffect, useRef } from "react";
 
 interface ContactListProps {
-  onSelectConversation: (conversationId: string, peerAddress: string) => void;
+  onSelectConversation: (conversationId: string, peerAccountId: string) => void;
 }
 
 export function ContactList({ onSelectConversation }: ContactListProps) {
   const { contacts, isLoading } = useContacts();
-  const { walletAddress } = useMessagingContext();
+  const { activeAccountId } = useMessagingContext();
   const [startingChat, setStartingChat] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-clear error after 4 seconds
   useEffect(() => {
     if (!error) return;
     errorTimerRef.current = setTimeout(() => setError(null), 4000);
@@ -27,14 +26,17 @@ export function ContactList({ onSelectConversation }: ContactListProps) {
     };
   }, [error]);
 
-  const handleStartChat = async (contactAddress: string) => {
-    if (!walletAddress || startingChat) return;
+  const handleStartChat = async (peerAccountId: string) => {
+    if (!activeAccountId || startingChat) return;
 
-    setStartingChat(contactAddress);
+    setStartingChat(peerAccountId);
     setError(null);
     try {
-      const conversation = await getOrCreateConversation(walletAddress, contactAddress);
-      onSelectConversation(conversation.id, contactAddress);
+      const conversation = await getOrCreateConversation(
+        activeAccountId,
+        peerAccountId
+      );
+      onSelectConversation(conversation.id, peerAccountId);
     } catch (err) {
       console.error("Error starting chat:", err);
       setError("Chat konnte nicht gestartet werden");
@@ -77,22 +79,22 @@ export function ContactList({ onSelectConversation }: ContactListProps) {
         </div>
       )}
       <div className="divide-y divide-border">
-      {contacts.map((contact) => (
-        <div key={contact.walletAddress} className="relative">
-          <ContactCard
-            name={contact.username || ""}
-            address={contact.walletAddress}
-            profilePictureUrl={contact.profilePictureUrl}
-            isCitizen={contact.isCitizen}
-            onClick={() => handleStartChat(contact.walletAddress)}
-          />
-          {startingChat === contact.walletAddress && (
-            <div className="absolute inset-0 bg-card/80 flex items-center justify-center rounded-lg">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900" />
-            </div>
-          )}
-        </div>
-      ))}
+        {contacts.map((contact) => (
+          <div key={contact.accountId} className="relative">
+            <ContactCard
+              name={contact.name}
+              profilePictureUrl={contact.profilePictureUrl}
+              fallbackLabel={contact.isCitizen ? "Bürger" : "Mitglied"}
+              isCitizen={contact.isCitizen}
+              onClick={() => handleStartChat(contact.accountId)}
+            />
+            {startingChat === contact.accountId && (
+              <div className="absolute inset-0 bg-card/80 flex items-center justify-center rounded-lg">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900" />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

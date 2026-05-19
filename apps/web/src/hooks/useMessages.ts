@@ -11,13 +11,16 @@ import { supabase } from "@/lib/supabase";
 import type { Message } from "@/lib/messaging/types";
 
 export function useMessages(conversationId: string | null) {
-  const { walletAddress } = useMessagingContext();
+  const { activeAccountId } = useMessagingContext();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load messages
+  // Load messages whenever the conversation OR active account changes.
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
 
     let cancelled = false;
 
@@ -37,9 +40,9 @@ export function useMessages(conversationId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, activeAccountId]);
 
-  // Subscribe to Realtime for new messages in this conversation
+  // Subscribe to Realtime for new messages in this conversation.
   useEffect(() => {
     if (!conversationId) return;
 
@@ -68,20 +71,19 @@ export function useMessages(conversationId: string | null) {
     };
   }, [conversationId]);
 
-  // Mark as read when messages change
+  // Mark as read for the ACTIVE account when messages change.
   useEffect(() => {
-    if (messages.length > 0 && conversationId && walletAddress) {
-      markConversationRead(conversationId, walletAddress);
+    if (messages.length > 0 && conversationId && activeAccountId) {
+      markConversationRead(conversationId, activeAccountId);
     }
-  }, [messages, conversationId, walletAddress]);
+  }, [messages, conversationId, activeAccountId]);
 
-  // Send a text message
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!conversationId || !walletAddress || !text.trim()) return;
-      await apiSendMessage(conversationId, walletAddress, text.trim());
+      if (!conversationId || !activeAccountId || !text.trim()) return;
+      await apiSendMessage(conversationId, activeAccountId, text.trim());
     },
-    [conversationId, walletAddress]
+    [conversationId, activeAccountId]
   );
 
   return { messages, isLoading, sendMessage };

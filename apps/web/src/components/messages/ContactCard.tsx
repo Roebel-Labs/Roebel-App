@@ -1,11 +1,9 @@
 "use client";
 
-import { formatWalletAddress } from "@/lib/user-types";
-
 interface ContactCardProps {
   name: string;
-  address: string;
   profilePictureUrl: string | null;
+  fallbackLabel?: string | null;
   lastMessage?: string | null;
   lastMessageTime?: Date | null;
   isCitizen?: boolean;
@@ -16,8 +14,8 @@ interface ContactCardProps {
 
 export function ContactCard({
   name,
-  address,
   profilePictureUrl,
+  fallbackLabel,
   lastMessage,
   lastMessageTime,
   isCitizen,
@@ -25,9 +23,8 @@ export function ContactCard({
   onClick,
   isSelected,
 }: ContactCardProps) {
-  const initials = name
-    ? name.slice(0, 2).toUpperCase()
-    : address.slice(2, 4).toUpperCase();
+  const displayName = name || fallbackLabel || "Unbekannt";
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   const timeLabel = lastMessageTime
     ? formatMessageTime(lastMessageTime)
@@ -37,17 +34,14 @@ export function ContactCard({
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 p-3 text-left transition-colors rounded-lg ${
-        isSelected
-          ? "bg-muted"
-          : "hover:bg-accent active:bg-muted"
+        isSelected ? "bg-muted" : "hover:bg-accent active:bg-muted"
       }`}
     >
-      {/* Avatar */}
       <div className="relative flex-shrink-0">
         {profilePictureUrl ? (
           <img
             src={profilePictureUrl}
-            alt={name}
+            alt={displayName}
             className="w-10 h-10 rounded-full object-cover"
           />
         ) : (
@@ -57,17 +51,15 @@ export function ContactCard({
             </span>
           </div>
         )}
-        {/* Citizen indicator */}
         {isCitizen && (
           <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" />
         )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-foreground truncate">
-            {name || formatWalletAddress(address)}
+            {displayName}
           </span>
           {timeLabel && (
             <span className="text-[11px] text-muted-foreground flex-shrink-0">
@@ -80,11 +72,11 @@ export function ContactCard({
             <span className="text-xs text-muted-foreground truncate">
               {lastMessage}
             </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {formatWalletAddress(address)}
+          ) : fallbackLabel ? (
+            <span className="text-xs text-muted-foreground truncate">
+              {fallbackLabel}
             </span>
-          )}
+          ) : null}
           {unreadCount && unreadCount > 0 ? (
             <span className="flex-shrink-0 bg-foreground text-white text-[10px] font-medium rounded-full w-5 h-5 flex items-center justify-center">
               {unreadCount > 9 ? "9+" : unreadCount}

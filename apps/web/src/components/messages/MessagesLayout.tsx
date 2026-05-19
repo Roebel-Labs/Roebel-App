@@ -7,7 +7,11 @@ import { ConversationList } from "./ConversationList";
 import { ContactList } from "./ContactList";
 import { ChatView } from "./ChatView";
 import { useConversations } from "@/hooks/useConversations";
-import { getOrCreateConversation, sendMessage } from "@/lib/messaging/api";
+import {
+  findPersonalAccountIdByWallet,
+  getOrCreateConversation,
+  sendMessage,
+} from "@/lib/messaging/api";
 import { getListingById } from "@/app/actions/marketplace";
 import { getConditionLabel } from "@/types/marketplace";
 import Link from "next/link";
@@ -15,33 +19,59 @@ import Link from "next/link";
 type Tab = "chats" | "contacts";
 
 interface MessagesLayoutProps {
+  /**
+   * Deep-link target. Accepts either an account_id (uuid) or a wallet address.
+   * If a wallet is provided, we resolve it to the user's personal account id.
+   */
   initialTo?: string | null;
   initialSubject?: string | null;
   initialListingId?: string | null;
 }
 
-export function MessagesLayout({ initialTo, initialSubject, initialListingId }: MessagesLayoutProps = {}) {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolvePeerAccountId(value: string): Promise<string | null> {
+  if (UUID_RE.test(value)) return value;
+  if (/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    return await findPersonalAccountIdByWallet(value);
+  }
+  return null;
+}
+
+export function MessagesLayout({
+  initialTo,
+  initialSubject,
+  initialListingId,
+}: MessagesLayoutProps = {}) {
   const account = useActiveAccount();
-  const { walletAddress } = useMessagingContext();
-  const { conversations, isLoading: convosLoading, refetch } = useConversations();
+  const { activeAccountId } = useMessagingContext();
+  const { conversations, isLoading: convosLoading } = useConversations();
   const [activeTab, setActiveTab] = useState<Tab>("chats");
   const [selectedConversation, setSelectedConversation] = useState<{
     id: string;
-    peerAddress: string;
+    peerAccountId: string;
   } | null>(null);
   const [initialMessage, setInitialMessage] = useState<string | null>(null);
   const initiatedRef = useRef(false);
 
-  // Auto-initiate DM when ?to= is provided
   const initiateDm = useCallback(async () => {
-    if (!initialTo || !walletAddress || initiatedRef.current) return;
+    if (!initialTo || !activeAccountId || initiatedRef.current) return;
     initiatedRef.current = true;
 
     try {
-      const conversation = await getOrCreateConversation(walletAddress, initialTo);
-      setSelectedConversation({ id: conversation.id, peerAddress: initialTo });
+      const peerAccountId = await resolvePeerAccountId(initialTo);
+      if (!peerAccountId) {
+        console.warn("Could not resolve peer account for", initialTo);
+        return;
+      }
 
-      // If coming from marketplace, send structured product inquiry
+      const conversation = await getOrCreateConversation(
+        activeAccountId,
+        peerAccountId
+      );
+      setSelectedConversation({ id: conversation.id, peerAccountId });
+
       if (initialListingId) {
         try {
           const result = await getListingById(initialListingId);
@@ -54,9 +84,11 @@ export function MessagesLayout({ initialTo, initialSubject, initialListingId }: 
               price: listing.price,
               priceType: listing.price_type,
               imageUrl: listing.media_urls?.[0] || null,
-              condition: listing.condition ? getConditionLabel(listing.condition) : null,
+              condition: listing.condition
+                ? getConditionLabel(listing.condition)
+                : null,
             });
-            await sendMessage(conversation.id, walletAddress, productMsg);
+            await sendMessage(conversation.id, activeAccountId, productMsg);
           }
         } catch (err) {
           console.error("Error sending product inquiry:", err);
@@ -67,15 +99,22 @@ export function MessagesLayout({ initialTo, initialSubject, initialListingId }: 
     } catch (err) {
       console.error("Error initiating DM:", err);
     }
-  }, [initialTo, initialSubject, initialListingId, walletAddress]);
+  }, [initialTo, initialSubject, initialListingId, activeAccountId]);
 
   useEffect(() => {
-    if (walletAddress && initialTo) {
+    if (activeAccountId && initialTo) {
       initiateDm();
     }
-  }, [walletAddress, initialTo, initiateDm]);
+  }, [activeAccountId, initialTo, initiateDm]);
 
-  // Not connected
+  // Reset any open conversation when the active account changes — viewing an
+  // org's chats and then switching to citizen must not leave the org's open
+  // chat visible.
+  useEffect(() => {
+    setSelectedConversation(null);
+    initiatedRef.current = false;
+  }, [activeAccountId]);
+
   if (!account) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] px-4">
@@ -114,8 +153,8 @@ export function MessagesLayout({ initialTo, initialSubject, initialListingId }: 
     );
   }
 
-  const handleSelectConversation = (id: string, peerAddress: string) => {
-    setSelectedConversation({ id, peerAddress });
+  const handleSelectConversation = (id: string, peerAccountId: string) => {
+    setSelectedConversation({ id, peerAccountId });
   };
 
   const handleBack = () => {
@@ -130,22 +169,18 @@ export function MessagesLayout({ initialTo, initialSubject, initialListingId }: 
   return (
     <div className="h-full flex flex-col bg-card">
       {selectedConversation ? (
-        /* Chat View — replaces the list */
         <ChatView
           conversationId={selectedConversation.id}
-          peerAddress={selectedConversation.peerAddress}
+          peerAccountId={selectedConversation.peerAccountId}
           onBack={handleBack}
           initialMessage={initialMessage}
         />
       ) : (
-        /* Conversation List */
         <>
-          {/* Header */}
           <div className="px-4 py-3 border-b border-border">
             <h1 className="text-lg font-medium text-foreground">Nachrichten</h1>
           </div>
 
-          {/* Tabs */}
           <div className="flex border-b border-border">
             {tabs.map((tab) => (
               <button
@@ -165,7 +200,6 @@ export function MessagesLayout({ initialTo, initialSubject, initialListingId }: 
             ))}
           </div>
 
-          {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
             {activeTab === "chats" && (
               <ConversationList

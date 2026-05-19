@@ -6,6 +6,7 @@ import { AppSidebar } from "./AppSidebar";
 import { AppRightPanel } from "./AppRightPanel";
 import { AppMobileNav } from "./AppMobileNav";
 import { MessageNotificationListener } from "./MessageNotificationListener";
+import { ChatFab } from "@/components/messages/ChatFab";
 import {
   Sheet,
   SheetContent,
@@ -54,6 +55,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Background listener for unread message badges */}
       <MessageNotificationListener />
+
+      {/* Floating chat button + drawer */}
+      <ChatFab />
     </div>
   );
 }

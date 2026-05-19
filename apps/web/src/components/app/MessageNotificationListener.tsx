@@ -7,24 +7,25 @@ import { emitUnreadUpdate } from "@/lib/messaging/unread";
 import { supabase } from "@/lib/supabase";
 
 /**
- * Background listener mounted at AppShell level.
- * Fetches initial unread count and subscribes to Realtime
- * for new incoming messages to keep the badge updated.
+ * Background listener mounted at AppShell level. Fetches initial unread count
+ * for the ACTIVE account and subscribes to Realtime for new incoming messages
+ * to keep the badge updated. Re-subscribes when the user switches account.
  */
 export function MessageNotificationListener() {
-  const { walletAddress } = useMessagingContext();
+  const { activeAccountId } = useMessagingContext();
 
   useEffect(() => {
-    if (!walletAddress) return;
+    if (!activeAccountId) {
+      emitUnreadUpdate(0);
+      return;
+    }
 
-    // Fetch initial unread count
-    fetchUnreadCount(walletAddress).then((count) => {
+    fetchUnreadCount(activeAccountId).then((count) => {
       emitUnreadUpdate(count);
     });
 
-    // Subscribe to new messages via Realtime
     const channel = supabase
-      .channel("notification-listener")
+      .channel(`notification-listener:${activeAccountId}`)
       .on(
         "postgres_changes",
         {
@@ -33,11 +34,9 @@ export function MessageNotificationListener() {
           table: "direct_messages",
         },
         (payload) => {
-          const msg = payload.new as { sender_address: string };
-          // Only increment for messages from others
-          if (msg.sender_address !== walletAddress) {
-            // Re-fetch accurate count from DB
-            fetchUnreadCount(walletAddress).then((count) => {
+          const msg = payload.new as { sender_account_id: string };
+          if (msg.sender_account_id !== activeAccountId) {
+            fetchUnreadCount(activeAccountId).then((count) => {
               emitUnreadUpdate(count);
             });
           }
@@ -48,7 +47,7 @@ export function MessageNotificationListener() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [walletAddress]);
+  }, [activeAccountId]);
 
   return null;
 }

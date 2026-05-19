@@ -6,58 +6,90 @@ import { useMessagingContext } from "./MessagingProvider";
 import { ChatBubble } from "./ChatBubble";
 import { MessageInput } from "./MessageInput";
 import { ProductContextBanner } from "./ProductContextBanner";
-import { getUserByWalletAddress } from "@/lib/supabase-users";
-import { formatWalletAddress } from "@/lib/user-types";
+import { supabase } from "@/lib/supabase";
 
 interface ChatViewProps {
   conversationId: string;
-  peerAddress?: string;
+  peerAccountId?: string | null;
   onBack?: () => void;
   initialMessage?: string | null;
 }
 
+interface PeerAccountInfo {
+  name: string;
+  avatarUrl: string | null;
+  username: string | null;
+}
+
 export function ChatView({
   conversationId,
-  peerAddress,
+  peerAccountId,
   onBack,
   initialMessage,
 }: ChatViewProps) {
-  const { walletAddress } = useMessagingContext();
+  const { activeAccountId } = useMessagingContext();
   const { messages, isLoading, sendMessage } = useMessages(conversationId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [peerInfo, setPeerInfo] = useState<{
-    name: string;
-    picture: string | null;
-  } | null>(null);
+  const [peerInfo, setPeerInfo] = useState<PeerAccountInfo | null>(null);
 
-  // Resolve peer info
+  // Resolve peer info from the accounts table (+users for username/picture).
   useEffect(() => {
-    async function loadPeerInfo() {
-      if (!peerAddress) return;
+    let cancelled = false;
+    async function load() {
+      if (!peerAccountId) return;
       try {
-        const result = await getUserByWalletAddress(peerAddress);
-        if (result.success && result.data) {
-          setPeerInfo({
-            name: result.data.username || formatWalletAddress(peerAddress),
-            picture: result.data.profile_picture_url,
-          });
-        } else {
-          setPeerInfo({
-            name: formatWalletAddress(peerAddress),
-            picture: null,
-          });
+        const { data: account } = await supabase
+          .from("accounts")
+          .select("id, name, avatar_url, account_type")
+          .eq("id", peerAccountId)
+          .single();
+
+        if (!account) {
+          if (!cancelled) {
+            setPeerInfo({ name: "Unbekannt", avatarUrl: null, username: null });
+          }
+          return;
         }
-      } catch {
+
+        let username: string | null = null;
+        let profilePicture: string | null = null;
+
+        if (account.account_type === "personal") {
+          const { data: owners } = await supabase
+            .from("account_owners")
+            .select("wallet_address")
+            .eq("account_id", peerAccountId)
+            .limit(1);
+          const wallet = owners?.[0]?.wallet_address;
+          if (wallet) {
+            const { data: user } = await supabase
+              .from("users")
+              .select("username, profile_picture_url")
+              .eq("wallet_address", wallet)
+              .single();
+            username = user?.username ?? null;
+            profilePicture = user?.profile_picture_url ?? null;
+          }
+        }
+
+        if (cancelled) return;
         setPeerInfo({
-          name: formatWalletAddress(peerAddress),
-          picture: null,
+          name: username || account.name,
+          avatarUrl: profilePicture ?? account.avatar_url,
+          username,
         });
+      } catch {
+        if (!cancelled) {
+          setPeerInfo({ name: "Unbekannt", avatarUrl: null, username: null });
+        }
       }
     }
-    loadPeerInfo();
-  }, [peerAddress]);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [peerAccountId]);
 
-  // Detect product context from messages
   const [showProductBanner, setShowProductBanner] = useState(true);
   const productContext = useMemo(() => {
     for (const msg of messages) {
@@ -73,18 +105,15 @@ export function ChatView({
     return null;
   }, [messages]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const displayName =
-    peerInfo?.name || (peerAddress ? formatWalletAddress(peerAddress) : "Chat");
+  const displayName = peerInfo?.name || "Chat";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <div className="flex flex-col h-full">
-      {/* Chat Header */}
       <div className="border-b border-border bg-card px-3 py-2.5 flex items-center gap-3">
         {onBack && (
           <button
@@ -106,9 +135,9 @@ export function ChatView({
             </svg>
           </button>
         )}
-        {peerInfo?.picture ? (
+        {peerInfo?.avatarUrl ? (
           <img
-            src={peerInfo.picture}
+            src={peerInfo.avatarUrl}
             alt={displayName}
             className="w-8 h-8 rounded-full object-cover"
           />
@@ -123,15 +152,14 @@ export function ChatView({
           <p className="text-sm font-medium text-foreground truncate">
             {displayName}
           </p>
-          {peerAddress && (
+          {peerInfo?.username && (
             <p className="text-[11px] text-muted-foreground truncate">
-              {formatWalletAddress(peerAddress)}
+              @{peerInfo.username}
             </p>
           )}
         </div>
       </div>
 
-      {/* Product Context Banner */}
       {productContext && showProductBanner && (
         <ProductContextBanner
           listingId={productContext.listingId}
@@ -144,7 +172,6 @@ export function ChatView({
         />
       )}
 
-      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -174,17 +201,16 @@ export function ChatView({
         ) : (
           <>
             {messages.map((msg) => {
-              const isOwn = msg.sender_address === walletAddress;
+              const isOwn = msg.sender_account_id === activeAccountId;
               let displayContent = msg.content;
 
-              // Convert product inquiry to compact text
               try {
                 const parsed = JSON.parse(msg.content);
                 if (parsed?.type === "product_inquiry" && parsed.title) {
                   displayContent = `Anfrage zu: ${parsed.title}`;
                 }
               } catch {
-                // Not JSON — regular text message
+                // Not JSON
               }
 
               return (
@@ -201,7 +227,6 @@ export function ChatView({
         )}
       </div>
 
-      {/* Message Input */}
       <MessageInput onSend={sendMessage} initialValue={initialMessage} />
     </div>
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
   Home,
   Calendar,
@@ -10,8 +11,6 @@ import {
   Store,
   Tag,
   ShoppingBag,
-  ShieldCheck,
-  MessageSquare,
   User,
   Settings,
   HelpCircle,
@@ -20,11 +19,10 @@ import {
   MapPin,
   Landmark,
   Users,
-  Compass,
   Bot,
+  Activity,
+  ChevronDown,
 } from "lucide-react";
-import { useUnreadMessages } from "@/hooks/useUnreadMessages";
-import { NotificationDot } from "@/components/ui/notification-dot";
 import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
 import { useAccount } from "@/lib/context/AccountContext";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -46,21 +44,27 @@ interface NavItem {
   modes?: AppMode[];
   /** If set, item is visible but shows a restricted state (e.g. "browse only") */
   restrictedIn?: AppMode[];
+  /** Nested child items, rendered indented under the parent when active. */
+  children?: NavItem[];
 }
 
 const mainNavItems: NavItem[] = [
   { href: "/app", label: "Feed", icon: Home, exact: true },
-  { href: "/app/proposals", label: "Rathaus", icon: Landmark },
+  {
+    href: "/app/proposals",
+    label: "Stadt",
+    icon: Landmark,
+    children: [
+      { href: "/app/graph", label: "Bürger-Netzwerk", icon: Users },
+      { href: "/app/proposals/timeline", label: "Zeitleiste", icon: Activity },
+    ],
+  },
   { href: "/app/events", label: "Veranstaltungen", icon: Calendar },
   { href: "/app/karte", label: "Karte", icon: MapPin },
-  { href: "/app/entdecken", label: "Entdecken", icon: Compass },
   { href: "/app/news", label: "Neuigkeiten", icon: Newspaper },
   { href: "/app/gewerbe", label: "Gewerbe", icon: Store },
   { href: "/app/angebote", label: "Angebote", icon: Tag },
   { href: "/app/marktplatz", label: "Marktplatz", icon: ShoppingBag },
-  { href: "/app/graph", label: "Bürger-Netzwerk", icon: Users, modes: ["citizen", "org"] },
-  { href: "/app/verifizierung", label: "Verifizierung", icon: ShieldCheck, modes: ["citizen", "org"] },
-  { href: "/app/messages", label: "Nachrichten", icon: MessageSquare, modes: ["citizen", "org"] },
   { href: "/app/mecky", label: "Mecky", icon: Bot },
   { href: "/app/profile", label: "Profil", icon: User },
 ];
@@ -73,7 +77,6 @@ const bottomNavItems: NavItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { unreadCount: unreadMessages } = useUnreadMessages();
   const { activeMode } = useAppMode();
   const { activeAccount } = useAccount();
   const { user } = useUserProfile();
@@ -88,7 +91,6 @@ export function AppSidebar() {
 
   const isVisible = (item: NavItem) => {
     if (!item.modes) return true;
-    // citizen/org modes: visible when user is citizen or active account is org
     if (item.modes.includes("citizen") || item.modes.includes("org")) {
       return isCitizen || isOrg;
     }
@@ -99,6 +101,25 @@ export function AppSidebar() {
   };
 
   const visibleMainItems = mainNavItems.filter(isVisible);
+
+  const hasActiveChild = (item: NavItem): boolean => {
+    if (!item.children) return false;
+    return item.children.some((c) => isActive(c.href, c.exact));
+  };
+
+  // Manual expansion overrides — keyed by parent href. Once a user clicks the
+  // chevron we honour their choice; otherwise we expand automatically when a
+  // child route is active.
+  const [manualExpanded, setManualExpanded] = useState<Record<string, boolean>>({});
+
+  const isExpanded = (item: NavItem) => {
+    if (item.href in manualExpanded) return manualExpanded[item.href];
+    return isActive(item.href, item.exact) || hasActiveChild(item);
+  };
+
+  const toggleExpanded = (href: string, currentlyExpanded: boolean) => {
+    setManualExpanded((prev) => ({ ...prev, [href]: !currentlyExpanded }));
+  };
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -119,31 +140,66 @@ export function AppSidebar() {
         <div className="space-y-1">
           {visibleMainItems.map((item) => {
             const Icon = item.icon;
-            const active = isActive(item.href, item.exact);
+            const selfActive = isActive(item.href, item.exact);
+            const childActive = hasActiveChild(item);
+            const active = selfActive || childActive;
+            const expanded = isExpanded(item);
+            const hasChildren = !!item.children?.length;
+
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors justify-center lg:justify-start ${
-                  active
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-                title={item.label}
-              >
-                <Icon className={`h-5 w-5 flex-shrink-0 ${active ? "text-foreground" : "text-muted-foreground"}`} />
-                <span className="flex-1 hidden lg:block">{item.label}</span>
-                {item.href === "/app/messages" && unreadMessages > 0 && (
-                  <>
-                    <span className="hidden lg:block">
-                      <NotificationDot count={unreadMessages} showNumber size="md" />
-                    </span>
-                    <span className="absolute top-1 right-1 lg:hidden">
-                      <NotificationDot count={unreadMessages} size="sm" />
-                    </span>
-                  </>
+              <div key={item.href}>
+                <div className="relative flex items-stretch">
+                  <Link
+                    href={item.href}
+                    className={`relative flex flex-1 items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors justify-center lg:justify-start ${
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    }`}
+                    title={item.label}
+                  >
+                    <Icon className={`h-5 w-5 flex-shrink-0 ${active ? "text-foreground" : "text-muted-foreground"}`} />
+                    <span className="flex-1 hidden lg:block">{item.label}</span>
+                  </Link>
+                  {hasChildren && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(item.href, expanded)}
+                      className="hidden lg:flex items-center justify-center w-8 ml-0.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                      aria-label={expanded ? `${item.label} einklappen` : `${item.label} ausklappen`}
+                      aria-expanded={expanded}
+                    >
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                {hasChildren && expanded && (
+                  <div className="mt-1 ml-3 pl-3 border-l border-border space-y-0.5 hidden lg:block">
+                    {item.children!.filter(isVisible).map((child) => {
+                      const ChildIcon = child.icon;
+                      const childIsActive = isActive(child.href, child.exact);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            childIsActive
+                              ? "bg-muted text-foreground font-medium"
+                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          }`}
+                          title={child.label}
+                        >
+                          <ChildIcon className="h-4 w-4 flex-shrink-0" />
+                          <span className="flex-1">{child.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 )}
-              </Link>
+              </div>
             );
           })}
         </div>

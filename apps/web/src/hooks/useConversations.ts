@@ -8,18 +8,24 @@ import type { ConversationWithMeta } from "@/lib/messaging/types";
 import { UNREAD_EVENT, emitUnreadUpdate } from "@/lib/messaging/unread";
 
 export function useConversations() {
-  const { walletAddress } = useMessagingContext();
-  const [conversations, setConversations] = useState<ConversationWithMeta[]>([]);
+  const { activeAccountId } = useMessagingContext();
+  const [conversations, setConversations] = useState<ConversationWithMeta[]>(
+    []
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchConversations = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!activeAccountId) {
+      setConversations([]);
+      emitUnreadUpdate(0);
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      const convos = await getConversationsForUser(walletAddress);
+      const convos = await getConversationsForUser(activeAccountId);
       setConversations(convos);
 
-      // Update global unread count
       const totalUnread = convos.reduce((sum, c) => sum + c.unreadCount, 0);
       emitUnreadUpdate(totalUnread);
     } catch (err) {
@@ -27,19 +33,23 @@ export function useConversations() {
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress]);
+  }, [activeAccountId]);
 
-  // Initial load
+  // Reset state immediately when the active account changes so the consumer
+  // never sees stale conversations from the previous account.
   useEffect(() => {
+    setConversations([]);
+    setIsLoading(true);
     fetchConversations();
   }, [fetchConversations]);
 
-  // Subscribe to Realtime for new messages
+  // Subscribe to Realtime for new messages. The channel name is keyed on the
+  // account id so switching account creates a fresh subscription.
   useEffect(() => {
-    if (!walletAddress) return;
+    if (!activeAccountId) return;
 
     const channel = supabase
-      .channel("conversations-listener")
+      .channel(`conversations-listener:${activeAccountId}`)
       .on(
         "postgres_changes",
         {
@@ -48,7 +58,6 @@ export function useConversations() {
           table: "direct_messages",
         },
         () => {
-          // Refetch conversations when any new message arrives
           fetchConversations();
         }
       )
@@ -57,7 +66,14 @@ export function useConversations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [walletAddress, fetchConversations]);
+  }, [activeAccountId, fetchConversations]);
+
+  // Drop the global unread count when there is no active account.
+  useEffect(() => {
+    if (!activeAccountId) emitUnreadUpdate(0);
+    // Read once to silence the unused-var lint warning for the import.
+    void UNREAD_EVENT;
+  }, [activeAccountId]);
 
   return { conversations, isLoading, refetch: fetchConversations };
 }

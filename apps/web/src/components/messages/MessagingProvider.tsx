@@ -16,7 +16,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const { activeAccount } = useAccount();
 
   const value: MessagingContextValue = {
-    isReady: !!account,
+    isReady: !!activeAccount?.id,
     walletAddress: account?.address?.toLowerCase() ?? null,
     activeAccountId: activeAccount?.id ?? null,
   };
