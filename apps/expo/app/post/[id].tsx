@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   RefreshControl,
 } from 'react-native';
@@ -149,6 +150,8 @@ export default function PostDetailScreen() {
         setPost((prev) =>
           prev ? { ...prev, comments_count: prev.comments_count + 1 } : prev
         );
+        Keyboard.dismiss();
+        setCommentFocused(false);
       }
     } catch (err) {
       console.error('Error submitting comment:', err);
@@ -396,7 +399,7 @@ export default function PostDetailScreen() {
 
         {/* Comment input */}
         {walletAddress ? (
-          <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.inputContainer}>
             {editingComment ? (
               <CommentInput
                 onSubmit={handleSubmitEditComment}

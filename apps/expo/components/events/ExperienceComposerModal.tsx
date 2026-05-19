@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import ExperienceInput, { type ExperienceInputHandle } from './ExperienceInput';
+import type { EventExperience } from '@/lib/types/feed';
 
 type Props = {
   visible: boolean;
   eventId: string;
   walletAddress: string;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (created: EventExperience) => void;
 };
 
 export default function ExperienceComposerModal({
@@ -57,9 +58,11 @@ export default function ExperienceComposerModal({
   };
 
   const handleShow = () => {
-    requestAnimationFrame(() => {
+    if (Platform.OS === 'ios') {
       inputRef.current?.focus();
-    });
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
   };
 
   return (
@@ -88,8 +91,8 @@ export default function ExperienceComposerModal({
             onSubmitStateChange={(submitting) => {
               isSubmittingRef.current = submitting;
             }}
-            onCreated={() => {
-              onCreated();
+            onCreated={(created) => {
+              onCreated(created);
               onClose();
             }}
           />

@@ -123,7 +123,7 @@ export default function ChatScreen() {
           />
         )}
 
-        <SafeAreaView edges={['bottom']} style={[styles.inputSafe, { backgroundColor: colors.background }]}>
+        <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
           <ChatInput onSend={sendMessage} isSending={isSending} />
         </SafeAreaView>
       </KeyboardAvoidingView>

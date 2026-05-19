@@ -14,6 +14,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { createExperience } from '@/lib/supabase-experiences';
+import type { EventExperience } from '@/lib/types/feed';
 
 import SendIcon from '@/assets/icons/sent.svg';
 import ImageIcon from '@/assets/icons/image-01.svg';
@@ -27,7 +28,7 @@ export type ExperienceInputHandle = {
 type Props = {
   eventId: string;
   walletAddress: string;
-  onCreated: () => void;
+  onCreated: (created: EventExperience) => void;
   onFocusChange?: (focused: boolean) => void;
   /** Called right before launching the native image picker so the parent can
    *  ignore the keyboard-hide event that follows. */
@@ -113,7 +114,7 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
         setText('');
         setImageUrl(null);
         Keyboard.dismiss();
-        onCreated();
+        onCreated(created);
       }
     } finally {
       setIsSubmitting(false);

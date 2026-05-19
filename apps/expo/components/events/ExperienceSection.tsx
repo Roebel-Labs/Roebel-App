@@ -21,6 +21,7 @@ type Props = {
 
 export type ExperienceSectionHandle = {
   refresh: () => void;
+  prepend: (experience: EventExperience) => void;
 };
 
 const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function ExperienceSection(
@@ -61,6 +62,9 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
     refresh: () => {
       setPage(0);
       loadExperiences(0);
+    },
+    prepend: (experience: EventExperience) => {
+      setExperiences((prev) => [experience, ...prev]);
     },
   }), [loadExperiences]);
 

@@ -512,7 +512,7 @@ export default function EventDetails() {
           eventId={id as string}
           walletAddress={user.wallet_address}
           onClose={() => setComposerOpen(false)}
-          onCreated={() => experienceSectionRef.current?.refresh()}
+          onCreated={(created) => experienceSectionRef.current?.prepend(created)}
         />
       )}
     </ScrollView>
