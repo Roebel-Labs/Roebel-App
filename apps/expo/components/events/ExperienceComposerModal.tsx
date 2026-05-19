@@ -9,7 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import ExperienceInput from './ExperienceInput';
+import ExperienceInput, { type ExperienceInputHandle } from './ExperienceInput';
 
 type Props = {
   visible: boolean;
@@ -28,7 +28,9 @@ export default function ExperienceComposerModal({
 }: Props) {
   const { colors } = useTheme();
   const onCloseRef = useRef(onClose);
+  const inputRef = useRef<ExperienceInputHandle>(null);
   const skipNextHideRef = useRef(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -41,6 +43,9 @@ export default function ExperienceComposerModal({
         skipNextHideRef.current = false;
         return;
       }
+      if (isSubmittingRef.current) {
+        return;
+      }
       onCloseRef.current();
     });
     return () => sub.remove();
@@ -51,12 +56,19 @@ export default function ExperienceComposerModal({
     onClose();
   };
 
+  const handleShow = () => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
+      onShow={handleShow}
       onRequestClose={onClose}
     >
       <Pressable style={styles.scrim} onPress={handleScrimPress} />
@@ -67,11 +79,14 @@ export default function ExperienceComposerModal({
       >
         <View style={[styles.inputDock, { backgroundColor: colors.background }]}>
           <ExperienceInput
+            ref={inputRef}
             eventId={eventId}
             walletAddress={walletAddress}
-            autoFocus
             onImagePickStart={() => {
               skipNextHideRef.current = true;
+            }}
+            onSubmitStateChange={(submitting) => {
+              isSubmittingRef.current = submitting;
             }}
             onCreated={() => {
               onCreated();

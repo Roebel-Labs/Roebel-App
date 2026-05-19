@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -20,33 +20,48 @@ import ImageIcon from '@/assets/icons/image-01.svg';
 
 const MAX_CONTENT_LENGTH = 500;
 
+export type ExperienceInputHandle = {
+  focus: () => void;
+};
+
 type Props = {
   eventId: string;
   walletAddress: string;
   onCreated: () => void;
   onFocusChange?: (focused: boolean) => void;
-  autoFocus?: boolean;
   /** Called right before launching the native image picker so the parent can
    *  ignore the keyboard-hide event that follows. */
   onImagePickStart?: () => void;
+  /** Called when submission begins (true) and ends (false) so the parent can
+   *  suppress overlay-close logic that races with submission. */
+  onSubmitStateChange?: (submitting: boolean) => void;
 };
 
-export default function ExperienceInput({
-  eventId,
-  walletAddress,
-  onCreated,
-  onFocusChange,
-  autoFocus,
-  onImagePickStart,
-}: Props) {
+const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function ExperienceInput(
+  {
+    eventId,
+    walletAddress,
+    onCreated,
+    onFocusChange,
+    onImagePickStart,
+    onSubmitStateChange,
+  },
+  ref,
+) {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
+
+  const textInputRef = useRef<TextInput>(null);
 
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => textInputRef.current?.focus(),
+  }));
 
   const canSubmit = (text.trim().length > 0 || !!imageUrl) && !isUploading && !isSubmitting;
   const showImageIcon = isFocused || !!imageUrl;
@@ -85,6 +100,7 @@ export default function ExperienceInput({
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setIsSubmitting(true);
+    onSubmitStateChange?.(true);
     try {
       const created = await createExperience({
         event_id: eventId,
@@ -101,6 +117,7 @@ export default function ExperienceInput({
       }
     } finally {
       setIsSubmitting(false);
+      onSubmitStateChange?.(false);
     }
   };
 
@@ -122,6 +139,7 @@ export default function ExperienceInput({
           ]}
         >
           <TextInput
+            ref={textInputRef}
             style={[styles.input, { color: colors.textPrimary }]}
             placeholder="Teile dein Erlebnis..."
             placeholderTextColor={colors.textTertiary}
@@ -131,7 +149,6 @@ export default function ExperienceInput({
             onBlur={handleBlur}
             maxLength={MAX_CONTENT_LENGTH}
             multiline
-            autoFocus={autoFocus}
           />
           {showImageIcon && (
             <Pressable
@@ -165,7 +182,9 @@ export default function ExperienceInput({
       </View>
     </View>
   );
-}
+});
+
+export default ExperienceInput;
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -179,7 +198,7 @@ const styles = StyleSheet.create({
   inputWrap: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 4,
