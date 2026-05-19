@@ -389,13 +389,7 @@ export default function FeedHome() {
             onPress={() => router.push('/notifications' as any)}
           >
             <NotificationIcon width={22} height={22} color={colors.textPrimary} />
-            {totalUnreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
-                </Text>
-              </View>
-            )}
+            {totalUnreadCount > 0 && <View style={styles.dot} />}
           </Pressable>
         </View>
       </View>
@@ -624,24 +618,6 @@ const styles = StyleSheet.create({
   },
   page: {
     flex: 1,
-  },
-  badge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 12,
   },
   dot: {
     position: 'absolute',

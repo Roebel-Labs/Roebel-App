@@ -36,12 +36,15 @@ export async function markNotificationRead(notificationId: string): Promise<void
     .eq('id', notificationId);
 }
 
-/** Mark all notifications as read for a user. */
+/** Mark all notifications as read for a user.
+ *  org_invite notifications are excluded: they only flip to is_read=true when
+ *  the user explicitly accepts or declines the invitation. */
 export async function markAllNotificationsRead(walletAddress: string): Promise<void> {
   await (supabase.from('notifications') as any)
     .update({ is_read: true })
     .eq('recipient_wallet', walletAddress.toLowerCase())
-    .eq('is_read', false);
+    .eq('is_read', false)
+    .neq('type', 'org_invite');
 }
 
 /** Get the count of unread notifications. */

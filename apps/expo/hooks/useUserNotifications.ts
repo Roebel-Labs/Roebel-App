@@ -100,14 +100,23 @@ export default function useUserNotifications() {
 
   const markAllAsRead = useCallback(async () => {
     if (!walletAddress) return;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    setUnreadCount(0);
+    // Skip org_invite — pending invitations stay unread until the user
+    // explicitly accepts or declines so the bell keeps reminding them.
+    setNotifications((prev) =>
+      prev.map((n) => (n.type === 'org_invite' ? n : { ...n, is_read: true }))
+    );
+    setUnreadCount((prev) => {
+      const remainingUnreadInvites = notifications.filter(
+        (n) => n.type === 'org_invite' && !n.is_read
+      ).length;
+      return remainingUnreadInvites;
+    });
     try {
       await markAllNotificationsRead(walletAddress);
     } catch (err) {
       console.error('Failed to mark all notifications as read:', err);
     }
-  }, [walletAddress]);
+  }, [walletAddress, notifications]);
 
   const handleAcceptInvite = useCallback(
     async (notification: UserNotification) => {

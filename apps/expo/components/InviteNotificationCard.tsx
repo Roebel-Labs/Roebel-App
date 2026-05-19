@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import OrgRoleBadge from '@/components/OrgRoleBadge';
-import type { UserNotification, OrgRole } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
+import type { UserNotification, OrgRole, InviteTokenStatus } from '@/lib/types';
 
 type Props = {
   notification: UserNotification;
@@ -16,11 +17,34 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
   const [isAccepting, setIsAccepting] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
   const [resolved, setResolved] = useState<'accepted' | 'declined' | null>(null);
+  const [serverStatus, setServerStatus] = useState<InviteTokenStatus | null>(null);
 
   const metadata = notification.metadata as { account_id?: string; role?: OrgRole; invitation_id?: string };
   const role = metadata.role || 'member';
-  const isRead = notification.is_read;
-  const isResolved = resolved || isRead;
+  const invitationId = metadata.invitation_id;
+
+  useEffect(() => {
+    if (!invitationId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase.from('invite_tokens') as any)
+        .select('status')
+        .eq('id', invitationId)
+        .maybeSingle();
+      if (!cancelled && data?.status) {
+        setServerStatus(data.status as InviteTokenStatus);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invitationId]);
+
+  const effective: 'accepted' | 'declined' | null =
+    resolved ??
+    (serverStatus === 'accepted' ? 'accepted' : serverStatus === 'declined' ? 'declined' : null);
+  const isInvalid = serverStatus === 'expired' || serverStatus === 'revoked';
+  const isResolved = effective !== null || isInvalid;
 
   const timeAgo = formatTimeAgo(notification.created_at);
 
@@ -118,13 +142,19 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
           style={[
             styles.resolvedText,
             {
-              color: resolved === 'accepted' || (!resolved && isRead)
+              color: effective === 'accepted'
                 ? isDark ? '#8AB4F8' : '#194383'
                 : colors.textTertiary,
             },
           ]}
         >
-          {resolved === 'accepted' || (!resolved && isRead) ? '✓ Angenommen' : '✗ Abgelehnt'}
+          {effective === 'accepted'
+            ? '✓ Angenommen'
+            : effective === 'declined'
+            ? '✗ Abgelehnt'
+            : serverStatus === 'expired'
+            ? 'Einladung abgelaufen'
+            : 'Einladung zurückgezogen'}
         </Text>
       )}
     </View>
