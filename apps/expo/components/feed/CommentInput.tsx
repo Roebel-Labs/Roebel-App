@@ -193,7 +193,7 @@ export default function CommentInput({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 8,
   },
   emojiButton: {

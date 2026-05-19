@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -8,6 +8,7 @@ import {
   Keyboard,
   StyleSheet,
 } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
 import ExperienceInput from './ExperienceInput';
 
 type Props = {
@@ -25,6 +26,26 @@ export default function ExperienceComposerModal({
   onClose,
   onCreated,
 }: Props) {
+  const { colors } = useTheme();
+  const onCloseRef = useRef(onClose);
+  const skipNextHideRef = useRef(false);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (skipNextHideRef.current) {
+        skipNextHideRef.current = false;
+        return;
+      }
+      onCloseRef.current();
+    });
+    return () => sub.remove();
+  }, [visible]);
+
   const handleScrimPress = () => {
     Keyboard.dismiss();
     onClose();
@@ -44,11 +65,14 @@ export default function ExperienceComposerModal({
         style={styles.kbWrap}
         pointerEvents="box-none"
       >
-        <View style={styles.inputDock}>
+        <View style={[styles.inputDock, { backgroundColor: colors.background }]}>
           <ExperienceInput
             eventId={eventId}
             walletAddress={walletAddress}
             autoFocus
+            onImagePickStart={() => {
+              skipNextHideRef.current = true;
+            }}
             onCreated={() => {
               onCreated();
               onClose();

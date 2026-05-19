@@ -396,7 +396,7 @@ export default function PostDetailScreen() {
 
         {/* Comment input */}
         {walletAddress ? (
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
             {editingComment ? (
               <CommentInput
                 onSubmit={handleSubmitEditComment}

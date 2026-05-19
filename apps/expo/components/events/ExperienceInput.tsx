@@ -26,6 +26,9 @@ type Props = {
   onCreated: () => void;
   onFocusChange?: (focused: boolean) => void;
   autoFocus?: boolean;
+  /** Called right before launching the native image picker so the parent can
+   *  ignore the keyboard-hide event that follows. */
+  onImagePickStart?: () => void;
 };
 
 export default function ExperienceInput({
@@ -34,6 +37,7 @@ export default function ExperienceInput({
   onCreated,
   onFocusChange,
   autoFocus,
+  onImagePickStart,
 }: Props) {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
@@ -58,6 +62,7 @@ export default function ExperienceInput({
   };
 
   const handlePickImage = async () => {
+    onImagePickStart?.();
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -168,7 +173,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 8,
   },
   inputWrap: {
