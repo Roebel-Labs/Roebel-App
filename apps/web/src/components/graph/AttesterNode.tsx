@@ -1,32 +1,30 @@
 import { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
+import type { NodeStatus } from "@/hooks/useSocialGraph";
 
 interface AttesterNodeData {
   address: string;
   isFounder: boolean;
+  status?: NodeStatus;
   label?: string;
 }
 
 function AttesterNode({ data }: NodeProps<AttesterNodeData>) {
   const shortAddress = `${data.address.slice(0, 6)}...${data.address.slice(-4)}`;
+  const status: NodeStatus = data.status ?? "active";
+
+  const wrapperClass =
+    status === "pending"
+      ? "px-4 py-3 rounded-lg shadow-sm border-2 border-dashed border-yellow-400 bg-yellow-50/80 text-yellow-900 text-sm font-medium min-w-[160px] opacity-90 transition-transform hover:scale-105"
+      : status === "revoked"
+        ? "px-4 py-3 rounded-lg shadow-sm border-2 border-border bg-muted text-muted-foreground text-sm font-medium min-w-[160px] opacity-70 transition-transform hover:scale-105"
+        : "px-4 py-3 rounded-lg shadow-lg border-2 bg-gradient-to-br from-yellow-500 via-teal-500 to-blue-600 border-teal-400 text-white text-sm font-medium min-w-[160px] transition-transform hover:scale-105";
 
   return (
     <div className="relative">
       <Handle type="target" position={Position.Top} className="w-2 h-2" />
 
-      <div
-        className={`
-          px-4 py-3 rounded-lg shadow-lg border-2
-          ${
-            data.isFounder
-              ? "bg-gradient-to-br from-yellow-500 via-teal-500 to-blue-600 border-teal-400"
-              : "bg-gradient-to-br from-yellow-400 via-teal-400 to-blue-500 border-teal-300"
-          }
-          text-white text-sm font-medium
-          min-w-[160px]
-          transition-transform hover:scale-105
-        `}
-      >
+      <div className={wrapperClass}>
         <div className="flex items-center gap-2 mb-1">
           <svg
             className="w-4 h-4"
@@ -44,15 +42,33 @@ function AttesterNode({ data }: NodeProps<AttesterNodeData>) {
           <span className="font-medium">Bescheiniger</span>
         </div>
 
-        <div className="text-xs opacity-90 font-mono">{shortAddress}</div>
+        <div
+          className={`text-xs opacity-90 font-mono ${
+            status === "revoked" ? "line-through" : ""
+          }`}
+        >
+          {shortAddress}
+        </div>
 
-        {data.isFounder && (
+        {status === "pending" && (
+          <div className="mt-2 text-xs bg-yellow-200/60 text-yellow-900 px-2 py-1 rounded">
+            Antrag offen
+          </div>
+        )}
+
+        {status === "revoked" && (
+          <div className="mt-2 text-xs bg-card text-muted-foreground px-2 py-1 rounded border border-border">
+            Entzogen
+          </div>
+        )}
+
+        {status === "active" && data.isFounder && (
           <div className="mt-2 text-xs bg-card/20 px-2 py-1 rounded">
             Gründungsmitglied
           </div>
         )}
 
-        {data.label && (
+        {status === "active" && data.label && (
           <div className="mt-1 text-xs opacity-80">{data.label}</div>
         )}
       </div>

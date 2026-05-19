@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Node,
   Edge,
@@ -14,46 +14,47 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import { useSocialGraph } from "@/hooks/useSocialGraph";
+import { useSocialGraph, type NodeStatus } from "@/hooks/useSocialGraph";
 import AttesterNode from "./AttesterNode";
 import CitizenNode from "./CitizenNode";
 
-// Define custom node types
 const nodeTypes: NodeTypes = {
-  attester: AttesterNode, // Committee members (have both AttesterNFT and CitizenNFT)
-  citizen: CitizenNode,   // Regular citizens (only CitizenNFT)
+  attester: AttesterNode,
+  citizen: CitizenNode,
 };
 
-// Force-directed layout algorithm (simplified)
+const STATUS_ORDER: Record<NodeStatus, number> = {
+  active: 0,
+  pending: 1,
+  revoked: 2,
+};
+
 function calculateLayout(
-  nodes: Array<{ id: string; type: string; isFounder: boolean }>,
-  edges: Array<{ source: string; target: string }>
+  nodes: Array<{ id: string; type: string; isFounder: boolean; status: NodeStatus }>,
 ): Array<{ id: string; x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
-  const nodeArray = Array.from(nodes);
 
-  // Place founders at center in a circle
-  const founders = nodeArray.filter((n) => n.isFounder);
+  const founders = nodes.filter((n) => n.isFounder && n.status === "active");
   const founderRadius = 150;
   founders.forEach((node, index) => {
-    const angle = (index / founders.length) * 2 * Math.PI;
+    const angle = (index / Math.max(founders.length, 1)) * 2 * Math.PI;
     positions.set(node.id, {
       x: Math.cos(angle) * founderRadius,
       y: Math.sin(angle) * founderRadius,
     });
   });
 
-  // Place non-founders in expanding circles
-  const nonFounders = nodeArray.filter((n) => !n.isFounder);
-  const ringsCount = Math.ceil(Math.sqrt(nonFounders.length));
-  const radius = 300;
+  const nonFounders = nodes
+    .filter((n) => !(n.isFounder && n.status === "active"))
+    .slice()
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 
+  const radius = 300;
   nonFounders.forEach((node, index) => {
-    const ring = Math.floor(index / 8) + 1; // 8 nodes per ring
+    const ring = Math.floor(index / 8) + 1;
     const posInRing = index % 8;
     const angle = (posInRing / 8) * 2 * Math.PI;
     const currentRadius = radius + ring * 150;
-
     positions.set(node.id, {
       x: Math.cos(angle) * currentRadius,
       y: Math.sin(angle) * currentRadius,
@@ -67,57 +68,90 @@ function calculateLayout(
   }));
 }
 
-export default function GraphCanvas() {
-  const { nodes: graphNodes, edges: graphEdges, isLoading, error } = useSocialGraph();
+function formatAgo(date: Date | null, now: number): string {
+  if (!date) return "—";
+  const seconds = Math.max(0, Math.floor((now - date.getTime()) / 1000));
+  if (seconds < 60) return `vor ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `vor ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `vor ${hours}h`;
+}
 
-  // Convert graph data to React Flow format
+export default function GraphCanvas() {
+  const {
+    nodes: graphNodes,
+    edges: graphEdges,
+    isLoading,
+    error,
+    lastUpdated,
+    refresh,
+  } = useSocialGraph();
+
+  // tick the "vor Xs" label once a second so it stays accurate without a re-fetch
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {
     if (!graphNodes.length) {
-      return { nodes: [], edges: [] };
+      return { nodes: [] as Node[], edges: [] as Edge[] };
     }
 
-    // Calculate positions
-    const positions = calculateLayout(graphNodes, graphEdges);
+    const positions = calculateLayout(graphNodes);
 
-    // Create React Flow nodes
     const nodes: Node[] = graphNodes.map((node) => {
-      const position = positions.find((p) => p.id === node.id) || { x: 0, y: 0 };
+      const position =
+        positions.find((p) => p.id === node.id) ?? { x: 0, y: 0 };
 
       return {
         id: node.id,
         type: node.type,
-        position: { x: position.x + 400, y: position.y + 300 }, // Center offset
+        position: { x: position.x + 400, y: position.y + 300 },
         data: {
           address: node.address,
           isFounder: node.isFounder,
-          label: node.verifiedBy
-            ? `Verifiziert von ${node.verifiedBy.length} Personen`
-            : undefined,
+          status: node.status,
+          label:
+            node.status === "active" && node.verifiedBy
+              ? `Verifiziert von ${node.verifiedBy.length} Personen`
+              : undefined,
         },
       };
     });
 
-    // Create React Flow edges with enhanced styling
+    const revokedIds = new Set(
+      graphNodes.filter((n) => n.status === "revoked").map((n) => n.id),
+    );
+
     const edges: Edge[] = graphEdges.map((edge) => {
       const isAttesterApproval = edge.type === "attester_approved";
-      const color = isAttesterApproval ? "#f59e0b" : "#3b82f6"; // amber-500 for attesters, blue for citizens
+      const touchesRevoked =
+        revokedIds.has(edge.source) || revokedIds.has(edge.target);
+      const color = touchesRevoked
+        ? "#9ca3af" // gray-400 — edge to/from a revoked node
+        : isAttesterApproval
+          ? "#f59e0b"
+          : "#3b82f6";
 
       return {
         id: edge.id,
         source: edge.source,
         target: edge.target,
         type: "smoothstep",
-        animated: true, // Animate approval flows
+        animated: !touchesRevoked,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 15,
           height: 15,
-          color: color,
+          color,
         },
         style: {
           stroke: color,
           strokeWidth: 2,
-          opacity: 0.6,
+          opacity: touchesRevoked ? 0.35 : 0.6,
         },
         label: isAttesterApproval ? "Bescheiniger ✓" : "Bürger ✓",
         labelStyle: {
@@ -138,13 +172,22 @@ export default function GraphCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
-  // Update nodes when graph data changes
-  useMemo(() => {
+  useEffect(() => {
     setNodes(flowNodes);
     setEdges(flowEdges);
   }, [flowNodes, flowEdges, setNodes, setEdges]);
 
-  if (isLoading) {
+  const activeCount = graphNodes.filter((n) => n.status === "active").length;
+  const attesterCount = graphNodes.filter(
+    (n) => n.type === "attester" && n.status === "active",
+  ).length;
+  const citizenCount = graphNodes.filter(
+    (n) => n.type === "citizen" && n.status === "active",
+  ).length;
+  const pendingCount = graphNodes.filter((n) => n.status === "pending").length;
+  const revokedCount = graphNodes.filter((n) => n.status === "revoked").length;
+
+  if (isLoading && graphNodes.length === 0) {
     return (
       <div className="h-[calc(100vh-140px)] flex items-center justify-center">
         <div className="text-center">
@@ -155,7 +198,7 @@ export default function GraphCanvas() {
     );
   }
 
-  if (error) {
+  if (error && graphNodes.length === 0) {
     return (
       <div className="h-[calc(100vh-140px)] flex items-center justify-center">
         <div className="text-center">
@@ -171,14 +214,16 @@ export default function GraphCanvas() {
     return (
       <div className="h-[calc(100vh-140px)] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground">Noch keine verifizierten Bürger</p>
+          <p className="text-muted-foreground">
+            Noch keine verifizierten Bürger
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-140px)]">
+    <div className="h-[calc(100vh-140px)] relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -194,9 +239,12 @@ export default function GraphCanvas() {
         <Controls />
         <MiniMap
           nodeColor={(node) => {
-            if (node.type === "attester") return "#f59e0b"; // amber-500
-            if (node.type === "citizen") return "#3b82f6"; // blue-500
-            return "#14b8a6"; // teal-500 for dual role
+            const status = (node.data?.status ?? "active") as NodeStatus;
+            if (status === "revoked") return "#9ca3af";
+            if (status === "pending") return "#fde68a";
+            if (node.type === "attester") return "#f59e0b";
+            if (node.type === "citizen") return "#3b82f6";
+            return "#14b8a6";
           }}
           maskColor="rgb(240, 240, 240, 0.6)"
         />
@@ -206,9 +254,10 @@ export default function GraphCanvas() {
       <div className="absolute bottom-4 left-4 bg-card rounded-lg shadow-lg p-4 z-10 max-w-xs">
         <h3 className="font-medium text-sm mb-3">Legende</h3>
 
-        {/* Nodes */}
         <div className="mb-3">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Mitglieder</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Mitglieder
+          </p>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-gradient-to-br from-yellow-500 via-teal-500 to-blue-600"></div>
@@ -218,43 +267,30 @@ export default function GraphCanvas() {
               <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-600 to-blue-800"></div>
               <span className="text-xs">Bürger</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border-2 border-dashed border-yellow-400 bg-yellow-50"></div>
+              <span className="text-xs">Antrag offen</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-muted border border-border"></div>
+              <span className="text-xs line-through text-muted-foreground">
+                Entzogen
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Edges */}
         <div className="border-t pt-3">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Verifizierungen</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Verifizierungen
+          </p>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  d="M5 12 L19 12"
-                  stroke="#f59e0b"
-                  strokeWidth="2"
-                  markerEnd="url(#arrow-amber)"
-                />
-                <defs>
-                  <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                    <polygon points="0 0, 10 3, 0 6" fill="#f59e0b" />
-                  </marker>
-                </defs>
-              </svg>
+              <div className="w-4 h-0.5 bg-amber-500"></div>
               <span className="text-xs">Bescheiniger Zustimmung</span>
             </div>
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  d="M5 12 L19 12"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  markerEnd="url(#arrow-blue)"
-                />
-                <defs>
-                  <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                    <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
-                  </marker>
-                </defs>
-              </svg>
+              <div className="w-4 h-0.5 bg-blue-500"></div>
               <span className="text-xs">Bürger Zustimmung</span>
             </div>
           </div>
@@ -262,27 +298,45 @@ export default function GraphCanvas() {
       </div>
 
       {/* Stats */}
-      <div className="absolute top-4 right-4 bg-card rounded-lg shadow-lg p-4 z-10">
-        <h3 className="font-medium text-sm mb-3">Statistiken</h3>
+      <div className="absolute top-4 right-4 bg-card rounded-lg shadow-lg p-4 z-10 min-w-[200px]">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium text-sm">Statistiken</h3>
+          <button
+            type="button"
+            onClick={() => refresh()}
+            disabled={isLoading}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            aria-label="Aktualisieren"
+          >
+            {isLoading ? "…" : "↻"}
+          </button>
+        </div>
         <div className="space-y-2">
           <div className="text-sm border-b pb-2">
-            <span className="font-medium">{nodes.length}</span> Mitglieder gesamt
+            <span className="font-medium">{activeCount}</span> aktive Mitglieder
           </div>
           <div className="text-sm">
-            <span className="font-medium">
-              {nodes.filter((n) => n.type === "attester").length}
-            </span>{" "}
-            Bescheiniger
+            <span className="font-medium">{attesterCount}</span> Bescheiniger
           </div>
           <div className="text-sm">
-            <span className="font-medium">
-              {nodes.filter((n) => n.type === "citizen").length}
-            </span>{" "}
-            Bürger
+            <span className="font-medium">{citizenCount}</span> Bürger
           </div>
           <div className="text-sm border-t pt-2 mt-2">
             <span className="font-medium">{edges.length}</span> Verifizierungen
           </div>
+          {pendingCount > 0 && (
+            <div className="text-sm text-yellow-700">
+              <span className="font-medium">{pendingCount}</span> offene Anträge
+            </div>
+          )}
+          {revokedCount > 0 && (
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium">{revokedCount}</span> entzogen
+            </div>
+          )}
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-3 pt-2 border-t">
+          Aktualisiert {formatAgo(lastUpdated, now)}
         </div>
       </div>
     </div>

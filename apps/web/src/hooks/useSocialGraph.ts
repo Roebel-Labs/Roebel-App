@@ -1,16 +1,22 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getContract } from "thirdweb";
 import { base } from "thirdweb/chains";
 import { client } from "@/app/client";
 import { VERIFICATION_CONTRACTS } from "@/lib/verification-contracts";
 
+export type NodeStatus = "active" | "pending" | "revoked";
+
 export interface GraphNode {
   id: string;
   address: string;
-  type: "attester" | "citizen"; // attester = has AttesterNFT (also has CitizenNFT), citizen = only CitizenNFT
+  type: "attester" | "citizen";
   isFounder: boolean;
+  status: NodeStatus;
   mintedAt?: number;
-  verifiedBy?: string[]; // Addresses of those who approved
+  revokedAt?: number;
+  requestedAt?: number;
+  requestId?: string;
+  verifiedBy?: string[];
 }
 
 export interface GraphEdge {
@@ -30,243 +36,302 @@ export interface SocialGraphData {
   refresh: () => void;
 }
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 export function useSocialGraph(): SocialGraphData {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const inFlight = useRef(false);
 
   const fetchGraphData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      setError(null);
 
-        // Dynamic import to avoid SSR issues
-        const { getContractEvents, prepareEvent } = await import("thirdweb");
+      const { getContractEvents, prepareEvent } = await import("thirdweb");
 
-        // Initialize contracts
-        const attesterContract = getContract({
-          client,
-          chain: base,
-          address: VERIFICATION_CONTRACTS.attesterNFT,
+      const attesterContract = getContract({
+        client,
+        chain: base,
+        address: VERIFICATION_CONTRACTS.attesterNFT,
+      });
+
+      const citizenContract = getContract({
+        client,
+        chain: base,
+        address: VERIFICATION_CONTRACTS.citizenNFT,
+      });
+
+      const transferEvent = prepareEvent({
+        signature:
+          "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+      });
+
+      const attesterApprovedEvent = prepareEvent({
+        signature:
+          "event RequestApproved(uint256 indexed requestId, address indexed approver)",
+      });
+
+      const citizenApprovedEvent = prepareEvent({
+        signature:
+          "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
+      });
+
+      const attesterMintedEvent = prepareEvent({
+        signature:
+          "event AttesterNFTMinted(address indexed attester, uint256 indexed tokenId, uint256 indexed requestId)",
+      });
+
+      const citizenMintedEvent = prepareEvent({
+        signature:
+          "event CitizenNFTMinted(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
+      });
+
+      const attestationRequestEvent = prepareEvent({
+        signature:
+          "event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
+      });
+
+      const attesterRevokedEvent = prepareEvent({
+        signature:
+          "event AttesterNFTRevoked(address indexed attester, uint256 indexed tokenId, uint256 indexed requestId)",
+      });
+
+      const citizenRevokedEvent = prepareEvent({
+        signature:
+          "event CitizenNFTRevoked(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
+      });
+
+      const [
+        attesterMints,
+        citizenMints,
+        attesterApprovals,
+        citizenApprovals,
+        attesterMintEvents,
+        citizenMintEvents,
+        attesterRequests,
+        citizenRequests,
+        attesterRevocations,
+        citizenRevocations,
+      ] = await Promise.all([
+        getContractEvents({ contract: attesterContract, events: [transferEvent] }),
+        getContractEvents({ contract: citizenContract, events: [transferEvent] }),
+        getContractEvents({ contract: attesterContract, events: [attesterApprovedEvent] }),
+        getContractEvents({ contract: citizenContract, events: [citizenApprovedEvent] }),
+        getContractEvents({ contract: attesterContract, events: [attesterMintedEvent] }),
+        getContractEvents({ contract: citizenContract, events: [citizenMintedEvent] }),
+        getContractEvents({ contract: attesterContract, events: [attestationRequestEvent] }),
+        getContractEvents({ contract: citizenContract, events: [attestationRequestEvent] }),
+        getContractEvents({ contract: attesterContract, events: [attesterRevokedEvent] }),
+        getContractEvents({ contract: citizenContract, events: [citizenRevokedEvent] }),
+      ]);
+
+      const nodesMap = new Map<string, GraphNode>();
+      const attesterAddresses = new Set<string>();
+
+      // Pass 1: collect attester mint targets
+      attesterMints
+        .filter((event: any) => event.args?.from === ZERO_ADDRESS)
+        .forEach((event: any) => {
+          const address = event.args?.to as string;
+          if (address) attesterAddresses.add(address);
         });
 
-        const citizenContract = getContract({
-          client,
-          chain: base,
-          address: VERIFICATION_CONTRACTS.citizenNFT,
-        });
-
-        // Prepare Transfer event
-        const transferEvent = prepareEvent({
-          signature: "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
-        });
-
-        // Fetch Attester NFT mints
-        const attesterMints = await getContractEvents({
-          contract: attesterContract,
-          events: [transferEvent],
-        });
-
-        // Fetch Citizen NFT mints
-        const citizenMints = await getContractEvents({
-          contract: citizenContract,
-          events: [transferEvent],
-        });
-
-        // Build nodes map
-        const nodesMap = new Map<string, GraphNode>();
-        const attesterAddresses = new Set<string>();
-
-        // First pass: collect all Attester addresses
-        attesterMints
-          .filter((event: any) => event.args?.from === "0x0000000000000000000000000000000000000000")
-          .forEach((event: any) => {
-            const address = event.args?.to as string;
-            if (address) {
-              attesterAddresses.add(address);
-            }
+      // Pass 2: attester mints → active attester nodes (first 3 = founders)
+      attesterMints
+        .filter((event: any) => event.args?.from === ZERO_ADDRESS)
+        .forEach((event: any, index: number) => {
+          const address = event.args?.to as string;
+          if (!address) return;
+          nodesMap.set(address, {
+            id: address,
+            address,
+            type: "attester",
+            isFounder: index < 3,
+            status: "active",
+            mintedAt: event.blockNumber,
           });
+        });
 
-        // Second pass: Process Attester mints
-        // All Attesters are also Citizens, so they get "attester" type
-        attesterMints
-          .filter((event: any) => event.args?.from === "0x0000000000000000000000000000000000000000")
-          .forEach((event: any, index: number) => {
-            const address = event.args?.to as string;
-            if (address) {
-              nodesMap.set(address, {
-                id: address,
-                address,
-                type: "attester", // All Attesters are committee members (also have Citizen rights)
-                isFounder: index < 3, // First 3 are founders
-                mintedAt: event.blockNumber,
-              });
-            }
+      // Pass 3: citizen-only mints → active citizen nodes
+      citizenMints
+        .filter((event: any) => event.args?.from === ZERO_ADDRESS)
+        .forEach((event: any, index: number) => {
+          const address = event.args?.to as string;
+          if (!address || attesterAddresses.has(address)) return;
+          nodesMap.set(address, {
+            id: address,
+            address,
+            type: "citizen",
+            isFounder: index < 3,
+            status: "active",
+            mintedAt: event.blockNumber,
           });
+        });
 
-        // Third pass: Process Citizen-only mints
-        // Only add if they don't already have Attester NFT
-        citizenMints
-          .filter((event: any) => event.args?.from === "0x0000000000000000000000000000000000000000")
-          .forEach((event: any, index: number) => {
-            const address = event.args?.to as string;
-            if (address && !attesterAddresses.has(address)) {
-              nodesMap.set(address, {
-                id: address,
-                address,
-                type: "citizen", // Citizen-only (not a committee member)
-                isFounder: index < 3, // First 3 are founders
-                mintedAt: event.blockNumber,
-              });
-            }
+      // Pass 4: pending citizen requests — only if target isn't already a member
+      citizenRequests.forEach((event: any) => {
+        const target = event.args?.target as string;
+        const requestId = event.args?.requestId?.toString();
+        if (!target || nodesMap.has(target)) return;
+        nodesMap.set(target, {
+          id: target,
+          address: target,
+          type: "citizen",
+          isFounder: false,
+          status: "pending",
+          requestedAt: event.blockNumber,
+          requestId,
+        });
+      });
+
+      // Pass 5: pending attester requests — same rule
+      attesterRequests.forEach((event: any) => {
+        const target = event.args?.target as string;
+        const requestId = event.args?.requestId?.toString();
+        if (!target || nodesMap.has(target)) return;
+        nodesMap.set(target, {
+          id: target,
+          address: target,
+          type: "attester",
+          isFounder: false,
+          status: "pending",
+          requestedAt: event.blockNumber,
+          requestId,
+        });
+      });
+
+      // Pass 6: revocations — mark existing nodes as revoked
+      attesterRevocations.forEach((event: any) => {
+        const address = event.args?.attester as string;
+        if (!address) return;
+        const node = nodesMap.get(address);
+        if (!node) return;
+        node.status = "revoked";
+        node.revokedAt = event.blockNumber;
+      });
+      citizenRevocations.forEach((event: any) => {
+        const address = event.args?.citizen as string;
+        if (!address) return;
+        const node = nodesMap.get(address);
+        if (!node) return;
+        node.status = "revoked";
+        node.revokedAt = event.blockNumber;
+      });
+
+      // Build edges from approvals that match a successful mint requestId
+      const edgesArray: GraphEdge[] = [];
+      const edgeSet = new Set<string>();
+
+      const attesterRequestToTarget = new Map<string, string>();
+      attesterMintEvents.forEach((event: any) => {
+        const requestId = event.args?.requestId?.toString();
+        const target = event.args?.attester as string;
+        if (requestId && target) attesterRequestToTarget.set(requestId, target);
+      });
+
+      const citizenRequestToTarget = new Map<string, string>();
+      citizenMintEvents.forEach((event: any) => {
+        const requestId = event.args?.requestId?.toString();
+        const target = event.args?.citizen as string;
+        if (requestId && target) citizenRequestToTarget.set(requestId, target);
+      });
+
+      attesterApprovals.forEach((event: any) => {
+        const requestId = event.args?.requestId?.toString();
+        const approver = event.args?.approver as string;
+        const target = attesterRequestToTarget.get(requestId);
+        if (!approver || !target || approver === target) return;
+
+        const edgeId = `${approver}->${target}`;
+        if (!edgeSet.has(edgeId)) {
+          edgesArray.push({
+            id: edgeId,
+            source: approver,
+            target,
+            type: "attester_approved",
+            timestamp: event.blockNumber || 0,
           });
-
-        // Prepare RequestApproved events
-        const attesterApprovedEvent = prepareEvent({
-          signature: "event RequestApproved(uint256 indexed requestId, address indexed approver)",
-        });
-
-        const citizenApprovedEvent = prepareEvent({
-          signature: "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
-        });
-
-        const attesterMintedEvent = prepareEvent({
-          signature: "event AttesterNFTMinted(address indexed attester, uint256 indexed tokenId, uint256 indexed requestId)",
-        });
-
-        const citizenMintedEvent = prepareEvent({
-          signature: "event CitizenNFTMinted(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
-        });
-
-        // Fetch approval events
-        const [attesterApprovals, citizenApprovals, attesterMintEvents, citizenMintEvents] = await Promise.all([
-          getContractEvents({
-            contract: attesterContract,
-            events: [attesterApprovedEvent],
-          }),
-          getContractEvents({
-            contract: citizenContract,
-            events: [citizenApprovedEvent],
-          }),
-          getContractEvents({
-            contract: attesterContract,
-            events: [attesterMintedEvent],
-          }),
-          getContractEvents({
-            contract: citizenContract,
-            events: [citizenMintedEvent],
-          }),
-        ]);
-
-        // Build edges from approvals
-        const edgesArray: GraphEdge[] = [];
-        const edgeSet = new Set<string>(); // To avoid duplicates
-
-        // Map requestId to target address for Attester approvals
-        const attesterRequestToTarget = new Map<string, string>();
-        attesterMintEvents.forEach((event: any) => {
-          const requestId = event.args?.requestId?.toString();
-          const target = event.args?.attester as string;
-          if (requestId && target) {
-            attesterRequestToTarget.set(requestId, target);
+          edgeSet.add(edgeId);
+        }
+        const targetNode = nodesMap.get(target);
+        if (targetNode) {
+          if (!targetNode.verifiedBy) targetNode.verifiedBy = [];
+          if (!targetNode.verifiedBy.includes(approver)) {
+            targetNode.verifiedBy.push(approver);
           }
-        });
+        }
+      });
 
-        // Map requestId to target address for Citizen approvals
-        const citizenRequestToTarget = new Map<string, string>();
-        citizenMintEvents.forEach((event: any) => {
-          const requestId = event.args?.requestId?.toString();
-          const target = event.args?.citizen as string;
-          if (requestId && target) {
-            citizenRequestToTarget.set(requestId, target);
+      citizenApprovals.forEach((event: any) => {
+        const requestId = event.args?.requestId?.toString();
+        const approver = event.args?.approver as string;
+        const target = citizenRequestToTarget.get(requestId);
+        if (!approver || !target || approver === target) return;
+
+        const edgeId = `${approver}->${target}`;
+        if (!edgeSet.has(edgeId)) {
+          edgesArray.push({
+            id: edgeId,
+            source: approver,
+            target,
+            type: "citizen_approved",
+            timestamp: event.blockNumber || 0,
+          });
+          edgeSet.add(edgeId);
+        }
+        const targetNode = nodesMap.get(target);
+        if (targetNode) {
+          if (!targetNode.verifiedBy) targetNode.verifiedBy = [];
+          if (!targetNode.verifiedBy.includes(approver)) {
+            targetNode.verifiedBy.push(approver);
           }
-        });
+        }
+      });
 
-        // Process Attester approvals
-        attesterApprovals.forEach((event: any) => {
-          const requestId = event.args?.requestId?.toString();
-          const approver = event.args?.approver as string;
-          const target = attesterRequestToTarget.get(requestId);
-
-          if (approver && target && approver !== target) {
-            const edgeId = `${approver}->${target}`;
-            if (!edgeSet.has(edgeId)) {
-              edgesArray.push({
-                id: edgeId,
-                source: approver,
-                target: target,
-                type: "attester_approved",
-                timestamp: event.blockNumber || 0,
-              });
-              edgeSet.add(edgeId);
-            }
-
-            // Update node verifiedBy
-            const targetNode = nodesMap.get(target);
-            if (targetNode) {
-              if (!targetNode.verifiedBy) {
-                targetNode.verifiedBy = [];
-              }
-              if (!targetNode.verifiedBy.includes(approver)) {
-                targetNode.verifiedBy.push(approver);
-              }
-            }
-          }
-        });
-
-        // Process Citizen approvals
-        citizenApprovals.forEach((event: any) => {
-          const requestId = event.args?.requestId?.toString();
-          const approver = event.args?.approver as string;
-          const target = citizenRequestToTarget.get(requestId);
-
-          if (approver && target && approver !== target) {
-            const edgeId = `${approver}->${target}`;
-            if (!edgeSet.has(edgeId)) {
-              edgesArray.push({
-                id: edgeId,
-                source: approver,
-                target: target,
-                type: "citizen_approved",
-                timestamp: event.blockNumber || 0,
-              });
-              edgeSet.add(edgeId);
-            }
-
-            // Update node verifiedBy
-            const targetNode = nodesMap.get(target);
-            if (targetNode) {
-              if (!targetNode.verifiedBy) {
-                targetNode.verifiedBy = [];
-              }
-              if (!targetNode.verifiedBy.includes(approver)) {
-                targetNode.verifiedBy.push(approver);
-              }
-            }
-          }
-        });
-
-        setNodes(Array.from(nodesMap.values()));
-        setEdges(edgesArray);
-        setLastUpdated(new Date());
-        setIsLoading(false);
-      } catch (err) {
-        console.error("Error fetching social graph data:", err);
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setIsLoading(false);
-      }
-    };
-
-  useEffect(() => {
-    // Fetch data only on mount (page refresh)
-    fetchGraphData();
-  }, []);
-
-  const refresh = () => {
-    fetchGraphData();
+      setNodes(Array.from(nodesMap.values()));
+      setEdges(edgesArray);
+      setLastUpdated(new Date());
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Error fetching social graph data:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
+      setIsLoading(false);
+    } finally {
+      inFlight.current = false;
+    }
   };
 
-  return { nodes, edges, isLoading, error, lastUpdated, refresh };
+  useEffect(() => {
+    fetchGraphData();
+    const interval = setInterval(fetchGraphData, 30_000);
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchGraphData();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisible);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    nodes,
+    edges,
+    isLoading,
+    error,
+    lastUpdated,
+    refresh: fetchGraphData,
+  };
 }
