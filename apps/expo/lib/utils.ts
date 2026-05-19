@@ -37,6 +37,12 @@ export function formatEventCardDateSplit(dateISO: string): { day: string; label:
   }
 }
 
+// Long-form date subtitle for linked event previews: "26. Mai · Montag"
+export function formatEventDateLong(dateISO: string): string {
+  const date = parseISO(dateISO);
+  return format(date, "d. MMMM '·' EEEE", { locale: de });
+}
+
 // Check if event is in current week
 export function isEventThisWeek(dateISO: string): boolean {
   return isThisWeek(parseISO(dateISO), { locale: de, weekStartsOn: 1 });

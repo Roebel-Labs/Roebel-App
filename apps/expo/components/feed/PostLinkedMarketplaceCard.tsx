@@ -35,36 +35,34 @@ export default function PostLinkedMarketplaceCard({ listing }: Props) {
   const priceLabel =
     listing.price_type === 'free'
       ? 'Zu verschenken'
-      : `${currency(listing.price)} ${PRICE_TYPE_LABELS[listing.price_type] || ''}`;
+      : `${currency(listing.price)} ${PRICE_TYPE_LABELS[listing.price_type] || ''}`.trim();
   const conditionLabel = listing.condition ? CONDITION_LABELS[listing.condition] : null;
 
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.container, { borderColor: colors.border }]}
+      style={[
+        styles.container,
+        { borderColor: colors.border, backgroundColor: colors.background },
+      ]}
     >
-      {firstImage && (
-        <Image
-          source={{ uri: firstImage }}
-          style={styles.thumbnail}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
-        />
-      )}
+      <Image
+        source={firstImage ? { uri: firstImage } : undefined}
+        style={[styles.thumbnail, { backgroundColor: colors.cardPlaceholder }]}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
       <View style={styles.info}>
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
           {listing.title}
         </Text>
-        <Text style={[styles.price, { color: colors.primary }]}>{priceLabel}</Text>
-        <View style={styles.meta}>
+        <View style={styles.priceRow}>
+          <Text style={[styles.price, { color: colors.textPrimary }]} numberOfLines={1}>
+            {priceLabel}
+          </Text>
           {conditionLabel && (
-            <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.chipText, { color: colors.textSecondary }]}>{conditionLabel}</Text>
-            </View>
-          )}
-          {listing.neighborhood && (
-            <Text style={[styles.location, { color: colors.textTertiary }]} numberOfLines={1}>
-              {listing.neighborhood}
+            <Text style={[styles.condition, { color: colors.textSecondary }]} numberOfLines={1}>
+              {conditionLabel}
             </Text>
           )}
         </View>
@@ -76,45 +74,38 @@ export default function PostLinkedMarketplaceCard({ listing }: Props) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
   },
   thumbnail: {
-    width: 80,
-    height: 80,
+    width: 96,
+    height: 96,
   },
   info: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 3,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 19,
-  },
-  price: {
-    fontSize: 14,
+    fontSize: 17,
     fontFamily: 'Inter-SemiBold',
+    lineHeight: 22,
   },
-  meta: {
+  priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    flexWrap: 'wrap',
   },
-  chip: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  price: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
   },
-  chipText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-  },
-  location: {
-    fontSize: 12,
+  condition: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
   },
 });

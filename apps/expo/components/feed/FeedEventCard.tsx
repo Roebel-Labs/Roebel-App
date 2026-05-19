@@ -14,7 +14,7 @@ type Props = {
 };
 
 export default function FeedEventCard({ event }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const handlePress = () => {
@@ -30,7 +30,10 @@ export default function FeedEventCard({ event }: Props) {
       onPress={handlePress}
       style={({ pressed }) => [
         styles.container,
-        { backgroundColor: colors.background },
+        {
+          backgroundColor: colors.background,
+          borderColor: isDark ? colors.border : '#ffffff',
+        },
         pressed && { backgroundColor: colors.pressedOverlay },
       ]}
     >
@@ -92,7 +95,8 @@ export default function FeedEventCard({ event }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 4,
     overflow: 'hidden',
     gap: 0,
   },

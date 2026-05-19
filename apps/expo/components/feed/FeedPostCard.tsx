@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -49,24 +49,36 @@ export default function FeedPostCard({
 
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
   const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
+  const isMarketplacePost = !!post.linked_marketplace;
 
   return (
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
         styles.container,
+        isMarketplacePost && styles.containerMarketplace,
         { backgroundColor: colors.background },
         pressed && { backgroundColor: colors.pressedOverlay },
       ]}
     >
       <PostAuthorRow
         author={post.author}
-        category={post.category}
+        category={isMarketplacePost ? undefined : post.category}
         createdAt={post.created_at}
         onMore={onMore}
       />
 
-      <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
+      {!!post.content && (
+        <Text
+          style={[
+            isMarketplacePost ? styles.headline : styles.content,
+            { color: colors.textPrimary },
+          ]}
+          numberOfLines={isMarketplacePost ? 3 : undefined}
+        >
+          {post.content}
+        </Text>
+      )}
 
       {post.linked_event && (
         <PostLinkedEventCard event={post.linked_event} />
@@ -106,6 +118,7 @@ export default function FeedPostCard({
         onLike={onLike}
         onComment={handleComment}
         onShare={onShare}
+        iconOnly={isMarketplacePost}
       />
 
       <ImageZoomModal
@@ -125,10 +138,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden' as const,
     gap: 10,
   },
+  containerMarketplace: {
+    paddingVertical: 16,
+    borderRadius: 20,
+    gap: 14,
+  },
   content: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
+  },
+  headline: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 28,
   },
   sticker: {
     width: 200,

@@ -17,6 +17,8 @@ type Props = {
   onLike: () => void;
   onComment: () => void;
   onShare: () => void;
+  /** When true, hides numeric counts and the top divider for a cleaner row. */
+  iconOnly?: boolean;
 };
 
 export default function PostActions({
@@ -26,6 +28,7 @@ export default function PostActions({
   onLike,
   onComment,
   onShare,
+  iconOnly = false,
 }: Props) {
   const { colors } = useTheme();
 
@@ -111,10 +114,17 @@ export default function PostActions({
   };
 
   return (
-    <View style={[styles.container, { borderTopColor: colors.border }]}>
+    <View
+      style={[
+        styles.container,
+        iconOnly
+          ? styles.containerIconOnly
+          : { borderTopColor: colors.border, borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+      ]}
+    >
       <Pressable onPress={onComment} style={styles.action}>
         <CommentIcon width={22} height={22} color={colors.textPrimary} />
-        {commentsCount > 0 && (
+        {!iconOnly && commentsCount > 0 && (
           <Text style={[styles.count, { color: colors.textPrimary }]}>{commentsCount}</Text>
         )}
       </Pressable>
@@ -124,7 +134,7 @@ export default function PostActions({
       </Pressable>
 
       <Pressable onPress={handleLikePress} style={[styles.action, styles.heartAction]}>
-        {likesCount > 0 && (
+        {!iconOnly && likesCount > 0 && (
           <Text
             style={[
               styles.count,
@@ -171,9 +181,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 20,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    marginTop: 10,
+  },
+  containerIconOnly: {
+    paddingTop: 4,
   },
   action: {
     flexDirection: 'row',

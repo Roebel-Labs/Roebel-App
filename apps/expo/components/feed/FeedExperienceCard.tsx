@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import { Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
 import PostAuthorRow from './PostAuthorRow';
+import PostLinkedEventCard from './PostLinkedEventCard';
 import PostActions from './PostActions';
 
 type Props = {
@@ -27,10 +27,6 @@ export default function FeedExperienceCard({
   const { colors } = useTheme();
   const router = useRouter();
 
-  const eventTitle = post.linked_event?.title;
-  const eventBanner = post.linked_event?.image_url;
-  const firstMedia = post.media_urls?.find(Boolean) ?? null;
-
   const openEvent = () => {
     if (!post.linked_event_id) return;
     router.push({
@@ -52,54 +48,23 @@ export default function FeedExperienceCard({
       ]}
       accessibilityRole="button"
       accessibilityLabel={
-        eventTitle ? `Erlebnis bei ${eventTitle} öffnen` : 'Erlebnis öffnen'
+        post.linked_event?.title
+          ? `Erlebnis bei ${post.linked_event.title} öffnen`
+          : 'Erlebnis öffnen'
       }
     >
       <PostAuthorRow author={post.author} createdAt={post.created_at} onMore={onMore} />
 
-      {eventTitle && (
-        <View style={styles.eventLabelRow}>
-          <Text style={[styles.eventLabelPrefix, { color: colors.textTertiary }]}>
-            war bei:
-          </Text>
-          <Text
-            style={[styles.eventLabelTitle, { color: colors.primary }]}
-            numberOfLines={1}
-          >
-            {eventTitle}
-          </Text>
-        </View>
-      )}
-
       {!!post.content && (
         <Text
-          style={[styles.content, { color: colors.textPrimary }]}
-          numberOfLines={2}
+          style={[styles.headline, { color: colors.textPrimary }]}
+          numberOfLines={3}
         >
           {post.content}
         </Text>
       )}
 
-      {(eventBanner || firstMedia) && (
-        <View style={styles.thumbRow}>
-          {eventBanner && (
-            <Image
-              source={{ uri: eventBanner }}
-              style={[styles.thumb, { backgroundColor: colors.cardPlaceholder }]}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          )}
-          {firstMedia && (
-            <Image
-              source={{ uri: firstMedia }}
-              style={[styles.thumb, { backgroundColor: colors.cardPlaceholder }]}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          )}
-        </View>
-      )}
+      {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
 
       <PostActions
         likesCount={displayLikeCount}
@@ -108,6 +73,7 @@ export default function FeedExperienceCard({
         onLike={onLike}
         onComment={openEvent}
         onShare={onShare}
+        iconOnly
       />
     </Pressable>
   );
@@ -116,37 +82,14 @@ export default function FeedExperienceCard({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    gap: 8,
+    gap: 14,
   },
-  eventLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  eventLabelPrefix: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-  },
-  eventLabelTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-  },
-  content: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
-  },
-  thumbRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
+  headline: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 28,
   },
 });
