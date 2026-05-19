@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,15 +22,20 @@ export default function AccountPostsList({ accountId }: Props) {
   const { colors } = useTheme();
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errored, setErrored] = useState(false);
 
   useEffect(() => {
     if (!accountId) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setErrored(false);
       try {
         const { data } = await fetchAccountPosts(accountId, { pageSize: 50 });
-        if (!cancelled) setPosts(data);
+        if (!cancelled) setPosts(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[AccountPostsList] fetch failed:', err);
+        if (!cancelled) setErrored(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -40,6 +45,14 @@ export default function AccountPostsList({ accountId }: Props) {
     };
   }, [accountId]);
 
+  const safePosts = useMemo(
+    () =>
+      posts.filter(
+        (p) => p && typeof p.id === 'string' && typeof p.created_at === 'string'
+      ),
+    [posts]
+  );
+
   if (loading) {
     return (
       <View style={styles.empty}>
@@ -48,7 +61,17 @@ export default function AccountPostsList({ accountId }: Props) {
     );
   }
 
-  if (posts.length === 0) {
+  if (errored) {
+    return (
+      <View style={styles.empty}>
+        <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+          Beiträge konnten nicht geladen werden
+        </Text>
+      </View>
+    );
+  }
+
+  if (safePosts.length === 0) {
     return (
       <View style={styles.empty}>
         <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
@@ -60,37 +83,40 @@ export default function AccountPostsList({ accountId }: Props) {
 
   return (
     <View>
-      {posts.map((post) => (
-        <Pressable
-          key={post.id}
-          onPress={() => router.push(`/post/${post.id}` as any)}
-          style={({ pressed }) => [
-            styles.post,
-            { borderBottomColor: colors.border },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Beitrag öffnen"
-        >
-          <PostAuthorRow
-            author={post.author}
-            category={post.category}
-            createdAt={post.created_at}
-          />
-          {post.content ? (
-            <Text
-              style={[styles.content, { color: colors.textPrimary }]}
-              numberOfLines={6}
-            >
-              {post.content}
-            </Text>
-          ) : null}
-          {post.media_urls && post.media_urls.length > 0 && (
-            <PostImageGrid imageUrls={post.media_urls as string[]} />
-          )}
-          {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
-        </Pressable>
-      ))}
+      {safePosts.map((post) => {
+        const mediaUrls = Array.isArray(post.media_urls)
+          ? (post.media_urls.filter((u) => typeof u === 'string' && u.length > 0) as string[])
+          : [];
+        return (
+          <Pressable
+            key={post.id}
+            onPress={() => router.push(`/post/${post.id}` as any)}
+            style={({ pressed }) => [
+              styles.post,
+              { borderBottomColor: colors.border },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Beitrag öffnen"
+          >
+            <PostAuthorRow
+              author={post.author}
+              category={post.category}
+              createdAt={post.created_at}
+            />
+            {post.content ? (
+              <Text
+                style={[styles.content, { color: colors.textPrimary }]}
+                numberOfLines={6}
+              >
+                {post.content}
+              </Text>
+            ) : null}
+            {mediaUrls.length > 0 && <PostImageGrid imageUrls={mediaUrls} />}
+            {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

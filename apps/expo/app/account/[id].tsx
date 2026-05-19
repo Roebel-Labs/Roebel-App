@@ -22,6 +22,7 @@ import MapboxMapView from '@/components/map/MapboxMapView';
 import ProfileTabs from '@/components/profile/ProfileTabs';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import { fetchAccountPosts, fetchEventsByAccount } from '@/lib/supabase-posts';
@@ -70,20 +71,23 @@ function subTypeLabel(subType: OrgSubType | null): { emoji: string; label: strin
   return SUB_TYPE_LABELS[subType] ?? null;
 }
 
-function formatEventDate(date: string, time: string | null): string {
+function formatEventDate(date: string | null | undefined, time: string | null): string {
+  if (!date || typeof date !== 'string') return '';
   try {
     const d = new Date(date + 'T' + (time ?? '00:00:00'));
+    if (Number.isNaN(d.getTime())) return date;
     const day = d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' });
     if (!time) return day;
-    const hhmm = time.slice(0, 5);
+    const hhmm = String(time).slice(0, 5);
     return `${day} · ${hhmm}`;
   } catch {
     return date;
   }
 }
 
-function formatPrice(price: number, priceType: string): string {
+function formatPrice(price: number | null | undefined, priceType: string): string {
   if (priceType === 'free') return 'Gratis';
+  if (typeof price !== 'number' || !Number.isFinite(price)) return '';
   const formatted = price.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   return `${formatted} €${priceType === 'negotiable' ? ' VB' : ''}`;
 }
@@ -167,11 +171,17 @@ export default function PublicAccountScreen() {
   }, [account, members]);
 
   const products = useMemo(
-    () => listings.filter((l) => l.listing_type === 'product'),
+    () =>
+      listings.filter(
+        (l) => l && l.id && typeof l.title === 'string' && l.listing_type === 'product'
+      ),
     [listings]
   );
   const services = useMemo(
-    () => listings.filter((l) => l.listing_type === 'service'),
+    () =>
+      listings.filter(
+        (l) => l && l.id && typeof l.title === 'string' && l.listing_type === 'service'
+      ),
     [listings]
   );
 
@@ -179,11 +189,28 @@ export default function PublicAccountScreen() {
   const myRole = useMemo(
     () =>
       myWallet
-        ? members.find((m) => m.wallet_address.toLowerCase() === myWallet)?.role ?? null
+        ? members.find(
+            (m) =>
+              typeof m?.wallet_address === 'string' &&
+              m.wallet_address.toLowerCase() === myWallet
+          )?.role ?? null
         : null,
     [members, myWallet]
   );
   const canEdit = myRole === 'owner' || myRole === 'admin';
+
+  const safeEvents = useMemo(
+    () => events.filter((e) => e && e.id && typeof e.title === 'string'),
+    [events]
+  );
+  const safeBlog = useMemo(
+    () => blogArticles.filter((a) => a && a.id && typeof a.title === 'string'),
+    [blogArticles]
+  );
+  const safeDeals = useMemo(
+    () => deals.filter((d) => d && d.id && typeof d.title === 'string'),
+    [deals]
+  );
 
   if (loading) {
     return <AccountPageSkeleton onBack={goBack} />;
@@ -248,7 +275,12 @@ export default function PublicAccountScreen() {
     Linking.openURL(`mailto:${account.contact_email}`).catch(() => undefined);
   };
 
-  const mapGeoJSON = orgLocation
+  const hasValidCoords =
+    !!orgLocation &&
+    Number.isFinite(orgLocation.lat) &&
+    Number.isFinite(orgLocation.lon);
+
+  const mapGeoJSON = orgLocation && hasValidCoords
     ? {
         type: 'FeatureCollection' as const,
         features: [
@@ -309,6 +341,7 @@ export default function PublicAccountScreen() {
 
       {/* Öffnungszeiten — promoted above all other content sections */}
       {supportsOpeningHours && (openingHours || canEdit) ? (
+        <InlineErrorBoundary label="org-opening-hours">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Öffnungszeiten</Text>
@@ -367,17 +400,19 @@ export default function PublicAccountScreen() {
             </Pressable>
           )}
         </View>
+        </InlineErrorBoundary>
       ) : null}
 
       {/* Events */}
-      {events.length > 0 && (
+      {safeEvents.length > 0 && (
+        <InlineErrorBoundary label="org-events">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
-            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{events.length}</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{safeEvents.length}</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-            {events.map((event) => (
+            {safeEvents.map((event) => (
               <Pressable
                 key={event.id}
                 onPress={() => router.push(`/event/${event.id}` as any)}
@@ -401,17 +436,19 @@ export default function PublicAccountScreen() {
             ))}
           </ScrollView>
         </View>
+        </InlineErrorBoundary>
       )}
 
       {/* Blog */}
-      {blogArticles.length > 0 && (
+      {safeBlog.length > 0 && (
+        <InlineErrorBoundary label="org-blog">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Artikel</Text>
-            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{blogArticles.length}</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{safeBlog.length}</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-            {blogArticles.map((article) => (
+            {safeBlog.map((article) => (
               <Pressable
                 key={article.id}
                 onPress={() => router.push(`/blog/${article.id}` as any)}
@@ -437,10 +474,12 @@ export default function PublicAccountScreen() {
             ))}
           </ScrollView>
         </View>
+        </InlineErrorBoundary>
       )}
 
       {/* Produkte */}
       {products.length > 0 && (
+        <InlineErrorBoundary label="org-products">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Produkte</Text>
@@ -471,10 +510,12 @@ export default function PublicAccountScreen() {
             ))}
           </ScrollView>
         </View>
+        </InlineErrorBoundary>
       )}
 
       {/* Services */}
       {services.length > 0 && (
+        <InlineErrorBoundary label="org-services">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Services</Text>
@@ -505,17 +546,19 @@ export default function PublicAccountScreen() {
             ))}
           </ScrollView>
         </View>
+        </InlineErrorBoundary>
       )}
 
       {/* Deals (only when a linked business is found) */}
-      {deals.length > 0 && (
+      {safeDeals.length > 0 && (
+        <InlineErrorBoundary label="org-deals">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Deals</Text>
-            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{deals.length}</Text>
+            <Text style={[styles.sectionCount, { color: colors.textTertiary }]}>{safeDeals.length}</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-            {deals.map((deal) => (
+            {safeDeals.map((deal) => (
               <View
                 key={deal.id}
                 style={[styles.mediaCard, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
@@ -539,10 +582,12 @@ export default function PublicAccountScreen() {
             ))}
           </ScrollView>
         </View>
+        </InlineErrorBoundary>
       )}
 
       {/* Standort / map */}
-      {orgLocation && mapGeoJSON ? (
+      {orgLocation ? (
+        <InlineErrorBoundary label="org-map-embed">
         <View style={[styles.section, { borderTopColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
           {orgLocation.address ? (
@@ -550,24 +595,27 @@ export default function PublicAccountScreen() {
               {orgLocation.address}
             </Text>
           ) : null}
-          <Pressable
-            onPress={openMap}
-            accessibilityRole="button"
-            accessibilityLabel={`${account.name} auf der Karte ansehen`}
-            style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
-          >
-            <View style={styles.mapInner} pointerEvents="none">
-              <MapboxMapView
-                geojson={mapGeoJSON}
-                onMarkerPress={() => undefined}
-                flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
-              />
-            </View>
-            <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
-              <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
-            </View>
-          </Pressable>
+          {mapGeoJSON ? (
+            <Pressable
+              onPress={openMap}
+              accessibilityRole="button"
+              accessibilityLabel={`${account.name} auf der Karte ansehen`}
+              style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
+            >
+              <View style={styles.mapInner} pointerEvents="none">
+                <MapboxMapView
+                  geojson={mapGeoJSON}
+                  onMarkerPress={() => undefined}
+                  flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
+                />
+              </View>
+              <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
+                <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
+              </View>
+            </Pressable>
+          ) : null}
         </View>
+        </InlineErrorBoundary>
       ) : null}
     </>
   );
@@ -678,7 +726,15 @@ export default function PublicAccountScreen() {
           />
         </View>
 
-        {activeTab === 'info' ? renderInfoTab() : <AccountPostsList accountId={account.id} />}
+        <InlineErrorBoundary label="org-tabs-content">
+          {activeTab === 'info' ? (
+            renderInfoTab()
+          ) : (
+            <InlineErrorBoundary label="org-posts-list">
+              <AccountPostsList accountId={account.id} />
+            </InlineErrorBoundary>
+          )}
+        </InlineErrorBoundary>
       </ScrollView>
     </SafeAreaView>
   );
