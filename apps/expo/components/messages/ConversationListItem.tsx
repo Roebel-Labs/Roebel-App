@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
-import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
+import { safeDisplayName, type ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 type Props = {
   conversation: ConversationWithLastMessage;
@@ -58,7 +58,7 @@ export default function ConversationListItem({ conversation, onPress }: Props) {
     hasUnread,
   } = conversation;
 
-  const displayName = peerName || peerUsername || 'Unbekannt';
+  const displayName = safeDisplayName(peerName, peerUsername);
   // Personal accounts carry an equipped frame from their owner wallet's
   // users row; orgs never do.
   const frameUrl = peerAccountType === 'personal' ? peerEquippedFrameUrl : null;

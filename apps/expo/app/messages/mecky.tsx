@@ -47,7 +47,7 @@ export default function MeckyScreen() {
       return (
         <View style={[styles.streamingRow]}>
           <Image
-            source={require('@/assets/games/mecky/mecky_main.png')}
+            source={require('@/assets/illustration/mecky/welcome.png')}
             style={styles.streamingAvatar}
             contentFit="cover"
           />
@@ -81,7 +81,7 @@ export default function MeckyScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Image
-            source={require('@/assets/games/mecky/mecky_main.png')}
+            source={require('@/assets/illustration/mecky/welcome.png')}
             style={styles.headerAvatar}
             contentFit="cover"
           />

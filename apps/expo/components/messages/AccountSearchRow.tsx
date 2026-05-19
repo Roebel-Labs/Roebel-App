@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import CheckIcon from '@/assets/icons/check.svg';
 import { SUB_TYPE_LABELS, SUB_TYPE_EMOJI } from '@/lib/types';
+import { safeDisplayName } from '@/lib/supabase-messages';
 import type { AccountSearchResult } from '@/lib/supabase-account-search';
 
 type Props = {
@@ -15,6 +16,8 @@ type Props = {
 
 export default function AccountSearchRow({ result, onPress, index = 0 }: Props) {
   const { colors } = useTheme();
+
+  const displayName = safeDisplayName(result.name, result.username);
 
   const subtitle = (() => {
     if (result.accountType === 'organisation' && result.subType) {
@@ -40,7 +43,7 @@ export default function AccountSearchRow({ result, onPress, index = 0 }: Props) 
         <UserAvatarWithFrame
           size={44}
           uri={result.avatarUrl}
-          fallbackInitial={(result.name[0] || '?').toUpperCase()}
+          fallbackInitial={(displayName[0] || '?').toUpperCase()}
           frameAssetUrl={null}
         />
         <View style={styles.body}>
@@ -49,7 +52,7 @@ export default function AccountSearchRow({ result, onPress, index = 0 }: Props) 
               style={[styles.name, { color: colors.textPrimary }]}
               numberOfLines={1}
             >
-              {result.name}
+              {displayName}
             </Text>
             {result.isVerified && (
               <View style={[styles.verifiedBadge, { backgroundColor: colors.primary }]}>

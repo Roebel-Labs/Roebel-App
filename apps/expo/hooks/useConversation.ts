@@ -13,9 +13,7 @@ import {
   hydrateMessageSticker,
   type Message,
 } from '@/lib/supabase-messages';
-import { fetchAccountById } from '@/lib/supabase-accounts';
-import { supabase as sb } from '@/lib/supabase';
-import type { Account, OrgSubType } from '@/lib/types';
+import type { OrgSubType } from '@/lib/types';
 
 export type PeerAccount = {
   id: string;
@@ -33,88 +31,97 @@ export function useConversation(conversationId: string) {
   const myAccountId = activeAccount?.id ?? null;
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const [isLoadingPeer, setIsLoadingPeer] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [peerAccount, setPeerAccount] = useState<PeerAccount | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Load conversation peer + initial messages
+  // Two parallel chains: messages and peer hydration. Either can complete
+  // first — the chat screen shows real bubbles as soon as messages land and
+  // a header skeleton until peer data lands. Cuts perceived load time roughly
+  // in half compared to the previous sequential chain.
   useEffect(() => {
     if (!conversationId || !myAccountId) return;
-
     let cancelled = false;
 
-    const load = async () => {
-      setIsLoading(true);
+    // Reset per-conversation state so stale data from the previous chat
+    // doesn't flash in.
+    setMessages([]);
+    setPeerAccount(null);
+    setIsLoadingMessages(true);
+    setIsLoadingPeer(true);
+
+    // Chain A — messages
+    (async () => {
       try {
-        const { data } = await supabase
+        const msgs = await fetchMessages(conversationId, 50);
+        if (!cancelled) setMessages(msgs);
+      } catch (err) {
+        console.error('Failed to load messages:', err);
+      } finally {
+        if (!cancelled) setIsLoadingMessages(false);
+      }
+    })();
+
+    // Chain B — peer hydration
+    (async () => {
+      try {
+        const { data: convoRow } = await supabase
           .from('conversations' as any)
           .select('participant_one_account_id, participant_two_account_id')
           .eq('id', conversationId)
           .single();
 
-        const convo = data as {
+        const convo = convoRow as {
           participant_one_account_id: string | null;
           participant_two_account_id: string | null;
         } | null;
 
-        let peerId: string | null = null;
-        if (convo) {
-          peerId =
-            convo.participant_one_account_id === myAccountId
-              ? convo.participant_two_account_id
-              : convo.participant_one_account_id;
-        }
+        const peerId =
+          convo?.participant_one_account_id === myAccountId
+            ? convo?.participant_two_account_id
+            : convo?.participant_one_account_id;
 
-        if (peerId && !cancelled) {
-          const acc: Account | null = await fetchAccountById(peerId);
-          if (acc && !cancelled) {
-            // Pull personal-account frame + username from the owner wallet's `users` row.
-            let username: string | null = null;
-            let equippedFrameUrl: string | null = null;
-            if (acc.account_type === 'personal') {
-              const { data: ownerRow } = await sb
-                .from('account_owners' as any)
-                .select('wallet_address')
-                .eq('account_id', acc.id)
-                .limit(1)
-                .maybeSingle();
-              const wallet = (ownerRow as any)?.wallet_address as string | undefined;
-              if (wallet) {
-                const { data: userRow } = await sb
-                  .from('users')
-                  .select('username, equipped_frame_asset_url')
-                  .eq('wallet_address', wallet)
-                  .maybeSingle();
-                username = (userRow as any)?.username ?? null;
-                equippedFrameUrl = (userRow as any)?.equipped_frame_asset_url ?? null;
-              }
-            }
-            if (!cancelled) {
-              setPeerAccount({
-                id: acc.id,
-                accountType: acc.account_type,
-                subType: acc.sub_type,
-                name: acc.name,
-                username,
-                avatarUrl: acc.avatar_url,
-                equippedFrameUrl,
-                isVerified: acc.is_verified,
-              });
-            }
-          }
-        }
+        if (!peerId || cancelled) return;
 
-        const msgs = await fetchMessages(conversationId, 50);
-        if (!cancelled) setMessages(msgs);
+        // Fetch the peer account row and (for personal peers) the owner's
+        // users row in a single joined query. Cuts a round trip.
+        const { data: acc } = await supabase
+          .from('accounts' as any)
+          .select(
+            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, equipped_frame_asset_url))'
+          )
+          .eq('id', peerId)
+          .single();
+
+        if (!acc || cancelled) return;
+
+        const row = acc as any;
+        const owner = Array.isArray(row.account_owners) ? row.account_owners[0] : row.account_owners;
+        const ownerUser = owner?.users
+          ? Array.isArray(owner.users)
+            ? owner.users[0]
+            : owner.users
+          : null;
+
+        const isPersonal = row.account_type === 'personal';
+        setPeerAccount({
+          id: row.id,
+          accountType: row.account_type,
+          subType: row.sub_type,
+          name: row.name,
+          username: isPersonal ? ownerUser?.username ?? null : null,
+          avatarUrl: row.avatar_url,
+          equippedFrameUrl: isPersonal ? ownerUser?.equipped_frame_asset_url ?? null : null,
+          isVerified: row.is_verified,
+        });
       } catch (err) {
-        console.error('Failed to load conversation:', err);
+        console.error('Failed to hydrate peer:', err);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) setIsLoadingPeer(false);
       }
-    };
-
-    load();
+    })();
 
     return () => {
       cancelled = true;
@@ -185,7 +192,10 @@ export function useConversation(conversationId: string) {
 
   return {
     messages,
-    isLoading,
+    isLoadingMessages,
+    isLoadingPeer,
+    // Back-compat for callers that still read `isLoading`.
+    isLoading: isLoadingMessages,
     isSending,
     sendMessage,
     loadMore,

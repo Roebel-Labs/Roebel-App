@@ -59,6 +59,18 @@ function orderedIds(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
 }
 
+// Never render a wallet address as a display name. Some legacy `accounts.name`
+// rows were defaulted to the owner wallet — strip those out at the UI boundary.
+const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
+export function safeDisplayName(
+  name: string | null | undefined,
+  username: string | null | undefined
+): string {
+  if (username && !WALLET_RE.test(username)) return username;
+  if (name && !WALLET_RE.test(name)) return name;
+  return 'Unbekannt';
+}
+
 // ── Queries ────────────────────────────────────────────────────────
 
 export async function findOrCreateConversation(
@@ -68,14 +80,22 @@ export async function findOrCreateConversation(
   if (myAccountId === peerAccountId) return null;
   const [p1, p2] = orderedIds(myAccountId, peerAccountId);
 
+  // Write BOTH the new account-id columns and the legacy wallet columns.
+  // The legacy columns are NOT NULL with a `participant_one < participant_two`
+  // CHECK; using the same ordered uuid satisfies both. The legacy
+  // `(participant_one, participant_two)` unique index is always present,
+  // so we use it as the conflict target — that works regardless of whether
+  // the round-2 fixup migration has been applied yet.
   const { data, error } = await supabase
     .from('conversations' as any)
     .upsert(
       {
+        participant_one: p1,
+        participant_two: p2,
         participant_one_account_id: p1,
         participant_two_account_id: p2,
       } as any,
-      { onConflict: 'participant_one_account_id,participant_two_account_id' }
+      { onConflict: 'participant_one,participant_two' }
     )
     .select()
     .single();
@@ -87,15 +107,17 @@ export async function findOrCreateConversation(
 
   const convo = data as Conversation;
 
-  // Ensure participant rows exist for read tracking, one per account.
+  // Ensure participant rows exist for read tracking, one per account. Mirror
+  // the account id into the legacy wallet_address column so the original
+  // (conversation_id, wallet_address) PK is satisfied without the migration.
   await supabase
     .from('conversation_participants' as any)
     .upsert(
       [
-        { conversation_id: convo.id, account_id: p1 },
-        { conversation_id: convo.id, account_id: p2 },
+        { conversation_id: convo.id, wallet_address: p1, account_id: p1 },
+        { conversation_id: convo.id, wallet_address: p2, account_id: p2 },
       ] as any,
-      { onConflict: 'conversation_id,account_id' }
+      { onConflict: 'conversation_id,wallet_address' }
     );
 
   return convo;
@@ -194,68 +216,66 @@ export async function fetchConversations(
     }
   }
 
-  const results: ConversationWithLastMessage[] = [];
+  // Fire all per-conversation queries in parallel — with 5+ chats this is
+  // the difference between feeling laggy and feeling instant on cold open.
+  const rows = await Promise.all(
+    convos.map(async (convo) => {
+      const peerId =
+        convo.participant_one_account_id === myAccountId
+          ? convo.participant_two_account_id
+          : convo.participant_one_account_id;
+      if (!peerId) return null;
 
-  for (const convo of convos) {
-    const peerId =
-      convo.participant_one_account_id === myAccountId
-        ? convo.participant_two_account_id
-        : convo.participant_one_account_id;
-    if (!peerId) continue;
+      const peerAccount = accountById.get(peerId);
+      if (!peerAccount) return null;
 
-    const peerAccount = accountById.get(peerId);
-    if (!peerAccount) continue; // skip orphans
+      const peerUser = userByAccountId.get(peerId);
 
-    const peerUser = userByAccountId.get(peerId);
+      const [{ data: msgs }, { data: cp }] = await Promise.all([
+        supabase
+          .from('direct_messages' as any)
+          .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
+          .eq('conversation_id', convo.id)
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('conversation_participants' as any)
+          .select('last_read_at')
+          .eq('conversation_id', convo.id)
+          .eq('account_id', myAccountId)
+          .maybeSingle(),
+      ]);
 
-    const { data: msgs } = await supabase
-      .from('direct_messages' as any)
-      .select('*, sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)')
-      .eq('conversation_id', convo.id)
-      .order('created_at', { ascending: false })
-      .limit(1);
+      const lastMessage: Message | null = (msgs as Message[] | null)?.[0] ?? null;
+      const lastReadAt: string | null = (cp as any)?.last_read_at ?? null;
 
-    const lastMessage: Message | null = (msgs as Message[] | null)?.[0] ?? null;
+      const hasUnread =
+        !!lastMessage &&
+        lastMessage.sender_account_id !== myAccountId &&
+        (!lastReadAt || new Date(lastMessage.created_at) > new Date(lastReadAt));
 
-    const { data: cp } = await supabase
-      .from('conversation_participants' as any)
-      .select('last_read_at')
-      .eq('conversation_id', convo.id)
-      .eq('account_id', myAccountId)
-      .maybeSingle();
+      return {
+        ...convo,
+        peerAccountId: peerId,
+        peerAccountType: peerAccount.account_type,
+        peerSubType: peerAccount.sub_type,
+        peerName: peerAccount.name,
+        peerSlug: peerAccount.slug,
+        peerUsername: peerUser?.username ?? null,
+        peerIsVerified: peerAccount.is_verified,
+        peerAvatarUrl: peerAccount.avatar_url,
+        peerEquippedFrameUrl: peerUser?.equipped_frame_asset_url ?? null,
+        // Legacy mirror fields kept for back-compat with older renderers.
+        peerAddress: peerId,
+        peerProfilePictureUrl: peerAccount.avatar_url,
+        lastMessage,
+        lastReadAt,
+        hasUnread,
+      } satisfies ConversationWithLastMessage;
+    })
+  );
 
-    const lastReadAt: string | null = (cp as any)?.last_read_at ?? null;
-
-    const hasUnread =
-      !!lastMessage &&
-      lastMessage.sender_account_id !== myAccountId &&
-      (!lastReadAt || new Date(lastMessage.created_at) > new Date(lastReadAt));
-
-    const displayName =
-      peerAccount.name ||
-      peerUser?.username ||
-      '';
-
-    results.push({
-      ...convo,
-      peerAccountId: peerId,
-      peerAccountType: peerAccount.account_type,
-      peerSubType: peerAccount.sub_type,
-      peerName: displayName,
-      peerSlug: peerAccount.slug,
-      peerUsername: peerUser?.username ?? null,
-      peerIsVerified: peerAccount.is_verified,
-      peerAvatarUrl: peerAccount.avatar_url,
-      peerEquippedFrameUrl: peerUser?.equipped_frame_asset_url ?? null,
-      // Legacy mirror fields — keep `peerAddress` semantics as "the peer's
-      // public id" so older render code shows something sensible.
-      peerAddress: peerId,
-      peerProfilePictureUrl: peerAccount.avatar_url,
-      lastMessage,
-      lastReadAt,
-      hasUnread,
-    });
-  }
+  const results = rows.filter((r): r is ConversationWithLastMessage => r !== null);
 
   results.sort((a, b) => {
     const ta = a.lastMessage?.created_at ?? a.created_at;
@@ -296,10 +316,13 @@ export async function sendMessage(
   content: string,
   stickerRewardId: string | null = null
 ): Promise<Message | null> {
+  // Mirror sender_account_id into the legacy NOT NULL `sender_address` so the
+  // insert works against the pre-migration schema too.
   const { data, error } = await supabase
     .from('direct_messages' as any)
     .insert({
       conversation_id: conversationId,
+      sender_address: senderAccountId,
       sender_account_id: senderAccountId,
       content,
       sticker_reward_id: stickerRewardId,
@@ -323,10 +346,11 @@ export async function markConversationRead(
     .upsert(
       {
         conversation_id: conversationId,
+        wallet_address: accountId,
         account_id: accountId,
         last_read_at: new Date().toISOString(),
       } as any,
-      { onConflict: 'conversation_id,account_id' }
+      { onConflict: 'conversation_id,wallet_address' }
     );
 
   if (error) console.error('markConversationRead error:', error);

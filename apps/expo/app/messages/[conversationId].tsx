@@ -5,7 +5,6 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -18,7 +17,8 @@ import MessageBubble from '@/components/messages/MessageBubble';
 import ChatInput from '@/components/messages/ChatInput';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import { Skeleton } from '@/components/SkeletonLoader';
-import type { Message } from '@/lib/supabase-messages';
+import { ChatLoadingSkeletons } from '@/components/messages/MessageBubbleSkeleton';
+import { safeDisplayName, type Message } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -37,7 +37,8 @@ export default function ChatScreen() {
 
   const {
     messages,
-    isLoading,
+    isLoadingMessages,
+    isLoadingPeer,
     isSending,
     sendMessage,
     loadMore,
@@ -45,7 +46,9 @@ export default function ChatScreen() {
     myAccountId,
   } = useConversation(conversationId || '');
 
-  const peerDisplayName = peerAccount?.name ?? '';
+  const peerDisplayName = peerAccount
+    ? safeDisplayName(peerAccount.name, peerAccount.username)
+    : '';
 
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
@@ -70,13 +73,18 @@ export default function ChatScreen() {
           }
           disabled={!peerAccount?.id}
         >
-          {peerAccount ? (
+          {isLoadingPeer && !peerAccount ? (
+            <View style={styles.headerCenterSkeleton}>
+              <Skeleton width={32} height={32} borderRadius={16} />
+              <Skeleton width={120} height={14} borderRadius={4} />
+            </View>
+          ) : (
             <>
               <UserAvatarWithFrame
                 size={32}
-                uri={peerAccount.avatarUrl}
+                uri={peerAccount?.avatarUrl ?? null}
                 fallbackInitial={(peerDisplayName[0] || '?').toUpperCase()}
-                frameAssetUrl={peerAccount.equippedFrameUrl}
+                frameAssetUrl={peerAccount?.equippedFrameUrl ?? null}
               />
               <Text
                 style={[styles.headerTitle, { color: colors.textPrimary }]}
@@ -85,11 +93,6 @@ export default function ChatScreen() {
                 {peerDisplayName}
               </Text>
             </>
-          ) : (
-            <View style={styles.headerCenterSkeleton}>
-              <Skeleton width={32} height={32} borderRadius={16} />
-              <Skeleton width={120} height={14} borderRadius={4} />
-            </View>
           )}
         </Pressable>
         <View style={styles.headerRight} />
@@ -99,10 +102,8 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
+        {isLoadingMessages && messages.length === 0 ? (
+          <ChatLoadingSkeletons />
         ) : (
           <FlatList
             data={messages}

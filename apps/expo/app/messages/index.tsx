@@ -34,7 +34,7 @@ function MeckyRow() {
       onPress={() => router.push('/messages/mecky' as any)}
     >
       <Image
-        source={require('@/assets/games/mecky/mecky_main.png')}
+        source={require('@/assets/illustration/mecky/welcome.png')}
         style={styles.meckyAvatar}
         contentFit="cover"
       />

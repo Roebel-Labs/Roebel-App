@@ -28,7 +28,7 @@ export default function MeckyChatBubble({ message }: Props) {
       {/* Mecky avatar for assistant messages */}
       {!isUser && (
         <Image
-          source={require('@/assets/games/mecky/mecky_main.png')}
+          source={require('@/assets/illustration/mecky/welcome.png')}
           style={styles.avatar}
           contentFit="cover"
         />
