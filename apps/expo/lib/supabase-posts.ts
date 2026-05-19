@@ -219,21 +219,26 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
 }
 
 /**
- * Delete (soft-delete) a post by setting status to 'deleted'
+ * Hard-delete a post owned by the given wallet. Cascades remove comments, likes,
+ * links, polls, and poll votes via the ON DELETE CASCADE FKs.
+ *
+ * NOTE: account-managed posts (where the deleter is an account manager, not the
+ * original author) are not supported here — the wallet filter rejects them.
+ * Tracked as a follow-up.
  */
-export async function deletePost(postId: string): Promise<void> {
-  const { data, error } = await supabase
+export async function deletePost(postId: string, walletAddress: string): Promise<void> {
+  const { error, count } = await supabase
     .from('posts')
-    .update({ status: 'deleted' })
+    .delete({ count: 'exact' })
     .eq('id', postId)
-    .select('id');
+    .eq('wallet_address', walletAddress);
 
   if (error) {
     console.error('Error deleting post:', error);
     throw error;
   }
 
-  if (!data || data.length === 0) {
+  if (count === 0) {
     throw new Error('Beitrag konnte nicht gelöscht werden');
   }
 }
@@ -430,17 +435,27 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
 }
 
 /**
- * Soft-delete a comment and decrement the post's comment count
+ * Hard-delete a comment owned by the given wallet and keep the parent post's
+ * comments_count in sync.
  */
-export async function deleteComment(commentId: string, postId: string): Promise<void> {
-  const { error } = await supabase
+export async function deleteComment(
+  commentId: string,
+  postId: string,
+  walletAddress: string,
+): Promise<void> {
+  const { error, count } = await supabase
     .from('post_comments')
-    .update({ status: 'deleted' })
-    .eq('id', commentId);
+    .delete({ count: 'exact' })
+    .eq('id', commentId)
+    .eq('wallet_address', walletAddress);
 
   if (error) {
     console.error('Error deleting comment:', error);
     throw error;
+  }
+
+  if (count === 0) {
+    throw new Error('Kommentar konnte nicht gelöscht werden');
   }
 
   // Decrement comment count

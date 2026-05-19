@@ -311,10 +311,14 @@ export default function FeedHome() {
   };
 
   const confirmDeletePost = async () => {
-    if (!selectedPost) return;
+    if (!selectedPost || !walletAddress) return;
+    if (selectedPost.wallet_address?.toLowerCase() !== walletAddress.toLowerCase()) {
+      showSnackbar({ message: 'Du kannst diesen Beitrag nicht löschen' });
+      return;
+    }
     const postId = selectedPost.id;
     try {
-      await deletePost(postId);
+      await deletePost(postId, walletAddress);
       removePostEverywhere(postId);
       showSnackbar({ message: 'Beitrag gelöscht' });
       setDeleteConfirmVisible(false);

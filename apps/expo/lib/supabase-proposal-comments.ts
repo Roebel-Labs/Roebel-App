@@ -128,15 +128,23 @@ export async function createProposalComment(
   return mergeAccountIntoAuthor(data as ProposalCommentRecord);
 }
 
-export async function deleteProposalComment(commentId: string): Promise<void> {
-  const { error } = await supabase
+export async function deleteProposalComment(
+  commentId: string,
+  walletAddress: string,
+): Promise<void> {
+  const { error, count } = await supabase
     .from('proposal_comments')
-    .update({ status: 'deleted' })
-    .eq('id', commentId);
+    .delete({ count: 'exact' })
+    .eq('id', commentId)
+    .eq('wallet_address', walletAddress);
 
   if (error) {
     console.error('Error deleting proposal comment:', error);
     throw error;
+  }
+
+  if (count === 0) {
+    throw new Error('Kommentar konnte nicht gelöscht werden');
   }
 }
 

@@ -64,8 +64,11 @@ export default function ProposalCommentSection({ proposalId, isCitizen }: Props)
   };
 
   const handleDelete = async (comment: ProposalCommentRecord) => {
+    const walletAddress = user?.wallet_address;
+    if (!walletAddress) return;
+    if (comment.wallet_address?.toLowerCase() !== walletAddress.toLowerCase()) return;
     try {
-      await deleteProposalComment(comment.id);
+      await deleteProposalComment(comment.id, walletAddress);
       setComments((prev) => prev.filter((c) => c.id !== comment.id));
     } catch {
       // logged in lib

@@ -189,9 +189,13 @@ export default function PostDetailScreen() {
   };
 
   const confirmDeletePost = async () => {
-    if (!post) return;
+    if (!post || !walletAddress) return;
+    if (post.wallet_address?.toLowerCase() !== walletAddress.toLowerCase()) {
+      showSnackbar({ message: 'Du kannst diesen Beitrag nicht löschen' });
+      return;
+    }
     try {
-      await deletePost(post.id);
+      await deletePost(post.id, walletAddress);
       showSnackbar({ message: 'Beitrag gelöscht' });
       router.back();
     } catch {
@@ -215,9 +219,14 @@ export default function PostDetailScreen() {
   };
 
   const confirmDeleteComment = async () => {
-    if (!deletingComment || !id) return;
+    if (!deletingComment || !id || !walletAddress) return;
+    if (deletingComment.wallet_address?.toLowerCase() !== walletAddress.toLowerCase()) {
+      showSnackbar({ message: 'Du kannst diesen Kommentar nicht löschen' });
+      setDeleteCommentConfirmVisible(false);
+      return;
+    }
     try {
-      await deleteComment(deletingComment.id, id);
+      await deleteComment(deletingComment.id, id, walletAddress);
       setComments((prev) => prev.filter((c) => c.id !== deletingComment.id));
       setPost((prev) =>
         prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : prev

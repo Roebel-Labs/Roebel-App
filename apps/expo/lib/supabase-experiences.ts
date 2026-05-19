@@ -110,27 +110,36 @@ export async function createExperience(
 }
 
 /**
- * Soft-delete an experience by setting status to 'deleted'.
- * Mirrors the soft-delete to the paired feed post so the compact card
- * disappears from the home feed too.
+ * Hard-delete an experience owned by the given wallet, plus its paired feed
+ * post (if any) so the compact card disappears from the home feed too.
  */
-export async function deleteExperience(experienceId: string): Promise<void> {
-  const { error } = await supabase
+export async function deleteExperience(
+  experienceId: string,
+  walletAddress: string,
+): Promise<void> {
+  // Delete the paired feed post first, scoped to the same wallet.
+  const { error: postError } = await supabase
+    .from('posts')
+    .delete()
+    .eq('linked_experience_id', experienceId)
+    .eq('wallet_address', walletAddress);
+
+  if (postError) {
+    console.error('Error deleting paired feed post:', postError);
+  }
+
+  const { error, count } = await supabase
     .from('event_experiences')
-    .update({ status: 'deleted' })
-    .eq('id', experienceId);
+    .delete({ count: 'exact' })
+    .eq('id', experienceId)
+    .eq('wallet_address', walletAddress);
 
   if (error) {
     console.error('Error deleting experience:', error);
     throw error;
   }
 
-  const { error: postError } = await supabase
-    .from('posts')
-    .update({ status: 'deleted' })
-    .eq('linked_experience_id', experienceId);
-
-  if (postError) {
-    console.error('Error soft-deleting paired feed post:', postError);
+  if (count === 0) {
+    throw new Error('Erlebnis konnte nicht gelöscht werden');
   }
 }
