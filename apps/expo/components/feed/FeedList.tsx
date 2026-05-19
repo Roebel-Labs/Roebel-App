@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
+  useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
@@ -267,13 +269,37 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
-  // Bind translate 1:1 to scroll offset so the header tracks the finger
-  // exactly. Clamped to [0, -headerHeight].
+  // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.
+  // Always force visible at the top / on overscroll. Only triggers a new timing
+  // animation when the target state actually flips, so scroll frames don't spawn
+  // overlapping animations.
+  const prevScrollY = useSharedValue(0);
+  const collapsed = useSharedValue(false);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       if (!headerTranslateY || headerHeight <= 0) return;
       const y = e.contentOffset.y;
-      headerTranslateY.value = -Math.min(Math.max(y, 0), headerHeight);
+      const dy = y - prevScrollY.value;
+      prevScrollY.value = y;
+
+      if (y <= 0) {
+        if (collapsed.value) {
+          collapsed.value = false;
+          headerTranslateY.value = withTiming(0, { duration: 180 });
+        }
+        return;
+      }
+
+      if (Math.abs(dy) < 2) return;
+
+      if (dy > 0 && !collapsed.value) {
+        collapsed.value = true;
+        headerTranslateY.value = withTiming(-headerHeight, { duration: 180 });
+      } else if (dy < 0 && collapsed.value) {
+        collapsed.value = false;
+        headerTranslateY.value = withTiming(0, { duration: 180 });
+      }
     },
   });
 
