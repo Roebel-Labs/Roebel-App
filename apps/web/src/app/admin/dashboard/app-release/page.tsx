@@ -89,7 +89,7 @@ export default function AppReleasePage() {
         <div className="flex-1">
           <h1 className="text-3xl font-medium text-foreground">App Release</h1>
           <p className="text-muted-foreground mt-1">
-            Steuere das „Update verfügbar"-Modal in der mobilen App.
+            Steuere das „Update verfügbar“-Modal in der mobilen App.
           </p>
         </div>
       </div>
@@ -209,7 +209,7 @@ export default function AppReleasePage() {
                 />
               </div>
               <div>
-                <Label htmlFor="dismiss_label_de">„Später"-Button</Label>
+                <Label htmlFor="dismiss_label_de">„Später“-Button</Label>
                 <Input
                   id="dismiss_label_de"
                   value={config.dismiss_label_de}
