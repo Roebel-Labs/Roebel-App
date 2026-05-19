@@ -114,7 +114,7 @@ export default function SettingsScreen() {
           <Section title="MITGLIEDSCHAFT" colors={colors}>
             <Pressable
               style={styles.themeOptionRow}
-              onPress={() => router.push('/settings/revoke-membership' as any)}
+              onPress={() => router.push('/revoke-membership' as any)}
             >
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
