@@ -68,17 +68,7 @@ export default function FeedPostCard({
         onMore={onMore}
       />
 
-      {!!post.content && (
-        <Text
-          style={[
-            isMarketplacePost ? styles.headline : styles.content,
-            { color: colors.textPrimary },
-          ]}
-          numberOfLines={isMarketplacePost ? 3 : undefined}
-        >
-          {post.content}
-        </Text>
-      )}
+      <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
 
       {post.linked_event && (
         <PostLinkedEventCard event={post.linked_event} />
@@ -147,11 +137,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
-  },
-  headline: {
-    fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 28,
   },
   sticker: {
     width: 200,

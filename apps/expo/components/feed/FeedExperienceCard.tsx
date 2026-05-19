@@ -57,8 +57,8 @@ export default function FeedExperienceCard({
 
       {!!post.content && (
         <Text
-          style={[styles.headline, { color: colors.textPrimary }]}
-          numberOfLines={3}
+          style={[styles.content, { color: colors.textPrimary }]}
+          numberOfLines={2}
         >
           {post.content}
         </Text>
@@ -87,9 +87,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: 14,
   },
-  headline: {
-    fontSize: 22,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 28,
+  content: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 22,
   },
 });

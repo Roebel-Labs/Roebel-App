@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     lineHeight: 22,
   },
   metaItem: {
