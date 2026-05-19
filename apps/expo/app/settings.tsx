@@ -9,7 +9,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
-const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/verifizierung/widerrufen';
+const REVOKE_MEMBERSHIP_URL = 'https://www.roebel.app/app/verifizierung/widerrufen';
 
 type SectionProps = {
   title: string;
