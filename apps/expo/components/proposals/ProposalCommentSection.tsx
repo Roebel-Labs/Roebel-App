@@ -70,8 +70,8 @@ export default function ProposalCommentSection({ proposalId, isCitizen }: Props)
     try {
       await deleteProposalComment(comment.id, walletAddress);
       setComments((prev) => prev.filter((c) => c.id !== comment.id));
-    } catch {
-      // logged in lib
+    } catch (e) {
+      console.error('[ProposalCommentSection.handleDelete]', e);
     }
   };
 

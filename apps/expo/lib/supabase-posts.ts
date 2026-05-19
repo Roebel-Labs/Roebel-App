@@ -219,27 +219,23 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
 }
 
 /**
- * Hard-delete a post owned by the given wallet. Cascades remove comments, likes,
- * links, polls, and poll votes via the ON DELETE CASCADE FKs.
+ * Hard-delete a post owned by the given wallet via the SECURITY DEFINER RPC
+ * `delete_owned_post`. The RPC handles wallet-case normalization, bypasses RLS,
+ * and raises a clear error if no row matched.
  *
  * NOTE: account-managed posts (where the deleter is an account manager, not the
- * original author) are not supported here — the wallet filter rejects them.
+ * original author) are not supported — the RPC accepts a single wallet only.
  * Tracked as a follow-up.
  */
 export async function deletePost(postId: string, walletAddress: string): Promise<void> {
-  const { error, count } = await supabase
-    .from('posts')
-    .delete({ count: 'exact' })
-    .eq('id', postId)
-    .eq('wallet_address', walletAddress);
+  const { error } = await supabase.rpc('delete_owned_post', {
+    p_post_id: postId,
+    p_wallet: walletAddress,
+  });
 
   if (error) {
-    console.error('Error deleting post:', error);
+    console.error('[deletePost] rpc error', error);
     throw error;
-  }
-
-  if (count === 0) {
-    throw new Error('Beitrag konnte nicht gelöscht werden');
   }
 }
 
@@ -435,41 +431,26 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
 }
 
 /**
- * Hard-delete a comment owned by the given wallet and keep the parent post's
- * comments_count in sync.
+ * Hard-delete a comment owned by the given wallet via the SECURITY DEFINER RPC
+ * `delete_owned_post_comment`. The RPC also decrements the parent post's
+ * comments_count atomically.
+ *
+ * The `postId` arg is kept for backwards compatibility with callers — the RPC
+ * derives it from the comment row.
  */
 export async function deleteComment(
   commentId: string,
-  postId: string,
+  _postId: string,
   walletAddress: string,
 ): Promise<void> {
-  const { error, count } = await supabase
-    .from('post_comments')
-    .delete({ count: 'exact' })
-    .eq('id', commentId)
-    .eq('wallet_address', walletAddress);
+  const { error } = await supabase.rpc('delete_owned_post_comment', {
+    p_comment_id: commentId,
+    p_wallet: walletAddress,
+  });
 
   if (error) {
-    console.error('Error deleting comment:', error);
+    console.error('[deleteComment] rpc error', error);
     throw error;
-  }
-
-  if (count === 0) {
-    throw new Error('Kommentar konnte nicht gelöscht werden');
-  }
-
-  // Decrement comment count
-  const { data: post } = await supabase
-    .from('posts')
-    .select('comments_count')
-    .eq('id', postId)
-    .single();
-
-  if (post) {
-    await supabase
-      .from('posts')
-      .update({ comments_count: Math.max(0, (post.comments_count || 0) - 1) })
-      .eq('id', postId);
   }
 }
 

@@ -132,19 +132,14 @@ export async function deleteProposalComment(
   commentId: string,
   walletAddress: string,
 ): Promise<void> {
-  const { error, count } = await supabase
-    .from('proposal_comments')
-    .delete({ count: 'exact' })
-    .eq('id', commentId)
-    .eq('wallet_address', walletAddress);
+  const { error } = await supabase.rpc('delete_owned_proposal_comment', {
+    p_comment_id: commentId,
+    p_wallet: walletAddress,
+  });
 
   if (error) {
-    console.error('Error deleting proposal comment:', error);
+    console.error('[deleteProposalComment] rpc error', error);
     throw error;
-  }
-
-  if (count === 0) {
-    throw new Error('Kommentar konnte nicht gelöscht werden');
   }
 }
 

@@ -198,7 +198,8 @@ export default function PostDetailScreen() {
       await deletePost(post.id, walletAddress);
       showSnackbar({ message: 'Beitrag gelöscht' });
       router.back();
-    } catch {
+    } catch (e) {
+      console.error('[post/[id].confirmDeletePost]', e);
       showSnackbar({ message: 'Fehler beim Löschen des Beitrags' });
     }
   };
@@ -232,7 +233,8 @@ export default function PostDetailScreen() {
         prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : prev
       );
       showSnackbar({ message: 'Kommentar gelöscht' });
-    } catch {
+    } catch (e) {
+      console.error('[post/[id].confirmDeleteComment]', e);
       showSnackbar({ message: 'Fehler beim Löschen des Kommentars' });
     } finally {
       setDeleteCommentConfirmVisible(false);

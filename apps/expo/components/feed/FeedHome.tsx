@@ -324,7 +324,8 @@ export default function FeedHome() {
       setDeleteConfirmVisible(false);
       setSelectedPost(null);
       refreshAll();
-    } catch {
+    } catch (e) {
+      console.error('[FeedHome.confirmDeletePost]', e);
       showSnackbar({ message: 'Fehler beim Löschen des Beitrags' });
     }
   };

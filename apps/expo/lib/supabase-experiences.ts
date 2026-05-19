@@ -110,36 +110,21 @@ export async function createExperience(
 }
 
 /**
- * Hard-delete an experience owned by the given wallet, plus its paired feed
- * post (if any) so the compact card disappears from the home feed too.
+ * Hard-delete an experience owned by the given wallet via the SECURITY DEFINER
+ * RPC `delete_owned_experience`. The RPC also removes the paired feed post
+ * (linked_experience_id) atomically.
  */
 export async function deleteExperience(
   experienceId: string,
   walletAddress: string,
 ): Promise<void> {
-  // Delete the paired feed post first, scoped to the same wallet.
-  const { error: postError } = await supabase
-    .from('posts')
-    .delete()
-    .eq('linked_experience_id', experienceId)
-    .eq('wallet_address', walletAddress);
-
-  if (postError) {
-    console.error('Error deleting paired feed post:', postError);
-  }
-
-  const { error, count } = await supabase
-    .from('event_experiences')
-    .delete({ count: 'exact' })
-    .eq('id', experienceId)
-    .eq('wallet_address', walletAddress);
+  const { error } = await supabase.rpc('delete_owned_experience', {
+    p_experience_id: experienceId,
+    p_wallet: walletAddress,
+  });
 
   if (error) {
-    console.error('Error deleting experience:', error);
+    console.error('[deleteExperience] rpc error', error);
     throw error;
-  }
-
-  if (count === 0) {
-    throw new Error('Erlebnis konnte nicht gelöscht werden');
   }
 }

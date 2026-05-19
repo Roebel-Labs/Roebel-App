@@ -93,8 +93,8 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
     try {
       await deleteExperience(experience.id, walletAddress);
       setExperiences((prev) => prev.filter((e) => e.id !== experience.id));
-    } catch {
-      // Error logged in supabase-experiences.ts
+    } catch (e) {
+      console.error('[ExperienceSection.handleDelete]', e);
     }
   };
 
