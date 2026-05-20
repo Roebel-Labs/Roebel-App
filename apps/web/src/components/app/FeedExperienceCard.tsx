@@ -214,11 +214,11 @@ export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
         </DropdownMenu>
       </div>
 
-      {/* Title (post content) */}
+      {/* Post content */}
       {post.content && post.content.trim() && (
-        <h3 className="mt-3 text-lg sm:text-xl font-bold text-foreground leading-snug whitespace-pre-wrap">
+        <p className="mt-3 text-sm text-foreground whitespace-pre-wrap break-words">
           {post.content}
-        </h3>
+        </p>
       )}
 
       {/* Inset event card */}
@@ -243,7 +243,7 @@ export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
             <div className="text-xs text-muted-foreground">
               {eventDate.dayMonth} · {eventDate.weekday}
             </div>
-            <div className="font-semibold text-foreground truncate">
+            <div className="font-medium text-foreground truncate">
               {linkedEvent.title}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground pt-0.5">
