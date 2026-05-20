@@ -60,6 +60,7 @@ export interface LinkedEventPreview {
   time: string | null;
   location: string;
   image_url: string | null;
+  ticket_price: number | null;
 }
 
 export interface PostWithAuthor extends Post {

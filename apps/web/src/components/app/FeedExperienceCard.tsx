@@ -1,11 +1,25 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
-import { MessageCircle, Share2, Sparkles } from "lucide-react";
-import { LikeButton } from "@/components/app/LikeButton";
+import {
+  Gem,
+  Heart,
+  MapPin,
+  MessageCircle,
+  MoreHorizontal,
+  Send,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { reportPost, toggleLike } from "@/app/actions/posts";
 import type { PostWithEngagement } from "@/types/post";
 import { toast } from "sonner";
 
@@ -24,13 +38,29 @@ function formatRelativeTime(dateStr: string): string {
   if (diffMin < 1) return "gerade eben";
   if (diffMin < 60) return `vor ${diffMin} Min.`;
   if (diffHrs < 24) return `vor ${diffHrs} Std.`;
+  if (diffDays === 1) return "Gestern";
   if (diffDays < 7) return `vor ${diffDays} T.`;
   return date.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+}
+
+function formatEventDate(dateStr: string): { dayMonth: string; weekday: string } {
+  const date = new Date(dateStr);
+  return {
+    dayMonth: date.toLocaleDateString("de-DE", { day: "numeric", month: "long" }),
+    weekday: date.toLocaleDateString("de-DE", { weekday: "long" }),
+  };
 }
 
 export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
   const router = useRouter();
   const account = useActiveAccount();
+
+  const [isLiked, setIsLiked] = useState(post.is_liked_by_viewer);
+  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isReported, setIsReported] = useState(post.is_reported_by_viewer);
+  const [, startLikeTransition] = useTransition();
+  const [, startReportTransition] = useTransition();
 
   const shortAddress = `${post.wallet_address.slice(0, 4)}...${post.wallet_address.slice(-3)}`;
   const displayName = post.author_username || shortAddress;
@@ -45,19 +75,48 @@ export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
         ? `/app/events/${eventId}`
         : null;
 
-  const eventTitle = post.linked_event?.title;
-  const eventBanner = post.linked_event?.image_url || null;
-  const firstMedia = post.media_urls?.[0] || null;
+  const linkedEvent = post.linked_event;
+  const eventBanner = linkedEvent?.image_url || post.media_urls?.[0] || null;
+  const eventDate = linkedEvent ? formatEventDate(linkedEvent.date) : null;
+  const isFree =
+    linkedEvent != null &&
+    (linkedEvent.ticket_price === null || linkedEvent.ticket_price <= 0);
+  const priceLabel = linkedEvent
+    ? isFree
+      ? "Kostenlos"
+      : `${linkedEvent.ticket_price} €`
+    : null;
 
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
       target.closest(
-        'button, a, input, video, [role="button"], [data-radix-collection-item]'
+        'button, a, input, video, [role="button"], [role="menuitem"], [data-radix-collection-item]'
       )
     )
       return;
     if (linkHref) router.push(linkHref);
+  };
+
+  const handleLike = () => {
+    if (!account?.address) return;
+    const newLiked = !isLiked;
+    setIsLiked(newLiked);
+    setLikesCount((c) => (newLiked ? c + 1 : Math.max(c - 1, 0)));
+    if (newLiked) {
+      setIsAnimating(true);
+      setTimeout(() => setIsAnimating(false), 300);
+    }
+    startLikeTransition(async () => {
+      const result = await toggleLike(post.id, account.address);
+      if (result.success && result.data) {
+        setIsLiked(result.data.liked);
+        setLikesCount(result.data.newCount);
+      } else {
+        setIsLiked(!newLiked);
+        setLikesCount((c) => (newLiked ? c - 1 : c + 1));
+      }
+    });
   };
 
   const handleShare = async () => {
@@ -65,7 +124,7 @@ export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
     const url = `${window.location.origin}${linkHref}`;
     try {
       if (navigator.share) {
-        await navigator.share({ url, title: eventTitle || "Erlebnis" });
+        await navigator.share({ url, title: linkedEvent?.title || "Erlebnis" });
       } else {
         await navigator.clipboard.writeText(url);
         toast.success("Link kopiert");
@@ -75,118 +134,185 @@ export function FeedExperienceCard({ post }: FeedExperienceCardProps) {
     }
   };
 
+  const handleReport = () => {
+    if (!account?.address || isReported) return;
+    startReportTransition(async () => {
+      const result = await reportPost(post.id, account.address);
+      if (result.success) {
+        setIsReported(true);
+        toast.success("Beitrag wurde gemeldet");
+      } else {
+        toast.error(result.error || "Fehler beim Melden");
+      }
+    });
+  };
+
+  const handleCopyLink = async () => {
+    if (!linkHref) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${linkHref}`);
+      toast.success("Link kopiert");
+    } catch {
+      toast.error("Konnte Link nicht kopieren");
+    }
+  };
+
   return (
-    <div
+    <article
       onClick={handleCardClick}
-      className="rounded-lg border border-border bg-card p-4 hover:bg-accent/40 transition-colors cursor-pointer space-y-2"
+      className="rounded-2xl border border-border bg-card p-4 sm:p-5 transition-colors cursor-pointer hover:bg-accent/30"
     >
-      {/* Author row */}
-      <div className="flex items-center gap-2.5">
-        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="h-11 w-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
           {displayAvatar ? (
             <Image
               src={displayAvatar}
               alt=""
-              width={28}
-              height={28}
+              width={44}
+              height={44}
               className="object-cover w-full h-full"
             />
           ) : (
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-sm font-medium text-muted-foreground">
               {displayName.slice(0, 2).toUpperCase()}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-sm font-medium text-foreground truncate">
+        <div className="flex-1 min-w-0 leading-tight">
+          <div className="font-semibold text-foreground truncate">
             {displayName}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            · {formatRelativeTime(post.created_at)}
-          </span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {formatRelativeTime(post.created_at)}
+          </div>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-          <Sparkles className="h-3 w-3" />
-          Erlebnis
-        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Mehr Optionen"
+              className="-mr-1 -mt-1 p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {linkHref && (
+              <DropdownMenuItem onClick={handleCopyLink}>
+                Link kopieren
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={handleReport}
+              disabled={!account?.address || isReported}
+              className="text-orange-600 focus:text-orange-600"
+            >
+              {isReported ? "Bereits gemeldet" : "Beitrag melden"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Event reference */}
-      {eventTitle && eventId && (
-        <div className="text-xs text-muted-foreground truncate">
-          war bei:{" "}
-          <Link
-            href={`/app/events/${eventId}`}
-            className="text-primary font-medium hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {eventTitle}
-          </Link>
-        </div>
-      )}
-
-      {/* Content snippet */}
+      {/* Title (post content) */}
       {post.content && post.content.trim() && (
-        <p className="text-sm text-foreground line-clamp-2 whitespace-pre-wrap">
+        <h3 className="mt-3 text-lg sm:text-xl font-bold text-foreground leading-snug whitespace-pre-wrap">
           {post.content}
-        </p>
+        </h3>
       )}
 
-      {/* Thumbnails: event banner + first media */}
-      {(eventBanner || firstMedia) && (
-        <div className="flex gap-2 pt-1">
-          {eventBanner && (
-            <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+      {/* Inset event card */}
+      {linkedEvent && eventId && eventDate && (
+        <Link
+          href={linkHref || `/app/events/${eventId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-4 flex items-stretch gap-3 rounded-2xl border border-border bg-background p-2 hover:bg-accent/40 transition-colors"
+        >
+          <div className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+            {eventBanner ? (
               <Image
                 src={eventBanner}
                 alt=""
                 fill
-                sizes="64px"
+                sizes="96px"
                 className="object-cover"
               />
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1 flex flex-col justify-center py-1 pr-2 gap-1">
+            <div className="text-xs text-muted-foreground">
+              {eventDate.dayMonth} · {eventDate.weekday}
             </div>
-          )}
-          {firstMedia && (
-            <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-              <Image
-                src={firstMedia}
-                alt=""
-                fill
-                sizes="64px"
-                className="object-cover"
-              />
+            <div className="font-semibold text-foreground truncate">
+              {linkedEvent.title}
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground pt-0.5">
+              {priceLabel && (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <Gem className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{priceLabel}</span>
+                </span>
+              )}
+              {linkedEvent.location && (
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{linkedEvent.location}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
       )}
 
-      {/* Footer actions */}
-      <div className="flex items-center gap-1 pt-1 -ml-3">
-        <LikeButton
-          postId={post.id}
-          isLiked={post.is_liked_by_viewer}
-          likesCount={post.likes_count}
-          walletAddress={account?.address}
-        />
-        {linkHref && (
+      {/* Action row */}
+      <div className="mt-4 flex items-center gap-2">
+        {linkHref ? (
           <Link
             href={linkHref}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Erlebnis ansehen"
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Kommentare ansehen"
+            className="inline-flex items-center gap-1.5 p-2 -ml-2 rounded-full text-foreground hover:bg-muted transition-colors"
           >
-            <MessageCircle className="h-4 w-4" />
-            {post.comments_count > 0 && <span>{post.comments_count}</span>}
+            <MessageCircle className="h-6 w-6" strokeWidth={1.75} />
+            {post.comments_count > 0 && (
+              <span className="text-sm">{post.comments_count}</span>
+            )}
           </Link>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 p-2 -ml-2 text-muted-foreground">
+            <MessageCircle className="h-6 w-6" strokeWidth={1.75} />
+          </span>
         )}
         <button
           type="button"
           onClick={handleShare}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           aria-label="Teilen"
+          className="p-2 rounded-full text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          disabled={!linkHref}
         >
-          <Share2 className="h-4 w-4" />
+          <Send className="h-6 w-6" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleLike}
+          disabled={!account?.address}
+          aria-label={isLiked ? "Gefällt mir nicht mehr" : "Gefällt mir"}
+          className={`ml-auto inline-flex items-center gap-1.5 p-2 -mr-2 rounded-full transition-colors ${
+            isLiked
+              ? "text-red-500"
+              : "text-foreground hover:bg-muted"
+          } ${!account?.address ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          {likesCount > 0 && (
+            <span className="text-sm">{likesCount}</span>
+          )}
+          <Heart
+            className={`h-6 w-6 transition-transform ${isAnimating ? "scale-125" : "scale-100"}`}
+            strokeWidth={1.75}
+            fill={isLiked ? "currentColor" : "none"}
+          />
         </button>
       </div>
-    </div>
+    </article>
   );
 }
