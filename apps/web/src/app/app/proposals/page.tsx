@@ -5,10 +5,12 @@ export const dynamic = "force-dynamic";
 import { useActiveAccount } from "thirdweb/react";
 import Link from "next/link";
 import { ProposalCard } from "@/components/proposals/ProposalCard";
+import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { getProposals } from "@/lib/supabase";
 import type { Proposal } from "@/lib/proposal-types";
 import { de } from "@/lib/translations/de";
+import { Network, Layers, ArrowUpRight } from "lucide-react";
 
 export default function ProposalsPage() {
   const account = useActiveAccount();
@@ -58,6 +60,56 @@ export default function ProposalsPage() {
               className="inline-flex items-center justify-center bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
             >
               {de.proposals.createProposal}
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+            <Link
+              href="/graph"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block focus:outline-none"
+            >
+              <Card className="px-4 py-3 shadow-none transition-colors hover:border-primary/50 hover:bg-accent/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Network className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        Bürger-Netzwerk
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Verifizierungs-Graph aller Bürger.
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </div>
+              </Card>
+            </Link>
+
+            <Link
+              href="/proposals/timeline"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block focus:outline-none"
+            >
+              <Card className="px-4 py-3 shadow-none transition-colors hover:border-primary/50 hover:bg-accent/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Layers className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        Zeitleiste
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Geschichte aller Vorschläge mit Basescan-Verlinkung.
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </div>
+              </Card>
             </Link>
           </div>
 

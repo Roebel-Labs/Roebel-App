@@ -18,9 +18,7 @@ import {
   Plus,
   MapPin,
   Landmark,
-  Users,
   Bot,
-  Activity,
   ChevronDown,
 } from "lucide-react";
 import { useAppMode, type AppMode } from "@/lib/context/AppModeContext";
@@ -50,15 +48,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { href: "/app", label: "Feed", icon: Home, exact: true },
-  {
-    href: "/app/proposals",
-    label: "Stadt",
-    icon: Landmark,
-    children: [
-      { href: "/app/graph", label: "Bürger-Netzwerk", icon: Users },
-      { href: "/app/proposals/timeline", label: "Zeitleiste", icon: Activity },
-    ],
-  },
+  { href: "/app/proposals", label: "Stadt", icon: Landmark },
   { href: "/app/events", label: "Veranstaltungen", icon: Calendar },
   { href: "/app/karte", label: "Karte", icon: MapPin },
   { href: "/app/news", label: "Neuigkeiten", icon: Newspaper },
