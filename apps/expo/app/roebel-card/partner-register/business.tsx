@@ -18,7 +18,7 @@ const SUB_TYPE_EMOJI: Record<string, string> = {
   restaurant: '🍽️',
   unternehmen: '🏪',
   verein: '🤝',
-  partei: '🏛️',
+  stadt: '🏛️',
   fraktion: '⚖️',
 };
 

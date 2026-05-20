@@ -74,7 +74,7 @@ const SUB_TYPE_FEATURES: Record<OrgSubType, FeatureCardConfig[]> = {
     },
   ],
   verein: [],
-  partei: [],
+  stadt: [],
   fraktion: [],
 };
 

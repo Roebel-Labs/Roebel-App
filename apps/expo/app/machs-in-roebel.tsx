@@ -70,7 +70,7 @@ export default function MachsInRoebelScreen() {
           <OptionCard
             emoji="🏛️"
             title="Politisch engagieren"
-            subtitle="Partei oder Fraktion beitreten"
+            subtitle="Stadt oder Fraktion beitreten"
             onPress={() => router.push('/create-org' as any)}
             colors={colors}
           />

@@ -12,7 +12,7 @@ const ORG_TYPES: { value: OrgTypeChoice; icon: string; label: string; desc: stri
   { value: 'restaurant', icon: 'restaurant-01', label: 'Restaurant', desc: 'Gastronomie mit Speisekarte' },
   { value: 'unternehmen', icon: 'store-01', label: 'Unternehmen', desc: 'Gewerbe & Dienstleistungen' },
   { value: 'verein', icon: 'agreement-02', label: 'Verein', desc: 'Sport, Kultur, Soziales' },
-  { value: 'partei', icon: 'flag-02', label: 'Partei', desc: 'Politische Parteien' },
+  { value: 'stadt', icon: 'building-04', label: 'Stadt', desc: 'Stadt Röbel/Müritz' },
   { value: 'fraktion', icon: 'balance-scale', label: 'Fraktion', desc: 'Fraktionen im Stadtrat' },
   { value: 'journalist', icon: 'license-draft', label: 'Journalist:in', desc: 'Redaktion oder freischaffend' },
 ];

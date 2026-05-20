@@ -31,7 +31,7 @@ import type { Account, OrgSubType } from '@/lib/types';
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
   restaurant: '🍽️ Restaurant',
-  partei: '🎗️ Partei',
+  stadt: '🏛️ Stadt',
   fraktion: '📋 Fraktion',
   unternehmen: '🏢 Unternehmen',
 };

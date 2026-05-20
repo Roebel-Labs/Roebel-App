@@ -18,7 +18,7 @@ const ORG_TYPE_LABELS: Record<string, { emoji: string; label: string }> = {
   restaurant: { emoji: '🍽️', label: 'Restaurant' },
   unternehmen: { emoji: '🏪', label: 'Unternehmen' },
   verein: { emoji: '🤝', label: 'Verein' },
-  partei: { emoji: '🏛️', label: 'Partei' },
+  stadt: { emoji: '🏛️', label: 'Stadt' },
   fraktion: { emoji: '⚖️', label: 'Fraktion' },
   journalist: { emoji: '📝', label: 'Journalist:in' },
 };

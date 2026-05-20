@@ -104,7 +104,7 @@ export function ModeProfileSections() {
             href="/app/gewerbe/erstellen"
             icon={<Rocket className="h-5 w-5 text-green-600" />}
             title="Mach's in Röbel"
-            subtitle="Gewerbe, Verein, Partei gründen"
+            subtitle="Gewerbe, Verein, Stadt gründen"
           />
           <ProfileCard
             href="/app/verifizierung"

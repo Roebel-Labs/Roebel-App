@@ -13,7 +13,7 @@ const SUB_TYPE_LABEL: Record<string, string> = {
   restaurant: 'Restaurant',
   unternehmen: 'Unternehmen',
   verein: 'Verein',
-  partei: 'Partei',
+  stadt: 'Stadt',
   fraktion: 'Fraktion',
 };
 

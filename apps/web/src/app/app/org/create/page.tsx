@@ -27,7 +27,7 @@ const ORG_SUB_TYPES: OrgSubType[] = [
   "unternehmen",
   "restaurant",
   "verein",
-  "partei",
+  "stadt",
   "fraktion",
   "journalist",
 ];

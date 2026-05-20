@@ -42,7 +42,7 @@ const ORG_TYPE_LABELS: Record<string, string> = {
   restaurant: 'Restaurant',
   unternehmen: 'Unternehmen',
   verein: 'Verein',
-  partei: 'Partei',
+  stadt: 'Stadt',
   fraktion: 'Fraktion',
 };
 
@@ -455,8 +455,8 @@ const handleRefresh = async () => {
         >
           {ownedAccounts.map((acc) => {
             const isActive = activeAccount?.id === acc.id;
-            const SUB_TYPE_EMOJI: Record<string, string> = { restaurant: '🍽️', unternehmen: '🏢', verein: '🤝', partei: '🏛️', fraktion: '⚖️' };
-            const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', partei: 'Partei', fraktion: 'Fraktion' };
+            const SUB_TYPE_EMOJI: Record<string, string> = { restaurant: '🍽️', unternehmen: '🏢', verein: '🤝', stadt: '🏛️', fraktion: '⚖️' };
+            const SUB_TYPE_LABEL: Record<string, string> = { restaurant: 'Restaurant', unternehmen: 'Unternehmen', verein: 'Verein', stadt: 'Stadt', fraktion: 'Fraktion' };
             const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
             const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
             const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url);

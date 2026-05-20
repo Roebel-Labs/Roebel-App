@@ -5,7 +5,7 @@ export type OrgTypeChoice =
   | 'restaurant'
   | 'unternehmen'
   | 'verein'
-  | 'partei'
+  | 'stadt'
   | 'fraktion'
   | 'journalist';
 

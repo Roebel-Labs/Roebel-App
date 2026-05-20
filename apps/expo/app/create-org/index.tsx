@@ -9,7 +9,7 @@ import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
 const STEPS = [
   {
     title: 'Wähle deinen Typ',
-    desc: 'Restaurant, Verein, Partei oder Unternehmen',
+    desc: 'Restaurant, Verein, Stadt oder Unternehmen',
     illustration: require('@/assets/illustration/small/org.png'),
   },
   {

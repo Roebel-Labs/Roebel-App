@@ -191,7 +191,7 @@ export function PostCard({
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-medium">
                   {author_account_type === "unternehmen" ? "Gewerbe" :
                    author_account_type === "verein" ? "Verein" :
-                   author_account_type === "partei" ? "Partei" :
+                   author_account_type === "stadt" ? "Stadt" :
                    author_account_type === "fraktion" ? "Fraktion" : ""}
                 </span>
               )}

@@ -142,7 +142,7 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
       <CTABanner
         emoji="🚀"
         title="Starte durch in Röbel"
-        subtitle="Gewerbe, Verein, Partei, Freelancer..."
+        subtitle="Gewerbe, Verein, Stadt, Freelancer..."
         onPress={() => router.push('/create-org' as any)}
       />
     </>

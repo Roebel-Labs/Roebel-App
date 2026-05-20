@@ -15,7 +15,7 @@ export type BusinessCategory =
   | "immobilien"
   | "sonstiges"
 
-export type OrgTypeChoice = "restaurant" | "unternehmen" | "verein" | "partei" | "fraktion"
+export type OrgTypeChoice = "restaurant" | "unternehmen" | "verein" | "stadt" | "fraktion"
 
 export type DealType = "discount" | "special" | "event" | "new_product" | "promotion"
 
@@ -188,7 +188,7 @@ export const ORG_TYPES: { value: OrgTypeChoice; label: string; description: stri
   { value: "restaurant", label: "Restaurant", description: "Gastronomie mit Speisekarte", emoji: "🍽️" },
   { value: "unternehmen", label: "Unternehmen", description: "Gewerbe & Dienstleistungen", emoji: "🏢" },
   { value: "verein", label: "Verein", description: "Sport, Kultur, Soziales", emoji: "🤝" },
-  { value: "partei", label: "Partei", description: "Politische Parteien", emoji: "🏛️" },
+  { value: "stadt", label: "Stadt", description: "Stadt Röbel/Müritz", emoji: "🏛️" },
   { value: "fraktion", label: "Fraktion", description: "Fraktionen im Stadtrat", emoji: "🗳️" },
 ]
 

@@ -311,7 +311,7 @@ export type OrgSubType =
   | 'restaurant'
   | 'unternehmen'
   | 'verein'
-  | 'partei'
+  | 'stadt'
   | 'fraktion'
   | 'journalist';
 /** @deprecated Use OrgSubType instead */
@@ -345,7 +345,7 @@ export const SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   restaurant: 'Restaurant',
   unternehmen: 'Unternehmen',
   verein: 'Verein',
-  partei: 'Partei',
+  stadt: 'Stadt',
   fraktion: 'Fraktion',
   journalist: 'Journalist:in',
 };
@@ -354,7 +354,7 @@ export const SUB_TYPE_EMOJI: Record<OrgSubType, string> = {
   restaurant: '🍽️',
   unternehmen: '🏪',
   verein: '🤝',
-  partei: '🏛️',
+  stadt: '🏛️',
   fraktion: '⚖️',
   journalist: '📝',
 };
@@ -375,7 +375,7 @@ export function subTypeFeatures(subType: OrgSubType | null): SubTypeFeatures {
     case 'unternehmen':
       return { blog: true, members: true, openingHours: true, products: true, ads: true, events: true, partner: true };
     case 'verein':
-    case 'partei':
+    case 'stadt':
     case 'fraktion':
       return { blog: true, members: true, openingHours: false, products: false, ads: false, events: true, partner: false };
     case 'journalist':

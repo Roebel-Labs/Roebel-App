@@ -60,7 +60,7 @@ const DAY_LABELS: { key: keyof OpeningHours; label: string }[] = [
 const SUB_TYPE_LABELS: Partial<Record<OrgSubType, { emoji: string; label: string }>> = {
   verein: { emoji: '🏛️', label: 'Verein' },
   restaurant: { emoji: '🍽️', label: 'Restaurant' },
-  partei: { emoji: '🎗️', label: 'Partei' },
+  stadt: { emoji: '🏛️', label: 'Stadt' },
   fraktion: { emoji: '📋', label: 'Fraktion' },
   unternehmen: { emoji: '🏢', label: 'Unternehmen' },
   journalist: { emoji: '📰', label: 'Journalismus' },
