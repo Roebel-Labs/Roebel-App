@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, UserCog, Map, Vote, Smartphone } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, Map, Vote, Smartphone } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -162,12 +162,6 @@ export function AdminSidebar() {
       href: "/admin/dashboard/tourists",
       icon: <Map className="h-5 w-5" />,
       badgeKey: "touristHelpRequests",
-    },
-    {
-      name: "Externe Konten",
-      href: "/admin/dashboard/extern-accounts",
-      icon: <UserCog className="h-5 w-5" />,
-      badgeKey: "externAccounts",
     },
     {
       name: "DAO & Bürger",
