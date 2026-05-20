@@ -6,34 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useCreateOrgWizard } from '@/context/CreateOrgWizardContext';
-import { supabase } from '@/lib/supabase';
+import { uploadMediaFile } from '@/lib/upload-media';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
-
-async function uploadImage(uri: string, folder: string): Promise<string | null> {
-  try {
-    const response = await fetch(uri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
-    const fileName = `${folder}/${Date.now()}.${fileExt}`;
-    const contentType = `image/${fileExt === 'png' ? 'png' : 'jpeg'}`;
-
-    const { error } = await supabase.storage
-      .from('images')
-      .upload(fileName, arrayBuffer, { contentType, upsert: true });
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data } = supabase.storage.from('images').getPublicUrl(fileName);
-    return data.publicUrl;
-  } catch (error) {
-    console.error('Upload failed:', error);
-    return null;
-  }
-}
 
 export default function CreateOrgPhotosScreen() {
   const router = useRouter();
@@ -59,7 +34,14 @@ export default function CreateOrgPhotosScreen() {
     if (result.canceled || !result.assets[0]?.uri) return;
 
     setUploading(true);
-    const url = await uploadImage(result.assets[0].uri, type === 'logo' ? 'org-logos' : 'org-covers');
+    const folder = type === 'logo' ? 'org-logos' : 'org-covers';
+    const url = await uploadMediaFile(
+      result.assets[0].uri,
+      '',
+      'image',
+      folder,
+      result.assets[0].mimeType,
+    );
     setUploading(false);
 
     if (url) {
