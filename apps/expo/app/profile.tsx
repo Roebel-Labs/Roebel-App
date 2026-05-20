@@ -332,6 +332,11 @@ const handleRefresh = async () => {
                   {isOrg ? (
                     <View style={styles.menuGroup}>
                       <ProfileMenuItem
+                        icon={<PencilIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Mein Profil"
+                        onPress={() => router.push('/edit-org' as any)}
+                      />
+                      <ProfileMenuItem
                         icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
                         label="Feedback geben"
                         onPress={() => router.push('/feedback')}

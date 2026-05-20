@@ -250,7 +250,9 @@ export default function PublicAccountScreen() {
   const openStatus = openingHours ? isRestaurantOpen(openingHours) : null;
   const supportsOpeningHours = subTypeFeatures(account.sub_type).openingHours;
 
-  const goToOwnerScreen = async (pathname: '/org/settings' | '/org/opening-hours') => {
+  const goToOwnerScreen = async (
+    pathname: '/org/settings' | '/org/opening-hours' | '/edit-org',
+  ) => {
     try {
       await switchAccount(account.id);
     } catch (err) {
@@ -667,7 +669,7 @@ export default function PublicAccountScreen() {
           {canEdit ? (
             <View style={styles.identityActions}>
               <Pressable
-                onPress={() => goToOwnerScreen('/org/settings')}
+                onPress={() => goToOwnerScreen('/edit-org')}
                 style={[styles.editPill, { borderColor: colors.borderSecondary, backgroundColor: colors.background }]}
                 accessibilityRole="button"
                 accessibilityLabel="Profil bearbeiten"

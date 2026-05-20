@@ -293,7 +293,9 @@ export async function deleteAccount(accountId: string): Promise<void> {
 
 export async function updateAccount(
   accountId: string,
-  updates: Partial<Pick<Account, 'name' | 'bio' | 'avatar_url' | 'cover_url' | 'opening_hours'>>
+  updates: Partial<
+    Pick<Account, 'name' | 'bio' | 'avatar_url' | 'cover_url' | 'opening_hours' | 'contact_email'>
+  >
 ): Promise<Account | null> {
   const { data, error } = await supabase
     .from('accounts' as any)
