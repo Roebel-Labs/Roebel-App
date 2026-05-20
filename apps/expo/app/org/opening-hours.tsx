@@ -7,7 +7,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  ScrollView,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +17,6 @@ import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
-import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
 import type { OpeningHours } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -49,12 +47,11 @@ const DEFAULT_HOURS: OpeningHoursState = {
 export default function OrgOpeningHoursScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { activeAccount } = useAccount();
+  const { activeAccount, refreshAccounts } = useAccount();
   const { user } = useUser();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [location, setLocation] = useState<OrgLocation | null>(null);
   const [hours, setHours] = useState<OpeningHoursState>(DEFAULT_HOURS);
   const [canEdit, setCanEdit] = useState(false);
 
@@ -84,11 +81,7 @@ export default function OrgOpeningHoursScreen() {
           return;
         }
 
-        const loc = await resolveOrgLocation(activeAccount, members);
-        if (cancelled) return;
-        setLocation(loc);
-
-        const current = loc?.restaurant?.opening_hours ?? loc?.business?.opening_hours ?? null;
+        const current = activeAccount.opening_hours ?? null;
         if (current) {
           const state: OpeningHoursState = { ...DEFAULT_HOURS };
           for (const day of DAY_LABELS) {
@@ -118,15 +111,10 @@ export default function OrgOpeningHoursScreen() {
     setHours((prev) => ({ ...prev, [day]: { ...prev[day], closed: !prev[day].closed } }));
   };
 
-  const subtitle = useMemo(() => {
-    if (!location) return null;
-    if (location.entityType === 'restaurant') return location.restaurant?.name ?? 'Restaurant';
-    if (location.entityType === 'business') return location.business?.name ?? 'Unternehmen';
-    return null;
-  }, [location]);
+  const subtitle = useMemo(() => activeAccount?.name ?? null, [activeAccount?.name]);
 
   const handleSave = async () => {
-    if (!location || !canEdit) return;
+    if (!activeAccount || !canEdit) return;
     setSaving(true);
     try {
       const payload: OpeningHours = {};
@@ -134,11 +122,12 @@ export default function OrgOpeningHoursScreen() {
         const h = hours[day.key];
         payload[day.key] = { open: h.open, close: h.close, closed: h.closed };
       }
-      const table = location.entityType === 'restaurant' ? 'restaurants' : 'businesses';
-      const { error } = await (supabase.from(table) as any)
+      const { error } = await supabase
+        .from('accounts')
         .update({ opening_hours: payload })
-        .eq('id', location.entityId);
+        .eq('id', activeAccount.id);
       if (error) throw error;
+      await refreshAccounts();
       router.back();
     } catch (err: any) {
       console.error('Failed to save opening hours:', err);
@@ -162,30 +151,6 @@ export default function OrgOpeningHoursScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!location) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8}>
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Öffnungszeiten</Text>
-          <View style={styles.backButton} />
-        </View>
-        <ScrollView contentContainerStyle={styles.emptyWrap}>
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-            Kein Standort hinterlegt
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
-            Bitte hinterlege zuerst die Adresse deines Restaurants oder Unternehmens. Erst dann
-            kannst du die Öffnungszeiten verwalten.
-          </Text>
-        </ScrollView>
       </SafeAreaView>
     );
   }

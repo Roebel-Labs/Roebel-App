@@ -25,7 +25,7 @@ const DEFAULT_CLOSE = '18:00';
 export default function CreateOrgContactScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { state, dispatch, needsCategory } = useCreateOrgWizard();
+  const { state, dispatch } = useCreateOrgWizard();
 
   const [phone, setPhone] = useState(state.phone);
   const [email, setEmail] = useState(state.email);
@@ -104,19 +104,17 @@ export default function CreateOrgContactScreen() {
           style={[styles.input, { backgroundColor: colors.surface, color: colors.textPrimary }]}
         />
 
-        {/* Opening hours (conditional) */}
-        {needsCategory && (
-          <>
-            <View style={styles.hoursToggleRow}>
-              <Text style={[styles.hoursToggleLabel, { color: colors.textPrimary }]}>Öffnungszeiten angeben</Text>
-              <Switch
-                value={showHours}
-                onValueChange={setShowHours}
-                trackColor={{ false: colors.border, true: colors.primary }}
-              />
-            </View>
+        {/* Opening hours (optional, available for every org type) */}
+        <View style={styles.hoursToggleRow}>
+          <Text style={[styles.hoursToggleLabel, { color: colors.textPrimary }]}>Öffnungszeiten angeben</Text>
+          <Switch
+            value={showHours}
+            onValueChange={setShowHours}
+            trackColor={{ false: colors.border, true: colors.primary }}
+          />
+        </View>
 
-            {showHours && DAYS.map(({ key, label }) => {
+        {showHours && DAYS.map(({ key, label }) => {
               const day = hours[key];
               const isClosed = day?.closed ?? false;
 
@@ -156,8 +154,6 @@ export default function CreateOrgContactScreen() {
                 </View>
               );
             })}
-          </>
-        )}
 
         <View style={styles.bottomSpacer} />
       </KeyboardAwareScrollView>

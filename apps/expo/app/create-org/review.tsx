@@ -62,12 +62,17 @@ export default function CreateOrgReviewScreen() {
         }
       );
 
-      // 2. Store images on the account itself
+      // 2. Store images + opening hours on the account itself
+      const accountUpdates: Parameters<typeof updateAccount>[1] = {};
       if (state.logoUrl || state.coverImageUrl) {
-        await updateAccount(orgAccount.id, {
-          avatar_url: state.logoUrl || null,
-          cover_url: state.coverImageUrl || null,
-        });
+        accountUpdates.avatar_url = state.logoUrl || null;
+        accountUpdates.cover_url = state.coverImageUrl || null;
+      }
+      if (state.openingHours) {
+        accountUpdates.opening_hours = state.openingHours;
+      }
+      if (Object.keys(accountUpdates).length > 0) {
+        await updateAccount(orgAccount.id, accountUpdates);
       }
 
       // 3. Store new account ID for success screen

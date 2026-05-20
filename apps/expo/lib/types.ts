@@ -335,6 +335,7 @@ export type Account = {
   extern_reviewed_by: string | null;
   extern_reviewed_at: string | null;
   contact_email: string | null;
+  opening_hours: OpeningHours | null;
   created_at: string;
   updated_at: string;
 };
@@ -377,9 +378,9 @@ export function subTypeFeatures(subType: OrgSubType | null): SubTypeFeatures {
     case 'verein':
     case 'stadt':
     case 'fraktion':
-      return { blog: true, members: true, openingHours: false, products: false, ads: false, events: true, partner: false };
+      return { blog: true, members: true, openingHours: true, products: false, ads: false, events: true, partner: false };
     case 'journalist':
-      return { blog: true, members: true, openingHours: false, products: false, ads: false, events: false, partner: false };
+      return { blog: true, members: true, openingHours: true, products: false, ads: false, events: false, partner: false };
     default:
       return { blog: false, members: false, openingHours: false, products: false, ads: false, events: false, partner: false };
   }

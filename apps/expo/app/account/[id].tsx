@@ -31,15 +31,16 @@ import { listForAccount as listBlogForAccount } from '@/lib/supabase-blog-articl
 import { fetchDealsByBusiness } from '@/lib/supabase-deals';
 import { resolveOrgLocation, type OrgLocation } from '@/lib/org-location';
 import { isRestaurantOpen } from '@/lib/utils';
-import type {
-  Account,
-  MemberWithProfile,
-  OrgSubType,
-  OpeningHours,
-  EventRecord,
-  BlogArticle,
-  MarketplaceListingRecord,
-  BusinessDealRecord,
+import {
+  subTypeFeatures,
+  type Account,
+  type MemberWithProfile,
+  type OrgSubType,
+  type OpeningHours,
+  type EventRecord,
+  type BlogArticle,
+  type MarketplaceListingRecord,
+  type BusinessDealRecord,
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
 
@@ -242,12 +243,12 @@ export default function PublicAccountScreen() {
   const showExternBadge = account.is_extern && account.extern_status !== 'approved';
 
   const openingHours: OpeningHours | null =
+    account.opening_hours ??
     orgLocation?.restaurant?.opening_hours ??
     orgLocation?.business?.opening_hours ??
     null;
   const openStatus = openingHours ? isRestaurantOpen(openingHours) : null;
-  const supportsOpeningHours =
-    account.sub_type === 'restaurant' || account.sub_type === 'unternehmen';
+  const supportsOpeningHours = subTypeFeatures(account.sub_type).openingHours;
 
   const goToOwnerScreen = async (pathname: '/org/settings' | '/org/opening-hours') => {
     try {
