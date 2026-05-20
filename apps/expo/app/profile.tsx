@@ -11,6 +11,7 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
+import AvatarStack from '@/components/AvatarStack';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import BottomDrawer from '@/components/BottomDrawer';
 import LoginDrawer from '@/components/LoginDrawer';
@@ -53,7 +54,7 @@ export default function ProfileScreen() {
   const { disconnect } = useDisconnect();
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
-  const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
+  const { activeAccount, ownedAccounts, recentOtherAccounts, switchAccount, refreshAccounts } = useAccount();
   const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
   const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
   const userBusiness = businessRecord;
@@ -125,7 +126,17 @@ const handleRefresh = async () => {
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Röbel</Text>
         {ownedAccounts.length > 1 && (
           <Pressable onPress={() => setShowAccountSheet(true)} style={[styles.switchButton, { borderColor: colors.border }]}>
-            <Text style={[styles.switchButtonText, { color: colors.textSecondary }]}>Account wechseln</Text>
+            {recentOtherAccounts.length > 0 && (
+              <AvatarStack
+                users={recentOtherAccounts.map((a) => ({
+                  avatar_url: a.avatar_url,
+                  username: a.name,
+                }))}
+                maxVisible={2}
+                size="small"
+              />
+            )}
+            <Text style={[styles.switchButtonText, { color: colors.textPrimary }]}>Account wechseln</Text>
           </Pressable>
         )}
       </View>
@@ -610,7 +621,7 @@ const styles = StyleSheet.create({
   switchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 20,

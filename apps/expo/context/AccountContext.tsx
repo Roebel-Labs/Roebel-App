@@ -15,10 +15,13 @@ import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
 import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
+const RECENT_ACCOUNT_IDS_KEY = '@recent_account_ids';
+const RECENT_ACCOUNT_IDS_CAP = 5;
 
 interface AccountContextValue {
   activeAccount: Account | null;
   ownedAccounts: Account[];
+  recentOtherAccounts: Account[];
   roleInActiveAccount: AccountRole | null;
   switchAccount: (accountId: string) => Promise<void>;
   createOrgAccount: (
@@ -42,8 +45,26 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [ownedAccounts, setOwnedAccounts] = useState<Account[]>([]);
+  const [recentAccountIds, setRecentAccountIds] = useState<string[]>([]);
   const [roleInActiveAccount, setRoleInActiveAccount] = useState<AccountRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Restore MRU list from AsyncStorage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_ACCOUNT_IDS_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+            setRecentAccountIds(parsed.slice(0, RECENT_ACCOUNT_IDS_CAP));
+          }
+        } catch {
+          // ignore malformed storage value
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Load accounts when user connects
   const refreshAccounts = useCallback(async () => {
@@ -99,12 +120,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setActiveAccount(null);
       setOwnedAccounts([]);
       setRoleInActiveAccount(null);
+      setRecentAccountIds([]);
+      AsyncStorage.removeItem(RECENT_ACCOUNT_IDS_KEY).catch(() => {});
     }
   }, [walletAddress]);
 
   const switchAccount = useCallback(
     async (accountId: string) => {
       if (!walletAddress) throw new Error('No wallet connected');
+
+      const prevId = activeAccount?.id;
 
       await switchActiveAccountDB(walletAddress, accountId);
       await AsyncStorage.setItem(ACTIVE_ACCOUNT_KEY, accountId);
@@ -116,8 +141,19 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         const fetched = await fetchAccountById(accountId);
         if (fetched) setActiveAccount(fetched);
       }
+
+      if (prevId && prevId !== accountId) {
+        setRecentAccountIds((prev) => {
+          const next = [prevId, ...prev.filter((id) => id !== prevId && id !== accountId)].slice(
+            0,
+            RECENT_ACCOUNT_IDS_CAP
+          );
+          AsyncStorage.setItem(RECENT_ACCOUNT_IDS_KEY, JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+      }
     },
-    [walletAddress, ownedAccounts]
+    [walletAddress, ownedAccounts, activeAccount?.id]
   );
 
   const createOrgAccount = useCallback(
@@ -169,10 +205,23 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     [ownedAccounts]
   );
 
+  const recentOtherAccounts = useMemo<Account[]>(() => {
+    const activeId = activeAccount?.id;
+    const byId = new Map(ownedAccounts.map((a) => [a.id, a]));
+    const mruResolved = recentAccountIds
+      .map((id) => byId.get(id))
+      .filter((a): a is Account => !!a && a.id !== activeId);
+    const filler = ownedAccounts.filter(
+      (a) => a.id !== activeId && !recentAccountIds.includes(a.id)
+    );
+    return [...mruResolved, ...filler].slice(0, 2);
+  }, [recentAccountIds, ownedAccounts, activeAccount?.id]);
+
   const value = useMemo<AccountContextValue>(
     () => ({
       activeAccount,
       ownedAccounts,
+      recentOtherAccounts,
       roleInActiveAccount,
       switchAccount,
       createOrgAccount,
@@ -183,7 +232,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       refreshAccounts,
     }),
-    [activeAccount, ownedAccounts, roleInActiveAccount, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, deleteOrgAccount, isOwnerOf, isLoading, refreshAccounts]
+    [activeAccount, ownedAccounts, recentOtherAccounts, roleInActiveAccount, switchAccount, createOrgAccount, inviteCitizen, removeCitizen, deleteOrgAccount, isOwnerOf, isLoading, refreshAccounts]
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
