@@ -224,7 +224,7 @@ export async function getPostsForFeed(
     if (linkedEventIds.length > 0) {
       const { data: events } = await supabase
         .from("events")
-        .select("id, title, date, time, location, image_url, ticket_price")
+        .select("id, title, date, time, location, image_url")
         .in("id", linkedEventIds)
       for (const e of events || []) {
         eventMap.set(e.id as string, {
@@ -234,7 +234,6 @@ export async function getPostsForFeed(
           time: (e.time as string) || null,
           location: e.location as string,
           image_url: (e.image_url as string) || null,
-          ticket_price: (e.ticket_price as number | null) ?? null,
         })
       }
     }
@@ -342,7 +341,7 @@ export async function getPostById(
     ) {
       const { data: ev } = await supabase
         .from("events")
-        .select("id, title, date, time, location, image_url, ticket_price")
+        .select("id, title, date, time, location, image_url")
         .eq("id", post.linked_event_id as string)
         .single()
       if (ev) {
@@ -353,7 +352,6 @@ export async function getPostById(
           time: (ev.time as string) || null,
           location: ev.location as string,
           image_url: (ev.image_url as string) || null,
-          ticket_price: (ev.ticket_price as number | null) ?? null,
         }
       }
     }
