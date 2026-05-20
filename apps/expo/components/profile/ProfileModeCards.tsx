@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { getOrgFeatures } from '@/lib/org-features';
 import type { OrgSubType } from '@/lib/types';
 
@@ -84,18 +85,27 @@ export default function ProfileModeCards() {
   const router = useRouter();
   const { tier, isCitizen } = useUser();
   const { activeAccount } = useAccount();
+  const requireAuth = useRequireAuth();
   const isOrg = activeAccount?.account_type === 'organisation';
 
   return (
     <View style={styles.container}>
-      {(tier === 'tourist' || tier === 'guest') && !isOrg && <TouristCards router={router} />}
-      {isCitizen && !isOrg && <CitizenCards router={router} />}
+      {(tier === 'tourist' || tier === 'guest') && !isOrg && (
+        <TouristCards router={router} requireAuth={requireAuth} />
+      )}
+      {isCitizen && !isOrg && <CitizenCards router={router} requireAuth={requireAuth} />}
       {isOrg && <OrgCards router={router} />}
     </View>
   );
 }
 
-function TouristCards({ router }: { router: ReturnType<typeof useRouter> }) {
+function TouristCards({
+  router,
+  requireAuth,
+}: {
+  router: ReturnType<typeof useRouter>;
+  requireAuth: (action: () => void) => void;
+}) {
   return (
     <>
       <View style={styles.cardsRow}>
@@ -116,13 +126,19 @@ function TouristCards({ router }: { router: ReturnType<typeof useRouter> }) {
         emoji="🏛️"
         title="Bürger werden"
         subtitle="Werde Teil der Röbel Community"
-        onPress={() => router.push('/verification/request-citizen' as any)}
+        onPress={() => requireAuth(() => router.push('/verification/request-citizen' as any))}
       />
     </>
   );
 }
 
-function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
+function CitizenCards({
+  router,
+  requireAuth,
+}: {
+  router: ReturnType<typeof useRouter>;
+  requireAuth: (action: () => void) => void;
+}) {
   return (
     <>
       <View style={styles.cardsRow}>
@@ -143,7 +159,7 @@ function CitizenCards({ router }: { router: ReturnType<typeof useRouter> }) {
         emoji="🚀"
         title="Starte durch in Röbel"
         subtitle="Gewerbe, Verein, Stadt, Freelancer..."
-        onPress={() => router.push('/create-org' as any)}
+        onPress={() => requireAuth(() => router.push('/create-org' as any))}
       />
     </>
   );

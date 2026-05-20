@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 interface OptionCardProps {
@@ -32,6 +33,8 @@ function OptionCard({ emoji, title, subtitle, onPress, colors }: OptionCardProps
 export default function MachsInRoebelScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const requireAuth = useRequireAuth();
+  const gatedPush = (path: string) => requireAuth(() => router.push(path as any));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -57,35 +60,35 @@ export default function MachsInRoebelScreen() {
             emoji="🏪"
             title="Gewerbe gründen"
             subtitle="Registriere dein Unternehmen in Röbel"
-            onPress={() => router.push('/create-org' as any)}
+            onPress={() => gatedPush('/create-org')}
             colors={colors}
           />
           <OptionCard
             emoji="🤝"
             title="Verein gründen"
             subtitle="Starte einen Sportverein, Kulturverein, oder mehr"
-            onPress={() => router.push('/create-org' as any)}
+            onPress={() => gatedPush('/create-org')}
             colors={colors}
           />
           <OptionCard
             emoji="🏛️"
             title="Politisch engagieren"
             subtitle="Stadt oder Fraktion beitreten"
-            onPress={() => router.push('/create-org' as any)}
+            onPress={() => gatedPush('/create-org')}
             colors={colors}
           />
           <OptionCard
             emoji="💼"
             title="Freelancer werden"
             subtitle="Biete deine Dienste auf dem Marktplatz an"
-            onPress={() => router.push('/create-listing' as any)}
+            onPress={() => gatedPush('/create-listing')}
             colors={colors}
           />
           <OptionCard
             emoji="🎨"
             title="Kreativ werden"
             subtitle="Kulturprojekte, Kunst, Musik in Röbel"
-            onPress={() => router.push('/submit-event' as any)}
+            onPress={() => gatedPush('/submit-event')}
             colors={colors}
           />
         </View>

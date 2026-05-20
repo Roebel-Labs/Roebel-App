@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import { useInterest } from '@/context/InterestContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { HeartIcon, HeartFilledIcon } from './Icons';
 import AvatarStack from './AvatarStack';
 import { InterestedUser } from '@/lib/supabase-interests';
@@ -19,6 +20,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
   const account = useActiveAccount();
   const router = useRouter();
   const { colors } = useTheme();
+  const requireAuth = useRequireAuth();
   const { isInterested, toggleInterest, getCount, refreshCount, getInterestedUsers } = useInterest();
 
   const interested = isInterested(eventId);
@@ -39,7 +41,11 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
   }, [eventId]);
 
   const handleToggle = useCallback(async () => {
-    if (!account?.address || toggling) return;
+    if (toggling) return;
+    if (!account?.address) {
+      requireAuth(() => {});
+      return;
+    }
 
     setToggling(true);
     const wasInterested = interested;
@@ -148,14 +154,12 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
     <View style={styles.container}>
       <Pressable
         onPress={handleToggle}
-        disabled={!account?.address}
         style={({ pressed }) => [
           styles.button,
           isActive
             ? [styles.buttonActive, { backgroundColor: colors.surface, borderColor: colors.primary }]
             : { backgroundColor: colors.primary },
           pressed && styles.buttonPressed,
-          !account?.address && styles.buttonDisabled,
         ]}
         accessibilityRole="button"
         accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}

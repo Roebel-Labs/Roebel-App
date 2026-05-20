@@ -19,6 +19,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { usePostActions } from '@/hooks/usePostActions';
 import {
   fetchPostById,
@@ -60,6 +61,7 @@ export default function PostDetailScreen() {
   const { activeAccount, isOwnerOf } = useAccount();
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
+  const requireAuth = useRequireAuth();
 
   const [post, setPost] = useState<PostRecord | null>(null);
   const [comments, setComments] = useState<PostCommentRecord[]>([]);
@@ -131,7 +133,11 @@ export default function PostDetailScreen() {
     stickerRewardId: string | null,
     imageUrl: string | null,
   ) => {
-    if (!walletAddress || !id) return;
+    if (!id) return;
+    if (!walletAddress) {
+      requireAuth(() => {});
+      return;
+    }
     setIsSubmittingComment(true);
 
     try {

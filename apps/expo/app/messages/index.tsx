@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
@@ -55,6 +56,7 @@ export default function MessagesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const account = useActiveAccount();
+  const requireAuth = useRequireAuth();
   const {
     conversations,
     isLoading,
@@ -107,7 +109,7 @@ export default function MessagesScreen() {
                 { backgroundColor: colors.primary },
                 pressed && { opacity: 0.85 },
               ]}
-              onPress={() => router.push('/profile' as any)}
+              onPress={() => requireAuth(() => {})}
             >
               <Text style={[styles.loginButtonText, { color: colors.onPrimary }]}>Anmelden</Text>
             </Pressable>

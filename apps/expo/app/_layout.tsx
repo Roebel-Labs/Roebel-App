@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { extractReferralCode, storePendingReferralCode } from '@/lib/referral-deeplink';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { noTransition } from '@/lib/navigation/transitionPresets';
+import { AuthGateProvider } from '@/context/AuthGateContext';
 import { BookmarksProvider } from '@/context/BookmarksContext';
 import { InterestProvider } from '@/context/InterestContext';
 import { LocationProvider } from '@/context/LocationContext';
@@ -298,35 +299,37 @@ function Layout() {
               <ConditionalPostHogProvider>
                 <ThirdwebProvider>
                   <AutoConnectHandler />
-                  <VerificationProvider>
-                    <UserProvider>
-                    <AccountProvider>
-                    <MessagingProvider>
-                    <NotificationsProvider>
-                    <RewardsProvider>
-                    <MeckyProvider>
-                    <GovernanceTestProvider>
-                    <MaciProvider>
-                    <InterestProvider>
-                    <BookmarksProvider>
-                      <LocationProvider>
-                        <SnackbarProvider>
-                          <ConsentGate />
-                          <AppUpdateGate />
-                          <ThemedLayout />
-                        </SnackbarProvider>
-                      </LocationProvider>
-                    </BookmarksProvider>
-                    </InterestProvider>
-                    </MaciProvider>
-                    </GovernanceTestProvider>
-                    </MeckyProvider>
-                    </RewardsProvider>
-                    </NotificationsProvider>
-                    </MessagingProvider>
-                    </AccountProvider>
-                    </UserProvider>
-                  </VerificationProvider>
+                  <AuthGateProvider>
+                    <VerificationProvider>
+                      <UserProvider>
+                      <AccountProvider>
+                      <MessagingProvider>
+                      <NotificationsProvider>
+                      <RewardsProvider>
+                      <MeckyProvider>
+                      <GovernanceTestProvider>
+                      <MaciProvider>
+                      <InterestProvider>
+                      <BookmarksProvider>
+                        <LocationProvider>
+                          <SnackbarProvider>
+                            <ConsentGate />
+                            <AppUpdateGate />
+                            <ThemedLayout />
+                          </SnackbarProvider>
+                        </LocationProvider>
+                      </BookmarksProvider>
+                      </InterestProvider>
+                      </MaciProvider>
+                      </GovernanceTestProvider>
+                      </MeckyProvider>
+                      </RewardsProvider>
+                      </NotificationsProvider>
+                      </MessagingProvider>
+                      </AccountProvider>
+                      </UserProvider>
+                    </VerificationProvider>
+                  </AuthGateProvider>
                 </ThirdwebProvider>
               </ConditionalPostHogProvider>
             </ConsentProvider>

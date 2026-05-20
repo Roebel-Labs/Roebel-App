@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { softShadow } from '@/lib/shadow';
 
 const ROEBEL_CARD = require('../../assets/illustration/profile/01.png');
@@ -25,6 +26,7 @@ type WideItem = {
 export default function OrgActionCards() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const requireAuth = useRequireAuth();
   const cardBg = isDark ? colors.surface : '#FFFFFF';
 
   const gridItems: GridItem[] = [
@@ -33,13 +35,17 @@ export default function OrgActionCards() {
       label: 'Anzeige\nerstellen',
       icon: ANZEIGE,
       onPress: () =>
-        router.push({ pathname: '/create-listing', params: { listingType: 'product' } } as any),
+        requireAuth(() =>
+          router.push({ pathname: '/create-listing', params: { listingType: 'product' } } as any)
+        ),
     },
     {
       label: 'Dienstleistung\nanbieten',
       icon: DIENSTLEISTUNG,
       onPress: () =>
-        router.push({ pathname: '/create-listing', params: { listingType: 'service' } } as any),
+        requireAuth(() =>
+          router.push({ pathname: '/create-listing', params: { listingType: 'service' } } as any)
+        ),
     },
   ];
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import type { PostPollRecord } from '@/lib/types/feed';
 import { fetchPollVotes, submitPollVote, getUserPollVote } from '@/lib/supabase-posts';
 
@@ -11,6 +12,7 @@ type Props = {
 
 export default function PostPollView({ poll, walletAddress }: Props) {
   const { colors } = useTheme();
+  const requireAuth = useRequireAuth();
   const [voteCounts, setVoteCounts] = useState<number[]>(poll.options.map(() => 0));
   const [totalVotes, setTotalVotes] = useState(0);
   const [userVote, setUserVote] = useState<number[] | null>(null);
@@ -40,7 +42,11 @@ export default function PostPollView({ poll, walletAddress }: Props) {
   };
 
   const handleVote = async (optionIndex: number) => {
-    if (!walletAddress || hasVoted || isExpired || isVoting) return;
+    if (hasVoted || isExpired || isVoting) return;
+    if (!walletAddress) {
+      requireAuth(() => {});
+      return;
+    }
     setIsVoting(true);
 
     try {

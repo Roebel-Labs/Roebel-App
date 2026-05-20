@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useConversation } from '@/hooks/useConversation';
 import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import MessageBubble from '@/components/messages/MessageBubble';
 import ChatInput from '@/components/messages/ChatInput';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
@@ -27,6 +28,7 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { markConversationRead } = useMessaging();
+  const requireAuth = useRequireAuth();
 
   // Mark conversation as read when opened
   useEffect(() => {
@@ -124,7 +126,16 @@ export default function ChatScreen() {
         )}
 
         <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
-          <ChatInput onSend={sendMessage} isSending={isSending} />
+          <ChatInput
+            onSend={(text, stickerRewardId) => {
+              if (!myAccountId) {
+                requireAuth(() => {});
+                return;
+              }
+              sendMessage(text, stickerRewardId);
+            }}
+            isSending={isSending}
+          />
         </SafeAreaView>
       </KeyboardAvoidingView>
     </SafeAreaView>

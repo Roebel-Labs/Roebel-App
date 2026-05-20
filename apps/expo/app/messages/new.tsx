@@ -14,6 +14,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { useAccountSearch } from '@/hooks/useAccountSearch';
 import {
   findOrCreateConversation,
@@ -42,6 +43,7 @@ export default function NewConversationScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
+  const requireAuth = useRequireAuth();
 
   const {
     address: prefillAddress,
@@ -74,7 +76,10 @@ export default function NewConversationScreen() {
   );
 
   const openConversation = async (peerAccountId: string) => {
-    if (!activeAccount?.id) return;
+    if (!activeAccount?.id) {
+      requireAuth(() => {});
+      return;
+    }
     if (isOpening) return;
     setIsOpening(peerAccountId);
     setErrorMessage(null);

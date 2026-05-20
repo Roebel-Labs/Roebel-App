@@ -24,6 +24,7 @@ import Animated, {
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
@@ -187,6 +188,7 @@ export default function FeedHome() {
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
   const { isOwnerOf } = useAccount();
+  const requireAuth = useRequireAuth();
   const { showSnackbar } = useSnackbar();
   const { totalUnreadCount } = useNotificationsContext();
   const { unreadCount: unreadMessages } = useMessaging();
@@ -293,8 +295,9 @@ export default function FeedHome() {
   };
 
   const handleCompose = () => {
-    if (!walletAddress) return;
-    router.push({ pathname: '/create', params: { feedType: effectiveTab } } as any);
+    requireAuth(() => {
+      router.push({ pathname: '/create', params: { feedType: effectiveTab } } as any);
+    });
   };
 
   const handleMore = (post: PostRecord) => {

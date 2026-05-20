@@ -18,6 +18,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { PostCategory, FeedType } from '@/lib/types/feed';
@@ -82,6 +83,7 @@ export default function CreateScreen() {
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address || '';
   const draft = useCreatePost();
+  const requireAuth = useRequireAuth();
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -170,7 +172,7 @@ export default function CreateScreen() {
 
   const handleWeiter = () => {
     if (!canProceed) return;
-    router.push('/create/review' as any);
+    requireAuth(() => router.push('/create/review' as any));
   };
 
   const bottomOptions: BottomOption[] = [
@@ -498,7 +500,7 @@ export default function CreateScreen() {
               <Pressable
                 key={opt.key}
                 style={[styles.bottomCard, { backgroundColor: colors.surfaceSecondary }]}
-                onPress={() => router.push(opt.route as any)}
+                onPress={() => requireAuth(() => router.push(opt.route as any))}
               >
                 {opt.icon}
                 <Text style={[styles.bottomCardLabel, { color: colors.textPrimary }]}>

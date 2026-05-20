@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { softShadow } from '@/lib/shadow';
 
 const BUERGERUMFRAGEN_ILLUSTRATION = require('../../assets/illustration/buergerumfragen.png');
@@ -9,8 +10,10 @@ const BUERGERUMFRAGEN_ILLUSTRATION = require('../../assets/illustration/buergeru
 export default function BuergerWerdenBanner() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const requireAuth = useRequireAuth();
 
-  const onPress = () => router.push('/verification/request-citizen' as any);
+  const onPress = () =>
+    requireAuth(() => router.push('/verification/request-citizen' as any));
 
   return (
     <View

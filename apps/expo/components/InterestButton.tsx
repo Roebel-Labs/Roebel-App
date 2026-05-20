@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useActiveAccount } from 'thirdweb/react';
 import { useInterest } from '@/context/InterestContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 import { HeartIcon, HeartFilledIcon } from './Icons';
 import AvatarStack from './AvatarStack';
 import { InterestedUser } from '@/lib/supabase-interests';
@@ -20,6 +21,7 @@ const HEART_PNG = require('@/assets/icons/Heart.png');
 export default function InterestButton({ eventId, compact = false, iconOnly = false }: InterestButtonProps) {
   const account = useActiveAccount();
   const { colors } = useTheme();
+  const requireAuth = useRequireAuth();
   const { isInterested, toggleInterest, getCount, refreshCount, getInterestedUsers } = useInterest();
 
   const interested = isInterested(eventId);
@@ -43,7 +45,11 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
   }, [eventId, iconOnly]);
 
   const handleToggle = useCallback(async () => {
-    if (!account?.address || toggling) return;
+    if (toggling) return;
+    if (!account?.address) {
+      requireAuth(() => {});
+      return;
+    }
 
     setToggling(true);
     const wasInterested = interested;
@@ -147,11 +153,9 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
   const heartButton = (
     <Pressable
       onPress={handleToggle}
-      disabled={!account?.address}
       style={({ pressed }) => [
         styles.heartBtn,
         pressed && styles.heartBtnPressed,
-        !account?.address && styles.heartBtnDisabled,
       ]}
       accessibilityRole="button"
       accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}

@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import { Share } from 'react-native';
 import { togglePostLike, reportPost as reportPostApi } from '@/lib/supabase-posts';
+import { useRequireAuth } from '@/context/AuthGateContext';
 
 /**
  * Hook for post interactions: like, share, report
  */
 export function usePostActions(walletAddress: string | undefined) {
+  const requireAuth = useRequireAuth();
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
 
@@ -25,7 +27,10 @@ export function usePostActions(walletAddress: string | undefined) {
    */
   const toggleLike = useCallback(
     async (postId: string, currentCount: number) => {
-      if (!walletAddress) return;
+      if (!walletAddress) {
+        requireAuth(() => {});
+        return;
+      }
 
       const wasLiked = likedPosts.has(postId);
       const newCount = wasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
@@ -59,7 +64,7 @@ export function usePostActions(walletAddress: string | undefined) {
         setLikeCounts((prev) => ({ ...prev, [postId]: currentCount }));
       }
     },
-    [walletAddress, likedPosts]
+    [walletAddress, likedPosts, requireAuth]
   );
 
   /**
@@ -98,7 +103,10 @@ export function usePostActions(walletAddress: string | undefined) {
    */
   const reportPost = useCallback(
     async (postId: string, reason: string) => {
-      if (!walletAddress) return;
+      if (!walletAddress) {
+        requireAuth(() => {});
+        return;
+      }
       try {
         await reportPostApi(postId, walletAddress, reason);
       } catch (err) {
@@ -106,7 +114,7 @@ export function usePostActions(walletAddress: string | undefined) {
         throw err;
       }
     },
-    [walletAddress]
+    [walletAddress, requireAuth]
   );
 
   return {
