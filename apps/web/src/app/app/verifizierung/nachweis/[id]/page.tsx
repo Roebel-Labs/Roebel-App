@@ -7,6 +7,7 @@ import { useVerificationStatus } from "@/hooks/useVerificationStatus";
 import { prepareContractCall, readContract } from "thirdweb";
 import { attesterNFTContract, citizenNFTContract } from "@/lib/verification-contracts";
 import { de } from "@/lib/translations/de";
+import { toast } from "sonner";
 import Link from "next/link";
 import { getBlockscoutTxUrl, getBlockscoutContractEventsUrl, getBaseScanTxUrl } from "@/lib/blockscout";
 import {
@@ -263,14 +264,21 @@ export default function NachweisPage() {
     checkIfSigned();
   }, [account, requestId, contract, txSuccess]);
 
-  // Auto-select role for users with only one NFT type
+  const isRevocation = request?.requestType === 1;
+
+  // Auto-select role for users with only one NFT type, and force "attester"
+  // for revocations (only attester signatures count on-chain).
   useEffect(() => {
+    if (isRevocation) {
+      setSelectedRole("attester");
+      return;
+    }
     if (isAttester && !isCitizen && !selectedRole) {
       setSelectedRole("attester");
     } else if (isCitizen && !isAttester && !selectedRole) {
       setSelectedRole("citizen");
     }
-  }, [isAttester, isCitizen, selectedRole]);
+  }, [isAttester, isCitizen, selectedRole, isRevocation]);
 
   const handleDecrypt = useCallback(async () => {
     if (!account || !evidence) {
@@ -406,74 +414,86 @@ export default function NachweisPage() {
 
   const handleSign = async () => {
     if (!account) {
-      alert("Bitte verbinde deine Wallet");
+      toast.error("Bitte verbinde deine Wallet");
       return;
     }
-
     if (hasUserSigned) {
-      alert("Du hast diesen Antrag bereits unterschrieben");
+      toast.error("Du hast diesen Antrag bereits unterschrieben");
+      return;
+    }
+    if (!request) {
+      toast.error("Antragsdaten noch nicht geladen");
       return;
     }
 
-    if (!isAttester && !isCitizen) {
-      alert("Du benötigst einen Bürger-Pass oder Bescheiniger-Pass, um zu unterschreiben");
-      return;
-    }
+    const onSuccess = (result: { transactionHash: string }) => {
+      console.log("✅ [Nachweis] Transaction submitted!", {
+        transactionHash: result.transactionHash,
+        contractType,
+        isRevocation,
+      });
+      console.log("🔗 Blockscout:", getBlockscoutTxUrl(result.transactionHash));
+      console.log("🔗 BaseScan:", getBaseScanTxUrl(result.transactionHash));
+      setPendingTxHash(result.transactionHash);
+      setTxSuccess(true);
+    };
 
-    if (!selectedRole) {
-      alert("Bitte wähle eine Rolle aus (Bescheiniger oder Bürger)");
-      return;
-    }
-
-    console.log("🖊️ [Nachweis] Starting signature...", {
-      requestId,
-      isAttester,
-      isCitizen,
-      selectedRole,
-      signingContract: selectedRole === "attester" ? "AttesterNFT" : "CitizenNFT",
-    });
+    const onError = (error: Error) => {
+      console.error("❌ [Nachweis] Signature failed:", error);
+      toast.error("Unterschrift fehlgeschlagen", {
+        description: error.message || "Unbekannter Fehler",
+      });
+    };
 
     try {
-      const signingContract = citizenNFTContract; // Always use CitizenNFT for citizen requests
-      const signAsAttester = selectedRole === "attester";
-      const signingType = signAsAttester ? "Bescheiniger" : "Bürger";
+      // AttesterNFT requests (mint OR revocation): only attesters can sign,
+      // approveRequest takes a single uint256 argument.
+      if (contractType === "attester") {
+        if (!isAttester) {
+          toast.error("Diese Unterschrift benötigt einen Bescheiniger-Pass");
+          return;
+        }
+        const transaction = prepareContractCall({
+          contract: attesterNFTContract,
+          method: "function approveRequest(uint256 requestId)",
+          params: [BigInt(requestId)],
+        });
+        sendTransaction(transaction, { onSuccess, onError });
+        return;
+      }
 
-      console.log(`📝 [Nachweis] Signing as ${signingType}...`, {
-        signAsAttester,
-        isAttester,
-        isCitizen,
-      });
+      // CitizenNFT REVOCATION: contract enforces isAttester. signAsAttester
+      // is forced to true; citizen-only signers are blocked client-side to
+      // avoid a guaranteed on-chain revert (and gasless wallets swallow it).
+      if (isRevocation) {
+        if (!isAttester) {
+          toast.error("Eine Bürger-Entziehung benötigt einen Bescheiniger-Pass");
+          return;
+        }
+        const transaction = prepareContractCall({
+          contract: citizenNFTContract,
+          method: "function approveRequest(uint256 requestId, bool signAsAttester)",
+          params: [BigInt(requestId), true],
+        });
+        sendTransaction(transaction, { onSuccess, onError });
+        return;
+      }
 
+      // CitizenNFT ATTESTATION: dual holders pick a role; single-NFT holders
+      // use whatever they hold (auto-selected on mount).
+      if (!selectedRole) {
+        toast.error("Bitte wähle eine Rolle aus (Bescheiniger oder Bürger)");
+        return;
+      }
       const transaction = prepareContractCall({
-        contract: signingContract,
+        contract: citizenNFTContract,
         method: "function approveRequest(uint256 requestId, bool signAsAttester)",
-        params: [BigInt(requestId), signAsAttester],
+        params: [BigInt(requestId), selectedRole === "attester"],
       });
-
-      sendTransaction(transaction, {
-        onSuccess: (result) => {
-          console.log("✅ [Nachweis] Transaction submitted!", {
-            transactionHash: result.transactionHash,
-            role: signingType,
-          });
-          console.log("🔗 [Nachweis] View on Blockscout:", getBlockscoutTxUrl(result.transactionHash));
-          console.log("🔗 [Nachweis] View on BaseScan:", getBaseScanTxUrl(result.transactionHash));
-
-          setPendingTxHash(result.transactionHash);
-          setTxSuccess(true); // Show success immediately (no event polling)
-        },
-        onError: (error) => {
-          console.error("❌ [Nachweis] Signature failed:", {
-            message: error.message,
-            code: (error as any)?.code,
-            reason: (error as any)?.reason,
-          });
-          alert(`Unterschrift fehlgeschlagen: ${error.message || "Unbekannter Fehler"}. Bitte versuche es erneut.`);
-        },
-      });
+      sendTransaction(transaction, { onSuccess, onError });
     } catch (error) {
       console.error("❌ [Nachweis] Error preparing signature:", error);
-      alert("Fehler beim Vorbereiten der Unterschrift");
+      toast.error("Fehler beim Vorbereiten der Unterschrift");
     }
   };
 
@@ -497,7 +517,14 @@ export default function NachweisPage() {
     }
   };
 
-  const canSign = account && (isAttester || isCitizen) && !hasUserSigned && request?.status === 0 && !txSuccess;
+  // Revocations and any AttesterNFT request require an Attester signature on-chain.
+  const needsAttesterToSign = isRevocation || contractType === "attester";
+  const canSign =
+    !!account &&
+    (needsAttesterToSign ? isAttester : isAttester || isCitizen) &&
+    !hasUserSigned &&
+    request?.status === 0 &&
+    !txSuccess;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -514,7 +541,7 @@ export default function NachweisPage() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-medium text-foreground mb-2">
-              Nachweis für Antrag #{requestId}
+              {isRevocation ? "Entziehung" : "Nachweis"} für Antrag #{requestId}
             </h1>
             {request && (
               <div className="flex items-center gap-3">
@@ -522,7 +549,7 @@ export default function NachweisPage() {
                   {getStatusLabel(request.status)}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {contractType === "attester" ? "Bescheiniger-Antrag" : "Bürger-Antrag"}
+                  {contractType === "attester" ? "Bescheiniger" : "Bürger"}-{isRevocation ? "Entziehung" : "Antrag"}
                 </span>
               </div>
             )}
@@ -746,22 +773,27 @@ export default function NachweisPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Bürger</span>
-                        <span className="font-medium">{request.citizenSignatures} / 1</span>
+                    {!isRevocation && (
+                      <div>
+                        <div className="flex justify-between text-sm mb-2">
+                          <span className="text-muted-foreground">Bürger</span>
+                          <span className="font-medium">{request.citizenSignatures} / 1</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div
+                            className="bg-gray-400 h-2 rounded-full transition-all"
+                            style={{ width: `${Math.min(request.citizenSignatures * 100, 100)}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-gray-400 h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min(request.citizenSignatures * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
+                    )}
 
                     <div className="mt-4 p-4 border border-border rounded-lg">
                       <p className="text-sm text-foreground">
-                        <span className="font-medium">Benötigt:</span> 1 Bescheiniger + 1 Bürger Unterschrift (mindestens 2 verschiedene Personen)
+                        <span className="font-medium">Benötigt:</span>{" "}
+                        {isRevocation
+                          ? "1 Bescheiniger-Unterschrift"
+                          : "1 Bescheiniger + 1 Bürger Unterschrift (mindestens 2 verschiedene Personen)"}
                       </p>
                     </div>
                   </div>
@@ -850,86 +882,128 @@ export default function NachweisPage() {
                 <div className="border border-border rounded-lg p-6 text-center">
                   <p className="text-foreground">Du benötigst einen Bürger-Pass oder Bescheiniger-Pass, um zu unterschreiben</p>
                 </div>
+              ) : needsAttesterToSign && !isAttester ? (
+                <div className="border border-border rounded-lg p-6 text-center">
+                  <p className="text-foreground">
+                    Nur Bescheiniger können {isRevocation ? "diese Entziehung" : "diesen Antrag"} unterschreiben.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Role selection for dual NFT holders */}
-                  {isAttester && isCitizen && (
-                    <div className="border border-border rounded-lg p-6">
-                      <h3 className="font-medium text-foreground mb-3">
-                        Du besitzt beide NFTs - Wähle deine Rolle
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Du kannst entscheiden, als <strong>Bescheiniger</strong> oder <strong>Bürger</strong> zu unterschreiben.
-                      </p>
-
-                      <div className="bg-muted rounded-lg p-4 mb-4">
-                        <p className="text-sm font-medium text-foreground mb-2">Aktuelle Unterschriften:</p>
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                          <div>• Bescheiniger: {request?.attesterSignatures || 0}/1</div>
-                          <div>• Bürger: {request?.citizenSignatures || 0}/1</div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
-                          selectedRole === "attester"
-                            ? "bg-muted border-gray-400"
-                            : "bg-card border-border hover:border-border"
-                        }`}>
-                          <input
-                            type="radio"
-                            name="role"
-                            value="attester"
-                            checked={selectedRole === "attester"}
-                            onChange={() => setSelectedRole("attester")}
-                            className="w-4 h-4"
-                          />
-                          <div>
-                            <div className="font-medium text-foreground">Als Bescheiniger unterschreiben</div>
-                            <div className="text-xs text-muted-foreground">Deine Unterschrift wird als Bescheiniger-Stimme gezählt</div>
-                          </div>
-                        </label>
-
-                        <label className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
-                          selectedRole === "citizen"
-                            ? "bg-muted border-gray-400"
-                            : "bg-card border-border hover:border-border"
-                        }`}>
-                          <input
-                            type="radio"
-                            name="role"
-                            value="citizen"
-                            checked={selectedRole === "citizen"}
-                            onChange={() => setSelectedRole("citizen")}
-                            className="w-4 h-4"
-                          />
-                          <div>
-                            <div className="font-medium text-foreground">Als Bürger unterschreiben</div>
-                            <div className="text-xs text-muted-foreground">Deine Unterschrift wird als Bürger-Stimme gezählt</div>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Info for single NFT holders */}
-                  {((isAttester && !isCitizen) || (isCitizen && !isAttester)) && (
+                  {/* Revocation: attester-only, no role choice */}
+                  {isRevocation ? (
                     <div className="border border-border rounded-lg p-4">
                       <p className="text-sm text-foreground">
-                        Du unterschreibst als <strong>{isAttester ? "Bescheiniger" : "Bürger"}</strong> für diesen Bürger-Antrag.
+                        Eine Entziehung kann nur von <strong>Bescheinigern</strong> unterschrieben werden.
                       </p>
-                      {request && (
+                      {request && contractType === "citizen" && (
                         <div className="mt-3 text-xs text-muted-foreground">
-                          <div>• Bescheiniger: {request.attesterSignatures || 0}/1</div>
-                          <div>• Bürger: {request.citizenSignatures || 0}/1</div>
+                          • Bescheiniger: {request.attesterSignatures || 0}/1
+                        </div>
+                      )}
+                      {request && contractType === "attester" && (
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          • Bescheiniger: {request.signatureCount || 0}/2
                         </div>
                       )}
                     </div>
+                  ) : (
+                    <>
+                      {/* Role selection for dual NFT holders (citizen attestation only) */}
+                      {isAttester && isCitizen && contractType === "citizen" && (
+                        <div className="border border-border rounded-lg p-6">
+                          <h3 className="font-medium text-foreground mb-3">
+                            Du besitzt beide NFTs - Wähle deine Rolle
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Du kannst entscheiden, als <strong>Bescheiniger</strong> oder <strong>Bürger</strong> zu unterschreiben.
+                          </p>
+
+                          <div className="bg-muted rounded-lg p-4 mb-4">
+                            <p className="text-sm font-medium text-foreground mb-2">Aktuelle Unterschriften:</p>
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              <div>• Bescheiniger: {request?.attesterSignatures || 0}/1</div>
+                              <div>• Bürger: {request?.citizenSignatures || 0}/1</div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedRole === "attester"
+                                ? "bg-muted border-gray-400"
+                                : "bg-card border-border hover:border-border"
+                            }`}>
+                              <input
+                                type="radio"
+                                name="role"
+                                value="attester"
+                                checked={selectedRole === "attester"}
+                                onChange={() => setSelectedRole("attester")}
+                                className="w-4 h-4"
+                              />
+                              <div>
+                                <div className="font-medium text-foreground">Als Bescheiniger unterschreiben</div>
+                                <div className="text-xs text-muted-foreground">Deine Unterschrift wird als Bescheiniger-Stimme gezählt</div>
+                              </div>
+                            </label>
+
+                            <label className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedRole === "citizen"
+                                ? "bg-muted border-gray-400"
+                                : "bg-card border-border hover:border-border"
+                            }`}>
+                              <input
+                                type="radio"
+                                name="role"
+                                value="citizen"
+                                checked={selectedRole === "citizen"}
+                                onChange={() => setSelectedRole("citizen")}
+                                className="w-4 h-4"
+                              />
+                              <div>
+                                <div className="font-medium text-foreground">Als Bürger unterschreiben</div>
+                                <div className="text-xs text-muted-foreground">Deine Unterschrift wird als Bürger-Stimme gezählt</div>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Info for single NFT holders (citizen attestation) */}
+                      {contractType === "citizen" &&
+                        ((isAttester && !isCitizen) || (isCitizen && !isAttester)) && (
+                          <div className="border border-border rounded-lg p-4">
+                            <p className="text-sm text-foreground">
+                              Du unterschreibst als <strong>{isAttester ? "Bescheiniger" : "Bürger"}</strong> für diesen Bürger-Antrag.
+                            </p>
+                            {request && (
+                              <div className="mt-3 text-xs text-muted-foreground">
+                                <div>• Bescheiniger: {request.attesterSignatures || 0}/1</div>
+                                <div>• Bürger: {request.citizenSignatures || 0}/1</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                      {/* AttesterNFT attestation — only attesters can sign */}
+                      {contractType === "attester" && isAttester && (
+                        <div className="border border-border rounded-lg p-4">
+                          <p className="text-sm text-foreground">
+                            Du unterschreibst als <strong>Bescheiniger</strong> für diesen Bescheiniger-Antrag.
+                          </p>
+                          {request && (
+                            <div className="mt-3 text-xs text-muted-foreground">
+                              • Bescheiniger: {request.signatureCount || 0}/2
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <button
                     onClick={handleSign}
-                    disabled={!canSign || isPending || !selectedRole}
+                    disabled={!canSign || isPending}
                     className="w-full bg-foreground hover:bg-foreground text-white px-8 py-4 rounded-lg transition-colors font-medium text-lg disabled:bg-muted disabled:cursor-not-allowed flex items-center justify-center gap-3"
                   >
                     {isPending ? (
@@ -939,7 +1013,9 @@ export default function NachweisPage() {
                       </>
                     ) : (
                       <>
-                        Unterschreiben {selectedRole && `als ${selectedRole === "attester" ? "Bescheiniger" : "Bürger"}`}
+                        {isRevocation
+                          ? "Entziehung unterschreiben"
+                          : `Unterschreiben${selectedRole ? ` als ${selectedRole === "attester" ? "Bescheiniger" : "Bürger"}` : ""}`}
                       </>
                     )}
                   </button>
