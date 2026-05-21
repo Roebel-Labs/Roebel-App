@@ -21,6 +21,14 @@ export default function RestaurantDetailScreen() {
   const { colors } = useTheme();
 
   React.useEffect(() => { if (restaurant && slug) logRestaurantView(slug, restaurant.name); }, [restaurant, slug]);
+
+  // If this restaurant is linked to an org account, prefer the unified gastro account view.
+  React.useEffect(() => {
+    if (restaurant && (restaurant as any).account_id) {
+      router.replace(`/account/${(restaurant as any).account_id}`);
+    }
+  }, [restaurant, router]);
+
   async function onRefresh() { setRefreshing(true); await refetch(); setRefreshing(false); }
 
   const openStatus = restaurant ? isRestaurantOpen(restaurant.opening_hours) : null;

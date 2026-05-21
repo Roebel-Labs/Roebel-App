@@ -233,11 +233,60 @@ export type MenuItemRecord = {
   name: string;
   description: string | null;
   price: number;
+  image_url: string | null;
   is_vegetarian: boolean;
   is_vegan: boolean;
   is_available: boolean;
+  sides_required: boolean;
+  sides_label: string;
   sort_order: number;
   created_at: string;
+};
+
+export type MenuItemSide = {
+  id: string;
+  menu_item_id: string;
+  name: string;
+  description: string | null;
+  price_delta: number;
+  is_default: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type AccountRatingSummary = {
+  account_id: string;
+  rating_count: number;
+  avg_stars: number;
+};
+
+export type AccountRatingRecord = {
+  id: string;
+  account_id: string;
+  wallet_address: string;
+  stars: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MenuItemVoteSummary = {
+  menu_item_id: string;
+  vote_count: number;
+  percent_liked: number;
+};
+
+export type MenuItemVoteRecord = {
+  id: string;
+  menu_item_id: string;
+  wallet_address: string;
+  vote: 1 | -1;
+  created_at: string;
+};
+
+export type MenuItemWithDetails = MenuItemRecord & {
+  sides: MenuItemSide[];
+  vote_summary: MenuItemVoteSummary | null;
 };
 
 export type SpecialMenuRecord = {

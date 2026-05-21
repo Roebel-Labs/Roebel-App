@@ -23,6 +23,12 @@ import ProfileTabs from '@/components/profile/ProfileTabs';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
+import HeaderFloatingActions from '@/components/HeaderFloatingActions';
+import RatingModal from '@/components/RatingModal';
+import RatingSummary from '@/components/RatingSummary';
+import MenuSearchModal from '@/components/MenuSearchModal';
+import GastroSection from '@/components/GastroSection';
+import { useAccountRating } from '@/hooks/useAccountRating';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import { fetchAccountPosts, fetchEventsByAccount } from '@/lib/supabase-posts';
@@ -105,6 +111,9 @@ export default function PublicAccountScreen() {
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('info');
+  const [ratingModalOpen, setRatingModalOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
 
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -645,6 +654,14 @@ export default function PublicAccountScreen() {
           >
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
+          <HeaderFloatingActions
+            actions={[
+              ...(account.sub_type === 'restaurant'
+                ? [{ kind: 'search' as const, onPress: () => setSearchModalOpen(true), accessibilityLabel: 'Speisekarte durchsuchen' }]
+                : []),
+              { kind: 'rate' as const, onPress: () => setRatingModalOpen(true), active: !!userRating, accessibilityLabel: 'Bewerten' },
+            ]}
+          />
         </View>
 
         {/* Avatar overlapping banner */}
@@ -715,7 +732,19 @@ export default function PublicAccountScreen() {
           {account.bio ? (
             <Text style={[styles.bioText, { color: colors.textPrimary }]}>{account.bio}</Text>
           ) : null}
+
+          {(ratingSummary?.rating_count ?? 0) > 0 && (
+            <View style={{ marginTop: 8 }}>
+              <RatingSummary summary={ratingSummary} />
+            </View>
+          )}
         </View>
+
+        {account.sub_type === 'restaurant' && (
+          <InlineErrorBoundary label="gastro-section">
+            <GastroSection accountId={account.id} />
+          </InlineErrorBoundary>
+        )}
 
         {/* Tabs */}
         <View style={styles.tabsWrap}>
@@ -739,6 +768,20 @@ export default function PublicAccountScreen() {
           )}
         </InlineErrorBoundary>
       </ScrollView>
+
+      <RatingModal
+        visible={ratingModalOpen}
+        accountId={account.id}
+        accountName={account.name}
+        onClose={() => setRatingModalOpen(false)}
+      />
+      {account.sub_type === 'restaurant' && (
+        <MenuSearchModal
+          visible={searchModalOpen}
+          accountId={account.id}
+          onClose={() => setSearchModalOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
