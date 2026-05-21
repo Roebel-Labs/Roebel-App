@@ -3,10 +3,13 @@
 // Branches on the active account type:
 //
 //   - personal → <BuyerLanding>
-//     "Jetzt kaufen" opens the TopUpBottomSheet which creates a Stripe
-//     checkout session and credits the buyer's card. Shows "Meine Karte
-//     anzeigen" once the buyer has a card. Also shows the
-//     "Ich habe eine Einladung" claim link for employees.
+//     "Interessiert" records the user's interest in the upcoming Röbel
+//     Card by writing to the shared `card_interest` Supabase table (same
+//     table the web landing modal writes to) via the
+//     `buyer-card-interest` Edge Function. The Stripe purchase flow is
+//     parked until the card launches. Shows "Meine Karte anzeigen" once
+//     the buyer has a card. Also shows the "Ich habe eine Einladung"
+//     claim link for employees.
 //
 //   - organisation → <OrgLanding>
 //     Organisations don't buy voucher cards — they become partners who
@@ -29,7 +32,6 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Alert,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -39,14 +41,12 @@ import { useActiveAccount } from 'thirdweb/react';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
-import { useUser } from '@/context/UserContext';
 import { useRoebelCard } from '@/context/RoebelCardContext';
+import { useBuyerCardInterest } from '@/hooks/useBuyerCardInterest';
 import { openRoebelCardLearnMore } from '@/lib/roebel-card-checkout';
-import type { BuyerMode } from './my-card';
 import { fetchPartnersByWallet } from '@/lib/supabase-roebel-card-partners';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import TopUpBottomSheet from '@/components/TopUpBottomSheet';
 
 const CARD_IMAGE = require('../../assets/images/card.png');
 
@@ -106,30 +106,12 @@ interface BuyerLandingProps {
 function BuyerLanding({ card }: BuyerLandingProps) {
   const router = useRouter();
   const { colors } = useTheme();
-  const activeAccount = useActiveAccount();
-  const { isCitizen } = useUser();
+  const interest = useBuyerCardInterest();
 
-  const buyerMode: BuyerMode = isCitizen ? 'citizen' : 'tourist';
-
-  const [topUpVisible, setTopUpVisible] = useState(false);
-
-  function handleBuyPress() {
-    if (!activeAccount?.address) {
-      Alert.alert(
-        'Wallet benötigt',
-        'Bitte verbinde zuerst dein Wallet, um eine Röbel Card zu kaufen.',
-      );
-      return;
-    }
-    setTopUpVisible(true);
-  }
-
-  function handleStripeDismissed() {
-    // Stripe in-app browser was dismissed — send the user to the
-    // polling success screen which watches for the webhook-driven
-    // balance update.
-    router.push('/roebel-card/topup-success' as any);
-  }
+  const ctaDisabled =
+    interest.status === 'submitting' ||
+    interest.status === 'submitted' ||
+    interest.status === 'loading';
 
   async function handleLearnMorePress() {
     try {
@@ -173,15 +155,47 @@ function BuyerLanding({ card }: BuyerLandingProps) {
 
         <View style={styles.ctaWrapper}>
           <Pressable
-            onPress={handleBuyPress}
-            style={[styles.primaryButton, { backgroundColor: '#194383' }]}
+            onPress={interest.submit}
+            disabled={ctaDisabled}
+            style={[
+              styles.primaryButton,
+              interest.isSubmitted
+                ? styles.primaryButtonSubmitted
+                : { backgroundColor: '#194383' },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel="Jetzt kaufen"
+            accessibilityLabel={
+              interest.isSubmitted
+                ? 'Bereits als interessiert eingetragen'
+                : 'Interessiert'
+            }
+            accessibilityState={{ disabled: interest.isSubmitted }}
           >
-            <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
-              Jetzt kaufen
-            </Text>
+            {interest.status === 'submitting' ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text
+                style={[
+                  styles.primaryButtonText,
+                  { color: interest.isSubmitted ? '#194383' : '#ffffff' },
+                ]}
+              >
+                {interest.isSubmitted ? 'Interessiert ✓' : 'Interessiert'}
+              </Text>
+            )}
           </Pressable>
+
+          {interest.isSubmitted && (
+            <Text style={[styles.thanksText, { color: colors.textSecondary }]}>
+              Vielen Dank für Ihr Interesse.
+            </Text>
+          )}
+
+          {interest.status === 'error' && interest.errorMessage && (
+            <Text style={[styles.errorText, { color: '#c5221f' }]}>
+              {interest.errorMessage}
+            </Text>
+          )}
         </View>
 
         <View style={styles.imageWrapper}>
@@ -229,25 +243,37 @@ function BuyerLanding({ card }: BuyerLandingProps) {
             </Text>
           </Pressable>
           <Pressable
-            onPress={handleBuyPress}
-            style={[styles.primaryButtonCompact, { backgroundColor: '#194383' }]}
+            onPress={interest.submit}
+            disabled={ctaDisabled}
+            style={[
+              styles.primaryButtonCompact,
+              interest.isSubmitted
+                ? styles.primaryButtonCompactSubmitted
+                : { backgroundColor: '#194383' },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel="Jetzt kaufen"
+            accessibilityLabel={
+              interest.isSubmitted
+                ? 'Bereits als interessiert eingetragen'
+                : 'Interessiert'
+            }
+            accessibilityState={{ disabled: interest.isSubmitted }}
           >
-            <Text style={[styles.primaryButtonText, { color: '#ffffff' }]}>
-              Jetzt kaufen
-            </Text>
+            {interest.status === 'submitting' ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text
+                style={[
+                  styles.primaryButtonText,
+                  { color: interest.isSubmitted ? '#194383' : '#ffffff' },
+                ]}
+              >
+                {interest.isSubmitted ? 'Interessiert ✓' : 'Interessiert'}
+              </Text>
+            )}
           </Pressable>
         </View>
       </SafeAreaView>
-
-      <TopUpBottomSheet
-        visible={topUpVisible}
-        walletAddress={activeAccount?.address ?? null}
-        buyerMode={buyerMode}
-        onClose={() => setTopUpVisible(false)}
-        onStripeDismissed={handleStripeDismissed}
-      />
     </SafeAreaView>
   );
 }
@@ -464,15 +490,37 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  primaryButtonSubmitted: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#194383',
+  },
   primaryButtonCompact: {
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 24,
     alignItems: 'center',
   },
+  primaryButtonCompactSubmitted: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#194383',
+  },
   primaryButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
+  },
+  thanksText: {
+    marginTop: 12,
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
   },
   imageWrapper: {
     marginTop: 48,
