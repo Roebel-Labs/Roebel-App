@@ -20,6 +20,7 @@ import LogoutDrawer from '@/components/LogoutDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import FrameCarousel from '@/components/rewards/FrameCarousel';
 import BannerSelectionGrid from '@/components/rewards/BannerSelectionGrid';
+import TierBadge from '@/components/RoleBadge';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -196,6 +197,14 @@ export default function EditProfileScreen() {
           <Pressable onPress={handlePickImage} disabled={uploading}>
             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Foto ändern</Text>
           </Pressable>
+          <View style={styles.statusBadge}>
+            <TierBadge
+              tier={user?.tier ?? 'guest'}
+              size="medium"
+              preferredRole={user?.preferred_role}
+              isVerifiedCitizen={user?.is_verified_citizen}
+            />
+          </View>
         </View>
 
         {/* Frame carousel (horizontal swipe) */}
@@ -376,6 +385,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     marginTop: 12,
+  },
+  statusBadge: {
+    marginTop: 10,
   },
   fieldSection: {
     paddingHorizontal: 16,

@@ -184,7 +184,12 @@ export default function PublicUserProfileScreen() {
             )}
           </View>
           <View style={styles.subRow}>
-            <TierBadge tier={profile.tier} size="medium" />
+            <TierBadge
+              tier={profile.tier}
+              size="medium"
+              preferredRole={profile.preferred_role}
+              isVerifiedCitizen={profile.is_verified_citizen}
+            />
           </View>
 
           {isFieldVisible(privacy, 'bio') && profile.bio ? (

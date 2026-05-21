@@ -9,6 +9,8 @@ type IoniconName = ComponentProps<typeof Ionicons>['name'];
 type Props = {
   tier: UserTier;
   size?: 'small' | 'medium';
+  preferredRole?: 'buerger' | 'tourist' | null;
+  isVerifiedCitizen?: boolean;
 };
 
 type TierCfg = {
@@ -54,9 +56,25 @@ const TIER_CONFIG: Record<UserTier, TierCfg> = {
   },
 };
 
-export default function TierBadge({ tier, size = 'small' }: Props) {
+const UNVERIFIED_BUERGER_CFG: TierCfg = {
+  label: 'Nicht verifiziert',
+  icon: 'shield-outline',
+  bgLight: '#E5E7EB',
+  bgDark: '#374151',
+  fgLight: '#4B5563',
+  fgDark: '#9CA3AF',
+};
+
+export default function TierBadge({
+  tier,
+  size = 'small',
+  preferredRole,
+  isVerifiedCitizen,
+}: Props) {
   const { isDark } = useTheme();
-  const cfg = TIER_CONFIG[tier];
+  const isUnverifiedBuerger =
+    tier !== 'citizen' && preferredRole === 'buerger' && !isVerifiedCitizen;
+  const cfg = isUnverifiedBuerger ? UNVERIFIED_BUERGER_CFG : TIER_CONFIG[tier];
   const fg = isDark ? cfg.fgDark : cfg.fgLight;
   const bg = isDark ? cfg.bgDark : cfg.bgLight;
   const isMedium = size === 'medium';

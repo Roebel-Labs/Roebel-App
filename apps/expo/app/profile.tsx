@@ -232,7 +232,9 @@ const handleRefresh = async () => {
             const isOrg = activeAccount?.account_type === 'organisation';
             // Aspiring citizen = logged-in non-citizen non-org with a citizen
             // verification request in flight (or a previously submitted one).
-            const isAspiringCitizen = !isOrg && !isCitizen && !!citizenRequest;
+            // Tourists never enter this branch — onboarding choice wins.
+            const isAspiringCitizen =
+              !isOrg && !isCitizen && !!citizenRequest && user?.preferred_role !== 'tourist';
             const orgPillLabel = isOrg
               ? ORG_TYPE_LABELS[activeAccount?.sub_type || ''] || 'Organisation'
               : 'Tourist:in';

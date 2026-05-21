@@ -3,6 +3,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
+import { useRequireAuth } from '@/context/AuthGateContext';
 
 interface RewardsCTABannerProps {
   variant?: 'default' | 'guest';
@@ -14,6 +15,7 @@ export default function RewardsCTABanner({ variant = 'default' }: RewardsCTABann
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { coins, keyCount } = useRewards();
+  const requireAuth = useRequireAuth();
 
   const subtitle =
     variant === 'guest'
@@ -22,7 +24,7 @@ export default function RewardsCTABanner({ variant = 'default' }: RewardsCTABann
 
   return (
     <Pressable
-      onPress={() => router.push('/rewards' as any)}
+      onPress={() => requireAuth(() => router.push('/rewards' as any))}
       style={({ pressed }) => [
         styles.banner,
         {
