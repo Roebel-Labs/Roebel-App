@@ -113,3 +113,27 @@ chore(deps): upgrade Expo SDK
 - Primary color: `#194383` (Navy, from Roebel coat of arms)
 - Font: Inter family (body), Plus Jakarta Sans (headings)
 - Mecky = AI chatbot mascot (Claude-powered, German language)
+
+## Supabase — Use the Supabase MCP (mandatory)
+
+This repo registers the Supabase MCP server at project scope in `.mcp.json`
+(project ref: `wwbeqhkslxdxhktqzqti`). Every agent and contributor working in
+this project MUST use the Supabase MCP for Supabase operations instead of raw
+CLI calls or ad-hoc HTTP. The `supabase` CLI is intentionally not installed
+in this environment.
+
+Use the MCP for:
+- Deploying / updating Edge Functions (`apps/expo/supabase/functions/*`)
+- Running ad-hoc SQL or inspecting tables
+- Applying or generating migrations (`supabase/migrations/*`)
+- Reading function and Postgres logs
+- Listing projects, buckets, secrets, branches
+
+First-time setup per machine:
+1. Confirm the server loads: `claude mcp list`
+2. Authenticate (interactive OAuth, must run outside the IDE extension):
+   `claude /mcp` → select `supabase` → Authenticate
+3. Optional Supabase Agent Skills: `npx skills add supabase/agent-skills`
+
+If an MCP tool is available for a given Supabase operation, prefer it over
+reaching for a shell command, even if you remember the CLI invocation.
