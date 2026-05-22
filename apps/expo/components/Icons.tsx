@@ -87,6 +87,7 @@ export const MusicIcon = ({ size = 24, ...props }: IconProps) => <MusicSvg width
 export const CommunityIconComponent = ({ size = 24, ...props }: IconProps) => <CommunitySvg width={size} height={size} {...props} />;
 export const MarketsIcon = ({ size = 24, ...props }: IconProps) => <MarketsSvg width={size} height={size} {...props} />;
 export const StarIconComponent = ({ size = 24, ...props }: IconProps) => <StarSvg width={size} height={size} {...props} />;
+export const StarIcon = StarIconComponent;
 export const BookmarkIcon = ({ size = 24, ...props }: IconProps) => <BookmarkSvg width={size} height={size} {...props} />;
 export const BookmarkAddIcon = ({ size = 24, ...props }: IconProps) => <BookmarkActiveSvg width={size} height={size} {...props} />;
 export const LocationIcon = ({ size = 24, ...props }: IconProps) => <LocationSvg width={size} height={size} {...props} />;
