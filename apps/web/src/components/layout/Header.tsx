@@ -9,6 +9,7 @@ import Image from "next/image";
 import { de } from "@/lib/translations/de";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { ProfilePill } from "@/components/layout/ProfilePill";
 
 export function Header() {
   const account = useActiveAccount();
@@ -20,6 +21,8 @@ export function Header() {
   };
 
   const navLinks = [
+    { href: "/app", label: "App" },
+    { href: "/unternehmen", label: "Unternehmen" },
     { href: "/verifizierung", label: de.navigation.verification },
     { href: "/verifizierung/antraege", label: "Anträge" },
     { href: "/graph", label: "Bürger für Röbel" },
@@ -59,53 +62,48 @@ export function Header() {
                 {link.label}
               </Link>
             ))}
-            {account && (
-              <Link
-                href="/profile"
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  isActive("/profile")
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Profil
-              </Link>
-            )}
           </nav>
 
-          {/* Right Side - Connect Button + Mobile Menu */}
+          {/* Right Side - Profile Pill / Connect Button + Mobile Menu */}
           <div className="flex items-center gap-2">
-            <div className="hidden sm:block">
-              <ConnectButton
-                client={client}
-                chain={activeChain}
-                wallets={wallets}
-                connectModal={{
-                  title: "Bei Röbel/Müritz DAO anmelden",
-                  size: "compact",
-                }}
-                theme="light"
-              />
-            </div>
+            {account ? (
+              <ProfilePill />
+            ) : (
+              <>
+                <div className="hidden sm:block">
+                  <ConnectButton
+                    client={client}
+                    chain={activeChain}
+                    wallets={wallets}
+                    connectModal={{
+                      title: "Bei Röbel/Müritz DAO anmelden",
+                      size: "compact",
+                    }}
+                    theme="light"
+                  />
+                </div>
 
-            <div className="block sm:hidden">
-              <ConnectButton
-                client={client}
-                chain={activeChain}
-                wallets={wallets}
-                connectModal={{
-                  title: "Anmelden",
-                  size: "compact",
-                }}
-                theme="light"
-              />
-            </div>
+                <div className="block sm:hidden">
+                  <ConnectButton
+                    client={client}
+                    chain={activeChain}
+                    wallets={wallets}
+                    connectModal={{
+                      title: "Anmelden",
+                      size: "compact",
+                    }}
+                    theme="light"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Mobile Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden p-1.5 sm:p-2 text-muted-foreground hover:text-foreground rounded-md transition-colors flex-shrink-0"
               aria-label="Toggle mobile menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

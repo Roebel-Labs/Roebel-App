@@ -9,6 +9,7 @@ import { Toaster as Sonner } from "sonner";
 import { ConditionalFooter } from "@/components/layout/ConditionalFooter";
 import { GlobalWalletRedirect } from "@/components/app/GlobalWalletRedirect";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AccountProvider } from "@/lib/context/AccountContext";
 import { Analytics } from "@vercel/analytics/react";
 
 const inter = Inter({
@@ -47,12 +48,14 @@ export default function RootLayout({
       <body className={`${GeistSans.className} flex flex-col min-h-screen overflow-x-hidden`}>
         <ThemeProvider>
           <ThirdwebProvider>
-            <GlobalWalletRedirect />
-            <div className="flex-1">{children}</div>
-            <ConditionalFooter />
-            <Toaster />
-            <Sonner position="top-right" richColors />
-            <Analytics />
+            <AccountProvider>
+              <GlobalWalletRedirect />
+              <div className="flex-1">{children}</div>
+              <ConditionalFooter />
+              <Toaster />
+              <Sonner position="top-right" richColors />
+              <Analytics />
+            </AccountProvider>
           </ThirdwebProvider>
         </ThemeProvider>
       </body>
