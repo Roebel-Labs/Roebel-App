@@ -9,6 +9,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import { fetchRestaurantByAccount } from '@/lib/supabase-restaurants';
 import { fetchMenuCategories } from '@/lib/supabase-menu';
 import { supabase } from '@/lib/supabase';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import type { MenuCategoryRecord, RestaurantRecord } from '@/lib/types';
 
 export default function MenuAdminIndex() {
@@ -81,6 +82,7 @@ export default function MenuAdminIndex() {
       <Stack.Screen options={{ headerShown: false }} />
       <Header title="Speisekarte" onBack={goBack} />
 
+      <InlineErrorBoundary label="org-menu-index">
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {!restaurant ? (
           <Text style={[styles.empty, { color: colors.textSecondary, padding: 24 }]}>
@@ -129,6 +131,7 @@ export default function MenuAdminIndex() {
           </View>
         )}
       </ScrollView>
+      </InlineErrorBoundary>
     </SafeAreaView>
   );
 }

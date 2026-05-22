@@ -84,9 +84,15 @@ export default function RestaurantDashboardContent() {
 
   return (
     <View style={styles.container}>
-      {canEditMenu && (
+      {canEditMenu && activeAccount && (
         <Pressable
-          onPress={() => router.push('/org/menu' as any)}
+          onPress={() => {
+            try {
+              router.push('/org/menu' as any);
+            } catch (err) {
+              console.error('[Speisekarte tile] navigation failed', err);
+            }
+          }}
           style={[styles.menuTile, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
         >
           <View style={{ flex: 1 }}>

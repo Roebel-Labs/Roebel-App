@@ -18,7 +18,6 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
-import MapboxMapView from '@/components/map/MapboxMapView';
 import ProfileTabs from '@/components/profile/ProfileTabs';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
@@ -308,35 +307,6 @@ export default function PublicAccountScreen() {
     Number.isFinite(orgLocation.lat) &&
     Number.isFinite(orgLocation.lon);
 
-  const mapGeoJSON = orgLocation && hasValidCoords
-    ? {
-        type: 'FeatureCollection' as const,
-        features: [
-          {
-            type: 'Feature' as const,
-            id: `${orgLocation.entityType}-${orgLocation.entityId}`,
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [orgLocation.lon, orgLocation.lat] as [number, number],
-            },
-            properties: {
-              id: orgLocation.entityId,
-              entityType: orgLocation.entityType,
-              title: account.name,
-              subtitle: orgLocation.address ?? '',
-              category: orgLocation.entityType,
-              image_url: null,
-              date: null,
-              slug: orgLocation.slug,
-              poi_type: null,
-              poi_status: null,
-              maki: orgLocation.entityType === 'restaurant' ? 'restaurant' : 'shop',
-            },
-          },
-        ],
-      }
-    : null;
-
   const renderInfoTab = () => (
     <>
       {/* Contact */}
@@ -613,36 +583,37 @@ export default function PublicAccountScreen() {
         </InlineErrorBoundary>
       )}
 
-      {/* Standort / map */}
+      {/* Standort — tap-to-open. Inline Mapbox was removed because the
+          native GL crash was blanking the screen (see Hotfix #6). */}
       {orgLocation ? (
-        <InlineErrorBoundary label="org-map-embed">
-        <View style={[styles.section, { borderTopColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
-          {orgLocation.address ? (
-            <Text style={[styles.bioText, { color: colors.textSecondary, marginBottom: 12 }]}>
-              {orgLocation.address}
-            </Text>
-          ) : null}
-          {mapGeoJSON ? (
-            <Pressable
-              onPress={openMap}
-              accessibilityRole="button"
-              accessibilityLabel={`${account.name} auf der Karte ansehen`}
-              style={[styles.mapWrap, { borderColor: colors.borderSecondary }]}
-            >
-              <View style={styles.mapInner} pointerEvents="none">
-                <MapboxMapView
-                  geojson={mapGeoJSON}
-                  onMarkerPress={() => undefined}
-                  flyToCoordinate={[orgLocation.lon, orgLocation.lat]}
-                />
-              </View>
-              <View style={[styles.mapOverlay, { backgroundColor: colors.surface }]} pointerEvents="none">
-                <Text style={[styles.linkText, { color: colors.primary }]}>Auf Karte ansehen →</Text>
-              </View>
-            </Pressable>
-          ) : null}
-        </View>
+        <InlineErrorBoundary label="org-location">
+          <View style={[styles.section, { borderTopColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
+            {orgLocation.address ? (
+              <Text style={[styles.bioText, { color: colors.textPrimary, marginBottom: 12 }]}>
+                {orgLocation.address}
+              </Text>
+            ) : null}
+            {hasValidCoords ? (
+              <Pressable
+                onPress={openMap}
+                accessibilityRole="button"
+                accessibilityLabel={`${account.name} auf der Karte ansehen`}
+                style={({ pressed }) => [
+                  styles.locationButton,
+                  {
+                    borderColor: colors.borderSecondary,
+                    backgroundColor: colors.surface,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 15 }}>
+                  Auf Karte ansehen →
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </InlineErrorBoundary>
       ) : null}
     </>
@@ -687,6 +658,7 @@ export default function PublicAccountScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <InlineErrorBoundary label="account-screen">
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -921,6 +893,7 @@ export default function PublicAccountScreen() {
           <View />
         )}
       </ScrollView>
+      </InlineErrorBoundary>
 
       <RatingModal
         visible={ratingModalOpen}
@@ -1217,23 +1190,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
-  mapWrap: {
-    height: 200,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  mapInner: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapOverlay: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  locationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'flex-start',
   },
   openStatus: {
     fontSize: 13,
