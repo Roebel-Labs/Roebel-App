@@ -38,12 +38,12 @@ import PostOptionsDrawer from './PostOptionsDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
-import { Image } from 'expo-image';
 import MailIcon from '@/assets/icons/mail-01.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
+import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 
 const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
@@ -367,13 +367,9 @@ export default function FeedHome() {
       ]}
     >
       <View style={styles.header}>
-        <Image
-          source={isDark ? HANDWRITTEN_DARK : HANDWRITTEN_LIGHT}
-          style={styles.headerWordmark}
-          contentFit="contain"
-          tintColor={colors.textPrimary}
-          accessibilityIgnoresInvertColors
-          accessibilityLabel="Moin!"
+        <HeaderWeather
+          fallbackSource={isDark ? HANDWRITTEN_DARK : HANDWRITTEN_LIGHT}
+          fallbackTintColor={colors.textPrimary}
         />
         <View style={styles.headerActions}>
           <Pressable
