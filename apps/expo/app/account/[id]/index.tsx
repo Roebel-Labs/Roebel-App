@@ -131,6 +131,12 @@ function PublicAccountScreenInner() {
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
   const categoryYsRef = React.useRef<Record<string, number>>({});
   const scrollRef = React.useRef<ScrollView>(null);
+  // Hoisted from below — these MUST live above any conditional return to keep
+  // the hook count stable across renders. Their consumers (handleScroll,
+  // jumpToCategory, handleCategoryLayout, handleWrapperLayout) are plain
+  // closures defined further down and can read these refs without issue.
+  const gastroWrapperY = React.useRef(0);
+  const sectionYs = React.useRef<Record<string, number>>({});
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
@@ -627,10 +633,8 @@ function PublicAccountScreenInner() {
     </>
   );
 
-  // Track category Y positions for the sticky bar.
-  const gastroWrapperY = React.useRef(0);
-  const sectionYs = React.useRef<Record<string, number>>({});
-
+  // Category Y positions tracked via gastroWrapperY + sectionYs refs hoisted
+  // above the early-return so the hook count stays stable across renders.
   const handleCategoryLayout = (id: string, y: number) => {
     sectionYs.current[id] = y;
   };
@@ -820,13 +824,13 @@ function PublicAccountScreenInner() {
         {/* slot 6 — menu content */}
         {activeTab === 'menu' && isRestaurant ? (
           gastroData.loading ? (
-            <View style={styles.gastroSkeletonWrap}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
               {[0, 1, 2, 3].map((i) => (
-                <View key={i} style={styles.gastroSkeletonRow}>
-                  <View style={{ flex: 1 }}>
-                    <Skeleton width={'60%' as any} height={16} />
-                    <Skeleton width={'30%' as any} height={13} style={{ marginTop: 6 } as any} />
-                    <Skeleton width={'90%' as any} height={13} style={{ marginTop: 6 } as any} />
+                <View key={i} style={styles.gastroItemRow}>
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <Skeleton width={'60%' as any} height={16} borderRadius={4} />
+                    <Skeleton width={'30%' as any} height={13} borderRadius={4} />
+                    <Skeleton width={'90%' as any} height={13} borderRadius={4} />
                   </View>
                   <Skeleton width={96} height={96} borderRadius={8} />
                 </View>
@@ -927,11 +931,17 @@ function PublicAccountScreenInner() {
   );
 }
 
+// Skeleton tree shaped to mirror the real screen: banner, avatar, identity,
+// tab strip, then menu rows that match `gastroItemRow` exactly. When the real
+// content arrives, each placeholder swaps into its matching slot in place,
+// so the user perceives one continuous skeleton state rather than two
+// flashing variants.
 function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
   const { colors } = useTheme();
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Banner — same height & box as the loaded screen */}
         <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
           <Pressable
             onPress={onBack}
@@ -944,6 +954,7 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
           </Pressable>
         </View>
 
+        {/* Avatar overlapping banner — same size & position */}
         <View style={styles.identityRow}>
           <Skeleton
             width={AVATAR_SIZE}
@@ -953,30 +964,35 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
           />
         </View>
 
+        {/* Identity block — name + sub-type pill + bio lines */}
         <View style={styles.identityBlock}>
           <Skeleton width={'60%' as any} height={26} borderRadius={6} />
           <View style={{ flexDirection: 'row', gap: 6 }}>
-            <Skeleton width={90} height={26} borderRadius={13} />
             <Skeleton width={120} height={26} borderRadius={13} />
           </View>
           <Skeleton width={'100%' as any} height={16} borderRadius={4} />
           <Skeleton width={'85%' as any} height={16} borderRadius={4} />
         </View>
 
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={[styles.section, { borderTopColor: colors.border }]}>
-            <Skeleton width={140} height={20} borderRadius={6} style={{ marginBottom: 12 } as any} />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Skeleton width={200} height={170} borderRadius={14} />
-              <Skeleton width={200} height={170} borderRadius={14} />
-              <Skeleton width={120} height={170} borderRadius={14} />
-            </View>
-          </View>
-        ))}
+        {/* Tabs strip placeholder — matches ProfileTabs visual weight */}
+        <View style={[styles.tabsWrap, { flexDirection: 'row', gap: 18, paddingHorizontal: 16 }]}>
+          <Skeleton width={90} height={20} borderRadius={6} />
+          <Skeleton width={48} height={20} borderRadius={6} />
+          <Skeleton width={70} height={20} borderRadius={6} />
+        </View>
 
-        <View style={[styles.section, { borderTopColor: colors.border }]}>
-          <Skeleton width={120} height={20} borderRadius={6} style={{ marginBottom: 12 } as any} />
-          <Skeleton width={'100%' as any} height={200} borderRadius={14} />
+        {/* Menu row placeholders — pixel-aligned with gastroItemRow */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={styles.gastroItemRow}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width={'60%' as any} height={16} borderRadius={4} />
+                <Skeleton width={'30%' as any} height={13} borderRadius={4} />
+                <Skeleton width={'90%' as any} height={13} borderRadius={4} />
+              </View>
+              <Skeleton width={96} height={96} borderRadius={8} />
+            </View>
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1233,17 +1249,6 @@ const styles = StyleSheet.create({
   ctaButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-  },
-  gastroSkeletonWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-  },
-  gastroSkeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
   },
   gastroCategorySection: {
     paddingHorizontal: 16,
