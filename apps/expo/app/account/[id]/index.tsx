@@ -31,7 +31,6 @@ import FeaturedMenuItemsGrid from '@/components/FeaturedMenuItemsGrid';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
 import StickyCategoryBar from '@/components/StickyCategoryBar';
 import MenuCategoriesSheet from '@/components/MenuCategoriesSheet';
-import { Skeleton } from '@/components/SkeletonLoader';
 import { useAccountRating } from '@/hooks/useAccountRating';
 import { useGastroData } from '@/hooks/useGastroData';
 import { fetchAccountById } from '@/lib/supabase-accounts';
