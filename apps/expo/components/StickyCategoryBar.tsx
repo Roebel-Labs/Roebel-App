@@ -15,7 +15,7 @@ type Props = {
 const LABEL_GAP = 20;
 const LABEL_PADDING_H = 4;
 
-export default function StickyCategoryBar({ categories, activeIndex, onSelect, onOpenSheet }: Props) {
+function StickyCategoryBar({ categories, activeIndex, onSelect, onOpenSheet }: Props) {
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const labelXs = useRef<number[]>([]);
@@ -31,9 +31,14 @@ export default function StickyCategoryBar({ categories, activeIndex, onSelect, o
   }, [activeIndex]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+    <View
+      collapsable={false}
+      style={[styles.container, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
+    >
       <Pressable
         onPress={onOpenSheet}
+        unstable_pressDelay={0}
+        hitSlop={10}
         accessibilityLabel="Kategorien öffnen"
         style={[styles.iconBtn, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}
       >
@@ -52,6 +57,8 @@ export default function StickyCategoryBar({ categories, activeIndex, onSelect, o
             <Pressable
               key={cat.id}
               onPress={() => onSelect(idx)}
+              unstable_pressDelay={0}
+              hitSlop={8}
               onLayout={(e) => {
                 labelXs.current[idx] = e.nativeEvent.layout.x;
                 labelWs.current[idx] = e.nativeEvent.layout.width;
@@ -76,6 +83,8 @@ export default function StickyCategoryBar({ categories, activeIndex, onSelect, o
   );
 }
 
+export default React.memo(StickyCategoryBar);
+
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
@@ -84,6 +93,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    // Keep this view above the scrolled content below it when sticky;
+    // without zIndex/elevation, Android can route taps to the content
+    // scrolling beneath the bar.
+    zIndex: 10,
+    elevation: 10,
   },
   iconBtn: {
     width: 40,

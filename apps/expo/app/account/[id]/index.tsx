@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -54,6 +54,7 @@ import {
 import type { PostRecord } from '@/lib/types/feed';
 
 const AVATAR_SIZE = 120;
+const STICKY_OFFSET = 56;
 
 type TabKey = 'menu' | 'info' | 'posts';
 
@@ -140,6 +141,30 @@ function PublicAccountScreenInner() {
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
+
+  // Stable callbacks for StickyCategoryBar (memoized) — they read refs +
+  // gastroData.categories, both of which are stable across scroll events,
+  // so the sticky bar doesn't re-render on every scroll tick.
+  const jumpToCategory = useCallback((idx: number) => {
+    const cat = gastroData.categories[idx];
+    if (!cat) return;
+    const sectionY = sectionYs.current[cat.id];
+    if (sectionY == null) return;
+    const absolute = gastroWrapperY.current + sectionY - STICKY_OFFSET + 1;
+    scrollRef.current?.scrollTo({ y: absolute, animated: true });
+    setActiveCategoryIdx(idx);
+  }, [gastroData.categories]);
+
+  const openCategoriesSheet = useCallback(() => {
+    setCategoriesSheetOpen(true);
+  }, []);
+
+  // Stable array reference so React.memo on StickyCategoryBar can skip
+  // re-renders on scroll-driven activeCategoryIdx updates.
+  const stickyCategoriesProp = useMemo(
+    () => gastroData.categories.map((c) => ({ id: c.id, name: c.name })),
+    [gastroData.categories],
+  );
 
   const activeTab: TabKey =
     tabSelection ?? (account?.sub_type === 'restaurant' ? 'menu' : 'info');
@@ -639,7 +664,6 @@ function PublicAccountScreenInner() {
     sectionYs.current[id] = y;
   };
   const handleWrapperLayout = (y: number) => { gastroWrapperY.current = y; };
-  const STICKY_OFFSET = 56;
 
   const handleScroll = (e: any) => {
     if (activeTab !== 'menu' || !gastroData.categories.length) return;
@@ -654,16 +678,6 @@ function PublicAccountScreenInner() {
       else break;
     }
     if (idx !== activeCategoryIdx) setActiveCategoryIdx(idx);
-  };
-
-  const jumpToCategory = (idx: number) => {
-    const cat = gastroData.categories[idx];
-    if (!cat) return;
-    const sectionY = sectionYs.current[cat.id];
-    if (sectionY == null) return;
-    const absolute = gastroWrapperY.current + sectionY - STICKY_OFFSET + 1;
-    scrollRef.current?.scrollTo({ y: absolute, animated: true });
-    setActiveCategoryIdx(idx);
   };
 
   const showStickyBar = activeTab === 'menu' && isRestaurant && gastroData.categories.length > 0;
@@ -812,10 +826,10 @@ function PublicAccountScreenInner() {
         {/* slot 5 — sticky category bar */}
         {showStickyBar ? (
           <StickyCategoryBar
-            categories={gastroData.categories.map((c) => ({ id: c.id, name: c.name }))}
+            categories={stickyCategoriesProp}
             activeIndex={activeCategoryIdx}
             onSelect={jumpToCategory}
-            onOpenSheet={() => setCategoriesSheetOpen(true)}
+            onOpenSheet={openCategoriesSheet}
           />
         ) : (
           <View />
@@ -914,7 +928,7 @@ function PublicAccountScreenInner() {
       {isRestaurant && (
         <MenuCategoriesSheet
           visible={categoriesSheetOpen}
-          categories={gastroData.categories.map((c) => ({ id: c.id, name: c.name }))}
+          categories={stickyCategoriesProp}
           activeIndex={activeCategoryIdx}
           onSelect={(idx) => { setCategoriesSheetOpen(false); setTimeout(() => jumpToCategory(idx), 200); }}
           onClose={() => setCategoriesSheetOpen(false)}
