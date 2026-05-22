@@ -7,7 +7,7 @@ import {
   Pressable,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
@@ -118,6 +118,7 @@ function PublicAccountScreenInner() {
   const { colors } = useTheme();
   const { switchAccount } = useAccount();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
@@ -142,33 +143,9 @@ function PublicAccountScreenInner() {
   // Y of the in-flow sticky-bar slot; used to decide when to show the
   // absolute overlay copy of the bar.
   const slot5Y = React.useRef<number>(Number.POSITIVE_INFINITY);
-  // Latest scrollY captured by handleScroll — feeds smoothScrollTo so it
-  // can start from the user's actual position instead of 0.
-  const currentScrollY = React.useRef(0);
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
-
-  // Custom scroll-to that uses requestAnimationFrame + ease-in-out so the
-  // category jump feels noticeably slower (~600ms) than the platform default
-  // (~250-350ms). RN's ScrollView.scrollTo doesn't accept a duration prop,
-  // so we drive the offset by hand.
-  const smoothScrollTo = useCallback((targetY: number) => {
-    const startY = currentScrollY.current;
-    const delta = targetY - startY;
-    if (Math.abs(delta) < 1) return;
-    const startTs = Date.now();
-    const duration = 600;
-    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    const tick = () => {
-      const elapsed = Date.now() - startTs;
-      const t = Math.min(1, elapsed / duration);
-      const y = startY + delta * ease(t);
-      scrollRef.current?.scrollTo({ y, animated: false });
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, []);
 
   // Stable callbacks for StickyCategoryBar (memoized) — they read refs +
   // gastroData.categories, both of which are stable across scroll events,
@@ -179,9 +156,9 @@ function PublicAccountScreenInner() {
     const sectionY = sectionYs.current[cat.id];
     if (sectionY == null) return;
     const absolute = gastroWrapperY.current + sectionY - STICKY_OFFSET + 1;
-    smoothScrollTo(absolute);
+    scrollRef.current?.scrollTo({ y: absolute, animated: true });
     setActiveCategoryIdx(idx);
-  }, [gastroData.categories, smoothScrollTo]);
+  }, [gastroData.categories]);
 
   const openCategoriesSheet = useCallback(() => {
     setCategoriesSheetOpen(true);
@@ -695,7 +672,6 @@ function PublicAccountScreenInner() {
 
   const handleScroll = (e: any) => {
     const y = e.nativeEvent.contentOffset.y;
-    currentScrollY.current = y;
 
     // Toggle the absolute-overlay copy of the sticky bar based on whether
     // the in-flow slot has scrolled off the top.
@@ -966,11 +942,13 @@ function PublicAccountScreenInner() {
       {/* Sticky category bar — rendered OUTSIDE the ScrollView as an
           absolute overlay so its taps aren't fought over by the parent
           ScrollView's gesture recognizer (which was the root cause of
-          taps failing when the bar was sticky via stickyHeaderIndices). */}
+          taps failing when the bar was sticky via stickyHeaderIndices).
+          Offset by safe-area top so the bar sits below the status bar /
+          notch on every device. */}
       {showStickyBar && isBarStuck && (
         <View
           pointerEvents="box-none"
-          style={[styles.stickyOverlay, { backgroundColor: colors.background }]}
+          style={[styles.stickyOverlay, { top: insets.top, backgroundColor: colors.background }]}
         >
           <StickyCategoryBar
             categories={stickyCategoriesProp}
@@ -1373,9 +1351,10 @@ const styles = StyleSheet.create({
   },
   stickyOverlay: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 100,
+    // `top` is set inline from useSafeAreaInsets().top so the bar
+    // clears the status bar / dynamic island on every device.
   },
 });
