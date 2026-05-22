@@ -198,7 +198,9 @@ serve(async (req: Request) => {
   const contentType = imgResp.headers.get('content-type') ?? 'image/jpeg';
   const ext = contentType.includes('png') ? 'png' : 'jpg';
 
-  const objectPath = `menu-items/${item.restaurant_id}/${item.id}_${VERSION_TAG}.${ext}`;
+  // Timestamped path so each regeneration writes a fresh object — bypasses the
+  // bucket's no-update RLS for anon callers and cache-busts the image URL.
+  const objectPath = `menu-items/${item.restaurant_id}/${item.id}_${VERSION_TAG}_${Date.now()}.${ext}`;
   const uploadRes = await supabase.storage.from(BUCKET).upload(objectPath, imgBytes, { contentType, upsert: true });
   if (uploadRes.error) return json(500, { ok: false, code: 'UPLOAD_FAILED', error: uploadRes.error.message });
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(objectPath);

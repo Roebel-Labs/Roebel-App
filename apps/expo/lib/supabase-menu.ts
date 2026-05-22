@@ -56,7 +56,12 @@ export async function createMenuItem(input: {
   description?: string | null;
   is_vegetarian?: boolean;
   is_vegan?: boolean;
+  is_available?: boolean;
   image_url?: string | null;
+  sides_required?: boolean;
+  sides_label?: string;
+  variants_label?: string;
+  sort_order?: number;
 }): Promise<MenuItemRecord | null> {
   const { data, error } = await supabase
     .from('menu_items')
@@ -67,7 +72,26 @@ export async function createMenuItem(input: {
   return data as MenuItemRecord;
 }
 
-export async function updateMenuItem(itemId: string, updates: Partial<Pick<MenuItemRecord, 'name' | 'description' | 'price' | 'is_vegetarian' | 'is_vegan' | 'is_available' | 'sort_order'>>): Promise<void> {
+export async function updateMenuItem(
+  itemId: string,
+  updates: Partial<
+    Pick<
+      MenuItemRecord,
+      | 'name'
+      | 'description'
+      | 'price'
+      | 'is_vegetarian'
+      | 'is_vegan'
+      | 'is_available'
+      | 'sort_order'
+      | 'image_url'
+      | 'sides_required'
+      | 'sides_label'
+      | 'variants_label'
+      | 'category_id'
+    >
+  >,
+): Promise<void> {
   const { error } = await supabase.from('menu_items').update(updates).eq('id', itemId);
   if (error) console.error('Error updating item:', error);
 }
@@ -156,4 +180,42 @@ export async function createMenuItemSide(input: {
   const { data, error } = await supabase.from('menu_item_sides').insert(input).select().single();
   if (error) { console.error('Error creating side:', error); return null; }
   return data as MenuItemSide;
+}
+
+export async function updateMenuItemSide(
+  sideId: string,
+  updates: Partial<Pick<MenuItemSide, 'name' | 'description' | 'price_delta' | 'is_default' | 'sort_order'>>,
+): Promise<void> {
+  const { error } = await supabase.from('menu_item_sides').update(updates).eq('id', sideId);
+  if (error) console.error('Error updating side:', error);
+}
+
+export async function deleteMenuItemSide(sideId: string): Promise<void> {
+  const { error } = await supabase.from('menu_item_sides').delete().eq('id', sideId);
+  if (error) console.error('Error deleting side:', error);
+}
+
+export async function createMenuItemVariant(input: {
+  menu_item_id: string;
+  name: string;
+  price: number;
+  is_default?: boolean;
+  sort_order?: number;
+}): Promise<MenuItemVariant | null> {
+  const { data, error } = await supabase.from('menu_item_variants').insert(input).select().single();
+  if (error) { console.error('Error creating variant:', error); return null; }
+  return data as MenuItemVariant;
+}
+
+export async function updateMenuItemVariant(
+  variantId: string,
+  updates: Partial<Pick<MenuItemVariant, 'name' | 'price' | 'is_default' | 'sort_order'>>,
+): Promise<void> {
+  const { error } = await supabase.from('menu_item_variants').update(updates).eq('id', variantId);
+  if (error) console.error('Error updating variant:', error);
+}
+
+export async function deleteMenuItemVariant(variantId: string): Promise<void> {
+  const { error } = await supabase.from('menu_item_variants').delete().eq('id', variantId);
+  if (error) console.error('Error deleting variant:', error);
 }

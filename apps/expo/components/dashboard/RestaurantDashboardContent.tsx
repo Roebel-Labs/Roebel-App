@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, RefreshControl, ScrollView, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { supabase } from '@/lib/supabase';
@@ -16,7 +17,9 @@ type SessionStats = {
 
 export default function RestaurantDashboardContent() {
   const { colors } = useTheme();
-  const { activeAccount } = useAccount();
+  const router = useRouter();
+  const { activeAccount, roleInActiveAccount } = useAccount();
+  const canEditMenu = roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin';
   const [stats, setStats] = useState<SessionStats>({
     totalSessions: 0,
     openedByStaff: 0,
@@ -25,6 +28,7 @@ export default function RestaurantDashboardContent() {
     totalOrders: 0,
     avgOrdersPerSession: 0,
   });
+  const [menuCounts, setMenuCounts] = useState<{ categories: number; items: number }>({ categories: 0, items: 0 });
   const [loading, setLoading] = useState(true);
 
   const loadStats = useCallback(async () => {
@@ -39,6 +43,13 @@ export default function RestaurantDashboardContent() {
         .single();
 
       if (!restaurant) return;
+
+      // Menu category + item counts for the Speisekarte tile.
+      const [{ count: catCount }, { count: itemCount }] = await Promise.all([
+        supabase.from('menu_categories').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id),
+        supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('restaurant_id', restaurant.id),
+      ]);
+      setMenuCounts({ categories: catCount ?? 0, items: itemCount ?? 0 });
 
       // Fetch table sessions
       const { data: sessions } = await supabase
@@ -73,6 +84,21 @@ export default function RestaurantDashboardContent() {
 
   return (
     <View style={styles.container}>
+      {canEditMenu && (
+        <Pressable
+          onPress={() => router.push('/org/menu' as any)}
+          style={[styles.menuTile, { backgroundColor: colors.surface, borderColor: colors.borderSecondary }]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.tileTitle, { color: colors.textPrimary }]}>Speisekarte verwalten</Text>
+            <Text style={[styles.tileSubtitle, { color: colors.textSecondary }]}>
+              {menuCounts.categories} Kategorien · {menuCounts.items} Gerichte · KI-Bilder
+            </Text>
+          </View>
+          <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium', fontSize: 20 }}>›</Text>
+        </Pressable>
+      )}
+
       <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tisch-Statistiken</Text>
       <View style={styles.statsGrid}>
         <AnalyticsCard label="Sitzungen gesamt" value={stats.totalSessions} />
@@ -108,4 +134,17 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
   },
+  menuTile: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tileTitle: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  tileSubtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
 });
