@@ -8,8 +8,17 @@ import { useGoBack } from '@/hooks/useGoBack';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CategoryEditor from '@/components/menu-admin/CategoryEditor';
 import { fetchRestaurantByAccount } from '@/lib/supabase-restaurants';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 
 export default function NewCategoryScreen() {
+  return (
+    <InlineErrorBoundary label="org-menu-category-new">
+      <NewCategoryScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function NewCategoryScreenInner() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();

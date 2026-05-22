@@ -103,6 +103,14 @@ function formatPrice(price: number | null | undefined, priceType: string): strin
 }
 
 export default function PublicAccountScreen() {
+  return (
+    <InlineErrorBoundary label="account-screen">
+      <PublicAccountScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function PublicAccountScreenInner() {
   const goBack = useGoBack();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -658,7 +666,6 @@ export default function PublicAccountScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <InlineErrorBoundary label="account-screen">
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -893,7 +900,6 @@ export default function PublicAccountScreen() {
           <View />
         )}
       </ScrollView>
-      </InlineErrorBoundary>
 
       <RatingModal
         visible={ratingModalOpen}

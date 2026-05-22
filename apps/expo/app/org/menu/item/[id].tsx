@@ -9,8 +9,17 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MenuItemEditor from '@/components/menu-admin/MenuItemEditor';
 import { supabase } from '@/lib/supabase';
 import type { MenuItemRecord } from '@/lib/types';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 
 export default function EditMenuItemScreen() {
+  return (
+    <InlineErrorBoundary label="org-menu-item-edit">
+      <EditMenuItemScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function EditMenuItemScreenInner() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();

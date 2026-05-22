@@ -14,8 +14,17 @@ import { useMenuItemDetail } from '@/hooks/useMenuItemDetail';
 import { supabase } from '@/lib/supabase';
 import type { MenuItemRecord, MenuItemVoteSummary } from '@/lib/types';
 import { fetchMenuItemVoteSummaries } from '@/lib/supabase-menu';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 
 export default function MenuItemDetailScreen() {
+  return (
+    <InlineErrorBoundary label="menu-item-detail">
+      <MenuItemDetailScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function MenuItemDetailScreenInner() {
   const router = useRouter();
   const { id: accountId, itemId } = useLocalSearchParams<{ id: string; itemId: string }>();
   const { colors } = useTheme();

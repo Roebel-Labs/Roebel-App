@@ -10,8 +10,17 @@ import CategoryEditor from '@/components/menu-admin/CategoryEditor';
 import { supabase } from '@/lib/supabase';
 import { fetchMenuItems } from '@/lib/supabase-menu';
 import type { MenuCategoryRecord, MenuItemRecord } from '@/lib/types';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 
 export default function CategoryEditScreen() {
+  return (
+    <InlineErrorBoundary label="org-menu-category-edit">
+      <CategoryEditScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function CategoryEditScreenInner() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();

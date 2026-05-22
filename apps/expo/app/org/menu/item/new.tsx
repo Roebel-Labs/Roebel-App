@@ -8,8 +8,17 @@ import { useGoBack } from '@/hooks/useGoBack';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MenuItemEditor from '@/components/menu-admin/MenuItemEditor';
 import { fetchRestaurantByAccount } from '@/lib/supabase-restaurants';
+import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 
 export default function NewMenuItemScreen() {
+  return (
+    <InlineErrorBoundary label="org-menu-item-new">
+      <NewMenuItemScreenInner />
+    </InlineErrorBoundary>
+  );
+}
+
+function NewMenuItemScreenInner() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
