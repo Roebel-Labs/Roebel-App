@@ -231,6 +231,7 @@ export interface SpecialMenuItem {
   name: string
   description: string | null
   price: number | null
+  image_url: string | null
   is_vegetarian: boolean
   sort_order: number
 }
@@ -241,6 +242,7 @@ export interface CreateSpecialMenuItemInput {
   name: string
   description?: string
   price?: number
+  image_url?: string | null
   is_vegetarian?: boolean
   sort_order?: number
 }
@@ -251,6 +253,7 @@ export interface UpdateSpecialMenuItemInput {
   name?: string
   description?: string | null
   price?: number | null
+  image_url?: string | null
   is_vegetarian?: boolean
   sort_order?: number
 }

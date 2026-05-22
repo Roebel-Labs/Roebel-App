@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,6 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +50,7 @@ import {
   Loader2,
   Leaf,
   Vegan,
+  ImageOff,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -71,12 +81,13 @@ import {
   deleteMenuItem,
   reorderMenuItems,
 } from "@/app/actions/restaurants"
-import type { MenuCategory, MenuItem } from "@/types/restaurant"
+import type { MenuCategory, MenuItem, AiImageStyle } from "@/types/restaurant"
 import { formatPrice, parsePrice } from "@/types/restaurant"
-import { ItemImageField } from "@/components/dashboard/speisekarte/item-image-field"
+import { AiImageEditor } from "@/components/dashboard/speisekarte/ai-image-editor"
 
 interface MenuTabProps {
   restaurantId: string
+  restaurantAiStyle?: AiImageStyle | null
 }
 
 // Sortable Category Component
@@ -263,6 +274,22 @@ function SortableMenuItem({
       >
         <GripVertical className="h-4 w-4" />
       </button>
+      <div className="relative w-14 h-10 rounded-md overflow-hidden bg-background border border-border flex-shrink-0">
+        {item.image_url ? (
+          <Image
+            src={item.image_url}
+            alt=""
+            fill
+            sizes="56px"
+            className="object-cover"
+            unoptimized
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <ImageOff className="h-4 w-4" />
+          </div>
+        )}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm">{item.name}</span>
@@ -319,7 +346,7 @@ function SortableMenuItem({
   )
 }
 
-export function MenuTab({ restaurantId }: MenuTabProps) {
+export function MenuTab({ restaurantId, restaurantAiStyle = null }: MenuTabProps) {
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<MenuCategory[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
@@ -676,14 +703,17 @@ export function MenuTab({ restaurantId }: MenuTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Item Dialog */}
-      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      {/* Item Sheet (side panel) */}
+      <Sheet open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-[560px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
               {editingItem ? "Gericht bearbeiten" : "Neues Gericht"}
-            </DialogTitle>
-          </DialogHeader>
+            </SheetTitle>
+            <SheetDescription>
+              Pflege Details, Verfügbarkeit und Bild. Generiere KI-Varianten oder lade ein eigenes Bild hoch.
+            </SheetDescription>
+          </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="itemName">Name *</Label>
@@ -757,9 +787,11 @@ export function MenuTab({ restaurantId }: MenuTabProps) {
                 }
               />
             </div>
-            <ItemImageField
+            <AiImageEditor
+              kind="menu_item"
               itemId={editingItem?.id ?? null}
               imageUrl={editingItem?.image_url ?? null}
+              restaurantStyle={restaurantAiStyle}
               onImageChange={(url) => {
                 if (editingItem) {
                   setEditingItem({ ...editingItem, image_url: url })
@@ -768,7 +800,7 @@ export function MenuTab({ restaurantId }: MenuTabProps) {
               }}
             />
           </div>
-          <DialogFooter>
+          <SheetFooter className="mt-6">
             <Button
               variant="outline"
               onClick={() => setItemDialogOpen(false)}
@@ -780,9 +812,9 @@ export function MenuTab({ restaurantId }: MenuTabProps) {
               {savingItem && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Speichern
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

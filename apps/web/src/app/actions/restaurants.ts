@@ -779,12 +779,47 @@ export async function updateRestaurantAiStyle(
   }
 }
 
+export type ItemKind = "menu_item" | "special_menu_item"
+
+function tableFor(kind: ItemKind): "menu_items" | "special_menu_items" {
+  return kind === "menu_item" ? "menu_items" : "special_menu_items"
+}
+
+function storageFolderFor(kind: ItemKind): "menu-items" | "special-menu-items" {
+  return kind === "menu_item" ? "menu-items" : "special-menu-items"
+}
+
+async function resolveRestaurantIdForItem(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  kind: ItemKind,
+  itemId: string
+): Promise<string | null> {
+  if (kind === "menu_item") {
+    const { data } = await supabase
+      .from("menu_items")
+      .select("restaurant_id")
+      .eq("id", itemId)
+      .single()
+    return (data?.restaurant_id as string | undefined) ?? null
+  }
+  const { data } = await supabase
+    .from("special_menu_items")
+    .select("special_menu_id, special_menus:special_menu_id(restaurant_id)")
+    .eq("id", itemId)
+    .single()
+  if (!data) return null
+  const restaurantId = (data as unknown as {
+    special_menus?: { restaurant_id?: string }
+  }).special_menus?.restaurant_id
+  return restaurantId ?? null
+}
+
 /**
- * Upload a manually-chosen image for a menu item.
- * Mirrors the Edge Function's storage path scheme so the public bucket rules
- * and cache-busting both still apply.
+ * Upload a manually-chosen image for a menu item (regular or special).
+ * Mirrors the Edge Function's storage path scheme.
  */
-export async function uploadMenuItemImage(
+export async function uploadItemImage(
+  kind: ItemKind,
   itemId: string,
   formData: FormData
 ) {
@@ -796,17 +831,14 @@ export async function uploadMenuItemImage(
     }
 
     const supabase = await createClient()
-    const { data: item, error: itemErr } = await supabase
-      .from("menu_items")
-      .select("id, restaurant_id")
-      .eq("id", itemId)
-      .single()
-    if (itemErr || !item) return { success: false, error: "Gericht nicht gefunden" }
+    const restaurantId = await resolveRestaurantIdForItem(supabase, kind, itemId)
+    if (!restaurantId) return { success: false, error: "Gericht nicht gefunden" }
 
     const ext = file.name.includes(".")
       ? file.name.split(".").pop()!.toLowerCase()
       : (file.type.split("/")[1] ?? "jpg")
-    const objectPath = `menu-items/${item.restaurant_id}/${item.id}_upload_${Date.now()}.${ext}`
+    const folder = storageFolderFor(kind)
+    const objectPath = `${folder}/${restaurantId}/${itemId}_upload_${Date.now()}.${ext}`
     const arrayBuffer = await file.arrayBuffer()
 
     const { error: uploadErr } = await supabase.storage
@@ -823,7 +855,7 @@ export async function uploadMenuItemImage(
     const publicUrl = pub.publicUrl
 
     const { error: updateErr } = await supabase
-      .from("menu_items")
+      .from(tableFor(kind))
       .update({ image_url: publicUrl })
       .eq("id", itemId)
     if (updateErr) throw updateErr
@@ -831,16 +863,16 @@ export async function uploadMenuItemImage(
     revalidatePath("/dashboard/speisekarte")
     return { success: true, image_url: publicUrl, message: "Bild hochgeladen" }
   } catch (error) {
-    console.error("Error uploading menu item image:", error)
+    console.error("Error uploading item image:", error)
     return { success: false, error: "Fehler beim Hochladen des Bildes" }
   }
 }
 
-export async function clearMenuItemImage(itemId: string) {
+export async function clearItemImage(kind: ItemKind, itemId: string) {
   try {
     const supabase = await createClient()
     const { error } = await supabase
-      .from("menu_items")
+      .from(tableFor(kind))
       .update({ image_url: null })
       .eq("id", itemId)
     if (error) throw error
@@ -848,19 +880,50 @@ export async function clearMenuItemImage(itemId: string) {
     revalidatePath("/dashboard/speisekarte")
     return { success: true, message: "Bild entfernt" }
   } catch (error) {
-    console.error("Error clearing menu item image:", error)
+    console.error("Error clearing item image:", error)
     return { success: false, error: "Fehler beim Entfernen des Bildes" }
   }
 }
 
 /**
- * Call the deployed generate-menu-image Edge Function to (re)generate
- * an AI food photo for a menu item. SUPABASE_SEED_TOKEN is read on the
- * server only — never expose it to the browser.
+ * Commit a previously-generated variant URL as the item's saved image.
  */
-export async function regenerateMenuItemImageWithAi(
+export async function commitItemImage(
+  kind: ItemKind,
   itemId: string,
-  opts?: { prompt_hint?: string; style_preset?: AiImageStyle }
+  url: string
+) {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from(tableFor(kind))
+      .update({ image_url: url })
+      .eq("id", itemId)
+    if (error) throw error
+
+    revalidatePath("/dashboard/speisekarte")
+    return { success: true, image_url: url, message: "Bild übernommen" }
+  } catch (error) {
+    console.error("Error committing item image:", error)
+    return { success: false, error: "Fehler beim Übernehmen des Bildes" }
+  }
+}
+
+/**
+ * Call the deployed generate-menu-image Edge Function. With `preview=true`,
+ * the function uploads a variant to storage but does NOT update the row;
+ * the client gets the URL back and can show it as a variant. With `preview`
+ * unset/false, the function commits directly (one-shot regeneration).
+ * SUPABASE_SEED_TOKEN is read on the server only — never expose to the browser.
+ */
+export async function regenerateItemImageWithAi(
+  kind: ItemKind,
+  itemId: string,
+  opts?: {
+    prompt_hint?: string
+    style_preset?: AiImageStyle
+    preview?: boolean
+  }
 ) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -873,9 +936,13 @@ export async function regenerateMenuItemImageWithAi(
     }
 
     const endpoint = `${supabaseUrl}/functions/v1/generate-menu-image`
-    const payload: Record<string, unknown> = { menu_item_id: itemId }
+    const payload: Record<string, unknown> =
+      kind === "menu_item"
+        ? { menu_item_id: itemId }
+        : { special_menu_item_id: itemId }
     if (opts?.prompt_hint) payload.prompt_hint = opts.prompt_hint
     if (opts?.style_preset) payload.style_preset = opts.style_preset
+    if (opts?.preview) payload.preview = true
 
     const resp = await fetch(endpoint, {
       method: "POST",
@@ -887,7 +954,7 @@ export async function regenerateMenuItemImageWithAi(
     })
 
     const body = (await resp.json().catch(() => null)) as
-      | { ok?: boolean; image_url?: string; code?: string; error?: string }
+      | { ok?: boolean; image_url?: string; code?: string; error?: string; preview?: boolean }
       | null
 
     if (!resp.ok || !body?.ok || !body.image_url) {
@@ -896,10 +963,15 @@ export async function regenerateMenuItemImageWithAi(
       return { success: false, error: `KI-Bilderzeugung fehlgeschlagen: ${code}` }
     }
 
-    revalidatePath("/dashboard/speisekarte")
-    return { success: true, image_url: body.image_url, message: "Bild generiert" }
+    if (!opts?.preview) revalidatePath("/dashboard/speisekarte")
+    return {
+      success: true,
+      image_url: body.image_url,
+      preview: !!body.preview,
+      message: opts?.preview ? "Variante erstellt" : "Bild generiert",
+    }
   } catch (error) {
-    console.error("Error regenerating menu item image:", error)
+    console.error("Error regenerating item image:", error)
     return { success: false, error: "Fehler bei der KI-Bilderzeugung" }
   }
 }

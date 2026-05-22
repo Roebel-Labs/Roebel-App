@@ -154,13 +154,19 @@ serve(async (req: Request) => {
 
   let body: {
     menu_item_id?: string;
+    special_menu_item_id?: string;
     dry_run?: boolean;
+    preview?: boolean;
     prompt_hint?: string;
     quality?: 'basic' | 'high';
     style_preset?: string;
   };
   try { body = await req.json(); } catch { return json(400, { ok: false, code: 'BAD_JSON' }); }
-  if (!body.menu_item_id) return json(400, { ok: false, code: 'MISSING_MENU_ITEM_ID' });
+  const hasMenuItem = !!body.menu_item_id;
+  const hasSpecialItem = !!body.special_menu_item_id;
+  if (hasMenuItem === hasSpecialItem) {
+    return json(400, { ok: false, code: 'MISSING_OR_AMBIGUOUS_ITEM_ID' });
+  }
   if (body.style_preset !== undefined && !isValidStylePreset(body.style_preset)) {
     return json(400, { ok: false, code: 'INVALID_STYLE_PRESET' });
   }
@@ -169,12 +175,36 @@ serve(async (req: Request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  const { data: item, error: itemErr } = await supabase
-    .from('menu_items')
-    .select('id, name, description, restaurant_id')
-    .eq('id', body.menu_item_id)
-    .single();
-  if (itemErr || !item) return json(404, { ok: false, code: 'ITEM_NOT_FOUND' });
+  type ItemKind = 'menu_item' | 'special_menu_item';
+  const kind: ItemKind = hasMenuItem ? 'menu_item' : 'special_menu_item';
+
+  let item: { id: string; name: string; description: string | null; restaurant_id: string } | null = null;
+  if (kind === 'menu_item') {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('id, name, description, restaurant_id')
+      .eq('id', body.menu_item_id!)
+      .single();
+    if (error || !data) return json(404, { ok: false, code: 'ITEM_NOT_FOUND' });
+    item = data as typeof item;
+  } else {
+    const { data, error } = await supabase
+      .from('special_menu_items')
+      .select('id, name, description, special_menu_id, special_menus:special_menu_id(restaurant_id)')
+      .eq('id', body.special_menu_item_id!)
+      .single();
+    if (error || !data) return json(404, { ok: false, code: 'ITEM_NOT_FOUND' });
+    // deno-lint-ignore no-explicit-any
+    const restaurantId = (data as any).special_menus?.restaurant_id;
+    if (!restaurantId) return json(404, { ok: false, code: 'RESTAURANT_NOT_FOUND' });
+    item = {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      restaurant_id: restaurantId,
+    };
+  }
+  if (!item) return json(404, { ok: false, code: 'ITEM_NOT_FOUND' });
 
   const { data: restaurant } = await supabase
     .from('restaurants')
@@ -242,14 +272,19 @@ serve(async (req: Request) => {
 
   // Timestamped path so each regeneration writes a fresh object — bypasses the
   // bucket's no-update RLS for anon callers and cache-busts the image URL.
-  const objectPath = `menu-items/${item.restaurant_id}/${item.id}_${VERSION_TAG}_${Date.now()}.${ext}`;
+  const folder = kind === 'menu_item' ? 'menu-items' : 'special-menu-items';
+  const tag = body.preview ? `${VERSION_TAG}_variant` : VERSION_TAG;
+  const objectPath = `${folder}/${item.restaurant_id}/${item.id}_${tag}_${Date.now()}.${ext}`;
   const uploadRes = await supabase.storage.from(BUCKET).upload(objectPath, imgBytes, { contentType, upsert: true });
   if (uploadRes.error) return json(500, { ok: false, code: 'UPLOAD_FAILED', error: uploadRes.error.message });
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(objectPath);
   const publicUrl = pub.publicUrl;
 
-  const { error: updErr } = await supabase.from('menu_items').update({ image_url: publicUrl }).eq('id', item.id);
-  if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
+  if (!body.preview) {
+    const table = kind === 'menu_item' ? 'menu_items' : 'special_menu_items';
+    const { error: updErr } = await supabase.from(table).update({ image_url: publicUrl }).eq('id', item.id);
+    if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
+  }
 
-  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId });
+  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId, preview: !!body.preview });
 });

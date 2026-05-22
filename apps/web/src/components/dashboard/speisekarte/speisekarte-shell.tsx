@@ -49,8 +49,12 @@ export function SpeisekarteShell({ restaurant }: SpeisekarteShellProps) {
         </nav>
       </div>
 
-      {activeTab === "menu" && <MenuTab restaurantId={restaurant.id} />}
-      {activeTab === "specials" && <SpecialMenusTab restaurantId={restaurant.id} />}
+      {activeTab === "menu" && (
+        <MenuTab restaurantId={restaurant.id} restaurantAiStyle={currentStyle} />
+      )}
+      {activeTab === "specials" && (
+        <SpecialMenusTab restaurantId={restaurant.id} restaurantAiStyle={currentStyle} />
+      )}
       {activeTab === "ai" && (
         <AiStyleSelector
           restaurantId={restaurant.id}

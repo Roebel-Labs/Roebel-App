@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -58,6 +59,7 @@ import {
   Leaf,
   Calendar,
   UtensilsCrossed,
+  ImageOff,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -97,7 +99,9 @@ import type {
   SpecialMenuCategory,
   SpecialMenuItem,
   SpecialMenuStatus,
+  AiImageStyle,
 } from "@/types/restaurant"
+import { AiImageEditor } from "@/components/dashboard/speisekarte/ai-image-editor"
 import {
   formatPrice,
   parsePrice,
@@ -107,6 +111,7 @@ import {
 
 interface SpecialMenusTabProps {
   restaurantId: string
+  restaurantAiStyle?: AiImageStyle | null
 }
 
 // Sortable Category within Special Menu
@@ -288,6 +293,22 @@ function SortableSpecialItem({
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
+      <div className="relative w-12 h-8 rounded overflow-hidden bg-muted border border-border flex-shrink-0">
+        {item.image_url ? (
+          <Image
+            src={item.image_url}
+            alt=""
+            fill
+            sizes="48px"
+            className="object-cover"
+            unoptimized
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <ImageOff className="h-3 w-3" />
+          </div>
+        )}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-sm">{item.name}</span>
@@ -331,7 +352,7 @@ function SortableSpecialItem({
   )
 }
 
-export function SpecialMenusTab({ restaurantId }: SpecialMenusTabProps) {
+export function SpecialMenusTab({ restaurantId, restaurantAiStyle = null }: SpecialMenusTabProps) {
   const [loading, setLoading] = useState(true)
   const [specialMenus, setSpecialMenus] = useState<SpecialMenu[]>([])
   const [categories, setCategories] = useState<SpecialMenuCategory[]>([])
@@ -1051,28 +1072,31 @@ export function SpecialMenusTab({ restaurantId }: SpecialMenusTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Item Dialog */}
-      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      {/* Item Sheet (side panel) */}
+      <Sheet open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-[560px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
               {editingItem ? "Gericht bearbeiten" : "Neues Gericht"}
-            </DialogTitle>
-          </DialogHeader>
+            </SheetTitle>
+            <SheetDescription>
+              Pflege Details, Preis und Bild. Generiere KI-Varianten oder lade ein eigenes Bild hoch.
+            </SheetDescription>
+          </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="itemName">Name *</Label>
+              <Label htmlFor="specialItemName">Name *</Label>
               <Input
-                id="itemName"
+                id="specialItemName"
                 value={itemForm.name}
                 onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
                 placeholder="Gerichtsname"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="itemDesc">Beschreibung</Label>
+              <Label htmlFor="specialItemDesc">Beschreibung</Label>
               <Textarea
-                id="itemDesc"
+                id="specialItemDesc"
                 value={itemForm.description}
                 onChange={(e) =>
                   setItemForm({ ...itemForm, description: e.target.value })
@@ -1082,10 +1106,10 @@ export function SpecialMenusTab({ restaurantId }: SpecialMenusTabProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="itemPrice">Preis (optional)</Label>
+              <Label htmlFor="specialItemPrice">Preis (optional)</Label>
               <div className="relative">
                 <Input
-                  id="itemPrice"
+                  id="specialItemPrice"
                   value={itemForm.price}
                   onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
                   placeholder="12,90"
@@ -1099,18 +1123,30 @@ export function SpecialMenusTab({ restaurantId }: SpecialMenusTabProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Leaf className="h-4 w-4 text-green-600" />
-                <Label htmlFor="itemVeg">Vegetarisch</Label>
+                <Label htmlFor="specialItemVeg">Vegetarisch</Label>
               </div>
               <Switch
-                id="itemVeg"
+                id="specialItemVeg"
                 checked={itemForm.is_vegetarian}
                 onCheckedChange={(checked) =>
                   setItemForm({ ...itemForm, is_vegetarian: checked })
                 }
               />
             </div>
+            <AiImageEditor
+              kind="special_menu_item"
+              itemId={editingItem?.id ?? null}
+              imageUrl={editingItem?.image_url ?? null}
+              restaurantStyle={restaurantAiStyle}
+              onImageChange={(url) => {
+                if (editingItem) {
+                  setEditingItem({ ...editingItem, image_url: url })
+                }
+                fetchData()
+              }}
+            />
           </div>
-          <DialogFooter>
+          <SheetFooter className="mt-6">
             <Button
               variant="outline"
               onClick={() => setItemDialogOpen(false)}
@@ -1122,9 +1158,9 @@ export function SpecialMenusTab({ restaurantId }: SpecialMenusTabProps) {
               {savingItem && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Speichern
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
