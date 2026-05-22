@@ -130,6 +130,7 @@ function PublicAccountScreenInner() {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [categoriesSheetOpen, setCategoriesSheetOpen] = useState(false);
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
+  const [isBarStuck, setIsBarStuck] = useState(false);
   const categoryYsRef = React.useRef<Record<string, number>>({});
   const scrollRef = React.useRef<ScrollView>(null);
   // Hoisted from below — these MUST live above any conditional return to keep
@@ -138,9 +139,36 @@ function PublicAccountScreenInner() {
   // closures defined further down and can read these refs without issue.
   const gastroWrapperY = React.useRef(0);
   const sectionYs = React.useRef<Record<string, number>>({});
+  // Y of the in-flow sticky-bar slot; used to decide when to show the
+  // absolute overlay copy of the bar.
+  const slot5Y = React.useRef<number>(Number.POSITIVE_INFINITY);
+  // Latest scrollY captured by handleScroll — feeds smoothScrollTo so it
+  // can start from the user's actual position instead of 0.
+  const currentScrollY = React.useRef(0);
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
+
+  // Custom scroll-to that uses requestAnimationFrame + ease-in-out so the
+  // category jump feels noticeably slower (~600ms) than the platform default
+  // (~250-350ms). RN's ScrollView.scrollTo doesn't accept a duration prop,
+  // so we drive the offset by hand.
+  const smoothScrollTo = useCallback((targetY: number) => {
+    const startY = currentScrollY.current;
+    const delta = targetY - startY;
+    if (Math.abs(delta) < 1) return;
+    const startTs = Date.now();
+    const duration = 600;
+    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+    const tick = () => {
+      const elapsed = Date.now() - startTs;
+      const t = Math.min(1, elapsed / duration);
+      const y = startY + delta * ease(t);
+      scrollRef.current?.scrollTo({ y, animated: false });
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, []);
 
   // Stable callbacks for StickyCategoryBar (memoized) — they read refs +
   // gastroData.categories, both of which are stable across scroll events,
@@ -151,9 +179,9 @@ function PublicAccountScreenInner() {
     const sectionY = sectionYs.current[cat.id];
     if (sectionY == null) return;
     const absolute = gastroWrapperY.current + sectionY - STICKY_OFFSET + 1;
-    scrollRef.current?.scrollTo({ y: absolute, animated: true });
+    smoothScrollTo(absolute);
     setActiveCategoryIdx(idx);
-  }, [gastroData.categories]);
+  }, [gastroData.categories, smoothScrollTo]);
 
   const openCategoriesSheet = useCallback(() => {
     setCategoriesSheetOpen(true);
@@ -666,8 +694,15 @@ function PublicAccountScreenInner() {
   const handleWrapperLayout = (y: number) => { gastroWrapperY.current = y; };
 
   const handleScroll = (e: any) => {
-    if (activeTab !== 'menu' || !gastroData.categories.length) return;
     const y = e.nativeEvent.contentOffset.y;
+    currentScrollY.current = y;
+
+    // Toggle the absolute-overlay copy of the sticky bar based on whether
+    // the in-flow slot has scrolled off the top.
+    const shouldStick = y >= slot5Y.current - STICKY_OFFSET;
+    if (shouldStick !== isBarStuck) setIsBarStuck(shouldStick);
+
+    if (activeTab !== 'menu' || !gastroData.categories.length) return;
     const adjusted = y + STICKY_OFFSET;
     let idx = 0;
     for (let i = 0; i < gastroData.categories.length; i++) {
@@ -688,9 +723,8 @@ function PublicAccountScreenInner() {
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        stickyHeaderIndices={showStickyBar ? [5] : undefined}
         onScroll={handleScroll}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
       >
         {/* Banner with back button */}
         <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
@@ -823,14 +857,24 @@ function PublicAccountScreenInner() {
           <View />
         )}
 
-        {/* slot 5 — sticky category bar */}
+        {/* slot 5 — in-flow sticky category bar. Records its Y position
+            via onLayout so handleScroll knows when to show the absolute
+            overlay copy at the top. The in-flow bar stays in the layout
+            (so menu rows don't jump) but is hidden with opacity: 0 while
+            the overlay is visible — so the user only sees one bar. */}
         {showStickyBar ? (
-          <StickyCategoryBar
-            categories={stickyCategoriesProp}
-            activeIndex={activeCategoryIdx}
-            onSelect={jumpToCategory}
-            onOpenSheet={openCategoriesSheet}
-          />
+          <View
+            onLayout={(e) => { slot5Y.current = e.nativeEvent.layout.y; }}
+            style={{ opacity: isBarStuck ? 0 : 1 }}
+            pointerEvents={isBarStuck ? 'none' : 'auto'}
+          >
+            <StickyCategoryBar
+              categories={stickyCategoriesProp}
+              activeIndex={activeCategoryIdx}
+              onSelect={jumpToCategory}
+              onOpenSheet={openCategoriesSheet}
+            />
+          </View>
         ) : (
           <View />
         )}
@@ -918,6 +962,24 @@ function PublicAccountScreenInner() {
           <View />
         )}
       </ScrollView>
+
+      {/* Sticky category bar — rendered OUTSIDE the ScrollView as an
+          absolute overlay so its taps aren't fought over by the parent
+          ScrollView's gesture recognizer (which was the root cause of
+          taps failing when the bar was sticky via stickyHeaderIndices). */}
+      {showStickyBar && isBarStuck && (
+        <View
+          pointerEvents="box-none"
+          style={[styles.stickyOverlay, { backgroundColor: colors.background }]}
+        >
+          <StickyCategoryBar
+            categories={stickyCategoriesProp}
+            activeIndex={activeCategoryIdx}
+            onSelect={jumpToCategory}
+            onOpenSheet={openCategoriesSheet}
+          />
+        </View>
+      )}
 
       <RatingModal
         visible={ratingModalOpen}
@@ -1308,5 +1370,12 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 8,
+  },
+  stickyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
 });

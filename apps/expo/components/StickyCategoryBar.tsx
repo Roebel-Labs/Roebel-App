@@ -93,11 +93,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    // Keep this view above the scrolled content below it when sticky;
-    // without zIndex/elevation, Android can route taps to the content
-    // scrolling beneath the bar.
+    // No elevation/shadow. The sticky behaviour is implemented via an
+    // absolute-positioned overlay outside the ScrollView (see
+    // app/account/[id]/index.tsx), so we don't need elevation to ensure
+    // draw-order anymore.
     zIndex: 10,
-    elevation: 10,
   },
   iconBtn: {
     width: 40,
