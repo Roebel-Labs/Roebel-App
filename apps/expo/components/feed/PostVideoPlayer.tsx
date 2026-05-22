@@ -82,6 +82,10 @@ function PostVideoPlayer({ videoUrl, isVisible = true, autoPlay = true }: Readon
     videoViewRef.current?.enterFullscreen();
   };
 
+  const handlePictureInPicture = () => {
+    videoViewRef.current?.startPictureInPicture();
+  };
+
   return (
     <View style={[styles.container, { aspectRatio }]}>
       <VideoView
@@ -90,6 +94,7 @@ function PostVideoPlayer({ videoUrl, isVisible = true, autoPlay = true }: Readon
         player={player}
         nativeControls={false}
         allowsPictureInPicture
+        startsPictureInPictureAutomatically={false}
         contentFit="contain"
       />
 
@@ -113,18 +118,27 @@ function PostVideoPlayer({ videoUrl, isVisible = true, autoPlay = true }: Readon
         <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={16} color="#ffffff" />
       </Pressable>
 
-      {/* Time + fullscreen, sitting above the progress bar */}
+      {/* Time + PiP + fullscreen, sitting above the progress bar */}
       <View style={styles.bottomRow} pointerEvents="box-none">
         <Text style={styles.timeText}>
           {formatTime(currentTime || 0)} / {formatTime(duration)}
         </Text>
-        <Pressable
-          onPress={handleFullscreen}
-          hitSlop={10}
-          accessibilityLabel="Vollbild"
-        >
-          <Ionicons name="expand" size={18} color="#ffffff" style={styles.iconShadow} />
-        </Pressable>
+        <View style={styles.bottomActions}>
+          <Pressable
+            onPress={handlePictureInPicture}
+            hitSlop={10}
+            accessibilityLabel="Bild-in-Bild"
+          >
+            <Ionicons name="albums-outline" size={18} color="#ffffff" style={styles.iconShadow} />
+          </Pressable>
+          <Pressable
+            onPress={handleFullscreen}
+            hitSlop={10}
+            accessibilityLabel="Vollbild"
+          >
+            <Ionicons name="expand" size={18} color="#ffffff" style={styles.iconShadow} />
+          </Pressable>
+        </View>
       </View>
 
       {/* 8px progress track at bottom edge */}
@@ -175,6 +189,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  bottomActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   timeText: {
     color: '#ffffff',

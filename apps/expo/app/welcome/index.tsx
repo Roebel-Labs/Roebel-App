@@ -4,11 +4,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 
 export default function WelcomeIntroScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
+  // Apple Sign in policy: name/email already provided by Authentication
+  // Services framework — don't prompt for it again.
+  const skipNameStep = user?.auth_provider === 'apple';
 
   const certImage = isDark
     ? require('../../assets/illustration/onboarding/cert-dark-mode.png')
@@ -34,7 +39,7 @@ export default function WelcomeIntroScreen() {
           </Text>
 
           <Pressable
-            onPress={() => router.push('/welcome/name' as any)}
+            onPress={() => router.push((skipNameStep ? '/welcome/role' : '/welcome/name') as any)}
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
             accessibilityRole="button"
           >

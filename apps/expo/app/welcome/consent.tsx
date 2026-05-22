@@ -7,6 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
+import { slugifyDisplayName, ensureUniqueUsernameSlug } from '@/lib/username-slug';
 import { setNotificationPromptPending } from '@/lib/onboarding-storage';
 import StoryProgress from '@/components/StoryProgress';
 
@@ -35,11 +36,18 @@ export default function WelcomeConsentScreen() {
     }
     setSubmitting(true);
     try {
-      const trimmedName = state.name?.trim() ?? '';
-      const usernameValid = /^[a-zA-Z0-9_]{3,30}$/.test(trimmedName);
+      const trimmedName = state.displayName?.replace(/\s+/g, ' ').trim() ?? '';
+      let username: string | null = null;
+      let displayName: string | null = null;
+      if (trimmedName.length >= 2) {
+        const baseSlug = slugifyDisplayName(trimmedName);
+        username = await ensureUniqueUsernameSlug(baseSlug, user.wallet_address);
+        displayName = trimmedName;
+      }
 
       await updateUserOnboarding(user.wallet_address, {
-        username: usernameValid ? trimmedName : undefined,
+        username: username ?? undefined,
+        displayName: displayName ?? undefined,
         preferredRole: state.preferredRole ?? undefined,
         termsAccepted: true,
         markCompleted: true,
@@ -65,8 +73,17 @@ export default function WelcomeConsentScreen() {
   const handleDecline = async () => {
     if (user?.wallet_address) {
       try {
+        const trimmedName = state.displayName?.replace(/\s+/g, ' ').trim() ?? '';
+        let username: string | undefined;
+        let displayName: string | undefined;
+        if (trimmedName.length >= 2) {
+          const baseSlug = slugifyDisplayName(trimmedName);
+          username = await ensureUniqueUsernameSlug(baseSlug, user.wallet_address);
+          displayName = trimmedName;
+        }
         await updateUserOnboarding(user.wallet_address, {
-          username: state.name ? state.name : undefined,
+          username,
+          displayName,
           preferredRole: state.preferredRole ?? undefined,
           markCompleted: true,
         });

@@ -1,10 +1,13 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
+import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
+import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
+import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
@@ -69,6 +72,33 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
   const { hasAnyNFT } = useVerificationContext();
+  const insets = useSafeAreaInsets();
+  const activeAccount = useActiveAccount();
+  const activeWallet = useActiveWallet();
+  const { disconnect } = useDisconnect();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (!activeAccount || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteUserAccount(activeAccount);
+      if (activeWallet) {
+        disconnect(activeWallet);
+      }
+      setShowDeleteConfirm(false);
+      router.replace('/');
+    } catch (err) {
+      console.error('Account deletion failed', err);
+      const message =
+        err instanceof DeleteAccountError
+          ? err.message
+          : 'Dein Konto konnte nicht gelöscht werden. Bitte versuche es erneut.';
+      Alert.alert('Fehler beim Löschen', message);
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -169,6 +199,25 @@ export default function SettingsScreen() {
           </Pressable>
         </Section>
 
+        {activeAccount && (
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>KONTO</Text>
+            <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
+              <Pressable style={styles.themeOptionRow} onPress={() => setShowDeleteConfirm(true)}>
+                <View style={styles.themeOptionTextContainer}>
+                  <Text style={[styles.themeOptionLabel, { color: colors.error }]}>
+                    Konto löschen
+                  </Text>
+                  <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                    Dein Konto und alle dazugehörigen Daten werden unwiderruflich gelöscht.
+                  </Text>
+                </View>
+                <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <View style={styles.footerNote}>
           <Text style={[styles.footerNoteText, { color: colors.textTertiary }]}>
             Im Modus „System" passt sich die App automatisch an die Einstellungen Ihres Geräts an.
@@ -177,9 +226,62 @@ export default function SettingsScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <BottomDrawer
+        visible={showDeleteConfirm}
+        onClose={() => !isDeleting && setShowDeleteConfirm(false)}
+      >
+        <View style={deleteStyles.body}>
+          <Text style={[deleteStyles.title, { color: colors.textPrimary }]}>
+            Konto wirklich löschen?
+          </Text>
+          <Text style={[deleteStyles.text, { color: colors.textSecondary }]}>
+            Dein Konto, deine Beiträge, Bewertungen und alle alleinigen Organisationskonten werden
+            dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+          </Text>
+
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              deleteStyles.confirmDelete,
+              { opacity: isDeleting || pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text style={deleteStyles.confirmDeleteText}>
+              {isDeleting ? 'Wird gelöscht…' : 'Endgültig löschen'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => !isDeleting && setShowDeleteConfirm(false)}
+            style={[deleteStyles.cancel, { paddingBottom: 12 + insets.bottom }]}
+          >
+            <Text style={[deleteStyles.cancelText, { color: colors.textSecondary }]}>
+              Abbrechen
+            </Text>
+          </Pressable>
+        </View>
+      </BottomDrawer>
     </SafeAreaView>
   );
 }
+
+const deleteStyles = StyleSheet.create({
+  body: { gap: 12, paddingTop: 4 },
+  title: { fontSize: 18, fontFamily: 'Inter-Bold' },
+  text: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },
+  confirmDelete: {
+    backgroundColor: '#EF4444',
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmDeleteText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  cancel: { alignItems: 'center', paddingTop: 6 },
+  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -487,6 +487,7 @@ export type UserRecord = {
   wallet_address: string;
   tier: UserTier;
   username: string | null;
+  display_name: string | null;
   bio: string | null;
   profile_picture_url: string | null;
   cover_image_url: string | null;

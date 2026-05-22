@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
-import { getUserEmail } from 'thirdweb/wallets/in-app';
+import { getUserEmail, getProfiles } from 'thirdweb/wallets/in-app';
 import { client } from '@/constants/thirdweb';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useConsent } from '@/context/ConsentContext';
@@ -63,15 +63,28 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       try {
         let email: string | undefined;
+        let authProvider: string | undefined;
         if (wallet && wallet.id === 'inApp') {
           try {
             email = await getUserEmail({ client });
           } catch {
             // Email retrieval may fail
           }
+          try {
+            const profiles = await getProfiles({ client });
+            // thirdweb returns one profile per linked auth method
+            // (apple, google, email, facebook, ...). We treat the first
+            // matching social provider as the primary one.
+            const primary = profiles?.find((p: { type?: string }) =>
+              p.type && p.type !== 'guest',
+            );
+            authProvider = primary?.type;
+          } catch {
+            // Profile lookup may fail (e.g. session expired) — non-fatal.
+          }
         }
 
-        const userRecord = await upsertUser(account!.address, email);
+        const userRecord = await upsertUser(account!.address, email, authProvider);
         setUser(userRecord);
 
         // Onboarding + consent re-prompt trigger — fires once per connection transition

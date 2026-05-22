@@ -27,7 +27,11 @@ export async function fetchUserByWallet(walletAddress: string): Promise<UserReco
  * First login: creates with tier='tourist' and a personal account.
  * Returning login: updates last_login_at and email only (preserves tier).
  */
-export async function upsertUser(walletAddress: string, email?: string): Promise<UserRecord | null> {
+export async function upsertUser(
+  walletAddress: string,
+  email?: string,
+  authProvider?: string,
+): Promise<UserRecord | null> {
   const normalizedAddress = walletAddress.toLowerCase();
 
   // Try to fetch existing user first
@@ -36,6 +40,7 @@ export async function upsertUser(walletAddress: string, email?: string): Promise
     // Update last_login_at and email if provided
     const updates: Record<string, unknown> = { last_login_at: new Date().toISOString() };
     if (email) updates.email = email;
+    if (authProvider && !existing.auth_provider) updates.auth_provider = authProvider;
 
     const { data, error } = await supabase
       .from('users')
@@ -58,6 +63,7 @@ export async function upsertUser(walletAddress: string, email?: string): Promise
       wallet_address: normalizedAddress,
       tier: 'tourist' as UserTier,
       ...(email && { email }),
+      ...(authProvider && { auth_provider: authProvider }),
     })
     .select()
     .single();
@@ -82,7 +88,7 @@ export async function upsertUser(walletAddress: string, email?: string): Promise
  */
 export async function updateUserProfile(
   walletAddress: string,
-  updates: Partial<Pick<UserRecord, 'username' | 'bio' | 'profile_picture_url' | 'cover_image_url' | 'neighborhood' | 'interests'>>
+  updates: Partial<Pick<UserRecord, 'username' | 'display_name' | 'bio' | 'profile_picture_url' | 'cover_image_url' | 'neighborhood' | 'interests'>>
 ): Promise<UserRecord | null> {
   const { data, error } = await supabase
     .from('users')
@@ -140,6 +146,7 @@ export async function updateUserOnboarding(
   walletAddress: string,
   updates: {
     username?: string | null;
+    displayName?: string | null;
     preferredRole?: 'buerger' | 'tourist' | null;
     termsAccepted?: boolean;
     markCompleted?: boolean;
@@ -147,6 +154,7 @@ export async function updateUserOnboarding(
 ): Promise<UserRecord | null> {
   const patch: Record<string, unknown> = {};
   if (updates.username !== undefined) patch.username = updates.username;
+  if (updates.displayName !== undefined) patch.display_name = updates.displayName;
   if (updates.preferredRole !== undefined) patch.preferred_role = updates.preferredRole;
   if (updates.markCompleted) patch.onboarding_completed_at = new Date().toISOString();
   if (updates.termsAccepted) patch.terms_accepted_at = new Date().toISOString();

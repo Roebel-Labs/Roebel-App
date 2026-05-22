@@ -113,7 +113,7 @@ const handleRefresh = async () => {
     setRefreshing(false);
   };
 
-  const displayName = user?.username || shortenAddress(account?.address);
+  const displayName = user?.display_name || user?.username || shortenAddress(account?.address);
   const citizenRequest = userRequests.find((r: any) => r.nft_type === 'citizen') || null;
   const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;

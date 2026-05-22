@@ -8,24 +8,26 @@ import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
 
-const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
+// Display names: letters (incl. ä/ö/ü/ß), spaces, hyphens, apostrophes.
+// Must start with a letter. 2–40 chars total.
+const DISPLAY_NAME_REGEX = /^\p{L}[\p{L}\p{M}'\- ]{1,39}$/u;
 
 export default function WelcomeNameScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { state, dispatch } = useWelcomeWizard();
-  const [name, setName] = useState(state.name);
+  const [displayName, setDisplayName] = useState(state.displayName);
 
-  const trimmed = name.trim();
-  const usernameValid = USERNAME_REGEX.test(trimmed);
-  const showHint = trimmed.length > 0 && !usernameValid;
+  const trimmed = displayName.replace(/\s+/g, ' ').trim();
+  const nameValid = DISPLAY_NAME_REGEX.test(trimmed);
+  const showHint = trimmed.length > 0 && !nameValid;
 
   const commit = (nextName: string) => {
-    dispatch({ type: 'SET_NAME', payload: nextName });
+    dispatch({ type: 'SET_DISPLAY_NAME', payload: nextName });
   };
 
   const handleNext = () => {
-    if (trimmed.length > 0 && !usernameValid) return;
+    if (trimmed.length > 0 && !nameValid) return;
     commit(trimmed);
     router.push('/welcome/role' as any);
   };
@@ -58,13 +60,13 @@ export default function WelcomeNameScreen() {
         >
           <TextInput
             style={[styles.input, { color: colors.textPrimary }]}
-            value={name}
-            onChangeText={setName}
-            placeholder="Dein Name"
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="z. B. Max Brych"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="words"
             autoCorrect={false}
-            maxLength={30}
+            maxLength={40}
             returnKeyType="done"
             onSubmitEditing={handleNext}
           />
@@ -72,7 +74,7 @@ export default function WelcomeNameScreen() {
 
         {showHint && (
           <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            Nur Buchstaben (A–Z), Zahlen und Unterstrich, mindestens 3 Zeichen.
+            Buchstaben, Leerzeichen, Bindestrich oder Apostroph, 2–40 Zeichen.
           </Text>
         )}
 

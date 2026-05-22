@@ -7,27 +7,27 @@ import ExitWizardSheet from '@/components/ExitWizardSheet';
 export type PreferredRole = 'buerger' | 'tourist';
 
 export type WelcomeWizardState = {
-  name: string;
+  displayName: string;
   preferredRole: PreferredRole | null;
   isSubmitting: boolean;
 };
 
 type WelcomeWizardAction =
-  | { type: 'SET_NAME'; payload: string }
+  | { type: 'SET_DISPLAY_NAME'; payload: string }
   | { type: 'SET_ROLE'; payload: PreferredRole }
   | { type: 'SET_SUBMITTING'; payload: boolean }
   | { type: 'RESET' };
 
 const initialState: WelcomeWizardState = {
-  name: '',
+  displayName: '',
   preferredRole: null,
   isSubmitting: false,
 };
 
 function reducer(state: WelcomeWizardState, action: WelcomeWizardAction): WelcomeWizardState {
   switch (action.type) {
-    case 'SET_NAME':
-      return { ...state, name: action.payload };
+    case 'SET_DISPLAY_NAME':
+      return { ...state, displayName: action.payload };
     case 'SET_ROLE':
       return { ...state, preferredRole: action.payload };
     case 'SET_SUBMITTING':
