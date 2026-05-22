@@ -73,6 +73,7 @@ import {
 } from "@/app/actions/restaurants"
 import type { MenuCategory, MenuItem } from "@/types/restaurant"
 import { formatPrice, parsePrice } from "@/types/restaurant"
+import { ItemImageField } from "@/components/dashboard/speisekarte/item-image-field"
 
 interface MenuTabProps {
   restaurantId: string
@@ -756,6 +757,16 @@ export function MenuTab({ restaurantId }: MenuTabProps) {
                 }
               />
             </div>
+            <ItemImageField
+              itemId={editingItem?.id ?? null}
+              imageUrl={editingItem?.image_url ?? null}
+              onImageChange={(url) => {
+                if (editingItem) {
+                  setEditingItem({ ...editingItem, image_url: url })
+                }
+                fetchData()
+              }}
+            />
           </div>
           <DialogFooter>
             <Button

@@ -13,6 +13,7 @@ import {
   Calendar,
   CreditCard,
   Settings,
+  UtensilsCrossed,
 } from "lucide-react";
 import {
   subTypeFeatures,
@@ -66,6 +67,12 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       href: "/dashboard/opening-hours",
       icon: <Clock className="h-4 w-4" />,
       visible: features.openingHours,
+    },
+    {
+      name: "Speisekarte",
+      href: "/dashboard/speisekarte",
+      icon: <UtensilsCrossed className="h-4 w-4" />,
+      visible: features.speisekarte,
     },
     {
       name: "Produkte",

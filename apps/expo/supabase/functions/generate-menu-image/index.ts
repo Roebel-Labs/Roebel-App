@@ -36,6 +36,7 @@ function json(status: number, body: Record<string, unknown>) {
 }
 
 type GastroKey = 'mt' | 'delizia' | 'waage' | 'generic';
+type StylePreset = 'dark_stoneware' | 'italian_gingham' | 'light_concrete' | 'wooden_board';
 
 function gastroFor(restaurantName: string): GastroKey {
   const n = restaurantName.toLowerCase();
@@ -45,17 +46,39 @@ function gastroFor(restaurantName: string): GastroKey {
   return 'generic';
 }
 
+function backgroundForPreset(p: StylePreset): string {
+  switch (p) {
+    case 'dark_stoneware':
+      return 'served on an anthracite/black stoneware ceramic plate on top of a dark matte surface, clean even dark background, soft round shadow under the plate';
+    case 'italian_gingham':
+      return 'served on a white ceramic plate on top of a beige-and-white gingham checkered cotton tablecloth (small even squares, classic Italian trattoria), bright and clean';
+    case 'light_concrete':
+      return 'on a light grey concrete-textured flat surface (subtle stone texture, Uber-Eats catalog style), clean and bright, even neutral background';
+    case 'wooden_board':
+      return 'served on a warm oak wooden board with visible natural grain (rustic farm-to-table look), clean neutral surroundings, soft round shadow under the board';
+  }
+}
+
 function backgroundFor(g: GastroKey): string {
   switch (g) {
     case 'mt':
-      return 'served on an anthracite/black stoneware ceramic plate on top of a dark matte surface, clean even dark background, soft round shadow under the plate';
+      return backgroundForPreset('dark_stoneware');
     case 'delizia':
-      return 'served on a white ceramic plate on top of a beige-and-white gingham checkered cotton tablecloth (small even squares, classic Italian trattoria), bright and clean';
+      return backgroundForPreset('italian_gingham');
     case 'waage':
-      return 'on a light grey concrete-textured flat surface (subtle stone texture, Uber-Eats catalog style), clean and bright, even neutral background';
+      return backgroundForPreset('light_concrete');
     default:
       return 'on a clean flat neutral background';
   }
+}
+
+function isValidStylePreset(v: unknown): v is StylePreset {
+  return (
+    v === 'dark_stoneware' ||
+    v === 'italian_gingham' ||
+    v === 'light_concrete' ||
+    v === 'wooden_board'
+  );
 }
 
 function angleFor(itemName: string): 'overhead' | 'side' {
@@ -93,9 +116,15 @@ function vesselFor(g: GastroKey, itemName: string): string {
   return 'shot from directly overhead, food perfectly centered in the frame';
 }
 
-function buildPrompt(itemName: string, description: string | null, restaurantName: string, hint?: string): string {
+function buildPrompt(
+  itemName: string,
+  description: string | null,
+  restaurantName: string,
+  preset: StylePreset | null,
+  hint?: string,
+): string {
   const g = gastroFor(restaurantName);
-  const bg = backgroundFor(g);
+  const bg = preset ? backgroundForPreset(preset) : backgroundFor(g);
   const vessel = vesselFor(g, itemName);
   const desc = description ? `: ${description}` : '';
   const tail = hint ? ` ${hint}` : '';
@@ -123,9 +152,18 @@ serve(async (req: Request) => {
     return json(401, { ok: false, code: 'UNAUTHORIZED' });
   }
 
-  let body: { menu_item_id?: string; dry_run?: boolean; prompt_hint?: string; quality?: 'basic' | 'high' };
+  let body: {
+    menu_item_id?: string;
+    dry_run?: boolean;
+    prompt_hint?: string;
+    quality?: 'basic' | 'high';
+    style_preset?: string;
+  };
   try { body = await req.json(); } catch { return json(400, { ok: false, code: 'BAD_JSON' }); }
   if (!body.menu_item_id) return json(400, { ok: false, code: 'MISSING_MENU_ITEM_ID' });
+  if (body.style_preset !== undefined && !isValidStylePreset(body.style_preset)) {
+    return json(400, { ok: false, code: 'INVALID_STYLE_PRESET' });
+  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -140,10 +178,14 @@ serve(async (req: Request) => {
 
   const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('id, name')
+    .select('id, name, ai_image_style')
     .eq('id', item.restaurant_id)
     .single();
-  const prompt = buildPrompt(item.name, item.description, restaurant?.name ?? '', body.prompt_hint);
+  // Resolution order: explicit body param > restaurants.ai_image_style > gastroFor() fallback.
+  const presetFromBody = isValidStylePreset(body.style_preset) ? body.style_preset : null;
+  const presetFromRow = isValidStylePreset(restaurant?.ai_image_style) ? restaurant.ai_image_style : null;
+  const resolvedPreset: StylePreset | null = presetFromBody ?? presetFromRow;
+  const prompt = buildPrompt(item.name, item.description, restaurant?.name ?? '', resolvedPreset, body.prompt_hint);
 
   if (body.dry_run) return json(200, { ok: true, prompt, dry_run: true });
 

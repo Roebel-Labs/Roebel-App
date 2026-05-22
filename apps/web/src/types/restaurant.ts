@@ -3,11 +3,36 @@
 export type RestaurantStatus = "pending" | "approved" | "rejected" | "published"
 export type SpecialMenuStatus = "draft" | "published" | "archived"
 
+export type AiImageStyle =
+  | "dark_stoneware"
+  | "italian_gingham"
+  | "light_concrete"
+  | "wooden_board"
+
+export const AI_IMAGE_STYLE_LABELS: Record<AiImageStyle, string> = {
+  dark_stoneware: "Dunkle Steinplatte",
+  italian_gingham: "Italienische Trattoria",
+  light_concrete: "Heller Beton",
+  wooden_board: "Holzbrett",
+}
+
+export const AI_IMAGE_STYLE_DESCRIPTIONS: Record<AiImageStyle, string> = {
+  dark_stoneware:
+    "Anthrazitgraue Steinplatte auf mattem dunklem Untergrund — wirkt edel und reduziert.",
+  italian_gingham:
+    "Weißer Teller auf beige-weiß karierter Tischdecke — klassische Trattoria-Optik.",
+  light_concrete:
+    "Heller, betongrauer Untergrund — neutral und modern, ähnlich Uber-Eats-Katalog.",
+  wooden_board:
+    "Warmes Eichenholz-Brett mit sichtbarer Maserung — rustikal, Farm-to-Table.",
+}
+
 // ============================================
 // Restaurant
 // ============================================
 export interface Restaurant {
   id: string
+  account_id: string | null
   name: string
   slug: string
   description: string | null
@@ -22,6 +47,7 @@ export interface Restaurant {
   status: RestaurantStatus
   is_featured: boolean
   sort_order: number
+  ai_image_style: AiImageStyle | null
   created_at: string
   updated_at: string
   // Computed fields from joins

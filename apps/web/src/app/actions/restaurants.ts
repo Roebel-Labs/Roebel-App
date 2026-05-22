@@ -21,7 +21,9 @@ import type {
   SpecialMenuItem,
   CreateSpecialMenuItemInput,
   UpdateSpecialMenuItemInput,
+  AiImageStyle,
 } from "@/types/restaurant"
+import { generateSlug } from "@/types/restaurant"
 
 // ============================================
 // Restaurant Actions
@@ -695,5 +697,209 @@ export async function reorderSpecialMenuItems(
   } catch (error) {
     console.error("Error reordering special menu items:", error)
     return { success: false, error: "Fehler beim Aktualisieren der Reihenfolge" }
+  }
+}
+
+// ============================================
+// Org-facing menu management
+// ============================================
+
+const IMAGE_BUCKET = "images"
+
+/**
+ * Look up the restaurant row tied to the given org account.
+ * If none exists, create a minimal pending row so the dashboard can render
+ * the menu UI on first visit.
+ */
+export async function getOrCreateRestaurantForAccount(accountId: string) {
+  try {
+    const supabase = await createClient()
+
+    const { data: existing, error: selectErr } = await supabase
+      .from("restaurants")
+      .select("*")
+      .eq("account_id", accountId)
+      .maybeSingle()
+
+    if (selectErr) throw selectErr
+    if (existing) return { success: true, data: existing as Restaurant }
+
+    const { data: account, error: accErr } = await supabase
+      .from("accounts")
+      .select("id, name, slug, sub_type")
+      .eq("id", accountId)
+      .single()
+    if (accErr || !account) {
+      return { success: false, error: "Konto nicht gefunden" }
+    }
+    if (account.sub_type !== "restaurant") {
+      return { success: false, error: "Nur für Gastronomie-Konten verfügbar" }
+    }
+
+    const baseSlug = account.slug || generateSlug(account.name || "restaurant")
+    const slug = `${baseSlug}-${Date.now().toString(36)}`
+
+    const { data: created, error: insertErr } = await supabase
+      .from("restaurants")
+      .insert({
+        account_id: account.id,
+        name: account.name,
+        slug,
+        status: "pending",
+      })
+      .select()
+      .single()
+
+    if (insertErr) throw insertErr
+    return { success: true, data: created as Restaurant }
+  } catch (error) {
+    console.error("Error resolving restaurant for account:", error)
+    return { success: false, error: "Fehler beim Laden des Restaurants" }
+  }
+}
+
+export async function updateRestaurantAiStyle(
+  restaurantId: string,
+  style: AiImageStyle | null
+) {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("restaurants")
+      .update({ ai_image_style: style, updated_at: new Date().toISOString() })
+      .eq("id", restaurantId)
+
+    if (error) throw error
+
+    revalidatePath("/dashboard/speisekarte")
+    return { success: true, message: "Bildstil gespeichert" }
+  } catch (error) {
+    console.error("Error updating restaurant ai_image_style:", error)
+    return { success: false, error: "Fehler beim Speichern des Bildstils" }
+  }
+}
+
+/**
+ * Upload a manually-chosen image for a menu item.
+ * Mirrors the Edge Function's storage path scheme so the public bucket rules
+ * and cache-busting both still apply.
+ */
+export async function uploadMenuItemImage(
+  itemId: string,
+  formData: FormData
+) {
+  try {
+    const file = formData.get("file") as File | null
+    if (!file) return { success: false, error: "Keine Datei ausgewählt" }
+    if (!file.type.startsWith("image/")) {
+      return { success: false, error: "Nur Bilddateien sind erlaubt" }
+    }
+
+    const supabase = await createClient()
+    const { data: item, error: itemErr } = await supabase
+      .from("menu_items")
+      .select("id, restaurant_id")
+      .eq("id", itemId)
+      .single()
+    if (itemErr || !item) return { success: false, error: "Gericht nicht gefunden" }
+
+    const ext = file.name.includes(".")
+      ? file.name.split(".").pop()!.toLowerCase()
+      : (file.type.split("/")[1] ?? "jpg")
+    const objectPath = `menu-items/${item.restaurant_id}/${item.id}_upload_${Date.now()}.${ext}`
+    const arrayBuffer = await file.arrayBuffer()
+
+    const { error: uploadErr } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(objectPath, new Uint8Array(arrayBuffer), {
+        contentType: file.type || "image/jpeg",
+        upsert: true,
+      })
+    if (uploadErr) throw uploadErr
+
+    const { data: pub } = supabase.storage
+      .from(IMAGE_BUCKET)
+      .getPublicUrl(objectPath)
+    const publicUrl = pub.publicUrl
+
+    const { error: updateErr } = await supabase
+      .from("menu_items")
+      .update({ image_url: publicUrl })
+      .eq("id", itemId)
+    if (updateErr) throw updateErr
+
+    revalidatePath("/dashboard/speisekarte")
+    return { success: true, image_url: publicUrl, message: "Bild hochgeladen" }
+  } catch (error) {
+    console.error("Error uploading menu item image:", error)
+    return { success: false, error: "Fehler beim Hochladen des Bildes" }
+  }
+}
+
+export async function clearMenuItemImage(itemId: string) {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ image_url: null })
+      .eq("id", itemId)
+    if (error) throw error
+
+    revalidatePath("/dashboard/speisekarte")
+    return { success: true, message: "Bild entfernt" }
+  } catch (error) {
+    console.error("Error clearing menu item image:", error)
+    return { success: false, error: "Fehler beim Entfernen des Bildes" }
+  }
+}
+
+/**
+ * Call the deployed generate-menu-image Edge Function to (re)generate
+ * an AI food photo for a menu item. SUPABASE_SEED_TOKEN is read on the
+ * server only — never expose it to the browser.
+ */
+export async function regenerateMenuItemImageWithAi(
+  itemId: string,
+  opts?: { prompt_hint?: string; style_preset?: AiImageStyle }
+) {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const seedToken = process.env.SUPABASE_SEED_TOKEN
+    if (!supabaseUrl || !seedToken) {
+      return {
+        success: false,
+        error: "AI-Bilderzeugung ist aktuell nicht konfiguriert (SEED_TOKEN fehlt).",
+      }
+    }
+
+    const endpoint = `${supabaseUrl}/functions/v1/generate-menu-image`
+    const payload: Record<string, unknown> = { menu_item_id: itemId }
+    if (opts?.prompt_hint) payload.prompt_hint = opts.prompt_hint
+    if (opts?.style_preset) payload.style_preset = opts.style_preset
+
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-seed-token": seedToken,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const body = (await resp.json().catch(() => null)) as
+      | { ok?: boolean; image_url?: string; code?: string; error?: string }
+      | null
+
+    if (!resp.ok || !body?.ok || !body.image_url) {
+      console.error("Edge Function generate-menu-image failed:", resp.status, body)
+      const code = body?.code ?? `HTTP_${resp.status}`
+      return { success: false, error: `KI-Bilderzeugung fehlgeschlagen: ${code}` }
+    }
+
+    revalidatePath("/dashboard/speisekarte")
+    return { success: true, image_url: body.image_url, message: "Bild generiert" }
+  } catch (error) {
+    console.error("Error regenerating menu item image:", error)
+    return { success: false, error: "Fehler bei der KI-Bilderzeugung" }
   }
 }

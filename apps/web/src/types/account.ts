@@ -164,6 +164,7 @@ export interface SubTypeFeatures {
   ads: boolean;
   events: boolean;
   partner: boolean;
+  speisekarte: boolean;
 }
 
 /** Single source of truth for which dashboard panels each sub_type sees. */
@@ -172,6 +173,16 @@ export function subTypeFeatures(
 ): SubTypeFeatures {
   switch (subType) {
     case "restaurant":
+      return {
+        blog: true,
+        members: true,
+        openingHours: true,
+        products: true,
+        ads: true,
+        events: true,
+        partner: true,
+        speisekarte: true,
+      };
     case "unternehmen":
       return {
         blog: true,
@@ -181,6 +192,7 @@ export function subTypeFeatures(
         ads: true,
         events: true,
         partner: true,
+        speisekarte: false,
       };
     case "verein":
       return {
@@ -191,6 +203,7 @@ export function subTypeFeatures(
         ads: false,
         events: true,
         partner: false,
+        speisekarte: false,
       };
     case "stadt":
     case "fraktion":
@@ -202,6 +215,7 @@ export function subTypeFeatures(
         ads: false,
         events: true,
         partner: false,
+        speisekarte: false,
       };
     case "journalist":
       return {
@@ -212,6 +226,7 @@ export function subTypeFeatures(
         ads: false,
         events: false,
         partner: false,
+        speisekarte: false,
       };
     default:
       return {
@@ -222,6 +237,7 @@ export function subTypeFeatures(
         ads: false,
         events: false,
         partner: false,
+        speisekarte: false,
       };
   }
 }
