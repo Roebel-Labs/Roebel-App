@@ -79,7 +79,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
                 {submitting ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontFamily: 'Inter-SemiBold' }}>Speichern</Text>
+                  <Text style={{ color: '#fff', fontFamily: 'Inter-Medium' }}>Speichern</Text>
                 )}
               </Pressable>
             )}
@@ -93,7 +93,7 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 28, gap: 16 },
-  title: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  title: { fontSize: 18, fontFamily: 'Inter-Medium' },
   body: { fontSize: 14, fontFamily: 'Inter-Regular' },
   starsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8 },
   input: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },

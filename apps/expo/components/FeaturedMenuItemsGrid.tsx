@@ -74,7 +74,7 @@ const CARD_W = 160;
 
 const styles = StyleSheet.create({
   section: { paddingTop: 16, paddingBottom: 8 },
-  heading: { paddingHorizontal: 16, fontSize: 20, fontFamily: 'Inter-SemiBold', marginBottom: 12 },
+  heading: { paddingHorizontal: 16, fontSize: 20, fontFamily: 'Inter-Medium', marginBottom: 12 },
   row: { paddingHorizontal: 16, gap: 12 },
   card: { width: CARD_W },
   imgWrap: { width: CARD_W, height: CARD_W, borderRadius: 12, overflow: 'hidden', justifyContent: 'flex-start' },
@@ -87,8 +87,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  badgeText: { color: '#fff', fontFamily: 'Inter-SemiBold', fontSize: 11 },
-  name: { marginTop: 8, fontFamily: 'Inter-SemiBold', fontSize: 14 },
+  badgeText: { color: '#fff', fontFamily: 'Inter-Medium', fontSize: 11 },
+  name: { marginTop: 8, fontFamily: 'Inter-Medium', fontSize: 14 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   price: { fontFamily: 'Inter-Regular', fontSize: 13 },
 });

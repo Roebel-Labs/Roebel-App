@@ -67,7 +67,7 @@ export default function SideSelectionGroup({ label, required, sides, value, onCh
 const styles = StyleSheet.create({
   section: { paddingHorizontal: 16, paddingTop: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  label: { fontSize: 18, fontFamily: 'Inter-Medium' },
   requiredPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
   requiredText: { fontSize: 12, fontFamily: 'Inter-Medium' },
   hint: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },

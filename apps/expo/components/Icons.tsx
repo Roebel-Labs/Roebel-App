@@ -28,6 +28,10 @@ import PartySvg from '@/assets/icons/party.svg';
 import BookSvg from '@/assets/icons/book.svg';
 import ClockSvg from '@/assets/icons/clock.svg';
 import ShareSvg from '@/assets/icons/share.svg';
+import ThumbsUpSvg from '@/assets/icons/thumbs-up.svg';
+import ThumbsUpFilledSvg from '@/assets/icons/thumbs-up-filled.svg';
+import ThumbsDownSvg from '@/assets/icons/thumbs-down.svg';
+import MenuListSvg from '@/assets/icons/menu-01.svg';
 
 
 // Icon mapping for categories
@@ -88,6 +92,10 @@ export const CommunityIconComponent = ({ size = 24, ...props }: IconProps) => <C
 export const MarketsIcon = ({ size = 24, ...props }: IconProps) => <MarketsSvg width={size} height={size} {...props} />;
 export const StarIconComponent = ({ size = 24, ...props }: IconProps) => <StarSvg width={size} height={size} {...props} />;
 export const StarIcon = StarIconComponent;
+export const ThumbsUpIcon = ({ size = 24, ...props }: IconProps) => <ThumbsUpSvg width={size} height={size} {...props} />;
+export const ThumbsUpFilledIcon = ({ size = 24, ...props }: IconProps) => <ThumbsUpFilledSvg width={size} height={size} {...props} />;
+export const ThumbsDownIcon = ({ size = 24, ...props }: IconProps) => <ThumbsDownSvg width={size} height={size} {...props} />;
+export const MenuListIcon = ({ size = 24, ...props }: IconProps) => <MenuListSvg width={size} height={size} {...props} />;
 export const BookmarkIcon = ({ size = 24, ...props }: IconProps) => <BookmarkSvg width={size} height={size} {...props} />;
 export const BookmarkAddIcon = ({ size = 24, ...props }: IconProps) => <BookmarkActiveSvg width={size} height={size} {...props} />;
 export const LocationIcon = ({ size = 24, ...props }: IconProps) => <LocationSvg width={size} height={size} {...props} />;

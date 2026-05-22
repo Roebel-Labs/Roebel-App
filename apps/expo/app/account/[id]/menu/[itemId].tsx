@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Skeleton } from '@/components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -64,11 +65,21 @@ export default function MenuItemDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <ScrollView contentContainerStyle={{ paddingBottom: 48 }} scrollEnabled={false}>
+          <Skeleton width="100%" height={280} borderRadius={0} />
+          <View style={styles.headBlock}>
+            <Skeleton width="70%" height={26} />
+            <Skeleton width={80} height={18} style={{ marginTop: 8 } as any} />
+            <Skeleton width="100%" height={14} style={{ marginTop: 16 } as any} />
+            <Skeleton width="85%" height={14} style={{ marginTop: 6 } as any} />
+            <View style={[styles.thumbsRow, { marginTop: 20 }]}>
+              <Skeleton width={80} height={32} borderRadius={9999} />
+              <Skeleton width={48} height={32} borderRadius={9999} />
+            </View>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -88,7 +99,7 @@ export default function MenuItemDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }}>
         {/* Hero */}
@@ -212,13 +223,13 @@ const styles = StyleSheet.create({
   floatingBack: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   headBlock: { paddingHorizontal: 16, paddingTop: 24 },
-  title: { fontSize: 26, fontFamily: 'Inter-SemiBold' },
+  title: { fontSize: 26, fontFamily: 'Inter-Medium' },
   price: { fontSize: 17, fontFamily: 'Inter-Medium', marginTop: 6 },
   description: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginTop: 12 },
   thumbsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 16 },
   hint: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
   section: { paddingHorizontal: 16, paddingTop: 28 },
-  sectionTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold', marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontFamily: 'Inter-Medium', marginBottom: 12 },
   noteInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },
   relCard: { width: 140 },
   relImg: { width: 140, height: 140, borderRadius: 12 },

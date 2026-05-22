@@ -27,8 +27,13 @@ import HeaderFloatingActions from '@/components/HeaderFloatingActions';
 import RatingModal from '@/components/RatingModal';
 import RatingSummary from '@/components/RatingSummary';
 import MenuSearchModal from '@/components/MenuSearchModal';
-import GastroSection from '@/components/GastroSection';
+import FeaturedMenuItemsGrid from '@/components/FeaturedMenuItemsGrid';
+import MenuItemThumbs from '@/components/MenuItemThumbs';
+import StickyCategoryBar from '@/components/StickyCategoryBar';
+import MenuCategoriesSheet from '@/components/MenuCategoriesSheet';
+import { Skeleton } from '@/components/SkeletonLoader';
 import { useAccountRating } from '@/hooks/useAccountRating';
+import { useGastroData } from '@/hooks/useGastroData';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 import { fetchAccountPosts, fetchEventsByAccount } from '@/lib/supabase-posts';
@@ -110,18 +115,22 @@ export default function PublicAccountScreen() {
   const [account, setAccount] = useState<Account | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabKey>('info');
+  // Track only the user-selected tab. The displayed tab is derived from
+  // sub_type + this state via `activeTab` below, so gastros land on
+  // "menu" from the very first render with no info→menu flicker.
+  const [tabSelection, setTabSelection] = useState<TabKey | null>(null);
   const [ratingModalOpen, setRatingModalOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [categoriesSheetOpen, setCategoriesSheetOpen] = useState(false);
+  const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
+  const categoryYsRef = React.useRef<Record<string, number>>({});
+  const scrollRef = React.useRef<ScrollView>(null);
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
+  const isRestaurant = account?.sub_type === 'restaurant';
+  const gastroData = useGastroData(isRestaurant ? account?.id : null);
 
-  // Default to the Speisekarte tab for gastros so the heavy menu list and the
-  // Mapbox map (which lives in the Info tab) never co-mount.
-  useEffect(() => {
-    if (account?.sub_type === 'restaurant') {
-      setActiveTab((prev) => (prev === 'info' ? 'menu' : prev));
-    }
-  }, [account?.sub_type]);
+  const activeTab: TabKey =
+    tabSelection ?? (account?.sub_type === 'restaurant' ? 'menu' : 'info');
 
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -640,9 +649,53 @@ export default function PublicAccountScreen() {
     </>
   );
 
+  // Track category Y positions for the sticky bar.
+  const gastroWrapperY = React.useRef(0);
+  const sectionYs = React.useRef<Record<string, number>>({});
+
+  const handleCategoryLayout = (id: string, y: number) => {
+    sectionYs.current[id] = y;
+  };
+  const handleWrapperLayout = (y: number) => { gastroWrapperY.current = y; };
+  const STICKY_OFFSET = 56;
+
+  const handleScroll = (e: any) => {
+    if (activeTab !== 'menu' || !gastroData.categories.length) return;
+    const y = e.nativeEvent.contentOffset.y;
+    const adjusted = y + STICKY_OFFSET;
+    let idx = 0;
+    for (let i = 0; i < gastroData.categories.length; i++) {
+      const sectionY = sectionYs.current[gastroData.categories[i].id];
+      if (sectionY == null) continue;
+      const absolute = gastroWrapperY.current + sectionY;
+      if (absolute <= adjusted) idx = i;
+      else break;
+    }
+    if (idx !== activeCategoryIdx) setActiveCategoryIdx(idx);
+  };
+
+  const jumpToCategory = (idx: number) => {
+    const cat = gastroData.categories[idx];
+    if (!cat) return;
+    const sectionY = sectionYs.current[cat.id];
+    if (sectionY == null) return;
+    const absolute = gastroWrapperY.current + sectionY - STICKY_OFFSET + 1;
+    scrollRef.current?.scrollTo({ y: absolute, animated: true });
+    setActiveCategoryIdx(idx);
+  };
+
+  const showStickyBar = activeTab === 'menu' && isRestaurant && gastroData.categories.length > 0;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        stickyHeaderIndices={showStickyBar ? [5] : undefined}
+        onScroll={handleScroll}
+        scrollEventThrottle={32}
+      >
         {/* Banner with back button */}
         <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
           {account.cover_url ? (
@@ -759,23 +812,115 @@ export default function PublicAccountScreen() {
               { key: 'posts' as const, label: 'Beiträge', count: posts.length },
             ]}
             active={activeTab}
-            onChange={(key) => setActiveTab(key as TabKey)}
+            onChange={(key) => setTabSelection(key as TabKey)}
           />
         </View>
 
-        <InlineErrorBoundary label="org-tabs-content">
-          {activeTab === 'menu' && account.sub_type === 'restaurant' ? (
-            <InlineErrorBoundary label="gastro-menu">
-              <GastroSection accountId={account.id} />
-            </InlineErrorBoundary>
-          ) : activeTab === 'info' ? (
-            renderInfoTab()
+        {/* slot 4 — featured grid */}
+        {activeTab === 'menu' && isRestaurant && !gastroData.loading && gastroData.categories.length > 0 ? (
+          <FeaturedMenuItemsGrid
+            accountId={account.id}
+            items={gastroData.categories.flatMap((c) => c.items)}
+            voteSummaries={gastroData.voteSummaries}
+          />
+        ) : (
+          <View />
+        )}
+
+        {/* slot 5 — sticky category bar */}
+        {showStickyBar ? (
+          <StickyCategoryBar
+            categories={gastroData.categories.map((c) => ({ id: c.id, name: c.name }))}
+            activeIndex={activeCategoryIdx}
+            onSelect={jumpToCategory}
+            onOpenSheet={() => setCategoriesSheetOpen(true)}
+          />
+        ) : (
+          <View />
+        )}
+
+        {/* slot 6 — menu content */}
+        {activeTab === 'menu' && isRestaurant ? (
+          gastroData.loading ? (
+            <View style={styles.gastroSkeletonWrap}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={styles.gastroSkeletonRow}>
+                  <View style={{ flex: 1 }}>
+                    <Skeleton width={'60%' as any} height={16} />
+                    <Skeleton width={'30%' as any} height={13} style={{ marginTop: 6 } as any} />
+                    <Skeleton width={'90%' as any} height={13} style={{ marginTop: 6 } as any} />
+                  </View>
+                  <Skeleton width={96} height={96} borderRadius={8} />
+                </View>
+              ))}
+            </View>
           ) : (
-            <InlineErrorBoundary label="org-posts-list">
-              <AccountPostsList accountId={account.id} />
-            </InlineErrorBoundary>
-          )}
-        </InlineErrorBoundary>
+            <View
+              onLayout={(e) => handleWrapperLayout(e.nativeEvent.layout.y)}
+              style={{ paddingBottom: 24 }}
+            >
+              {gastroData.categories.map((cat) => (
+                <View
+                  key={cat.id}
+                  onLayout={(e) => handleCategoryLayout(cat.id, e.nativeEvent.layout.y)}
+                  style={[styles.gastroCategorySection, { borderTopColor: colors.border }]}
+                >
+                  <Text style={[styles.gastroCategoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
+                  {cat.items.length === 0 ? (
+                    <Text style={[styles.gastroEmpty, { color: colors.textSecondary }]}>Keine Gerichte</Text>
+                  ) : (
+                    cat.items.map((item, idx) => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => router.push(`/account/${account.id}/menu/${item.id}` as any)}
+                        style={[
+                          styles.gastroItemRow,
+                          idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.gastroItemName, { color: colors.textPrimary }]} numberOfLines={1}>{item.name}</Text>
+                          <View style={styles.gastroMetaRow}>
+                            <Text style={[styles.gastroItemPrice, { color: colors.textPrimary }]}>
+                              {item.has_variants ? `ab €${item.price.toFixed(2)}` : `€${item.price.toFixed(2)}`}
+                            </Text>
+                            <MenuItemThumbs summary={gastroData.voteSummaries[item.id] ?? null} />
+                          </View>
+                          {!!item.description && (
+                            <Text style={[styles.gastroItemDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+                              {item.description}
+                            </Text>
+                          )}
+                        </View>
+                        {item.image_url ? (
+                          <Image source={{ uri: item.image_url }} style={styles.gastroThumb} contentFit="cover" />
+                        ) : null}
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              ))}
+            </View>
+          )
+        ) : (
+          <View />
+        )}
+
+        {/* slot 7 — info tab */}
+        {activeTab === 'info' ? (
+          <InlineErrorBoundary label="org-info">{renderInfoTab()}</InlineErrorBoundary>
+        ) : (
+          <View />
+        )}
+
+        {/* slot 8 — posts tab */}
+        {activeTab === 'posts' ? (
+          <InlineErrorBoundary label="org-posts-list">
+            <AccountPostsList accountId={account.id} />
+          </InlineErrorBoundary>
+        ) : (
+          <View />
+        )}
       </ScrollView>
 
       <RatingModal
@@ -784,7 +929,16 @@ export default function PublicAccountScreen() {
         accountName={account.name}
         onClose={() => setRatingModalOpen(false)}
       />
-      {account.sub_type === 'restaurant' && (
+      {isRestaurant && (
+        <MenuCategoriesSheet
+          visible={categoriesSheetOpen}
+          categories={gastroData.categories.map((c) => ({ id: c.id, name: c.name }))}
+          activeIndex={activeCategoryIdx}
+          onSelect={(idx) => { setCategoriesSheetOpen(false); setTimeout(() => jumpToCategory(idx), 200); }}
+          onClose={() => setCategoriesSheetOpen(false)}
+        />
+      )}
+      {isRestaurant && (
         <MenuSearchModal
           visible={searchModalOpen}
           accountId={account.id}
@@ -1112,5 +1266,61 @@ const styles = StyleSheet.create({
   ctaButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+  },
+  gastroSkeletonWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 24,
+  },
+  gastroSkeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+  },
+  gastroCategorySection: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  gastroCategoryName: {
+    fontSize: 22,
+    fontFamily: 'Inter-Medium',
+    marginBottom: 12,
+  },
+  gastroEmpty: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    paddingVertical: 12,
+  },
+  gastroItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+  },
+  gastroItemName: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+  },
+  gastroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  gastroItemPrice: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  gastroItemDesc: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginTop: 4,
+  },
+  gastroThumb: {
+    width: 96,
+    height: 96,
+    borderRadius: 8,
   },
 });

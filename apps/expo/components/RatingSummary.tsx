@@ -38,6 +38,6 @@ export default function RatingSummary({ summary, size = 'md', showCount = true }
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  value: { fontFamily: 'Inter-SemiBold' },
+  value: { fontFamily: 'Inter-Medium' },
   count: { fontFamily: 'Inter-Regular' },
 });
