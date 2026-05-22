@@ -40,12 +40,13 @@ export default function GastroSection({ accountId }: Props) {
       setRestaurant(r);
       if (!r) { setLoading(false); return; }
 
-      const { data: cats } = await supabase
+      const { data: cats, error: catsErr } = await supabase
         .from('menu_categories')
         .select('*, menu_items(*, menu_item_variants(id))')
         .eq('restaurant_id', r.id)
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
+      if (catsErr) console.error('[GastroSection] menu_categories error', catsErr);
 
       const list: CategoryWithItems[] = ((cats ?? []) as any[]).map((c) => ({
         id: c.id,

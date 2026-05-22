@@ -52,7 +52,7 @@ import type { PostRecord } from '@/lib/types/feed';
 
 const AVATAR_SIZE = 120;
 
-type TabKey = 'info' | 'posts';
+type TabKey = 'menu' | 'info' | 'posts';
 
 const DAY_LABELS: { key: keyof OpeningHours; label: string }[] = [
   { key: 'monday', label: 'Mo' },
@@ -114,6 +114,14 @@ export default function PublicAccountScreen() {
   const [ratingModalOpen, setRatingModalOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
+
+  // Default to the Speisekarte tab for gastros so the heavy menu list and the
+  // Mapbox map (which lives in the Info tab) never co-mount.
+  useEffect(() => {
+    if (account?.sub_type === 'restaurant') {
+      setActiveTab((prev) => (prev === 'info' ? 'menu' : prev));
+    }
+  }, [account?.sub_type]);
 
   const [posts, setPosts] = useState<PostRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -740,18 +748,15 @@ export default function PublicAccountScreen() {
           )}
         </View>
 
-        {account.sub_type === 'restaurant' && (
-          <InlineErrorBoundary label="gastro-section">
-            <GastroSection accountId={account.id} />
-          </InlineErrorBoundary>
-        )}
-
         {/* Tabs */}
         <View style={styles.tabsWrap}>
           <ProfileTabs
             tabs={[
-              { key: 'info', label: 'Info' },
-              { key: 'posts', label: 'Beiträge', count: posts.length },
+              ...(account.sub_type === 'restaurant'
+                ? [{ key: 'menu' as const, label: 'Speisekarte' }]
+                : []),
+              { key: 'info' as const, label: 'Info' },
+              { key: 'posts' as const, label: 'Beiträge', count: posts.length },
             ]}
             active={activeTab}
             onChange={(key) => setActiveTab(key as TabKey)}
@@ -759,7 +764,11 @@ export default function PublicAccountScreen() {
         </View>
 
         <InlineErrorBoundary label="org-tabs-content">
-          {activeTab === 'info' ? (
+          {activeTab === 'menu' && account.sub_type === 'restaurant' ? (
+            <InlineErrorBoundary label="gastro-menu">
+              <GastroSection accountId={account.id} />
+            </InlineErrorBoundary>
+          ) : activeTab === 'info' ? (
             renderInfoTab()
           ) : (
             <InlineErrorBoundary label="org-posts-list">
