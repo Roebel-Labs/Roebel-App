@@ -239,6 +239,7 @@ export type MenuItemRecord = {
   is_available: boolean;
   sides_required: boolean;
   sides_label: string;
+  variants_label: string;
   sort_order: number;
   created_at: string;
 };
@@ -249,6 +250,16 @@ export type MenuItemSide = {
   name: string;
   description: string | null;
   price_delta: number;
+  is_default: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type MenuItemVariant = {
+  id: string;
+  menu_item_id: string;
+  name: string;
+  price: number;
   is_default: boolean;
   sort_order: number;
   created_at: string;
@@ -286,6 +297,7 @@ export type MenuItemVoteRecord = {
 
 export type MenuItemWithDetails = MenuItemRecord & {
   sides: MenuItemSide[];
+  variants: MenuItemVariant[];
   vote_summary: MenuItemVoteSummary | null;
 };
 

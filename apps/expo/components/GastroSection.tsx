@@ -15,11 +15,13 @@ import type {
   RestaurantRecord,
 } from '@/lib/types';
 
+type MenuItemWithVariantFlag = MenuItemRecord & { has_variants?: boolean };
+
 type Props = {
   accountId: string;
 };
 
-type CategoryWithItems = MenuCategoryRecord & { items: MenuItemRecord[] };
+type CategoryWithItems = MenuCategoryRecord & { items: MenuItemWithVariantFlag[] };
 
 export default function GastroSection({ accountId }: Props) {
   const { colors } = useTheme();
@@ -40,7 +42,7 @@ export default function GastroSection({ accountId }: Props) {
 
       const { data: cats } = await supabase
         .from('menu_categories')
-        .select('*, menu_items(*)')
+        .select('*, menu_items(*, menu_item_variants(id))')
         .eq('restaurant_id', r.id)
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
@@ -52,8 +54,12 @@ export default function GastroSection({ accountId }: Props) {
         sort_order: c.sort_order,
         is_active: c.is_active,
         created_at: c.created_at,
-        items: ((c.menu_items ?? []) as MenuItemRecord[])
+        items: ((c.menu_items ?? []) as any[])
           .filter((it) => it.is_available !== false)
+          .map((it) => ({
+            ...it,
+            has_variants: Array.isArray(it.menu_item_variants) && it.menu_item_variants.length > 0,
+          }) as MenuItemWithVariantFlag)
           .sort((a, b) => a.sort_order - b.sort_order),
       }));
       if (cancelled) return;
@@ -106,7 +112,9 @@ export default function GastroSection({ accountId }: Props) {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.itemName, { color: colors.textPrimary }]} numberOfLines={1}>{item.name}</Text>
                   <View style={styles.metaRow}>
-                    <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+                    <Text style={[styles.itemPrice, { color: colors.textPrimary }]}>
+                      {item.has_variants ? `ab €${item.price.toFixed(2)}` : `€${item.price.toFixed(2)}`}
+                    </Text>
                     <MenuItemThumbs summary={voteSummaries[item.id] ?? null} />
                   </View>
                   {!!item.description && (

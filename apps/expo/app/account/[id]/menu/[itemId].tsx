@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { ArrowLeftIcon } from '@/components/Icons';
 import SideSelectionGroup from '@/components/SideSelectionGroup';
+import VariantSelectionGroup from '@/components/VariantSelectionGroup';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { useMenuItemDetail } from '@/hooks/useMenuItemDetail';
@@ -19,6 +20,7 @@ export default function MenuItemDetailScreen() {
   const { colors } = useTheme();
   const { item, loading, userVote, isSignedIn, setVote, clearVote } = useMenuItemDetail(itemId);
   const [selectedSide, setSelectedSide] = useState<string | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [related, setRelated] = useState<MenuItemRecord[]>([]);
   const [relatedVotes, setRelatedVotes] = useState<Record<string, MenuItemVoteSummary>>({});
@@ -27,7 +29,18 @@ export default function MenuItemDetailScreen() {
     if (!item) return;
     const defaultSide = item.sides.find((s) => s.is_default) ?? item.sides[0];
     if (defaultSide) setSelectedSide(defaultSide.id);
+    const defaultVariant = item.variants.find((v) => v.is_default) ?? item.variants[0];
+    if (defaultVariant) setSelectedVariant(defaultVariant.id);
   }, [item]);
+
+  const displayPrice = React.useMemo(() => {
+    if (!item) return 0;
+    if (item.variants.length && selectedVariant) {
+      const v = item.variants.find((x) => x.id === selectedVariant);
+      if (v) return Number(v.price);
+    }
+    return item.price;
+  }, [item, selectedVariant]);
 
   useEffect(() => {
     if (!item) return;
@@ -99,7 +112,9 @@ export default function MenuItemDetailScreen() {
         {/* Title + price + description */}
         <View style={styles.headBlock}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>{item.name}</Text>
-          <Text style={[styles.price, { color: colors.textPrimary }]}>€{item.price.toFixed(2)}</Text>
+          <Text style={[styles.price, { color: colors.textPrimary }]}>
+            {item.variants.length > 0 ? `ab €${item.price.toFixed(2)}` : `€${displayPrice.toFixed(2)}`}
+          </Text>
           {!!item.description && (
             <Text style={[styles.description, { color: colors.textPrimary }]}>{item.description}</Text>
           )}
@@ -122,6 +137,16 @@ export default function MenuItemDetailScreen() {
             </Text>
           )}
         </View>
+
+        {/* Variants (size, portion) */}
+        {item.variants.length > 0 && (
+          <VariantSelectionGroup
+            label={item.variants_label || 'Größe wählen'}
+            variants={item.variants}
+            value={selectedVariant}
+            onChange={setSelectedVariant}
+          />
+        )}
 
         {/* Sides */}
         {item.sides.length > 0 && (

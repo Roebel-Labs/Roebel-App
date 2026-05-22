@@ -1,43 +1,30 @@
 /**
  * Supabase Edge Function: generate-menu-image
  *
- * Generates a food photo for a menu_items row using Seedream 4.5 via the
- * Volcengine Ark API, stores it in the `images` bucket at
- * `menu-items/<restaurant_id>/<menu_item_id>.png`, and writes the public
- * URL to `menu_items.image_url`.
+ * Generates a food photo for a menu_items row via Seedream 4.5 (kie.ai),
+ * stores it in the `images` bucket and writes the public URL to
+ * `menu_items.image_url`.
  *
- * Auth model
- * ----------
- * Deployed with `verify_jwt=false` because the Expo client signs in via
- * thirdweb (no Supabase JWT). We protect the function with a shared
- * secret header `x-seed-token` matched against `SEED_TOKEN` env. For
- * easy local testing we ALSO accept `x-ark-key` to override the server-
- * side `ARK_API_KEY` env. Never expose either header value in the
- * mobile client.
+ * v3 style — per-gastro brand, angle by food type, sharp, centered, no text.
  *
- * Required secrets (set via Supabase dashboard → Edge Functions → Secrets):
- *   - ARK_API_KEY   Volcengine Ark API key (starts with `ark-...`)
- *   - SEED_TOKEN    Any random string; required as `x-seed-token` header
- *
- * Request body:
- *   { menu_item_id: string, dry_run?: boolean, prompt_hint?: string }
- *
- * Response:
- *   { ok: true, image_url, prompt }       // success
- *   { ok: true, prompt, dry_run: true }   // dry_run only
- *   { ok: false, code, error }            // failure
+ * Auth: verify_jwt=false; protect with x-seed-token header matched against
+ * SEED_TOKEN env. Optional x-kie-key header overrides KIE_API_KEY env.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
-const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
-const SEEDREAM_MODEL = 'doubao-seedream-4-5-251128';
+const KIE_CREATE = 'https://api.kie.ai/api/v1/jobs/createTask';
+const KIE_POLL = 'https://api.kie.ai/api/v1/jobs/recordInfo';
+const SEEDREAM_MODEL = 'seedream/4.5-text-to-image';
 const BUCKET = 'images';
+const POLL_INTERVAL_MS = 2500;
+const POLL_BUDGET_MS = 50_000;
+const VERSION_TAG = 'v3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-seed-token, x-ark-key',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-seed-token, x-kie-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -48,19 +35,83 @@ function json(status: number, body: Record<string, unknown>) {
   });
 }
 
-function cuisineFromName(restaurantName: string): string {
+type GastroKey = 'mt' | 'delizia' | 'waage' | 'generic';
+
+function gastroFor(restaurantName: string): GastroKey {
   const n = restaurantName.toLowerCase();
-  if (n.includes('delizia')) return 'Italian trattoria';
-  if (n.includes('müritz') || n.includes('mueritz')) return 'modern German Mecklenburg-style';
-  if (n.includes('waage')) return 'classic German bistro';
-  return 'modern European';
+  if (n.includes('delizia')) return 'delizia';
+  if (n.includes('müritz') || n.includes('mueritz')) return 'mt';
+  if (n.includes('waage')) return 'waage';
+  return 'generic';
 }
 
-function buildPrompt(itemName: string, description: string | null, cuisine: string, hint?: string): string {
+function backgroundFor(g: GastroKey): string {
+  switch (g) {
+    case 'mt':
+      return 'served on an anthracite/black stoneware ceramic plate on top of a dark matte surface, clean even dark background, soft round shadow under the plate';
+    case 'delizia':
+      return 'served on a white ceramic plate on top of a beige-and-white gingham checkered cotton tablecloth (small even squares, classic Italian trattoria), bright and clean';
+    case 'waage':
+      return 'on a light grey concrete-textured flat surface (subtle stone texture, Uber-Eats catalog style), clean and bright, even neutral background';
+    default:
+      return 'on a clean flat neutral background';
+  }
+}
+
+function angleFor(itemName: string): 'overhead' | 'side' {
+  const n = itemName.toLowerCase();
+  if (
+    n.includes('burger') ||
+    n.includes('hamburger') ||
+    n.includes('cheeseburger') ||
+    n.includes('döner') ||
+    n.includes('doner') ||
+    n.includes('dürüm') ||
+    n.includes('duerum') ||
+    n.includes('dürum') ||
+    n.includes('dönerbox') ||
+    n.includes('hot dog') ||
+    n.includes('wrap')
+  ) {
+    return 'side';
+  }
+  return 'overhead';
+}
+
+function vesselFor(g: GastroKey, itemName: string): string {
+  const angle = angleFor(itemName);
+  if (g === 'waage') {
+    if (angle === 'side') {
+      // döner / dürüm style — paper-wrap or small white plate, side 3/4 view
+      return 'plated on a white ceramic plate, shot from a slight side 3/4 angle (eye-level)';
+    }
+    return 'plated centered, shot from directly overhead';
+  }
+  if (angle === 'side') {
+    return 'plated on a white ceramic plate, shot from a slight side 3/4 angle (eye-level) so the layers and stack are visible';
+  }
+  return 'shot from directly overhead, food perfectly centered in the frame';
+}
+
+function buildPrompt(itemName: string, description: string | null, restaurantName: string, hint?: string): string {
+  const g = gastroFor(restaurantName);
+  const bg = backgroundFor(g);
+  const vessel = vesselFor(g, itemName);
   const desc = description ? `: ${description}` : '';
   const tail = hint ? ` ${hint}` : '';
-  return `Professional overhead food photography of ${itemName}${desc}. ${cuisine} restaurant plating, rustic table, warm natural lighting, shallow depth of field, vibrant colors, hyper-detailed, no text, no watermark, no logo.${tail}`;
+  return [
+    `Studio-grade product food photography of ${itemName}${desc}.`,
+    `${vessel}, ${bg}.`,
+    'The subject is perfectly centered in the frame with even margins on all sides.',
+    'Entire image is in perfect sharp focus — every element crisp and clean, no depth-of-field blur, no bokeh.',
+    'Bright, even, soft natural lighting. Vibrant natural colors. Magazine/advertising quality. Ultra clean composition.',
+    'No people, no hands, no cutlery, no menu cards, no packaging branding.',
+    'ABSOLUTELY NO text, no letters, no numbers, no signage, no captions, no logos, no watermarks anywhere in the image.',
+    tail,
+  ].join(' ').trim();
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -72,19 +123,14 @@ serve(async (req: Request) => {
     return json(401, { ok: false, code: 'UNAUTHORIZED' });
   }
 
-  let body: { menu_item_id?: string; dry_run?: boolean; prompt_hint?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { ok: false, code: 'BAD_JSON' });
-  }
+  let body: { menu_item_id?: string; dry_run?: boolean; prompt_hint?: string; quality?: 'basic' | 'high' };
+  try { body = await req.json(); } catch { return json(400, { ok: false, code: 'BAD_JSON' }); }
   if (!body.menu_item_id) return json(400, { ok: false, code: 'MISSING_MENU_ITEM_ID' });
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Load item + restaurant + account for cuisine context.
   const { data: item, error: itemErr } = await supabase
     .from('menu_items')
     .select('id, name, description, restaurant_id')
@@ -94,63 +140,72 @@ serve(async (req: Request) => {
 
   const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('id, name, account_id')
+    .select('id, name')
     .eq('id', item.restaurant_id)
     .single();
-  const cuisine = cuisineFromName(restaurant?.name ?? '');
-  const prompt = buildPrompt(item.name, item.description, cuisine, body.prompt_hint);
+  const prompt = buildPrompt(item.name, item.description, restaurant?.name ?? '', body.prompt_hint);
 
   if (body.dry_run) return json(200, { ok: true, prompt, dry_run: true });
 
-  const arkKey = req.headers.get('x-ark-key') ?? Deno.env.get('ARK_API_KEY');
-  if (!arkKey) return json(500, { ok: false, code: 'NO_ARK_KEY' });
+  const kieKey = req.headers.get('x-kie-key') ?? Deno.env.get('KIE_API_KEY');
+  if (!kieKey) return json(500, { ok: false, code: 'NO_KIE_KEY' });
 
-  // 1. Call Seedream.
-  const seedResp = await fetch(ARK_ENDPOINT, {
+  const createResp = await fetch(KIE_CREATE, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${arkKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kieKey}` },
     body: JSON.stringify({
       model: SEEDREAM_MODEL,
-      prompt,
-      size: '1024x1024',
-      n: 1,
-      response_format: 'url',
+      input: { prompt, aspect_ratio: '16:9', quality: body.quality ?? 'basic' },
     }),
   });
-  if (!seedResp.ok) {
-    const text = await seedResp.text();
-    return json(502, { ok: false, code: 'SEEDREAM_ERROR', error: text.slice(0, 500) });
+  if (!createResp.ok) {
+    const txt = await createResp.text();
+    return json(502, { ok: false, code: 'KIE_CREATE_ERROR', error: txt.slice(0, 500) });
   }
-  const seedJson = (await seedResp.json()) as { data?: Array<{ url?: string }> };
-  const sourceUrl = seedJson?.data?.[0]?.url;
-  if (!sourceUrl) return json(502, { ok: false, code: 'SEEDREAM_NO_URL' });
+  const createJson = (await createResp.json()) as { data?: { taskId?: string } };
+  const taskId = createJson?.data?.taskId;
+  if (!taskId) return json(502, { ok: false, code: 'KIE_NO_TASK_ID', error: JSON.stringify(createJson).slice(0, 500) });
 
-  // 2. Download the generated image.
-  const imgResp = await fetch(sourceUrl);
+  const started = Date.now();
+  let imageUrl: string | null = null;
+  let failMsg: string | null = null;
+  while (Date.now() - started < POLL_BUDGET_MS) {
+    await sleep(POLL_INTERVAL_MS);
+    const pollResp = await fetch(`${KIE_POLL}?taskId=${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${kieKey}` },
+    });
+    if (!pollResp.ok) continue;
+    const pollJson = (await pollResp.json()) as { data?: { state?: string; resultJson?: string; failMsg?: string } };
+    const state = pollJson?.data?.state;
+    if (state === 'success') {
+      try {
+        const parsed = JSON.parse(pollJson.data?.resultJson ?? '{}') as { resultUrls?: string[] };
+        imageUrl = parsed.resultUrls?.[0] ?? null;
+      } catch {}
+      break;
+    }
+    if (state === 'fail') {
+      failMsg = pollJson?.data?.failMsg ?? 'unknown failure';
+      break;
+    }
+  }
+  if (failMsg) return json(502, { ok: false, code: 'KIE_FAIL', error: failMsg, task_id: taskId });
+  if (!imageUrl) return json(202, { ok: false, code: 'TIMEOUT', task_id: taskId, prompt });
+
+  const imgResp = await fetch(imageUrl);
   if (!imgResp.ok) return json(502, { ok: false, code: 'IMAGE_DOWNLOAD_FAILED' });
   const imgBytes = new Uint8Array(await imgResp.arrayBuffer());
-  const contentType = imgResp.headers.get('content-type') ?? 'image/png';
-  const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
+  const contentType = imgResp.headers.get('content-type') ?? 'image/jpeg';
+  const ext = contentType.includes('png') ? 'png' : 'jpg';
 
-  // 3. Upload to Supabase Storage.
-  const objectPath = `menu-items/${item.restaurant_id}/${item.id}.${ext}`;
-  const uploadRes = await supabase.storage.from(BUCKET).upload(objectPath, imgBytes, {
-    contentType,
-    upsert: true,
-  });
+  const objectPath = `menu-items/${item.restaurant_id}/${item.id}_${VERSION_TAG}.${ext}`;
+  const uploadRes = await supabase.storage.from(BUCKET).upload(objectPath, imgBytes, { contentType, upsert: true });
   if (uploadRes.error) return json(500, { ok: false, code: 'UPLOAD_FAILED', error: uploadRes.error.message });
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(objectPath);
   const publicUrl = pub.publicUrl;
 
-  // 4. Write image_url back to the row.
-  const { error: updErr } = await supabase
-    .from('menu_items')
-    .update({ image_url: publicUrl })
-    .eq('id', item.id);
+  const { error: updErr } = await supabase.from('menu_items').update({ image_url: publicUrl }).eq('id', item.id);
   if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
 
-  return json(200, { ok: true, image_url: publicUrl, prompt });
+  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId });
 });

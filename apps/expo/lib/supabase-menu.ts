@@ -3,6 +3,7 @@ import type {
   MenuCategoryRecord,
   MenuItemRecord,
   MenuItemSide,
+  MenuItemVariant,
   MenuItemVoteSummary,
   MenuItemWithDetails,
 } from './types';
@@ -86,6 +87,16 @@ export async function fetchMenuItemSides(menuItemId: string): Promise<MenuItemSi
   return (data ?? []) as MenuItemSide[];
 }
 
+export async function fetchMenuItemVariants(menuItemId: string): Promise<MenuItemVariant[]> {
+  const { data, error } = await supabase
+    .from('menu_item_variants')
+    .select('*')
+    .eq('menu_item_id', menuItemId)
+    .order('sort_order', { ascending: true });
+  if (error) { console.error('Error fetching variants:', error); return []; }
+  return (data ?? []) as MenuItemVariant[];
+}
+
 export async function fetchMenuItemDetail(itemId: string): Promise<MenuItemWithDetails | null> {
   const { data: item, error } = await supabase
     .from('menu_items')
@@ -93,11 +104,12 @@ export async function fetchMenuItemDetail(itemId: string): Promise<MenuItemWithD
     .eq('id', itemId)
     .single();
   if (error || !item) { console.error('Error fetching item:', error); return null; }
-  const [sides, voteSummary] = await Promise.all([
+  const [sides, variants, voteSummary] = await Promise.all([
     fetchMenuItemSides(itemId),
+    fetchMenuItemVariants(itemId),
     fetchMenuItemVoteSummary(itemId),
   ]);
-  return { ...(item as MenuItemRecord), sides, vote_summary: voteSummary };
+  return { ...(item as MenuItemRecord), sides, variants, vote_summary: voteSummary };
 }
 
 export async function fetchMenuItemVoteSummary(itemId: string): Promise<MenuItemVoteSummary | null> {
