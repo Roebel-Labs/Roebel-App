@@ -165,8 +165,7 @@ export async function fetchAllWeather(): Promise<WeatherSnapshot> {
 //   ≥ 60 %  → rain
 //   30–60 % → cloudy
 //   10–30 % → partly cloudy
-//   < 10 %  → cloudy (rainy enum at near-zero probability usually means
-//             an otherwise overcast day rather than a sunny one)
+//   < 10 %  → sun
 const PRECIP_RAIN_MIN = 60;
 const PRECIP_CLOUDY_MIN = 30;
 const PRECIP_PARTLY_CLOUDY_MIN = 10;
@@ -192,10 +191,9 @@ export function getWeatherIcon(
     precipitationProbability !== undefined &&
     precipitationProbability < PRECIP_RAIN_MIN
   ) {
-    const isPartlyCloudyBand =
-      precipitationProbability >= PRECIP_PARTLY_CLOUDY_MIN &&
-      precipitationProbability < PRECIP_CLOUDY_MIN;
-    return isPartlyCloudyBand ? SunCloudIcon : CloudIcon;
+    if (precipitationProbability < PRECIP_PARTLY_CLOUDY_MIN) return SunIcon;
+    if (precipitationProbability < PRECIP_CLOUDY_MIN) return SunCloudIcon;
+    return CloudIcon;
   }
 
   if (type.includes('CLEAR') || type.includes('SUNNY')) return SunIcon;
@@ -234,10 +232,9 @@ export function getWeatherIllustration(
     precipitationProbability !== undefined &&
     precipitationProbability < PRECIP_RAIN_MIN
   ) {
-    const isPartlyCloudyBand =
-      precipitationProbability >= PRECIP_PARTLY_CLOUDY_MIN &&
-      precipitationProbability < PRECIP_CLOUDY_MIN;
-    return isPartlyCloudyBand ? ILLUSTRATIONS.heiter : ILLUSTRATIONS.bewoelkt;
+    if (precipitationProbability < PRECIP_PARTLY_CLOUDY_MIN) return ILLUSTRATIONS.sonnig;
+    if (precipitationProbability < PRECIP_CLOUDY_MIN) return ILLUSTRATIONS.heiter;
+    return ILLUSTRATIONS.bewoelkt;
   }
 
   if (t === 'CLEAR') return ILLUSTRATIONS.sonnig;
