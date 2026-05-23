@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from '@/components/Icons';
@@ -8,6 +8,7 @@ import { fetchAllWeather, type WeatherSnapshot } from '@/lib/weather';
 import CurrentWeatherCard from '@/components/weather/CurrentWeatherCard';
 import HourlyForecastStrip from '@/components/weather/HourlyForecastStrip';
 import WeeklyForecastList from '@/components/weather/WeeklyForecastList';
+import WeatherPageSkeleton from '@/components/weather/WeatherPageSkeleton';
 
 type State =
   | { kind: 'loading' }
@@ -61,9 +62,13 @@ export default function WeatherScreen() {
       </View>
 
       {state.kind === 'loading' && (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <WeatherPageSkeleton />
+        </ScrollView>
       )}
 
       {state.kind === 'error' && (

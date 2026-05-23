@@ -43,7 +43,7 @@ export default function WeeklyForecastList({ daily }: Props) {
               key={day.date.toISOString()}
               style={[
                 styles.card,
-                { backgroundColor: colors.surface, borderColor: colors.borderSecondary },
+                { backgroundColor: colors.background, borderColor: colors.borderSecondary },
               ]}
             >
               <View style={styles.cardBody}>
@@ -112,9 +112,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
   },
-  cardBody: {
-    gap: 6,
-  },
+  cardBody: {},
   weekday: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
@@ -127,7 +125,7 @@ const styles = StyleSheet.create({
   bigTemp: {
     fontSize: 40,
     fontFamily: 'Inter-Bold',
-    lineHeight: 44,
+    lineHeight: 40,
   },
   iconWrap: {
     width: 64,
@@ -142,6 +140,7 @@ const styles = StyleSheet.create({
   condition: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+    marginTop: 8,
   },
   metricsRow: {
     marginTop: 12,
