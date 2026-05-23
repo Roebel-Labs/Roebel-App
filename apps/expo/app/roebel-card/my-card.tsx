@@ -242,10 +242,12 @@ export default function MyRoebelCardScreen() {
     }, [loadHistory, loadPartners]),
   );
 
-  // Initial fetch + Realtime subscription for pending charges.
-  // Replaces the old 2s setInterval poll. Scoped to card.card_id so each
-  // card gets its own channel; we tear it down on focus/blur and on card
-  // change.
+  // Initial fetch + Realtime subscription + 3s polling fallback for pending
+  // charges. Realtime is the primary path (instant); polling is the safety
+  // net for cases realtime can't cover — channel reconnect after a network
+  // blip or backgrounding (Supabase Realtime does not replay missed events)
+  // and the rare case where the realtime publication / RLS is misconfigured
+  // server-side. Scoped to card.card_id; torn down on focus/blur/card change.
   useFocusEffect(
     useCallback(() => {
       if (!card) return;
@@ -284,7 +286,8 @@ export default function MyRoebelCardScreen() {
             if (new Date(row.expires_at).getTime() <= Date.now()) return;
             const partner_name = await fetchPartnerName(row.partner_id);
             if (cancelled) return;
-            setPending({ ...row, partner_name });
+            // Functional setter: don't reopen a modal the user just resolved.
+            setPending((cur) => cur ?? { ...row, partner_name });
           },
         )
         .on(
@@ -310,8 +313,18 @@ export default function MyRoebelCardScreen() {
           console.log('[my-card] realtime', status, { card_id: cardId });
         });
 
+      // Polling fallback. Functional setter ensures we never override a
+      // modal the user is interacting with (or already resolved within
+      // this 3s window).
+      const pollInterval = setInterval(async () => {
+        const rows = await fetchPendingChargesForCard(cardId);
+        if (cancelled || rows.length === 0) return;
+        setPending((cur) => cur ?? rows[0]);
+      }, 3000);
+
       return () => {
         cancelled = true;
+        clearInterval(pollInterval);
         void supabase.removeChannel(channel);
       };
     }, [card]),
