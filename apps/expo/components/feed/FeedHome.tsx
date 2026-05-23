@@ -45,6 +45,7 @@ import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 
 const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
 const HANDWRITTEN_DARK = require('@/assets/handwritten/dark-mode.png');
@@ -188,6 +189,7 @@ export default function FeedHome() {
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
   const { isOwnerOf } = useAccount();
+  const activeProfileImage = useActiveProfileImage();
   const requireAuth = useRequireAuth();
   const { showSnackbar } = useSnackbar();
   const { totalUnreadCount } = useNotificationsContext();
@@ -398,7 +400,12 @@ export default function FeedHome() {
         </View>
       </View>
 
-      <PostBar avatarUrl={user?.profile_picture_url ?? null} onPress={handleCompose} />
+      <PostBar
+        avatarUrl={activeProfileImage.url}
+        fallbackInitial={activeProfileImage.fallbackInitial}
+        disableFrame={activeProfileImage.isOrg}
+        onPress={handleCompose}
+      />
 
       {isCitizen && (
         <FeedTabBar activeTab={activeTab} onTabChange={handleTabChange} scrollProgress={scrollProgress} />

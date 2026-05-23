@@ -18,6 +18,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
@@ -82,6 +83,7 @@ export default function CreateScreen() {
   }>();
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address || '';
+  const activeProfileImage = useActiveProfileImage();
   const draft = useCreatePost();
   const requireAuth = useRequireAuth();
 
@@ -284,8 +286,9 @@ export default function CreateScreen() {
           <View style={styles.authorRow}>
             <UserAvatarWithFrame
               size={40}
-              uri={user?.profile_picture_url ?? null}
-              fallbackInitial={user?.username?.charAt(0)?.toUpperCase() || '?'}
+              uri={activeProfileImage.url}
+              fallbackInitial={activeProfileImage.fallbackInitial}
+              disabled={activeProfileImage.isOrg}
             />
             <View>
               <Text style={[styles.authorName, { color: colors.textPrimary }]}>

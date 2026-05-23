@@ -7,9 +7,11 @@ import ImageIcon from '@/assets/icons/image-01.svg';
 type Props = {
   avatarUrl: string | null;
   onPress: () => void;
+  disableFrame?: boolean;
+  fallbackInitial?: string;
 };
 
-export default function PostBar({ avatarUrl, onPress }: Props) {
+export default function PostBar({ avatarUrl, onPress, disableFrame, fallbackInitial }: Props) {
   const { colors } = useTheme();
 
   return (
@@ -21,7 +23,12 @@ export default function PostBar({ avatarUrl, onPress }: Props) {
       ]}
     >
       {/* Avatar — viewer's own, uses the equipped frame from the rewards hook */}
-      <UserAvatarWithFrame size={36} uri={avatarUrl} />
+      <UserAvatarWithFrame
+        size={36}
+        uri={avatarUrl}
+        disabled={disableFrame}
+        fallbackInitial={fallbackInitial}
+      />
 
       {/* Input area with gray background */}
       <View style={[styles.inputArea, { backgroundColor: colors.surfaceSecondary }]}>

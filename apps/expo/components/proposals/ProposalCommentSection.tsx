@@ -3,6 +3,7 @@ import { View, Text, Pressable, ActivityIndicator, Image, StyleSheet } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import {
   fetchProposalComments,
   deleteProposalComment,
@@ -19,6 +20,7 @@ type Props = {
 export default function ProposalCommentSection({ proposalId, isCitizen }: Props) {
   const { colors } = useTheme();
   const { user } = useUser();
+  const activeProfileImage = useActiveProfileImage();
 
   const [comments, setComments] = useState<ProposalCommentRecord[]>([]);
   const [page, setPage] = useState(0);
@@ -95,12 +97,12 @@ export default function ProposalCommentSection({ proposalId, isCitizen }: Props)
           onPress={() => setComposerVisible(true)}
           style={[styles.inputBar, { borderColor: colors.border }]}
         >
-          {user!.profile_picture_url ? (
-            <Image source={{ uri: user!.profile_picture_url }} style={styles.inputAvatar} />
+          {activeProfileImage.url ? (
+            <Image source={{ uri: activeProfileImage.url }} style={styles.inputAvatar} />
           ) : (
             <View style={[styles.inputAvatarFallback, { backgroundColor: colors.primaryLight }]}>
               <Text style={[styles.inputAvatarText, { color: colors.primary }]}>
-                {(user!.username || '?').charAt(0).toUpperCase()}
+                {activeProfileImage.fallbackInitial}
               </Text>
             </View>
           )}

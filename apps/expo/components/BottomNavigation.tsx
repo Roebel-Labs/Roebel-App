@@ -1,9 +1,7 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, Text, Image } from 'react-native';
+import { View, Pressable, StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useExploreDot } from '@/context/ExploreDotContext';
-import { useUser } from '@/context/UserContext';
-import { useAccount } from '@/context/AccountContext';
 import { fontFamily } from '@/constants/theme';
 
 // Import SVG icons
@@ -32,17 +30,11 @@ const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
 ];
 
 export default function BottomNavigation({ activeTab, onTabPress }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
-  const { user, isConnected } = useUser();
-  const { activeAccount } = useAccount();
 
-  const profileImageUrl =
-    activeAccount?.account_type === 'organisation'
-      ? activeAccount.avatar_url ?? activeAccount.cover_url ?? null
-      : user?.profile_picture_url ?? null;
-
-  const showProfileImage = isConnected && !!profileImageUrl;
+  const activeColor = isDark ? colors.tabIconActive : '#000000';
+  const inactiveColor = colors.tabIconDefault;
 
   const handlePress = (key: TabKey) => {
     if (key === 'explore' && exploreDotVisible) {
@@ -56,31 +48,8 @@ export default function BottomNavigation({ activeTab, onTabPress }: Props) {
       <View style={styles.tabsContainer}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
-          const iconColor = isActive ? colors.tabIconActive : colors.tabIconDefault;
-          const labelColor = isActive ? colors.textPrimary : colors.tabIconDefault;
+          const tintColor = isActive ? activeColor : inactiveColor;
           const Icon = isActive ? tab.filled : tab.stroke;
-
-          const renderIcon = () => {
-            if (tab.key === 'profile' && showProfileImage) {
-              return (
-                <View
-                  style={[
-                    styles.profileImageWrapper,
-                    isActive && {
-                      borderWidth: 2,
-                      borderColor: colors.primary,
-                    },
-                  ]}
-                >
-                  <Image
-                    source={{ uri: profileImageUrl as string }}
-                    style={styles.profileImage}
-                  />
-                </View>
-              );
-            }
-            return <Icon width={ICON_SIZE} height={ICON_SIZE} color={iconColor} />;
-          };
 
           return (
             <Pressable
@@ -90,7 +59,7 @@ export default function BottomNavigation({ activeTab, onTabPress }: Props) {
               hitSlop={8}
             >
               <View style={styles.iconBox}>
-                {renderIcon()}
+                <Icon width={ICON_SIZE} height={ICON_SIZE} color={tintColor} />
                 {tab.key === 'explore' && exploreDotVisible && (
                   <View
                     style={[
@@ -105,7 +74,7 @@ export default function BottomNavigation({ activeTab, onTabPress }: Props) {
               </View>
               <Text
                 numberOfLines={1}
-                style={[styles.label, { color: labelColor }]}
+                style={[styles.label, { color: tintColor }]}
               >
                 {tab.label}
               </Text>
@@ -157,18 +126,5 @@ const styles = StyleSheet.create({
     height: 9,
     borderRadius: 5,
     borderWidth: 1,
-  },
-  profileImageWrapper: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-    borderRadius: ICON_SIZE / 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: ICON_SIZE / 2,
   },
 });

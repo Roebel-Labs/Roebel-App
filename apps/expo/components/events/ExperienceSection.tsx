@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useImperativeHandle, forwardRef, RefO
 import { View, Text, Pressable, ActivityIndicator, StyleSheet, ScrollView, Image } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { fetchEventExperiences, deleteExperience } from '@/lib/supabase-experiences';
 import ExperienceItem from './ExperienceItem';
 import ImageIcon from '@/assets/icons/image-01.svg';
@@ -30,6 +31,7 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
 ) {
   const { colors } = useTheme();
   const { user } = useUser();
+  const activeProfileImage = useActiveProfileImage();
 
   const [experiences, setExperiences] = useState<EventExperience[]>([]);
   const [page, setPage] = useState(0);
@@ -120,12 +122,12 @@ const ExperienceSection = forwardRef<ExperienceSectionHandle, Props>(function Ex
           accessibilityRole="button"
           accessibilityLabel="Erlebnis teilen"
         >
-          {user.profile_picture_url ? (
-            <Image source={{ uri: user.profile_picture_url }} style={styles.triggerAvatar} />
+          {activeProfileImage.url ? (
+            <Image source={{ uri: activeProfileImage.url }} style={styles.triggerAvatar} />
           ) : (
             <View style={[styles.triggerAvatarFallback, { backgroundColor: colors.primaryLight }]}>
               <Text style={[styles.triggerAvatarText, { color: colors.primary }]}>
-                {(user.username || '?').charAt(0).toUpperCase()}
+                {activeProfileImage.fallbackInitial}
               </Text>
             </View>
           )}
