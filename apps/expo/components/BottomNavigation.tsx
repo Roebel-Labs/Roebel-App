@@ -1,6 +1,10 @@
 import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, Text, Image } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import { useExploreDot } from '@/context/ExploreDotContext';
+import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
+import { fontFamily } from '@/constants/theme';
 
 // Import SVG icons
 import HomeStroke from '../assets/icons/bottom-nav/home.svg';
@@ -12,36 +16,99 @@ import UserFilled from '../assets/icons/bottom-nav/user-circle-filled.svg';
 
 export type TabKey = 'home' | 'explore' | 'profile';
 
-export const BOTTOM_NAV_HEIGHT = 56;
+export const BOTTOM_NAV_HEIGHT = 72;
+
+const ICON_SIZE = 24;
 
 type Props = {
   activeTab: TabKey;
   onTabPress: (tab: TabKey) => void;
 };
 
-const TABS: { key: TabKey; stroke: any; filled: any }[] = [
-  { key: 'home', stroke: HomeStroke, filled: HomeFilled },
-  { key: 'explore', stroke: DiscoverStroke, filled: DiscoverFilled },
-  { key: 'profile', stroke: UserStroke, filled: UserFilled },
+const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
+  { key: 'home', stroke: HomeStroke, filled: HomeFilled, label: 'Austausch' },
+  { key: 'explore', stroke: DiscoverStroke, filled: DiscoverFilled, label: 'Erkunden' },
+  { key: 'profile', stroke: UserStroke, filled: UserFilled, label: 'Profil' },
 ];
 
 export default function BottomNavigation({ activeTab, onTabPress }: Props) {
   const { colors } = useTheme();
-  const iconColor = colors.textPrimary;
+  const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
+  const { user, isConnected } = useUser();
+  const { activeAccount } = useAccount();
+
+  const profileImageUrl =
+    activeAccount?.account_type === 'organisation'
+      ? activeAccount.avatar_url ?? activeAccount.cover_url ?? null
+      : user?.profile_picture_url ?? null;
+
+  const showProfileImage = isConnected && !!profileImageUrl;
+
+  const handlePress = (key: TabKey) => {
+    if (key === 'explore' && exploreDotVisible) {
+      dismissExploreDot();
+    }
+    onTabPress(key);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.tabsContainer}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
+          const iconColor = isActive ? colors.tabIconActive : colors.tabIconDefault;
+          const labelColor = isActive ? colors.textPrimary : colors.tabIconDefault;
           const Icon = isActive ? tab.filled : tab.stroke;
+
+          const renderIcon = () => {
+            if (tab.key === 'profile' && showProfileImage) {
+              return (
+                <View
+                  style={[
+                    styles.profileImageWrapper,
+                    isActive && {
+                      borderWidth: 2,
+                      borderColor: colors.primary,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: profileImageUrl as string }}
+                    style={styles.profileImage}
+                  />
+                </View>
+              );
+            }
+            return <Icon width={ICON_SIZE} height={ICON_SIZE} color={iconColor} />;
+          };
+
           return (
             <Pressable
               key={tab.key}
-              onPress={() => onTabPress(tab.key)}
-              style={[styles.tab, isActive && styles.activeTab]}
+              onPress={() => handlePress(tab.key)}
+              style={styles.tab}
+              hitSlop={8}
             >
-              <Icon width={24} height={24} color={iconColor} />
+              <View style={styles.iconBox}>
+                {renderIcon()}
+                {tab.key === 'explore' && exploreDotVisible && (
+                  <View
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor: colors.primary,
+                        borderColor: colors.background,
+                      },
+                    ]}
+                  />
+                )}
+              </View>
+              <Text
+                numberOfLines={1}
+                style={[styles.label, { color: labelColor }]}
+              >
+                {tab.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -54,15 +121,54 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 8,
     paddingBottom: 8,
+    height: BOTTOM_NAV_HEIGHT,
   },
   tabsContainer: {
+    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 60,
-    paddingHorizontal: 40,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   tab: {
-    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    minWidth: 64,
   },
-  activeTab: {},
+  iconBox: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    marginTop: 2,
+    fontFamily: fontFamily.medium,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  dot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  profileImageWrapper: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    borderRadius: ICON_SIZE / 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: ICON_SIZE / 2,
+  },
 });
