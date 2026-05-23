@@ -341,10 +341,11 @@ export default function CreateScreen() {
           )}
 
           {/* Image previews — feed-shaped grid + tap-to-zoom */}
-          {draft.images.length > 0 && (
+          {(draft.images.length > 0 || draft.pendingUploads > 0) && (
             <View style={styles.imagePreviewWrapper}>
               <PostImageGrid
                 imageUrls={draft.images}
+                pendingCount={draft.pendingUploads}
                 onPress={(i) => setZoomImageUrl(draft.images[i])}
                 renderOverlay={(i) => (
                   <Pressable
@@ -374,8 +375,8 @@ export default function CreateScreen() {
             </View>
           )}
 
-          {/* Upload indicator */}
-          {draft.isUploading && (
+          {/* Upload indicator (video only — image uploads show inline skeletons) */}
+          {draft.isUploading && draft.pendingUploads === 0 && (
             <View style={styles.uploadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>

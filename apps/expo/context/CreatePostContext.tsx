@@ -21,6 +21,7 @@ type CreatePostState = {
   pollOptions: string[];
   pollType: 'single' | 'multi';
   isUploading: boolean;
+  pendingUploads: number;
   linkedEventId: string | null;
   linkedEventData: LinkedEventData | null;
   linkedMarketplaceId: string | null;
@@ -61,6 +62,7 @@ const initialState: CreatePostState = {
   pollOptions: ['', ''],
   pollType: 'single',
   isUploading: false,
+  pendingUploads: 0,
   linkedEventId: null,
   linkedEventData: null,
   linkedMarketplaceId: null,
@@ -96,19 +98,26 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
 
     if (result.canceled) return;
 
-    setState((prev) => ({ ...prev, isUploading: true }));
-
-    const newUrls: string[] = [];
-    for (const asset of result.assets) {
-      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'posts', asset.mimeType || undefined);
-      if (url) newUrls.push(url);
-    }
-
+    const assets = result.assets.slice(0, remaining);
     setState((prev) => ({
       ...prev,
-      images: [...prev.images, ...newUrls].slice(0, MAX_IMAGES),
-      isUploading: false,
+      isUploading: true,
+      pendingUploads: prev.pendingUploads + assets.length,
     }));
+
+    for (const asset of assets) {
+      const url = await uploadMediaFile(asset.uri, walletAddress, 'image', 'posts', asset.mimeType || undefined);
+      setState((prev) => {
+        const nextImages = url ? [...prev.images, url].slice(0, MAX_IMAGES) : prev.images;
+        const nextPending = Math.max(0, prev.pendingUploads - 1);
+        return {
+          ...prev,
+          images: nextImages,
+          pendingUploads: nextPending,
+          isUploading: nextPending > 0,
+        };
+      });
+    }
   }, [state.images.length]);
 
   const removeImage = useCallback((index: number) => {
