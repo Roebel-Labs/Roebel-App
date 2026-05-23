@@ -116,6 +116,16 @@ export const ClockIcon = ({ size = 24, ...props }: IconProps) => <ClockSvg width
 export const ShareIcon = ({ size = 24, ...props }: IconProps) => <ShareSvg width={size} height={size} {...props} />;
 export const BookIcon = ({ size = 24, ...props }: IconProps) => <BookSvg width={size} height={size} {...props} />;
 
+// Arrow right (02) — inline SVG for dynamic color support
+export const ArrowRight02Icon: React.FC<{ size?: number; color?: string; strokeWidth?: number }> = ({
+  size = 24,
+  color = '#000',
+  strokeWidth = 2,
+}) => {
+  const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.5 12H5" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 18C13 18 19 13.5811 19 12C19 10.4188 13 6 13 6" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return <SvgXml xml={xml} />;
+};
+
 // Heart icons (inline SVG for dynamic color support)
 export const HeartIcon: React.FC<{ size?: number; color?: string; strokeWidth?: number }> = ({
   size = 24,

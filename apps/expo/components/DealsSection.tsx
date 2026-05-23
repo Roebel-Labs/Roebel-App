@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 import BusinessDealCard from './BusinessDealCard';
 import type { BusinessDealWithBusiness } from '@/lib/types';
 
@@ -28,8 +29,10 @@ export default function DealsSection({ deals }: Props) {
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/deals' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Angebote anzeigen"
         >
-          <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alle anzeigen</Text>
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
         </Pressable>
       </View>
       <FlatList
@@ -61,13 +64,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   viewAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
     paddingHorizontal: 16,

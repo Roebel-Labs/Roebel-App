@@ -1,14 +1,10 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 import MarketplaceCard from './MarketplaceCard';
 import type { MarketplaceListingRecord } from '@/lib/types';
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const GRID_GAP = 12;
-const GRID_PADDING = 16;
-const CARD_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP) / 2;
 
 type Props = {
   listings: MarketplaceListingRecord[];
@@ -19,7 +15,7 @@ export default function MarketplaceSection({ listings }: Props) {
   const { colors } = useTheme();
 
   const displayListings = useMemo(() => {
-    return listings.slice(0, 4);
+    return listings.slice(0, 6);
   }, [listings]);
 
   if (displayListings.length === 0) {
@@ -30,23 +26,23 @@ export default function MarketplaceSection({ listings }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Marktplatz</Text>
+        <Pressable
+          style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
+          onPress={() => router.push('/marketplace' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Marktplatz-Anzeigen anzeigen"
+        >
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
+        </Pressable>
       </View>
-      <View style={styles.grid}>
-        {displayListings.map((item) => (
-          <MarketplaceCard
-            key={item.id}
-            listing={item}
-            compact
-            style={{ width: CARD_WIDTH, marginRight: 0 }}
-          />
-        ))}
-      </View>
-      <Pressable
-        style={[styles.viewAllButton, { borderColor: colors.border }]}
-        onPress={() => router.push('/marketplace' as any)}
-      >
-        <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alles anzeigen</Text>
-      </Pressable>
+      <FlatList
+        horizontal
+        data={displayListings}
+        renderItem={({ item }) => <MarketplaceCard listing={item} compact />}
+        keyExtractor={(item) => item.id}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+      />
     </View>
   );
 }
@@ -60,29 +56,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: GRID_PADDING,
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 22,
     fontFamily: 'Inter-Medium',
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: GRID_PADDING,
-    gap: GRID_GAP,
-  },
   viewAllButton: {
-    marginHorizontal: GRID_PADDING,
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  viewAllText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
+  listContent: {
+    paddingHorizontal: 16,
   },
 });

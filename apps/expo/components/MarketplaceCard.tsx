@@ -52,14 +52,9 @@ export default function MarketplaceCard({ listing, compact = true, style }: Prop
           <Text style={[styles.titleCompact, { color: colors.textPrimary }]} numberOfLines={2}>
             {listing.title}
           </Text>
-          <Text style={[styles.priceCompact, { color: colors.primary }]}>
+          <Text style={[styles.priceCompact, { color: colors.textPrimary }]}>
             {formatPrice(listing.price, listing.price_type)}
           </Text>
-          {conditionLabel && (
-            <View style={[styles.conditionBadge, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.conditionText, { color: colors.textSecondary }]}>{conditionLabel}</Text>
-            </View>
-          )}
         </View>
       </Pressable>
     );
@@ -166,8 +161,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   priceCompact: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
     marginBottom: 6,
   },
   price: {

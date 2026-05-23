@@ -4,6 +4,7 @@ import { MovieRecord } from '@/lib/types';
 import MovieCard from './MovieCard';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 
 type Props = {
   movies: MovieRecord[];
@@ -43,8 +44,10 @@ export default function MovieSection({ movies }: Props) {
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/movies' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Filme anzeigen"
         >
-          <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alle anzeigen</Text>
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
         </Pressable>
       </View>
       <FlatList
@@ -76,13 +79,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   viewAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
     paddingHorizontal: 16,

@@ -5,6 +5,7 @@ import NewsCard from './NewsCard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 
 type Props = {
   articles: NewsArticle[];
@@ -37,8 +38,10 @@ export default function NewsSection({ articles }: Props) {
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/news' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Neuigkeiten anzeigen"
         >
-          <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alle anzeigen</Text>
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
         </Pressable>
       </View>
       <FlatList
@@ -70,13 +73,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   viewAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
     paddingHorizontal: 16,

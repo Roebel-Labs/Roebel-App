@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 import BusinessCardCompact from './BusinessCardCompact';
 import type { BusinessRecord } from '@/lib/types';
 
@@ -39,8 +40,10 @@ export default function BusinessSection({ businesses }: Props) {
         <Pressable
           style={[styles.viewAllButton, { backgroundColor: colors.surfaceSecondary }]}
           onPress={() => router.push('/businesses' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Unternehmen anzeigen"
         >
-          <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alle anzeigen</Text>
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
         </Pressable>
       </View>
       <View style={styles.grid}>
@@ -74,13 +77,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   viewAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   grid: {
     flexDirection: 'row',

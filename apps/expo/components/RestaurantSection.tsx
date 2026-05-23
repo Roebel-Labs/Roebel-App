@@ -4,6 +4,7 @@ import { RestaurantRecord } from '@/lib/types';
 import RestaurantCard from './RestaurantCard';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { ArrowRight02Icon } from './Icons';
 
 type Props = {
   restaurants: RestaurantRecord[];
@@ -28,7 +29,7 @@ export default function RestaurantSection({ restaurants }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Alle Speisekarten anzeigen"
         >
-          <Text style={[styles.showAllText, { color: colors.textPrimary }]}>Alle anzeigen</Text>
+          <ArrowRight02Icon size={20} color={colors.textPrimary} />
         </Pressable>
       </View>
       <FlatList
@@ -60,13 +61,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   showAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  showAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listContent: {
     paddingHorizontal: 16,
