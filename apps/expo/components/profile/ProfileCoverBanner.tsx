@@ -3,40 +3,30 @@ import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 
+const DEFAULT_BANNER = require('../../assets/illustration/roebel-bg.png');
+
 type Props = {
   assetUrl: string | null | undefined;
   height?: number;
 };
 
 /**
- * Cover image at the top of a profile screen. Falls back to a subtle gradient
- * placeholder when the user has no banner equipped.
+ * Cover image at the top of a profile screen. Falls back to the Roebel default
+ * banner when the user has no custom banner equipped.
  */
 export default function ProfileCoverBanner({ assetUrl, height = 160 }: Props) {
   const { colors } = useTheme();
   const isPlaceholderUrl = !!assetUrl && assetUrl.includes('placehold.co');
-  const shouldRender = !!assetUrl && !isPlaceholderUrl;
+  const hasCustomBanner = !!assetUrl && !isPlaceholderUrl;
 
   return (
     <View style={[styles.container, { height, backgroundColor: colors.cardPlaceholder }]}>
-      {shouldRender ? (
-        <Image
-          source={{ uri: assetUrl! }}
-          style={StyleSheet.absoluteFill as any}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
-        />
-      ) : (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            styles.placeholder,
-            { backgroundColor: colors.primary + '22' },
-          ]}
-        >
-          <View style={[styles.placeholderStripe, { backgroundColor: colors.primary + '44' }]} />
-        </View>
-      )}
+      <Image
+        source={hasCustomBanner ? { uri: assetUrl! } : DEFAULT_BANNER}
+        style={StyleSheet.absoluteFill as any}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
     </View>
   );
 }
@@ -46,14 +36,5 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
     position: 'relative',
-  },
-  placeholder: {
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-  },
-  placeholderStripe: {
-    width: '140%',
-    height: 60,
-    transform: [{ rotate: '-8deg' }, { translateY: 40 }],
   },
 });
