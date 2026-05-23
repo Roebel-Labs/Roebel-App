@@ -3,17 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import Constants from 'expo-constants';
 import { WeatherData } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
-
-// Weather condition icons
-import SunIcon from '@/assets/icons/weather/sun-01.svg';
-import SunCloudIcon from '@/assets/icons/weather/sun-cloud-02.svg';
-import CloudIcon from '@/assets/icons/weather/blur.svg';
-import RainIcon from '@/assets/icons/weather/cloud-mid-rain.svg';
-import LightRainIcon from '@/assets/icons/weather/cloud-little-rain.svg';
-import HeavyRainIcon from '@/assets/icons/weather/cloud-angled-rain.svg';
-import ThunderIcon from '@/assets/icons/weather/sun-cloud-angled-rain-zap-02.svg';
-import SnowIcon from '@/assets/icons/weather/sun-cloud-mid-snow-02.svg';
-import WindyIcon from '@/assets/icons/weather/sun-cloud-fast-wind-02.svg';
+import { getWeatherIcon, translateWeatherCondition } from '@/lib/weather';
 
 // Weather stats icons
 import RainStatIcon from '@/assets/icons/weather-stats/rain.svg';
@@ -31,88 +21,6 @@ type Props = {
 const ROEBEL_COORDS = {
   latitude: 53.3667,
   longitude: 12.6000,
-};
-
-// Translate English weather descriptions to German
-const translateWeatherCondition = (condition: string): string => {
-  const translations: { [key: string]: string } = {
-    // Clear/Sunny
-    'clear': 'Klar',
-    'sunny': 'Sonnig',
-    'clear sky': 'Klarer Himmel',
-
-    // Cloudy
-    'partly cloudy': 'Teilweise bewölkt',
-    'partly sunny': 'Teilweise sonnig',
-    'mostly cloudy': 'Überwiegend bewölkt',
-    'mostly sunny': 'Überwiegend sonnig',
-    'cloudy': 'Bewölkt',
-    'overcast': 'Bedeckt',
-
-    // Rain
-    'light rain': 'Leichter Regen',
-    'rain': 'Regen',
-    'heavy rain': 'Starker Regen',
-    'drizzle': 'Nieselregen',
-    'showers': 'Schauer',
-    'scattered showers': 'Vereinzelte Schauer',
-
-    // Thunder
-    'thunderstorm': 'Gewitter',
-    'storm': 'Sturm',
-    'thunderstorms': 'Gewitter',
-
-    // Snow
-    'snow': 'Schnee',
-    'light snow': 'Leichter Schneefall',
-    'heavy snow': 'Starker Schneefall',
-    'flurries': 'Schneeschauer',
-    'sleet': 'Schneeregen',
-
-    // Fog/Mist
-    'fog': 'Nebel',
-    'mist': 'Nebel',
-    'haze': 'Dunst',
-
-    // Wind
-    'windy': 'Windig',
-  };
-
-  const lowerCondition = condition.toLowerCase();
-  return translations[lowerCondition] || condition;
-};
-
-// Map weather condition type enum to icon component
-const getWeatherIcon = (conditionType: string) => {
-  const type = conditionType.toUpperCase();
-
-  // Clear/Sunny
-  if (type.includes('CLEAR') || type.includes('SUNNY')) return SunIcon;
-
-  // Cloudy
-  if (type === 'PARTLY_CLOUDY' || type === 'MOSTLY_CLOUDY') return SunCloudIcon;
-  if (type === 'CLOUDY' || type.includes('OVERCAST')) return CloudIcon;
-
-  // Rain
-  if (type === 'LIGHT_RAIN' || type === 'DRIZZLE') return LightRainIcon;
-  if (type === 'RAIN') return RainIcon;
-  if (type === 'HEAVY_RAIN') return HeavyRainIcon;
-  if (type === 'SHOWERS') return RainIcon;
-
-  // Thunder
-  if (type.includes('THUNDER') || type.includes('STORM')) return ThunderIcon;
-
-  // Snow
-  if (type.includes('SNOW') || type.includes('FLURRIES')) return SnowIcon;
-  if (type.includes('SLEET') || type.includes('ICE')) return SnowIcon;
-
-  // Fog/Mist
-  if (type.includes('FOG') || type.includes('MIST') || type.includes('HAZE')) return CloudIcon;
-
-  // Wind
-  if (type.includes('WIND')) return WindyIcon;
-
-  return SunCloudIcon; // Default
 };
 
 export default function EventWeatherWidget({ date, latitude, longitude }: Props) {
