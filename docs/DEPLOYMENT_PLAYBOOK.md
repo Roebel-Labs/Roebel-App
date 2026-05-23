@@ -110,19 +110,33 @@ export const CITIZEN_NFT_ADDRESS = "0xNEW_CITIZEN_NFT_ADDRESS";
 export const ATTESTER_GOVERNOR_ADDRESS = "0xNEW_GOVERNOR_ADDRESS";
 ```
 
-## Current Deployment Addresses (Base Mainnet)
+## Current Deployment Addresses (Base Mainnet, rotated 2026-05-23)
 
 | Contract | Address |
 |----------|---------|
-| AttesterNFT (2-sig rule) | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` |
-| CitizenNFT (1 Attester + 1 Citizen) | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` |
-| AttesterGovernor (1h voting, 10% quorum) | `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` |
-| Timelock | `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0` |
+| AttesterNFT (2-sig, governance-mutable) | `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` |
+| CitizenNFT (1+1 attest AND revoke, governance-mutable) | `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` |
+| SignUpTokenGatekeeper (bound to new CitizenNFT) | `0xcf12E8da5f7599dd9162e07388715bBa11739F2e` |
+| MaciAttesterGovernor (MACI v2, 5 governance setters) | `0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177` |
+| TimelockController (1h min delay, raise via `updateDelay()`) | `0xe8B8149F9373a56F55112e5Fc867E58308D014c1` |
+
+Source of truth: [`contracts/governor-contract/deployments/base.json`](../contracts/governor-contract/deployments/base.json). Re-runnable rotation scripts live in [`contracts/governor-contract/scripts/`](../contracts/governor-contract/scripts/):
+
+- `redeploy-verification.cjs` — full rotation (AttesterNFT → CitizenNFT → Gatekeeper → Timelock → Governor → ownership + role wiring → renounce admin)
+- `finish-redeploy-rewire.cjs` — recovery script if `redeploy-verification.cjs` partially fails (uses minimal ABI strings instead of `getContractFactory`, immune to artifact-discovery issues)
+- `verify-redeploy.cjs` — programmatic Basescan verification for all 5 contracts (uses Etherscan v2 unified API)
 
 ## Previous Deployment Addresses (for reference)
 
 | Contract | Address |
 |----------|---------|
+| AttesterNFT (pre-2026-05-23, 2-sig constant) | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` |
+| CitizenNFT (pre-2026-05-23, 1-Attester revocation) | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` |
+| MaciAttesterGovernor (pre-2026-05-23, immutable coordinator) | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` |
+| TimelockController (pre-2026-05-23, 2-day delay) | `0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe` |
+| SignUpTokenGatekeeper (pre-2026-05-23) | `0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee` |
+| AttesterGovernor v1 (public-vote, deprecated) | `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` |
+| RoebelTimelock v1 (bound to AttesterGovernor v1) | `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0` |
 | AttesterNFT v1 (3-sig rule, superseded) | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` |
 | CitizenNFT v3 (1+2 rule, superseded) | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` |
 | AttesterGovernor v1 (1-day voting, superseded) | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` |

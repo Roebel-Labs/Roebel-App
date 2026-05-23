@@ -1,5 +1,7 @@
 # Röbel Web App — Full Architecture & Vision Spec
 
+> **Historical note (2026-05-23):** This spec is dated 2026-04-04. Contract addresses below reflect the deployment as of the spec date; do not update them here — that would corrupt the audit trail. Current live addresses live in [`packages/blockchain/src/index.ts`](../../../packages/blockchain/src/index.ts) and [`contracts/governor-contract/deployments/base.json`](../../../contracts/governor-contract/deployments/base.json). Notably, the CitizenNFT revocation rule was changed from "1 Attester" to "1 Attester + 1 Citizen" in the 2026-05-23 rotation.
+
 ## Context
 
 The Röbel Web App (`apps/web`) is the Next.js 15 companion to the Expo mobile app. It serves three distinct audiences through a layered routing architecture:

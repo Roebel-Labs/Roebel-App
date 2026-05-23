@@ -1,6 +1,8 @@
 # MACI v2 Privacy-Voting Governor — Base Mainnet Deployment
 
-This guide walks you through deploying a complete MACI v2 privacy-voting stack on **Base mainnet**, wired to your existing on-chain `AttesterNFT` (`0xa06F09Cb…`) and `CitizenNFT` (`0xe2d39ffd…`).
+This guide walks you through deploying a complete MACI v2 privacy-voting stack on **Base mainnet**, wired to your on-chain `AttesterNFT` (currently `0x79B837b2…`) and `CitizenNFT` (currently `0x7eF83081…`). Source of truth for live addresses is [`../../deployments/base.json`](../../deployments/base.json).
+
+> **Note (2026-05-23):** The NFT contracts here were rotated alongside the Governor — see the `addresses.attesterNFT` / `addresses.citizenNFT` fields in `deployments/base.json`. For full-stack rotations (NFTs + Governor + Timelock + Gatekeeper together), prefer `scripts/redeploy-verification.cjs` over the standalone MACI deploy script described below.
 
 The MACI v2 trusted-setup ceremony is complete (per [MACI docs](https://maci.pse.dev/docs/security/trusted-setup)) — production zKeys exist and the cryptographic security model holds. We deliberately stayed on v2 instead of the unreleased v3 because v3's ceremony "has not started yet."
 
@@ -94,7 +96,7 @@ Approximate gas cost on Base at ~0.05 gwei: **0.001 ETH (~$2.50)**. Linked Posei
 
 ### 5. Wire into the apps
 
-Update `packages/blockchain/addresses.ts` with `maciAttesterGovernor` from `deployments/base.json`. The frontend now points at the new Governor; the old `0x84D8ab0Fc…` AttesterGovernor stays on chain for past proposals.
+Update `packages/blockchain/src/index.ts` with `maciAttesterGovernor` from `deployments/base.json`. The frontend now points at the new Governor; both the legacy public-vote `AttesterGovernor` (`0x84D8ab0Fc…`) and any prior MACI Governor (e.g. `0x5983F630…`) stay on chain for past-proposal lookups.
 
 ## Per-proposal lifecycle
 
@@ -140,7 +142,7 @@ Before pointing real proposals at the new Governor:
 - [ ] `deployments/base.json` contains all 12 addresses
 - [ ] `gatekeeper.maci()` returns the MACI core address
 - [ ] `vkRegistry.hasNonQvProcessVk(...)` returns true (or equivalent — check via Basescan)
-- [ ] `governor.attesterNFT()` returns `0xa06F09Cb…`
+- [ ] `governor.attesterNFT()` returns the current AttesterNFT address from `deployments/base.json` (currently `0x79B837b2…`)
 - [ ] `governor.coordinator()` returns the address you set
 - [ ] `timelock.hasRole(PROPOSER_ROLE, governor) == true` and `hasRole(DEFAULT_ADMIN_ROLE, deployer) == false`
 - [ ] **Pilot proposal**: an attester proposes a no-op (e.g. `governor.updateVotingPeriod(...)` itself). Verify `PollLinked` fires, `MACI.polls(0)` returns non-zero addresses, and the Tally's owner equals `coordinator`.

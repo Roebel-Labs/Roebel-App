@@ -82,11 +82,15 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 - **SimpleHomeTownGovernor.sol** - DAO governance (public voting)
 - **HomeTownMaciGovernor.sol** - MACI-integrated governance (private voting)
 
-### Deployed Contract Addresses (Base Mainnet)
-- AttesterNFT: `0xa06F09Cb406880512326318fbC09Cdb28631DA73`
-- CitizenNFT: `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`
-- Governor (AttesterGovernor): `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b`
-- Timelock: `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0`
+### Deployed Contract Addresses (Base Mainnet, rotated 2026-05-23)
+- AttesterNFT: `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` (governance-mutable thresholds, owned by Timelock)
+- CitizenNFT: `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` (1 Attester + 1 Citizen for BOTH attestation and revocation; governance-mutable)
+- SignUpTokenGatekeeper: `0xcf12E8da5f7599dd9162e07388715bBa11739F2e` (MACI v2 gatekeeper bound to CitizenNFT)
+- Governor (MaciAttesterGovernor): `0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177` (5 governance setters: quorumPercentage, quorumAbsolute, tallyGracePeriod, coordinator, coordinatorPubKey)
+- Timelock: `0xe8B8149F9373a56F55112e5Fc867E58308D014c1` (currently 1h min delay; raise via `timelock.updateDelay()` governance proposal)
+- Legacy AttesterGovernor (read-only, public-vote, deprecated): `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b`
+
+Source of truth: [`contracts/governor-contract/deployments/base.json`](contracts/governor-contract/deployments/base.json) and [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts).
 
 ## Environment Variables
 

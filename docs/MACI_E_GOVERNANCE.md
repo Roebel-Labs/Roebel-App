@@ -81,7 +81,7 @@ Why MACI? Without it, every vote is public on chain — a citizen's wallet → v
 
 Source: [`contracts/governor-contract/contracts/verification-system/`](../contracts/governor-contract/contracts/verification-system/).
 
-### 3.1 AttesterNFT — `0xa06F09Cb406880512326318fbC09Cdb28631DA73`
+### 3.1 AttesterNFT — `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` (rotated 2026-05-23)
 
 A soulbound (non-transferable) ERC-721 held by members of Roebel's culture committee. Holding it grants the right to **attest** other people. There's no on-chain voting power tied to AttesterNFT alone — Attesters who want to vote also hold a CitizenNFT.
 
@@ -89,25 +89,44 @@ Issuance is decentralized: `createAttestationRequest(evidenceURI)` opens a reque
 
 Revocation has the same shape (2-Attester approval) so a rogue attester can be removed.
 
+**Both `requiredSignatures` (default 2) and `requiredRejections` (default 2) are now mutable state variables**, settable only by `owner()` — which after deploy is the Timelock. So any future change to the Attester threshold is a single governance proposal calling `setRequiredSignatures()` / `setRequiredRejections()`, not another contract redeploy.
+
+Rejection is also multi-sig: a single Attester rejection no longer auto-vetoes a request. The status only flips to `Rejected` once `requiredRejections` distinct Attesters reject.
+
+Revocation gas cost is now O(1) regardless of mint history (an internal `_tokenIdByOwner` mapping replaces the prior O(N) `tokenOfOwnerByIndex` loop).
+
 Key entry points:
 - `createAttestationRequest(string evidenceURI) → uint256 requestId`
-- `approveRequest(uint256 requestId)` — 2/N rule, attester-gated
-- `rejectRequest(uint256 requestId)`
+- `approveRequest(uint256 requestId)` — 2/N rule, attester-gated, threshold mutable
+- `rejectRequest(uint256 requestId)` — multi-sig veto, threshold mutable
+- `setRequiredSignatures(uint256)` / `setRequiredRejections(uint256)` — Timelock only
 - `hasAttesterNFT(address) view returns (bool)`
+- `requiredSignatures()` / `requiredRejections()` — read current thresholds
 
-### 3.2 CitizenNFT — `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`
+### 3.2 CitizenNFT — `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` (rotated 2026-05-23)
 
 The civic ID. Soulbound ERC-721 + ERC-721Votes (the token weight is unused now that voting moved to MACI, but the standard hook stays). Holding it is the prerequisite for **signing up to MACI** and therefore for voting.
 
-Issuance rule: **1 Attester + 1 Citizen** must each sign off on `approveRequest`. Dual NFT holders (Attester + Citizen) explicitly choose which role they're signing as via the `signAsAttester` flag — this prevents a single dual-holder from satisfying both halves of the 2-of-2 rule.
+**Attestation rule:** **1 Attester + 1 Citizen** must each sign off on `approveRequest`. Dual NFT holders (Attester + Citizen) explicitly choose which role they're signing as via the `signAsAttester` flag — this prevents a single dual-holder from satisfying both halves of the 2-of-2 rule.
 
-Why this rule? The town's social fabric is dense enough that any prospective citizen knows at least one current citizen and one attester. The pair signature stops bots and forces real-world verification. Governance scaling: as the citizen count grows the rule stays cheap (no quorum adjustment required).
+**Revocation rule (changed 2026-05-23):** also **1 Attester + 1 Citizen**, symmetric with attestation. Previously revocation required only 1 Attester signature, which let any single Attester unilaterally wipe a citizen — that single-key risk was the headline reason for this rotation.
+
+All four signature thresholds (`requiredAttesterSignatures`, `requiredCitizenSignatures`, `requiredRevocationAttesterSignatures`, `requiredRevocationCitizenSignatures`) plus the two rejection thresholds (`requiredAttesterRejections`, `requiredCitizenRejections`) are mutable state variables, settable only by the Timelock via three pair-setters: `setAttestationRequirements(att, cit)`, `setRevocationRequirements(att, cit)`, `setRejectionRequirements(att, cit)`. Any future tightening (e.g. raising revocation to 2+1 as the citizen base grows) is a single governance proposal.
+
+Why this rule? The town's social fabric is dense enough that any prospective citizen knows at least one current citizen and one attester. The pair signature stops bots and forces real-world verification — and now extends to the destructive direction (revocation) too, so no single Attester can grief.
+
+Rejection follows the same multi-sig pattern (single rejection no longer flips status to `Rejected`).
+
+Burn gas is now O(1) regardless of mint history (same `_tokenIdByOwner` pattern as AttesterNFT).
 
 Key entry points:
 - `createAttestationRequest(string evidenceURI) → uint256 requestId`
-- `approveRequest(uint256 requestId, bool signAsAttester)`
+- `approveRequest(uint256 requestId, bool signAsAttester)` — role-explicit
+- `rejectRequest(uint256 requestId, bool signAsAttester)` — role-explicit, multi-sig
+- `setAttestationRequirements(uint256 att, uint256 cit)` / `setRevocationRequirements(uint256 att, uint256 cit)` / `setRejectionRequirements(uint256 att, uint256 cit)` — Timelock only
 - `hasCitizenNFT(address) view returns (bool)`
 - `getVotes(address) view returns (uint256)` — present but unused for MACI polls
+- `requiredAttesterSignatures()` / `requiredCitizenSignatures()` / `requiredRevocationAttesterSignatures()` / `requiredRevocationCitizenSignatures()` / `requiredAttesterRejections()` / `requiredCitizenRejections()` — read current thresholds
 
 ### 3.3 Why these are soulbound
 
@@ -165,8 +184,8 @@ All addresses live in [`contracts/governor-contract/deployments/base.json`](../c
 
 | Contract | Address |
 |---|---|
-| AttesterNFT | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` |
-| CitizenNFT | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` |
+| AttesterNFT | `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` |
+| CitizenNFT | `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` |
 
 ### 5.2 MACI v2 infrastructure
 
@@ -177,7 +196,7 @@ These get deployed once and stay forever (assuming no protocol-version bump):
 | MACI core | `0x2922e42945a10d1F765E3f9Cab136421d4556D30` | Global signup pool; `deployPoll` factory |
 | Verifier | `0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8` | Groth16 proof verifier |
 | VkRegistry | `0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED` | Stores process + tally VKs keyed by tree depths |
-| SignUpTokenGatekeeper | `0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee` | "You can sign up iff you hold CitizenNFT" |
+| SignUpTokenGatekeeper | `0xcf12E8da5f7599dd9162e07388715bBa11739F2e` | "You can sign up iff you hold CitizenNFT" (rotated 2026-05-23 to bind to new CitizenNFT) |
 | ConstantInitialVoiceCreditProxy | `0x5b358A77E89FF3d699607b4fC235b381d67f3d05` | Issues 1 voice credit per signup (non-QV) |
 | PoseidonT3 | `0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3` | Linked into PollFactory + MACI |
 | PoseidonT4 | `0x71f05e914Aa4E8Bc19c0c98073e5B0a59b2Ef0C6` | … |
@@ -193,8 +212,8 @@ VkRegistry is the only one that's been rotated since first deploy (twice — see
 
 | Contract | Address | Purpose |
 |---|---|---|
-| MaciAttesterGovernor | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` | OZ Governor + MACI-aware state() override |
-| TimelockController | `0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe` | OZ Timelock (currently 2-day min delay) |
+| MaciAttesterGovernor | `0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177` | OZ Governor + MACI-aware state() override (rotated 2026-05-23 to add governance setters + rebind to new NFTs) |
+| TimelockController | `0xe8B8149F9373a56F55112e5Fc867E58308D014c1` | OZ Timelock (currently 1-hour min delay for the test phase; raise via `timelock.updateDelay()` governance proposal) |
 
 Coordinator EOA (Fly machine wallet): `0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C`. Owns each Poll's MessageProcessor + Tally contracts (set in `_deployPollFor`).
 
@@ -218,7 +237,19 @@ Standard OZ Governor with these overrides:
 
    This is critical for the UX: badge says "AKTIV" while the coordinator computes the tally; flips to "ABGELEHNT" / "ERFOLGREICH" once the tally lands.
 
-6. **`tallyGracePeriod`** is configurable at deploy time. Currently 7 days on mainnet; was 30 min during the test cycle.
+6. **`tallyGracePeriod`** is governance-mutable post-deploy via `setTallyGracePeriod()` (Timelock-only). Currently 7 days on mainnet; was 30 min during the test cycle. Capped at 30 days by the setter.
+
+7. **Five governance-tunable parameters** (added 2026-05-23 rotation). All callable only by the Timelock via `onlyGovernance` — i.e. a Governor proposal must propose + queue + execute against the Timelock for any of these to land. The Governor itself stays immutable; only its parameter storage changes.
+
+| Setter | Default | Bounds | Rotation use case |
+|---|---|---|---|
+| `setQuorumPercentage(uint256)` | `10` | `≤ 100` | Tighten/loosen quorum as citizen base grows |
+| `setQuorumAbsolute(uint256)` | `2` | unbounded | Floor when `signups * pct / 100` is too small |
+| `setTallyGracePeriod(uint256)` | `604800` (7d) | `≤ 30 days` | Shorten when the coordinator is reliably fast; lengthen during a coordinator migration |
+| `setCoordinator(address)` | deploy EOA | non-zero | **Critical**: rotate the on-chain coordinator to a Gnosis Safe at 7+ Attesters, or after a key compromise |
+| `setCoordinatorPubKey(DomainObjs.PubKey)` | deploy pubkey | none | Off-chain key rotation; future-proofs for the eventual threshold-MACI swap |
+
+The pre-rotation Governor at `0x5983F630…` had none of these setters — `coordinator` was `immutable` and the quorum / grace fields were storage-only-no-setter. A compromised coordinator would have required a full Governor + Timelock + NFT redeploy. Now it's a single governance proposal.
 
 ### 5.5 Per-proposal contracts
 

@@ -73,35 +73,40 @@ pnpm dev:expo
 
 ## Smart Contracts & Governance
 
-The Röbel DAO runs on four contracts on **Base Mainnet (chain id 8453)**, all soulbound/non-transferable, all verified on Blockscout + Sourcify.
+The Röbel DAO runs on five contracts on **Base Mainnet (chain id 8453)**, all soulbound/non-transferable, all verified on Basescan. Voting is privacy-preserving via [MACI v2](https://maci.pse.dev). The latest rotation (`2026-05-23`) adds governance-tunable thresholds and changes citizen revocation from a 1-Attester rule to a 1-Attester + 1-Citizen rule (symmetric with attestation).
 
-### Live addresses
+### Live addresses (rotated 2026-05-23)
 
 | Contract | Address | Purpose |
 |---|---|---|
-| **AttesterNFT** | [`0xa06F09Cb406880512326318fbC09Cdb28631DA73`](https://base.blockscout.com/address/0xa06F09Cb406880512326318fbC09Cdb28631DA73) | Soulbound NFT for "culture committee" members. Only holders can *propose* in the DAO. |
-| **CitizenNFT** | [`0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7`](https://base.blockscout.com/address/0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7) | Soulbound ERC721Votes NFT for verified citizens. 1 NFT = 1 vote. Auto-delegates voting power on mint. |
-| **AttesterGovernor** | [`0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b`](https://base.blockscout.com/address/0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b) | OpenZeppelin v5 Governor. Attesters propose, Citizens vote, proposals execute through the Timelock. |
-| **RoebelTimelock** | [`0xed1680AFf2A4235421b209A1bf8C7f5760149cc0`](https://base.blockscout.com/address/0xed1680AFf2A4235421b209A1bf8C7f5760149cc0) | OpenZeppelin `TimelockController` with `minDelay = 0`. Queues and executes passed proposals; open executor, Governor-only proposer. |
+| **AttesterNFT** | [`0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb`](https://basescan.org/address/0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb) | Soulbound NFT for "culture committee" members. Only holders can *propose* in the DAO. Owned by the Timelock; thresholds are governance-mutable. |
+| **CitizenNFT** | [`0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB`](https://basescan.org/address/0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB) | Soulbound ERC721Votes NFT for verified citizens. 1 NFT = 1 vote (used by MACI signup gating). Owned by the Timelock; both attestation and revocation thresholds are governance-mutable. |
+| **SignUpTokenGatekeeper** | [`0xcf12E8da5f7599dd9162e07388715bBa11739F2e`](https://basescan.org/address/0xcf12E8da5f7599dd9162e07388715bBa11739F2e) | MACI v2 gatekeeper bound to CitizenNFT — enforces "only citizens can sign up to vote". |
+| **MaciAttesterGovernor** | [`0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177`](https://basescan.org/address/0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177) | OpenZeppelin Governor + MACI-aware `state()` override. Attesters propose, Citizens vote via encrypted MACI ballots, the coordinator submits a ZK tally proof, proposals execute through the Timelock. Quorum/coordinator are all governance-mutable. |
+| **TimelockController** | [`0xe8B8149F9373a56F55112e5Fc867E58308D014c1`](https://basescan.org/address/0xe8B8149F9373a56F55112e5Fc867E58308D014c1) | OpenZeppelin `TimelockController` with `minDelay = 3600` (1h) for the initial test phase. Raise to 1 week via a governance proposal calling `timelock.updateDelay(604800)`. |
 
-Source files: [`AttesterNFT.sol`](contracts/governor-contract/contracts/verification-system/AttesterNFT.sol), [`CitizenNFT.sol`](contracts/governor-contract/contracts/verification-system/CitizenNFT.sol), [`AttesterGovernor.sol`](contracts/governor-contract/contracts/AttesterGovernor.sol).
+Source files: [`AttesterNFT.sol`](contracts/governor-contract/contracts/verification-system/AttesterNFT.sol), [`CitizenNFT.sol`](contracts/governor-contract/contracts/verification-system/CitizenNFT.sol), [`MaciAttesterGovernor.sol`](contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol). Address source of truth: [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) and [`deployments/base.json`](contracts/governor-contract/deployments/base.json).
 
 ### Governance rules (current)
 
 | Rule | Value |
 |---|---|
-| Become an Attester | 2 existing Attesters approve your evidence request |
-| Become a Citizen | 1 Attester + 1 Citizen approve your evidence request (2 unique signers minimum) |
-| Revoke a Citizen | 1 Attester signature |
-| Revoke an Attester | 2 Attester signatures |
+| Become an Attester | 2 existing Attesters approve your evidence request (mutable via `AttesterNFT.setRequiredSignatures()`) |
+| Become a Citizen | 1 Attester + 1 Citizen approve your evidence request (mutable via `CitizenNFT.setAttestationRequirements()`) |
+| Revoke a Citizen | **1 Attester + 1 Citizen signature** (mutable via `CitizenNFT.setRevocationRequirements()`) |
+| Revoke an Attester | 2 Attester signatures (mutable via `AttesterNFT.setRequiredSignatures()`) |
+| Reject a request | Multi-sig with the same role thresholds as approval — a single rogue signer cannot veto. Mutable via the `set…Rejections` setters. |
 | Who can propose | Anyone holding an Attester NFT |
-| Who can vote | Anyone holding a Citizen NFT (1 NFT = 1 vote) |
-| Voting delay | 1 block (~2 s on Base) |
-| Voting period | 1,800 blocks (~1 hour) |
-| Quorum | 10 % of delegated Citizen votes |
-| Timelock delay | 0 (proposals can execute as soon as they pass) |
+| Who can vote | Anyone holding a Citizen NFT, via encrypted MACI v2 ballots |
+| Voting period | 604,800 s (7 days) |
+| Quorum | `max(10% of MACI signups, 2)` — both terms mutable via `Governor.setQuorumPercentage()` / `setQuorumAbsolute()` |
+| Tally grace period | 7 days for the coordinator to publish the ZK tally proof; mutable via `Governor.setTallyGracePeriod()` |
+| Timelock delay | 3,600 s (1 h) test setting — raise to 1 week with a `timelock.updateDelay(604800)` governance proposal |
+| Coordinator key rotation | Rotate via `Governor.setCoordinator()` / `setCoordinatorPubKey()` — both Timelock-gated |
 
-The "2 unique signers" rule means a wallet holding *both* an Attester and Citizen NFT cannot single-handedly mint a new Citizen: the `signAsAttester` parameter on `CitizenNFT.approveRequest` forces an explicit role choice, and `msg.sender != req.target` prevents self-approval.
+The "2 unique signers" rule means a wallet holding *both* an Attester and Citizen NFT cannot single-handedly attest or revoke: the `signAsAttester` parameter on `approveRequest` / `rejectRequest` forces an explicit role choice, and `msg.sender != req.target` prevents self-approval.
+
+All threshold values above are stored as state variables on the deployed contracts and writable only by the Timelock — so any of them can be tuned by a single governance proposal, no redeploy needed. See [`docs/MACI_E_GOVERNANCE.md`](docs/MACI_E_GOVERNANCE.md) for the full list of governance-tunable settings.
 
 ### How to become an Attester
 
@@ -122,53 +127,48 @@ Bootstrap: three founding Citizens were minted directly in the constructor at de
 
 ### How to create and execute a proposal
 
-1. As an Attester, call `AttesterGovernor.propose(targets, values, calldatas, description)`.
-2. After 1 block, the proposal enters the `Active` state. Citizens vote by calling `AttesterGovernor.castVote(proposalId, support)` — `support` is `0` (against), `1` (for), or `2` (abstain).
-3. After ~1 hour the voting period closes. If quorum is met (10 %) and "for" outweighs "against", the proposal enters the `Succeeded` state.
-4. Any wallet calls `AttesterGovernor.queue(…)` to move the proposal into the Timelock.
-5. After the Timelock delay (currently 0 s), anyone calls `AttesterGovernor.execute(…)` to run the proposal's calldata.
+1. As an Attester, call `MaciAttesterGovernor.propose(targets, values, calldatas, description)`. The Governor automatically deploys a fresh MACI Poll for this proposal.
+2. The proposal enters the `Active` state immediately (MACI v2 has no voting delay). Citizens vote by submitting **encrypted MACI ballots** to the per-proposal Poll contract — `Governor.castVote` is disabled (reverts with `VotingHappensOnMaciPoll`).
+3. After the 7-day voting period, the coordinator (Fly machine wallet `0x5e6528…D4cF`) decrypts ballots off-chain, generates a Groth16 tally proof, and posts it to the per-poll Tally contract. The `Governor.state()` override holds the proposal in `Active` for up to a 7-day grace period until the tally lands on chain.
+4. Once `Tally.totalTallyResults() > 0`, the proposal resolves to `Succeeded` if `forVotes > againstVotes` and `totalSpent ≥ quorum`, otherwise `Defeated`.
+5. Any wallet calls `Governor.queue(…)` to move a Succeeded proposal into the Timelock.
+6. After the Timelock delay (currently 1 h), anyone calls `Governor.execute(…)` to run the proposal's calldata.
 
 ---
 
 ## Contract Migration History
 
-The currently-deployed contracts above replaced an earlier trio that had tighter thresholds. The lower bar was chosen to make citizen onboarding realistic for a civic app that's still growing its verified base.
+### 2026-05-23 — Governance-mutable thresholds + symmetric revocation (current)
 
-### What changed
+A pre-deploy audit found that **a single Attester could unilaterally revoke any CitizenNFT** (the old `REQUIRED_REVOCATION_SIGNATURES = 1` constant), plus three other safety / scalability issues. All four were fixed in a single coordinated redeploy.
 
-| Rule | Before | After |
+| Change | Before | After |
 |---|---|---|
-| Attester minting | 3 Attester signatures | 2 Attester signatures |
-| Attester revocation | 3 Attester signatures | 2 Attester signatures |
-| Citizen attestation | 1 Attester + 2 Citizens (minimum 3 unique signers) | 1 Attester + 1 Citizen (minimum 2 unique signers) |
-| Citizen revocation | 3 Attester signatures | 1 Attester signature |
-| Voting period | 5 days (old Governor) | 1 hour |
-| Governor-token coupling | Bound to old CitizenNFT `0x78C8…` | Bound to new CitizenNFT `0xe2d3…` |
+| Revoke a Citizen | 1 Attester signature | **1 Attester + 1 Citizen** (symmetric with attestation) |
+| Threshold tuning | `public constant` — required full contract redeploy + migration | All thresholds are `owner()`-mutable state vars; one Timelock proposal can change them |
+| Rejection veto | Single rejection auto-flipped status to `Rejected` (any one rogue signer could spam-veto) | Multi-sig rejection: needs the same per-role thresholds as approval |
+| `tokenOfOwnerByIndex` lookup | O(N) scan over every minted token id; revocation gas grew with mint history | O(1) `mapping(address => uint256) _tokenIdByOwner` |
+| Governor quorum / coordinator | `immutable` after deploy — compromised coordinator = full redeploy | 5 new `onlyGovernance` setters: `setQuorumPercentage`, `setQuorumAbsolute`, `setTallyGracePeriod`, `setCoordinator`, `setCoordinatorPubKey` |
+| Timelock min delay | 2 days | 1 hour (test setting; raise to 1 week via `timelock.updateDelay(604800)` proposal) |
 
-### Deployment steps taken
+Five contracts redeployed; existing MACI core / Verifier / VkRegistry / Poseidon stack reused. Both NFTs are owned by the new Timelock; the new Governor holds `PROPOSER_ROLE` + `CANCELLER_ROLE` on the new Timelock; deployer `DEFAULT_ADMIN_ROLE` was renounced post-wire (asserted on chain). Re-runnable deploy + recovery + verify scripts live in [`contracts/governor-contract/scripts/`](contracts/governor-contract/scripts/): `redeploy-verification.cjs`, `finish-redeploy-rewire.cjs`, `verify-redeploy.cjs`. Commits `08bd7e7` + `3236290`.
 
-1. **Solidity edits** — Updated threshold constants + minimum-unique-approver logic in `AttesterNFT.sol` and `CitizenNFT.sol`; shipped in commit `2bed1dd`.
-2. **AttesterNFT redeploy** — Compiled in Remix (OZ v5, optimizer 200 runs) with 3 founding Attester addresses. Deployed to `0xa06F…DA73`.
-3. **CitizenNFT redeploy** — Deployed with a reference to the new AttesterNFT and the same 3 founding addresses (who also became founding Citizens). Address: `0xe2d3…b5b7`.
-4. **Timelock deploy** — Thin wrapper `RoebelTimelock` around OZ `TimelockController` with `minDelay = 0`, deployer (`0x1C11…d1f9`) as sole proposer + admin, open executors (`address(0)`). Address: `0xed16…9cc0`.
-5. **AttesterGovernor deploy** — OZ v5 Governor that takes both AttesterNFT and CitizenNFT in its constructor. Configured for 1-block voting delay, 1,800-block voting period (~1 hour on Base), 10 % quorum. Address: `0x84D8…2a5b`.
-6. **Role wiring on the Timelock** (`0xed16…9cc0`):
-   - `grantRole(PROPOSER_ROLE, 0x84D8…2a5b)` — Governor can now queue proposals.
-   - `grantRole(CANCELLER_ROLE, 0x84D8…2a5b)` — Governor can cancel its own queued proposals.
-   - `revokeRole(PROPOSER_ROLE, 0x1C11…d1f9)` — deployer no longer has unilateral proposer rights; only the Governor does.
-7. **Client swap** — `packages/blockchain` + `apps/web` + `apps/expo` updated to point at the new contract addresses; shipped in commit `9b2299a`.
+### Pre-2026-05 rotations (kept on chain for historical traceability)
 
-### Previous (superseded) contracts
+| Contract | Address | Notes |
+|---|---|---|
+| AttesterNFT (pre-2026-05-23) | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` | 2-sig threshold as `public constant`, no setters |
+| CitizenNFT (pre-2026-05-23) | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` | 1-Attester revocation rule |
+| MaciAttesterGovernor (pre-2026-05-23) | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` | `coordinator` was `immutable`; no quorum setters |
+| TimelockController (pre-2026-05-23) | `0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe` | 2-day min delay |
+| SignUpTokenGatekeeper (pre-2026-05-23) | `0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee` | Bound to the prior CitizenNFT |
+| AttesterGovernor v1 (public-vote, deprecated) | `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` | Pre-MACI public-vote Governor; never deleted, no longer referenced for new proposals |
+| RoebelTimelock v1 (bound to AttesterGovernor v1) | `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0` | Original `minDelay = 0` Timelock |
+| AttesterNFT v0 (3-sig rule) | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` | First-ever Attester NFT |
+| CitizenNFT v3 (1+2 rule) | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` | Required 2 Citizen sigs to attest |
+| AttesterGovernor v1 prototype (5-day voting) | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` | First public-vote prototype |
 
-Kept on-chain for historical traceability but no longer referenced by the apps:
-
-| Contract | Address |
-|---|---|
-| AttesterNFT v1 (3-sig rule) | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` |
-| CitizenNFT v3 (1+2 rule) | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` |
-| AttesterGovernor v1 (5-day voting) | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` |
-
-Pre-2024 legacy contracts (HomeTownVotingNFT era) are listed in [packages/blockchain/src/index.ts](packages/blockchain/src/index.ts) under `legacyNFT` / `legacyGovernor`.
+The full rotation log (every MACI Governor + Timelock + VkRegistry rotation since 2026-05-07) is structured in [`apps/web/src/lib/maci-config.ts`](apps/web/src/lib/maci-config.ts) under `ROTATION_HISTORY`. Pre-2024 legacy contracts (HomeTownVotingNFT era) are in [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) under `legacyNFT` / `legacyGovernor`.
 
 ---
 
