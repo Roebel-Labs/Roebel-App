@@ -6,16 +6,17 @@ import { base } from "thirdweb/chains";
 export const OLD_NFT_CONTRACT_ADDRESS = "0x976966e2669b3bF3c99B38cA4259a864f85191A1";
 export const OLD_GOVERNOR_CONTRACT_ADDRESS = "0x767f7b996E54248F88944DAc344Ab74e93E21cdB";
 
-// Röbel/Müritz DAO contracts (Base Mainnet)
-export const CITIZEN_NFT_ADDRESS = "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7";
-export const ATTESTER_NFT_ADDRESS = "0xa06F09Cb406880512326318fbC09Cdb28631DA73";
+// Röbel/Müritz DAO contracts (Base Mainnet) — rotated 2026-05-23 to add
+// governance-mutable thresholds, 1+1 CitizenNFT revocation, and Bug A/B/C fixes.
+export const CITIZEN_NFT_ADDRESS = "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
+export const ATTESTER_NFT_ADDRESS = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
 
 // Legacy public-vote AttesterGovernor — kept for historical proposals only.
 export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 
 // Current MACI v2 privacy-voting governor — proposal creation + voting target.
 // Source of truth: contracts/governor-contract/deployments/base.json
-export const MACI_GOVERNOR_ADDRESS = "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3";
+export const MACI_GOVERNOR_ADDRESS = "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177";
 export const MACI_ADDRESS = "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
 
 // Convenience aliases — existing imports keep working but now point at the

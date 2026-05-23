@@ -7,11 +7,11 @@ import { getContract } from "thirdweb";
 import { client } from "@/app/client";
 import { base } from "thirdweb/chains";
 
-// Deployed contract addresses on Base Mainnet
+// Deployed contract addresses on Base Mainnet (rotated 2026-05-23)
 export const VERIFICATION_CONTRACTS = {
-  attesterNFT: "0xa06F09Cb406880512326318fbC09Cdb28631DA73", // AttesterNFT (2-sig rule)
-  citizenNFT: "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7",  // CitizenNFT (1 Attester + 1 Citizen rule)
-  governor: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",    // AttesterGovernor (1h voting, 10% quorum)
+  attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb", // AttesterNFT (2-sig rule, mutable thresholds, Timelock-owned)
+  citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",  // CitizenNFT (1 Attester + 1 Citizen for BOTH attestation AND revocation)
+  governor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",    // MaciAttesterGovernor (governance-tunable quorum/coordinator)
 };
 
 // Contract instances
@@ -40,10 +40,13 @@ export const ATTESTER_NFT_ABI = [
   "function approveRequest(uint256 requestId)",
   "function rejectRequest(uint256 requestId)",
   "function getRequest(uint256 requestId) view returns (address requester, address target, uint8 requestType, uint8 status, string evidenceURI, uint256 signatureCount, uint256 createdAt)",
+  "function getRequestRejections(uint256 requestId) view returns (uint256)",
   "function hasApprovedRequest(uint256 requestId, address approver) view returns (bool)",
   "function hasRejectedRequest(uint256 requestId, address rejector) view returns (bool)",
   "function hasAttesterNFT(address account) view returns (bool)",
   "function requestCount() view returns (uint256)",
+  "function requiredSignatures() view returns (uint256)",
+  "function requiredRejections() view returns (uint256)",
   "event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RequestApproved(uint256 indexed requestId, address indexed approver)",
@@ -56,17 +59,24 @@ export const CITIZEN_NFT_ABI = [
   "function createAttestationRequest(string evidenceURI) returns (uint256)",
   "function createRevocationRequest(address target, string evidenceURI)",
   "function approveRequest(uint256 requestId, bool signAsAttester)",
-  "function rejectRequest(uint256 requestId)",
+  "function rejectRequest(uint256 requestId, bool signAsAttester)",
   "function getRequest(uint256 requestId) view returns (address requester, address target, uint8 requestType, uint8 status, string evidenceURI, uint256 attesterSignatures, uint256 citizenSignatures, uint256 createdAt)",
+  "function getRequestRejections(uint256 requestId) view returns (uint256 attesterRejections, uint256 citizenRejections)",
   "function hasApprovedRequest(uint256 requestId, address approver) view returns (bool)",
   "function hasRejectedRequest(uint256 requestId, address rejector) view returns (bool)",
   "function hasCitizenNFT(address account) view returns (bool)",
   "function requestCount() view returns (uint256)",
   "function getVotes(address account) view returns (uint256)",
+  "function requiredAttesterSignatures() view returns (uint256)",
+  "function requiredCitizenSignatures() view returns (uint256)",
+  "function requiredRevocationAttesterSignatures() view returns (uint256)",
+  "function requiredRevocationCitizenSignatures() view returns (uint256)",
+  "function requiredAttesterRejections() view returns (uint256)",
+  "function requiredCitizenRejections() view returns (uint256)",
   "event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
-  "event RequestRejected(uint256 indexed requestId, address indexed rejector)",
+  "event RequestRejected(uint256 indexed requestId, address indexed rejector, bool isAttester, bool isCitizen, bool signedAsAttester)",
   "event CitizenNFTMinted(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
   "event CitizenNFTRevoked(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
 ] as const;

@@ -14,24 +14,30 @@ import { client } from "@/app/client";
 // ----- live infrastructure on Base mainnet -----
 
 export const MACI_INFRA = {
-  attesterNFT: "0xa06F09Cb406880512326318fbC09Cdb28631DA73",
-  citizenNFT: "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7",
+  // Rotated 2026-05-23: governance-mutable thresholds, 1+1 CitizenNFT
+  // revocation, O(1) burn lookup, multi-sig rejection. Both NFTs owned by timelock.
+  attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
+  citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
 
-  // MACI v2 — never rotated
+  // MACI v2 core — never rotated
   maci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
   verifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
-  gatekeeper: "0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee",
   voiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
   pollFactory: "0x604B8b61488e02b2EEeeB4993825afD436D526fE",
   messageProcessorFactory: "0x34EDb8C26cc759D3e63C2580323eDcB0A136dAAb",
   tallyFactory: "0xC6351B4470CE0C1fab41b45a902554A8040Df463",
 
+  // Rotated 2026-05-23 alongside the NFT redeploy (gatekeeper binds to the new CitizenNFT).
+  gatekeeper: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
+
   // Rotated 2026-05-08 to align VK keys with the production zKey signature.
   vkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
 
-  // Active Governor + Timelock — rotated 2026-05-09 for the isTallied → totalTallyResults fix.
-  governor: "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
-  timelock: "0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe",
+  // Active Governor + Timelock — rotated 2026-05-23 to add governance-tunable
+  // setters (quorumPercentage / quorumAbsolute / tallyGracePeriod /
+  // coordinator / coordinatorPubKey) and to rebind to the new NFTs.
+  governor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
+  timelock: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
 
   // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
   coordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
@@ -51,11 +57,11 @@ export const MACI_TREE_DEPTHS = {
 // ----- Governor parameter snapshot (also re-read live by useMaciInfra) -----
 
 export const GOVERNOR_PARAMS_SNAPSHOT = {
-  votingPeriodSeconds: 1800, // 30 min (test), production target: 7 days
+  votingPeriodSeconds: 604800, // 7 days
   quorumAbsolute: 2,
   quorumPercentage: 10,
   tallyGracePeriodSeconds: 604800, // 7 days
-  timelockMinDelaySeconds: 172800,
+  timelockMinDelaySeconds: 3600, // 1 hour (test phase); raise via timelock.updateDelay()
 } as const;
 
 // ----- coordinator service URL -----
@@ -143,6 +149,18 @@ export const ROTATION_HISTORY: ArchivedAddress[] = [
     address: "0xc50C8E2d7b8d13169aB2FAcb5000004d8Eb28465",
     archivedAt: "2026-05-09T08:22:05Z",
     reason: "Bound to the previous (isTallied-bug) Governor.",
+  },
+  {
+    kind: "governor",
+    address: "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
+    archivedAt: "2026-05-23T00:00:00Z",
+    reason: "Rotated alongside the NFT redeploy. New Governor adds governance-tunable setters (quorumPercentage, quorumAbsolute, tallyGracePeriod, coordinator, coordinatorPubKey) and rebinds to the new AttesterNFT + CitizenNFT.",
+  },
+  {
+    kind: "timelock",
+    address: "0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe",
+    archivedAt: "2026-05-23T00:00:00Z",
+    reason: "Bound to the previous Governor; redeployed with 1-hour min delay for the test phase (raise via updateDelay() proposal).",
   },
 ];
 

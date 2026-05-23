@@ -17,19 +17,19 @@ import { de } from "@/lib/translations/de";
 const CONTRACT_ROWS = [
   {
     role: de.governance.roleGovernor,
-    address: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",
+    address: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
   },
   {
     role: de.governance.roleTimelock,
-    address: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
+    address: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
   },
   {
     role: de.governance.roleCitizenNFT,
-    address: "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7",
+    address: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
   },
   {
     role: de.governance.roleAttesterNFT,
-    address: "0xa06F09Cb406880512326318fbC09Cdb28631DA73",
+    address: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
   },
 ] as const;
 

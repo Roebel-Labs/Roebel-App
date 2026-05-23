@@ -18,10 +18,12 @@
  *   COORDINATOR_PUBKEY_Y
  *
  * Optional .env:
- *   NFT_INITIAL_OWNER         — pre-handoff owner of new NFTs (default: deployer)
- *                                If set to a non-deployer address, the script skips
- *                                the transferOwnership step so the named owner can
- *                                perform any migration (e.g. emergencyBulkMint) first.
+ *   NFT_INITIAL_OWNER         — pre-handoff owner of new NFTs. If unset (default),
+ *                                the burner is used and the script auto-transfers
+ *                                ownership to the new Timelock at the end. If set
+ *                                to a non-deployer address (e.g. for a migration),
+ *                                the script skips the transferOwnership step so the
+ *                                named owner can perform any migration first.
  *   FOUNDING_ATTESTER_1/2/3   — defaults to project constants
  *   FOUNDING_CITIZEN_1/2/3    — defaults to founding attesters
  *   REQUIRED_ATTESTER_SIGNATURES (default 1)
@@ -44,7 +46,11 @@ const DEFAULT_FOUNDING_ATTESTERS = [
   "0x90f677dc480e76a127ec1dce42263a370e396313",
   "0xf468d87fca0e15bc2c383ef482d38b9b77812b29",
 ];
-const DEFAULT_INITIAL_OWNER = "0x1C11F068c83D364Ad0A015C01D51d2cC6c62d1f9"; // maxbrych.eth
+// Pre-handoff NFT owner. By default the deployer holds ownership briefly and
+// the script auto-transfers to the new Timelock at the end. Override via
+// NFT_INITIAL_OWNER env if a different address needs interim control
+// (e.g. to run a one-shot bulk-mint migration before handoff).
+const MAXBRYCH_ETH = "0x1C11F068c83D364Ad0A015C01D51d2cC6c62d1f9";
 
 const REQUIRED_ENV = [
   "VOTING_PERIOD_SECONDS",
@@ -139,9 +145,10 @@ async function main() {
     envAddr("FOUNDING_CITIZEN_3", founders[2]),
   ];
 
-  // Default initialOwner is maxbrych.eth (per plan). If a different value is provided
-  // via env, use that. If it equals the deployer, we auto-transfer at the end.
-  const initialOwnerRaw = envAddr("NFT_INITIAL_OWNER", DEFAULT_INITIAL_OWNER);
+  // Default initialOwner = deployer → script auto-transfers ownership to the new
+  // Timelock at the end (full automation, no manual step). Override via NFT_INITIAL_OWNER
+  // only if you need an interim owner (e.g. for a one-shot migration).
+  const initialOwnerRaw = envAddr("NFT_INITIAL_OWNER", deployerAddr);
   const initialOwner = ethers.getAddress(initialOwnerRaw);
   const autoHandoff = initialOwner === deployerAddr;
 

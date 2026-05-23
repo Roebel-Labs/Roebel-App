@@ -288,7 +288,11 @@ export function useRejectRequest() {
   const [error, setError] = useState<Error | null>(null);
 
   const rejectRequest = useCallback(
-    async (requestId: number, nftType: 'citizen' | 'attester' = 'citizen') => {
+    async (
+      requestId: number,
+      nftType: 'citizen' | 'attester' = 'citizen',
+      signAsAttester = true,
+    ) => {
       if (!account) {
         throw new Error('No wallet connected');
       }
@@ -299,13 +303,22 @@ export function useRejectRequest() {
       try {
         console.log(`🚀 Rejecting ${nftType} request #${requestId}...`);
 
-        const contract = nftType === 'citizen' ? citizenNFTContract : attesterNFTContract;
-
-        const transaction = prepareContractCall({
-          contract,
-          method: 'function rejectRequest(uint256 requestId)',
-          params: [BigInt(requestId)],
-        });
+        let transaction;
+        if (nftType === 'citizen') {
+          // CitizenNFT.rejectRequest now requires role selection — single rejection
+          // no longer auto-vetoes; needs both Attester+Citizen rejection thresholds.
+          transaction = prepareContractCall({
+            contract: citizenNFTContract,
+            method: 'function rejectRequest(uint256 requestId, bool signAsAttester)',
+            params: [BigInt(requestId), signAsAttester],
+          });
+        } else {
+          transaction = prepareContractCall({
+            contract: attesterNFTContract,
+            method: 'function rejectRequest(uint256 requestId)',
+            params: [BigInt(requestId)],
+          });
+        }
 
         const { transactionHash } = await sendTransaction({
           transaction,
@@ -314,7 +327,8 @@ export function useRejectRequest() {
 
         console.log('✅ Rejection transaction submitted:', transactionHash);
 
-        // Update Supabase
+        // NOTE: signature flips status only when BOTH role thresholds are met.
+        // Keep Supabase optimistic only if your rules expect single-sig veto.
         await updateSupabaseRequestStatus(requestId, 'rejected');
 
         setIsLoading(false);

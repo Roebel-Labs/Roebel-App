@@ -38,11 +38,12 @@ export const usdcContract = getContract({
 //    historical proposals. Reads only.
 //  - governorContract       — current MACI v2 privacy-voting governor. All
 //    new proposals + votes go here.
-export const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0xa06F09Cb406880512326318fbC09Cdb28631DA73";
-export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7";
+// Rotated 2026-05-23: governance-mutable thresholds, 1+1 revocation, Bug A/B/C fixes.
+export const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
+export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
 
 export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3";
+export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177";
 
 // MACI v2 infrastructure
 export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
