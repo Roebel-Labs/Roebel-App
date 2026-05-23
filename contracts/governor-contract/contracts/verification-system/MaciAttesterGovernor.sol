@@ -89,7 +89,9 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     IMACIDeploy public immutable maci;
     address public immutable verifier;
     address public immutable vkRegistry;
-    address public immutable coordinator;
+
+    /// @notice Mutable so governance can rotate a compromised coordinator without redeploying.
+    address public coordinator;
 
     DomainObjs.PubKey public coordinatorPubKey;
     Params.TreeDepths public treeDepths;
@@ -117,6 +119,11 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
 
     event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId);
     event ProposalCreatedByAttester(uint256 indexed proposalId, address indexed attester, string description);
+    event QuorumPercentageChanged(uint256 oldValue, uint256 newValue);
+    event QuorumAbsoluteChanged(uint256 oldValue, uint256 newValue);
+    event TallyGracePeriodChanged(uint256 oldValue, uint256 newValue);
+    event CoordinatorChanged(address oldValue, address newValue);
+    event CoordinatorPubKeyChanged(DomainObjs.PubKey oldValue, DomainObjs.PubKey newValue);
 
     struct InitArgs {
         IAttesterNFT attesterNFT;
@@ -312,6 +319,44 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     // solhint-disable-next-line func-name-mixedcase
     function CLOCK_MODE() public pure override returns (string memory) {
         return "mode=timestamp";
+    }
+
+    // ---- Governance-tunable setters (Timelock = _executor()) ----
+
+    /// @notice Adjust the percentage-of-signups component of quorum. Validates `v <= 100`.
+    function setQuorumPercentage(uint256 v) external onlyGovernance {
+        require(v <= 100, "must be <= 100");
+        emit QuorumPercentageChanged(quorumPercentage, v);
+        quorumPercentage = v;
+    }
+
+    /// @notice Adjust the absolute floor used when `signups * quorumPercentage / 100` is too low.
+    function setQuorumAbsolute(uint256 v) external onlyGovernance {
+        emit QuorumAbsoluteChanged(quorumAbsolute, v);
+        quorumAbsolute = v;
+    }
+
+    /// @notice Adjust how long after the OZ deadline a proposal can still be tallied. Capped at 30 days.
+    function setTallyGracePeriod(uint256 v) external onlyGovernance {
+        require(v <= 30 days, "grace period too long");
+        emit TallyGracePeriodChanged(tallyGracePeriod, v);
+        tallyGracePeriod = v;
+    }
+
+    /// @notice Rotate the on-chain coordinator address (e.g. EOA → Gnosis Safe at 7+ Attesters).
+    ///         Affects only *future* polls — MessageProcessor / Tally ownership is set per-poll
+    ///         at `propose()` time and is not retroactively reassigned.
+    function setCoordinator(address v) external onlyGovernance {
+        require(v != address(0), "zero address");
+        emit CoordinatorChanged(coordinator, v);
+        coordinator = v;
+    }
+
+    /// @notice Rotate the MACI public key used to encrypt ballots. Future-proofs for interim
+    ///         off-chain coordinator rotation and the eventual threshold-MACI swap.
+    function setCoordinatorPubKey(DomainObjs.PubKey calldata v) external onlyGovernance {
+        emit CoordinatorPubKeyChanged(coordinatorPubKey, v);
+        coordinatorPubKey = v;
     }
 
     // ---- Required multi-inheritance overrides ----
