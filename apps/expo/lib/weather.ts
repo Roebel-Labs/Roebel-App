@@ -158,11 +158,18 @@ export async function fetchAllWeather(): Promise<WeatherSnapshot> {
   return { current, hourly, daily };
 }
 
-// Precipitation probability (0-100) below which rain/shower/thunder
-// condition types are demoted to a partly-cloudy visual. Google's
-// condition enum can read e.g. CHANCE_OF_SHOWERS at 5% probability,
-// which is misleading when shown next to the actual percentage.
-const PRECIP_VISUAL_THRESHOLD = 30;
+// Google's weatherCondition.type often returns rain-flavored labels
+// (CHANCE_OF_SHOWERS, LIGHT_RAIN_SHOWERS, SCATTERED_SHOWERS, …) at
+// low probabilities. We tier the visual fall-off so the icon next to
+// the percentage doesn't claim more rain than the number suggests:
+//   ≥ 60 %  → rain
+//   30–60 % → cloudy
+//   10–30 % → partly cloudy
+//   < 10 %  → cloudy (rainy enum at near-zero probability usually means
+//             an otherwise overcast day rather than a sunny one)
+const PRECIP_RAIN_MIN = 60;
+const PRECIP_CLOUDY_MIN = 30;
+const PRECIP_PARTLY_CLOUDY_MIN = 10;
 
 function isRainyConditionType(upperType: string): boolean {
   return (
@@ -183,9 +190,12 @@ export function getWeatherIcon(
   if (
     isRainyConditionType(type) &&
     precipitationProbability !== undefined &&
-    precipitationProbability < PRECIP_VISUAL_THRESHOLD
+    precipitationProbability < PRECIP_RAIN_MIN
   ) {
-    return SunCloudIcon;
+    const isPartlyCloudyBand =
+      precipitationProbability >= PRECIP_PARTLY_CLOUDY_MIN &&
+      precipitationProbability < PRECIP_CLOUDY_MIN;
+    return isPartlyCloudyBand ? SunCloudIcon : CloudIcon;
   }
 
   if (type.includes('CLEAR') || type.includes('SUNNY')) return SunIcon;
@@ -222,9 +232,12 @@ export function getWeatherIllustration(
   if (
     isRainyConditionType(t) &&
     precipitationProbability !== undefined &&
-    precipitationProbability < PRECIP_VISUAL_THRESHOLD
+    precipitationProbability < PRECIP_RAIN_MIN
   ) {
-    return ILLUSTRATIONS.leichtBewoelkt;
+    const isPartlyCloudyBand =
+      precipitationProbability >= PRECIP_PARTLY_CLOUDY_MIN &&
+      precipitationProbability < PRECIP_CLOUDY_MIN;
+    return isPartlyCloudyBand ? ILLUSTRATIONS.heiter : ILLUSTRATIONS.bewoelkt;
   }
 
   if (t === 'CLEAR') return ILLUSTRATIONS.sonnig;
