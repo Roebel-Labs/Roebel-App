@@ -343,7 +343,11 @@ function ResultPhase({
   onRetry: () => void;
 }) {
   const iconBg =
-    kind === 'approved' ? '#16a34a' : kind === 'declined' ? '#DC2626' : '#6b7280';
+    kind === 'approved'
+      ? colors.primary
+      : kind === 'declined'
+      ? '#DC2626'
+      : '#6b7280';
   const iconText = kind === 'approved' ? '✓' : kind === 'declined' ? '✕' : '⌛';
   const title =
     kind === 'approved'
@@ -353,7 +357,7 @@ function ResultPhase({
       : 'Zeit abgelaufen';
   const body =
     kind === 'approved'
-      ? `${formatEuros(amountCents)} wurden deiner Tagesabrechnung gutgeschrieben.`
+      ? 'Wurde deiner Tagesabrechnung gutgeschrieben.'
       : kind === 'declined'
       ? 'Der Kunde hat die Zahlung abgelehnt.'
       : 'Der Kunde hat die Zahlung nicht rechtzeitig bestätigt.';
@@ -363,6 +367,11 @@ function ResultPhase({
       <View style={[styles.resultIcon, { backgroundColor: iconBg }]}>
         <Text style={styles.resultIconText}>{iconText}</Text>
       </View>
+      {kind === 'approved' ? (
+        <Text style={[styles.resultAmount, { color: colors.textPrimary }]}>
+          {formatEuros(amountCents)}
+        </Text>
+      ) : null}
       <Text style={[styles.resultTitle, { color: colors.textPrimary }]}>{title}</Text>
       <Text style={[styles.resultBody, { color: colors.textSecondary }]}>{body}</Text>
 
@@ -522,6 +531,12 @@ const styles = StyleSheet.create({
     fontSize: 44,
     color: '#ffffff',
     fontFamily: 'Inter-Bold',
+  },
+  resultAmount: {
+    fontSize: 40,
+    fontFamily: 'Inter-Bold',
+    marginTop: 4,
+    letterSpacing: -0.5,
   },
   resultTitle: {
     fontSize: 22,

@@ -1,14 +1,13 @@
 // Röbel Card — Partner dashboard.
 //
-// Reads live data from roebel_card_partners for the active org account.
-// - No row yet for the active org → show a "Jetzt als Partner registrieren" CTA
-// - Row exists → render status banner + balance cards + recent charges list
-//
-// Manual charge entry is STUBBED for this session because
-// roebel_card_charges.card_id is NOT NULL and the scanner flow that
-// identifies a buyer card hasn't landed yet.
+// Reads live data from roebel_card_partners + roebel_card_charges for the
+// active org account.
+// - No row yet for the active org → "Jetzt als Partner registrieren" CTA
+// - Status pending / rejected / suspended → status banner explains why
+// - Status approved → no banner; clean dashboard with KPI grid +
+//   7-day revenue chart + recent transactions
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -32,6 +31,9 @@ import {
 } from '@/lib/supabase-roebel-card-partners';
 import { formatEuros } from '@/lib/format-currency';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import PartnerRevenueChart, {
+  peakHourLabel,
+} from './_components/PartnerRevenueChart';
 
 type LoadState =
   | { kind: 'loading' }
@@ -81,7 +83,10 @@ export default function PartnerDashboardScreen() {
   }, [load]);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={['top', 'bottom']}
+    >
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.replace('/profile' as any)}
@@ -92,7 +97,9 @@ export default function PartnerDashboardScreen() {
         >
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Partner Dashboard</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+          Partner Dashboard
+        </Text>
         <View style={styles.backButton} />
       </View>
 
@@ -105,85 +112,189 @@ export default function PartnerDashboardScreen() {
       ) : loadState.kind === 'not-registered' ? (
         <NotRegisteredState colors={colors} router={router} />
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          }
-        >
-          <StatusBanner partner={loadState.partner} colors={colors} />
-
-          <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>Guthaben</Text>
-          <View style={styles.balanceRow}>
-            <BalanceCard
-              label="Offen"
-              value={formatEuros(loadState.partner.pending_balance_cents)}
-              colors={colors}
-            />
-            <BalanceCard
-              label="Gesamt"
-              value={formatEuros(loadState.partner.lifetime_volume_cents)}
-              colors={colors}
-            />
-          </View>
-
-          <Pressable
-            onPress={() => {
-              if (loadState.partner.status !== 'approved') {
-                Alert.alert(
-                  'Noch nicht freigeschaltet',
-                  'Zahlungen kannst du erst erfassen, sobald dein Antrag geprüft und freigeschaltet wurde.',
-                );
-                return;
-              }
-              router.push('/roebel-card/partner/scan' as any);
-            }}
-            style={[
-              styles.chargeButton,
-              {
-                backgroundColor:
-                  loadState.partner.status === 'approved' ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.chargeButtonText,
-                {
-                  color:
-                    loadState.partner.status === 'approved'
-                      ? colors.onPrimary
-                      : colors.textSecondary,
-                },
-              ]}
-            >
-              + Zahlung erfassen
-            </Text>
-          </Pressable>
-
-          <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>
-            Letzte Transaktionen
-          </Text>
-          {loadState.charges.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-                Noch keine Transaktionen
-              </Text>
-            </View>
-          ) : (
-            loadState.charges.map((charge) => (
-              <ChargeRow key={charge.id} charge={charge} colors={colors} />
-            ))
-          )}
-
-          <View style={styles.quietRow}>
-            <QuietCard title="Angebote" colors={colors} />
-            <QuietCard title="Auszahlungen" colors={colors} />
-          </View>
-        </ScrollView>
+        <ReadyState
+          colors={colors}
+          partner={loadState.partner}
+          charges={loadState.charges}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onScanPress={() => {
+            if (loadState.partner.status !== 'approved') {
+              Alert.alert(
+                'Noch nicht freigeschaltet',
+                'Zahlungen kannst du erst erfassen, sobald dein Antrag geprüft und freigeschaltet wurde.',
+              );
+              return;
+            }
+            router.push('/roebel-card/partner/scan' as any);
+          }}
+        />
       )}
     </SafeAreaView>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Ready state — main dashboard
+// ---------------------------------------------------------------------------
+
+function ReadyState({
+  colors,
+  partner,
+  charges,
+  refreshing,
+  onRefresh,
+  onScanPress,
+}: {
+  colors: ReturnType<typeof useTheme>['colors'];
+  partner: RoebelCardPartnerRow;
+  charges: PartnerChargeRow[];
+  refreshing: boolean;
+  onRefresh: () => void;
+  onScanPress: () => void;
+}) {
+  const kpis = useMemo(() => computeKpis(charges), [charges]);
+  const peakHour = useMemo(() => peakHourLabel(charges), [charges]);
+  const recentForList = useMemo(() => charges.slice(0, 10), [charges]);
+  const eyebrow = peakHour
+    ? `Letzte 7 Tage · Stoßzeit ${peakHour}`
+    : 'Letzte 7 Tage';
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
+      }
+    >
+      {partner.status !== 'approved' ? (
+        <StatusBanner partner={partner} colors={colors} />
+      ) : null}
+
+      <View style={styles.kpiGrid}>
+        <KpiCard label="Heute" value={formatEuros(kpis.todayCents)} colors={colors} />
+        <KpiCard label="7 Tage" value={formatEuros(kpis.weekCents)} colors={colors} />
+        <KpiCard
+          label="Bestätigt"
+          value={kpis.approvalRate !== null ? `${kpis.approvalRate} %` : '—'}
+          colors={colors}
+        />
+        <KpiCard label="Zahlungen" value={String(kpis.monthCount)} colors={colors} />
+      </View>
+
+      <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+        <View style={styles.chartHead}>
+          <Text style={[styles.chartEyebrow, { color: colors.textTertiary }]}>
+            {eyebrow}
+          </Text>
+          <Text style={[styles.chartAccent, { color: colors.textSecondary }]}>
+            Offen{' '}
+            <Text style={{ color: colors.textPrimary, fontFamily: 'Inter-SemiBold' }}>
+              {formatEuros(partner.pending_balance_cents)}
+            </Text>
+          </Text>
+        </View>
+        <PartnerRevenueChart charges={charges} />
+      </View>
+
+      <Pressable
+        onPress={onScanPress}
+        style={[
+          styles.chargeButton,
+          {
+            backgroundColor:
+              partner.status === 'approved' ? colors.primary : colors.border,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.chargeButtonText,
+            {
+              color:
+                partner.status === 'approved'
+                  ? colors.onPrimary
+                  : colors.textSecondary,
+            },
+          ]}
+        >
+          + Zahlung erfassen
+        </Text>
+      </Pressable>
+
+      <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>
+        Letzte Transaktionen
+      </Text>
+      {recentForList.length === 0 ? (
+        <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+            Noch keine Transaktionen
+          </Text>
+        </View>
+      ) : (
+        recentForList.map((charge) => (
+          <ChargeRow key={charge.id} charge={charge} colors={colors} />
+        ))
+      )}
+
+      <View style={styles.quietRow}>
+        <QuietCard title="Angebote" colors={colors} />
+        <QuietCard title="Auszahlungen" colors={colors} />
+      </View>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KPI computation
+// ---------------------------------------------------------------------------
+
+type Kpis = {
+  todayCents: number;
+  weekCents: number;
+  approvalRate: number | null;
+  monthCount: number;
+};
+
+function computeKpis(charges: PartnerChargeRow[]): Kpis {
+  const now = Date.now();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayMs = startOfToday.getTime();
+  const weekAgoMs = now - 7 * 24 * 60 * 60 * 1000;
+  const monthAgoMs = now - 30 * 24 * 60 * 60 * 1000;
+
+  let todayCents = 0;
+  let weekCents = 0;
+  let monthCount = 0;
+  let weekApproved = 0;
+  let weekResolved = 0; // approved + declined + expired in last 7d
+
+  for (const c of charges) {
+    const ts = new Date(c.created_at).getTime();
+    if (c.status === 'approved') {
+      if (ts >= startOfTodayMs) todayCents += c.amount_cents;
+      if (ts >= weekAgoMs) {
+        weekCents += c.amount_cents;
+        weekApproved += 1;
+      }
+      if (ts >= monthAgoMs) monthCount += 1;
+    }
+    if (ts >= weekAgoMs) {
+      if (c.status === 'approved' || c.status === 'declined' || c.status === 'expired') {
+        weekResolved += 1;
+      }
+    }
+  }
+
+  const approvalRate =
+    weekResolved > 0 ? Math.round((weekApproved / weekResolved) * 100) : null;
+
+  return { todayCents, weekCents, approvalRate, monthCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -202,8 +313,6 @@ function StatusBanner({
   const subtitle =
     partner.status === 'pending'
       ? `Dein Antrag vom ${formatGermanDate(partner.created_at)}`
-      : partner.status === 'approved'
-      ? `Seit ${formatGermanDate(partner.approved_at ?? partner.created_at)}`
       : partner.status === 'rejected'
       ? 'Bitte kontaktiere uns'
       : 'Zahlungen sind aktuell nicht möglich';
@@ -230,7 +339,7 @@ const STATUS_BG: Record<PartnerStatus, string> = {
   suspended: '#D97706',
 };
 
-function BalanceCard({
+function KpiCard({
   label,
   value,
   colors,
@@ -240,9 +349,9 @@ function BalanceCard({
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
   return (
-    <View style={[styles.balanceCard, { backgroundColor: colors.surface }]}>
-      <Text style={[styles.balanceValue, { color: colors.textPrimary }]}>{value}</Text>
-      <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{label}</Text>
+    <View style={[styles.kpiCard, { backgroundColor: colors.surface }]}>
+      <Text style={[styles.kpiValue, { color: colors.textPrimary }]}>{value}</Text>
+      <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>{label}</Text>
     </View>
   );
 }
@@ -261,7 +370,9 @@ function ChargeRow({
           {formatEuros(charge.amount_cents)}
         </Text>
         {charge.partner_note ? (
-          <Text style={[styles.chargeNote, { color: colors.textSecondary }]}>{charge.partner_note}</Text>
+          <Text style={[styles.chargeNote, { color: colors.textSecondary }]}>
+            {charge.partner_note}
+          </Text>
         ) : null}
       </View>
       <View style={styles.chargeRowRight}>
@@ -314,7 +425,9 @@ function QuietCard({
   return (
     <View style={[styles.quietCard, { backgroundColor: colors.surface }]}>
       <Text style={[styles.quietTitle, { color: colors.textPrimary }]}>{title}</Text>
-      <Text style={[styles.quietSubtitle, { color: colors.textTertiary }]}>Bald verfügbar</Text>
+      <Text style={[styles.quietSubtitle, { color: colors.textTertiary }]}>
+        Bald verfügbar
+      </Text>
     </View>
   );
 }
@@ -339,7 +452,9 @@ function NoAccountState({
         onPress={() => router.replace('/create-org' as any)}
         style={[styles.statePrimary, { backgroundColor: colors.primary }]}
       >
-        <Text style={[styles.statePrimaryText, { color: colors.onPrimary }]}>Unternehmen anlegen</Text>
+        <Text style={[styles.statePrimaryText, { color: colors.onPrimary }]}>
+          Unternehmen anlegen
+        </Text>
       </Pressable>
     </View>
   );
@@ -451,10 +566,53 @@ const styles = StyleSheet.create({
   statusBanner: {
     borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   statusTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
   statusSubtitle: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4, opacity: 0.9 },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  kpiCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 2,
+  },
+  kpiValue: {
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: -0.3,
+  },
+  kpiLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  chartCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  chartHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chartEyebrow: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  chartAccent: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
   sectionHeading: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
@@ -463,16 +621,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 12,
   },
-  balanceRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  balanceCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'flex-start',
-    gap: 4,
-  },
-  balanceValue: { fontSize: 22, fontFamily: 'Inter-Bold' },
-  balanceLabel: { fontSize: 13, fontFamily: 'Inter-Regular' },
   chargeButton: {
     borderRadius: 16,
     paddingVertical: 16,

@@ -14,6 +14,7 @@ import {
   CreditCard,
   Settings,
   UtensilsCrossed,
+  BookOpen,
 } from "lucide-react";
 import {
   subTypeFeatures,
@@ -91,6 +92,12 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       href: "/dashboard/events",
       icon: <Calendar className="h-4 w-4" />,
       visible: features.events,
+    },
+    {
+      name: "Stories",
+      href: "/dashboard/story-collections",
+      icon: <BookOpen className="h-4 w-4" />,
+      visible: features.storyCollections,
     },
     {
       name: "Röbel Card Partner",

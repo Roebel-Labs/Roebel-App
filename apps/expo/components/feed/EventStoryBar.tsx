@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,17 +12,69 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchThisWeekEvents } from '@/lib/supabase-posts';
 import type { EventRecord } from '@/lib/types';
-import EventStoryViewer from './EventStoryViewer';
+import StoryViewer, { type StorySlideInput } from './StoryViewer';
+
+function formatEventDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('de-DE', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+function formatWeekdayLong(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('de-DE', { weekday: 'long' });
+}
 
 export default function EventStoryBar() {
   const { colors } = useTheme();
   const router = useRouter();
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchThisWeekEvents().then((data) => setEvents(data as EventRecord[]));
   }, []);
+
+  const activeEvent = useMemo(
+    () => events.find((e) => e.id === activeEventId) ?? null,
+    [activeEventId, events],
+  );
+
+  // Each event opens its own viewer (one slide = the event poster + meta).
+  // No more cross-event paging.
+  const viewerSlides: StorySlideInput[] = useMemo(() => {
+    if (!activeEvent) return [];
+    const orgName = activeEvent.account?.name ?? activeEvent.organizer_name;
+    const orgAvatar = (activeEvent.account as any)?.avatar_url ?? null;
+    const locationLine = activeEvent.location
+      ? `${'\u{1F4CD}'} ${activeEvent.location}`
+      : undefined;
+
+    return [
+      {
+        backgroundUrl: activeEvent.image_url ?? '',
+        imageFit: 'contain',
+        header: {
+          avatarUrl: orgAvatar,
+          title: orgName,
+          subtitle: formatEventDate(activeEvent.date),
+        },
+        pillText: formatWeekdayLong(activeEvent.date),
+        title: activeEvent.title,
+        subtitleLine: locationLine,
+        cta: {
+          label: 'Mehr erfahren',
+          onPress: () => {
+            router.push(`/event/${activeEvent.id}` as any);
+            setTimeout(() => setActiveEventId(null), 300);
+          },
+        },
+      },
+    ];
+  }, [activeEvent, router]);
 
   return (
     <View style={[styles.wrapper, { borderBottomColor: colors.border }]}>
@@ -40,7 +92,12 @@ export default function EventStoryBar() {
             { backgroundColor: colors.background, borderColor: colors.background },
           ]}
         >
-          <View style={[styles.createCardTopHalf, { backgroundColor: colors.feedBackground }]} />
+          <View
+            style={[
+              styles.createCardTopHalf,
+              { backgroundColor: colors.feedBackground },
+            ]}
+          />
           <View style={[styles.plusCircle, { backgroundColor: colors.primary }]}>
             <Text style={[styles.plusText, { color: colors.background }]}>+</Text>
           </View>
@@ -50,17 +107,16 @@ export default function EventStoryBar() {
         </Pressable>
 
         {/* Event story cards */}
-        {events.map((event, index) => {
+        {events.map((event) => {
           const orgName = (event.account as any)?.name ?? event.organizer_name;
           const orgAvatar = (event.account as any)?.avatar_url ?? null;
 
           return (
             <Pressable
               key={event.id}
-              onPress={() => setViewerIndex(index)}
+              onPress={() => setActiveEventId(event.id)}
               style={styles.card}
             >
-              {/* Background image */}
               {event.image_url ? (
                 <Image
                   source={{ uri: event.image_url }}
@@ -71,7 +127,6 @@ export default function EventStoryBar() {
                 <View style={[StyleSheet.absoluteFill, styles.cardImageFallback]} />
               )}
 
-              {/* Org avatar — top left */}
               <View style={styles.storyOrgRow}>
                 <View style={styles.storyOrgAvatar}>
                   {orgAvatar ? (
@@ -88,7 +143,6 @@ export default function EventStoryBar() {
                 </View>
               </View>
 
-              {/* Bottom gradient + title */}
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.82)']}
                 style={styles.cardGradient}
@@ -102,18 +156,13 @@ export default function EventStoryBar() {
         })}
       </ScrollView>
 
-      {/* Full-screen story viewer */}
-      {viewerIndex !== null && (
-        <EventStoryViewer
-          events={events}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-          onNavigateToEvent={(id) => {
-            router.push(`/event/${id}` as any);
-            setTimeout(() => setViewerIndex(null), 300);
-          }}
-        />
-      )}
+      <StoryViewer
+        visible={activeEventId !== null && viewerSlides.length > 0}
+        slides={viewerSlides}
+        initialIndex={0}
+        durationMs={10000}
+        onClose={() => setActiveEventId(null)}
+      />
     </View>
   );
 }

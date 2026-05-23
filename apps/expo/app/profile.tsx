@@ -26,6 +26,11 @@ import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
 import TouristActionRow from '@/components/profile/TouristActionRow';
 import OrgActionCards from '@/components/profile/OrgActionCards';
+import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
+import {
+  fetchProfileStoryCollections,
+  type StoryCollection,
+} from '@/lib/supabase-story-collections';
 
 // Import SVG icons
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -118,6 +123,13 @@ const handleRefresh = async () => {
   const orgAccount = ownedAccounts.find(a => a.account_type === 'organisation');
   const showBusinessRegister = isCitizen && !isBusinessOwner && !orgAccount;
   const wantsToBeCitizen = user?.preferred_role === 'buerger';
+
+  const [profileStoryCollections, setProfileStoryCollections] = useState<
+    StoryCollection[]
+  >([]);
+  useEffect(() => {
+    fetchProfileStoryCollections().then(setProfileStoryCollections);
+  }, []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -314,6 +326,14 @@ const handleRefresh = async () => {
                     />
                     <TouristActionRow />
                   </>
+                )}
+
+                {/* "Lerne mehr über die Röbel App" — citizens (incl. aspiring) only */}
+                {!isOrg && (isCitizen || isAspiringCitizen || wantsToBeCitizen) && (
+                  <StoryCollectionsBar
+                    collections={profileStoryCollections}
+                    heading="Lerne mehr über die Röbel App"
+                  />
                 )}
 
                 {/* Menu Items */}

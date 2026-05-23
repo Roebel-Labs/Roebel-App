@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,11 @@ import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import EventStoryBar from './EventStoryBar';
+import StoryCollectionsBar from './StoryCollectionsBar';
+import {
+  fetchHomeFeedStoryCollections,
+  type StoryCollection,
+} from '@/lib/supabase-story-collections';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
@@ -199,6 +204,12 @@ export default function FeedHome() {
   const insets = useSafeAreaInsets();
 
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [homeFeedStoryCollections, setHomeFeedStoryCollections] = useState<
+    StoryCollection[]
+  >([]);
+  useEffect(() => {
+    fetchHomeFeedStoryCollections().then(setHomeFeedStoryCollections);
+  }, []);
   const headerTranslateY = useSharedValue(0);
 
   const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
@@ -473,7 +484,14 @@ export default function FeedHome() {
               walletAddress={walletAddress}
               onCompose={handleCompose}
               onMore={handleMore}
-              listHeader={<EventStoryBar />}
+              listHeader={
+                <>
+                  <EventStoryBar />
+                  <StoryCollectionsBar
+                    collections={homeFeedStoryCollections}
+                  />
+                </>
+              }
               {...feedListProps}
             />
           </View>

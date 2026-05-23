@@ -240,7 +240,7 @@ export async function fetchApprovedPartners(): Promise<ApprovedPartnerDisplay[]>
 
 export async function fetchRecentChargesByPartner(
   partnerId: string,
-  limit = 20,
+  limit = 200,
 ): Promise<PartnerChargeRow[]> {
   const { data, error } = await supabase
     .from('roebel_card_charges' as any)

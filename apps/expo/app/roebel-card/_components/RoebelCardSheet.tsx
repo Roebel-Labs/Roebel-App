@@ -118,7 +118,7 @@ export default function RoebelCardSheet({
         </View>
 
         <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-          Partner-Geschäfte
+          Verlauf
         </Text>
 
         {historyLoading && history.length === 0 ? (
