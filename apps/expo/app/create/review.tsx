@@ -16,6 +16,8 @@ import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useCreatePost } from '@/context/CreatePostContext';
+import { usePendingPostFeedback } from '@/context/PendingPostFeedbackContext';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { createPost, createPoll } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
@@ -37,6 +39,8 @@ export default function ReviewScreen() {
   const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
   const draft = useCreatePost();
+  const activeProfileImage = useActiveProfileImage();
+  const { signal: signalPostFeedback } = usePendingPostFeedback();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const walletAddress = user?.wallet_address || '';
@@ -83,9 +87,10 @@ export default function ReviewScreen() {
       }
 
       draft.reset();
-      showSnackbar({ message: 'Beitrag veröffentlicht!' });
+      signalPostFeedback({ message: 'Beitrag veröffentlicht!' });
 
-      // Navigate back to feed
+      // Navigate back to feed — the home screen consumes the pending
+      // feedback on focus, refreshes the lists, and shows the snackbar.
       router.dismissAll();
     } catch (err) {
       console.error('Error creating post:', err);
@@ -115,13 +120,17 @@ export default function ReviewScreen() {
         {/* Post preview */}
         <View style={[styles.previewCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.previewAuthor}>
-            <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {user?.username?.charAt(0)?.toUpperCase() || '?'}
-              </Text>
-            </View>
+            {activeProfileImage.url ? (
+              <Image source={{ uri: activeProfileImage.url }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
+                <Text style={[styles.avatarText, { color: colors.primary }]}>
+                  {activeProfileImage.fallbackInitial}
+                </Text>
+              </View>
+            )}
             <Text style={[styles.authorName, { color: colors.textPrimary }]}>
-              {user?.username || 'Unbekannt'}
+              {activeProfileImage.displayName}
             </Text>
           </View>
 

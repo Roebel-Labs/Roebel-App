@@ -27,7 +27,7 @@ import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 
 import ImageIcon from '@/assets/icons/image-01.svg';
-import LocationIcon from '@/assets/icons/location-small.svg';
+import VideoIcon from '@/assets/icons/video-01.svg';
 import MarketsIcon from '@/assets/icons/markets.svg';
 import CalendarIcon from '@/assets/icons/calendar.svg';
 import CommunityIcon from '@/assets/icons/community.svg';
@@ -292,7 +292,7 @@ export default function CreateScreen() {
             />
             <View>
               <Text style={[styles.authorName, { color: colors.textPrimary }]}>
-                {user?.username || 'Unbekannt'}
+                {activeProfileImage.displayName}
               </Text>
               <Text style={[styles.authorLocation, { color: colors.textSecondary }]}>
                 Röbel/Müritz
@@ -432,9 +432,6 @@ export default function CreateScreen() {
         {/* Toolbar */}
         <View style={[styles.toolbar, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
           <View style={styles.toolbarLeft}>
-            <Pressable style={styles.toolbarBtn} onPress={() => {}}>
-              <Text style={[styles.toolbarIcon, { color: colors.textSecondary }]}>@</Text>
-            </Pressable>
             <Pressable
               style={styles.toolbarBtn}
               onPress={() => draft.addImages(walletAddress)}
@@ -457,9 +454,9 @@ export default function CreateScreen() {
               disabled={!!draft.videoUrl || draft.images.length > 0 || draft.isUploading}
               accessibilityLabel="Video anhängen"
             >
-              <Ionicons
-                name="videocam-outline"
-                size={22}
+              <VideoIcon
+                width={22}
+                height={22}
                 color={
                   draft.videoUrl || draft.images.length > 0
                     ? colors.disabled
@@ -476,9 +473,6 @@ export default function CreateScreen() {
               accessibilityLabel="Emoji oder Sticker öffnen"
             >
               <EmojiIcon width={22} height={22} color={colors.textSecondary} />
-            </Pressable>
-            <Pressable style={styles.toolbarBtn} onPress={() => {}}>
-              <LocationIcon width={22} height={22} color={colors.textSecondary} />
             </Pressable>
           </View>
 
@@ -747,10 +741,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  toolbarIcon: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
   },
   moreBtn: {
     flexDirection: 'row',

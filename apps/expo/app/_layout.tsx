@@ -13,6 +13,7 @@ import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
+import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider } from '@/context/UserContext';
@@ -314,11 +315,13 @@ function Layout() {
                       <BookmarksProvider>
                         <LocationProvider>
                           <SnackbarProvider>
-                            <ExploreDotProvider>
-                              <ConsentGate />
-                              <AppUpdateGate />
-                              <ThemedLayout />
-                            </ExploreDotProvider>
+                            <PendingPostFeedbackProvider>
+                              <ExploreDotProvider>
+                                <ConsentGate />
+                                <AppUpdateGate />
+                                <ThemedLayout />
+                              </ExploreDotProvider>
+                            </PendingPostFeedbackProvider>
                           </SnackbarProvider>
                         </LocationProvider>
                       </BookmarksProvider>

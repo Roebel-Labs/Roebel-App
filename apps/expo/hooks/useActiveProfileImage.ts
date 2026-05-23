@@ -5,6 +5,7 @@ export type ActiveProfileImage = {
   url: string | null;
   fallbackInitial: string;
   isOrg: boolean;
+  displayName: string;
 };
 
 /**
@@ -25,6 +26,7 @@ export function useActiveProfileImage(): ActiveProfileImage {
       url: activeAccount.avatar_url ?? activeAccount.cover_url ?? null,
       fallbackInitial: (name.charAt(0) || '?').toUpperCase(),
       isOrg: true,
+      displayName: name || 'Organisation',
     };
   }
 
@@ -33,5 +35,6 @@ export function useActiveProfileImage(): ActiveProfileImage {
     url: user?.profile_picture_url ?? null,
     fallbackInitial: (username.charAt(0) || '?').toUpperCase(),
     isOrg: false,
+    displayName: username || 'Unbekannt',
   };
 }

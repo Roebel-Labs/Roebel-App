@@ -12,7 +12,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -46,6 +46,7 @@ import EventStoryBar from './EventStoryBar';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
+import { usePendingPostFeedback } from '@/context/PendingPostFeedbackContext';
 
 const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
 const HANDWRITTEN_DARK = require('@/assets/handwritten/dark-mode.png');
@@ -254,6 +255,18 @@ export default function FeedHome() {
     appListRef.current?.refresh();
     nonCitizenListRef.current?.refresh();
   }, []);
+
+  const { consume: consumePostFeedback } = usePendingPostFeedback();
+
+  useFocusEffect(
+    useCallback(() => {
+      const pending = consumePostFeedback();
+      if (pending) {
+        refreshAll();
+        showSnackbar({ message: pending.message });
+      }
+    }, [consumePostFeedback, refreshAll, showSnackbar])
+  );
 
   const removePostEverywhere = useCallback((postId: string) => {
     mainListRef.current?.removePost(postId);

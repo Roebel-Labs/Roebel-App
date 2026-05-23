@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useCreatePost } from '@/context/CreatePostContext';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 
 const MAX_POLL_OPTIONS = 4;
 const MAX_CONTENT_LENGTH = 500;
@@ -25,6 +27,7 @@ export default function PollScreen() {
   const router = useRouter();
   const { user } = useUser();
   const draft = useCreatePost();
+  const activeProfileImage = useActiveProfileImage();
 
   // Initialize poll mode
   useEffect(() => {
@@ -117,14 +120,18 @@ export default function PollScreen() {
         >
           {/* Author row */}
           <View style={styles.authorRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {user?.username?.charAt(0)?.toUpperCase() || '?'}
-              </Text>
-            </View>
+            {activeProfileImage.url ? (
+              <Image source={{ uri: activeProfileImage.url }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
+                <Text style={[styles.avatarText, { color: colors.primary }]}>
+                  {activeProfileImage.fallbackInitial}
+                </Text>
+              </View>
+            )}
             <View>
               <Text style={[styles.authorName, { color: colors.textPrimary }]}>
-                {user?.username || 'Unbekannt'}
+                {activeProfileImage.displayName}
               </Text>
               <Text style={[styles.authorLocation, { color: colors.textSecondary }]}>
                 Röbel/Müritz
