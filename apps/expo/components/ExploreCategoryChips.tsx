@@ -13,11 +13,11 @@ type CategoryChip = {
 };
 
 const EXPLORE_CATEGORIES: CategoryChip[] = [
-  { key: 'events', label: 'Veranstaltungen', route: '/events', image: require('@/assets/illustration/collections/events.png') },
-  { key: 'news', label: 'Neuigkeiten', route: '/news', image: require('@/assets/illustration/collections/neuigkeiten.png') },
-  { key: 'restaurants', label: 'Gastronomie', route: '/restaurant', image: require('@/assets/illustration/collections/gastronomie.png') },
+  { key: 'events', label: 'Events', route: '/events', image: require('@/assets/illustration/collections/events.png') },
+  { key: 'news', label: 'News', route: '/news', image: require('@/assets/illustration/collections/neuigkeiten.png') },
+  { key: 'restaurants', label: 'Gastro', route: '/restaurant', image: require('@/assets/illustration/collections/gastronomie.png') },
   { key: 'movies', label: 'Kino', route: '/movies', image: require('@/assets/illustration/collections/kino.png') },
-  { key: 'businesses', label: 'Unternehmen', route: '/businesses', image: require('@/assets/illustration/collections/unternehmen.png') },
+  { key: 'businesses', label: 'Shops', route: '/businesses', image: require('@/assets/illustration/collections/unternehmen.png') },
   { key: 'deals', label: 'Angebote', route: '/deals', image: require('@/assets/illustration/collections/angebote.png') },
   { key: 'marketplace', label: 'Marktplatz', route: '/marketplace', image: require('@/assets/illustration/collections/marktplatz.png') },
 ];
