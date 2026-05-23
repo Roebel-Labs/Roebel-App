@@ -22,6 +22,8 @@ import { createPost, createPoll } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
+import PostImageGrid from '@/components/feed/PostImageGrid';
+import ImageZoomModal from '@/components/ImageZoomModal';
 
 const GUIDELINES = [
   'Sei respektvoll und freundlich zu deinen Nachbarn',
@@ -42,6 +44,7 @@ export default function ReviewScreen() {
   const activeProfileImage = useActiveProfileImage();
   const { signal: signalPostFeedback } = usePendingPostFeedback();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const walletAddress = user?.wallet_address || '';
 
@@ -147,16 +150,10 @@ export default function ReviewScreen() {
           )}
 
           {draft.images.length > 0 && (
-            <View style={styles.previewImages}>
-              {draft.images.map((uri, i) => (
-                <Image
-                  key={i}
-                  source={{ uri }}
-                  style={styles.previewImage}
-                  contentFit="cover"
-                />
-              ))}
-            </View>
+            <PostImageGrid
+              imageUrls={draft.images}
+              onPress={(i) => setZoomImageUrl(draft.images[i])}
+            />
           )}
 
           {draft.videoUrl && (
@@ -198,6 +195,12 @@ export default function ReviewScreen() {
           Mit dem Posten stimmst du unseren Community-Richtlinien und der Datenschutzerklärung zu.
         </Text>
       </ScrollView>
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl ?? ''}
+        onClose={() => setZoomImageUrl(null)}
+      />
 
       {/* Post CTA */}
       <View style={[styles.ctaContainer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
@@ -276,16 +279,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
-  },
-  previewImages: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  previewImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
   },
   previewPoll: {
     gap: 6,

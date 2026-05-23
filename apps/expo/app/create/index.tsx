@@ -25,6 +25,8 @@ import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { PostCategory, FeedType } from '@/lib/types/feed';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import PostImageGrid from '@/components/feed/PostImageGrid';
+import ImageZoomModal from '@/components/ImageZoomModal';
 
 import ImageIcon from '@/assets/icons/image-01.svg';
 import VideoIcon from '@/assets/icons/video-01.svg';
@@ -91,6 +93,7 @@ export default function CreateScreen() {
   const [showMore, setShowMore] = useState(false);
   const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   // Initialize linked event from route params (coming from event submission success)
   useEffect(() => {
@@ -337,20 +340,23 @@ export default function CreateScreen() {
             </View>
           )}
 
-          {/* Image previews */}
+          {/* Image previews — feed-shaped grid + tap-to-zoom */}
           {draft.images.length > 0 && (
-            <View style={styles.imageGrid}>
-              {draft.images.map((uri, i) => (
-                <View key={i} style={styles.imagePreviewContainer}>
-                  <Image source={{ uri }} style={styles.imagePreview} contentFit="cover" />
+            <View style={styles.imagePreviewWrapper}>
+              <PostImageGrid
+                imageUrls={draft.images}
+                onPress={(i) => setZoomImageUrl(draft.images[i])}
+                renderOverlay={(i) => (
                   <Pressable
                     onPress={() => draft.removeImage(i)}
                     style={[styles.removeImageBtn, { backgroundColor: colors.error }]}
+                    hitSlop={8}
+                    accessibilityLabel="Bild entfernen"
                   >
-                    <Text style={styles.removeImageText}>✕</Text>
+                    <Ionicons name="close" size={14} color="#ffffff" />
                   </Pressable>
-                </View>
-              ))}
+                )}
+              />
             </View>
           )}
 
@@ -521,6 +527,12 @@ export default function CreateScreen() {
           />
         )}
       </KeyboardAvoidingView>
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl ?? ''}
+        onClose={() => setZoomImageUrl(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -629,35 +641,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 1,
   },
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  imagePreviewWrapper: {
     paddingHorizontal: 16,
     marginTop: 12,
   },
-  imagePreviewContainer: {
-    position: 'relative',
-  },
-  imagePreview: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
   removeImageBtn: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  removeImageText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   videoPreviewWrapper: {
     position: 'relative',

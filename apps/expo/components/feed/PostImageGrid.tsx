@@ -5,9 +5,11 @@ import { Image } from 'expo-image';
 type Props = {
   imageUrls: string[];
   onPress?: (index: number) => void;
+  /** Optional overlay rendered absolutely on top of each cell (e.g., remove buttons). */
+  renderOverlay?: (index: number) => React.ReactNode;
 };
 
-export default function PostImageGrid({ imageUrls, onPress }: Props) {
+export default function PostImageGrid({ imageUrls, onPress, renderOverlay }: Props) {
   if (imageUrls.length === 0) return null;
 
   const handlePress = (index: number) => {
@@ -16,14 +18,17 @@ export default function PostImageGrid({ imageUrls, onPress }: Props) {
 
   if (imageUrls.length === 1) {
     return (
-      <Pressable onPress={() => handlePress(0)} style={styles.singleContainer}>
-        <Image
-          source={{ uri: imageUrls[0] }}
-          style={styles.singleImage}
-          contentFit="cover"
-          accessibilityIgnoresInvertColors
-        />
-      </Pressable>
+      <View style={styles.singleContainer}>
+        <Pressable onPress={() => handlePress(0)} style={styles.fill}>
+          <Image
+            source={{ uri: imageUrls[0] }}
+            style={styles.singleImage}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        </Pressable>
+        {renderOverlay?.(0)}
+      </View>
     );
   }
 
@@ -31,14 +36,17 @@ export default function PostImageGrid({ imageUrls, onPress }: Props) {
     return (
       <View style={styles.doubleContainer}>
         {imageUrls.map((url, i) => (
-          <Pressable key={i} onPress={() => handlePress(i)} style={styles.doubleItem}>
-            <Image
-              source={{ uri: url }}
-              style={styles.doubleImage}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          </Pressable>
+          <View key={i} style={styles.doubleItem}>
+            <Pressable onPress={() => handlePress(i)} style={styles.fill}>
+              <Image
+                source={{ uri: url }}
+                style={styles.doubleImage}
+                contentFit="cover"
+                accessibilityIgnoresInvertColors
+              />
+            </Pressable>
+            {renderOverlay?.(i)}
+          </View>
         ))}
       </View>
     );
@@ -48,41 +56,53 @@ export default function PostImageGrid({ imageUrls, onPress }: Props) {
   return (
     <View style={styles.gridContainer}>
       <View style={styles.gridRow}>
-        <Pressable onPress={() => handlePress(0)} style={styles.gridItem}>
-          <Image
-            source={{ uri: imageUrls[0] }}
-            style={styles.gridImage}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        </Pressable>
-        <Pressable onPress={() => handlePress(1)} style={styles.gridItem}>
-          <Image
-            source={{ uri: imageUrls[1] }}
-            style={styles.gridImage}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        </Pressable>
-      </View>
-      <View style={styles.gridRow}>
-        <Pressable onPress={() => handlePress(2)} style={styles.gridItem}>
-          <Image
-            source={{ uri: imageUrls[2] }}
-            style={styles.gridImage}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        </Pressable>
-        {imageUrls.length >= 4 && (
-          <Pressable onPress={() => handlePress(3)} style={styles.gridItem}>
+        <View style={styles.gridItem}>
+          <Pressable onPress={() => handlePress(0)} style={styles.fill}>
             <Image
-              source={{ uri: imageUrls[3] }}
+              source={{ uri: imageUrls[0] }}
               style={styles.gridImage}
               contentFit="cover"
               accessibilityIgnoresInvertColors
             />
           </Pressable>
+          {renderOverlay?.(0)}
+        </View>
+        <View style={styles.gridItem}>
+          <Pressable onPress={() => handlePress(1)} style={styles.fill}>
+            <Image
+              source={{ uri: imageUrls[1] }}
+              style={styles.gridImage}
+              contentFit="cover"
+              accessibilityIgnoresInvertColors
+            />
+          </Pressable>
+          {renderOverlay?.(1)}
+        </View>
+      </View>
+      <View style={styles.gridRow}>
+        <View style={styles.gridItem}>
+          <Pressable onPress={() => handlePress(2)} style={styles.fill}>
+            <Image
+              source={{ uri: imageUrls[2] }}
+              style={styles.gridImage}
+              contentFit="cover"
+              accessibilityIgnoresInvertColors
+            />
+          </Pressable>
+          {renderOverlay?.(2)}
+        </View>
+        {imageUrls.length >= 4 && (
+          <View style={styles.gridItem}>
+            <Pressable onPress={() => handlePress(3)} style={styles.fill}>
+              <Image
+                source={{ uri: imageUrls[3] }}
+                style={styles.gridImage}
+                contentFit="cover"
+                accessibilityIgnoresInvertColors
+              />
+            </Pressable>
+            {renderOverlay?.(3)}
+          </View>
         )}
       </View>
     </View>
@@ -90,9 +110,13 @@ export default function PostImageGrid({ imageUrls, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
   singleContainer: {
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
   },
   singleImage: {
     width: '100%',
@@ -107,6 +131,7 @@ const styles = StyleSheet.create({
   },
   doubleItem: {
     flex: 1,
+    position: 'relative',
   },
   doubleImage: {
     width: '100%',
@@ -123,6 +148,7 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     flex: 1,
+    position: 'relative',
   },
   gridImage: {
     width: '100%',
