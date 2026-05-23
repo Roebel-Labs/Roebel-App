@@ -31,7 +31,7 @@ export default function WeeklyForecastList({ daily }: Props) {
       <Text style={[styles.title, { color: colors.textPrimary }]}>Wochenausblick</Text>
       <View style={styles.list}>
         {days.map((day, index) => {
-          const Icon = getWeatherIcon(day.conditionType);
+          const Icon = getWeatherIcon(day.conditionType, day.precipitationProbability);
           const conditionText =
             day.conditionText || translateWeatherCondition(day.conditionType);
           const cardinal = cardinalToGerman(day.windCardinal);

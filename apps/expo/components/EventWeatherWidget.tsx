@@ -171,7 +171,10 @@ export default function EventWeatherWidget({ date, latitude, longitude }: Props)
     );
   }
 
-  const WeatherIcon = getWeatherIcon(weather.conditionCode);
+  const WeatherIcon = getWeatherIcon(
+    weather.conditionCode,
+    weather.precipitationProbability * 100,
+  );
   const translatedCondition = translateWeatherCondition(weather.condition);
 
   return (

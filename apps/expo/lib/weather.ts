@@ -158,8 +158,36 @@ export async function fetchAllWeather(): Promise<WeatherSnapshot> {
   return { current, hourly, daily };
 }
 
-export function getWeatherIcon(conditionType: string): React.FC<SvgProps> {
+// Precipitation probability (0-100) below which rain/shower/thunder
+// condition types are demoted to a partly-cloudy visual. Google's
+// condition enum can read e.g. CHANCE_OF_SHOWERS at 5% probability,
+// which is misleading when shown next to the actual percentage.
+const PRECIP_VISUAL_THRESHOLD = 30;
+
+function isRainyConditionType(upperType: string): boolean {
+  return (
+    upperType.includes('RAIN') ||
+    upperType.includes('DRIZZLE') ||
+    upperType.includes('SHOWER') ||
+    upperType.includes('THUNDER') ||
+    upperType.includes('STORM')
+  );
+}
+
+export function getWeatherIcon(
+  conditionType: string,
+  precipitationProbability?: number,
+): React.FC<SvgProps> {
   const type = (conditionType || '').toUpperCase();
+
+  if (
+    isRainyConditionType(type) &&
+    precipitationProbability !== undefined &&
+    precipitationProbability < PRECIP_VISUAL_THRESHOLD
+  ) {
+    return SunCloudIcon;
+  }
+
   if (type.includes('CLEAR') || type.includes('SUNNY')) return SunIcon;
   if (type === 'PARTLY_CLOUDY' || type === 'MOSTLY_CLOUDY') return SunCloudIcon;
   if (type === 'CLOUDY' || type.includes('OVERCAST')) return CloudIcon;
@@ -185,8 +213,19 @@ const ILLUSTRATIONS = {
   hagel: require('@/assets/illustration/weather/hagel.png') as ImageSourcePropType,
 };
 
-export function getWeatherIllustration(conditionType: string): ImageSourcePropType {
+export function getWeatherIllustration(
+  conditionType: string,
+  precipitationProbability?: number,
+): ImageSourcePropType {
   const t = (conditionType || '').toUpperCase();
+
+  if (
+    isRainyConditionType(t) &&
+    precipitationProbability !== undefined &&
+    precipitationProbability < PRECIP_VISUAL_THRESHOLD
+  ) {
+    return ILLUSTRATIONS.leichtBewoelkt;
+  }
 
   if (t === 'CLEAR') return ILLUSTRATIONS.sonnig;
   if (t === 'MOSTLY_CLEAR') return ILLUSTRATIONS.heiter;

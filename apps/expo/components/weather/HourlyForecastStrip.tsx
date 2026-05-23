@@ -23,7 +23,7 @@ export default function HourlyForecastStrip({ hourly }: Props) {
         contentContainerStyle={styles.row}
       >
         {hourly.map((entry, index) => {
-          const Icon = getWeatherIcon(entry.conditionType);
+          const Icon = getWeatherIcon(entry.conditionType, entry.precipitationProbability);
           const label = index === 0 ? 'Jetzt' : formatHourLabel(entry.date);
           return (
             <View key={entry.date.toISOString() + index} style={styles.column}>

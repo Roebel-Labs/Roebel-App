@@ -7,7 +7,13 @@ import { fetchCurrentConditions, getWeatherIcon } from '@/lib/weather';
 
 type WeatherState =
   | { kind: 'loading' }
-  | { kind: 'ready'; tempC: number; conditionType: string; description: string }
+  | {
+      kind: 'ready';
+      tempC: number;
+      conditionType: string;
+      description: string;
+      precipitationProbability: number;
+    }
   | { kind: 'error' };
 
 type Props = {
@@ -31,6 +37,7 @@ export function HeaderWeather({ fallbackSource, fallbackTintColor }: Props) {
           tempC: c.tempC,
           conditionType: c.conditionType,
           description: c.conditionText,
+          precipitationProbability: c.precipitationProbability,
         });
       })
       .catch(() => {
@@ -63,7 +70,7 @@ export function HeaderWeather({ fallbackSource, fallbackTintColor }: Props) {
     );
   }
 
-  const Icon = getWeatherIcon(state.conditionType);
+  const Icon = getWeatherIcon(state.conditionType, state.precipitationProbability);
 
   return (
     <Pressable

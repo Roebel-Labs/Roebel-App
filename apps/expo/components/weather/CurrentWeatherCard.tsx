@@ -38,8 +38,11 @@ function sunHours(sunrise: string | null, sunset: string | null): string {
 export default function CurrentWeatherCard({ current, today }: Props) {
   const { colors, isDark } = useTheme();
 
-  const illustration = getWeatherIllustration(current.conditionType);
-  const ConditionIcon = getWeatherIcon(current.conditionType);
+  const illustration = getWeatherIllustration(
+    current.conditionType,
+    current.precipitationProbability,
+  );
+  const ConditionIcon = getWeatherIcon(current.conditionType, current.precipitationProbability);
   const overlayColor = isDark ? 'rgba(20,22,26,0.55)' : 'rgba(255,255,255,0.55)';
 
   const highLow =
