@@ -18,7 +18,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { usePendingPostFeedback } from '@/context/PendingPostFeedbackContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
-import { createPost, createPoll } from '@/lib/supabase-posts';
+import { createPost, createPoll, PostingDeniedError } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
@@ -96,12 +96,35 @@ export default function ReviewScreen() {
       // feedback on focus, refreshes the lists, and shows the snackbar.
       router.dismissAll();
     } catch (err) {
+      if (err instanceof PostingDeniedError) {
+        // The gate state changed between opening the composer and submitting
+        // (e.g. just hit the daily limit). Route back to /create so the
+        // PostingGate can render the appropriate UI.
+        showSnackbar({ message: denialMessage(err) });
+        router.replace('/create' as any);
+        return;
+      }
       console.error('Error creating post:', err);
       showSnackbar({ message: 'Fehler beim Erstellen des Beitrags' });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  function denialMessage(err: PostingDeniedError): string {
+    switch (err.code) {
+      case 'LOCATION_REQUIRED':
+        return 'Bitte bestätige kurz, dass du gerade in Röbel/Müritz bist.';
+      case 'ACCOUNT_TOO_YOUNG':
+        return 'Posten ist erst 24 Stunden nach Account-Erstellung möglich.';
+      case 'RATE_LIMIT_DAY':
+        return 'Du hast dein Tageslimit erreicht.';
+      case 'RATE_LIMIT_WEEK':
+        return 'Du hast dein Wochenlimit erreicht.';
+      default:
+        return 'Beitrag konnte nicht erstellt werden.';
+    }
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

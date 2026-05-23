@@ -26,6 +26,8 @@ import type { PostCategory, FeedType } from '@/lib/types/feed';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import PostingGate from '@/components/feed/PostingGate';
+import { usePostingPermission } from '@/hooks/usePostingPermission';
 import ImageZoomModal from '@/components/ImageZoomModal';
 
 import ImageIcon from '@/assets/icons/image-01.svg';
@@ -88,6 +90,8 @@ export default function CreateScreen() {
   const activeProfileImage = useActiveProfileImage();
   const draft = useCreatePost();
   const requireAuth = useRequireAuth();
+  const { status: postingStatus } = usePostingPermission();
+  const postingAllowed = postingStatus.kind === 'allowed' || postingStatus.kind === 'unknown_user';
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -155,7 +159,7 @@ export default function CreateScreen() {
 
   const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
 
-  const canProceed = draft.content.trim().length > 0 || hasLinkedItem;
+  const canProceed = postingAllowed && (draft.content.trim().length > 0 || hasLinkedItem);
 
   const handleClose = () => {
     if (draft.content.trim() || draft.images.length > 0 || draft.videoUrl) {
@@ -279,6 +283,10 @@ export default function CreateScreen() {
           </Pressable>
         </View>
 
+        {/* Posting permission gate — short-circuits to GPS/age/rate-limit UI
+            when the wallet doesn't meet the tourist-tier requirements. Citizens
+            and unknown_user fall through to the normal composer. */}
+        <PostingGate>
         {/* Scrollable content */}
         <ScrollView
           style={styles.flex}
@@ -514,6 +522,7 @@ export default function CreateScreen() {
             ))}
           </View>
         )}
+        </PostingGate>
         {showPicker && (
           <StickerEmojiPicker
             onPickEmoji={(emoji) => {

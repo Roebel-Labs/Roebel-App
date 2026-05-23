@@ -28,7 +28,7 @@ import { useRequireAuth } from '@/context/AuthGateContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
-import { deletePost } from '@/lib/supabase-posts';
+import { deletePost, DuplicateReportError } from '@/lib/supabase-posts';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
@@ -365,7 +365,11 @@ export default function FeedHome() {
     try {
       await reportPost(reportingPostId, reason);
       showSnackbar({ message: 'Beitrag wurde gemeldet' });
-    } catch {
+    } catch (err) {
+      if (err instanceof DuplicateReportError) {
+        showSnackbar({ message: 'Du hast diesen Beitrag bereits gemeldet.' });
+        return;
+      }
       showSnackbar({ message: 'Fehler beim Melden des Beitrags' });
       throw new Error('Report failed');
     }

@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { createPost, createPoll, updatePost } from '@/lib/supabase-posts';
+import { createPost, createPoll, updatePost, PostingDeniedError } from '@/lib/supabase-posts';
 import type { PostRecord } from '@/lib/types/feed';
 import { supabase } from '@/lib/supabase';
 import { uploadMediaFile } from '@/lib/upload-media';
@@ -208,6 +208,20 @@ export default function PostComposer({
         onPostCreated();
       }
     } catch (err) {
+      if (err instanceof PostingDeniedError) {
+        const message =
+          err.code === 'LOCATION_REQUIRED'
+            ? 'Bitte bestätige kurz, dass du gerade in Röbel/Müritz bist.'
+            : err.code === 'ACCOUNT_TOO_YOUNG'
+            ? 'Posten ist erst 24 Stunden nach Account-Erstellung möglich.'
+            : err.code === 'RATE_LIMIT_DAY'
+            ? 'Du hast dein Tageslimit erreicht.'
+            : err.code === 'RATE_LIMIT_WEEK'
+            ? 'Du hast dein Wochenlimit erreicht.'
+            : 'Beitrag konnte nicht erstellt werden.';
+        showSnackbar({ message });
+        return;
+      }
       console.error('Error saving post:', err);
       showSnackbar({ message: isEditMode ? 'Beitrag konnte nicht aktualisiert werden' : 'Beitrag konnte nicht erstellt werden' });
     } finally {

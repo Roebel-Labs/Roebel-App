@@ -29,6 +29,7 @@ import {
   deleteComment,
   updateComment,
   getUserLikedPostIds,
+  DuplicateReportError,
 } from '@/lib/supabase-posts';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
@@ -180,7 +181,11 @@ export default function PostDetailScreen() {
     try {
       await reportPost(post.id, reason);
       showSnackbar({ message: 'Beitrag wurde gemeldet' });
-    } catch {
+    } catch (err) {
+      if (err instanceof DuplicateReportError) {
+        showSnackbar({ message: 'Du hast diesen Beitrag bereits gemeldet.' });
+        return;
+      }
       showSnackbar({ message: 'Fehler beim Melden des Beitrags' });
       throw new Error('Report failed');
     }

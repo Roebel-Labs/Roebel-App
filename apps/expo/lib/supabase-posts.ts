@@ -180,7 +180,49 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
 }
 
 /**
- * Create a new post
+ * Posting denial codes raised by the `enforce_posting_rules` trigger when a
+ * non-citizen attempts to post without meeting the tourist-tier requirements.
+ * The trigger raises messages like `ACCOUNT_TOO_YOUNG:2026-05-24T15:00:00+00`
+ * which `parsePostingDenial` turns into a structured value.
+ */
+export type PostingDenialCode =
+  | 'LOCATION_REQUIRED'
+  | 'ACCOUNT_TOO_YOUNG'
+  | 'RATE_LIMIT_DAY'
+  | 'RATE_LIMIT_WEEK'
+  | 'USER_NOT_FOUND';
+
+export class PostingDeniedError extends Error {
+  code: PostingDenialCode;
+  unlockAt?: Date;
+  constructor(code: PostingDenialCode, unlockAt?: Date) {
+    super(code);
+    this.name = 'PostingDeniedError';
+    this.code = code;
+    this.unlockAt = unlockAt;
+  }
+}
+
+function parsePostingDenial(message: string | undefined): PostingDeniedError | null {
+  if (!message) return null;
+  const m = message.match(
+    /\b(LOCATION_REQUIRED|ACCOUNT_TOO_YOUNG|RATE_LIMIT_DAY|RATE_LIMIT_WEEK|USER_NOT_FOUND)(?::(\S+))?/,
+  );
+  if (!m) return null;
+  const code = m[1] as PostingDenialCode;
+  const ts = m[2];
+  const unlockAt = ts ? new Date(ts) : undefined;
+  return new PostingDeniedError(code, Number.isNaN(unlockAt?.getTime()) ? undefined : unlockAt);
+}
+
+/**
+ * Create a new post.
+ *
+ * Throws `PostingDeniedError` when the `enforce_posting_rules` trigger blocks
+ * a non-citizen post (location/age/rate-limit gate). Returns null on generic
+ * failures, matching the historical contract — callers may keep their old
+ * `if (!post)` branch and just add a `catch (PostingDeniedError)` for the new
+ * gated path.
  */
 export async function createPost(input: CreatePostInput): Promise<PostRecord | null> {
   const { data, error } = await supabase
@@ -211,11 +253,24 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
     .single();
 
   if (error) {
+    const denied = parsePostingDenial(error.message);
+    if (denied) throw denied;
     console.error('Error creating post:', error);
     return null;
   }
 
-  return mergeAccountIntoAuthor(data as PostRecord);
+  const post = mergeAccountIntoAuthor(data as PostRecord);
+
+  // Fire background Claude moderation for non-citizen freeform posts only.
+  // Citizens are trusted (CitizenNFT signal); other post_types are auto-generated.
+  const isCitizen = !!post.author?.is_verified_citizen;
+  if (!isCitizen && post.post_type === 'user') {
+    supabase.functions
+      .invoke('moderate-post', { body: { post_id: post.id } })
+      .catch((err) => console.warn('[moderate-post] invoke failed', err?.message));
+  }
+
+  return post;
 }
 
 /**
@@ -604,8 +659,17 @@ export async function fetchActiveServiceAlerts(): Promise<ServiceAlertRecord[]> 
 
 // ─── Reports ────────────────────────────────────────────────
 
+export class DuplicateReportError extends Error {
+  constructor() {
+    super('DUPLICATE_REPORT');
+    this.name = 'DuplicateReportError';
+  }
+}
+
 /**
- * Report a post
+ * Report a post. A user may only report a given post once — the unique index
+ * `post_reports_unique_reporter` (added in 20260523_posting_rules) raises a
+ * 23505 unique_violation that this function turns into `DuplicateReportError`.
  */
 export async function reportPost(
   postId: string,
@@ -619,6 +683,9 @@ export async function reportPost(
   });
 
   if (error) {
+    if (error.code === '23505') {
+      throw new DuplicateReportError();
+    }
     console.error('Error reporting post:', error);
     throw error;
   }
