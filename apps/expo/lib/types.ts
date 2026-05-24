@@ -28,6 +28,7 @@ export type EventRecord = {
   category: string | null;
   status: 'pending' | 'approved' | 'rejected';
   image_url: string | null;
+  audio_url: string | null;
   website_url: string | null;
   ticket_price: number | null;
   max_attendees: number | null;

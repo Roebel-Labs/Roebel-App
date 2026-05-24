@@ -101,6 +101,10 @@ export default function HomeStoryBar() {
               setTimeout(() => setOpenTarget(null), 300);
             },
           },
+          // Each event has its own audio track (admin-uploaded). The
+          // StoryViewer swaps the player source when this URL changes
+          // between slides.
+          audioUrl: event.audio_url ?? null,
         };
       });
 
@@ -119,6 +123,9 @@ export default function HomeStoryBar() {
           title: c.title,
           subtitle: c.subtitle ?? undefined,
         },
+        // One track per collection — same URL across all slides keeps the
+        // player instance alive, so the track loops continuously.
+        audioUrl: c.audio_url ?? null,
         slides:
           slides.length > 0
             ? slides.map((s) => ({

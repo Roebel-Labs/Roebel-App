@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone";
+import { AudioUploadDropzone } from "@/components/ui/audio-upload-dropzone";
 import { ArrowLeft, Save, Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,6 +52,7 @@ export function StoryCollectionForm({
     title: existing?.title ?? "",
     subtitle: existing?.subtitle ?? "",
     cover_image_url: existing?.cover_image_url ?? "",
+    audio_url: existing?.audio_url ?? "",
     show_on_profile: existing?.show_on_profile ?? true,
     show_on_home_feed: existing?.show_on_home_feed ?? false,
     is_published: existing?.is_published ?? true,
@@ -122,6 +124,7 @@ export function StoryCollectionForm({
       title: form.title.trim(),
       subtitle: form.subtitle.trim() || null,
       cover_image_url: form.cover_image_url || null,
+      audio_url: form.audio_url || null,
       show_on_profile: form.show_on_profile,
       show_on_home_feed: form.show_on_home_feed,
       is_published: form.is_published,
@@ -204,6 +207,22 @@ export function StoryCollectionForm({
                 setForm({ ...form, cover_image_url: url })
               }
               maxSizeMB={5}
+            />
+          </div>
+          <div>
+            <Label>Audio (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Wird automatisch abgespielt, solange diese Sammlung im Story-
+              Viewer geöffnet ist. Loopt nahtlos über alle Slides.
+            </p>
+            <AudioUploadDropzone
+              bucketName="story-audio"
+              folder="story-collections"
+              currentAudioUrl={form.audio_url}
+              onUploadComplete={(url) =>
+                setForm({ ...form, audio_url: url })
+              }
+              maxSizeMB={10}
             />
           </div>
         </div>

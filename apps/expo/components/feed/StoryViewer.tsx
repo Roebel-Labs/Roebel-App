@@ -34,6 +34,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useAudioPlayer } from 'expo-audio';
 
 export type StoryHeader = {
   avatarUrl?: string | null;
@@ -56,9 +57,10 @@ export type StorySlideInput = {
   imageFit?: 'cover' | 'contain';
   cta?: StoryCta;
   // Per-slide overrides — useful when one group holds slides with different
-  // headers / swipe-up destinations (e.g. the unified "events" story).
+  // headers / swipe-up destinations / audio (e.g. the unified "events" story).
   header?: StoryHeader;
   onSwipeUp?: () => void;
+  audioUrl?: string | null;
 };
 
 export type StoryGroup = {
@@ -66,6 +68,7 @@ export type StoryGroup = {
   header?: StoryHeader;
   slides: StorySlideInput[];
   onSwipeUp?: () => void;
+  audioUrl?: string | null;
 };
 
 type Props = {
@@ -96,6 +99,7 @@ export default function StoryViewer({
   const [currentGroupIndex, setCurrentGroupIndex] = useState(initialGroupIndex);
   const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
   const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   // ── Shared value (vertical drag only) ──────────────────────
   const dragY = useSharedValue(0);
@@ -111,6 +115,7 @@ export default function StoryViewer({
       setSlideIndices({});
     }
     setPaused(false);
+    setMuted(false); // sound on every time the viewer opens
     dragY.value = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGroupIndex, initialSlideIndex, visible]);
@@ -130,6 +135,39 @@ export default function StoryViewer({
         currentGroup.slides.length - 1,
       )
     : 0;
+
+  // ── Audio playback ─────────────────────────────────────────
+  // Resolve the active track: slide override beats group default.
+  const currentSlideAudio = currentGroup?.slides[currentSlideIndex]?.audioUrl;
+  const audioUrl = (currentSlideAudio ?? currentGroup?.audioUrl ?? null) || null;
+  // useAudioPlayer accepts a URI string (or null/undefined to unload).
+  // Re-creating with a new URI swaps the source; passing the same URI
+  // across renders keeps the player instance alive → continuous playback
+  // across slides of the same collection.
+  const player = useAudioPlayer(audioUrl);
+
+  useEffect(() => {
+    if (!player) return;
+    try {
+      player.loop = true;
+      player.muted = muted;
+      if (visible && !paused && audioUrl) {
+        player.play();
+      } else {
+        player.pause();
+      }
+    } catch (err) {
+      // expo-audio occasionally throws on a stale player ref; safe to ignore.
+      console.warn('StoryViewer audio control failed:', err);
+    }
+    return () => {
+      try {
+        player.pause();
+      } catch {
+        /* noop */
+      }
+    };
+  }, [player, audioUrl, visible, paused, muted]);
 
   // ── Auto-advance timer ─────────────────────────────────────
   const progress = useRef(new RNAnimated.Value(0)).current;
@@ -401,6 +439,19 @@ export default function StoryViewer({
                 ) : (
                   <View style={styles.headerSpacer} pointerEvents="none" />
                 )}
+                {audioUrl ? (
+                  <Pressable
+                    onPress={() => setMuted((m) => !m)}
+                    hitSlop={16}
+                    style={styles.muteBtn}
+                  >
+                    <Ionicons
+                      name={muted ? 'volume-mute' : 'volume-high'}
+                      size={22}
+                      color="#ffffff"
+                    />
+                  </Pressable>
+                ) : null}
                 <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
                   <Ionicons name="close" size={26} color="#ffffff" />
                 </Pressable>
@@ -601,6 +652,13 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  muteBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 2,
   },
   bottomGradient: {
     position: 'absolute',

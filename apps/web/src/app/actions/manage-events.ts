@@ -169,6 +169,7 @@ export async function updateEvent(
     const status = formData.get("status") as string
     const is_popular = formData.get("is_popular") === "true"
     const image_url = formData.get("image_url") as string
+    const audio_url = formData.get("audio_url") as string
     const livestream_url = formData.get("livestream_url") as string
     const livestream_active = formData.get("livestream_active") === "true"
 
@@ -190,6 +191,7 @@ export async function updateEvent(
         status,
         is_popular,
         image_url: image_url || null,
+        audio_url: audio_url || null,
         livestream_url: livestream_url || null,
         livestream_active,
         updated_at: new Date().toISOString(),

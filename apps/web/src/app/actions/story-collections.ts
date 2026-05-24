@@ -59,6 +59,7 @@ export async function createStoryCollection(input: {
   title: string;
   subtitle?: string | null;
   cover_image_url?: string | null;
+  audio_url?: string | null;
   show_on_profile: boolean;
   show_on_home_feed: boolean;
   is_published: boolean;
@@ -85,6 +86,7 @@ export async function createStoryCollection(input: {
         title: input.title,
         subtitle: input.subtitle ?? null,
         cover_image_url: input.cover_image_url ?? null,
+        audio_url: input.audio_url ?? null,
         show_on_profile: input.show_on_profile,
         show_on_home_feed: input.show_on_home_feed,
         is_published: input.is_published,
@@ -123,6 +125,7 @@ export async function updateStoryCollection(
     title: string;
     subtitle?: string | null;
     cover_image_url?: string | null;
+    audio_url?: string | null;
     show_on_profile: boolean;
     show_on_home_feed: boolean;
     is_published: boolean;
@@ -159,6 +162,7 @@ export async function updateStoryCollection(
         title: input.title,
         subtitle: input.subtitle ?? null,
         cover_image_url: input.cover_image_url ?? null,
+        audio_url: input.audio_url ?? null,
         show_on_profile: input.show_on_profile,
         show_on_home_feed: input.show_on_home_feed,
         is_published: input.is_published,

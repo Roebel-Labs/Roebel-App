@@ -84,6 +84,7 @@ const config: ExpoConfig = {
         supportsPictureInPicture: true,
       },
     ],
+    'expo-audio',
     [
       '@sentry/react-native/expo',
       {

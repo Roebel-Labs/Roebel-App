@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone"
+import { AudioUploadDropzone } from "@/components/ui/audio-upload-dropzone"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { updateEvent, deleteEvent, addEventDates, cancelEventDate, deleteEventDate } from "@/app/actions/manage-events"
@@ -61,6 +62,7 @@ export default function EditEventPage() {
     is_popular: false,
     is_recurring: false,
     image_url: "",
+    audio_url: "",
     livestream_url: "",
     livestream_active: false,
   })
@@ -94,6 +96,7 @@ export default function EditEventPage() {
           is_popular: data.is_popular || false,
           is_recurring: data.is_recurring || false,
           image_url: data.image_url || "",
+          audio_url: data.audio_url || "",
           livestream_url: data.livestream_url || "",
           livestream_active: data.livestream_active || false,
         })
@@ -293,6 +296,22 @@ export default function EditEventPage() {
                 maxSizeMB={5}
               />
             </div>
+          </div>
+
+          {/* Event Audio (story soundtrack) */}
+          <div>
+            <Label>Event-Audio (optional)</Label>
+            <p className="text-xs text-muted-foreground mb-2 mt-1">
+              Wird automatisch abgespielt, wenn dieses Event als Story
+              geöffnet wird. Loopt während der Slide angezeigt wird.
+            </p>
+            <AudioUploadDropzone
+              bucketName="story-audio"
+              folder="events"
+              currentAudioUrl={formData.audio_url}
+              onUploadComplete={(url) => setFormData({ ...formData, audio_url: url })}
+              maxSizeMB={10}
+            />
           </div>
 
           {/* Date and Time */}

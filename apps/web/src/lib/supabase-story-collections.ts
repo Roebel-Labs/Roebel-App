@@ -21,6 +21,7 @@ export interface StoryCollection {
   title: string;
   subtitle: string | null;
   cover_image_url: string | null;
+  audio_url: string | null;
   show_on_profile: boolean;
   show_on_home_feed: boolean;
   display_order: number;

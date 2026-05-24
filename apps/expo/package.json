@@ -46,6 +46,7 @@
     "events": "3.3.0",
     "expo": "^55.0.8",
     "expo-application": "~55.0.14",
+    "expo-audio": "~55.0.14",
     "expo-blur": "~55.0.10",
     "expo-build-properties": "~55.0.10",
     "expo-calendar": "~55.0.10",

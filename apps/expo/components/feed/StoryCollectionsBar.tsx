@@ -58,6 +58,7 @@ export default function StoryCollectionsBar({
             title: c.title,
             subtitle: c.subtitle ?? undefined,
           },
+          audioUrl: c.audio_url ?? null,
           slides:
             slides.length > 0
               ? slides.map((s) => ({
