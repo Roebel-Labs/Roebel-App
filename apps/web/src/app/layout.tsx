@@ -2,13 +2,12 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThirdwebProvider, AutoConnect } from "thirdweb/react";
-import { client } from "@/app/client";
-import { wallets } from "@/lib/wallet-config";
+import { ThirdwebProvider } from "thirdweb/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "sonner";
 import { ConditionalFooter } from "@/components/layout/ConditionalFooter";
 import { GlobalWalletRedirect } from "@/components/app/GlobalWalletRedirect";
+import { GlobalAutoConnect } from "@/components/app/GlobalAutoConnect";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccountProvider } from "@/lib/context/AccountContext";
 import { Analytics } from "@vercel/analytics/react";
@@ -49,7 +48,7 @@ export default function RootLayout({
       <body className={`${inter.className} flex flex-col min-h-screen overflow-x-hidden`}>
         <ThemeProvider>
           <ThirdwebProvider>
-            <AutoConnect client={client} wallets={wallets} />
+            <GlobalAutoConnect />
             <AccountProvider>
               <GlobalWalletRedirect />
               <div className="flex-1">{children}</div>
