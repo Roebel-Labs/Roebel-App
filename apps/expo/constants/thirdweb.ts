@@ -56,9 +56,14 @@ export const maciCoordinatorAddress = process.env.NEXT_PUBLIC_MACI_COORDINATOR |
 
 /** Block at (or slightly before) the MACI core deployment on Base mainnet.
  *  Used as the lower bound for SignUp event scans when recovering a citizen's
- *  stateIndex after an app cold-start. The actual deploy was around block
- *  ~45,697,600; we round down to absorb any RPC drift. */
-export const MACI_DEPLOY_BLOCK = 45697000n;
+ *  stateIndex after an app cold-start. The current MACI core
+ *  (0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E, rotated 2026-05-24) was
+ *  deployed around block ~46,387,xxx; we round down ~30 minutes' worth of
+ *  blocks for RPC-drift safety. KEEP THIS IN SYNC with the MACI core
+ *  address above — a stale value forces the SignUp event scan to span
+ *  hundreds of thousands of blocks, which the public Base RPC will reject
+ *  and which can crash the app at cold start. */
+export const MACI_DEPLOY_BLOCK = 46386000n;
 
 export const attesterNFTContract = getContract({
 	client,
