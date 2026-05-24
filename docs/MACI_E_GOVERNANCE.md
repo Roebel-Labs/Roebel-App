@@ -280,6 +280,16 @@ A single Fly.io machine (region `fra`, 4 GB RAM, 2 shared CPUs, auto-stop) runni
 
 Both are equally sensitive. Compromise of `COORDINATOR_PRIV` breaks **ballot privacy** (the attacker can decrypt any past or future ballot encrypted to that key). Compromise of `COORDINATOR_ETH_PRIV` breaks **liveness** (the attacker can refuse to submit tallies, but can't fake them — the Verifier still checks the ZK proof).
 
+> ⚠️ **POST-ROTATION CHECKLIST — the coordinator does NOT read `deployments/base.json`.** It reads its contract addresses from Fly secrets only. After **any MACI core rotation** you MUST update the coordinator or it will silently scan the old MACI, find zero pending polls, and never finalize any new proposal (this exact failure stranded "Test Umfrage 2" on 2026-05-24). Run:
+>
+> ```bash
+> fly secrets set -a roebel-maci-coordinator MACI_ADDRESS=<new MACI core>
+> # then confirm:
+> fly ssh console -a roebel-maci-coordinator -C 'printenv MACI_ADDRESS'
+> ```
+>
+> Also re-check `VERIFIER_ADDRESS` / `VK_REGISTRY_ADDRESS` (only if they rotated — usually reused) and `BASE_REFERENCE_TX` (see §6.4 — must remain a Base tx **older** than the new MACI's first `SignUp`, else `genProofs` will miss signups). The `redeploy-maci-governor.cjs` script prints this reminder at the end of every run.
+
 ### 6.2 The finalize pipeline
 
 `finalize-poll.js <pollId>` runs five steps in sequence:

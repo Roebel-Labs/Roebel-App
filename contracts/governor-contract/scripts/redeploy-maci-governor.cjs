@@ -275,6 +275,23 @@ async function main() {
   console.log("  TimelockController:    " + timelockAddr);
   console.log("  MaciAttesterGovernor:  " + governorAddr);
   console.log("\nNext: verify on Basescan, then bump packages/blockchain + apps frontend.");
+
+  console.log("\n" + "=".repeat(72));
+  console.log("⚠️  CRITICAL POST-ROTATION STEP — DO NOT SKIP");
+  console.log("=".repeat(72));
+  console.log("The off-chain coordinator discovers polls via MACI_ADDRESS. It does");
+  console.log("NOT read deployments/base.json — it reads a Fly secret. A new MACI");
+  console.log("core means the coordinator will scan the OLD MACI, find zero pending");
+  console.log("polls, and silently never finalize any new proposal. Update it now:");
+  console.log("");
+  console.log("  fly secrets set -a roebel-maci-coordinator \\");
+  console.log("    MACI_ADDRESS=" + maciAddr);
+  console.log("");
+  console.log("(VERIFIER_ADDRESS + VK_REGISTRY_ADDRESS only need updating if THEY");
+  console.log("rotated too — this script reuses them, so usually just MACI_ADDRESS.)");
+  console.log("Then confirm: fly ssh console -a roebel-maci-coordinator -C 'printenv MACI_ADDRESS'");
+  console.log("=".repeat(72));
+
   console.log("\n=== DONE ===\n");
 }
 
