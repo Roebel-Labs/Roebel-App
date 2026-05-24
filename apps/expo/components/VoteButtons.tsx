@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
-import { prepareContractCall, readContract, sendAndConfirmTransaction, sendTransaction } from 'thirdweb';
+import { prepareContractCall, readContract, sendTransaction, waitForReceipt } from 'thirdweb';
+import { base } from 'thirdweb/chains';
 import { keccak256, toHex } from 'thirdweb/utils';
 import {
+  client,
   governorContract,
   maciContract,
   citizenNFTContract,
@@ -38,6 +40,41 @@ type Phase =
   | 'signing-up'
   | 'encrypting-vote'
   | 'submitting-vote';
+
+// Substate inside a multi-step transaction phase. `wallet-prompt` = the wallet
+// popup is waiting on the user; `tx-submitted` = the tx is on chain and we're
+// waiting for inclusion. Surfaced as inline button labels so the user never sees
+// a bare spinner without context.
+type TxSubstate = 'wallet-prompt' | 'tx-submitted' | null;
+
+/**
+ * Extract a human-readable error message from a thirdweb / ethers error.
+ * Falls back to the raw message string. Strips `Error: ` and trims trailing
+ * RPC noise to keep the drawer readable.
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (!err) return fallback;
+  const raw = err instanceof Error ? err.message : String(err);
+
+  // Common revert-reason patterns from thirdweb / ethers / Base RPC.
+  const patterns: RegExp[] = [
+    /execution reverted:\s*"?([^"\n]+)"?/i,
+    /reason="([^"]+)"/i,
+    /reverted with reason string ['"]([^'"]+)['"]/i,
+    /reverted: ([^\n(]+)/i,
+  ];
+  for (const re of patterns) {
+    const m = raw.match(re);
+    if (m && m[1]) return m[1].trim();
+  }
+  // User rejection in most wallets.
+  if (/user (?:rejected|denied)/i.test(raw) || /rejected by user/i.test(raw)) {
+    return 'Transaktion wurde im Wallet abgebrochen.';
+  }
+  // First line, capped at 240 chars.
+  const firstLine = raw.split('\n')[0]?.trim() ?? raw;
+  return firstLine.length > 240 ? firstLine.slice(0, 240) + '…' : firstLine || fallback;
+}
 
 /**
  * MACI-aware vote buttons.
@@ -78,6 +115,9 @@ export default function VoteButtons({
   } = useMaci();
 
   const [phase, setPhase] = useState<Phase>('idle');
+  // Substate within the active phase — drives the inline button label so the
+  // user can see whether the wallet is open, the tx is in-flight, etc.
+  const [txSubstate, setTxSubstate] = useState<TxSubstate>(null);
   const [votingFor, setVotingFor] = useState<VoteType | null>(null);
   const [pollAddress, setPollAddress] = useState<string | null>(null);
   const [pollId, setPollId] = useState<bigint | null>(null);
@@ -210,13 +250,11 @@ export default function VoteButtons({
       console.error('[VoteButtons] generate key failed:', err);
       setErrorDrawer({
         visible: true,
-        message:
-          err instanceof Error
-            ? err.message
-            : 'Schlüssel konnte nicht erstellt werden.',
+        message: extractErrorMessage(err, 'Schlüssel konnte nicht erstellt werden.'),
       });
     } finally {
       setPhase('idle');
+      setTxSubstate(null);
     }
   };
 
@@ -233,6 +271,7 @@ export default function VoteButtons({
     }
     try {
       setPhase('signing-up');
+      setTxSubstate('wallet-prompt');
 
       // Look up the citizen's CitizenNFT tokenId. SignUpTokenGatekeeper expects
       // the tokenId so it can verify ownership and mark the token as used.
@@ -256,10 +295,14 @@ export default function VoteButtons({
         ],
       });
 
-      // sendAndConfirmTransaction returns the full receipt with logs so we
-      // can parse the SignUp event and learn the assigned stateIndex without
-      // racing the RPC's view of post-tx state.
-      const receipt = await sendAndConfirmTransaction({ transaction: tx, account });
+      // Split sendTransaction + waitForReceipt so the substate can flip from
+      // "wallet open" → "tx submitted, waiting for inclusion". A single
+      // sendAndConfirmTransaction hides both stages behind one await and there's
+      // no way to surface the wallet-popup state to the user — that's exactly
+      // what made the previous spinner-only UX feel broken.
+      const { transactionHash } = await sendTransaction({ transaction: tx, account });
+      setTxSubstate('tx-submitted');
+      const receipt = await waitForReceipt({ client, chain: base, transactionHash });
 
       // SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX,
       //         uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance,
@@ -315,14 +358,15 @@ export default function VoteButtons({
       } else {
         setErrorDrawer({
           visible: true,
-          message:
-            err instanceof Error
-              ? err.message
-              : 'Anmeldung bei MACI ist fehlgeschlagen.',
+          message: extractErrorMessage(
+            err,
+            'Anmeldung bei MACI ist fehlgeschlagen.',
+          ),
         });
       }
     } finally {
       setPhase('idle');
+      setTxSubstate(null);
     }
   };
 
@@ -356,6 +400,7 @@ export default function VoteButtons({
       });
 
       setPhase('submitting-vote');
+      setTxSubstate('wallet-prompt');
       const poll = getPollContract(pollAddress);
       // ABI requires uint256[10] (fixed length); coerce from bigint[] for TS.
       const messageFixed = message as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
@@ -366,6 +411,7 @@ export default function VoteButtons({
         params: [{ data: messageFixed }, encPubKey],
       });
       const receipt = await sendTransaction({ transaction: tx, account });
+      setTxSubstate('tx-submitted');
 
       track(Events.PROPOSAL_VOTED, {
         proposal_id: proposalId.toString(),
@@ -391,13 +437,11 @@ export default function VoteButtons({
       console.error('[VoteButtons] vote failed:', err);
       setErrorDrawer({
         visible: true,
-        message:
-          err instanceof Error
-            ? err.message
-            : 'Stimme konnte nicht abgegeben werden.',
+        message: extractErrorMessage(err, 'Stimme konnte nicht abgegeben werden.'),
       });
     } finally {
       setPhase('idle');
+      setTxSubstate(null);
       setVotingFor(null);
     }
   };
@@ -527,11 +571,10 @@ export default function VoteButtons({
           onPress={handleGenerateKey}
           disabled={phase !== 'idle'}
         >
-          {phase === 'creating-key' ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Schlüssel erstellen</Text>
-          )}
+          <PrimaryButtonContent
+            label={phase === 'creating-key' ? 'Schlüssel wird erstellt…' : 'Schlüssel erstellen'}
+            isLoading={phase === 'creating-key'}
+          />
         </Pressable>
         {renderDrawers()}
       </View>
@@ -555,11 +598,10 @@ export default function VoteButtons({
           onPress={handleSignUp}
           disabled={phase !== 'idle'}
         >
-          {phase === 'signing-up' ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Bei MACI anmelden</Text>
-          )}
+          <PrimaryButtonContent
+            label={getSignUpButtonLabel(phase, txSubstate)}
+            isLoading={phase === 'signing-up'}
+          />
         </Pressable>
         {renderDrawers()}
       </View>
@@ -601,11 +643,12 @@ export default function VoteButtons({
           onPress={() => handleVote(VoteType.For)}
           disabled={phase !== 'idle'}
         >
-          {phase !== 'idle' && votingFor === VoteType.For ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.voteButtonText}>Dafür</Text>
-          )}
+          <VoteButtonContent
+            label={getVoteButtonLabel('Dafür', VoteType.For, phase, txSubstate, votingFor)}
+            isLoading={phase !== 'idle' && votingFor === VoteType.For}
+            spinnerColor="#ffffff"
+            textStyle={styles.voteButtonText}
+          />
         </Pressable>
         <Pressable
           style={[
@@ -616,11 +659,12 @@ export default function VoteButtons({
           onPress={() => handleVote(VoteType.Against)}
           disabled={phase !== 'idle'}
         >
-          {phase !== 'idle' && votingFor === VoteType.Against ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.voteButtonText}>Dagegen</Text>
-          )}
+          <VoteButtonContent
+            label={getVoteButtonLabel('Dagegen', VoteType.Against, phase, txSubstate, votingFor)}
+            isLoading={phase !== 'idle' && votingFor === VoteType.Against}
+            spinnerColor="#ffffff"
+            textStyle={styles.voteButtonText}
+          />
         </Pressable>
         <Pressable
           style={[
@@ -631,23 +675,14 @@ export default function VoteButtons({
           onPress={() => handleVote(VoteType.Abstain)}
           disabled={phase !== 'idle'}
         >
-          {phase !== 'idle' && votingFor === VoteType.Abstain ? (
-            <ActivityIndicator color={colors.textSecondary} />
-          ) : (
-            <Text style={[styles.voteButtonText, { color: colors.textPrimary }]}>Enthalten</Text>
-          )}
+          <VoteButtonContent
+            label={getVoteButtonLabel('Enthalten', VoteType.Abstain, phase, txSubstate, votingFor)}
+            isLoading={phase !== 'idle' && votingFor === VoteType.Abstain}
+            spinnerColor={colors.textSecondary}
+            textStyle={[styles.voteButtonText, { color: colors.textPrimary }]}
+          />
         </Pressable>
       </View>
-      {phase === 'encrypting-vote' && (
-        <Text style={[styles.statusLine, { color: colors.textSecondary }]}>
-          Stimme wird verschlüsselt…
-        </Text>
-      )}
-      {phase === 'submitting-vote' && (
-        <Text style={[styles.statusLine, { color: colors.textSecondary }]}>
-          Stimme wird auf die Blockchain gesendet…
-        </Text>
-      )}
       {renderDrawers()}
       </>
       ) : null}
@@ -692,6 +727,87 @@ function Container({
       <View style={[styles.messageContainer, { backgroundColor: colors.surfaceSecondary }]}>
         {children}
       </View>
+    </View>
+  );
+}
+
+/**
+ * Resolve the inline button label for the MACI signup flow. The label tracks
+ * three substates inside `signing-up`:
+ *   - wallet-prompt: wallet popup is open, waiting on the user
+ *   - tx-submitted:  tx is on chain, waiting for inclusion
+ *   - (idle):        button is interactive — show the call-to-action
+ */
+function getSignUpButtonLabel(phase: Phase, substate: TxSubstate): string {
+  if (phase !== 'signing-up') return 'Bei MACI anmelden';
+  if (substate === 'wallet-prompt') return 'Wallet öffnet sich…';
+  if (substate === 'tx-submitted') return 'Transaktion gesendet — warte auf Bestätigung…';
+  return 'Anmeldung läuft…';
+}
+
+/**
+ * Resolve the inline vote-button label. Only the button matching `votingFor`
+ * shows the loading state; the other two stay idle (but disabled). Mirrors the
+ * three substates from signup plus a separate "encrypting" phase that runs
+ * fully on-device before the wallet ever opens.
+ */
+function getVoteButtonLabel(
+  idleLabel: string,
+  forOption: VoteType,
+  phase: Phase,
+  substate: TxSubstate,
+  votingFor: VoteType | null,
+): string {
+  if (phase === 'idle' || votingFor !== forOption) return idleLabel;
+  if (phase === 'encrypting-vote') return 'Stimme wird verschlüsselt…';
+  if (phase === 'submitting-vote') {
+    if (substate === 'wallet-prompt') return 'Wallet öffnet sich…';
+    if (substate === 'tx-submitted') return 'Stimme wird auf die Blockchain gesendet…';
+    return 'Abstimmen läuft…';
+  }
+  return idleLabel;
+}
+
+function PrimaryButtonContent({
+  label,
+  isLoading,
+}: {
+  label: string;
+  isLoading: boolean;
+}) {
+  if (!isLoading) {
+    return <Text style={styles.primaryButtonText}>{label}</Text>;
+  }
+  return (
+    <View style={styles.loadingRow}>
+      <ActivityIndicator color="#ffffff" />
+      <Text style={[styles.primaryButtonText, styles.loadingLabel]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function VoteButtonContent({
+  label,
+  isLoading,
+  spinnerColor,
+  textStyle,
+}: {
+  label: string;
+  isLoading: boolean;
+  spinnerColor: string;
+  textStyle: any;
+}) {
+  if (!isLoading) {
+    return <Text style={textStyle}>{label}</Text>;
+  }
+  return (
+    <View style={styles.loadingRow}>
+      <ActivityIndicator color={spinnerColor} />
+      <Text style={[textStyle, styles.loadingLabel]} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -770,6 +886,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+  },
+  loadingLabel: {
+    fontSize: 14,
+    flexShrink: 1,
   },
   messageContainer: {
     padding: 16,
