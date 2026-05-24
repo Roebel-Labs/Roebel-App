@@ -50,75 +50,27 @@ function computeKpiTiles(
   partner: RoebelCardPartnerRow,
   charges: RoebelCardChargeRow[],
 ): KpiTile[] {
-  const now = Date.now();
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayMs = startOfToday.getTime();
-  const weekAgoMs = now - 7 * 24 * 60 * 60 * 1000;
-  const monthAgoMs = now - 30 * 24 * 60 * 60 * 1000;
+  const monthAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
   let todayCents = 0;
-  let weekCents = 0;
-  let monthCents = 0;
-  let monthApproved = 0;
-  let monthResolved = 0; // approved + declined + expired in last 30d
-  const customerCounts = new Map<string, number>();
+  const customerCards = new Set<string>();
 
   for (const c of charges) {
+    if (c.status !== "approved") continue;
     const ts = new Date(c.created_at).getTime();
-    if (c.status === "approved") {
-      if (ts >= startOfTodayMs) todayCents += c.amount_cents;
-      if (ts >= weekAgoMs) weekCents += c.amount_cents;
-      if (ts >= monthAgoMs) {
-        monthCents += c.amount_cents;
-        monthApproved += 1;
-        customerCounts.set(
-          c.card_id,
-          (customerCounts.get(c.card_id) ?? 0) + 1,
-        );
-      }
-    }
-    if (
-      ts >= monthAgoMs &&
-      (c.status === "approved" ||
-        c.status === "declined" ||
-        c.status === "expired")
-    ) {
-      monthResolved += 1;
-    }
+    if (ts >= startOfTodayMs) todayCents += c.amount_cents;
+    if (ts >= monthAgoMs) customerCards.add(c.card_id);
   }
-
-  const uniqueCustomers = customerCounts.size;
-  const repeatCustomers = Array.from(customerCounts.values()).filter(
-    (n) => n >= 2,
-  ).length;
-  const approvalRate =
-    monthResolved > 0
-      ? Math.round((monthApproved / monthResolved) * 100)
-      : null;
-  const repeatRate =
-    uniqueCustomers > 0
-      ? Math.round((repeatCustomers / uniqueCustomers) * 100)
-      : null;
 
   return [
     { label: "Heute", value: formatEuros(todayCents) },
-    { label: "7 Tage", value: formatEuros(weekCents) },
-    { label: "30 Tage", value: formatEuros(monthCents) },
-    {
-      label: "Quote",
-      value: approvalRate !== null ? `${approvalRate} %` : "—",
-      hint: "Bestätigt vs. abgelehnt (30 T)",
-    },
     {
       label: "Stammkunden",
-      value: String(uniqueCustomers),
+      value: String(customerCards.size),
       hint: "Einzigartige Karten (30 T)",
-    },
-    {
-      label: "Wiederkehrer",
-      value: repeatRate !== null ? `${repeatRate} %` : "—",
-      hint: "Karten mit ≥ 2 Zahlungen",
     },
     {
       label: "Offen",
