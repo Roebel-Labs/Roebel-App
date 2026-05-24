@@ -56,6 +56,7 @@ try {
   const mod = require('expo-audio');
   if (mod?.useAudioPlayer) {
     useAudioPlayer = mod.useAudioPlayer as UseAudioPlayerFn;
+    console.log('[StoryViewer] expo-audio loaded ✓');
   }
 } catch (err) {
   console.warn(
