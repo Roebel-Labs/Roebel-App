@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,7 +12,13 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchThisWeekEvents } from '@/lib/supabase-posts';
 import type { EventRecord } from '@/lib/types';
-import StoryViewer, { type StorySlideInput } from './StoryViewer';
+import {
+  fetchHomeFeedStoryCollections,
+  fetchSlidesForCollection,
+  type StoryCollection,
+  type StorySlide,
+} from '@/lib/supabase-story-collections';
+import StoryViewer, { type StoryGroup } from './StoryViewer';
 
 function formatEventDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -28,53 +34,103 @@ function formatWeekdayLong(dateStr: string): string {
   return d.toLocaleDateString('de-DE', { weekday: 'long' });
 }
 
-export default function EventStoryBar() {
+export default function HomeStoryBar() {
   const { colors } = useTheme();
   const router = useRouter();
+
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [collections, setCollections] = useState<StoryCollection[]>([]);
+  const [collectionSlides, setCollectionSlides] = useState<
+    Record<string, StorySlide[]>
+  >({});
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchThisWeekEvents().then((data) => setEvents(data as EventRecord[]));
+    fetchHomeFeedStoryCollections().then(async (cols) => {
+      setCollections(cols);
+      // Pre-fetch all slides upfront — admin-curated, small list.
+      const results = await Promise.all(
+        cols.map((c) =>
+          fetchSlidesForCollection(c.id).then((s) => [c.id, s] as const),
+        ),
+      );
+      setCollectionSlides(Object.fromEntries(results));
+    });
   }, []);
 
-  const activeEvent = useMemo(
-    () => events.find((e) => e.id === activeEventId) ?? null,
-    [activeEventId, events],
-  );
-
-  // Each event opens its own viewer (one slide = the event poster + meta).
-  // No more cross-event paging.
-  const viewerSlides: StorySlideInput[] = useMemo(() => {
-    if (!activeEvent) return [];
-    const orgName = activeEvent.account?.name ?? activeEvent.organizer_name;
-    const orgAvatar = (activeEvent.account as any)?.avatar_url ?? null;
-    const locationLine = activeEvent.location
-      ? `${'\u{1F4CD}'} ${activeEvent.location}`
-      : undefined;
-
-    return [
-      {
-        backgroundUrl: activeEvent.image_url ?? '',
-        imageFit: 'contain',
+  // ── Build unified group sequence: events first, then collections ──
+  const groups = useMemo<StoryGroup[]>(() => {
+    const eventGroups: StoryGroup[] = events.map((event) => {
+      const orgName = event.account?.name ?? event.organizer_name;
+      const orgAvatar = (event.account as any)?.avatar_url ?? null;
+      const locationLine = event.location
+        ? `${'\u{1F4CD}'} ${event.location}`
+        : undefined;
+      return {
+        id: `event:${event.id}`,
         header: {
           avatarUrl: orgAvatar,
           title: orgName,
-          subtitle: formatEventDate(activeEvent.date),
+          subtitle: formatEventDate(event.date),
         },
-        pillText: formatWeekdayLong(activeEvent.date),
-        title: activeEvent.title,
-        subtitleLine: locationLine,
-        cta: {
-          label: 'Mehr erfahren',
-          onPress: () => {
-            router.push(`/event/${activeEvent.id}` as any);
-            setTimeout(() => setActiveEventId(null), 300);
+        onSwipeUp: () => {
+          router.push(`/event/${event.id}` as any);
+          setTimeout(() => setOpenIndex(null), 300);
+        },
+        slides: [
+          {
+            backgroundUrl: event.image_url ?? '',
+            imageFit: 'contain',
+            pillText: formatWeekdayLong(event.date),
+            title: event.title,
+            subtitleLine: locationLine,
+            cta: {
+              label: 'Mehr erfahren',
+              onPress: () => {
+                router.push(`/event/${event.id}` as any);
+                setTimeout(() => setOpenIndex(null), 300);
+              },
+            },
           },
+        ],
+      };
+    });
+
+    const collectionGroups: StoryGroup[] = collections.map((c) => {
+      const slides = collectionSlides[c.id] ?? [];
+      return {
+        id: `collection:${c.id}`,
+        header: {
+          avatarUrl: c.cover_image_url,
+          title: c.title,
+          subtitle: c.subtitle ?? undefined,
         },
-      },
-    ];
-  }, [activeEvent, router]);
+        slides:
+          slides.length > 0
+            ? slides.map((s) => ({
+                backgroundUrl: s.background_image_url,
+                overlayText: s.overlay_text,
+                textColor: s.text_color ?? '#FFFFFF',
+                imageFit: 'cover' as const,
+              }))
+            : [
+                {
+                  backgroundUrl: c.cover_image_url ?? '',
+                  imageFit: 'cover' as const,
+                },
+              ],
+      };
+    });
+
+    return [...eventGroups, ...collectionGroups];
+  }, [events, collections, collectionSlides, router]);
+
+  const handleOpen = useCallback((groupIdx: number) => {
+    setOpenIndex(groupIdx);
+  }, []);
+
+  const handleClose = useCallback(() => setOpenIndex(null), []);
 
   return (
     <View style={[styles.wrapper, { borderBottomColor: colors.border }]}>
@@ -83,7 +139,7 @@ export default function EventStoryBar() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        {/* Create event card — always first */}
+        {/* Create event card */}
         <Pressable
           onPress={() => router.push('/submit-event' as any)}
           style={[
@@ -106,15 +162,14 @@ export default function EventStoryBar() {
           </Text>
         </Pressable>
 
-        {/* Event story cards */}
-        {events.map((event) => {
+        {/* Event bubbles */}
+        {events.map((event, idx) => {
           const orgName = (event.account as any)?.name ?? event.organizer_name;
           const orgAvatar = (event.account as any)?.avatar_url ?? null;
-
           return (
             <Pressable
-              key={event.id}
-              onPress={() => setActiveEventId(event.id)}
+              key={`event-${event.id}`}
+              onPress={() => handleOpen(idx)}
               style={styles.card}
             >
               {event.image_url ? (
@@ -126,7 +181,6 @@ export default function EventStoryBar() {
               ) : (
                 <View style={[StyleSheet.absoluteFill, styles.cardImageFallback]} />
               )}
-
               <View style={styles.storyOrgRow}>
                 <View style={styles.storyOrgAvatar}>
                   {orgAvatar ? (
@@ -142,7 +196,6 @@ export default function EventStoryBar() {
                   )}
                 </View>
               </View>
-
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.82)']}
                 style={styles.cardGradient}
@@ -154,14 +207,45 @@ export default function EventStoryBar() {
             </Pressable>
           );
         })}
+
+        {/* Collection bubbles (rendered at the end of the same row) */}
+        {collections.map((c, idx) => (
+          <Pressable
+            key={`collection-${c.id}`}
+            onPress={() => handleOpen(events.length + idx)}
+            style={styles.card}
+          >
+            {c.cover_image_url ? (
+              <Image
+                source={{ uri: c.cover_image_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            ) : (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.85)']}
+              style={styles.cardGradient}
+            >
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {c.title}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        ))}
       </ScrollView>
 
       <StoryViewer
-        visible={activeEventId !== null && viewerSlides.length > 0}
-        slides={viewerSlides}
-        initialIndex={0}
-        durationMs={10000}
-        onClose={() => setActiveEventId(null)}
+        visible={openIndex !== null && groups.length > 0}
+        groups={groups}
+        initialGroupIndex={openIndex ?? 0}
+        onClose={handleClose}
       />
     </View>
   );

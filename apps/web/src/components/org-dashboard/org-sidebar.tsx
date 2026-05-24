@@ -100,7 +100,7 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       visible: features.storyCollections,
     },
     {
-      name: "Röbel Card Partner",
+      name: "Röbel Card",
       href: "/dashboard/partner",
       icon: <CreditCard className="h-4 w-4" />,
       visible: features.partner,

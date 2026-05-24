@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -14,7 +14,7 @@ import {
   type StoryCollection,
   type StorySlide,
 } from '@/lib/supabase-story-collections';
-import StoryViewer, { type StorySlideInput } from './StoryViewer';
+import StoryViewer, { type StoryGroup } from './StoryViewer';
 
 type Props = {
   collections: StoryCollection[];
@@ -28,48 +28,58 @@ export default function StoryCollectionsBar({
   showBorder = false,
 }: Props) {
   const { colors } = useTheme();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [slidesById, setSlidesById] = useState<Record<string, StorySlide[]>>({});
-  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const handleOpen = useCallback(
-    async (collection: StoryCollection) => {
-      const cached = slidesById[collection.id];
-      if (cached) {
-        setOpenId(collection.id);
-        return;
-      }
-      setLoadingId(collection.id);
-      const slides = await fetchSlidesForCollection(collection.id);
-      setSlidesById((m) => ({ ...m, [collection.id]: slides }));
-      setLoadingId(null);
-      setOpenId(collection.id);
-    },
-    [slidesById],
+  // Pre-fetch all slides for the listed collections (admin-curated, small list).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      collections.map((c) =>
+        fetchSlidesForCollection(c.id).then((s) => [c.id, s] as const),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      setSlidesById(Object.fromEntries(results));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [collections]);
+
+  const groups = useMemo<StoryGroup[]>(
+    () =>
+      collections.map((c) => {
+        const slides = slidesById[c.id] ?? [];
+        return {
+          id: `collection:${c.id}`,
+          header: {
+            avatarUrl: c.cover_image_url,
+            title: c.title,
+            subtitle: c.subtitle ?? undefined,
+          },
+          slides:
+            slides.length > 0
+              ? slides.map((s) => ({
+                  backgroundUrl: s.background_image_url,
+                  overlayText: s.overlay_text,
+                  textColor: s.text_color ?? '#FFFFFF',
+                  imageFit: 'cover' as const,
+                }))
+              : [
+                  {
+                    backgroundUrl: c.cover_image_url ?? '',
+                    imageFit: 'cover' as const,
+                  },
+                ],
+        };
+      }),
+    [collections, slidesById],
   );
 
-  const handleClose = useCallback(() => setOpenId(null), []);
+  const handleClose = useCallback(() => setOpenIndex(null), []);
 
   if (collections.length === 0) return null;
-
-  const activeCollection = openId
-    ? collections.find((c) => c.id === openId) ?? null
-    : null;
-  const activeSlides = openId ? slidesById[openId] ?? [] : [];
-
-  const viewerSlides: StorySlideInput[] = activeSlides.map((s) => ({
-    backgroundUrl: s.background_image_url,
-    overlayText: s.overlay_text,
-    textColor: s.text_color ?? '#FFFFFF',
-    imageFit: 'cover',
-    header: activeCollection
-      ? {
-          avatarUrl: activeCollection.cover_image_url,
-          title: activeCollection.title,
-          subtitle: activeCollection.subtitle ?? undefined,
-        }
-      : undefined,
-  }));
 
   return (
     <View
@@ -91,46 +101,42 @@ export default function StoryCollectionsBar({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        {collections.map((c) => {
-          const busy = loadingId === c.id;
-          return (
-            <Pressable
-              key={c.id}
-              onPress={() => handleOpen(c)}
-              style={styles.card}
-              disabled={busy}
+        {collections.map((c, idx) => (
+          <Pressable
+            key={c.id}
+            onPress={() => setOpenIndex(idx)}
+            style={styles.card}
+          >
+            {c.cover_image_url ? (
+              <Image
+                source={{ uri: c.cover_image_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            ) : (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.85)']}
+              style={styles.gradient}
             >
-              {c.cover_image_url ? (
-                <Image
-                  source={{ uri: c.cover_image_url }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    { backgroundColor: colors.primary },
-                  ]}
-                />
-              )}
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.85)']}
-                style={styles.gradient}
-              >
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {c.title}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          );
-        })}
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {c.title}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        ))}
       </ScrollView>
 
       <StoryViewer
-        visible={openId !== null && activeSlides.length > 0}
-        slides={viewerSlides}
-        initialIndex={0}
+        visible={openIndex !== null && groups.length > 0}
+        groups={groups}
+        initialGroupIndex={openIndex ?? 0}
         onClose={handleClose}
       />
     </View>
