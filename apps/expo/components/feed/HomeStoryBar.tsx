@@ -18,7 +18,10 @@ import {
   type StoryCollection,
   type StorySlide,
 } from '@/lib/supabase-story-collections';
-import StoryViewer, { type StoryGroup } from './StoryViewer';
+import StoryViewer, {
+  type StoryGroup,
+  type StorySlideInput,
+} from './StoryViewer';
 
 function formatEventDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -59,45 +62,50 @@ export default function HomeStoryBar() {
     });
   }, []);
 
-  // ── Build unified group sequence: events first, then collections ──
+  // ── Build group sequence ────────────────────────────────────
+  // ONE events group (all events as ordered slides, grouped progress bars
+  // at the top show one segment per event) + one group per collection.
   const groups = useMemo<StoryGroup[]>(() => {
-    const eventGroups: StoryGroup[] = events.map((event) => {
-      const orgName = event.account?.name ?? event.organizer_name;
-      const orgAvatar = (event.account as any)?.avatar_url ?? null;
-      const locationLine = event.location || undefined;
-      return {
-        id: `event:${event.id}`,
-        header: {
-          avatarUrl: orgAvatar,
-          title: orgName,
-          subtitle: formatEventDate(event.date),
-        },
-        onSwipeUp: () => {
-          router.push(`/event/${event.id}` as any);
-          setTimeout(() => setOpenIndex(null), 300);
-        },
-        slides: [
-          {
-            backgroundUrl: event.image_url ?? '',
-            imageFit: 'contain',
-            pillText: formatWeekdayLong(event.date),
-            title: event.title,
-            subtitleLine: locationLine,
-            cta: {
-              label: 'Mehr erfahren',
-              onPress: () => {
-                router.push(`/event/${event.id}` as any);
-                setTimeout(() => setOpenIndex(null), 300);
-              },
+    const result: StoryGroup[] = [];
+
+    if (events.length > 0) {
+      const eventSlides: StorySlideInput[] = events.map((event) => {
+        const orgName = event.account?.name ?? event.organizer_name;
+        const orgAvatar = (event.account as any)?.avatar_url ?? null;
+        return {
+          backgroundUrl: event.image_url ?? '',
+          imageFit: 'contain',
+          pillText: formatWeekdayLong(event.date),
+          title: event.title,
+          subtitleLine: event.location || undefined,
+          header: {
+            avatarUrl: orgAvatar,
+            title: orgName,
+            subtitle: formatEventDate(event.date),
+          },
+          onSwipeUp: () => {
+            router.push(`/event/${event.id}` as any);
+            setTimeout(() => setOpenIndex(null), 300);
+          },
+          cta: {
+            label: 'Mehr erfahren',
+            onPress: () => {
+              router.push(`/event/${event.id}` as any);
+              setTimeout(() => setOpenIndex(null), 300);
             },
           },
-        ],
-      };
-    });
+        };
+      });
 
-    const collectionGroups: StoryGroup[] = collections.map((c) => {
+      result.push({
+        id: 'events',
+        slides: eventSlides,
+      });
+    }
+
+    for (const c of collections) {
       const slides = collectionSlides[c.id] ?? [];
-      return {
+      result.push({
         id: `collection:${c.id}`,
         header: {
           avatarUrl: c.cover_image_url,
@@ -118,10 +126,10 @@ export default function HomeStoryBar() {
                   imageFit: 'cover' as const,
                 },
               ],
-      };
-    });
+      });
+    }
 
-    return [...eventGroups, ...collectionGroups];
+    return result;
   }, [events, collections, collectionSlides, router]);
 
   const handleOpen = useCallback((groupIdx: number) => {
@@ -129,6 +137,11 @@ export default function HomeStoryBar() {
   }, []);
 
   const handleClose = useCallback(() => setOpenIndex(null), []);
+
+  // The events group is at index 0 when present.
+  const hasEvents = events.length > 0;
+  const eventsBubbleEvent = events[0]; // cover image
+  const collectionsStartIndex = hasEvents ? 1 : 0;
 
   return (
     <View style={[styles.wrapper, { borderBottomColor: colors.border }]}>
@@ -160,57 +173,36 @@ export default function HomeStoryBar() {
           </Text>
         </Pressable>
 
-        {/* Event bubbles */}
-        {events.map((event, idx) => {
-          const orgName = (event.account as any)?.name ?? event.organizer_name;
-          const orgAvatar = (event.account as any)?.avatar_url ?? null;
-          return (
-            <Pressable
-              key={`event-${event.id}`}
-              onPress={() => handleOpen(idx)}
-              style={styles.card}
+        {/* ONE events bubble (all events grouped into a single paged story) */}
+        {hasEvents && eventsBubbleEvent ? (
+          <Pressable onPress={() => handleOpen(0)} style={styles.card}>
+            {eventsBubbleEvent.image_url ? (
+              <Image
+                source={{ uri: eventsBubbleEvent.image_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            ) : (
+              <View
+                style={[StyleSheet.absoluteFill, styles.cardImageFallback]}
+              />
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.82)']}
+              style={styles.cardGradient}
             >
-              {event.image_url ? (
-                <Image
-                  source={{ uri: event.image_url }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[StyleSheet.absoluteFill, styles.cardImageFallback]} />
-              )}
-              <View style={styles.storyOrgRow}>
-                <View style={styles.storyOrgAvatar}>
-                  {orgAvatar ? (
-                    <Image
-                      source={{ uri: orgAvatar }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <Text style={styles.storyOrgLetter}>
-                      {orgName.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.82)']}
-                style={styles.cardGradient}
-              >
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {event.title}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          );
-        })}
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                Veranstaltungen
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        ) : null}
 
-        {/* Collection bubbles (rendered at the end of the same row) */}
+        {/* Collection bubbles (rendered after the events bubble) */}
         {collections.map((c, idx) => (
           <Pressable
             key={`collection-${c.id}`}
-            onPress={() => handleOpen(events.length + idx)}
+            onPress={() => handleOpen(collectionsStartIndex + idx)}
             style={styles.card}
           >
             {c.cover_image_url ? (
@@ -303,27 +295,6 @@ const styles = StyleSheet.create({
   },
   cardImageFallback: {
     backgroundColor: '#1a2a4a',
-  },
-  storyOrgRow: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-  },
-  storyOrgAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-    backgroundColor: '#194383',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  storyOrgLetter: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontFamily: 'Inter-SemiBold',
   },
   cardGradient: {
     position: 'absolute',

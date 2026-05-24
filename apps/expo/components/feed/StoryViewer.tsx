@@ -55,6 +55,10 @@ export type StorySlideInput = {
   pillText?: string;
   imageFit?: 'cover' | 'contain';
   cta?: StoryCta;
+  // Per-slide overrides — useful when one group holds slides with different
+  // headers / swipe-up destinations (e.g. the unified "events" story).
+  header?: StoryHeader;
+  onSwipeUp?: () => void;
 };
 
 export type StoryGroup = {
@@ -183,7 +187,11 @@ export default function StoryViewer({
 
   const triggerSwipeUp = useCallback(() => {
     const grp = groupsRef.current[currentGroupIndexRef.current];
-    grp?.onSwipeUp?.();
+    if (!grp) return;
+    const si = slideIndicesRef.current[grp.id] ?? 0;
+    const slide = grp.slides[si];
+    const handler = slide?.onSwipeUp ?? grp.onSwipeUp;
+    handler?.();
   }, []);
 
   // ── Gestures ───────────────────────────────────────────────
@@ -350,43 +358,48 @@ export default function StoryViewer({
             })}
           </Animated.View>
 
-          <Animated.View
-            style={[styles.header, chromeStyle]}
-            pointerEvents="box-none"
-          >
-            {currentGroup.header ? (
-              <>
-                <View style={styles.headerAvatar} pointerEvents="none">
-                  {currentGroup.header.avatarUrl ? (
-                    <Image
-                      source={{ uri: currentGroup.header.avatarUrl }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <Text style={styles.headerAvatarLetter}>
-                      {currentGroup.header.title.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.headerInfo} pointerEvents="none">
-                  <Text style={styles.headerTitle} numberOfLines={1}>
-                    {currentGroup.header.title}
-                  </Text>
-                  {currentGroup.header.subtitle ? (
-                    <Text style={styles.headerSubtitle} numberOfLines={1}>
-                      {currentGroup.header.subtitle}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            ) : (
-              <View style={styles.headerSpacer} pointerEvents="none" />
-            )}
-            <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
-              <Ionicons name="close" size={26} color="#ffffff" />
-            </Pressable>
-          </Animated.View>
+          {(() => {
+            const header = slide?.header ?? currentGroup.header;
+            return (
+              <Animated.View
+                style={[styles.header, chromeStyle]}
+                pointerEvents="box-none"
+              >
+                {header ? (
+                  <>
+                    <View style={styles.headerAvatar} pointerEvents="none">
+                      {header.avatarUrl ? (
+                        <Image
+                          source={{ uri: header.avatarUrl }}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <Text style={styles.headerAvatarLetter}>
+                          {header.title.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.headerInfo} pointerEvents="none">
+                      <Text style={styles.headerTitle} numberOfLines={1}>
+                        {header.title}
+                      </Text>
+                      {header.subtitle ? (
+                        <Text style={styles.headerSubtitle} numberOfLines={1}>
+                          {header.subtitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.headerSpacer} pointerEvents="none" />
+                )}
+                <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
+                  <Ionicons name="close" size={26} color="#ffffff" />
+                </Pressable>
+              </Animated.View>
+            );
+          })()}
 
           {(() => {
             if (!slide) return null;
