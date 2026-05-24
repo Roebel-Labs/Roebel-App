@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { COORDINATOR_BASE_URL } from "@/lib/maci-config";
 
 /**
  * /status response from apps/coordinator/scripts/healthcheck.js.
@@ -51,12 +50,13 @@ export function useCoordinatorHealth(): UseCoordinatorHealthResult {
     setIsLoading(true);
     setError(null);
     try {
-      // Short timeout — the Fly machine auto-wakes on first request, but we
-      // don't want the dashboard to block while it boots. If we time out,
-      // the user can retry; meanwhile we keep the previous status visible.
+      // Hit the same-origin Next proxy (/api/coordinator/status) rather than
+      // the coordinator's fly.dev host directly — the coordinator serves
+      // /status without CORS headers, so a direct browser fetch fails with
+      // "Failed to fetch". The proxy fetches server-side and returns same-origin.
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15_000);
-      const res = await fetch(`${COORDINATOR_BASE_URL}/status`, {
+      const t = setTimeout(() => ctrl.abort(), 16_000);
+      const res = await fetch(`/api/coordinator/status`, {
         cache: "no-store",
         signal: ctrl.signal,
       });
