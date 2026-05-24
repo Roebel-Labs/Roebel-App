@@ -22,10 +22,12 @@ import Animated, {
   interpolate,
   interpolateColor,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -77,8 +79,9 @@ const SWIPE_DOWN_THRESHOLD = 120;
 const SWIPE_DOWN_VELOCITY = 800;
 const SWIPE_UP_THRESHOLD = 90;
 const SWIPE_UP_VELOCITY = 700;
-const SWIPE_HORIZONTAL_RATIO = 0.25; // fraction of width to trigger a group change
-const SWIPE_HORIZONTAL_VELOCITY = 500;
+const SWIPE_HORIZONTAL_FLICK_VELOCITY = 500; // px/sec
+const AXIS_DECISION_PX = 12;
+const WINDOW = 2; // render groups within ±WINDOW of currentGroupIndex
 
 export default function StoryViewer({
   visible,
@@ -88,34 +91,70 @@ export default function StoryViewer({
   durationMs = 6000,
 }: Props) {
   const { width, height } = useWindowDimensions();
-  const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
-  const [slideIndex, setSlideIndex] = useState(0);
+
+  // ── React state (chrome + slide pointers) ──────────────────
+  const [currentGroupIndex, setCurrentGroupIndex] = useState(initialGroupIndex);
+  const [slideIndices, setSlideIndices] = useState<Record<string, number>>({});
   const [paused, setPaused] = useState(false);
 
-  // Reset when the viewer (re-)opens at a new starting group
+  // ── Shared values (UI thread) ──────────────────────────────
+  // cubePosition: absolute position across all groups.
+  //   integer N = group N is centered. fractional = mid-transition.
+  const cubePosition = useSharedValue(initialGroupIndex);
+  const dragY = useSharedValue(0);
+  // axis: 0 = undecided, 1 = horizontal, 2 = vertical
+  const axis = useSharedValue(0);
+  // cubePosition at gesture start — for relative drag math
+  const dragStartCube = useSharedValue(0);
+
+  // Reset everything when the viewer (re-)opens at a new starting group
   useEffect(() => {
     if (!visible) return;
-    setGroupIndex(initialGroupIndex);
-    setSlideIndex(0);
+    setCurrentGroupIndex(initialGroupIndex);
+    setSlideIndices({});
+    setPaused(false);
+    cubePosition.value = initialGroupIndex;
+    dragY.value = 0;
+    axis.value = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialGroupIndex, visible]);
 
-  const groupIndexRef = useRef(groupIndex);
-  groupIndexRef.current = groupIndex;
-  const slideIndexRef = useRef(slideIndex);
-  slideIndexRef.current = slideIndex;
+  // ── Refs for use inside gesture callbacks / timer ──────────
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
+  const currentGroupIndexRef = useRef(currentGroupIndex);
+  currentGroupIndexRef.current = currentGroupIndex;
+  const slideIndicesRef = useRef(slideIndices);
+  slideIndicesRef.current = slideIndices;
 
-  const currentGroup = groups[groupIndex];
-  const prevGroup = groupIndex > 0 ? groups[groupIndex - 1] : null;
-  const nextGroup = groupIndex < groups.length - 1 ? groups[groupIndex + 1] : null;
+  const currentGroup = groups[currentGroupIndex];
+  const currentSlideIndex = currentGroup
+    ? slideIndices[currentGroup.id] ?? 0
+    : 0;
 
-  // ── Progress bar ────────────────────────────────────────────
+  // ── Chrome / state follower ────────────────────────────────
+  // When cubePosition rounds to a new integer, update currentGroupIndex so the
+  // chrome (progress bars, header, CTA) reflects the now-centered group. This
+  // fires once per integer crossing, while cubePosition is mid-transition and
+  // chrome opacity is near zero — so the chrome content swap is invisible.
+  useAnimatedReaction(
+    () => Math.round(cubePosition.value),
+    (rounded, prev) => {
+      if (
+        rounded !== prev &&
+        rounded >= 0 &&
+        rounded < groupsRef.current.length
+      ) {
+        runOnJS(setCurrentGroupIndex)(rounded);
+      }
+    },
+  );
+
+  // ── Auto-advance timer ─────────────────────────────────────
   const progress = useRef(new RNAnimated.Value(0)).current;
-  const slideCount = currentGroup?.slides.length ?? 0;
 
   useEffect(() => {
-    if (!visible || paused || slideCount === 0) return;
+    if (!visible || paused || !currentGroup) return;
     progress.setValue(0);
     const anim = RNAnimated.timing(progress, {
       toValue: 1,
@@ -129,74 +168,68 @@ export default function StoryViewer({
     });
     return () => anim.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupIndex, slideIndex, paused, visible, durationMs, slideCount]);
+  }, [currentGroupIndex, currentSlideIndex, paused, visible, durationMs]);
 
-  // ── Cube transition ─────────────────────────────────────────
-  // progressX: continuous horizontal swipe progress.
-  //   0 = at rest on current group
-  //   +1 = fully advanced to next group
-  //   -1 = fully retreated to previous group
-  const progressX = useSharedValue(0);
-  const dragY = useSharedValue(0);
-
+  // ── Navigation helpers ─────────────────────────────────────
   const stepForwardJS = useCallback(() => {
-    const gi = groupIndexRef.current;
-    const si = slideIndexRef.current;
+    const gi = currentGroupIndexRef.current;
     const grp = groupsRef.current[gi];
     if (!grp) return;
-    // Within group → instant slide change
+    const si = slideIndicesRef.current[grp.id] ?? 0;
+    // Within group → instant slide change (no cube)
     if (si < grp.slides.length - 1) {
-      setSlideIndex(si + 1);
+      setSlideIndices((p) => ({ ...p, [grp.id]: si + 1 }));
       return;
     }
-    // Last slide of current group → cube to next, or close
-    if (gi < groupsRef.current.length - 1) {
-      progressX.value = withTiming(1, { duration: 320 }, (finished) => {
-        if (!finished) return;
-        runOnJS(commitGroupChange)(gi + 1, 0);
-      });
-    } else {
+    // End of last group → close
+    if (gi >= groupsRef.current.length - 1) {
       onClose();
+      return;
     }
-  }, [onClose, progressX]);
+    // Cube to next group; pre-set its slideIndex to 0 so chrome lands clean
+    const nextGrp = groupsRef.current[gi + 1];
+    if (nextGrp) {
+      setSlideIndices((p) =>
+        p[nextGrp.id] === 0 ? p : { ...p, [nextGrp.id]: 0 },
+      );
+    }
+    cubePosition.value = withTiming(gi + 1, { duration: 280 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose]);
 
   const stepBackJS = useCallback(() => {
-    const gi = groupIndexRef.current;
-    const si = slideIndexRef.current;
-    // Within group → instant
+    const gi = currentGroupIndexRef.current;
+    const grp = groupsRef.current[gi];
+    if (!grp) return;
+    const si = slideIndicesRef.current[grp.id] ?? 0;
     if (si > 0) {
-      setSlideIndex(si - 1);
+      setSlideIndices((p) => ({ ...p, [grp.id]: si - 1 }));
       return;
     }
-    // First slide of current group → cube to prev (start at its last slide)
-    if (gi > 0) {
-      const prevSlides = groupsRef.current[gi - 1]?.slides.length ?? 1;
-      progressX.value = withTiming(-1, { duration: 320 }, (finished) => {
-        if (!finished) return;
-        runOnJS(commitGroupChange)(gi - 1, Math.max(0, prevSlides - 1));
-      });
-    } else {
-      // Already at very first slide — snap back if any partial drag
-      progressX.value = withSpring(0, { damping: 22, stiffness: 200 });
+    if (gi <= 0) {
+      // Already at first slide of first group — snap any partial drag back.
+      cubePosition.value = withSpring(0, { damping: 22, stiffness: 200 });
+      return;
     }
-  }, [progressX]);
-
-  const commitGroupChange = useCallback(
-    (newGroupIndex: number, newSlideIndex: number) => {
-      setGroupIndex(newGroupIndex);
-      setSlideIndex(newSlideIndex);
-      // After React commits the new index, reset progressX to 0 without animation
-      // so the new "current" layer sits at rest.
-      progressX.value = 0;
-    },
-    [progressX],
-  );
+    const prevGrp = groupsRef.current[gi - 1];
+    if (prevGrp) {
+      const prevLast = Math.max(0, prevGrp.slides.length - 1);
+      setSlideIndices((p) => ({ ...p, [prevGrp.id]: prevLast }));
+    }
+    cubePosition.value = withTiming(gi - 1, { duration: 280 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const triggerSwipeUp = useCallback(() => {
-    currentGroup?.onSwipeUp?.();
-  }, [currentGroup]);
+    const grp = groupsRef.current[currentGroupIndexRef.current];
+    grp?.onSwipeUp?.();
+  }, []);
 
-  // ── Gestures ────────────────────────────────────────────────
+  const seedSlideIndex = useCallback((groupId: string, idx: number) => {
+    setSlideIndices((p) => (p[groupId] === idx ? p : { ...p, [groupId]: idx }));
+  }, []);
+
+  // ── Gestures ───────────────────────────────────────────────
   const tap = Gesture.Tap()
     .maxDuration(280)
     .maxDistance(12)
@@ -213,139 +246,115 @@ export default function StoryViewer({
     .onFinalize(() => runOnJS(setPaused)(false));
 
   const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .activeOffsetY([-12, 12])
+    .activeOffsetX([-8, 8])
+    .activeOffsetY([-8, 8])
     .onStart(() => {
+      axis.value = 0;
+      dragStartCube.value = cubePosition.value;
       runOnJS(setPaused)(true);
     })
     .onUpdate((e) => {
-      // Vertical drag (close / swipe-up) tracked separately from the cube.
-      dragY.value = e.translationY;
-      // Horizontal drag drives the cube progress.
-      //   finger right (translationX > 0) → intent: previous story → progressX negative
-      //   finger left  (translationX < 0) → intent: next story     → progressX positive
-      const raw = e.translationX / width;
-      const gi = groupIndexRef.current;
-      const len = groupsRef.current.length;
-      let clamped = raw;
-      // Soft-block at edges: rubber-band by 75% so user feels the boundary.
-      if (raw < 0 && gi >= len - 1) clamped = raw * 0.25; // swipe-left at last group
-      if (raw > 0 && gi <= 0) clamped = raw * 0.25; // swipe-right at first group
-      progressX.value = -clamped;
+      // Decide axis after first 12px of clear movement, then LOCK IT.
+      if (axis.value === 0) {
+        const ax = Math.abs(e.translationX);
+        const ay = Math.abs(e.translationY);
+        if (ax < AXIS_DECISION_PX && ay < AXIS_DECISION_PX) return;
+        axis.value = ax > ay ? 1 : 2;
+      }
+
+      if (axis.value === 1) {
+        // Horizontal — drive cubePosition. Suppress vertical entirely.
+        // Finger LEFT (translationX < 0) → forward → cubePosition increases.
+        // Finger RIGHT (translationX > 0) → back → cubePosition decreases.
+        const delta = -e.translationX / width;
+        let target = dragStartCube.value + delta;
+        const maxIdx = groupsRef.current.length - 1;
+        // Rubber-band at edges (75% resistance past the bound).
+        if (target < 0) target = target * 0.25;
+        if (target > maxIdx) target = maxIdx + (target - maxIdx) * 0.25;
+        cubePosition.value = target;
+      } else {
+        // Vertical — drive dragY. Suppress horizontal entirely.
+        dragY.value = e.translationY;
+      }
     })
     .onEnd((e) => {
-      const dy = dragY.value;
-      const vy = e.velocityY;
+      const a = axis.value;
+      axis.value = 0;
 
-      // Swipe down → close (priority)
-      if (dy > SWIPE_DOWN_THRESHOLD || vy > SWIPE_DOWN_VELOCITY) {
-        progressX.value = withSpring(0, { damping: 22, stiffness: 200 });
-        dragY.value = withTiming(height, { duration: 220 }, (finished) => {
-          if (finished) runOnJS(onClose)();
-        });
-        return;
-      }
+      if (a === 1) {
+        // Horizontal release. NEVER close the viewer here.
+        const start = dragStartCube.value;
+        const cur = cubePosition.value;
+        const delta = cur - start;
+        const vxNorm = -e.velocityX / width;
+        const maxIdx = groupsRef.current.length - 1;
 
-      // Swipe up → onSwipeUp of current group
-      if (dy < -SWIPE_UP_THRESHOLD || vy < -SWIPE_UP_VELOCITY) {
-        progressX.value = withSpring(0, { damping: 22, stiffness: 200 });
-        dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
-        runOnJS(triggerSwipeUp)();
-        runOnJS(setPaused)(false);
-        return;
-      }
+        // Decide target integer: if user moved more than 25% of a page OR
+        // flicked with enough velocity, snap to the next/prev integer in
+        // the direction of motion. Otherwise snap back to start.
+        let target = Math.round(start);
+        const flicked =
+          Math.abs(e.velocityX) > SWIPE_HORIZONTAL_FLICK_VELOCITY;
+        if (delta > 0.25 || (flicked && vxNorm > 0)) {
+          target = Math.floor(start + 1.0);
+        } else if (delta < -0.25 || (flicked && vxNorm < 0)) {
+          target = Math.ceil(start - 1.0);
+        }
+        target = Math.max(0, Math.min(maxIdx, target));
 
-      // Horizontal swipe → group change
-      const px = progressX.value;
-      const horizontalThreshold = SWIPE_HORIZONTAL_RATIO;
-      const horizontalVelocity = Math.abs(e.velocityX) > SWIPE_HORIZONTAL_VELOCITY;
-      if ((px > horizontalThreshold || (horizontalVelocity && px > 0)) && groupIndexRef.current < groupsRef.current.length - 1) {
-        // Animate to next
-        const gi = groupIndexRef.current;
-        progressX.value = withTiming(1, { duration: 240 }, (finished) => {
-          if (finished) runOnJS(commitGroupChange)(gi + 1, 0);
-        });
-        dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
-        runOnJS(setPaused)(false);
-        return;
-      }
-      if ((px < -horizontalThreshold || (horizontalVelocity && px < 0)) && groupIndexRef.current > 0) {
-        const gi = groupIndexRef.current;
-        const prevSlides = groupsRef.current[gi - 1]?.slides.length ?? 1;
-        progressX.value = withTiming(-1, { duration: 240 }, (finished) => {
-          if (finished) runOnJS(commitGroupChange)(gi - 1, Math.max(0, prevSlides - 1));
-        });
+        // When jumping to the previous group, pre-seed its slideIndex to its
+        // last slide so the chrome lands correctly. Going forward, seed to 0.
+        if (target > Math.round(start)) {
+          const grp = groupsRef.current[target];
+          if (grp) runOnJS(seedSlideIndex)(grp.id, 0);
+        } else if (target < Math.round(start)) {
+          const grp = groupsRef.current[target];
+          if (grp) {
+            const last = Math.max(0, grp.slides.length - 1);
+            runOnJS(seedSlideIndex)(grp.id, last);
+          }
+        }
+
+        cubePosition.value = withTiming(target, { duration: 240 });
         dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
         runOnJS(setPaused)(false);
         return;
       }
 
-      // Snap back
-      progressX.value = withSpring(0, { damping: 22, stiffness: 200 });
+      if (a === 2) {
+        // Vertical release.
+        const dy = dragY.value;
+        const vy = e.velocityY;
+        if (dy > SWIPE_DOWN_THRESHOLD || vy > SWIPE_DOWN_VELOCITY) {
+          dragY.value = withTiming(height, { duration: 220 }, (finished) => {
+            if (finished) runOnJS(onClose)();
+          });
+          return;
+        }
+        if (dy < -SWIPE_UP_THRESHOLD || vy < -SWIPE_UP_VELOCITY) {
+          dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
+          runOnJS(triggerSwipeUp)();
+          runOnJS(setPaused)(false);
+          return;
+        }
+        dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
+        runOnJS(setPaused)(false);
+        return;
+      }
+
+      // No decided axis — snap everything back.
+      cubePosition.value = withSpring(Math.round(cubePosition.value), {
+        damping: 22,
+        stiffness: 200,
+      });
       dragY.value = withSpring(0, { damping: 22, stiffness: 200 });
       runOnJS(setPaused)(false);
     });
 
   const composed = Gesture.Race(tap, Gesture.Simultaneous(longPress, pan));
 
-  // ── Cube layer transforms ───────────────────────────────────
-  // Each of the three layers (prev / current / next) gets a transform that
-  // places it on a cube face. progressX drives the cube rotation; the layer's
-  // resting position relative to current is -1 / 0 / +1.
-  const prevLayerStyle = useAnimatedStyle(() => {
-    const eff = -1 - progressX.value;
-    if (Math.abs(eff) > 1.0001) {
-      return { opacity: 0, transform: [{ translateX: width * eff }] };
-    }
-    const pivot = eff < 0 ? width / 2 : -width / 2;
-    return {
-      opacity: 1,
-      transform: [
-        { perspective: 1200 },
-        { translateX: eff * width + pivot },
-        { rotateY: `${eff * 90}deg` },
-        { translateX: -pivot },
-      ],
-    };
-  });
-
-  const currentLayerStyle = useAnimatedStyle(() => {
-    const eff = -progressX.value;
-    if (Math.abs(eff) > 1.0001) {
-      return { opacity: 0, transform: [{ translateX: width * eff }] };
-    }
-    const pivot = eff < 0 ? width / 2 : -width / 2;
-    const ty = Math.max(dragY.value, 0);
-    return {
-      opacity: 1,
-      transform: [
-        { perspective: 1200 },
-        { translateX: eff * width + pivot },
-        { rotateY: `${eff * 90}deg` },
-        { translateX: -pivot },
-        { translateY: ty },
-      ],
-    };
-  });
-
-  const nextLayerStyle = useAnimatedStyle(() => {
-    const eff = 1 - progressX.value;
-    if (Math.abs(eff) > 1.0001) {
-      return { opacity: 0, transform: [{ translateX: width * eff }] };
-    }
-    const pivot = eff < 0 ? width / 2 : -width / 2;
-    return {
-      opacity: 1,
-      transform: [
-        { perspective: 1200 },
-        { translateX: eff * width + pivot },
-        { rotateY: `${eff * 90}deg` },
-        { translateX: -pivot },
-      ],
-    };
-  });
-
-  // Backdrop fade as user drags down
+  // ── Backdrop / chrome animated styles ──────────────────────
   const backdropStyle = useAnimatedStyle(() => {
     const down = Math.max(dragY.value, 0);
     return {
@@ -357,26 +366,40 @@ export default function StoryViewer({
     };
   });
 
-  // Chrome (header + progress + bottom content) fade
+  // Chrome fades both during vertical drag AND during horizontal cube transition.
   const chromeStyle = useAnimatedStyle(() => {
     const down = Math.max(dragY.value, 0);
-    const horizontalActivity = Math.min(Math.abs(progressX.value), 1);
+    const dist = Math.abs(cubePosition.value - Math.round(cubePosition.value));
+    const cubeOpacity = 1 - Math.min(dist * 3, 1);
+    const downOpacity = interpolate(
+      down,
+      [0, height * 0.18],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: Math.min(cubeOpacity, downOpacity) };
+  });
+
+  const overlayStyle = useAnimatedStyle(() => {
+    const down = Math.max(dragY.value, 0);
     return {
       opacity: interpolate(
-        Math.max(down / (height * 0.18), horizontalActivity),
-        [0, 1],
+        down,
+        [0, height * 0.35],
         [1, 0],
         Extrapolation.CLAMP,
       ),
     };
   });
 
-  const overlayStyle = useAnimatedStyle(() => {
-    const down = Math.max(dragY.value, 0);
-    return {
-      opacity: interpolate(down, [0, height * 0.35], [1, 0], Extrapolation.CLAMP),
-    };
-  });
+  // ── Windowed render of group layers ────────────────────────
+  const windowStart = Math.max(0, currentGroupIndex - WINDOW);
+  const windowEnd = Math.min(groups.length - 1, currentGroupIndex + WINDOW);
+  const visibleGroupIndices = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = windowStart; i <= windowEnd; i++) arr.push(i);
+    return arr;
+  }, [windowStart, windowEnd]);
 
   if (!visible || !currentGroup) return null;
 
@@ -391,56 +414,37 @@ export default function StoryViewer({
       <StatusBar hidden />
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View style={[styles.container, { width, height }, backdropStyle]}>
-          {/* Gesture surface — owns the cube faces */}
+          {/* Cube faces — one per group in the window */}
           <GestureDetector gesture={composed}>
             <View style={StyleSheet.absoluteFill}>
-              {prevGroup ? (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.face, { width, height }, prevLayerStyle]}
-                >
-                  <SlideFace
-                    slide={prevGroup.slides[prevGroup.slides.length - 1]}
+              {visibleGroupIndices.map((idx) => {
+                const group = groups[idx];
+                const si = Math.min(
+                  slideIndices[group.id] ?? 0,
+                  group.slides.length - 1,
+                );
+                return (
+                  <CubeLayer
+                    key={group.id}
+                    idx={idx}
+                    cubePosition={cubePosition}
+                    dragY={dragY}
                     width={width}
                     height={height}
+                    slide={group.slides[si]}
                   />
-                </Animated.View>
-              ) : null}
-
-              <Animated.View
-                pointerEvents="none"
-                style={[styles.face, { width, height }, currentLayerStyle]}
-              >
-                <SlideFace
-                  slide={currentGroup.slides[slideIndex]}
-                  width={width}
-                  height={height}
-                />
-              </Animated.View>
-
-              {nextGroup ? (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.face, { width, height }, nextLayerStyle]}
-                >
-                  <SlideFace
-                    slide={nextGroup.slides[0]}
-                    width={width}
-                    height={height}
-                  />
-                </Animated.View>
-              ) : null}
+                );
+              })}
             </View>
           </GestureDetector>
 
-          {/* Chrome — rendered OUTSIDE the gesture detector so Pressables
-              (close, CTA) win over the Tap-to-advance gesture. */}
+          {/* Chrome (rendered outside the gesture detector so Pressables win) */}
           <Animated.View
             style={[styles.progressRow, chromeStyle]}
             pointerEvents="none"
           >
             {currentGroup.slides.map((_, i) => {
-              if (i < slideIndex) {
+              if (i < currentSlideIndex) {
                 return (
                   <View
                     key={i}
@@ -448,7 +452,7 @@ export default function StoryViewer({
                   />
                 );
               }
-              if (i === slideIndex) {
+              if (i === currentSlideIndex) {
                 return (
                   <View
                     key={i}
@@ -513,7 +517,7 @@ export default function StoryViewer({
           </Animated.View>
 
           {(() => {
-            const s = currentGroup.slides[slideIndex];
+            const s = currentGroup.slides[currentSlideIndex];
             if (!s) return null;
             const hasBottom = s.title || s.cta || s.subtitleLine || s.pillText;
             if (!hasBottom) return null;
@@ -576,10 +580,61 @@ export default function StoryViewer({
   );
 }
 
+// ── CubeLayer ────────────────────────────────────────────────
+// One absolutely-positioned layer per group. Its transform reads cubePosition
+// and computes its own offset/rotation. Because each layer is keyed by group
+// id, the layer mounted for group N stays mounted as currentGroupIndex
+// changes — the slide content doesn't shift, so there's no flash at the end
+// of a cube transition.
+function CubeLayer({
+  idx,
+  cubePosition,
+  dragY,
+  width,
+  height,
+  slide,
+}: {
+  idx: number;
+  cubePosition: SharedValue<number>;
+  dragY: SharedValue<number>;
+  width: number;
+  height: number;
+  slide: StorySlideInput | undefined;
+}) {
+  const style = useAnimatedStyle(() => {
+    const eff = idx - cubePosition.value;
+    if (Math.abs(eff) > 1.0001) {
+      return {
+        opacity: 0,
+        transform: [{ translateX: width * 2 * Math.sign(eff || 1) }],
+      };
+    }
+    const pivot = eff < 0 ? width / 2 : -width / 2;
+    const ty = Math.abs(eff) < 0.5 ? Math.max(dragY.value, 0) : 0;
+    return {
+      opacity: 1,
+      transform: [
+        { perspective: 1200 },
+        { translateX: eff * width + pivot },
+        { rotateY: `${eff * 90}deg` },
+        { translateX: -pivot },
+        { translateY: ty },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.face, { width, height }, style]}
+    >
+      <SlideFace slide={slide} width={width} height={height} />
+    </Animated.View>
+  );
+}
+
 // ── SlideFace ────────────────────────────────────────────────
 // Stateless renderer for a single slide's background + overlay text.
-// Bottom CTAs and header live OUTSIDE the cube so they don't rotate
-// — they're drawn in the parent on top.
 function SlideFace({
   slide,
   width: _width,
