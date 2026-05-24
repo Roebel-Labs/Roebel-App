@@ -53,13 +53,20 @@ export default function PartnerLayout({
   }
 
   const features = subTypeFeatures(activeAccount.sub_type);
+  // Approved partners of any sub_type can always access the dashboard, even
+  // if their sub_type isn't in the partner-eligible list (e.g. a Verein that
+  // was admin-approved). Sub-type only controls whether registration CTA is
+  // shown to unregistered orgs.
+  const canAccess = features.partner || partner !== null;
 
   return (
     <div className="space-y-4">
       <BackLink />
       <Heading />
 
-      {!features.partner ? (
+      {loading ? (
+        <LoadingState />
+      ) : !canAccess ? (
         <NotAvailableCard
           subTypeLabel={
             activeAccount.sub_type
@@ -67,8 +74,6 @@ export default function PartnerLayout({
               : "—"
           }
         />
-      ) : loading ? (
-        <LoadingState />
       ) : !partner ? (
         <PartnerRegistrationForm
           accountId={activeAccount.id}

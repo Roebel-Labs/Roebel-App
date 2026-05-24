@@ -205,7 +205,7 @@ export function subTypeFeatures(
         products: false,
         ads: false,
         events: true,
-        partner: false,
+        partner: true,
         speisekarte: false,
         storyCollections: false,
       };
