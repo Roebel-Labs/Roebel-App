@@ -72,6 +72,7 @@ type Props = {
   visible: boolean;
   groups: StoryGroup[];
   initialGroupIndex: number;
+  initialSlideIndex?: number;
   onClose: () => void;
   durationMs?: number;
 };
@@ -85,6 +86,7 @@ export default function StoryViewer({
   visible,
   groups,
   initialGroupIndex,
+  initialSlideIndex = 0,
   onClose,
   durationMs = 6000,
 }: Props) {
@@ -98,15 +100,20 @@ export default function StoryViewer({
   // ── Shared value (vertical drag only) ──────────────────────
   const dragY = useSharedValue(0);
 
-  // Reset state when the viewer (re-)opens at a new starting group.
+  // Reset state when the viewer (re-)opens at a new starting group/slide.
   useEffect(() => {
     if (!visible) return;
     setCurrentGroupIndex(initialGroupIndex);
-    setSlideIndices({});
+    const startingGroup = groups[initialGroupIndex];
+    if (startingGroup && initialSlideIndex > 0) {
+      setSlideIndices({ [startingGroup.id]: initialSlideIndex });
+    } else {
+      setSlideIndices({});
+    }
     setPaused(false);
     dragY.value = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialGroupIndex, visible]);
+  }, [initialGroupIndex, initialSlideIndex, visible]);
 
   // Refs for use inside gesture callbacks and the timer.
   const groupsRef = useRef(groups);
