@@ -34,7 +34,36 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAudioPlayer } from 'expo-audio';
+
+// Defensive load of expo-audio. expo-audio is a NATIVE MODULE — its Swift /
+// Kotlin code only exists in binaries built after we added the package. If the
+// app is running via an EAS Update on an older binary, requiring expo-audio
+// throws synchronously at module-evaluation time and the app crashes on
+// launch. Swallow the failure and fall back to a stub hook; the audio
+// `useEffect` already guards on `!player`, so audio silently disables.
+// After the next `eas build`, the real `useAudioPlayer` takes over automatically.
+type StoryAudioPlayer = {
+  play: () => void;
+  pause: () => void;
+  muted: boolean;
+  loop: boolean;
+} | null;
+type UseAudioPlayerFn = (source: string | null) => StoryAudioPlayer;
+
+let useAudioPlayer: UseAudioPlayerFn = () => null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('expo-audio');
+  if (mod?.useAudioPlayer) {
+    useAudioPlayer = mod.useAudioPlayer as UseAudioPlayerFn;
+  }
+} catch (err) {
+  console.warn(
+    '[StoryViewer] expo-audio native module unavailable — audio disabled. ' +
+      'Run `eas build` to ship a binary that includes it.',
+    err,
+  );
+}
 
 export type StoryHeader = {
   avatarUrl?: string | null;
@@ -439,7 +468,7 @@ export default function StoryViewer({
                 ) : (
                   <View style={styles.headerSpacer} pointerEvents="none" />
                 )}
-                {audioUrl ? (
+                {audioUrl && player ? (
                   <Pressable
                     onPress={() => setMuted((m) => !m)}
                     hitSlop={16}
