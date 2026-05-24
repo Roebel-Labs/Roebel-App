@@ -64,9 +64,7 @@ export default function HomeStoryBar() {
     const eventGroups: StoryGroup[] = events.map((event) => {
       const orgName = event.account?.name ?? event.organizer_name;
       const orgAvatar = (event.account as any)?.avatar_url ?? null;
-      const locationLine = event.location
-        ? `${'\u{1F4CD}'} ${event.location}`
-        : undefined;
+      const locationLine = event.location || undefined;
       return {
         id: `event:${event.id}`,
         header: {
