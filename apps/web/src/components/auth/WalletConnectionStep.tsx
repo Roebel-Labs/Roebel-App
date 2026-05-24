@@ -130,6 +130,7 @@ export function WalletConnectionStep({
                 client={client}
                 chain={activeChain}
                 wallets={wallets}
+                autoConnect={false}
                 connectModal={{
                   title: "Create Your Wallet",
                   size: "compact",

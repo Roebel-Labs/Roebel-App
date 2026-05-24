@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThirdwebProvider } from "thirdweb/react";
+import { ThirdwebProvider, AutoConnect } from "thirdweb/react";
+import { client } from "@/app/client";
+import { wallets } from "@/lib/wallet-config";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "sonner";
 import { ConditionalFooter } from "@/components/layout/ConditionalFooter";
@@ -44,10 +45,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} ${inter.variable}`} suppressHydrationWarning>
-      <body className={`${GeistSans.className} flex flex-col min-h-screen overflow-x-hidden`}>
+    <html lang="en" className={`${GeistMono.variable} ${inter.variable}`} suppressHydrationWarning>
+      <body className={`${inter.className} flex flex-col min-h-screen overflow-x-hidden`}>
         <ThemeProvider>
           <ThirdwebProvider>
+            <AutoConnect client={client} wallets={wallets} />
             <AccountProvider>
               <GlobalWalletRedirect />
               <div className="flex-1">{children}</div>

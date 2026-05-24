@@ -66,6 +66,7 @@ export default function RevealKeyPage() {
             client={client}
             chain={activeChain}
             wallets={wallets}
+            autoConnect={false}
             theme="light"
             connectButton={{
               label: "Mit Röbel-Konto anmelden",

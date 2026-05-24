@@ -125,6 +125,7 @@ export function AppHeader({ onToggleMobileSidebar }: AppHeaderProps) {
               client={client}
               chain={activeChain}
               wallets={wallets}
+              autoConnect={false}
               connectModal={{
                 title: "Bei Röbel/Müritz DAO anmelden",
                 size: "compact",

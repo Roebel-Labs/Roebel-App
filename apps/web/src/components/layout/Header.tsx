@@ -75,6 +75,7 @@ export function Header() {
                     client={client}
                     chain={activeChain}
                     wallets={wallets}
+                    autoConnect={false}
                     connectModal={{
                       title: "Bei Röbel/Müritz DAO anmelden",
                       size: "compact",
@@ -88,6 +89,7 @@ export function Header() {
                     client={client}
                     chain={activeChain}
                     wallets={wallets}
+                    autoConnect={false}
                     connectModal={{
                       title: "Anmelden",
                       size: "compact",

@@ -206,6 +206,7 @@ export default function AdminCitizensPage() {
           <ConnectButton
             client={client}
             wallets={wallets}
+            autoConnect={false}
             theme="light"
             connectButton={{
               label: "Connect Wallet",
@@ -236,6 +237,7 @@ export default function AdminCitizensPage() {
             <ConnectButton
               client={client}
               wallets={wallets}
+              autoConnect={false}
               theme="light"
               connectButton={{
                 label: "Connect Wallet",
