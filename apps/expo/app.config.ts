@@ -48,7 +48,15 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-font',
     'expo-web-browser',
-    'expo-location',
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'Röbel nutzt deinen Standort, (1) um zu prüfen, dass du dich im Röbel/Müritz-Gebiet befindest — Voraussetzung für Beiträge im lokalen Bürger-Feed — und (2) um die Karte automatisch auf deine aktuelle Position zu zentrieren. — Röbel uses your location to (1) verify you are within the Röbel/Müritz area before allowing you to post in the local citizen feed, and (2) center the map on your current position when you open the Karte tab.',
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
+      },
+    ],
     [
       'expo-camera',
       {
@@ -94,6 +102,10 @@ const config: ExpoConfig = {
     ],
     './plugins/withExcludeBouncyCastle',
     './plugins/withRemoveJcenter',
+    // Strips `audio` from UIBackgroundModes that expo-audio adds by default.
+    // Story audio is foreground-only — Apple review 2.5.4 rejects the entry
+    // otherwise. MUST run after expo-audio above.
+    './plugins/withRemoveAudioBackgroundMode',
     [
       'expo-build-properties',
       {
@@ -128,7 +140,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
-    buildNumber: '27',
+    buildNumber: '28',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -139,6 +151,8 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSCalendarsUsageDescription: 'Die App benötigt Zugriff auf deinen Kalender um Veranstaltungen zu speichern.',
+      NSLocationWhenInUseUsageDescription:
+        'Röbel nutzt deinen Standort, (1) um zu prüfen, dass du dich im Röbel/Müritz-Gebiet befindest — Voraussetzung für Beiträge im lokalen Bürger-Feed — und (2) um die Karte automatisch auf deine aktuelle Position zu zentrieren. — Röbel uses your location to (1) verify you are within the Röbel/Müritz area before allowing you to post in the local citizen feed, and (2) center the map on your current position when you open the Karte tab.',
     }
   },
   android: {

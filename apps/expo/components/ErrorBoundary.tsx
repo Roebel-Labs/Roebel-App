@@ -15,6 +15,12 @@ const fallbackColors = {
 
 interface Props {
   children: ReactNode;
+  /**
+   * Optional custom fallback. When provided, replaces the default full-screen
+   * "Hier gibt's nichts zu finden" error UI — useful for wrapping a single
+   * component (e.g. the Mapbox view) without taking over the whole screen.
+   */
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -101,6 +107,9 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback !== undefined) {
+        return this.props.fallback;
+      }
       return (
         <ErrorFallback
           error={this.state.error}

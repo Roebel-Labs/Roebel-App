@@ -17,6 +17,7 @@ import { ArrowLeftIcon, CallIcon, LocationIcon, SearchIcon } from '@/components/
 import SearchModal from '@/components/SearchModal';
 import MapLoadingSkeleton from '@/components/MapLoadingSkeleton';
 import MapboxMapView from '@/components/map/MapboxMapView';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
 import MapFilterChips, { type MapFilter } from '@/components/map/MapFilterChips';
 import MapPreviewCarousel, {
@@ -77,7 +78,9 @@ const mapboxToken =
   process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ||
   '';
 
-if (isMapboxAvailable && Mapbox) {
+// Only initialize Mapbox if we actually have a token — passing '' has caused
+// crashes on iPad iPadOS 26.5 during App Review.
+if (isMapboxAvailable && Mapbox && mapboxToken) {
   Mapbox.setAccessToken(mapboxToken);
 }
 
@@ -382,6 +385,15 @@ export default function LocationScreen() {
           <MapPrivacyConsent onAccept={handlePrivacyAccept} />
         ) : (
           <>
+            <ErrorBoundary
+              fallback={
+                <View style={[styles.mapFallback, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.mapFallbackText, { color: colors.textPrimary }]}>
+                    Die Karte ist gerade nicht verfügbar. Bitte versuche es später erneut.
+                  </Text>
+                </View>
+              }
+            >
             <MapboxMapView
               geojson={geojson}
               onMarkerPress={handleMarkerPress}
@@ -415,6 +427,7 @@ export default function LocationScreen() {
                 ]);
               }}
             />
+            </ErrorBoundary>
 
             {/* Top header — back left, search right */}
             <SafeAreaView style={styles.topHeader} edges={['top']} pointerEvents="box-none">
@@ -550,6 +563,18 @@ const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
     position: 'relative',
+  },
+  mapFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  mapFallbackText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   topHeader: {
     position: 'absolute',
