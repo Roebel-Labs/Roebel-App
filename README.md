@@ -1,3 +1,5 @@
+<img width="1229" height="686" alt="1777224343114-28ylktjcd91 1 (1)" src="https://github.com/user-attachments/assets/aa398c24-560f-472c-af59-d2c906780fdf" />
+
 # Roebel App
 
 Open-source civic technology platform for Roebel/Mueritz, Mecklenburg-Vorpommern, Germany — a replicable blueprint for small towns building digital civic infrastructure.
