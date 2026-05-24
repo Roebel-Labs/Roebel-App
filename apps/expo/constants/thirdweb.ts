@@ -43,10 +43,13 @@ export const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0x79B
 export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
 
 export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177";
+// Rotated 2026-05-24: new Governor binds to a fresh MACI core that uses the new
+// gatekeeper for signup (the prior MACI was permanently stuck on the old
+// gatekeeper). Voting period is now 1 h.
+export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xffCeE774e226f354f261B5Cd264ce1325385A926";
 
-// MACI v2 infrastructure
-export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
+// MACI v2 infrastructure. MACI core rotated 2026-05-24 (see governor comment above).
+export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E";
 export const maciVerifierAddress = process.env.NEXT_PUBLIC_MACI_VERIFIER || "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8";
 export const maciVkRegistryAddress = process.env.NEXT_PUBLIC_MACI_VK_REGISTRY || "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED";
 export const maciCoordinatorAddress = process.env.NEXT_PUBLIC_MACI_COORDINATOR || "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C";

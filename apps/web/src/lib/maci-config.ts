@@ -19,8 +19,10 @@ export const MACI_INFRA = {
   attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
   citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
 
-  // MACI v2 core — never rotated
-  maci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
+  // MACI v2 core — rotated 2026-05-24 (NEW core binds to the new gatekeeper;
+  // prior MACI was permanently stuck on the old gatekeeper because
+  // MACI.signUpGatekeeper is `immutable`).
+  maci: "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E",
   verifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
   voiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
   pollFactory: "0x604B8b61488e02b2EEeeB4993825afD436D526fE",
@@ -28,16 +30,19 @@ export const MACI_INFRA = {
   tallyFactory: "0xC6351B4470CE0C1fab41b45a902554A8040Df463",
 
   // Rotated 2026-05-23 alongside the NFT redeploy (gatekeeper binds to the new CitizenNFT).
+  // Re-pointed to the new MACI core via setMaciInstance() on 2026-05-24.
   gatekeeper: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
 
   // Rotated 2026-05-08 to align VK keys with the production zKey signature.
   vkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
 
-  // Active Governor + Timelock — rotated 2026-05-23 to add governance-tunable
-  // setters (quorumPercentage / quorumAbsolute / tallyGracePeriod /
-  // coordinator / coordinatorPubKey) and to rebind to the new NFTs.
-  governor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
-  timelock: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
+  // Active Governor + Timelock — rotated 2026-05-24 alongside MACI core
+  // (Governor's `maci` is immutable; new MACI → new Governor → new Timelock).
+  // votingPeriod is now 1 h (was 7 days). NFTs still owned by the prior
+  // Timelock at 0xe8B8149F… — NFT threshold changes go through the prior
+  // Governor 0xb5333aFf… not this one.
+  governor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
+  timelock: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
 
   // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
   coordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
@@ -57,7 +62,7 @@ export const MACI_TREE_DEPTHS = {
 // ----- Governor parameter snapshot (also re-read live by useMaciInfra) -----
 
 export const GOVERNOR_PARAMS_SNAPSHOT = {
-  votingPeriodSeconds: 604800, // 7 days
+  votingPeriodSeconds: 3600, // 1 hour (test phase); raise via Governor.setVotingPeriod() governance proposal
   quorumAbsolute: 2,
   quorumPercentage: 10,
   tallyGracePeriodSeconds: 604800, // 7 days
@@ -161,6 +166,18 @@ export const ROTATION_HISTORY: ArchivedAddress[] = [
     address: "0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe",
     archivedAt: "2026-05-23T00:00:00Z",
     reason: "Bound to the previous Governor; redeployed with 1-hour min delay for the test phase (raise via updateDelay() proposal).",
+  },
+  {
+    kind: "governor",
+    address: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
+    archivedAt: "2026-05-24T00:00:00Z",
+    reason: "Rotated alongside MACI core. Prior Governor + MACI core paired with the OLD gatekeeper (MACI.signUpGatekeeper is immutable), so NEW CitizenNFT holders couldn't sign up to vote. Also fixed 7d → 1h voting period. This Governor STILL owns AttesterNFT + CitizenNFT — NFT threshold proposals go through it, not the current Governor.",
+  },
+  {
+    kind: "timelock",
+    address: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
+    archivedAt: "2026-05-24T00:00:00Z",
+    reason: "Bound to the previous Governor (Governor's _executor is immutable). Still owns the two NFTs — NFT threshold proposals route through this Timelock.",
   },
 ];
 

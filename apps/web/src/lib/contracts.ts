@@ -15,9 +15,12 @@ export const ATTESTER_NFT_ADDRESS = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb"
 export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 
 // Current MACI v2 privacy-voting governor — proposal creation + voting target.
+// Rotated 2026-05-24 with a NEW MACI core (the prior MACI was permanently bound
+// to the old gatekeeper, breaking signup for NEW CitizenNFT holders) and a 1-hour
+// voting period (was 7 days).
 // Source of truth: contracts/governor-contract/deployments/base.json
-export const MACI_GOVERNOR_ADDRESS = "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177";
-export const MACI_ADDRESS = "0x2922e42945a10d1F765E3f9Cab136421d4556D30";
+export const MACI_GOVERNOR_ADDRESS = "0xffCeE774e226f354f261B5Cd264ce1325385A926";
+export const MACI_ADDRESS = "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E";
 
 // Convenience aliases — existing imports keep working but now point at the
 // new MACI Governor.

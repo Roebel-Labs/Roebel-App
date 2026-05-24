@@ -17,18 +17,18 @@ export const CONTRACTS = {
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
   // Current MACI v2 privacy-voting governance (apps target this).
-  // Rotated 2026-05-23 alongside the NFT redeploy + added five governance-
-  // tunable setters (quorumPercentage / quorumAbsolute / tallyGracePeriod /
-  // coordinator / coordinatorPubKey).
-  maciAttesterGovernor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
-  maciTimelock: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
+  // Rotated 2026-05-24: NEW MACI core that actually binds to the new
+  // gatekeeper (MACI's signUpGatekeeper is immutable, so the prior rotation's
+  // gatekeeper swap was a no-op until MACI itself was redeployed). New
+  // Governor + Timelock pair binds to this MACI. Voting period is now 1 h
+  // (was 7 days).
+  maciAttesterGovernor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
+  maciTimelock: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
 
-  // MACI v2 infrastructure (MACI core, Verifier, voice credit proxy reused;
-  // VkRegistry rotated 2026-05-08 (twice) to align all four tree depths with
-  // the production-ceremony zKey signatures ProcessMessagesNonQv_14-9-2-3 +
-  // TallyVotesNonQv_14-5-3. Gatekeeper rotated 2026-05-23 to bind to the
-  // new CitizenNFT.
-  maci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
+  // MACI v2 infrastructure. MACI core rotated 2026-05-24; Verifier + VkRegistry
+  // + Poseidon + factories + voice credit proxy + gatekeeper all reused (their
+  // state is independent of MACI core).
+  maci: "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E",
   maciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
   maciVkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
   maciGatekeeper: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
@@ -40,6 +40,14 @@ export const CONTRACTS = {
   legacyMaciAttesterGovernor: "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
   legacyMaciTimelock: "0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe",
   legacyMaciGatekeeper: "0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee",
+  // 2026-05-23 rotation that fixed NFT thresholds but missed the MACI signup
+  // gatekeeper binding. Still owns AttesterNFT + CitizenNFT (NFT threshold
+  // changes require a proposal on this Governor, not the current one).
+  legacy2MaciAttesterGovernor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",
+  legacy2MaciTimelock: "0xe8B8149F9373a56F55112e5Fc867E58308D014c1",
+  // Pre-2026-05-24 MACI core (the one that was permanently bound to the OLD
+  // gatekeeper, breaking signup for NEW CitizenNFT holders).
+  legacyMaci: "0x2922e42945a10d1F765E3f9Cab136421d4556D30",
 
   // Off-chain coordinator EOA (Fly.io, decrypts ballots + posts ZK tally proof)
   maciCoordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",

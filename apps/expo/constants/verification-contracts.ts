@@ -12,7 +12,7 @@ import { base } from 'thirdweb/chains';
 export const VERIFICATION_CONTRACTS = {
   attesterNFT: process.env.NEXT_PUBLIC_ATTESTER_NFT || '0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb',
   citizenNFT: process.env.NEXT_PUBLIC_CITIZEN_NFT || '0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB',
-  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177',
+  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0xffCeE774e226f354f261B5Cd264ce1325385A926',
 };
 
 // Contract instances

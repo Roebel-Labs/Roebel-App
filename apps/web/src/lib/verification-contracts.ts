@@ -11,7 +11,7 @@ import { base } from "thirdweb/chains";
 export const VERIFICATION_CONTRACTS = {
   attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb", // AttesterNFT (2-sig rule, mutable thresholds, Timelock-owned)
   citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",  // CitizenNFT (1 Attester + 1 Citizen for BOTH attestation AND revocation)
-  governor: "0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177",    // MaciAttesterGovernor (governance-tunable quorum/coordinator)
+  governor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",    // MaciAttesterGovernor (rotated 2026-05-24: new MACI core, 1h voting period)
 };
 
 // Contract instances
