@@ -71,6 +71,12 @@ type Props = {
   topPadding?: number;
   /** Additional bottom inset (e.g. bottom nav) added to the footer padding. */
   bottomPadding?: number;
+  /**
+   * Whether this list is the on-screen feed tab AND the home screen is
+   * focused. When false, videos are paused even if scroll-visible — prevents
+   * off-tab / background audio from bleeding through. Defaults to true.
+   */
+  active?: boolean;
 };
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
@@ -85,6 +91,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     headerHeight = 0,
     topPadding = 0,
     bottomPadding = 0,
+    active = true,
   },
   ref,
 ) {
@@ -186,7 +193,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
               isLiked={isLiked(post.id)}
               displayLikeCount={getLikeCount(post.id, post.likes_count)}
               walletAddress={walletAddress}
-              isVisible={visibleVideoIds.has(post.id)}
+              isVisible={active && visibleVideoIds.has(post.id)}
               onLike={() => toggleLike(post.id, post.likes_count)}
               onShare={() => sharePost(post.id, post.content)}
               onMore={() => onMore(post)}
@@ -202,7 +209,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
               isLiked={isLiked(post.id)}
               displayLikeCount={getLikeCount(post.id, post.likes_count)}
               walletAddress={walletAddress}
-              isVisible={visibleVideoIds.has(post.id)}
+              isVisible={active && visibleVideoIds.has(post.id)}
               onLike={() => toggleLike(post.id, post.likes_count)}
               onShare={() => sharePost(post.id, post.content)}
               onMore={() => onMore(post)}
@@ -264,7 +271,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return null;
       }
     },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds],
+    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, active],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);

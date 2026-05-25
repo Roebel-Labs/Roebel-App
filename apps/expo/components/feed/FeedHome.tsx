@@ -268,6 +268,17 @@ export default function FeedHome() {
     }, [consumePostFeedback, refreshAll, showSnackbar])
   );
 
+  // Track whether the home screen is focused so feed videos pause (audio +
+  // video) when the user navigates to another screen — otherwise an unmuted
+  // video keeps playing in the background.
+  const [screenFocused, setScreenFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, [])
+  );
+
   const removePostEverywhere = useCallback((postId: string) => {
     mainListRef.current?.removePost(postId);
     rathausListRef.current?.removePost(postId);
@@ -474,6 +485,7 @@ export default function FeedHome() {
               onCompose={handleCompose}
               onMore={handleMore}
               listHeader={<HomeStoryBar />}
+              active={screenFocused && effectiveTab === 'main'}
               {...feedListProps}
             />
           </View>
@@ -485,6 +497,7 @@ export default function FeedHome() {
               walletAddress={walletAddress}
               onCompose={handleCompose}
               onMore={handleMore}
+              active={screenFocused && effectiveTab === 'rathaus'}
               {...feedListProps}
             />
           </View>
@@ -496,6 +509,7 @@ export default function FeedHome() {
               walletAddress={walletAddress}
               onCompose={handleCompose}
               onMore={handleMore}
+              active={screenFocused && effectiveTab === 'app'}
               {...feedListProps}
             />
           </View>
@@ -510,6 +524,7 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             listHeader={<HomeStoryBar />}
+            active={screenFocused}
             {...feedListProps}
           />
         </View>
