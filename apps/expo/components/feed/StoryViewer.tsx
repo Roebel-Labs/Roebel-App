@@ -23,6 +23,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -652,7 +653,7 @@ export default function StoryViewer({
                   ) : null}
                   {slide.cta ? (
                     <Pressable style={styles.ctaBtn} onPress={slide.cta.onPress}>
-                      <Ionicons name="chevron-up" size={18} color="#ffffff" />
+                      <BounceChevron />
                       <Text style={styles.ctaText}>{slide.cta.label}</Text>
                     </Pressable>
                   ) : null}
@@ -663,6 +664,28 @@ export default function StoryViewer({
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
+  );
+}
+
+// ── BounceChevron ────────────────────────────────────────────
+// The swipe-up hint chevron gently bobs up and down on a smooth, infinite
+// yoyo loop to nudge the user toward the "Mehr erfahren" action.
+function BounceChevron() {
+  const ty = useSharedValue(0);
+  useEffect(() => {
+    ty.value = withRepeat(
+      withTiming(-5, { duration: 650 }),
+      -1, // repeat forever
+      true, // reverse each cycle → smooth up/down bob
+    );
+  }, [ty]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: ty.value }],
+  }));
+  return (
+    <Animated.View style={style} pointerEvents="none">
+      <Ionicons name="chevron-up" size={18} color="#ffffff" />
+    </Animated.View>
   );
 }
 
