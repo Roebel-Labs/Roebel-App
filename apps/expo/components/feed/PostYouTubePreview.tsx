@@ -1,5 +1,4 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
 import { extractYouTubeVideoId } from '@/lib/utils/youtube';
 
@@ -10,28 +9,14 @@ type Props = {
 };
 
 /**
- * Inline YouTube preview for posts. Renders the actual player immediately (no
- * thumbnail / custom play button) so the video can be watched directly in the
- * feed. The wrapping View claims the touch responder so taps reach the player's
- * WebView and do NOT bubble up to the surrounding post card's navigation.
+ * Inline YouTube preview for posts — renders the actual player immediately so
+ * the video can be watched in place. The player's WebView owns its own touches
+ * (no responder wrapper, which would swallow taps); callers must render this
+ * OUTSIDE any navigating Pressable so a tap plays instead of navigating.
  */
 export default function PostYouTubePreview({ youtubeUrl }: Props) {
   const videoId = extractYouTubeVideoId(youtubeUrl);
   if (!videoId) return null;
 
-  return (
-    <View
-      style={styles.wrapper}
-      onStartShouldSetResponder={() => true}
-      onResponderTerminationRequest={() => false}
-    >
-      <YouTubeEmbed youtubeUrl={youtubeUrl} height={PLAYER_HEIGHT} autoplay={false} />
-    </View>
-  );
+  return <YouTubeEmbed youtubeUrl={youtubeUrl} height={PLAYER_HEIGHT} autoplay={false} />;
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    width: '100%',
-  },
-});

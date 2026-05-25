@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -56,56 +56,65 @@ export default function FeedPostCard({
   const isMarketplacePost = !!post.linked_marketplace;
 
   return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.container,
         isMarketplacePost && styles.containerMarketplace,
         { backgroundColor: colors.background },
-        pressed && { backgroundColor: colors.pressedOverlay },
       ]}
     >
-      <PostAuthorRow
-        author={post.author}
-        category={isMarketplacePost ? undefined : post.category}
-        createdAt={post.created_at}
-        onMore={onMore}
-      />
-
-      {displayContent ? (
-        <Text style={[styles.content, { color: colors.textPrimary }]}>{displayContent}</Text>
-      ) : null}
-
-      {post.linked_event && (
-        <PostLinkedEventCard event={post.linked_event} />
-      )}
-
-      {post.linked_marketplace && (
-        <PostLinkedMarketplaceCard listing={post.linked_marketplace} />
-      )}
-
-      {mediaUrls.length > 0 && (
-        <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
-      )}
-
-      {post.video_url && (
-        <PostVideoPlayer videoUrl={post.video_url} isVisible={isVisible} />
-      )}
-
-      {post.sticker && (
-        <Image
-          source={{ uri: post.sticker.asset_url }}
-          style={styles.sticker}
-          contentFit="contain"
-          accessibilityIgnoresInvertColors
+      {/* Tappable region — opens the post. The YouTube player is kept OUT of
+          this Pressable so tapping it plays inline instead of navigating. */}
+      <Pressable
+        onPress={handlePress}
+        style={({ pressed }) => [
+          styles.tappable,
+          isMarketplacePost && styles.tappableMarketplace,
+          pressed && { backgroundColor: colors.pressedOverlay },
+        ]}
+      >
+        <PostAuthorRow
+          author={post.author}
+          category={isMarketplacePost ? undefined : post.category}
+          createdAt={post.created_at}
+          onMore={onMore}
         />
-      )}
 
-      {youtubeUrl ? (
-        <PostYouTubePreview youtubeUrl={youtubeUrl} />
-      ) : firstLink ? (
-        <PostLinkPreview link={firstLink} />
-      ) : null}
+        {displayContent ? (
+          <Text style={[styles.content, { color: colors.textPrimary }]}>{displayContent}</Text>
+        ) : null}
+
+        {post.linked_event && (
+          <PostLinkedEventCard event={post.linked_event} />
+        )}
+
+        {post.linked_marketplace && (
+          <PostLinkedMarketplaceCard listing={post.linked_marketplace} />
+        )}
+
+        {mediaUrls.length > 0 && (
+          <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+        )}
+
+        {post.video_url && (
+          <PostVideoPlayer videoUrl={post.video_url} isVisible={isVisible} />
+        )}
+
+        {post.sticker && (
+          <Image
+            source={{ uri: post.sticker.asset_url }}
+            style={styles.sticker}
+            contentFit="contain"
+            accessibilityIgnoresInvertColors
+          />
+        )}
+
+        {!youtubeUrl && firstLink ? (
+          <PostLinkPreview link={firstLink} />
+        ) : null}
+      </Pressable>
+
+      {youtubeUrl ? <PostYouTubePreview youtubeUrl={youtubeUrl} /> : null}
 
       {post.poll && (
         <PostPollView poll={post.poll} walletAddress={walletAddress} />
@@ -126,7 +135,7 @@ export default function FeedPostCard({
         imageUrl={zoomImageUrl || ''}
         onClose={() => setZoomImageUrl(null)}
       />
-    </Pressable>
+    </View>
   );
 }
 
@@ -141,6 +150,12 @@ const styles = StyleSheet.create({
   containerMarketplace: {
     paddingVertical: 16,
     borderRadius: 20,
+    gap: 14,
+  },
+  tappable: {
+    gap: 10,
+  },
+  tappableMarketplace: {
     gap: 14,
   },
   content: {
