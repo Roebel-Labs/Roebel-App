@@ -311,7 +311,6 @@ function PublicAccountScreenInner() {
     );
   }
 
-  const subType = subTypeLabel(account.sub_type);
   const memberAvatars = members.slice(0, 3).map((m) => ({
     avatar_url: m.user?.profile_picture_url ?? null,
     username: m.user?.username ?? null,
@@ -779,22 +778,10 @@ function PublicAccountScreenInner() {
             <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>
               {account.name}
             </Text>
-            {account.is_verified && (
-              <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
-                <Text style={styles.verifiedCheck}>✓</Text>
-              </View>
-            )}
           </View>
 
-          {(subType || showExternBadge) && (
+          {showExternBadge && (
             <View style={styles.pillRow}>
-              {subType && (
-                <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
-                  <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
-                    {subType.emoji} {subType.label}
-                  </Text>
-                </View>
-              )}
               {showExternBadge && (
                 <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
                   <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>

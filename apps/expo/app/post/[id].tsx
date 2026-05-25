@@ -44,7 +44,7 @@ import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostActions from '@/components/feed/PostActions';
 import CommentItem from '@/components/feed/CommentItem';
-import { resolveYouTubeUrl } from '@/lib/utils/youtube';
+import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton from '@/components/feed/FeedPostSkeleton';
@@ -310,6 +310,7 @@ export default function PostDetailScreen() {
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
   const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
   const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
+  const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
 
   const renderHeader = () => (
     <View style={[styles.postSection, { borderBottomColor: colors.border }]}>
@@ -320,7 +321,9 @@ export default function PostDetailScreen() {
         onMore={() => setOptionsDrawerVisible(true)}
       />
 
-      <Text style={[styles.postContent, { color: colors.textPrimary }]}>{post.content}</Text>
+      {displayContent ? (
+        <Text style={[styles.postContent, { color: colors.textPrimary }]}>{displayContent}</Text>
+      ) : null}
 
       {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
       {post.linked_marketplace && <PostLinkedMarketplaceCard listing={post.linked_marketplace} />}

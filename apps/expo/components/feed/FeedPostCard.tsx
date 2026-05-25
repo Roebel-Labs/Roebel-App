@@ -14,7 +14,7 @@ import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
-import { resolveYouTubeUrl } from '@/lib/utils/youtube';
+import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 
 type Props = {
   post: PostRecord;
@@ -52,6 +52,7 @@ export default function FeedPostCard({
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
   const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
   const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
+  const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
   const isMarketplacePost = !!post.linked_marketplace;
 
   return (
@@ -71,7 +72,9 @@ export default function FeedPostCard({
         onMore={onMore}
       />
 
-      <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
+      {displayContent ? (
+        <Text style={[styles.content, { color: colors.textPrimary }]}>{displayContent}</Text>
+      ) : null}
 
       {post.linked_event && (
         <PostLinkedEventCard event={post.linked_event} />
@@ -99,7 +102,7 @@ export default function FeedPostCard({
       )}
 
       {youtubeUrl ? (
-        <PostYouTubePreview youtubeUrl={youtubeUrl} title={firstLink?.og_title ?? null} />
+        <PostYouTubePreview youtubeUrl={youtubeUrl} />
       ) : firstLink ? (
         <PostLinkPreview link={firstLink} />
       ) : null}

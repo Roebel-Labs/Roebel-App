@@ -1,5 +1,11 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { ThumbsUpIcon, ThumbsUpFilledIcon, ThumbsDownIcon } from '@/components/Icons';
 
@@ -15,8 +21,9 @@ type Props = {
 /**
  * Thumbs voting widget. Shows ONLY the thumbs-up count (never a percentage,
  * never a thumbs-down count). The count is rendered in the primary text color
- * (black in light mode, adapts in dark) with medium weight. Custom thumb icons
- * are theme-aware via the `color` prop (SVGs use currentColor).
+ * (black in light mode, adapts in dark) with medium weight. The active "liked"
+ * state is black (not green) and pops with a spring animation on tap. Custom
+ * thumb icons are theme-aware via the `color` prop (SVGs use currentColor).
  */
 export default function ThumbsVote({
   upCount,
@@ -28,6 +35,10 @@ export default function ThumbsVote({
   const { colors } = useTheme();
   const fontSize = size === 'sm' ? 12 : 14;
   const iconSize = size === 'sm' ? 12 : 14;
+
+  // Hooks must run unconditionally (before the read-only early return).
+  const upScale = useSharedValue(1);
+  const upAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: upScale.value }] }));
 
   if (!interactive) {
     if (upCount == null) return null;
@@ -41,24 +52,35 @@ export default function ThumbsVote({
 
   const upActive = userVote === 1;
   const downActive = userVote === -1;
+
+  const handleUp = () => {
+    upScale.value = withSequence(
+      withSpring(1.25, { damping: 6, stiffness: 260 }),
+      withSpring(1, { damping: 12, stiffness: 200 }),
+    );
+    onVote?.(1);
+  };
+
   return (
     <View style={styles.rowGap}>
       <Pressable
-        onPress={() => onVote?.(1)}
+        onPress={handleUp}
         accessibilityLabel="Daumen hoch"
         style={[
           styles.pill,
           {
-            borderColor: upActive ? colors.success : colors.borderSecondary,
-            backgroundColor: upActive ? colors.successBackground : 'transparent',
+            borderColor: upActive ? colors.textPrimary : colors.borderSecondary,
+            backgroundColor: upActive ? colors.surfaceSecondary : 'transparent',
           },
         ]}
       >
-        {upActive ? (
-          <ThumbsUpFilledIcon size={18} color={colors.success} />
-        ) : (
-          <ThumbsUpIcon size={18} color={colors.textSecondary} />
-        )}
+        <Animated.View style={upAnimStyle}>
+          {upActive ? (
+            <ThumbsUpFilledIcon size={18} color={colors.textPrimary} />
+          ) : (
+            <ThumbsUpIcon size={18} color={colors.textSecondary} />
+          )}
+        </Animated.View>
         {upCount != null && upCount > 0 && (
           <Text style={[styles.pillCount, { color: colors.textPrimary }]}>{upCount}</Text>
         )}

@@ -8,9 +8,10 @@ type Props = {
   youtubeUrl: string;
   height?: number;
   borderRadius?: number;
+  autoplay?: boolean;
 };
 
-export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 12 }: Props) {
+export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 12, autoplay = true }: Props) {
   const { colors } = useTheme();
   const [error, setError] = useState(false);
 
@@ -46,7 +47,7 @@ export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 
       <YoutubePlayer
         height={height}
         videoId={videoId}
-        play={true}
+        play={autoplay}
         onError={onError}
         webViewProps={{
           allowsInlineMediaPlayback: true,

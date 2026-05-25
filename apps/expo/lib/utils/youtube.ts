@@ -34,6 +34,20 @@ export function findYouTubeUrl(text: string | null | undefined): string | null {
 }
 
 /**
+ * Remove any YouTube URL tokens from a block of text (used to hide the raw
+ * link on posts that already render an inline YouTube preview). Returns the
+ * trimmed remainder, which may be an empty string.
+ */
+export function removeYouTubeUrls(text: string | null | undefined): string {
+  if (!text) return '';
+  return text
+    .split(/(\s+)/)
+    .filter((token) => !extractYouTubeVideoId(token))
+    .join('')
+    .trim();
+}
+
+/**
  * Resolve the YouTube URL for a post: prefer a YouTube URL among the
  * server-side link records, otherwise scan the post body. Returns null when
  * the post has no YouTube link.

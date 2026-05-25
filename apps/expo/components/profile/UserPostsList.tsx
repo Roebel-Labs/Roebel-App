@@ -7,7 +7,7 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
-import { resolveYouTubeUrl } from '@/lib/utils/youtube';
+import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -63,6 +63,7 @@ export default function UserPostsList({ walletAddress }: Props) {
     <View>
       {posts.map((post) => {
         const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
+        const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
         return (
           <Pressable
             key={post.id}
@@ -80,12 +81,12 @@ export default function UserPostsList({ walletAddress }: Props) {
               category={post.category}
               createdAt={post.created_at}
             />
-            {post.content ? (
+            {displayContent ? (
               <Text
                 style={[styles.content, { color: colors.textPrimary }]}
                 numberOfLines={6}
               >
-                {post.content}
+                {displayContent}
               </Text>
             ) : null}
             {post.media_urls && post.media_urls.length > 0 && (

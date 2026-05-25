@@ -27,7 +27,11 @@ export default function OrgAccountCard({ account, upCount }: Props) {
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/account/[id]' as any, params: { id: account.id } })}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
+      style={({ pressed }) => [
+        styles.card,
+        { borderColor: colors.border, backgroundColor: colors.surface },
+        pressed && { opacity: 0.9 },
+      ]}
       accessibilityRole="button"
       accessibilityLabel={`${account.name} ansehen`}
     >
@@ -73,17 +77,20 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     marginRight: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    paddingBottom: 12,
   },
   coverWrap: {
-    width: CARD_WIDTH,
+    width: '100%',
     height: COVER_HEIGHT,
-    borderRadius: 12,
-    overflow: 'hidden',
   },
   avatarWrap: {
     position: 'absolute',
     top: COVER_HEIGHT - AVATAR_SIZE / 2,
-    left: (CARD_WIDTH - AVATAR_SIZE) / 2,
+    left: '50%',
+    marginLeft: -AVATAR_SIZE / 2,
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
@@ -107,6 +114,7 @@ const styles = StyleSheet.create({
   info: {
     alignItems: 'center',
     paddingTop: AVATAR_SIZE / 2 + 8,
+    paddingHorizontal: 8,
     gap: 6,
   },
   name: {
