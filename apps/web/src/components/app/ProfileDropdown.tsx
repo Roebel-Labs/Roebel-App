@@ -43,7 +43,9 @@ export function ProfileDropdown() {
     : user?.profile_picture_url ?? null;
   const headerName = isOrg ? currentAccount!.name : displayName;
   const headerInitial = isOrg ? getInitial(currentAccount!.name) : initial;
-  const profileHref = isOrg ? "/dashboard/profile" : `/app/profile/${account.address}`;
+  // Always land on the account-aware in-app profile — it renders the active
+  // account (personal hub or org hero) so org owners no longer jump to /dashboard.
+  const profileHref = "/app/profile";
 
   return (
     <DropdownMenu>

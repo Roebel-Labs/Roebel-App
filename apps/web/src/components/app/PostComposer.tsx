@@ -317,7 +317,15 @@ export function PostComposer({
       <div className="bg-card rounded-lg border border-border p-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-muted-foreground flex-shrink-0 overflow-hidden">
-            {user?.profile_picture_url ? (
+            {isPostingAsOrg && activeAccount?.avatar_url ? (
+              <Image
+                src={activeAccount.avatar_url}
+                alt=""
+                width={40}
+                height={40}
+                className="object-cover w-full h-full"
+              />
+            ) : user?.profile_picture_url ? (
               <Image
                 src={user.profile_picture_url}
                 alt=""
@@ -326,7 +334,12 @@ export function PostComposer({
                 className="object-cover w-full h-full"
               />
             ) : (
-              displayName.slice(0, 2).toUpperCase()
+              (isPostingAsOrg && activeAccount
+                ? activeAccount.name
+                : displayName
+              )
+                .slice(0, 2)
+                .toUpperCase()
             )}
           </div>
           <button
