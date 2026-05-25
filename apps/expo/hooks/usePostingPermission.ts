@@ -52,22 +52,36 @@ function mapStatus(raw: RawStatus | null): PostingStatus {
   }
 }
 
+const CITIZEN_ALLOWED: PostingStatus = { kind: 'allowed', tier: 'citizen' };
+
 /**
  * Reads the gate state for the current wallet from `public.get_posting_status`.
  *
  * Citizens always return `{ kind: 'allowed', tier: 'citizen' }`. Non-citizens
  * progress through `needs_location` → `account_too_young` → `rate_limited` →
  * `allowed` as they pass each gate.
+ *
+ * Pass `{ bypass: true }` for callers that already know the gate doesn't apply
+ * — citizens (on-chain `hasCitizenNFT` may outpace the DB `is_verified_citizen`
+ * column) and org accounts (always citizen-owned). Bypass skips the RPC and
+ * resolves to citizen-tier immediately, avoiding a stale-DB false negative.
  */
-export function usePostingPermission(): {
+export function usePostingPermission(options?: { bypass?: boolean }): {
   status: PostingStatus;
   refresh: () => Promise<void>;
 } {
+  const bypass = options?.bypass ?? false;
   const { user } = useUser();
   const wallet = user?.wallet_address || null;
-  const [status, setStatus] = useState<PostingStatus>({ kind: 'loading' });
+  const [status, setStatus] = useState<PostingStatus>(
+    bypass ? CITIZEN_ALLOWED : { kind: 'loading' },
+  );
 
   const refresh = useCallback(async () => {
+    if (bypass) {
+      setStatus(CITIZEN_ALLOWED);
+      return;
+    }
     if (!wallet) {
       setStatus({ kind: 'unknown_user' });
       return;
@@ -81,7 +95,7 @@ export function usePostingPermission(): {
       return;
     }
     setStatus(mapStatus(data as RawStatus | null));
-  }, [wallet]);
+  }, [wallet, bypass]);
 
   useEffect(() => {
     void refresh();

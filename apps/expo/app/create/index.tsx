@@ -18,11 +18,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import { useCreatePost } from '@/context/CreatePostContext';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { PostCategory, FeedType } from '@/lib/types/feed';
+import { isOrgAccount } from '@/lib/types';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostImageGrid from '@/components/feed/PostImageGrid';
@@ -86,11 +88,17 @@ export default function CreateScreen() {
     linkedListingNeighborhood?: string;
   }>();
   const { user, isCitizen } = useUser();
+  const { activeAccount } = useAccount();
   const walletAddress = user?.wallet_address || '';
   const activeProfileImage = useActiveProfileImage();
   const draft = useCreatePost();
   const requireAuth = useRequireAuth();
-  const { status: postingStatus } = usePostingPermission();
+  // Citizens (on-chain NFT may outpace the DB flag) and org accounts (always
+  // citizen-owned) bypass the tourist gate entirely.
+  const bypassGate = isCitizen || isOrgAccount(activeAccount);
+  const { status: postingStatus, refresh: refreshPosting } = usePostingPermission({
+    bypass: bypassGate,
+  });
   const postingAllowed = postingStatus.kind === 'allowed' || postingStatus.kind === 'unknown_user';
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -286,7 +294,7 @@ export default function CreateScreen() {
         {/* Posting permission gate — short-circuits to GPS/age/rate-limit UI
             when the wallet doesn't meet the tourist-tier requirements. Citizens
             and unknown_user fall through to the normal composer. */}
-        <PostingGate>
+        <PostingGate status={postingStatus} refresh={refreshPosting}>
         {/* Scrollable content */}
         <ScrollView
           style={styles.flex}

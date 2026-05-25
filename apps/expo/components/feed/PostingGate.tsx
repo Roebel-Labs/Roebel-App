@@ -6,26 +6,27 @@ import { useLocation } from '@/context/LocationContext';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { supabase } from '@/lib/supabase';
-import { usePostingPermission, type PostingStatus } from '@/hooks/usePostingPermission';
+import { type PostingStatus } from '@/hooks/usePostingPermission';
 import { fontFamily, fontSize, spacing, borderRadius } from '@/constants/theme';
 
 interface Props {
+  status: PostingStatus;
+  refresh: () => Promise<void>;
   children: React.ReactNode;
 }
 
 /**
- * Wraps the post composer and short-circuits to a gate UI whenever the current
- * user fails a posting precondition. Citizens always pass through. Non-citizens
- * must (1) verify they're physically near Röbel, (2) wait 24h after sign-up,
- * (3) stay under the rate limit (2/day, 5/week).
+ * Presentational gate: given the posting `status` (owned by the parent via
+ * [`usePostingPermission`](hooks/usePostingPermission.ts)), it short-circuits to
+ * a gate UI whenever a non-citizen fails a precondition. Citizens and org
+ * accounts are bypassed upstream and fall straight through to `children`.
  *
- * Pair with [`usePostingPermission`](hooks/usePostingPermission.ts) — the hook
- * is also exported from here for callers that need the same state outside the
- * gate (e.g. defense-in-depth in submit handlers).
+ * Non-citizens must (1) verify they're physically near Röbel, (2) wait 24h after
+ * sign-up, (3) stay under the rate limit (2/day, 5/week). The parent owns the
+ * single source of truth so the composer's "Weiter" button and this gate stay
+ * in sync (e.g. both update the instant location verification completes).
  */
-export default function PostingGate({ children }: Props) {
-  const { status, refresh } = usePostingPermission();
-
+export default function PostingGate({ status, refresh, children }: Props) {
   switch (status.kind) {
     case 'loading':
       return <GateContainer><LoadingGate /></GateContainer>;
