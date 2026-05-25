@@ -101,6 +101,9 @@ export type StoryGroup = {
   slides: StorySlideInput[];
   onSwipeUp?: () => void;
   audioUrl?: string | null;
+  // Per-slide auto-advance duration for this group; falls back to the
+  // viewer's `durationMs` prop when unset.
+  durationMs?: number;
 };
 
 type Props = {
@@ -315,7 +318,7 @@ export default function StoryViewer({
     progress.setValue(0);
     const anim = RNAnimated.timing(progress, {
       toValue: 1,
-      duration: durationMs,
+      duration: currentGroup.durationMs ?? durationMs,
       easing: Easing.linear,
       useNativeDriver: false,
     });

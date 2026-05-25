@@ -119,6 +119,8 @@ export default function HomeStoryBar() {
         // Shared background track for ALL event slides — loops continuously
         // and is ducked under any per-event override track (see StoryViewer).
         audioUrl: eventStoriesAudioUrl,
+        // Event stories linger a little longer than collections (default 6s).
+        durationMs: 10000,
         slides: eventSlides,
       });
     }
