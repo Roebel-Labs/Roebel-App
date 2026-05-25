@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Skeleton } from '@/components/SkeletonLoader';
@@ -12,10 +12,16 @@ type Props = {
   pendingCount?: number;
 };
 
-const SINGLE_HEIGHT = 220;
 const MULTI_HEIGHT = 240;
 
+// Single images keep their natural aspect ratio, but never taller than 3:4
+// (portrait). aspectRatio is width/height, so the tallest allowed = 3/4 = 0.75.
+const MIN_SINGLE_ASPECT = 3 / 4;
+// Neutral placeholder ratio used until the real dimensions load.
+const DEFAULT_SINGLE_ASPECT = 4 / 5;
+
 export default function PostImageGrid({ imageUrls, onPress, renderOverlay, pendingCount = 0 }: Props) {
+  const [singleAspect, setSingleAspect] = useState<number | null>(null);
   const total = imageUrls.length + pendingCount;
   if (total === 0) return null;
 
@@ -45,9 +51,28 @@ export default function PostImageGrid({ imageUrls, onPress, renderOverlay, pendi
   };
 
   if (total === 1) {
+    // Adapt to the image's natural ratio, clamped so it's never taller than 3:4.
+    const displayAspect = Math.max(singleAspect ?? DEFAULT_SINGLE_ASPECT, MIN_SINGLE_ASPECT);
     return (
-      <View style={[styles.container, { height: SINGLE_HEIGHT }]}>
-        {renderSlot(0, styles.fill)}
+      <View style={[styles.container, { aspectRatio: displayAspect }]}>
+        {isPlaceholder(0) ? (
+          <Skeleton borderRadius={0} style={styles.fillImage} />
+        ) : (
+          <Pressable onPress={() => onPress?.(0)} style={styles.fill}>
+            <Image
+              source={{ uri: imageUrls[0] }}
+              style={styles.fillImage}
+              contentFit="cover"
+              onLoad={(e) => {
+                const w = e.source?.width;
+                const h = e.source?.height;
+                if (w && h) setSingleAspect(w / h);
+              }}
+              accessibilityIgnoresInvertColors
+            />
+          </Pressable>
+        )}
+        {renderOverlay?.(0)}
       </View>
     );
   }

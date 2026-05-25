@@ -15,7 +15,7 @@ export default function FeedSpecialMenuSection({ menus }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.textPrimary }]}>Aktuelle Speisekarten</Text>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>Mittagstisch</Text>
       <SpecialMenuGrid menus={menus} />
     </View>
   );
@@ -25,11 +25,13 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 12,
     overflow: 'hidden',
-    padding: 16,
+    paddingVertical: 16,
     gap: 12,
   },
   title: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
+    // Match the grid's own horizontal padding so the left card aligns with the headline.
+    paddingHorizontal: 16,
   },
 });
