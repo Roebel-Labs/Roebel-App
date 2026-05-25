@@ -40,8 +40,15 @@ async function setAppSetting(key: string, value: string | null) {
     if (error) throw error
     return { success: true as const }
   } catch (error) {
+    // Surface the real Postgres/Supabase message to the client toast so
+    // failures (e.g. missing app_settings table / RLS) are diagnosable —
+    // the server-side console.error never reaches the browser console.
     console.error("setAppSetting error:", error)
-    return { success: false as const, error: "Fehler beim Speichern" }
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "Fehler beim Speichern"
+    return { success: false as const, error: message }
   }
 }
 

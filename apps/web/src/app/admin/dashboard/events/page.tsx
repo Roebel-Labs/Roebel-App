@@ -246,9 +246,6 @@ export default function EventsManagementPage() {
         <h1 className="text-3xl font-medium text-foreground mb-2">Veranstaltungen verwalten</h1>
       </div>
 
-      {/* Shared background audio for all event stories */}
-      <EventStoryAudioPanel />
-
       {/* Featured Events Cards - Always 3 columns */}
       <div className="grid grid-cols-3 gap-4">
         {featuredSlots.map((event, index) => (
@@ -314,6 +311,9 @@ export default function EventsManagementPage() {
           )
         ))}
       </div>
+
+      {/* Shared background audio for all event stories */}
+      <EventStoryAudioPanel />
 
       {/* All Events Section */}
       <div className="space-y-4">
