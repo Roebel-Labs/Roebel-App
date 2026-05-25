@@ -24,6 +24,7 @@ import type {
   BusinessDealWithBusiness,
   GovernanceNudgeData,
   MeckyTipData,
+  AudioPlayerData,
 } from '@/lib/types/feed';
 import type {
   EventRecord,
@@ -48,6 +49,7 @@ import FeedPostSkeleton from './FeedPostSkeleton';
 import FeedEmptyState from './FeedEmptyState';
 import GovernanceNudge from './GovernanceNudge';
 import MeckyTip from './MeckyTip';
+import FeedAudioPlayerCard from './FeedAudioPlayerCard';
 import FeedProposalCard from './FeedProposalCard';
 import FeedProposalCommentCard from './FeedProposalCommentCard';
 
@@ -106,6 +108,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const visibleDeals = useRef(new Set<string>());
   const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
+  const [audioVisible, setAudioVisible] = useState(false);
 
   React.useEffect(() => {
     if (!walletAddress || items.length === 0) return;
@@ -134,6 +137,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const nextVideoIds = new Set<string>();
+      let audioOnScreen = false;
       viewableItems.forEach((item) => {
         if (item.item?.type === 'sponsored') {
           const dealId = item.item.data?.id;
@@ -147,7 +151,11 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
             nextVideoIds.add(post.id);
           }
         }
+        if (item.item?.type === 'audio_player') {
+          audioOnScreen = true;
+        }
       });
+      setAudioVisible((prev) => (prev === audioOnScreen ? prev : audioOnScreen));
       setVisibleVideoIds((prev) => {
         if (prev.size === nextVideoIds.size) {
           let same = true;
@@ -261,6 +269,9 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
         }
 
+        case 'audio_player':
+          return <FeedAudioPlayerCard data={item.data as AudioPlayerData} isVisible={active && audioVisible} />;
+
         case 'proposal':
           return <FeedProposalCard proposal={item.data} />;
 
@@ -271,7 +282,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return null;
       }
     },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, active],
+    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, audioVisible, active],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);

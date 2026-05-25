@@ -25,6 +25,16 @@ const NEWS_POSITION = 5;
 const CINEMA_POSITION = 9;
 const RESTAURANT_POSITION = 13;
 
+// Audio "plate" player: dropped between the two posts that follow the news
+// section (i.e. after the 1st post past Neuigkeiten, before the 2nd). Falls back
+// to a fixed feed position if no news section is present so it still appears.
+const AUDIO_PLAYER_POSTS_AFTER_NEWS = 1;
+const AUDIO_PLAYER_FALLBACK_POSITION = 6;
+const AUDIO_PLAYER_DATA = {
+  title: 'R.I.C.O. M.O.N.A.C.O. - Röbel bleibt!',
+  subtitle: 'Sommerhit des Jahres',
+};
+
 /**
  * Assembles a unified feed from multiple data sources.
  *
@@ -126,6 +136,7 @@ export function assembleFeed(params: {
     restaurants: false,
     governance: false,
     meckyTip: false,
+    audioPlayer: false,
   };
 
   let postPointer = 0;
@@ -134,6 +145,7 @@ export function assembleFeed(params: {
   let marketplaceIndex = 0;
   let marketplaceCount = 0;
   let feedPosition = 0;
+  let postsAfterNews = 0;
 
   while (
     postPointer < postItems.length ||
@@ -160,6 +172,20 @@ export function assembleFeed(params: {
     ) {
       items.push({ type: 'news_section', data: newsArticles, id: 'section-news' });
       sectionInjected.news = true;
+      feedPosition++;
+      continue;
+    }
+
+    // Inject audio "plate" player between the two posts after the news section
+    // (after the 1st post past Neuigkeiten). Fallback to a fixed position if no
+    // news section exists, so it still appears.
+    if (
+      !sectionInjected.audioPlayer &&
+      ((sectionInjected.news && postsAfterNews >= AUDIO_PLAYER_POSTS_AFTER_NEWS) ||
+        (newsArticles.length === 0 && feedPosition >= AUDIO_PLAYER_FALLBACK_POSITION))
+    ) {
+      items.push({ type: 'audio_player', data: AUDIO_PLAYER_DATA, id: 'audio-player-roebel-bleibt' });
+      sectionInjected.audioPlayer = true;
       feedPosition++;
       continue;
     }
@@ -263,6 +289,7 @@ export function assembleFeed(params: {
       items.push(postItems[postPointer]);
       postPointer++;
       feedPosition++;
+      if (sectionInjected.news && !sectionInjected.audioPlayer) postsAfterNews++;
     } else {
       break;
     }

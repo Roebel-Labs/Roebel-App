@@ -256,8 +256,15 @@ export type FeedItem =
   | { type: 'special_menu_section'; data: SpecialMenuRecord[]; id: string }
   | { type: 'governance_nudge'; data: GovernanceNudgeData; id: string }
   | { type: 'mecky_tip'; data: MeckyTipData; id: string }
+  | { type: 'audio_player'; data: AudioPlayerData; id: string }
   | { type: 'proposal'; data: ProposalFeedRecord; id: string }
   | { type: 'proposal_comment'; data: ProposalCommentFeedRecord; id: string };
+
+/** Static, locally-bundled audio track shown as a "plate" player card in the feed. */
+export type AudioPlayerData = {
+  title: string;
+  subtitle: string;
+};
 
 export type GovernanceNudgeData = {
   proposalId: string;
