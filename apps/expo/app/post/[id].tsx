@@ -346,7 +346,7 @@ export default function PostDetailScreen() {
       )}
 
       {youtubeUrl ? (
-        <PostYouTubePreview youtubeUrl={youtubeUrl} title={firstLink?.og_title ?? null} />
+        <PostYouTubePreview youtubeUrl={youtubeUrl} />
       ) : firstLink ? (
         <PostLinkPreview link={firstLink} />
       ) : null}
