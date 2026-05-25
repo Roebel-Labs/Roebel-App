@@ -170,39 +170,6 @@ export default function HomeStoryBar() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        {/* Create event card — only for citizens (personal Bürger or
-            org accounts where the connected wallet is a verified citizen). */}
-        {isCitizen ? (
-          <Pressable
-            onPress={() => router.push('/submit-event' as any)}
-            style={[
-              styles.card,
-              styles.createCard,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.background,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.createCardTopHalf,
-                { backgroundColor: colors.feedBackground },
-              ]}
-            />
-            <View
-              style={[styles.plusCircle, { backgroundColor: colors.primary }]}
-            >
-              <Text style={[styles.plusText, { color: colors.background }]}>
-                +
-              </Text>
-            </View>
-            <Text style={[styles.createLabel, { color: colors.textPrimary }]}>
-              {'Veranstaltung\nerstellen'}
-            </Text>
-          </Pressable>
-        ) : null}
-
         {/* One bubble per event. Tapping any opens the SAME unified events
             story at that event's slide index. */}
         {events.map((event, idx) => {
@@ -288,6 +255,40 @@ export default function HomeStoryBar() {
             </LinearGradient>
           </Pressable>
         ))}
+
+        {/* Create event card — rendered last, after the events and
+            collections. Only for citizens (personal Bürger or org accounts
+            where the connected wallet is a verified citizen). */}
+        {isCitizen ? (
+          <Pressable
+            onPress={() => router.push('/submit-event' as any)}
+            style={[
+              styles.card,
+              styles.createCard,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.background,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.createCardTopHalf,
+                { backgroundColor: colors.feedBackground },
+              ]}
+            />
+            <View
+              style={[styles.plusCircle, { backgroundColor: colors.primary }]}
+            >
+              <Text style={[styles.plusText, { color: colors.background }]}>
+                +
+              </Text>
+            </View>
+            <Text style={[styles.createLabel, { color: colors.textPrimary }]}>
+              {'Veranstaltung\nerstellen'}
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       <StoryViewer
