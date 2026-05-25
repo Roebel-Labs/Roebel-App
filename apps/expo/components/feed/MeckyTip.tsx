@@ -1,7 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MECKY_AVATAR = require('@/assets/illustration/mecky/welcome.png');
 
 interface MeckyTipProps {
   text: string;
@@ -16,11 +20,14 @@ export default function MeckyTip({ text, actionLabel, actionRoute }: MeckyTipPro
   return (
     <Pressable
       onPress={actionRoute ? () => router.push(actionRoute as any) : undefined}
-      style={[styles.container, { backgroundColor: colors.primaryLight }]}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-        <Text style={styles.avatarEmoji}>🐟</Text>
-      </View>
+      <Image
+        source={MECKY_AVATAR}
+        style={[styles.avatar, { backgroundColor: colors.primaryLight }]}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
       <View style={styles.content}>
         <Text style={[styles.label, { color: colors.primary }]}>MECKY TIPP</Text>
         <Text style={[styles.text, { color: colors.textPrimary }]}>
@@ -37,22 +44,16 @@ export default function MeckyTip({ text, actionLabel, actionRoute }: MeckyTipPro
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: 16,
-    padding: 14,
-    marginHorizontal: 16,
-    marginVertical: 6,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 12,
-    alignItems: 'flex-start',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarEmoji: {
-    fontSize: 18,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   content: {
     flex: 1,

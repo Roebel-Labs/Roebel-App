@@ -17,7 +17,7 @@ const EVENT_POSITIONS = [2, 7, 14];
 const MARKETPLACE_INTERVAL = 10;
 const MAX_MARKETPLACE_ITEMS = 3;
 const GOVERNANCE_NUDGE_POSITION = 4;
-const MECKY_TIP_POSITION = 8;
+const MECKY_TIP_POSITION = 16;
 
 // Positions for section cards (injected once)
 const SPECIAL_MENU_POSITION = 1;
@@ -31,7 +31,8 @@ const RESTAURANT_POSITION = 13;
 const AUDIO_PLAYER_POSTS_AFTER_NEWS = 1;
 const AUDIO_PLAYER_FALLBACK_POSITION = 6;
 const AUDIO_PLAYER_DATA = {
-  title: 'R.I.C.O. M.O.N.A.C.O. - Röbel bleibt!',
+  title: 'Röbel bleibt!',
+  artist: 'R.I.C.O. M.O.N.A.C.O.',
   subtitle: 'Sommerhit des Jahres',
 };
 

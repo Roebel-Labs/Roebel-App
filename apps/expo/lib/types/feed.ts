@@ -263,6 +263,7 @@ export type FeedItem =
 /** Static, locally-bundled audio track shown as a "plate" player card in the feed. */
 export type AudioPlayerData = {
   title: string;
+  artist: string;
   subtitle: string;
 };
 

@@ -219,8 +219,11 @@ export default function FeedAudioPlayerCard({ data, isVisible = true }: Props) {
         <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
           {data.subtitle}
         </Text>
-        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
           {data.title}
+        </Text>
+        <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
+          {data.artist}
         </Text>
 
         <View style={styles.controls}>
@@ -255,12 +258,6 @@ const styles = StyleSheet.create({
     gap: 16,
     borderRadius: 20,
     padding: 16,
-    // Soft floating shadow to match the design.
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   plate: {
     width: PLATE_SIZE,
@@ -310,6 +307,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: 'Inter-Bold',
     lineHeight: 22,
+    marginBottom: 2,
+  },
+  artist: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
     marginBottom: 12,
   },
   controls: {
