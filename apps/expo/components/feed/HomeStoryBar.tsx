@@ -13,6 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fetchThisWeekEvents } from '@/lib/supabase-posts';
 import type { EventRecord } from '@/lib/types';
+import { fetchEventStoriesAudioUrl } from '@/lib/supabase-app-settings';
 import {
   fetchHomeFeedStoryCollections,
   fetchSlidesForCollection,
@@ -51,10 +52,15 @@ export default function HomeStoryBar() {
   const [collectionSlides, setCollectionSlides] = useState<
     Record<string, StorySlide[]>
   >({});
+  // Shared background track that loops under ALL event stories (admin-set).
+  const [eventStoriesAudioUrl, setEventStoriesAudioUrl] = useState<
+    string | null
+  >(null);
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
 
   useEffect(() => {
     fetchThisWeekEvents().then((data) => setEvents(data as EventRecord[]));
+    fetchEventStoriesAudioUrl().then(setEventStoriesAudioUrl);
     fetchHomeFeedStoryCollections().then(async (cols) => {
       setCollections(cols);
       // Pre-fetch all slides upfront — admin-curated, small list.
@@ -101,15 +107,18 @@ export default function HomeStoryBar() {
               setTimeout(() => setOpenTarget(null), 300);
             },
           },
-          // Each event has its own audio track (admin-uploaded). The
-          // StoryViewer swaps the player source when this URL changes
-          // between slides.
+          // Per-event OVERRIDE track. When set, the StoryViewer ducks the
+          // shared events background track out and crossfades this one in
+          // for the duration of this slide. Null for most events.
           audioUrl: event.audio_url ?? null,
         };
       });
 
       result.push({
         id: 'events',
+        // Shared background track for ALL event slides — loops continuously
+        // and is ducked under any per-event override track (see StoryViewer).
+        audioUrl: eventStoriesAudioUrl,
         slides: eventSlides,
       });
     }
@@ -144,7 +153,7 @@ export default function HomeStoryBar() {
     }
 
     return result;
-  }, [events, collections, collectionSlides, router]);
+  }, [events, collections, collectionSlides, eventStoriesAudioUrl, router]);
 
   const handleClose = useCallback(() => setOpenTarget(null), []);
 

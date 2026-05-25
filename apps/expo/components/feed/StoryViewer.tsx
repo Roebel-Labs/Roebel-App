@@ -39,14 +39,15 @@ import { Ionicons } from '@expo/vector-icons';
 // Kotlin code only exists in binaries built after we added the package. If the
 // app is running via an EAS Update on an older binary, requiring expo-audio
 // throws synchronously at module-evaluation time and the app crashes on
-// launch. Swallow the failure and fall back to a stub hook; the audio
-// `useEffect` already guards on `!player`, so audio silently disables.
+// launch. Swallow the failure and fall back to a stub hook returning null; the
+// audio effects already guard on a null player, so audio silently disables.
 // After the next `eas build`, the real `useAudioPlayer` takes over automatically.
 type StoryAudioPlayer = {
   play: () => void;
   pause: () => void;
   muted: boolean;
   loop: boolean;
+  volume: number;
 } | null;
 type UseAudioPlayerFn = (source: string | null) => StoryAudioPlayer;
 
@@ -115,6 +116,58 @@ const SWIPE_DOWN_VELOCITY = 800;
 const SWIPE_UP_THRESHOLD = 90;
 const SWIPE_UP_VELOCITY = 700;
 
+// Crossfade duration between the shared background track and a slide's own
+// override track (e.g. a single event with its own audio).
+const CROSSFADE_MS = 600;
+
+/**
+ * Ramp one or more players' volumes from their current value to a target over
+ * `durationMs`, driven by requestAnimationFrame. Any in-flight ramp tracked by
+ * `rafRef` is cancelled first so successive slide changes don't fight.
+ */
+function fadeVolume(
+  rafRef: { current: number | null },
+  targets: { player: StoryAudioPlayer; to: number }[],
+  durationMs: number,
+) {
+  if (rafRef.current != null) {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+  }
+  const tweens = targets
+    .filter((t): t is { player: NonNullable<StoryAudioPlayer>; to: number } =>
+      Boolean(t.player),
+    )
+    .map((t) => {
+      let from = 1;
+      try {
+        from = t.player.volume;
+      } catch {
+        from = 1;
+      }
+      return { player: t.player, from, to: t.to };
+    });
+  if (tweens.length === 0) return;
+
+  const start = Date.now();
+  const tick = () => {
+    const p = Math.min(1, (Date.now() - start) / durationMs);
+    for (const t of tweens) {
+      try {
+        t.player.volume = t.from + (t.to - t.from) * p;
+      } catch {
+        /* stale player ref — ignore */
+      }
+    }
+    if (p < 1) {
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      rafRef.current = null;
+    }
+  };
+  rafRef.current = requestAnimationFrame(tick);
+}
+
 export default function StoryViewer({
   visible,
   groups,
@@ -166,38 +219,92 @@ export default function StoryViewer({
       )
     : 0;
 
-  // ── Audio playback ─────────────────────────────────────────
-  // Resolve the active track: slide override beats group default.
-  const currentSlideAudio = currentGroup?.slides[currentSlideIndex]?.audioUrl;
-  const audioUrl = (currentSlideAudio ?? currentGroup?.audioUrl ?? null) || null;
-  // useAudioPlayer accepts a URI string (or null/undefined to unload).
-  // Re-creating with a new URI swaps the source; passing the same URI
-  // across renders keeps the player instance alive → continuous playback
-  // across slides of the same collection.
-  const player = useAudioPlayer(audioUrl);
+  // ── Audio playback (two-player crossfade) ──────────────────
+  // A group can carry a *background* track (currentGroup.audioUrl) that loops
+  // continuously across all its slides. A slide may additionally carry its own
+  // OVERRIDE track (slide.audioUrl) — e.g. a single event with its own audio.
+  // While an override is active we duck the background to silence and fade the
+  // override in; when it clears we fade the override out and bring the
+  // background back. The background player keeps playing underneath (volume 0)
+  // the whole time so it resumes seamlessly rather than restarting.
+  //
+  // Passing the same URI across renders keeps a player instance alive →
+  // continuous looping; passing null unloads it.
+  const groupAudioUrl = currentGroup?.audioUrl ?? null;
+  const slideOverrideUrl =
+    currentGroup?.slides[currentSlideIndex]?.audioUrl ?? null;
+  const hasAudio = Boolean(groupAudioUrl || slideOverrideUrl);
 
+  const groupPlayer = useAudioPlayer(groupAudioUrl);
+  const slidePlayer = useAudioPlayer(slideOverrideUrl);
+
+  // Keep both players alive (loop, mute, play/pause) while the viewer is open.
   useEffect(() => {
-    if (!player) return;
-    try {
-      player.loop = true;
-      player.muted = muted;
-      if (visible && !paused && audioUrl) {
-        player.play();
-      } else {
-        player.pause();
+    const apply = (p: StoryAudioPlayer, url: string | null) => {
+      if (!p) return;
+      try {
+        p.loop = true;
+        p.muted = muted;
+        if (visible && !paused && url) p.play();
+        else p.pause();
+      } catch (err) {
+        // expo-audio occasionally throws on a stale player ref; safe to ignore.
+        console.warn('StoryViewer audio control failed:', err);
       }
-    } catch (err) {
-      // expo-audio occasionally throws on a stale player ref; safe to ignore.
-      console.warn('StoryViewer audio control failed:', err);
-    }
+    };
+    apply(groupPlayer, groupAudioUrl);
+    apply(slidePlayer, slideOverrideUrl);
     return () => {
       try {
-        player.pause();
+        groupPlayer?.pause();
+      } catch {
+        /* noop */
+      }
+      try {
+        slidePlayer?.pause();
       } catch {
         /* noop */
       }
     };
-  }, [player, audioUrl, visible, paused, muted]);
+  }, [
+    groupPlayer,
+    slidePlayer,
+    groupAudioUrl,
+    slideOverrideUrl,
+    visible,
+    paused,
+    muted,
+  ]);
+
+  // Crossfade whenever the active source changes: override wins → duck the
+  // background to 0 and fade the override up; no override → bring it back.
+  const fadeRef = useRef<number | null>(null);
+  useEffect(() => {
+    const overrideActive = Boolean(slideOverrideUrl);
+    // A freshly-created override player defaults to full volume — start it
+    // silent so it visibly fades IN rather than blaring.
+    if (overrideActive && slidePlayer) {
+      try {
+        slidePlayer.volume = 0;
+      } catch {
+        /* noop */
+      }
+    }
+    fadeVolume(
+      fadeRef,
+      [
+        { player: groupPlayer, to: overrideActive ? 0 : 1 },
+        { player: slidePlayer, to: overrideActive ? 1 : 0 },
+      ],
+      CROSSFADE_MS,
+    );
+    return () => {
+      if (fadeRef.current != null) {
+        cancelAnimationFrame(fadeRef.current);
+        fadeRef.current = null;
+      }
+    };
+  }, [groupPlayer, slidePlayer, slideOverrideUrl]);
 
   // ── Auto-advance timer ─────────────────────────────────────
   const progress = useRef(new RNAnimated.Value(0)).current;
@@ -469,7 +576,7 @@ export default function StoryViewer({
                 ) : (
                   <View style={styles.headerSpacer} pointerEvents="none" />
                 )}
-                {audioUrl && player ? (
+                {hasAudio && (groupPlayer || slidePlayer) ? (
                   <Pressable
                     onPress={() => setMuted((m) => !m)}
                     hitSlop={16}

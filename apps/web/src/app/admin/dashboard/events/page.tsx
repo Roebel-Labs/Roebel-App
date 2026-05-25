@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { EventStoryAudioPanel } from "./_components/EventStoryAudioPanel"
 
 interface Event {
   id: string
@@ -244,6 +245,9 @@ export default function EventsManagementPage() {
       <div>
         <h1 className="text-3xl font-medium text-foreground mb-2">Veranstaltungen verwalten</h1>
       </div>
+
+      {/* Shared background audio for all event stories */}
+      <EventStoryAudioPanel />
 
       {/* Featured Events Cards - Always 3 columns */}
       <div className="grid grid-cols-3 gap-4">
