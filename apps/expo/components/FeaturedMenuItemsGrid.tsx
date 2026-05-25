@@ -52,8 +52,8 @@ export default function FeaturedMenuItemsGrid({ accountId, items, voteSummaries 
                   <Image source={{ uri: item.image_url }} style={styles.img} contentFit="cover" />
                 ) : null}
                 {index < 3 && (
-                  <View style={[styles.badge, { backgroundColor: colors.success }]}>
-                    <Text style={styles.badgeText}>#{index + 1} most liked</Text>
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>#{index + 1} Beliebt</Text>
                   </View>
                 )}
               </View>
@@ -86,8 +86,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    // Fixed white pill in both light and dark mode.
+    backgroundColor: '#fff',
   },
-  badgeText: { color: '#fff', fontFamily: 'Inter-Medium', fontSize: 11 },
+  // Fixed black text in both light and dark mode.
+  badgeText: { color: '#000', fontFamily: 'Inter-Medium', fontSize: 11 },
   name: { marginTop: 8, fontFamily: 'Inter-Medium', fontSize: 14 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   price: { fontFamily: 'Inter-Regular', fontSize: 13 },
