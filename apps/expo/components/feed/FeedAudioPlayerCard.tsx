@@ -68,6 +68,22 @@ try {
   );
 }
 
+// ─── Defensive expo-keep-awake load ─────────────────────────
+// Keeps the screen from sleeping while the track plays (same effect video
+// playback has). Native module — guard the require like expo-audio above.
+type KeepAwakeFn = (tag?: string) => Promise<void>;
+let activateKeepAwakeAsync: KeepAwakeFn = async () => {};
+let deactivateKeepAwake: KeepAwakeFn = async () => {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ka = require('expo-keep-awake');
+  if (ka?.activateKeepAwakeAsync) activateKeepAwakeAsync = ka.activateKeepAwakeAsync as KeepAwakeFn;
+  if (ka?.deactivateKeepAwake) deactivateKeepAwake = ka.deactivateKeepAwake as KeepAwakeFn;
+} catch (err) {
+  console.warn('[FeedAudioPlayerCard] expo-keep-awake unavailable — screen may sleep during playback.', err);
+}
+const KEEP_AWAKE_TAG = 'roebel-audio-player';
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TRACK_SOURCE = require('@/assets/audio/roebel-bleibt.mp3');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -95,15 +111,9 @@ function formatTime(seconds: number): string {
 
 type Props = {
   data: AudioPlayerData;
-  /**
-   * Whether the card is on-screen AND its tab/screen is focused. When false,
-   * playback is paused to prevent background audio bleed (matches the feed's
-   * video off-tab pause behaviour). Defaults to true.
-   */
-  isVisible?: boolean;
 };
 
-export default function FeedAudioPlayerCard({ data, isVisible = true }: Props) {
+export default function FeedAudioPlayerCard({ data }: Props) {
   const { colors } = useTheme();
 
   const player = useAudioPlayer(TRACK_SOURCE, 250);
@@ -148,17 +158,16 @@ export default function FeedAudioPlayerCard({ data, isVisible = true }: Props) {
     }
   }, [status?.didJustFinish, player]);
 
-  // ── Pause when scrolled off-screen / tab unfocused ──────
+  // ── Keep the screen awake while playing ─────────────────
+  // Playback continues even when the card scrolls off-screen, so hold a wake
+  // lock for the duration and release it on pause / finish / unmount.
   useEffect(() => {
-    if (!isVisible && isPlaying) {
-      try {
-        player?.pause();
-      } catch {
-        /* noop */
-      }
-      setIsPlaying(false);
-    }
-  }, [isVisible, isPlaying, player]);
+    if (!isPlaying) return;
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    return () => {
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+    };
+  }, [isPlaying]);
 
   const toggle = useCallback(async () => {
     if (!player) return;

@@ -108,7 +108,6 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const visibleDeals = useRef(new Set<string>());
   const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
-  const [audioVisible, setAudioVisible] = useState(false);
 
   React.useEffect(() => {
     if (!walletAddress || items.length === 0) return;
@@ -137,7 +136,6 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const nextVideoIds = new Set<string>();
-      let audioOnScreen = false;
       viewableItems.forEach((item) => {
         if (item.item?.type === 'sponsored') {
           const dealId = item.item.data?.id;
@@ -151,11 +149,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
             nextVideoIds.add(post.id);
           }
         }
-        if (item.item?.type === 'audio_player') {
-          audioOnScreen = true;
-        }
       });
-      setAudioVisible((prev) => (prev === audioOnScreen ? prev : audioOnScreen));
       setVisibleVideoIds((prev) => {
         if (prev.size === nextVideoIds.size) {
           let same = true;
@@ -270,7 +264,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         }
 
         case 'audio_player':
-          return <FeedAudioPlayerCard data={item.data as AudioPlayerData} isVisible={active && audioVisible} />;
+          return <FeedAudioPlayerCard data={item.data as AudioPlayerData} />;
 
         case 'proposal':
           return <FeedProposalCard proposal={item.data} />;
@@ -282,7 +276,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return null;
       }
     },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, audioVisible, active],
+    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, active],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
