@@ -6,6 +6,8 @@ import { fetchAccountPosts } from '@/lib/supabase-posts';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
+import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
+import { resolveYouTubeUrl } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -87,6 +89,7 @@ export default function AccountPostsList({ accountId }: Props) {
         const mediaUrls = Array.isArray(post.media_urls)
           ? (post.media_urls.filter((u) => typeof u === 'string' && u.length > 0) as string[])
           : [];
+        const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
         return (
           <Pressable
             key={post.id}
@@ -114,6 +117,7 @@ export default function AccountPostsList({ accountId }: Props) {
             ) : null}
             {mediaUrls.length > 0 && <PostImageGrid imageUrls={mediaUrls} />}
             {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+            {youtubeUrl && <PostYouTubePreview youtubeUrl={youtubeUrl} />}
           </Pressable>
         );
       })}

@@ -8,11 +8,13 @@ import PostAuthorRow from './PostAuthorRow';
 import PostImageGrid from './PostImageGrid';
 import PostVideoPlayer from './PostVideoPlayer';
 import PostLinkPreview from './PostLinkPreview';
+import PostYouTubePreview from './PostYouTubePreview';
 import PostPollView from './PostPollView';
 import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import { resolveYouTubeUrl } from '@/lib/utils/youtube';
 
 type Props = {
   post: PostRecord;
@@ -49,6 +51,7 @@ export default function FeedPostCard({
 
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
   const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
+  const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
   const isMarketplacePost = !!post.linked_marketplace;
 
   return (
@@ -95,7 +98,11 @@ export default function FeedPostCard({
         />
       )}
 
-      {firstLink && <PostLinkPreview link={firstLink} />}
+      {youtubeUrl ? (
+        <PostYouTubePreview youtubeUrl={youtubeUrl} title={firstLink?.og_title ?? null} />
+      ) : firstLink ? (
+        <PostLinkPreview link={firstLink} />
+      ) : null}
 
       {post.poll && (
         <PostPollView poll={post.poll} walletAddress={walletAddress} />

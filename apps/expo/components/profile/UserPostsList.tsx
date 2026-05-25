@@ -6,6 +6,8 @@ import { fetchUserPosts } from '@/lib/supabase-posts';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
+import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
+import { resolveYouTubeUrl } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -59,37 +61,41 @@ export default function UserPostsList({ walletAddress }: Props) {
 
   return (
     <View>
-      {posts.map((post) => (
-        <Pressable
-          key={post.id}
-          onPress={() => router.push(`/post/${post.id}` as any)}
-          style={({ pressed }) => [
-            styles.post,
-            { borderBottomColor: colors.border },
-            pressed && { opacity: 0.85 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Beitrag öffnen"
-        >
-          <PostAuthorRow
-            author={post.author}
-            category={post.category}
-            createdAt={post.created_at}
-          />
-          {post.content ? (
-            <Text
-              style={[styles.content, { color: colors.textPrimary }]}
-              numberOfLines={6}
-            >
-              {post.content}
-            </Text>
-          ) : null}
-          {post.media_urls && post.media_urls.length > 0 && (
-            <PostImageGrid imageUrls={post.media_urls as string[]} />
-          )}
-          {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
-        </Pressable>
-      ))}
+      {posts.map((post) => {
+        const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
+        return (
+          <Pressable
+            key={post.id}
+            onPress={() => router.push(`/post/${post.id}` as any)}
+            style={({ pressed }) => [
+              styles.post,
+              { borderBottomColor: colors.border },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Beitrag öffnen"
+          >
+            <PostAuthorRow
+              author={post.author}
+              category={post.category}
+              createdAt={post.created_at}
+            />
+            {post.content ? (
+              <Text
+                style={[styles.content, { color: colors.textPrimary }]}
+                numberOfLines={6}
+              >
+                {post.content}
+              </Text>
+            ) : null}
+            {post.media_urls && post.media_urls.length > 0 && (
+              <PostImageGrid imageUrls={post.media_urls as string[]} />
+            )}
+            {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+            {youtubeUrl && <PostYouTubePreview youtubeUrl={youtubeUrl} />}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

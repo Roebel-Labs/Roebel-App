@@ -38,11 +38,13 @@ import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import PostLinkPreview from '@/components/feed/PostLinkPreview';
+import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
 import PostPollView from '@/components/feed/PostPollView';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import PostActions from '@/components/feed/PostActions';
 import CommentItem from '@/components/feed/CommentItem';
+import { resolveYouTubeUrl } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton from '@/components/feed/FeedPostSkeleton';
@@ -307,6 +309,7 @@ export default function PostDetailScreen() {
 
   const mediaUrls = post.media_urls?.filter(Boolean) || [];
   const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
+  const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
 
   const renderHeader = () => (
     <View style={[styles.postSection, { borderBottomColor: colors.border }]}>
@@ -339,7 +342,11 @@ export default function PostDetailScreen() {
         />
       )}
 
-      {firstLink && <PostLinkPreview link={firstLink} />}
+      {youtubeUrl ? (
+        <PostYouTubePreview youtubeUrl={youtubeUrl} title={firstLink?.og_title ?? null} />
+      ) : firstLink ? (
+        <PostLinkPreview link={firstLink} />
+      ) : null}
 
       {post.poll && <PostPollView poll={post.poll} walletAddress={walletAddress} />}
 
