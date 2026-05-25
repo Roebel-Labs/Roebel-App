@@ -139,7 +139,6 @@ function MenuItemDetailScreenInner() {
             <Text style={[styles.description, { color: colors.textPrimary }]}>{item.description}</Text>
           )}
           <View style={styles.thumbsRow}>
-            <MenuItemThumbs summary={item.vote_summary} />
             <MenuItemThumbs
               summary={item.vote_summary}
               interactive

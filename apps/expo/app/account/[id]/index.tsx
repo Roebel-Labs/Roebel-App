@@ -28,9 +28,11 @@ import RatingSummary from '@/components/RatingSummary';
 import MenuSearchModal from '@/components/MenuSearchModal';
 import FeaturedMenuItemsGrid from '@/components/FeaturedMenuItemsGrid';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
+import ThumbsVote from '@/components/ThumbsVote';
 import StickyCategoryBar from '@/components/StickyCategoryBar';
 import MenuCategoriesSheet from '@/components/MenuCategoriesSheet';
 import { useAccountRating } from '@/hooks/useAccountRating';
+import { useAccountVote } from '@/hooks/useAccountVote';
 import { useGastroData } from '@/hooks/useGastroData';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
@@ -144,6 +146,13 @@ function PublicAccountScreenInner() {
   // absolute overlay copy of the bar.
   const slot5Y = React.useRef<number>(Number.POSITIVE_INFINITY);
   const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
+  const {
+    summary: voteSummary,
+    userVote: accountUserVote,
+    isSignedIn: voteSignedIn,
+    setVote: setAccountVote,
+    clearVote: clearAccountVoteState,
+  } = useAccountVote(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
 
@@ -805,6 +814,25 @@ function PublicAccountScreenInner() {
               <RatingSummary summary={ratingSummary} />
             </View>
           )}
+
+          <View style={{ marginTop: 12 }}>
+            <ThumbsVote
+              interactive
+              size="md"
+              upCount={voteSummary?.up_count ?? null}
+              userVote={accountUserVote}
+              onVote={(v) => {
+                if (!voteSignedIn) return;
+                if (accountUserVote === v) clearAccountVoteState();
+                else setAccountVote(v);
+              }}
+            />
+            {!voteSignedIn && (
+              <Text style={[styles.bioText, { color: colors.textTertiary, marginTop: 6 }]}>
+                Melde dich an, um zu bewerten.
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* Tabs */}

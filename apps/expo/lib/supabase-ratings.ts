@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 import type {
   AccountRatingRecord,
   AccountRatingSummary,
+  AccountVoteRecord,
+  AccountVoteSummary,
   MenuItemVoteRecord,
 } from './types';
 
@@ -100,4 +102,63 @@ export async function clearMenuItemVote(menuItemId: string, wallet: string): Pro
     .eq('menu_item_id', menuItemId)
     .eq('wallet_address', wallet.toLowerCase());
   if (error) console.error('Error clearing vote:', error);
+}
+
+// --- Org account thumbs-up/down votes ---
+
+export async function fetchAccountVoteSummary(accountId: string): Promise<AccountVoteSummary | null> {
+  const { data, error } = await supabase
+    .from('account_vote_summary' as any)
+    .select('*')
+    .eq('account_id', accountId)
+    .maybeSingle();
+  if (error) { console.error('Error fetching account vote summary:', error); return null; }
+  return (data as AccountVoteSummary | null) ?? null;
+}
+
+export async function fetchAccountVoteSummaries(accountIds: string[]): Promise<Record<string, AccountVoteSummary>> {
+  if (!accountIds.length) return {};
+  const { data, error } = await supabase
+    .from('account_vote_summary' as any)
+    .select('*')
+    .in('account_id', accountIds);
+  if (error) { console.error('Error fetching account vote summaries:', error); return {}; }
+  const map: Record<string, AccountVoteSummary> = {};
+  for (const row of (data ?? []) as AccountVoteSummary[]) map[row.account_id] = row;
+  return map;
+}
+
+export async function fetchUserAccountVote(accountId: string, wallet: string): Promise<AccountVoteRecord | null> {
+  const { data, error } = await supabase
+    .from('account_votes' as any)
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('wallet_address', wallet.toLowerCase())
+    .maybeSingle();
+  if (error) { console.error('Error fetching user account vote:', error); return null; }
+  return (data as AccountVoteRecord | null) ?? null;
+}
+
+export async function voteAccount(input: {
+  account_id: string;
+  wallet_address: string;
+  vote: 1 | -1;
+}): Promise<AccountVoteRecord | null> {
+  const payload = { ...input, wallet_address: input.wallet_address.toLowerCase() };
+  const { data, error } = await supabase
+    .from('account_votes' as any)
+    .upsert(payload, { onConflict: 'account_id,wallet_address' })
+    .select()
+    .single();
+  if (error) { console.error('Error voting on account:', error); return null; }
+  return data as AccountVoteRecord;
+}
+
+export async function clearAccountVote(accountId: string, wallet: string): Promise<void> {
+  const { error } = await supabase
+    .from('account_votes' as any)
+    .delete()
+    .eq('account_id', accountId)
+    .eq('wallet_address', wallet.toLowerCase());
+  if (error) console.error('Error clearing account vote:', error);
 }

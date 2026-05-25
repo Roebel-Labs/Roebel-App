@@ -43,7 +43,7 @@ export default function RestaurantCard({ restaurant, compact = false }: Props) {
           <Image
             source={{ uri: restaurant.logo_url }}
             style={styles.logo}
-            contentFit="contain"
+            contentFit="cover"
             accessibilityIgnoresInvertColors
           />
         ) : (
@@ -86,8 +86,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   logo: {
-    width: '80%',
-    height: '50%',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    backgroundColor: '#ffffff',
   },
   name: {
     fontSize: 18,

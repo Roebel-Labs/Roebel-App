@@ -296,6 +296,22 @@ export type MenuItemVoteRecord = {
   created_at: string;
 };
 
+export type AccountVoteSummary = {
+  account_id: string;
+  up_count: number;
+  down_count: number;
+  vote_count: number;
+  percent_liked: number;
+};
+
+export type AccountVoteRecord = {
+  id: string;
+  account_id: string;
+  wallet_address: string;
+  vote: 1 | -1;
+  created_at: string;
+};
+
 export type MenuItemWithDetails = MenuItemRecord & {
   sides: MenuItemSide[];
   variants: MenuItemVariant[];

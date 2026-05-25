@@ -31,6 +31,7 @@ import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
 import MarketplaceSection from '@/components/MarketplaceSection';
 import NearbyEventsSection from '@/components/NearbyEventsSection';
+import NearbyOrgAccountsSection from '@/components/NearbyOrgAccountsSection';
 import MapFAB from '@/components/MapFAB';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
@@ -225,6 +226,9 @@ export default function ExploreScreen() {
 
             {/* Nearby Events */}
             <NearbyEventsSection events={nearbyEvents} />
+
+            {/* Nearby Org Accounts (Unternehmen) */}
+            <NearbyOrgAccountsSection />
 
             {/* All Events - Horizontal */}
             <AllEventsHorizontal events={futureEvents} />
