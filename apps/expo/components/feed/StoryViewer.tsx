@@ -328,6 +328,11 @@ export default function StoryViewer({
 
   // ── Navigation (instant — no animation) ────────────────────
   const stepForwardJS = useCallback(() => {
+    // Reset the shared progress value synchronously BEFORE the slide-index
+    // state change re-renders. Otherwise the incoming segment paints bound to
+    // the previous segment's finished value (1 → 100%) for one frame before
+    // the timer effect resets it, making the bar flash full then snap to 0.
+    progress.setValue(0);
     const gi = currentGroupIndexRef.current;
     const grp = groupsRef.current[gi];
     if (!grp) return;
@@ -347,9 +352,10 @@ export default function StoryViewer({
       );
     }
     setCurrentGroupIndex(gi + 1);
-  }, [onClose]);
+  }, [onClose, progress]);
 
   const stepBackJS = useCallback(() => {
+    progress.setValue(0); // avoid the incoming segment flashing the old value
     const gi = currentGroupIndexRef.current;
     const grp = groupsRef.current[gi];
     if (!grp) return;
@@ -365,7 +371,7 @@ export default function StoryViewer({
       setSlideIndices((p) => ({ ...p, [prevGrp.id]: prevLast }));
     }
     setCurrentGroupIndex(gi - 1);
-  }, []);
+  }, [progress]);
 
   const triggerSwipeUp = useCallback(() => {
     const grp = groupsRef.current[currentGroupIndexRef.current];
