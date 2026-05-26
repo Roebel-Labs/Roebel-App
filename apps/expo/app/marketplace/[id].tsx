@@ -16,24 +16,29 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { fetchListingById, fetchMarketplaceListings, deleteListing } from '@/lib/supabase-marketplace';
+import {
+  fetchListingById,
+  fetchMarketplaceListings,
+  deleteListing,
+  fetchSellerProfileByWallet,
+  type SellerProfile,
+} from '@/lib/supabase-marketplace';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
   LocationSmallIcon,
-  CalendarIcon,
-  UserIcon,
   ShareIcon,
-  StarIconComponent,
-  MarketsIcon,
-  ClockIcon,
-  MailIcon,
+  SparklesIcon,
+  MailSmallIcon,
 } from '@/components/Icons';
+import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import ListingCategoryIcon from '@/components/ListingCategoryIcon';
+import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from '@/constants/listing-categories';
 import MarketplaceCard from '@/components/MarketplaceCard';
 import type { MarketplaceListingRecord } from '@/lib/types';
-import { format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -44,14 +49,6 @@ function formatPrice(price: number, priceType: string): string {
   const formatted = price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
   const suffix = PRICE_TYPE_LABELS[priceType] || '';
   return suffix ? `${formatted} ${suffix}` : formatted;
-}
-
-function formatDate(dateStr: string): string {
-  try {
-    return format(new Date(dateStr), 'dd. MMMM yyyy', { locale: de });
-  } catch {
-    return dateStr;
-  }
 }
 
 export default function ListingDetailScreen() {
@@ -66,6 +63,7 @@ export default function ListingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [canEdit, setCanEdit] = useState(false);
+  const [seller, setSeller] = useState<SellerProfile | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -87,6 +85,17 @@ export default function ListingDetailScreen() {
     };
     checkPermission();
   }, [listing, user?.wallet_address]);
+
+  useEffect(() => {
+    if (!listing?.seller_wallet_address) return;
+    let cancelled = false;
+    fetchSellerProfileByWallet(listing.seller_wallet_address).then((profile) => {
+      if (!cancelled) setSeller(profile);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing?.seller_wallet_address]);
 
   const loadData = async () => {
     try {
@@ -174,12 +183,34 @@ export default function ListingDetailScreen() {
   }
 
   const images = listing.media_urls || [];
-  const categoryLabel = MARKETPLACE_CATEGORY_LABELS[listing.category] || listing.category;
+  const categoryDef =
+    [...PRODUCT_CATEGORIES, ...SERVICE_CATEGORIES].find((c) => c.key === listing.category) || null;
+  const categoryIconName = categoryDef?.icon || 'note';
+  const categoryLabel =
+    categoryDef?.label || MARKETPLACE_CATEGORY_LABELS[listing.category] || listing.category;
   const conditionLabel = listing.condition ? CONDITION_LABELS[listing.condition] : null;
-  const priceTypeLabel = PRICE_TYPE_LABELS[listing.price_type] || '';
   const sellerShort = listing.seller_wallet_address
     ? `${listing.seller_wallet_address.slice(0, 6)}...${listing.seller_wallet_address.slice(-4)}`
     : 'Unbekannt';
+  const sellerName = seller?.name || sellerShort;
+
+  const isOwn =
+    !!user?.wallet_address &&
+    listing.seller_wallet_address.toLowerCase() === user.wallet_address.toLowerCase();
+
+  let createdRelative = '';
+  try {
+    createdRelative = formatDistanceToNow(new Date(listing.created_at), {
+      locale: de,
+      addSuffix: true,
+    });
+  } catch {
+    createdRelative = '';
+  }
+  const metaParts = [
+    `${listing.views_count} Aufrufe`,
+    createdRelative,
+  ].filter(Boolean);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
@@ -236,11 +267,6 @@ export default function ListingDetailScreen() {
               <ArrowLeftIcon size={24} color={colors.tabIconActive} />
             </Pressable>
           </View>
-
-          {/* Price badge */}
-          <View style={[styles.priceBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.priceBadgeText}>{formatPrice(listing.price, listing.price_type)}</Text>
-          </View>
         </View>
 
         {/* Content overlay */}
@@ -248,54 +274,55 @@ export default function ListingDetailScreen() {
           {/* Title */}
           <Text style={[styles.title, { color: colors.textPrimary }]}>{listing.title}</Text>
 
-          {/* Badges */}
-          <View style={styles.badgeRow}>
-            <View style={[styles.badge, { backgroundColor: `${colors.primary}20` }]}>
-              <Text style={[styles.badgeText, { color: colors.primary }]}>{categoryLabel}</Text>
-            </View>
-            {conditionLabel && (
-              <View style={[styles.badge, { backgroundColor: colors.surfaceSecondary }]}>
-                <Text style={[styles.badgeText, { color: colors.textSecondary }]}>{conditionLabel}</Text>
-              </View>
-            )}
-            <View style={[styles.badge, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.badgeText, { color: colors.textSecondary }]}>
-                {listing.listing_type === 'product' ? 'Produkt' : 'Dienstleistung'}
+          {/* Meta line */}
+          {metaParts.length > 0 && (
+            <Text style={[styles.metaLine, { color: colors.textSecondary }]}>
+              {metaParts.join(' • ')}
+            </Text>
+          )}
+
+          {/* Seller row */}
+          <View style={styles.sellerRow}>
+            <View style={styles.sellerInfo}>
+              <UserAvatarWithFrame
+                size={44}
+                uri={seller?.avatarUrl ?? null}
+                fallbackInitial={(sellerName[0] || '?').toUpperCase()}
+                disabled
+              />
+              <Text style={[styles.sellerName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {sellerName}
               </Text>
             </View>
+            {!isOwn && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.contactPill,
+                  { backgroundColor: colors.surface },
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={handleContact}
+                accessibilityRole="button"
+                accessibilityLabel="Verkäufer kontaktieren"
+              >
+                <MailSmallIcon size={20} color={colors.textPrimary} />
+                <Text style={[styles.contactPillText, { color: colors.textPrimary }]}>Kontaktieren</Text>
+              </Pressable>
+            )}
           </View>
+
+          {/* Price */}
+          <Text style={[styles.priceLarge, { color: colors.textPrimary }]}>
+            {formatPrice(listing.price, listing.price_type)}
+          </Text>
+
+          {/* Description */}
+          {listing.description && (
+            <Text style={[styles.descriptionText, { color: colors.textPrimary }]}>{listing.description}</Text>
+          )}
 
           {/* Info Cards */}
           <View style={styles.infoCards}>
-            {/* Price card */}
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <MarketsIcon size={20} color={colors.primary} />
-              </View>
-              <View style={styles.infoCardContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Preis</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                  {formatPrice(listing.price, listing.price_type)}
-                </Text>
-                {priceTypeLabel ? (
-                  <Text style={[styles.infoSubvalue, { color: colors.textSecondary }]}>{priceTypeLabel}</Text>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Condition card */}
-            {conditionLabel && (
-              <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <StarIconComponent size={20} color={colors.primary} />
-                </View>
-                <View style={styles.infoCardContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Zustand</Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{conditionLabel}</Text>
-                </View>
-              </View>
-            )}
-
             {/* Location card */}
             {listing.neighborhood && (
               <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
@@ -309,60 +336,30 @@ export default function ListingDetailScreen() {
               </View>
             )}
 
-            {/* Views card */}
-            {listing.views_count > 0 && (
+            {/* Condition / quality card */}
+            {conditionLabel && (
               <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
                 <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <ClockIcon size={20} color={colors.primary} />
+                  <SparklesIcon size={20} color={colors.primary} />
                 </View>
                 <View style={styles.infoCardContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Aufrufe</Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{listing.views_count}</Text>
+                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Qualität</Text>
+                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{conditionLabel}</Text>
                 </View>
               </View>
             )}
 
-            {/* Created card */}
+            {/* Category card (dynamic icon) */}
             <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
               <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <CalendarIcon size={20} color={colors.primary} />
+                <ListingCategoryIcon name={categoryIconName} size={20} color={colors.primary} />
               </View>
               <View style={styles.infoCardContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Eingestellt am</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{formatDate(listing.created_at)}</Text>
+                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Kategorie</Text>
+                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{categoryLabel}</Text>
               </View>
             </View>
           </View>
-
-          {/* Description */}
-          {listing.description && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Beschreibung</Text>
-              <Text style={[styles.descriptionText, { color: colors.textPrimary }]}>{listing.description}</Text>
-            </View>
-          )}
-
-          {/* Seller */}
-          <View style={[styles.sellerCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.sellerHeader}>
-              <View style={[styles.sellerIconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <UserIcon size={20} color={colors.primary} />
-              </View>
-              <View>
-                <Text style={[styles.sellerLabel, { color: colors.textTertiary }]}>Verkäufer</Text>
-                <Text style={[styles.sellerAddress, { color: colors.textPrimary }]}>{sellerShort}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Contact CTA */}
-          <Pressable
-            style={({ pressed }) => [styles.contactButton, { backgroundColor: colors.primary }, pressed && { opacity: 0.8 }]}
-            onPress={handleContact}
-          >
-            <MailIcon size={20} color="#ffffff" />
-            <Text style={styles.contactButtonText}>Verkäufer kontaktieren</Text>
-          </Pressable>
 
           {/* Action Buttons */}
           <View style={styles.actionRow}>
@@ -499,26 +496,52 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     minHeight: 600,
   },
-  // Title & Badges
+  // Title
   title: {
     fontSize: 26,
     fontFamily: 'Inter-SemiBold',
-    marginBottom: 16,
+    marginBottom: 6,
   },
-  badgeRow: {
+  metaLine: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 20,
+  },
+  // Seller row
+  sellerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 24,
   },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  sellerInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sellerName: {
+    flex: 1,
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+  },
+  contactPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 12,
   },
-  badgeText: {
-    fontSize: 12,
+  contactPillText: {
+    fontSize: 15,
     fontFamily: 'Inter-Medium',
+  },
+  priceLarge: {
+    fontSize: 28,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 16,
   },
   // Info Cards
   infoCards: {
@@ -570,6 +593,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     lineHeight: 22,
     opacity: 0.85,
+    marginBottom: 24,
   },
   // Seller
   sellerCard: {

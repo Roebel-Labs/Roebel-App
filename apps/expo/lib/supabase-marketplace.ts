@@ -1,6 +1,46 @@
 import { supabase } from './supabase';
 import type { MarketplaceListingRecord } from './types';
 
+export type SellerProfile = {
+  accountId: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+/**
+ * Resolve a seller wallet address to their personal account profile (name +
+ * avatar) for display on the listing detail screen. A wallet can own several
+ * accounts (e.g. orgs), so we pick the personal one.
+ */
+export async function fetchSellerProfileByWallet(
+  wallet: string
+): Promise<SellerProfile | null> {
+  const { data, error } = await supabase
+    .from('account_owners' as any)
+    .select('account_id, accounts:account_id(id, account_type, name, avatar_url)')
+    .eq('wallet_address', wallet.toLowerCase());
+
+  if (error || !data) return null;
+
+  const rows = data as Array<{
+    account_id: string;
+    accounts: {
+      id: string;
+      account_type: 'personal' | 'organisation';
+      name: string;
+      avatar_url: string | null;
+    } | null;
+  }>;
+  const personal = rows.find((r) => r.accounts?.account_type === 'personal');
+  if (!personal?.accounts) return null;
+
+  return {
+    accountId: personal.accounts.id,
+    name: personal.accounts.name,
+    avatarUrl: personal.accounts.avatar_url,
+  };
+}
+
 /**
  * Fetch active marketplace listings
  */

@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   imageContainerCompact: {
     width: '100%',
-    height: 140,
+    aspectRatio: 1,
     borderRadius: 12,
     overflow: 'hidden',
   },

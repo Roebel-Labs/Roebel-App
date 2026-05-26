@@ -32,6 +32,9 @@ import ThumbsUpSvg from '@/assets/icons/thumbs-up.svg';
 import ThumbsUpFilledSvg from '@/assets/icons/thumbs-up-filled.svg';
 import ThumbsDownSvg from '@/assets/icons/thumbs-down.svg';
 import MenuListSvg from '@/assets/icons/menu-01.svg';
+import MailSmallSvg from '@/assets/icons/mail-small.svg';
+import SparklesSvg from '@/assets/icons/sparkles.svg';
+import PackageSvg from '@/assets/icons/package.svg';
 
 
 // Icon mapping for categories
@@ -109,6 +112,9 @@ export const InformationCircleIcon = ({ size = 24, ...props }: IconProps) => <In
 export const CallIcon = ({ size = 24, ...props }: IconProps) => <CallSvg width={size} height={size} {...props} />;
 export const UserIcon = ({ size = 24, ...props }: IconProps) => <UserSvg width={size} height={size} {...props} />;
 export const MailIcon = ({ size = 24, ...props }: IconProps) => <MailSvg width={size} height={size} {...props} />;
+export const MailSmallIcon = ({ size = 20, ...props }: IconProps) => <MailSmallSvg width={size} height={size} {...props} />;
+export const SparklesIcon = ({ size = 24, ...props }: IconProps) => <SparklesSvg width={size} height={size} {...props} />;
+export const PackageIcon = ({ size = 24, ...props }: IconProps) => <PackageSvg width={size} height={size} {...props} />;
 export const CalendarIcon = ({ size = 24, ...props }: IconProps) => <CalendarSvg width={size} height={size} {...props} />;
 export const ChevronLeft = ({ size = 24, ...props }: IconProps) => <ArrowLeftSvg width={size} height={size} {...props} />;
 export const ChevronRight = ({ size = 24, ...props }: IconProps) => <ArrowRightSvg width={size} height={size} {...props} />;

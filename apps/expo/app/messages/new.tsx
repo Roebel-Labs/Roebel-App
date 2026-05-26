@@ -124,9 +124,15 @@ export default function NewConversationScreen() {
 
     (async () => {
       const peerId = await fetchPersonalAccountIdByWallet(prefillAddress);
-      if (peerId) {
-        openConversation(peerId);
+      if (!peerId) {
+        setErrorMessage('Verkäufer konnte nicht gefunden werden.');
+        return;
       }
+      if (peerId === activeAccount?.id) {
+        setErrorMessage('Das ist deine eigene Anzeige – du kannst dir nicht selbst schreiben.');
+        return;
+      }
+      openConversation(peerId);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillAddress, activeAccount?.id]);

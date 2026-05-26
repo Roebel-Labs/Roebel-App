@@ -80,32 +80,58 @@ export async function findOrCreateConversation(
   if (myAccountId === peerAccountId) return null;
   const [p1, p2] = orderedIds(myAccountId, peerAccountId);
 
-  // Write BOTH the new account-id columns and the legacy wallet columns.
-  // The legacy columns are NOT NULL with a `participant_one < participant_two`
-  // CHECK; using the same ordered uuid satisfies both. The legacy
-  // `(participant_one, participant_two)` unique index is always present,
-  // so we use it as the conflict target — that works regardless of whether
-  // the round-2 fixup migration has been applied yet.
-  const { data, error } = await supabase
+  // Match an existing conversation by ACCOUNT pair in either stored order.
+  // Legacy rows store the pair unordered (and some logical pairs have more than
+  // one row), so we can't rely on a single ordered upsert — that would collide
+  // with the `conversations_account_pair_unique` index and throw. Select first,
+  // insert only if nothing matches.
+  const pairFilter =
+    `and(participant_one_account_id.eq.${p1},participant_two_account_id.eq.${p2}),` +
+    `and(participant_one_account_id.eq.${p2},participant_two_account_id.eq.${p1})`;
+
+  const { data: found } = await supabase
     .from('conversations' as any)
-    .upsert(
-      {
-        participant_one: p1,
-        participant_two: p2,
-        participant_one_account_id: p1,
-        participant_two_account_id: p2,
-      } as any,
-      { onConflict: 'participant_one,participant_two' }
-    )
-    .select()
-    .single();
+    .select('*')
+    .or(pairFilter)
+    .order('created_at', { ascending: true })
+    .limit(1);
 
-  if (error) {
-    console.error('findOrCreateConversation error:', error);
-    return null;
+  let convo = (found as Conversation[] | null)?.[0] ?? null;
+
+  if (!convo) {
+    // Insert fresh, writing both the new account-id columns and the legacy
+    // wallet columns (NOT NULL-friendly, ordered to satisfy the
+    // `participant_one < participant_two` CHECK).
+    const { data, error } = await supabase
+      .from('conversations' as any)
+      .insert(
+        {
+          participant_one: p1,
+          participant_two: p2,
+          participant_one_account_id: p1,
+          participant_two_account_id: p2,
+        } as any
+      )
+      .select()
+      .single();
+
+    if (error) {
+      // Lost a unique race (or a pre-existing dup) — re-select and use it.
+      const { data: retry } = await supabase
+        .from('conversations' as any)
+        .select('*')
+        .or(pairFilter)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      convo = (retry as Conversation[] | null)?.[0] ?? null;
+      if (!convo) {
+        console.error('findOrCreateConversation error:', error);
+        return null;
+      }
+    } else {
+      convo = data as Conversation;
+    }
   }
-
-  const convo = data as Conversation;
 
   // Ensure participant rows exist for read tracking, one per account. Mirror
   // the account id into the legacy wallet_address column so the original
