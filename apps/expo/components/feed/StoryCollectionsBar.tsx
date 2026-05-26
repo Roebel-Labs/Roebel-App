@@ -62,9 +62,10 @@ export default function StoryCollectionsBar({
           slides:
             slides.length > 0
               ? slides.map((s) => ({
-                  backgroundUrl: s.background_image_url,
+                  backgroundUrl: s.background_image_url ?? '',
+                  videoUrl: s.background_video_url ?? null,
                   overlayText: s.overlay_text,
-                  textColor: s.text_color ?? '#FFFFFF',
+                  textColor: s.text_color ?? '#000000',
                   imageFit: 'cover' as const,
                 }))
               : [

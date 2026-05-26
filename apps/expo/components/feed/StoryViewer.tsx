@@ -35,6 +35,8 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEvent } from 'expo';
 
 // Defensive load of expo-audio. expo-audio is a NATIVE MODULE — its Swift /
 // Kotlin code only exists in binaries built after we added the package. If the
@@ -81,6 +83,7 @@ export type StoryCta = {
 
 export type StorySlideInput = {
   backgroundUrl: string;
+  videoUrl?: string | null;
   overlayText?: string;
   textColor?: string;
   title?: string;
@@ -223,6 +226,13 @@ export default function StoryViewer({
       )
     : 0;
 
+  // A video slide drives its own timing (advances on playToEnd) and its own
+  // sound, so the fixed auto-advance timer and the collection background audio
+  // both stand down while one is showing.
+  const currentIsVideo = Boolean(
+    currentGroup?.slides[currentSlideIndex]?.videoUrl,
+  );
+
   // ── Audio playback (two-player crossfade) ──────────────────
   // A group can carry a *background* track (currentGroup.audioUrl) that loops
   // continuously across all its slides. A slide may additionally carry its own
@@ -249,7 +259,8 @@ export default function StoryViewer({
       try {
         p.loop = true;
         p.muted = muted;
-        if (visible && !paused && url) p.play();
+        // Stand down while a video slide is showing — the video owns the sound.
+        if (visible && !paused && url && !currentIsVideo) p.play();
         else p.pause();
       } catch (err) {
         // expo-audio occasionally throws on a stale player ref; safe to ignore.
@@ -278,6 +289,7 @@ export default function StoryViewer({
     visible,
     paused,
     muted,
+    currentIsVideo,
   ]);
 
   // Crossfade whenever the active source changes: override wins → duck the
@@ -315,6 +327,9 @@ export default function StoryViewer({
 
   useEffect(() => {
     if (!visible || paused || !currentGroup) return;
+    // Video slides advance themselves when the clip ends (see VideoSlideFace),
+    // and drive the progress bar from playback position — skip the timer.
+    if (currentIsVideo) return;
     progress.setValue(0);
     const anim = RNAnimated.timing(progress, {
       toValue: 1,
@@ -328,7 +343,7 @@ export default function StoryViewer({
     });
     return () => anim.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentGroupIndex, currentSlideIndex, paused, visible, durationMs]);
+  }, [currentGroupIndex, currentSlideIndex, paused, visible, durationMs, currentIsVideo]);
 
   // ── Navigation (instant — no animation) ────────────────────
   const stepForwardJS = useCallback(() => {
@@ -502,7 +517,18 @@ export default function StoryViewer({
           <GestureDetector gesture={composed}>
             <View style={StyleSheet.absoluteFill}>
               <Animated.View style={[StyleSheet.absoluteFill, slideStyle]}>
-                <SlideFace slide={slide} />
+                {slide?.videoUrl ? (
+                  <VideoSlideFace
+                    key={slide.videoUrl}
+                    slide={slide}
+                    muted={muted}
+                    paused={paused}
+                    onProgress={(f) => progress.setValue(f)}
+                    onEnded={stepForwardJS}
+                  />
+                ) : (
+                  <SlideFace slide={slide} />
+                )}
               </Animated.View>
             </View>
           </GestureDetector>
@@ -701,7 +727,7 @@ function SlideFace({ slide }: { slide: StorySlideInput | undefined }) {
       </View>
     );
   }
-  const overlayTextColor = slide.textColor || '#FFFFFF';
+  const overlayTextColor = slide.textColor || '#000000';
   return (
     <View style={StyleSheet.absoluteFill}>
       {slide.backgroundUrl ? (
@@ -713,6 +739,92 @@ function SlideFace({ slide }: { slide: StorySlideInput | undefined }) {
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.imageFallback]} />
       )}
+      {slide.overlayText ? (
+        <View style={styles.overlayTextWrap} pointerEvents="none">
+          <Text style={[styles.overlayText, { color: overlayTextColor }]}>
+            {slide.overlayText}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ── VideoSlideFace ───────────────────────────────────────────
+// Mounted (keyed on the video URL) only for video slides. Owns one expo-video
+// player: plays with sound, mirrors the viewer's mute/pause state, feeds the
+// progress bar from playback position, and advances on `playToEnd`.
+function VideoSlideFace({
+  slide,
+  muted,
+  paused,
+  onProgress,
+  onEnded,
+}: {
+  slide: StorySlideInput;
+  muted: boolean;
+  paused: boolean;
+  onProgress: (fraction: number) => void;
+  onEnded: () => void;
+}) {
+  const player = useVideoPlayer(slide.videoUrl ?? '', (p) => {
+    p.loop = false;
+    p.muted = muted;
+    p.timeUpdateEventInterval = 0.2;
+  });
+
+  const { currentTime } = useEvent(player, 'timeUpdate', {
+    currentTime: 0,
+    currentLiveTimestamp: null,
+    currentOffsetFromLive: null,
+    bufferedPosition: 0,
+  });
+
+  // Latest callbacks without resubscribing the native listener every render.
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
+
+  // Drive the viewer's progress bar from playback position.
+  useEffect(() => {
+    const dur = player.duration || 0;
+    if (dur > 0) onProgressRef.current(Math.min(1, (currentTime || 0) / dur));
+  }, [currentTime, player]);
+
+  // Advance to the next slide when the clip finishes.
+  useEffect(() => {
+    const sub = player.addListener('playToEnd', () => onEndedRef.current());
+    return () => sub.remove();
+  }, [player]);
+
+  // Mirror the viewer's mute + long-press-pause state onto the player.
+  useEffect(() => {
+    try {
+      player.muted = muted;
+    } catch {
+      /* stale player ref — ignore */
+    }
+  }, [muted, player]);
+
+  useEffect(() => {
+    try {
+      if (paused) player.pause();
+      else player.play();
+    } catch {
+      /* stale player ref — ignore */
+    }
+  }, [paused, player]);
+
+  const overlayTextColor = slide.textColor || '#000000';
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        nativeControls={false}
+        contentFit="cover"
+      />
       {slide.overlayText ? (
         <View style={styles.overlayTextWrap} pointerEvents="none">
           <Text style={[styles.overlayText, { color: overlayTextColor }]}>

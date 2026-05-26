@@ -48,7 +48,8 @@ async function assertCanWrite(
 
 export interface SlideInput {
   id?: string;
-  background_image_url: string;
+  background_image_url?: string | null;
+  background_video_url?: string | null;
   overlay_text: string;
   text_color?: string | null;
 }
@@ -99,7 +100,8 @@ export async function createStoryCollection(input: {
 
     const slideRows = input.slides.map((s, i) => ({
       collection_id: collection.id,
-      background_image_url: s.background_image_url,
+      background_image_url: s.background_image_url ?? null,
+      background_video_url: s.background_video_url ?? null,
       overlay_text: s.overlay_text,
       text_color: s.text_color ?? null,
       display_order: i,
@@ -182,7 +184,8 @@ export async function updateStoryCollection(
 
     const slideRows = input.slides.map((s, i) => ({
       collection_id: id,
-      background_image_url: s.background_image_url,
+      background_image_url: s.background_image_url ?? null,
+      background_video_url: s.background_video_url ?? null,
       overlay_text: s.overlay_text,
       text_color: s.text_color ?? null,
       display_order: i,

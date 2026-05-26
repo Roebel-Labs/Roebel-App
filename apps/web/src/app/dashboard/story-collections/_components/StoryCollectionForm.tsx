@@ -21,19 +21,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone";
 import { AudioUploadDropzone } from "@/components/ui/audio-upload-dropzone";
+import { VideoUploadDropzone } from "@/components/ui/video-upload-dropzone";
 import { ArrowLeft, Save, Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 
 type SlideDraft = {
   background_image_url: string;
+  background_video_url: string;
   overlay_text: string;
   text_color: string;
 };
 
 const blankSlide = (): SlideDraft => ({
   background_image_url: "",
+  background_video_url: "",
   overlay_text: "",
-  text_color: "#FFFFFF",
+  text_color: "#000000",
 });
 
 export function StoryCollectionForm({
@@ -61,9 +64,10 @@ export function StoryCollectionForm({
   const [slides, setSlides] = useState<SlideDraft[]>(
     existing?.slides && existing.slides.length > 0
       ? existing.slides.map((s) => ({
-          background_image_url: s.background_image_url,
+          background_image_url: s.background_image_url ?? "",
+          background_video_url: s.background_video_url ?? "",
           overlay_text: s.overlay_text,
-          text_color: s.text_color ?? "#FFFFFF",
+          text_color: s.text_color ?? "#000000",
         }))
       : [blankSlide()]
   );
@@ -102,14 +106,15 @@ export function StoryCollectionForm({
       return;
     }
     const validSlides: SlideInput[] = slides
-      .filter((s) => s.background_image_url && s.overlay_text.trim())
+      .filter((s) => s.background_image_url || s.background_video_url)
       .map((s) => ({
-        background_image_url: s.background_image_url,
+        background_image_url: s.background_image_url || null,
+        background_video_url: s.background_video_url || null,
         overlay_text: s.overlay_text.trim(),
         text_color: s.text_color || null,
       }));
     if (validSlides.length === 0) {
-      toast.error("Mindestens ein vollständiges Slide ist erforderlich");
+      toast.error("Mindestens ein Slide mit Bild oder Video ist erforderlich");
       return;
     }
 
@@ -278,8 +283,13 @@ export function StoryCollectionForm({
                 </div>
 
                 <div>
-                  <Label>Hintergrundbild *</Label>
-                  <div className="mt-2">
+                  <Label>Hintergrund — Bild oder Video *</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Lade ein Bild oder ein Video hoch. Ein Video wird im
+                    Story-Viewer mit Ton abgespielt; die Story springt zum
+                    nächsten Slide, sobald das Video endet.
+                  </p>
+                  <div className="mt-2 space-y-3">
                     <ImageUploadDropzone
                       bucketName="blog-images"
                       folder="story-collections"
@@ -289,11 +299,20 @@ export function StoryCollectionForm({
                       }
                       maxSizeMB={5}
                     />
+                    <VideoUploadDropzone
+                      bucketName="story-videos"
+                      folder="story-collections"
+                      currentVideoUrl={s.background_video_url}
+                      onUploadComplete={(url) =>
+                        updateSlide(idx, { background_video_url: url })
+                      }
+                      maxSizeMB={50}
+                    />
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor={`text-${idx}`}>Overlay-Text *</Label>
+                  <Label htmlFor={`text-${idx}`}>Overlay-Text</Label>
                   <Textarea
                     id={`text-${idx}`}
                     value={s.overlay_text}

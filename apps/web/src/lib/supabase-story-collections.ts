@@ -8,7 +8,8 @@ import { supabase } from "./supabase";
 export interface StorySlide {
   id: string;
   collection_id: string;
-  background_image_url: string;
+  background_image_url: string | null;
+  background_video_url: string | null;
   overlay_text: string;
   text_color: string | null;
   display_order: number;
