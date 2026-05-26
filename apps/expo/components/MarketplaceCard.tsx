@@ -105,7 +105,7 @@ export default function MarketplaceCard({ listing, compact = true, style }: Prop
 
 const styles = StyleSheet.create({
   cardCompact: {
-    width: 200,
+    width: 150,
     marginRight: 12,
   },
   card: {

@@ -16,6 +16,7 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
 import {
   fetchListingById,
   fetchMarketplaceListings,
@@ -57,6 +58,7 @@ export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const { user } = useUser();
+  const { activeAccount } = useAccount();
 
   const [listing, setListing] = useState<MarketplaceListingRecord | null>(null);
   const [moreListings, setMoreListings] = useState<MarketplaceListingRecord[]>([]);
@@ -194,9 +196,17 @@ export default function ListingDetailScreen() {
     : 'Unbekannt';
   const sellerName = seller?.name || sellerShort;
 
-  const isOwn =
-    !!user?.wallet_address &&
-    listing.seller_wallet_address.toLowerCase() === user.wallet_address.toLowerCase();
+  // Hide "Kontaktieren" only when the ACTIVE account is the seller's account
+  // (you can't message yourself). A wallet owns several accounts (personal +
+  // orgs), so a wallet match would wrongly hide it for org accounts too — from
+  // an org you should be able to message your own citizen account.
+  const isOwn = !!activeAccount?.id && !!seller?.accountId && activeAccount.id === seller.accountId;
+
+  const priceBase =
+    listing.price_type === 'free'
+      ? 'Gratis'
+      : listing.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+  const isNegotiable = listing.price_type === 'negotiable';
 
   let createdRelative = '';
   try {
@@ -305,16 +315,19 @@ export default function ListingDetailScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Verkäufer kontaktieren"
               >
-                <MailSmallIcon size={20} color={colors.textPrimary} />
+                <MailSmallIcon size={24} color={colors.textPrimary} />
                 <Text style={[styles.contactPillText, { color: colors.textPrimary }]}>Kontaktieren</Text>
               </Pressable>
             )}
           </View>
 
           {/* Price */}
-          <Text style={[styles.priceLarge, { color: colors.textPrimary }]}>
-            {formatPrice(listing.price, listing.price_type)}
-          </Text>
+          <View style={styles.priceBlock}>
+            <Text style={[styles.priceLarge, { color: colors.textPrimary }]}>{priceBase}</Text>
+            {isNegotiable && (
+              <Text style={[styles.priceNegotiable, { color: colors.textSecondary }]}>verhandelbar</Text>
+            )}
+          </View>
 
           {/* Description */}
           {listing.description && (
@@ -325,9 +338,9 @@ export default function ListingDetailScreen() {
           <View style={styles.infoCards}>
             {/* Location card */}
             {listing.neighborhood && (
-              <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <LocationSmallIcon size={20} color={colors.primary} />
+              <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <LocationSmallIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Ort</Text>
@@ -338,9 +351,9 @@ export default function ListingDetailScreen() {
 
             {/* Condition / quality card */}
             {conditionLabel && (
-              <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <SparklesIcon size={20} color={colors.primary} />
+              <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <SparklesIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Qualität</Text>
@@ -350,9 +363,9 @@ export default function ListingDetailScreen() {
             )}
 
             {/* Category card (dynamic icon) */}
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <ListingCategoryIcon name={categoryIconName} size={20} color={colors.primary} />
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+              <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                <ListingCategoryIcon name={categoryIconName} size={24} color={colors.textPrimary} />
               </View>
               <View style={styles.infoCardContent}>
                 <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Kategorie</Text>
@@ -367,7 +380,7 @@ export default function ListingDetailScreen() {
               style={({ pressed }) => [styles.actionButton, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
               onPress={handleShare}
             >
-              <ShareIcon size={18} color={colors.textPrimary} />
+              <ShareIcon size={24} color={colors.textPrimary} />
               <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Teilen</Text>
             </Pressable>
             {canEdit && (
@@ -499,7 +512,7 @@ const styles = StyleSheet.create({
   // Title
   title: {
     fontSize: 26,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
     marginBottom: 6,
   },
   metaLine: {
@@ -523,8 +536,8 @@ const styles = StyleSheet.create({
   },
   sellerName: {
     flex: 1,
-    fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
   },
   contactPill: {
     flexDirection: 'row',
@@ -538,10 +551,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Medium',
   },
+  priceBlock: {
+    marginBottom: 6,
+  },
   priceLarge: {
-    fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
-    marginBottom: 16,
+    fontSize: 22,
+    fontFamily: 'Inter-Medium',
+  },
+  priceNegotiable: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
   },
   // Info Cards
   infoCards: {
@@ -552,6 +572,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
+    borderWidth: 1,
     padding: 16,
     gap: 12,
   },
@@ -559,6 +580,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
