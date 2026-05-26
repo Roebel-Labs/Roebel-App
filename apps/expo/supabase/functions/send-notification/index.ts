@@ -16,7 +16,7 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 // Notification payload types
 interface NotificationPayload {
-  type: 'event_new' | 'news_breaking' | 'news_featured';
+  type: 'event_new' | 'news_breaking' | 'news_featured' | 'post_new';
   title: string;
   body: string;
   data?: {
@@ -59,6 +59,7 @@ interface NotificationPreference {
   news_enabled: boolean;
   news_breaking: boolean;
   news_featured: boolean;
+  feed_posts_enabled: boolean;
 }
 
 serve(async (req: Request) => {
@@ -159,6 +160,10 @@ serve(async (req: Request) => {
 
         case 'news_featured':
           return pref.news_enabled && pref.news_featured;
+
+        case 'post_new':
+          // New "Für Alle" feed post — opt-out per device (defaults to on)
+          return pref.feed_posts_enabled !== false;
 
         default:
           return true;

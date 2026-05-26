@@ -383,6 +383,7 @@ export function useNotifications(): UseNotificationsReturn {
         news_enabled: true,
         news_breaking: true,
         news_featured: true,
+        feed_posts_enabled: true,
       };
 
       const result = await saveNotificationPreferences(deviceId, allEnabledPrefs);

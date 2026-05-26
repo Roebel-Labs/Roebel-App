@@ -321,6 +321,18 @@ export default function NotificationsScreen() {
           />
         </Section>
 
+        {/* Feed Posts Section */}
+        <Section title="Beiträge" colors={colors}>
+          <ToggleRow
+            label="Neue Beiträge"
+            description="Benachrichtigung bei jedem neuen Beitrag im „Für Alle“-Feed"
+            value={preferences?.feed_posts_enabled ?? true}
+            onValueChange={(value) => updatePreference('feed_posts_enabled', value)}
+            isLast
+            colors={colors}
+          />
+        </Section>
+
         {/* Info Section */}
         <View style={styles.infoSection}>
           <Text style={[styles.infoText, { color: colors.textTertiary }]}>

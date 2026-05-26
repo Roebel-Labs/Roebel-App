@@ -92,6 +92,8 @@ function NotificationHandler() {
         router.push(`/event/${data.eventId}` as any);
       } else if (data?.type === 'news' && data?.slug) {
         router.push(`/news/${data.slug}` as any);
+      } else if (data?.type === 'post' && data?.postId) {
+        router.push(`/post/${data.postId}` as any);
       } else if (data?.type === 'reward') {
         router.push('/rewards' as any);
       }
@@ -109,6 +111,10 @@ function NotificationHandler() {
         } else if (data?.type === 'news' && data?.slug) {
           setTimeout(() => {
             router.push(`/news/${data.slug}` as any);
+          }, 100);
+        } else if (data?.type === 'post' && data?.postId) {
+          setTimeout(() => {
+            router.push(`/post/${data.postId}` as any);
           }, 100);
         } else if (data?.type === 'reward') {
           setTimeout(() => {
