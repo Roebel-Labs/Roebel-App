@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useConversation } from '@/hooks/useConversation';
 import { useMessaging } from '@/context/MessagingContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -20,6 +20,7 @@ import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import { Skeleton } from '@/components/SkeletonLoader';
 import { ChatLoadingSkeletons } from '@/components/messages/MessageBubbleSkeleton';
 import { safeDisplayName, type Message } from '@/lib/supabase-messages';
+import { setActiveConversationId } from '@/lib/active-conversation';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -36,6 +37,15 @@ export default function ChatScreen() {
       markConversationRead(conversationId);
     }
   }, [conversationId, markConversationRead]);
+
+  // Tell the push handler this conversation is on screen so it suppresses
+  // foreground DM banners for it. Cleared when the screen loses focus.
+  useFocusEffect(
+    React.useCallback(() => {
+      setActiveConversationId(conversationId ?? null);
+      return () => setActiveConversationId(null);
+    }, [conversationId])
+  );
 
   const {
     messages,

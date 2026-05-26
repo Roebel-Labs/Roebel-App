@@ -23,21 +23,42 @@ import {
   DEFAULT_PREFERENCES,
 } from '@/lib/supabase-notifications';
 import { EventCategory, EVENT_CATEGORIES } from '@/lib/categories';
+import { getActiveConversationId } from '@/lib/active-conversation';
 import { useConsent } from '@/context/ConsentContext';
 
 // AsyncStorage keys for prompt tracking
 const PROMPT_SEEN_KEY = '@notification_prompt_seen';
 const PROMPT_DISMISSED_KEY = '@notification_prompt_dismissed';
 
-// Configure notification handler at module level
+// Configure notification handler at module level. Runs only when a push
+// arrives while the app is foregrounded.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    // Suppress the banner for a direct message the user is already viewing.
+    const data = notification.request.content.data as
+      | { type?: string; conversationId?: string }
+      | undefined;
+    if (
+      data?.type === 'direct_message' &&
+      data.conversationId &&
+      data.conversationId === getActiveConversationId()
+    ) {
+      return {
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 export type PermissionStatus = 'undetermined' | 'granted' | 'denied';
