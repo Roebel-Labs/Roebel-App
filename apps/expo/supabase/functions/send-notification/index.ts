@@ -16,7 +16,7 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 // Notification payload types
 interface NotificationPayload {
-  type: 'event_new' | 'news_breaking' | 'news_featured' | 'post_new';
+  type: 'event_new' | 'news_breaking' | 'news_featured' | 'post_new' | 'direct_message';
   title: string;
   body: string;
   data?: {
@@ -25,6 +25,9 @@ interface NotificationPayload {
     [key: string]: unknown;
   };
   category?: string; // Event category for filtering
+  // When present, the notification targets only devices whose push token is
+  // linked to one of these wallet addresses (used for direct messages).
+  walletAddresses?: string[];
 }
 
 interface ExpoPushMessage {
@@ -60,6 +63,7 @@ interface NotificationPreference {
   news_breaking: boolean;
   news_featured: boolean;
   feed_posts_enabled: boolean;
+  dms_enabled: boolean;
 }
 
 serve(async (req: Request) => {
@@ -93,7 +97,7 @@ serve(async (req: Request) => {
 
     // Parse request body
     const payload: NotificationPayload = await req.json();
-    const { type, title, body, data, category } = payload;
+    const { type, title, body, data, category, walletAddresses } = payload;
 
     if (!type || !title || !body) {
       return new Response(
@@ -102,11 +106,21 @@ serve(async (req: Request) => {
       );
     }
 
-    // Fetch all active push tokens
-    const { data: tokens, error: tokensError } = await supabase
+    // Fetch active push tokens. When walletAddresses is provided (e.g. direct
+    // messages), scope to the devices of those users; otherwise broadcast.
+    let tokensQuery = supabase
       .from('push_tokens')
       .select('device_id, expo_push_token')
       .eq('is_active', true);
+
+    if (walletAddresses && walletAddresses.length > 0) {
+      tokensQuery = tokensQuery.in(
+        'wallet_address',
+        walletAddresses.map((w) => w.toLowerCase())
+      );
+    }
+
+    const { data: tokens, error: tokensError } = await tokensQuery;
 
     if (tokensError) {
       console.error('Error fetching tokens:', tokensError);
@@ -164,6 +178,10 @@ serve(async (req: Request) => {
         case 'post_new':
           // New "Für Alle" feed post — opt-out per device (defaults to on)
           return pref.feed_posts_enabled !== false;
+
+        case 'direct_message':
+          // New direct message — opt-out per device (defaults to on)
+          return pref.dms_enabled !== false;
 
         default:
           return true;

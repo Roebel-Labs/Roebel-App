@@ -333,6 +333,18 @@ export default function NotificationsScreen() {
           />
         </Section>
 
+        {/* Direct Messages Section */}
+        <Section title="Direktnachrichten" colors={colors}>
+          <ToggleRow
+            label="Direktnachrichten"
+            description="Benachrichtigung bei neuen Direktnachrichten"
+            value={preferences?.dms_enabled ?? true}
+            onValueChange={(value) => updatePreference('dms_enabled', value)}
+            isLast
+            colors={colors}
+          />
+        </Section>
+
         {/* Info Section */}
         <View style={styles.infoSection}>
           <Text style={[styles.infoText, { color: colors.textTertiary }]}>

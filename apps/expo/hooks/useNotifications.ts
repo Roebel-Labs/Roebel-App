@@ -10,9 +10,11 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useActiveAccount } from 'thirdweb/react';
 import {
   registerPushToken,
   deactivatePushToken,
+  linkPushTokenWallet,
   getNotificationPreferences,
   saveNotificationPreferences,
   initializePreferences,
@@ -92,6 +94,8 @@ function getDeviceId(): string {
 export function useNotifications(): UseNotificationsReturn {
   const { preferences: consentPrefs } = useConsent();
   const pushConsent = consentPrefs.push;
+  const activeAccount = useActiveAccount();
+  const walletAddress = activeAccount?.address ?? null;
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('undetermined');
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
@@ -268,6 +272,17 @@ export function useNotifications(): UseNotificationsReturn {
   }, []);
 
   /**
+   * Keep the device's push token linked to the logged-in wallet so it can
+   * receive targeted pushes (e.g. direct messages). Runs once the token is
+   * registered (deviceId set) and whenever the wallet changes (login, account
+   * switch, logout → null).
+   */
+  useEffect(() => {
+    if (!deviceId) return;
+    linkPushTokenWallet(deviceId, walletAddress);
+  }, [deviceId, walletAddress]);
+
+  /**
    * Refresh preferences from Supabase
    */
   const refreshPreferences = useCallback(async () => {
@@ -384,6 +399,7 @@ export function useNotifications(): UseNotificationsReturn {
         news_breaking: true,
         news_featured: true,
         feed_posts_enabled: true,
+        dms_enabled: true,
       };
 
       const result = await saveNotificationPreferences(deviceId, allEnabledPrefs);

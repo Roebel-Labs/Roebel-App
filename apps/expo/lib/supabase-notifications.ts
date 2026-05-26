@@ -23,6 +23,7 @@ export interface NotificationPreferences {
   news_breaking: boolean;
   news_featured: boolean;
   feed_posts_enabled: boolean;
+  dms_enabled: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -69,6 +70,7 @@ export const DEFAULT_PREFERENCES: Omit<NotificationPreferences, 'device_id'> = {
   news_breaking: true,
   news_featured: false,
   feed_posts_enabled: true,
+  dms_enabled: true,
 };
 
 /**
@@ -78,7 +80,8 @@ export async function registerPushToken(
   deviceId: string,
   expoPushToken: string,
   platform: 'ios' | 'android',
-  appVersion?: string
+  appVersion?: string,
+  walletAddress?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Using 'as any' because push_tokens table types are not yet in the generated schema
@@ -90,6 +93,11 @@ export async function registerPushToken(
         app_version: appVersion,
         is_active: true,
         last_used_at: new Date().toISOString(),
+        // Link the device to the logged-in wallet so it can receive targeted
+        // pushes (e.g. direct messages). Omitted when no wallet is known yet.
+        ...(walletAddress !== undefined
+          ? { wallet_address: walletAddress ? walletAddress.toLowerCase() : null }
+          : {}),
       },
       {
         onConflict: 'device_id',
@@ -105,6 +113,32 @@ export async function registerPushToken(
   } catch (err) {
     console.error('Exception registering push token:', err);
     return { success: false, error: 'Failed to register push token' };
+  }
+}
+
+/**
+ * Link (or unlink) a device's push token to the currently logged-in wallet.
+ * Called when the wallet becomes available, changes (account switch), or on
+ * logout (walletAddress = null). Enables targeting pushes at a specific user.
+ */
+export async function linkPushTokenWallet(
+  deviceId: string,
+  walletAddress: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await (supabase.from('push_tokens') as any)
+      .update({ wallet_address: walletAddress ? walletAddress.toLowerCase() : null })
+      .eq('device_id', deviceId);
+
+    if (error) {
+      console.error('Error linking push token wallet:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Exception linking push token wallet:', err);
+    return { success: false, error: 'Failed to link push token wallet' };
   }
 }
 
