@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, StyleSheet, Pressable, type ImageSourcePropType } from 'react-native';
+import { Text, View, StyleSheet, Pressable, type ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -51,7 +51,20 @@ export function HeaderWeather({ fallbackSource, fallbackTintColor }: Props) {
 
   const openWeather = () => router.push('/weather' as any);
 
-  if (state.kind !== 'ready') {
+  if (state.kind === 'loading') {
+    return (
+      <Pressable
+        onPress={openWeather}
+        accessibilityRole="button"
+        accessibilityLabel="Wetter öffnen"
+        hitSlop={8}
+      >
+        <View style={[styles.skeleton, { backgroundColor: colors.skeleton }]} />
+      </Pressable>
+    );
+  }
+
+  if (state.kind === 'error') {
     return (
       <Pressable
         onPress={openWeather}
@@ -92,6 +105,11 @@ const styles = StyleSheet.create({
   fallback: {
     width: 84,
     height: 36,
+  },
+  skeleton: {
+    width: 56,
+    height: 28,
+    borderRadius: 8,
   },
   container: {
     height: 36,
