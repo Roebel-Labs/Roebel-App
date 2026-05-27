@@ -5,6 +5,7 @@ import Image from "next/image";
 import {
   ChevronDown,
   ChevronRight,
+  ImagePlus,
   ImageOff,
   Loader2,
   Sparkles,
@@ -28,6 +29,7 @@ import {
   commitItemImage,
   regenerateItemImageWithAi,
   uploadItemImage,
+  uploadReferenceImage,
   type ItemKind,
 } from "@/app/actions/restaurants";
 import {
@@ -47,6 +49,10 @@ const VARIANTS_LIMIT = 4;
 const variantsStorageKey = (kind: ItemKind, itemId: string) =>
   `roebel:ai-variants:${kind}:${itemId}`;
 
+const REFERENCES_LIMIT = 4;
+const referencesStorageKey = (kind: ItemKind, itemId: string) =>
+  `roebel:ai-refs:${kind}:${itemId}`;
+
 interface AiImageEditorProps {
   kind: ItemKind;
   itemId: string | null;
@@ -63,21 +69,25 @@ export function AiImageEditor({
   onImageChange,
 }: AiImageEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const referenceInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [uploadingReference, setUploadingReference] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [promptHint, setPromptHint] = useState("");
   const [presetOverride, setPresetOverride] = useState<string>(DEFAULT_PRESET_VALUE);
   const [variants, setVariants] = useState<string[]>([]);
+  const [references, setReferences] = useState<string[]>([]);
 
   const itemReady = !!itemId;
-  const busy = uploading || generating || clearing || committing;
+  const busy = uploading || generating || clearing || committing || uploadingReference;
 
   useEffect(() => {
     if (!itemId) {
       setVariants([]);
+      setReferences([]);
       return;
     }
     try {
@@ -87,6 +97,13 @@ export function AiImageEditor({
     } catch {
       setVariants([]);
     }
+    try {
+      const rawRefs = window.localStorage.getItem(referencesStorageKey(kind, itemId));
+      if (rawRefs) setReferences(JSON.parse(rawRefs) as string[]);
+      else setReferences([]);
+    } catch {
+      setReferences([]);
+    }
   }, [kind, itemId]);
 
   const persistVariants = (next: string[]) => {
@@ -95,6 +112,19 @@ export function AiImageEditor({
     try {
       window.localStorage.setItem(
         variantsStorageKey(kind, itemId),
+        JSON.stringify(next),
+      );
+    } catch {
+      // localStorage may be unavailable (private window) — silent fail.
+    }
+  };
+
+  const persistReferences = (next: string[]) => {
+    setReferences(next);
+    if (!itemId) return;
+    try {
+      window.localStorage.setItem(
+        referencesStorageKey(kind, itemId),
         JSON.stringify(next),
       );
     } catch {
@@ -130,6 +160,29 @@ export function AiImageEditor({
     }
   };
 
+  const handleUploadReference = async (file: File) => {
+    if (!itemId) return;
+    setUploadingReference(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await uploadReferenceImage(kind, itemId, formData);
+    setUploadingReference(false);
+    if (res.success && res.url) {
+      const next = [res.url, ...references.filter((r) => r !== res.url)].slice(
+        0,
+        REFERENCES_LIMIT,
+      );
+      persistReferences(next);
+      toast.success(res.message ?? "Referenzbild hochgeladen");
+    } else {
+      toast.error(res.error ?? "Upload fehlgeschlagen");
+    }
+  };
+
+  const handleRemoveReference = (url: string) => {
+    persistReferences(references.filter((r) => r !== url));
+  };
+
   const handleGenerateVariant = async () => {
     if (!itemId) return;
     setGenerating(true);
@@ -141,6 +194,7 @@ export function AiImageEditor({
       prompt_hint: promptHint.trim() || undefined,
       style_preset: presetForCall,
       preview: true,
+      reference_image_urls: references.length ? references : undefined,
     });
     setGenerating(false);
     if (res.success && res.image_url) {
@@ -307,6 +361,65 @@ export function AiImageEditor({
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs">Referenzbilder (optional)</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Lade ein echtes Foto dieses Gerichts hoch — die KI verwandelt es
+                in den Marken-Look (max. {REFERENCES_LIMIT}).
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {references.map((url) => (
+                  <div key={url} className="relative group">
+                    <div className="relative h-14 w-14 rounded-md overflow-hidden border border-border">
+                      <Image
+                        src={url}
+                        alt=""
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveReference(url)}
+                      disabled={busy}
+                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-background border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                      aria-label="Referenzbild entfernen"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+                {references.length < REFERENCES_LIMIT && (
+                  <button
+                    type="button"
+                    disabled={!itemReady || busy}
+                    onClick={() => referenceInputRef.current?.click()}
+                    className="h-14 w-14 rounded-md border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground transition-colors disabled:opacity-50"
+                    aria-label="Referenzbild hinzufügen"
+                  >
+                    {uploadingReference ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+              </div>
+              <input
+                ref={referenceInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadReference(file);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+
             <Button
               type="button"
               size="sm"
@@ -319,7 +432,7 @@ export function AiImageEditor({
               ) : (
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               )}
-              Variante generieren
+              {references.length > 0 ? "Variante aus Foto generieren" : "Variante generieren"}
             </Button>
 
             {variants.length > 0 && (

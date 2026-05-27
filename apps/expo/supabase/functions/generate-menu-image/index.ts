@@ -7,6 +7,10 @@
  *
  * v3 style — per-gastro brand, angle by food type, sharp, centered, no text.
  *
+ * If `reference_image_urls` (1–10 public URLs) is provided, runs the
+ * seedream/4.5-edit image-to-image model instead: the caller's real photo of the
+ * dish is restyled into the branded studio look while keeping the actual food.
+ *
  * Auth: verify_jwt=false; protect with x-seed-token header matched against
  * SEED_TOKEN env. Optional x-kie-key header overrides KIE_API_KEY env.
  */
@@ -17,6 +21,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 const KIE_CREATE = 'https://api.kie.ai/api/v1/jobs/createTask';
 const KIE_POLL = 'https://api.kie.ai/api/v1/jobs/recordInfo';
 const SEEDREAM_MODEL = 'seedream/4.5-text-to-image';
+const SEEDREAM_EDIT_MODEL = 'seedream/4.5-edit';
+const MAX_REFERENCE_IMAGES = 10;
 const BUCKET = 'images';
 const POLL_INTERVAL_MS = 2500;
 const POLL_BUDGET_MS = 50_000;
@@ -140,6 +146,44 @@ function buildPrompt(
   ].join(' ').trim();
 }
 
+/**
+ * Prompt for the image-to-image edit model: takes the gastro's real photo of the
+ * dish and restyles it into the branded studio look, keeping the actual food intact.
+ */
+function buildEditPrompt(
+  itemName: string,
+  description: string | null,
+  restaurantName: string,
+  preset: StylePreset | null,
+  hint?: string,
+): string {
+  const g = gastroFor(restaurantName);
+  const bg = preset ? backgroundForPreset(preset) : backgroundFor(g);
+  const vessel = vesselFor(g, itemName);
+  const desc = description ? ` (${description})` : '';
+  const tail = hint ? ` ${hint}` : '';
+  return [
+    `Restyle this reference photo of ${itemName}${desc} into studio-grade product food photography.`,
+    'Keep the exact same dish, ingredients, portion size and arrangement shown in the reference image — do not invent or remove food, do not change the recipe.',
+    `Re-plate and re-light it: ${vessel}, ${bg}.`,
+    'The subject is perfectly centered in the frame with even margins on all sides.',
+    'Entire image is in perfect sharp focus — every element crisp and clean, no depth-of-field blur, no bokeh.',
+    'Bright, even, soft natural lighting. Vibrant natural colors. Magazine/advertising quality. Ultra clean composition.',
+    'No people, no hands, no cutlery, no menu cards, no packaging branding.',
+    'ABSOLUTELY NO text, no letters, no numbers, no signage, no captions, no logos, no watermarks anywhere in the image.',
+    tail,
+  ].join(' ').trim();
+}
+
+function isValidReferenceImageUrls(v: unknown): v is string[] {
+  return (
+    Array.isArray(v) &&
+    v.length >= 1 &&
+    v.length <= MAX_REFERENCE_IMAGES &&
+    v.every((u) => typeof u === 'string' && /^https?:\/\//i.test(u))
+  );
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 serve(async (req: Request) => {
@@ -160,6 +204,7 @@ serve(async (req: Request) => {
     prompt_hint?: string;
     quality?: 'basic' | 'high';
     style_preset?: string;
+    reference_image_urls?: unknown;
   };
   try { body = await req.json(); } catch { return json(400, { ok: false, code: 'BAD_JSON' }); }
   const hasMenuItem = !!body.menu_item_id;
@@ -169,6 +214,15 @@ serve(async (req: Request) => {
   }
   if (body.style_preset !== undefined && !isValidStylePreset(body.style_preset)) {
     return json(400, { ok: false, code: 'INVALID_STYLE_PRESET' });
+  }
+  const referenceImageUrls =
+    body.reference_image_urls === undefined || body.reference_image_urls === null
+      ? null
+      : isValidReferenceImageUrls(body.reference_image_urls)
+        ? body.reference_image_urls
+        : undefined;
+  if (referenceImageUrls === undefined) {
+    return json(400, { ok: false, code: 'INVALID_REFERENCE_IMAGES' });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -215,20 +269,36 @@ serve(async (req: Request) => {
   const presetFromBody = isValidStylePreset(body.style_preset) ? body.style_preset : null;
   const presetFromRow = isValidStylePreset(restaurant?.ai_image_style) ? restaurant.ai_image_style : null;
   const resolvedPreset: StylePreset | null = presetFromBody ?? presetFromRow;
-  const prompt = buildPrompt(item.name, item.description, restaurant?.name ?? '', resolvedPreset, body.prompt_hint);
+  const useEdit = !!referenceImageUrls;
+  const prompt = useEdit
+    ? buildEditPrompt(item.name, item.description, restaurant?.name ?? '', resolvedPreset, body.prompt_hint)
+    : buildPrompt(item.name, item.description, restaurant?.name ?? '', resolvedPreset, body.prompt_hint);
 
-  if (body.dry_run) return json(200, { ok: true, prompt, dry_run: true });
+  if (body.dry_run) {
+    return json(200, { ok: true, prompt, dry_run: true, mode: useEdit ? 'edit' : 'text-to-image' });
+  }
 
   const kieKey = req.headers.get('x-kie-key') ?? Deno.env.get('KIE_API_KEY');
   if (!kieKey) return json(500, { ok: false, code: 'NO_KIE_KEY' });
 
+  const createBody = useEdit
+    ? {
+        model: SEEDREAM_EDIT_MODEL,
+        input: {
+          prompt,
+          image_urls: referenceImageUrls,
+          aspect_ratio: '16:9',
+          quality: body.quality ?? 'basic',
+        },
+      }
+    : {
+        model: SEEDREAM_MODEL,
+        input: { prompt, aspect_ratio: '16:9', quality: body.quality ?? 'basic' },
+      };
   const createResp = await fetch(KIE_CREATE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kieKey}` },
-    body: JSON.stringify({
-      model: SEEDREAM_MODEL,
-      input: { prompt, aspect_ratio: '16:9', quality: body.quality ?? 'basic' },
-    }),
+    body: JSON.stringify(createBody),
   });
   if (!createResp.ok) {
     const txt = await createResp.text();
@@ -273,7 +343,8 @@ serve(async (req: Request) => {
   // Timestamped path so each regeneration writes a fresh object — bypasses the
   // bucket's no-update RLS for anon callers and cache-busts the image URL.
   const folder = kind === 'menu_item' ? 'menu-items' : 'special-menu-items';
-  const tag = body.preview ? `${VERSION_TAG}_variant` : VERSION_TAG;
+  const base = useEdit ? `${VERSION_TAG}_ref` : VERSION_TAG;
+  const tag = body.preview ? `${base}_variant` : base;
   const objectPath = `${folder}/${item.restaurant_id}/${item.id}_${tag}_${Date.now()}.${ext}`;
   const uploadRes = await supabase.storage.from(BUCKET).upload(objectPath, imgBytes, { contentType, upsert: true });
   if (uploadRes.error) return json(500, { ok: false, code: 'UPLOAD_FAILED', error: uploadRes.error.message });
@@ -286,5 +357,5 @@ serve(async (req: Request) => {
     if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
   }
 
-  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId, preview: !!body.preview });
+  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId, preview: !!body.preview, mode: useEdit ? 'edit' : 'text-to-image' });
 });

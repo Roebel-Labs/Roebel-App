@@ -910,10 +910,60 @@ export async function commitItemImage(
 }
 
 /**
+ * Upload a reference image used to "beautify" a dish via the AI edit model.
+ * Stored under `ai-references/{restaurantId}/...` in the same `images` bucket;
+ * does NOT touch the item's `image_url`. Returns the public URL so the client
+ * can pass it as `reference_image_urls` to `regenerateItemImageWithAi`.
+ */
+export async function uploadReferenceImage(
+  kind: ItemKind,
+  itemId: string,
+  formData: FormData
+) {
+  try {
+    const file = formData.get("file") as File | null
+    if (!file) return { success: false, error: "Keine Datei ausgewählt" }
+    if (!file.type.startsWith("image/")) {
+      return { success: false, error: "Nur Bilddateien sind erlaubt" }
+    }
+
+    const supabase = await createClient()
+    const restaurantId = await resolveRestaurantIdForItem(supabase, kind, itemId)
+    if (!restaurantId) return { success: false, error: "Gericht nicht gefunden" }
+
+    const ext = file.name.includes(".")
+      ? file.name.split(".").pop()!.toLowerCase()
+      : (file.type.split("/")[1] ?? "jpg")
+    const folder = storageFolderFor(kind)
+    const objectPath = `ai-references/${folder}/${restaurantId}/${itemId}_ref_${Date.now()}.${ext}`
+    const arrayBuffer = await file.arrayBuffer()
+
+    const { error: uploadErr } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(objectPath, new Uint8Array(arrayBuffer), {
+        contentType: file.type || "image/jpeg",
+        upsert: true,
+      })
+    if (uploadErr) throw uploadErr
+
+    const { data: pub } = supabase.storage
+      .from(IMAGE_BUCKET)
+      .getPublicUrl(objectPath)
+
+    return { success: true, url: pub.publicUrl, message: "Referenzbild hochgeladen" }
+  } catch (error) {
+    console.error("Error uploading reference image:", error)
+    return { success: false, error: "Fehler beim Hochladen des Referenzbildes" }
+  }
+}
+
+/**
  * Call the deployed generate-menu-image Edge Function. With `preview=true`,
  * the function uploads a variant to storage but does NOT update the row;
  * the client gets the URL back and can show it as a variant. With `preview`
  * unset/false, the function commits directly (one-shot regeneration).
+ * When `reference_image_urls` is passed, the function runs the image-to-image
+ * edit model to restyle the gastro's real photo into the branded look.
  * SUPABASE_SEED_TOKEN is read on the server only — never expose to the browser.
  */
 export async function regenerateItemImageWithAi(
@@ -923,6 +973,7 @@ export async function regenerateItemImageWithAi(
     prompt_hint?: string
     style_preset?: AiImageStyle
     preview?: boolean
+    reference_image_urls?: string[]
   }
 ) {
   try {
@@ -943,6 +994,8 @@ export async function regenerateItemImageWithAi(
     if (opts?.prompt_hint) payload.prompt_hint = opts.prompt_hint
     if (opts?.style_preset) payload.style_preset = opts.style_preset
     if (opts?.preview) payload.preview = true
+    if (opts?.reference_image_urls?.length)
+      payload.reference_image_urls = opts.reference_image_urls
 
     const resp = await fetch(endpoint, {
       method: "POST",
