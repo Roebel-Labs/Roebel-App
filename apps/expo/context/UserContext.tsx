@@ -8,6 +8,8 @@ import { useConsent } from '@/context/ConsentContext';
 import { setSentryUser } from '@/lib/sentry-init';
 import { Events, track } from '@/lib/analytics';
 import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
+import { loadCachedUser, saveCachedUser } from '@/lib/user-cache';
+import { useWalletBoot } from '@/context/WalletBootContext';
 import type { UserRecord, UserTier } from '@/lib/types';
 
 const TIER_LABELS: Record<UserTier, string> = {
@@ -44,6 +46,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { hasCitizenNFT } = useVerificationContext();
   const consent = useConsent();
+  const { autoConnectFinished } = useWalletBoot();
 
   const [user, setUser] = useState<UserRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,10 +54,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const sentryIdentifiedFor = useRef<string | null>(null);
   const grandfatherCheckedFor = useRef<string | null>(null);
 
+  // Optimistic hydration: restore the last synced user from local storage on
+  // mount so the personalized feed (tier / citizen tabs / likes) renders
+  // immediately, before thirdweb finishes reconnecting the wallet. `prev ?? cached`
+  // ensures a freshly-synced record (from a fast reconnect) is never clobbered.
+  useEffect(() => {
+    let cancelled = false;
+    loadCachedUser().then((cached) => {
+      if (cancelled || !cached) return;
+      setUser((prev) => prev ?? cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the user record so it can be hydrated on the next cold start.
+  useEffect(() => {
+    if (user?.wallet_address) {
+      void saveCachedUser(user);
+    }
+  }, [user]);
+
   // Sync user on login/account change
   useEffect(() => {
     if (!account?.address) {
+      // Still reconnecting on cold start — keep the optimistically-hydrated
+      // cached user on screen until auto-connect has actually finished.
+      if (!autoConnectFinished) return;
+      // Auto-connect finished with no account → genuine logout (covers all
+      // useDisconnect sites). Clear both in-memory and persisted state.
       setUser(null);
+      void saveCachedUser(null);
       onboardingTriggeredFor.current = null;
       return;
     }
@@ -109,7 +140,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     syncUser();
-  }, [account?.address, wallet, router]);
+  }, [account?.address, wallet, router, autoConnectFinished]);
 
   // Identify user in Sentry on login (consent-aware via setSentryUser);
   // reset on logout. PostHog identify is handled by <PostHogTelemetry />,

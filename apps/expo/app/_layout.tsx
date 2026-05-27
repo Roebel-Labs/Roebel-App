@@ -29,10 +29,9 @@ import '@/lib/patch-text';
 import useInterFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { ThirdwebProvider, useSetActiveWallet } from 'thirdweb/react';
-import { client } from '../constants/thirdweb';
+import { ThirdwebProvider } from 'thirdweb/react';
 import { useScreenTracking } from '@/hooks/useAnalytics';
-import { wallets } from '@/constants/wallets';
+import { WalletBootProvider } from '@/context/WalletBootContext';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
 import { ConsentGate } from '@/components/consent/ConsentGate';
@@ -183,41 +182,6 @@ function RewardsTaskTriggers() {
   return null;
 }
 
-/**
- * Restores the last connected wallet on cold start.
- *
- * We call wallet.autoConnect({ client }) explicitly per wallet (rather than
- * using <AutoConnect> / useAutoConnect) because the higher-level helpers were
- * swallowing errors and leaving the connection status as 'unknown' on Android
- * preview builds even when AsyncStorage held a valid session.
- */
-function AutoConnectHandler() {
-  const setActiveWallet = useSetActiveWallet();
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (const wallet of wallets) {
-        try {
-          const account = await wallet.autoConnect({ client });
-          if (cancelled) return;
-          if (account) {
-            await setActiveWallet(wallet);
-            return;
-          }
-        } catch {
-          // No stored session for this wallet, or restore failed; try next.
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [setActiveWallet]);
-
-  return null;
-}
-
 function ThemedLayout() {
   const { colors, isDark } = useTheme();
 
@@ -312,7 +276,7 @@ function Layout() {
             <ConsentProvider>
               <ConditionalPostHogProvider>
                 <ThirdwebProvider>
-                  <AutoConnectHandler />
+                  <WalletBootProvider>
                   <AuthGateProvider>
                     <VerificationProvider>
                       <UserProvider>
@@ -348,6 +312,7 @@ function Layout() {
                       </UserProvider>
                     </VerificationProvider>
                   </AuthGateProvider>
+                  </WalletBootProvider>
                 </ThirdwebProvider>
               </ConditionalPostHogProvider>
             </ConsentProvider>
