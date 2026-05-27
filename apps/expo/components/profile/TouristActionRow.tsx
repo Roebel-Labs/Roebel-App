@@ -12,7 +12,7 @@ export default function TouristActionRow() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { coins } = useRewards();
-  const cardBg = isDark ? colors.surface : '#FFFFFF';
+  const cardBg = colors.background;
 
   return (
     <View style={styles.row}>

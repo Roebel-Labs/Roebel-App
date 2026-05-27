@@ -19,7 +19,7 @@ export default function BuergerWerdenBanner() {
     <View
       style={[
         styles.card,
-        { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+        { backgroundColor: colors.background },
         softShadow(2, isDark),
       ]}
     >

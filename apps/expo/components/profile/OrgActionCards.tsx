@@ -27,7 +27,7 @@ export default function OrgActionCards() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const requireAuth = useRequireAuth();
-  const cardBg = isDark ? colors.surface : '#FFFFFF';
+  const cardBg = colors.background;
 
   const gridItems: GridItem[] = [
     { label: 'Röbel Card', icon: ROEBEL_CARD, onPress: () => router.push('/roebel-card' as any) },

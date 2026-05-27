@@ -27,7 +27,7 @@ export default function CitizenVerificationBanner({ pending }: CitizenVerificati
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.surface },
+        { backgroundColor: colors.background },
         softShadow(2, isDark),
       ]}
     >

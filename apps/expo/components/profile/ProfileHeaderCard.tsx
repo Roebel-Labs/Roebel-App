@@ -24,7 +24,7 @@ export default function ProfileHeaderCard({
   onPress,
 }: ProfileHeaderCardProps) {
   const { colors, isDark } = useTheme();
-  const cardBg = isDark ? colors.surface : '#FFFFFF';
+  const cardBg = colors.background;
 
   // Citizen pill is the only one with the verified shield + primary color.
   // Other variants use a neutral gray pill.

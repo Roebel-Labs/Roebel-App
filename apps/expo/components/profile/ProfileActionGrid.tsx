@@ -30,7 +30,7 @@ const ITEMS: Item[] = [
 export default function ProfileActionGrid() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const cardBg = isDark ? colors.surface : '#FFFFFF';
+  const cardBg = colors.background;
 
   return (
     <View
