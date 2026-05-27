@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   Pressable,
   ScrollView,
@@ -78,6 +77,8 @@ type PagerProps = {
   scrollProgress: SharedValue<number>;
   onPageSelected: (index: number) => void;
   pageWidth: number;
+  /** When false, horizontal paging is locked (non-citizens stay on 'main'). */
+  scrollEnabled?: boolean;
   children: React.ReactNode;
 };
 
@@ -87,7 +88,7 @@ type PagerHandle = {
 
 const NativePager = PagerViewModule
   ? React.forwardRef<PagerHandle, PagerProps>(function NativePager(
-      { initialPage, scrollProgress, onPageSelected, children, pageWidth: _pageWidth },
+      { initialPage, scrollProgress, onPageSelected, children, pageWidth: _pageWidth, scrollEnabled = true },
       ref,
     ) {
       const pagerRef = useRef<any>(null);
@@ -117,7 +118,8 @@ const NativePager = PagerViewModule
           initialPage={initialPage}
           onPageScroll={handleScroll}
           onPageSelected={handleSelected}
-          offscreenPageLimit={1}
+          offscreenPageLimit={2}
+          scrollEnabled={scrollEnabled}
           overdrag
         >
           {children}
@@ -127,7 +129,7 @@ const NativePager = PagerViewModule
   : null;
 
 const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPager(
-  { initialPage, scrollProgress, onPageSelected, pageWidth, children },
+  { initialPage, scrollProgress, onPageSelected, pageWidth, children, scrollEnabled = true },
   ref,
 ) {
   const scrollRef = useRef<ScrollView>(null);
@@ -164,6 +166,7 @@ const ScrollPager = React.forwardRef<PagerHandle, PagerProps>(function ScrollPag
       ref={scrollRef as any}
       horizontal
       pagingEnabled
+      scrollEnabled={scrollEnabled}
       showsHorizontalScrollIndicator={false}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
@@ -245,7 +248,6 @@ export default function FeedHome() {
   const mainListRef = useRef<FeedListHandle>(null);
   const rathausListRef = useRef<FeedListHandle>(null);
   const appListRef = useRef<FeedListHandle>(null);
-  const nonCitizenListRef = useRef<FeedListHandle>(null);
 
   const { reportPost } = usePostActions(walletAddress);
 
@@ -253,7 +255,6 @@ export default function FeedHome() {
     mainListRef.current?.refresh();
     rathausListRef.current?.refresh();
     appListRef.current?.refresh();
-    nonCitizenListRef.current?.refresh();
   }, []);
 
   const { consume: consumePostFeedback } = usePendingPostFeedback();
@@ -283,7 +284,6 @@ export default function FeedHome() {
     mainListRef.current?.removePost(postId);
     rathausListRef.current?.removePost(postId);
     appListRef.current?.removePost(postId);
-    nonCitizenListRef.current?.removePost(postId);
   }, []);
 
   const isOwnPost = useCallback(
@@ -468,67 +468,61 @@ export default function FeedHome() {
           { height: insets.bottom, backgroundColor: colors.background },
         ]}
       />
-      {isCitizen ? (
-        <Pager
-          ref={pagerRef}
-          initialPage={0}
-          scrollProgress={scrollProgress}
-          onPageSelected={handlePageSelected}
-          pageWidth={screenWidth}
-        >
-          <View key="main" style={[styles.page, { width: screenWidth }]} collapsable={false}>
-            <FeedList
-              ref={mainListRef}
-              feedType="main"
-              isCitizen={isCitizen}
-              walletAddress={walletAddress}
-              onCompose={handleCompose}
-              onMore={handleMore}
-              listHeader={<HomeStoryBar />}
-              active={screenFocused && effectiveTab === 'main'}
-              {...feedListProps}
-            />
-          </View>
-          <View key="rathaus" style={[styles.page, { width: screenWidth }]} collapsable={false}>
-            <FeedList
-              ref={rathausListRef}
-              feedType="rathaus"
-              isCitizen={isCitizen}
-              walletAddress={walletAddress}
-              onCompose={handleCompose}
-              onMore={handleMore}
-              active={screenFocused && effectiveTab === 'rathaus'}
-              {...feedListProps}
-            />
-          </View>
-          <View key="app" style={[styles.page, { width: screenWidth }]} collapsable={false}>
-            <FeedList
-              ref={appListRef}
-              feedType="app"
-              isCitizen={isCitizen}
-              walletAddress={walletAddress}
-              onCompose={handleCompose}
-              onMore={handleMore}
-              active={screenFocused && effectiveTab === 'app'}
-              {...feedListProps}
-            />
-          </View>
-        </Pager>
-      ) : (
-        <View style={styles.pager}>
+      {/* The Pager is ALWAYS rendered (even for non-citizens, where it's
+          locked to the 'main' page via scrollEnabled={false}). Keeping the
+          structure stable means the 'main' FeedList + its HomeStoryBar header
+          mount once and survive the isCitizen flip on cold start — so posts and
+          stories never disappear/reload. rathaus/app only fetch once isCitizen
+          resolves (enabled gate); offscreenPageLimit keeps all pages mounted so
+          tab switches don't refetch. */}
+      <Pager
+        ref={pagerRef}
+        initialPage={0}
+        scrollProgress={scrollProgress}
+        onPageSelected={handlePageSelected}
+        pageWidth={screenWidth}
+        scrollEnabled={isCitizen}
+      >
+        <View key="main" style={[styles.page, { width: screenWidth }]} collapsable={false}>
           <FeedList
-            ref={nonCitizenListRef}
+            ref={mainListRef}
             feedType="main"
             isCitizen={isCitizen}
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
             listHeader={<HomeStoryBar />}
-            active={screenFocused}
+            active={screenFocused && effectiveTab === 'main'}
             {...feedListProps}
           />
         </View>
-      )}
+        <View key="rathaus" style={[styles.page, { width: screenWidth }]} collapsable={false}>
+          <FeedList
+            ref={rathausListRef}
+            feedType="rathaus"
+            isCitizen={isCitizen}
+            walletAddress={walletAddress}
+            onCompose={handleCompose}
+            onMore={handleMore}
+            active={screenFocused && effectiveTab === 'rathaus'}
+            enabled={isCitizen}
+            {...feedListProps}
+          />
+        </View>
+        <View key="app" style={[styles.page, { width: screenWidth }]} collapsable={false}>
+          <FeedList
+            ref={appListRef}
+            feedType="app"
+            isCitizen={isCitizen}
+            walletAddress={walletAddress}
+            onCompose={handleCompose}
+            onMore={handleMore}
+            active={screenFocused && effectiveTab === 'app'}
+            enabled={isCitizen}
+            {...feedListProps}
+          />
+        </View>
+      </Pager>
 
       {appHeader}
 

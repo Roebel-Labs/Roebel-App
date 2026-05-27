@@ -42,26 +42,52 @@ function formatWeekdayLong(dateStr: string): string {
 // Where to open the viewer. groupIdx 0 = events, 1+ = collections.
 type OpenTarget = { groupIdx: number; slideIdx: number };
 
+// Module-level cache of the last loaded stories. Seeds initial state so a
+// remount (e.g. after navigating away and back) shows data instantly instead
+// of flashing skeletons / empty while the queries re-run in the background.
+let cachedEvents: EventRecord[] = [];
+let cachedCollections: StoryCollection[] = [];
+let cachedCollectionSlides: Record<string, StorySlide[]> = {};
+let cachedAudioUrl: string | null = null;
+let hasLoadedStories = false;
+
 export default function HomeStoryBar() {
   const { colors } = useTheme();
   const router = useRouter();
   const { isCitizen } = useUser();
 
-  const [events, setEvents] = useState<EventRecord[]>([]);
-  const [collections, setCollections] = useState<StoryCollection[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>(cachedEvents);
+  const [collections, setCollections] = useState<StoryCollection[]>(cachedCollections);
   const [collectionSlides, setCollectionSlides] = useState<
     Record<string, StorySlide[]>
-  >({});
+  >(cachedCollectionSlides);
   // Shared background track that loops under ALL event stories (admin-set).
   const [eventStoriesAudioUrl, setEventStoriesAudioUrl] = useState<
     string | null
-  >(null);
+  >(cachedAudioUrl);
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
+  // Only show skeletons on the very first load (when nothing is cached yet).
+  const [loading, setLoading] = useState(!hasLoadedStories);
 
   useEffect(() => {
-    fetchThisWeekEvents().then((data) => setEvents(data as EventRecord[]));
-    fetchEventStoriesAudioUrl().then(setEventStoriesAudioUrl);
-    fetchHomeFeedStoryCollections().then(async (cols) => {
+    let cancelled = false;
+
+    const eventsP = fetchThisWeekEvents().then((data) => {
+      if (cancelled) return;
+      const list = data as EventRecord[];
+      cachedEvents = list;
+      setEvents(list);
+    });
+
+    fetchEventStoriesAudioUrl().then((url) => {
+      if (cancelled) return;
+      cachedAudioUrl = url;
+      setEventStoriesAudioUrl(url);
+    });
+
+    const collectionsP = fetchHomeFeedStoryCollections().then(async (cols) => {
+      if (cancelled) return;
+      cachedCollections = cols;
       setCollections(cols);
       // Pre-fetch all slides upfront — admin-curated, small list.
       const results = await Promise.all(
@@ -69,9 +95,25 @@ export default function HomeStoryBar() {
           fetchSlidesForCollection(c.id).then((s) => [c.id, s] as const),
         ),
       );
-      setCollectionSlides(Object.fromEntries(results));
+      if (cancelled) return;
+      const map = Object.fromEntries(results);
+      cachedCollectionSlides = map;
+      setCollectionSlides(map);
     });
+
+    Promise.allSettled([eventsP, collectionsP]).then(() => {
+      if (cancelled) return;
+      hasLoadedStories = true;
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const showSkeletons =
+    loading && events.length === 0 && collections.length === 0;
 
   // ── Group sequence ──────────────────────────────────────────
   // Index 0: ONE events group with all events as slides (grouped progress
@@ -170,6 +212,16 @@ export default function HomeStoryBar() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
+        {/* First-load skeletons — placeholder cards matching real card
+            geometry while the events/collections queries resolve. */}
+        {showSkeletons &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <View
+              key={`story-skeleton-${i}`}
+              style={[styles.card, { backgroundColor: colors.skeleton }]}
+            />
+          ))}
+
         {/* One bubble per event. Tapping any opens the SAME unified events
             story at that event's slide index. */}
         {events.map((event, idx) => {
@@ -259,7 +311,7 @@ export default function HomeStoryBar() {
         {/* Create event card — rendered last, after the events and
             collections. Only for citizens (personal Bürger or org accounts
             where the connected wallet is a verified citizen). */}
-        {isCitizen ? (
+        {!showSkeletons && isCitizen ? (
           <Pressable
             onPress={() => router.push('/submit-event' as any)}
             style={[

@@ -79,6 +79,12 @@ type Props = {
    * off-tab / background audio from bleeding through. Defaults to true.
    */
   active?: boolean;
+  /**
+   * Gates the initial fetch. The list queries Supabase once, the first time
+   * this is true. Used to keep rathaus/app tabs from fetching for non-citizens
+   * who can never reach them. Defaults to true.
+   */
+  enabled?: boolean;
 };
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
@@ -94,13 +100,14 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     topPadding = 0,
     bottomPadding = 0,
     active = true,
+    enabled = true,
   },
   ref,
 ) {
   const { colors } = useTheme();
 
   const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost } =
-    useFeed(feedType);
+    useFeed(feedType, enabled);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, initLikes } = usePostActions(walletAddress);
 

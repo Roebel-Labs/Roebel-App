@@ -58,13 +58,16 @@ function generateMeckyTips(): MeckyTipData[] {
   return tips;
 }
 
-export function useFeed(feedType: FeedType) {
+export function useFeed(feedType: FeedType, enabled: boolean = true) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(0);
+  // Fetch exactly once, the first time this list becomes enabled. Lists that
+  // are never enabled (e.g. rathaus/app tabs for non-citizens) never query.
+  const hasFetchedRef = useRef(false);
 
   // Cache non-paginated data across loadMore calls
   const alertsRef = useRef<ServiceAlertRecord[]>([]);
@@ -202,8 +205,11 @@ export function useFeed(feedType: FeedType) {
   }, [feedType, isLoadingMore, hasMore, buildFeed]);
 
   useEffect(() => {
-    fetchInitial();
-  }, [fetchInitial]);
+    if (enabled && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchInitial();
+    }
+  }, [enabled, fetchInitial]);
 
   const removePost = useCallback((postId: string) => {
     setItems((prev) =>
