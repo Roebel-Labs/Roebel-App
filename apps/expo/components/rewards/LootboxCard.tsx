@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import SquareLockIcon from '@/assets/icons/square-lock-02.svg';
 import type { Lootbox } from '@/lib/supabase-rewards';
 
 interface LootboxCardProps {
@@ -42,7 +43,7 @@ export default function LootboxCard({
         styles.card,
         {
           backgroundColor: isDark ? colors.surface : '#FFFFFF',
-          borderColor: isLocked ? colors.border : colors.primary,
+          borderColor: colors.border,
           opacity: pressed ? 0.85 : 1,
         },
       ]}
@@ -57,8 +58,13 @@ export default function LootboxCard({
         />
         {isLocked && (
           <View style={styles.lockedOverlay}>
-            <View style={styles.lockedBubble}>
-              <Text style={styles.lockedEmoji}>🔒</Text>
+            <View
+              style={[
+                styles.lockedBubble,
+                { backgroundColor: isDark ? colors.surface : 'rgba(255,255,255,0.9)' },
+              ]}
+            >
+              <SquareLockIcon width={20} height={20} color={colors.textSecondary} />
             </View>
           </View>
         )}
@@ -134,12 +140,8 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  lockedEmoji: {
-    fontSize: 20,
   },
   keyBadge: {
     position: 'absolute',

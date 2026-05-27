@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -115,14 +116,20 @@ export default function RewardsIndexScreen() {
   );
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.background }]}
-      edges={['top']}
+    <LinearGradient
+      colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', '#FFFFFF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.gradient}
     >
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+          style={({ pressed }) => [
+            styles.backBtn,
+            { backgroundColor: isDark ? colors.surface : 'rgba(255,255,255,0.9)', opacity: pressed ? 0.6 : 1 },
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Zurück"
         >
@@ -142,19 +149,21 @@ export default function RewardsIndexScreen() {
           />
         }
       >
-        <CoinBalanceHero
-          balance={coins}
-          label="Mein Guthaben"
-          sublabel={
-            !isConnected
-              ? 'Melde dich an, um Münzen zu sammeln'
-              : keyCount > 0
-                ? `${keyCount} Schlüssel bereit für die Schatzkammer`
-                : hasCheckedInToday
-                  ? `Check-in erledigt · Serie ${streak} Tage`
-                  : undefined
-          }
-        />
+        <View style={styles.heroBleed}>
+          <CoinBalanceHero
+            balance={coins}
+            label="Mein Guthaben"
+            sublabel={
+              !isConnected
+                ? 'Melde dich an, um Münzen zu sammeln'
+                : keyCount > 0
+                  ? `${keyCount} Schlüssel bereit für die Schatzkammer`
+                  : hasCheckedInToday
+                    ? `Check-in erledigt · Serie ${streak} Tage`
+                    : undefined
+            }
+          />
+        </View>
 
         <CheckinStreakStrip
           streak={streak}
@@ -251,6 +260,7 @@ export default function RewardsIndexScreen() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -280,6 +290,7 @@ function EmptyState({
 }
 
 const styles = StyleSheet.create({
+  gradient: { flex: 1 },
   safe: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -290,6 +301,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: { minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 17,
@@ -298,6 +316,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 40,
     gap: 16,
+  },
+  heroBleed: {
+    marginHorizontal: -16,
   },
   primaryCTA: {
     borderRadius: 999,

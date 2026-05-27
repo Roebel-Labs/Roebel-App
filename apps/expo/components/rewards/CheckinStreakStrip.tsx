@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import { softShadow } from '@/lib/shadow';
 import type { DailyCheckin } from '@/lib/supabase-rewards';
 
 interface CheckinStreakStripProps {
@@ -52,7 +53,8 @@ export default function CheckinStreakStrip({
     <View
       style={[
         styles.container,
-        { backgroundColor: isDark ? colors.surface : '#F9FAFB', borderColor: colors.border },
+        { backgroundColor: isDark ? colors.surface : '#FFFFFF' },
+        softShadow(2, isDark),
       ]}
     >
       <Text style={[styles.title, { color: colors.textPrimary }]}>
@@ -129,7 +131,6 @@ export default function CheckinStreakStrip({
 const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
-    borderWidth: 1,
     paddingVertical: 14,
     paddingHorizontal: 12,
     gap: 10,
