@@ -68,6 +68,13 @@ export async function fetchFeedPosts(options: {
 /**
  * Fetch a user's own posts by wallet address, ordered newest first.
  * Used on the public profile's "Beiträge" tab.
+ *
+ * A wallet may post as itself (personal account) or on behalf of an
+ * organisation account it manages — all rows share the same `wallet_address`,
+ * distinguished only by `account_id`. The personal profile shows only the
+ * user's own posts, so posts authored as an organisation are excluded. Legacy
+ * posts with a NULL `account_id` predate the accounts model and count as
+ * personal.
  */
 export async function fetchUserPosts(
   walletAddress: string,
@@ -77,8 +84,20 @@ export async function fetchUserPosts(
   const page = options?.page || 0;
   const from = page * size;
   const to = from + size - 1;
+  const wallet = walletAddress.toLowerCase();
 
-  const { data, error } = await supabase
+  // Find the org account ids this wallet has posted as, so we can exclude them.
+  const { data: orgRows } = await supabase
+    .from('posts')
+    .select('account_id, accounts!inner(account_type)')
+    .eq('wallet_address', wallet)
+    .eq('accounts.account_type', 'organisation');
+
+  const orgAccountIds = Array.from(
+    new Set((orgRows ?? []).map((r: any) => r.account_id).filter(Boolean)),
+  );
+
+  let query = supabase
     .from('posts')
     .select(`
       *,
@@ -92,8 +111,16 @@ export async function fetchUserPosts(
       linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
       sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
-    .eq('wallet_address', walletAddress.toLowerCase())
-    .eq('status', 'published')
+    .eq('wallet_address', wallet)
+    .eq('status', 'published');
+
+  // Keep NULL-account (legacy) posts, drop org posts. `not.in` alone would also
+  // drop NULLs (NULL NOT IN (...) is NULL), so OR the null check back in.
+  if (orgAccountIds.length > 0) {
+    query = query.or(`account_id.is.null,account_id.not.in.(${orgAccountIds.join(',')})`);
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .range(from, to);
 
