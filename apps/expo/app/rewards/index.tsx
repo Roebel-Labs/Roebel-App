@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -49,9 +49,16 @@ export default function RewardsIndexScreen() {
     isLoading,
   } = useRewards();
 
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
+  // Gradient backdrop ends exactly at the bottom of the "Zur Schatzkammer"
+  // CTA. We measure the header height + the CTA's offset within the scroll
+  // content so the gradient can fade to the page background by that point.
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [ctaBottom, setCtaBottom] = useState(0);
+  const gradientHeight = insets.top + headerHeight + ctaBottom;
 
   useFocusEffect(
     useCallback(() => {
@@ -116,14 +123,16 @@ export default function RewardsIndexScreen() {
   );
 
   return (
-    <LinearGradient
-      colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', '#FFFFFF']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', '#FFFFFF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[styles.gradient, gradientHeight > 0 && { height: gradientHeight }]}
+        pointerEvents="none"
+      />
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [
@@ -172,6 +181,9 @@ export default function RewardsIndexScreen() {
         />
 
         <Pressable
+          onLayout={(e) =>
+            setCtaBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
+          }
           onPress={() => router.push('/rewards/schatzkammer' as any)}
           style={({ pressed }) => [
             styles.primaryCTA,
@@ -260,7 +272,7 @@ export default function RewardsIndexScreen() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -290,7 +302,13 @@ function EmptyState({
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
+  root: { flex: 1 },
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   safe: { flex: 1 },
   header: {
     flexDirection: 'row',
