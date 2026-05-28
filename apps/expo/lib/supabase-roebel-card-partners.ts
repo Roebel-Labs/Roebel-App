@@ -199,7 +199,7 @@ export async function fetchPartnersByWallet(
 export interface PartnerChargeRow {
   id: string;
   card_id: string;
-  partner_id: string;
+  partner_id: string | null;
   amount_cents: number;
   status: 'pending' | 'approved' | 'declined' | 'expired' | 'reversed';
   partner_note: string | null;

@@ -22,7 +22,7 @@ export type ChargeStatus =
 export interface RoebelCardChargeRow {
   id: string;
   card_id: string;
-  partner_id: string;
+  partner_id: string | null;
   amount_cents: number;
   offer_id: string | null;
   status: ChargeStatus;
@@ -149,7 +149,11 @@ export async function fetchPendingChargesForCard(
 
   // Step 2: fan out to partner names with one round-trip per unique
   // partner_id. Uses .in() so it's still a single query.
-  const partnerIds = Array.from(new Set(charges.map((c) => c.partner_id)));
+  // Skip null partner_ids — they correspond to orphan charges whose
+  // partner row was deleted (FK is ON DELETE SET NULL since 20260528).
+  const partnerIds = Array.from(
+    new Set(charges.map((c) => c.partner_id).filter((id): id is string => !!id)),
+  );
   const partnerNameById = new Map<string, string | null>();
   const { data: partnerRows, error: partnerError } = await supabase
     .from('roebel_card_partners' as any)
@@ -169,7 +173,7 @@ export async function fetchPendingChargesForCard(
 
   return charges.map((c) => ({
     ...c,
-    partner_name: partnerNameById.get(c.partner_id) ?? null,
+    partner_name: c.partner_id ? partnerNameById.get(c.partner_id) ?? null : null,
   }));
 }
 

@@ -284,7 +284,9 @@ export default function MyRoebelCardScreen() {
             });
             if (row.status !== 'pending') return;
             if (new Date(row.expires_at).getTime() <= Date.now()) return;
-            const partner_name = await fetchPartnerName(row.partner_id);
+            const partner_name = row.partner_id
+              ? await fetchPartnerName(row.partner_id)
+              : null;
             if (cancelled) return;
             // Functional setter: don't reopen a modal the user just resolved.
             setPending((cur) => cur ?? { ...row, partner_name });
