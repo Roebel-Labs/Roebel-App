@@ -41,6 +41,15 @@ const ICONS: Record<string, string> = {
 <path d="M17 7.50184C17 8.88255 15.8807 9.99997 14.5 9.99997C13.1193 9.99997 12 8.88068 12 7.49997C12 8.88068 10.8807 9.99997 9.5 9.99997C8.11928 9.99997 7 8.88068 7 7.49997C7 8.88068 5.82653 9.99997 4.37899 9.99997C3.59982 9.99997 2.90006 9.67567 2.41998 9.16087C1.5946 8.2758 2.12559 6.97403 2.81446 5.98842L3.202 5.45851C4.08384 4.2527 4.52476 3.6498 5.16491 3.32494C5.80506 3.00008 6.55199 3.00018 8.04585 3.00038L15.9551 3.00143C17.4485 3.00163 18.1952 3.00173 18.8351 3.32658C19.475 3.65143 19.9158 4.25414 20.7974 5.45957L21.1855 5.99029C21.8744 6.97589 22.4054 8.27766 21.58 9.16273C21.0999 9.67754 20.4002 10.0018 19.621 10.0018C18.1734 10.0018 17 8.88255 17 7.50184Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M14.9971 17C14.3133 17.6072 13.2247 18 11.9985 18C10.7723 18 9.68376 17.6072 9 17" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`,
+  'real-estate-02': `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M21 22V7.4849C21 6.38738 21 5.83862 20.6845 5.37551C20.3689 4.9124 19.7876 4.608 18.6251 3.99921L17.1459 3.22461C15.3209 2.26893 14.4084 1.7911 13.7042 2.08712C13 2.38315 13 3.24459 13 4.96746V9" stroke="black" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M22 22H2" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M21 8H19M21 11H19M21 14H19" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M8 13C8 11.1144 8 10.1716 8.58579 9.58579C9.17157 9 10.1144 9 12 9C13.8856 9 14.8284 9 15.4142 9.58579C16 10.1716 16 11.1144 16 13V22H8V13Z" stroke="black" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M11.5 13H12.5M11.5 16H12.5" stroke="black" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M3.5 16C4.32843 16 5 15.1046 5 14C5 12.8954 4.32843 12 3.5 12C2.67157 12 2 12.8954 2 14C2 15.1046 2.67157 16 3.5 16Z" stroke="black" stroke-width="1.5"/>
+<path d="M3.5 16V22" stroke="black" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`,
 };
 
 export default function OrgCategoryIcon({ name, size = 28, color = '#000000' }: Props) {
