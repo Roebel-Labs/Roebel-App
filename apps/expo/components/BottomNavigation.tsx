@@ -30,11 +30,11 @@ const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
 ];
 
 export default function BottomNavigation({ activeTab, onTabPress }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
 
-  const activeColor = isDark ? colors.tabIconActive : '#000000';
-  const inactiveColor = colors.tabIconDefault;
+  const activeColor = colors.textPrimary;
+  const inactiveColor = colors.textPrimary;
 
   const handlePress = (key: TabKey) => {
     if (key === 'explore' && exploreDotVisible) {
