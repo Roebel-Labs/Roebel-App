@@ -224,3 +224,16 @@ export async function fetchListingById(id: string): Promise<MarketplaceListingRe
 
   return data as MarketplaceListingRecord;
 }
+
+/**
+ * Fire-and-forget view increment via the public.increment_listing_views RPC.
+ * Mirrors apps/web's trackListingView so the count stays consistent across
+ * platforms. Errors are swallowed because view tracking must never block UI.
+ */
+export async function trackListingView(listingId: string): Promise<void> {
+  try {
+    await (supabase.rpc as any)('increment_listing_views', { listing_id: listingId });
+  } catch {
+    // fire-and-forget; ignore errors
+  }
+}

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
   Dimensions,
   Share,
   Alert,
@@ -22,9 +21,11 @@ import {
   fetchMarketplaceListings,
   deleteListing,
   fetchSellerProfileByWallet,
+  trackListingView,
   type SellerProfile,
 } from '@/lib/supabase-marketplace';
 import MeckyNotFound from '@/components/MeckyNotFound';
+import { MarketplaceDetailSkeleton } from '@/components/SkeletonLoader';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
@@ -108,6 +109,7 @@ export default function ListingDetailScreen() {
       ]);
       setListing(data);
       setMoreListings(allListings.filter((l) => l.id !== id).slice(0, 6));
+      if (data?.id) trackListingView(data.id);
     } catch (error) {
       console.error('Error loading listing:', error);
     } finally {
@@ -163,9 +165,9 @@ export default function ListingDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <MarketplaceDetailSkeleton />
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -206,7 +208,6 @@ export default function ListingDetailScreen() {
     listing.price_type === 'free'
       ? 'Gratis'
       : listing.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-  const isNegotiable = listing.price_type === 'negotiable';
 
   let createdRelative = '';
   try {
@@ -277,6 +278,11 @@ export default function ListingDetailScreen() {
               <ArrowLeftIcon size={24} color={colors.tabIconActive} />
             </Pressable>
           </View>
+
+          {/* Price pill — sibling of the carousel so it stays fixed during swipes */}
+          <View style={[styles.priceBadge, { backgroundColor: colors.background }]}>
+            <Text style={[styles.priceBadgeText, { color: colors.textPrimary }]}>{priceBase}</Text>
+          </View>
         </View>
 
         {/* Content overlay */}
@@ -318,14 +324,6 @@ export default function ListingDetailScreen() {
                 <MailSmallIcon size={24} color={colors.textPrimary} />
                 <Text style={[styles.contactPillText, { color: colors.textPrimary }]}>Kontaktieren</Text>
               </Pressable>
-            )}
-          </View>
-
-          {/* Price */}
-          <View style={styles.priceBlock}>
-            <Text style={[styles.priceLarge, { color: colors.textPrimary }]}>{priceBase}</Text>
-            {isNegotiable && (
-              <Text style={[styles.priceNegotiable, { color: colors.textSecondary }]}>verhandelbar</Text>
             )}
           </View>
 
@@ -426,11 +424,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   emptyText: {
     fontSize: 16,
     fontFamily: 'Inter',
@@ -488,17 +481,21 @@ const styles = StyleSheet.create({
   },
   priceBadge: {
     position: 'absolute',
-    bottom: 44,
+    bottom: 20,
     right: 16,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
     zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   priceBadgeText: {
-    color: '#ffffff',
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
   // Content Overlay
   contentOverlay: {
@@ -550,18 +547,6 @@ const styles = StyleSheet.create({
   contactPillText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-  },
-  priceBlock: {
-    marginBottom: 6,
-  },
-  priceLarge: {
-    fontSize: 22,
-    fontFamily: 'Inter-Medium',
-  },
-  priceNegotiable: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 2,
   },
   // Info Cards
   infoCards: {
