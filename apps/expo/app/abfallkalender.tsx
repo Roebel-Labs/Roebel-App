@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   Switch,
-  ActivityIndicator,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { ArrowLeftIcon } from '@/components/Icons';
+import { Skeleton } from '@/components/SkeletonLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import {
@@ -149,22 +149,10 @@ export default function AbfallkalenderScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Röbel an der Müritz</Text>
-
         {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color={colors.textSecondary} />
-          </View>
+          <AbfallkalenderSkeleton />
         ) : next ? (
-          <View
-            style={[
-              styles.heroCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
+          <View style={[styles.heroCard, { borderColor: colors.border }]}>
             <View style={[styles.heroChip, { backgroundColor: FRACTION_COLOR[next.fraction] }]} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroLabel, { color: colors.textSecondary }]}>Nächste Abholung</Text>
@@ -188,7 +176,7 @@ export default function AbfallkalenderScreen() {
           </View>
         )}
 
-        {grouped.map((group) => (
+        {!loading && grouped.map((group) => (
           <View key={group.month} style={styles.groupBlock}>
             <Text style={[styles.groupHeader, { color: colors.textSecondary }]}>
               {format(parseISO(`${group.month}-01`), 'LLLL yyyy', { locale: de })}
@@ -216,7 +204,7 @@ export default function AbfallkalenderScreen() {
           </View>
         ))}
 
-        {availableFractions.length > 0 && (
+        {!loading && availableFractions.length > 0 && (
           <View style={styles.remindersSection}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Erinnerungen</Text>
             <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
@@ -258,6 +246,50 @@ export default function AbfallkalenderScreen() {
   );
 }
 
+function AbfallkalenderSkeleton() {
+  return (
+    <View>
+      <View style={styles.heroSkeleton}>
+        <Skeleton width={6} height={96} borderRadius={3} />
+        <View style={{ flex: 1, gap: 8 }}>
+          <Skeleton width={120} height={12} borderRadius={6} />
+          <Skeleton width="60%" height={22} borderRadius={6} />
+          <Skeleton width="80%" height={16} borderRadius={6} />
+          <Skeleton width="40%" height={13} borderRadius={6} />
+        </View>
+      </View>
+
+      {[0, 1].map((g) => (
+        <View key={g} style={styles.groupBlock}>
+          <Skeleton width={120} height={12} borderRadius={6} style={{ marginBottom: 12 }} />
+          {[0, 1, 2].map((r) => (
+            <View key={r} style={styles.rowSkeleton}>
+              <Skeleton width={10} height={10} borderRadius={5} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Skeleton width="55%" height={15} borderRadius={6} />
+                <Skeleton width="40%" height={13} borderRadius={6} />
+              </View>
+              <Skeleton width={60} height={12} borderRadius={6} />
+            </View>
+          ))}
+        </View>
+      ))}
+
+      <View style={[styles.remindersSection, { gap: 8 }]}>
+        <Skeleton width={140} height={18} borderRadius={6} />
+        <Skeleton width="80%" height={13} borderRadius={6} style={{ marginBottom: 8 }} />
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={styles.rowSkeleton}>
+            <Skeleton width={10} height={10} borderRadius={5} />
+            <Skeleton width="40%" height={15} borderRadius={6} style={{ flex: 1 }} />
+            <Skeleton width={44} height={26} borderRadius={13} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function relativeLabel(isoDate: string): string {
   const days = differenceInCalendarDays(parseISO(isoDate), new Date());
   if (days < 0) return 'vorbei';
@@ -279,9 +311,7 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
-  scrollContent: { paddingBottom: 48, paddingHorizontal: 20 },
-  subtitle: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 16 },
-  loadingBox: { paddingVertical: 48, alignItems: 'center' },
+  scrollContent: { paddingBottom: 48, paddingHorizontal: 20, paddingTop: 4 },
   heroCard: {
     flexDirection: 'row',
     gap: 16,
@@ -289,6 +319,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     marginBottom: 24,
+  },
+  heroSkeleton: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingVertical: 16,
+    marginBottom: 24,
+  },
+  rowSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
   },
   heroChip: { width: 6, alignSelf: 'stretch', borderRadius: 3 },
   heroLabel: { fontSize: 12, fontFamily: 'Inter-Medium', textTransform: 'uppercase', letterSpacing: 0.5 },
