@@ -154,7 +154,9 @@ export function assembleFeed(params: {
     eventIndex < upcomingEvents.length
   ) {
     // Inject special menus section near top
+    // Temporarily hidden until Mittagstisch data is available.
     if (
+      false &&
       !sectionInjected.specialMenus &&
       specialMenus.length > 0 &&
       feedPosition >= SPECIAL_MENU_POSITION
