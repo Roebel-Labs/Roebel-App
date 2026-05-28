@@ -17,7 +17,9 @@ export default function CreateListingIntroScreen() {
     accountId?: string;
   }>();
 
+  const hasTypeParam = params.listingType === 'product' || params.listingType === 'service';
   const isService = params.listingType === 'service';
+
   const STEPS = [
     {
       title: 'Beschreibe dein Angebot',
@@ -38,26 +40,116 @@ export default function CreateListingIntroScreen() {
     },
   ];
 
-  // Pre-set type and account from route params (org-originated flows)
+  // Pre-set type and account from route params (org-originated flows).
   useEffect(() => {
     if (params.accountId) {
       dispatch({ type: 'SET_ACCOUNT_ID', payload: params.accountId });
     }
-    if (params.listingType === 'product' || params.listingType === 'service') {
+    if (hasTypeParam) {
       dispatch({
         type: 'SET_TYPE',
         payload: { listingType: params.listingType as ListingTypeChoice, category: null },
       });
     }
-  }, [params.accountId, params.listingType]);
+  }, [params.accountId, params.listingType, hasTypeParam]);
 
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+  const handlePick = (choice: ListingTypeChoice) => {
+    dispatch({ type: 'SET_TYPE', payload: { listingType: choice, category: null } });
+    router.push('/create-listing/type');
+  };
+
+  const headerAndExit = (
+    <>
       <View style={styles.headerRow}>
         <Pressable onPress={() => setShowExit(true)} style={styles.closeButton}>
           <Text style={[styles.closeIcon, { color: colors.textPrimary }]}>✕</Text>
         </Pressable>
       </View>
+      <ExitWizardSheet
+        visible={showExit}
+        onDelete={() => {
+          dispatch({ type: 'RESET' });
+          setShowExit(false);
+          router.back();
+        }}
+        onSaveAndExit={() => {
+          setShowExit(false);
+          router.back();
+        }}
+        onCancel={() => setShowExit(false)}
+      />
+    </>
+  );
+
+  if (!hasTypeParam) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        {headerAndExit}
+        <View style={styles.content}>
+          <Text style={[styles.heading, { color: colors.textPrimary }]}>
+            Was möchtest du{'\n'}inserieren?
+          </Text>
+          <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+            Du kannst ein Produkt zum Verkauf oder eine Dienstleistung anbieten.
+          </Text>
+
+          <View style={styles.pickerRow}>
+            <Pressable
+              onPress={() => handlePick('product')}
+              style={({ pressed }) => [
+                styles.pickerCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Produkt verkaufen"
+            >
+              <Image
+                source={require('@/assets/illustration/small/product-listing.png')}
+                style={styles.pickerIllustration}
+                resizeMode="contain"
+              />
+              <Text style={[styles.pickerTitle, { color: colors.textPrimary }]}>Produkt</Text>
+              <Text style={[styles.pickerDesc, { color: colors.textSecondary }]}>
+                Etwas verkaufen oder verschenken
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handlePick('service')}
+              style={({ pressed }) => [
+                styles.pickerCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Dienstleistung anbieten"
+            >
+              <Image
+                source={require('@/assets/illustration/small/services.png')}
+                style={styles.pickerIllustration}
+                resizeMode="contain"
+              />
+              <Text style={[styles.pickerTitle, { color: colors.textPrimary }]}>Dienstleistung</Text>
+              <Text style={[styles.pickerDesc, { color: colors.textSecondary }]}>
+                Eine Leistung anbieten
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      {headerAndExit}
       <View style={styles.content}>
         <View>
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
@@ -95,20 +187,6 @@ export default function CreateListingIntroScreen() {
           <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Los geht's</Text>
         </Pressable>
       </View>
-
-      <ExitWizardSheet
-        visible={showExit}
-        onDelete={() => {
-          dispatch({ type: 'RESET' });
-          setShowExit(false);
-          router.back();
-        }}
-        onSaveAndExit={() => {
-          setShowExit(false);
-          router.back();
-        }}
-        onCancel={() => setShowExit(false)}
-      />
     </SafeAreaView>
   );
 }
@@ -119,7 +197,20 @@ const styles = StyleSheet.create({
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   closeIcon: { fontSize: 20, fontFamily: 'Inter-Regular' },
   content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  heading: { fontSize: 32, fontFamily: 'Inter-Bold', marginBottom: 32, lineHeight: 38 },
+  heading: { fontSize: 32, fontFamily: 'Inter-Bold', marginBottom: 12, lineHeight: 38 },
+  subheading: { fontSize: 15, fontFamily: 'Inter-Regular', marginBottom: 32, lineHeight: 22 },
+  pickerRow: { flexDirection: 'row', gap: 12 },
+  pickerCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  pickerIllustration: { width: 96, height: 96, marginBottom: 12 },
+  pickerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
+  pickerDesc: { fontSize: 13, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 18 },
   stepsContainer: {},
   stepRow: {
     flexDirection: 'row',

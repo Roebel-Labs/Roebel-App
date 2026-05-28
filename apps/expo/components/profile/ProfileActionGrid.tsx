@@ -18,12 +18,12 @@ const ITEMS: Item[] = [
   {
     label: 'Anzeige\nerstellen',
     icon: require('../../assets/illustration/profile/05.png'),
-    href: { pathname: '/create-listing', params: { listingType: 'product' } } as unknown as Href,
+    href: '/create-listing' as Href,
   },
   {
-    label: 'Dienstleistung\nanbieten',
-    icon: require('../../assets/illustration/profile/06.png'),
-    href: { pathname: '/create-listing', params: { listingType: 'service' } } as unknown as Href,
+    label: 'Abfall\nkalender',
+    icon: require('../../assets/illustration/profile/trash.png'),
+    href: '/abfallkalender' as Href,
   },
 ];
 
