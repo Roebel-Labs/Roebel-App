@@ -121,7 +121,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   contentContainerCompact: {
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 0,
     paddingHorizontal: 0,
   },
   title: {
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
   },
   titleCompact: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'Inter-Medium',
     marginBottom: 8,
     lineHeight: 22,
   },

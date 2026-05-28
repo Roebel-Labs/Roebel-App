@@ -119,7 +119,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   contentContainer: {
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 0,
     gap: 6,
   },
   headerRow: {

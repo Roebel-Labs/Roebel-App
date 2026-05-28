@@ -29,7 +29,7 @@ export default function OrgAccountCard({ account, upCount }: Props) {
       onPress={() => router.push({ pathname: '/account/[id]' as any, params: { id: account.id } })}
       style={({ pressed }) => [
         styles.card,
-        { borderColor: colors.border, backgroundColor: colors.surface },
+        { borderColor: colors.border },
         pressed && { opacity: 0.9 },
       ]}
       accessibilityRole="button"
@@ -67,7 +67,7 @@ export default function OrgAccountCard({ account, upCount }: Props) {
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {account.name}
         </Text>
-        <ThumbsVote upCount={upCount ?? 0} />
+        <ThumbsVote upCount={upCount ?? 0} size="md" />
       </View>
     </Pressable>
   );

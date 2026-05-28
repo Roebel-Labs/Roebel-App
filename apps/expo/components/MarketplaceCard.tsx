@@ -143,7 +143,8 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   contentCompact: {
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 0,
   },
   content: {
     padding: 12,
