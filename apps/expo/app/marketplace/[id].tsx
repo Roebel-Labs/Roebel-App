@@ -481,11 +481,11 @@ const styles = StyleSheet.create({
   },
   priceBadge: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 60,
     right: 16,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 999,
+    borderRadius: 12,
     zIndex: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
