@@ -71,13 +71,16 @@ const themeOptions: { value: ThemePreference; label: string; description?: strin
 export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
-  const { hasAnyNFT } = useVerificationContext();
+  const { hasAnyNFT, hasCitizenNFT, hasAttesterNFT } = useVerificationContext();
   const insets = useSafeAreaInsets();
   const activeAccount = useActiveAccount();
   const activeWallet = useActiveWallet();
   const { disconnect } = useDisconnect();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showMembershipMenu, setShowMembershipMenu] = useState(false);
+
+  const canRequestAttester = hasCitizenNFT && !hasAttesterNFT;
 
   const handleDeleteAccount = async () => {
     if (!activeAccount || isDeleting) return;
@@ -146,19 +149,19 @@ export default function SettingsScreen() {
           <Section title="MITGLIEDSCHAFT" colors={colors}>
             <Pressable
               style={styles.themeOptionRow}
-              onPress={() => {
-                openBrowserAsync(REVOKE_MEMBERSHIP_URL).catch(() => {});
-              }}
+              onPress={() => setShowMembershipMenu(true)}
             >
               <View style={styles.themeOptionTextContainer}>
                 <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
                   Mitgliedschaft verwalten
                 </Text>
                 <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
-                  Entziehung im Browser beantragen — eigene Rolle oder anderes Mitglied.
+                  {canRequestAttester
+                    ? 'Bescheiniger beantragen oder Mitgliedschaft entziehen.'
+                    : 'Entziehung im Browser beantragen — eigene Rolle oder anderes Mitglied.'}
                 </Text>
               </View>
-              <Text style={[styles.chevron, { color: colors.textTertiary }]}>↗</Text>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
             </Pressable>
           </Section>
         ) : null}
@@ -228,6 +231,58 @@ export default function SettingsScreen() {
       </ScrollView>
 
       <BottomDrawer
+        visible={showMembershipMenu}
+        onClose={() => setShowMembershipMenu(false)}
+      >
+        <View style={membershipStyles.body}>
+          <Text style={[membershipStyles.title, { color: colors.textPrimary }]}>
+            Mitgliedschaft verwalten
+          </Text>
+
+          {canRequestAttester && (
+            <Pressable
+              onPress={() => {
+                setShowMembershipMenu(false);
+                router.push('/verification/request-attester/form' as any);
+              }}
+              style={[membershipStyles.option, { borderColor: colors.borderSecondary }]}
+            >
+              <Text style={[membershipStyles.optionLabel, { color: colors.textPrimary }]}>
+                Bescheiniger beantragen
+              </Text>
+              <Text style={[membershipStyles.optionDesc, { color: colors.textSecondary }]}>
+                Werde Bescheiniger und hilf bei der Verifizierung neuer Mitglieder.
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={() => {
+              setShowMembershipMenu(false);
+              openBrowserAsync(REVOKE_MEMBERSHIP_URL).catch(() => {});
+            }}
+            style={[membershipStyles.option, { borderColor: colors.borderSecondary }]}
+          >
+            <Text style={[membershipStyles.optionLabel, { color: colors.textPrimary }]}>
+              Mitgliedschaft entziehen
+            </Text>
+            <Text style={[membershipStyles.optionDesc, { color: colors.textSecondary }]}>
+              Entziehung beantragen — eigene Rolle oder anderes Mitglied.
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setShowMembershipMenu(false)}
+            style={[membershipStyles.cancel, { paddingBottom: 12 + insets.bottom }]}
+          >
+            <Text style={[membershipStyles.cancelText, { color: colors.textSecondary }]}>
+              Abbrechen
+            </Text>
+          </Pressable>
+        </View>
+      </BottomDrawer>
+
+      <BottomDrawer
         visible={showDeleteConfirm}
         onClose={() => !isDeleting && setShowDeleteConfirm(false)}
       >
@@ -266,6 +321,21 @@ export default function SettingsScreen() {
     </SafeAreaView>
   );
 }
+
+const membershipStyles = StyleSheet.create({
+  body: { gap: 12, paddingTop: 4 },
+  title: { fontSize: 18, fontFamily: 'Inter-Bold', marginBottom: 4 },
+  option: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  optionLabel: { fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  optionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18, marginTop: 2 },
+  cancel: { alignItems: 'center', paddingTop: 6 },
+  cancelText: { fontSize: 15, fontFamily: 'Inter-Medium' },
+});
 
 const deleteStyles = StyleSheet.create({
   body: { gap: 12, paddingTop: 4 },

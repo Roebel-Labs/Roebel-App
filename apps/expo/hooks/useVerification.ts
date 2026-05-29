@@ -157,6 +157,100 @@ export function useCreateCitizenRequest() {
 }
 
 /**
+ * Hook to create an attester (Bescheiniger) attestation request.
+ *
+ * Mirrors {@link useCreateCitizenRequest} but targets the AttesterNFT contract.
+ * Exposes the same {@link RequestStage} so the submit button can show progress
+ * (encrypting → submitting-tx → awaiting-receipt → uploading-evidence → saving).
+ */
+export function useCreateAttesterRequest() {
+  const account = useActiveAccount();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [stage, setStage] = useState<RequestStage>('idle');
+
+  const createRequest = useCallback(
+    async (personalData: PersonalData, reason: string) => {
+      if (!account) {
+        throw new Error('No wallet connected');
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log('🚀 Creating attester attestation request...');
+
+        // 1. Create encrypted evidence (V2 - no signature required!)
+        setStage('encrypting');
+        const evidence = await createEncryptedEvidenceV2(
+          personalData,
+          reason,
+          'attester',
+          account
+        );
+
+        // 2. Create blockchain transaction (get request ID from the receipt)
+        const transaction = prepareContractCall({
+          contract: attesterNFTContract,
+          method: 'function createAttestationRequest(string evidenceURI) returns (uint256)',
+          params: ['supabase://pending'], // Temporary URI
+        });
+
+        setStage('submitting-tx');
+        const { transactionHash } = await sendTransaction({
+          transaction,
+          account,
+        });
+
+        console.log('✅ Transaction submitted:', transactionHash);
+
+        // 3. Wait for receipt and read the actual requestId from the event log.
+        setStage('awaiting-receipt');
+        const receipt = await waitForReceipt({
+          client,
+          chain: base,
+          transactionHash,
+        });
+
+        const requestCreatedEvent = prepareEvent({
+          signature:
+            'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
+        });
+        const events = parseEventLogs({
+          events: [requestCreatedEvent],
+          logs: receipt.logs,
+        });
+        const created = events[0];
+        if (!created) {
+          throw new Error('Could not read request ID from transaction receipt');
+        }
+        const requestId = Number(created.args.requestId);
+
+        // 4. Upload evidence to Supabase (Irys then DB row, stages via callback)
+        await uploadEncryptedEvidence(evidence, requestId, setStage);
+
+        console.log(`✅ Attester request created successfully! ID: ${requestId}`);
+
+        setStage('idle');
+        setIsLoading(false);
+        return { requestId, transactionHash };
+      } catch (err) {
+        console.error('❌ Failed to create attester request:', err);
+        const error = err instanceof Error ? err : new Error('Unknown error');
+        setError(error);
+        setStage('idle');
+        setIsLoading(false);
+        throw error;
+      }
+    },
+    [account]
+  );
+
+  return { createRequest, isLoading, error, stage };
+}
+
+/**
  * Hook to create a revocation request (Attester or Citizen NFT)
  *
  * The encrypted reason is stuffed into the PersonalData shape so we can reuse
