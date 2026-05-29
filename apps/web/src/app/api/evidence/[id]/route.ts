@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { currentContractAddress } from "@/lib/verification-contracts";
 
 export async function GET(
   request: NextRequest,
@@ -26,12 +27,14 @@ export async function GET(
       );
     }
 
-    // Fetch from Supabase
+    // Fetch from Supabase, scoped to the current contract address so legacy
+    // rows from archived contracts are not returned.
     const { data, error } = await supabase
       .from("request_evidence")
       .select("*")
       .eq("request_id", requestId)
       .eq("contract_type", contractType)
+      .eq("contract_address", currentContractAddress(contractType))
       .single();
 
     if (error) {

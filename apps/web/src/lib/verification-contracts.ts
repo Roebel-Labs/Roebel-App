@@ -14,6 +14,15 @@ export const VERIFICATION_CONTRACTS = {
   governor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",    // MaciAttesterGovernor (rotated 2026-05-24: new MACI core, 1h voting period)
 };
 
+// Lowercase contract address for the active CitizenNFT/AttesterNFT, used to scope
+// request_evidence rows so rotations no longer collide with archived contract rows
+// on (request_id, contract_type, contract_address).
+export const currentContractAddress = (type: "citizen" | "attester"): string =>
+  (type === "citizen"
+    ? VERIFICATION_CONTRACTS.citizenNFT
+    : VERIFICATION_CONTRACTS.attesterNFT
+  ).toLowerCase();
+
 // Contract instances
 export const attesterNFTContract = getContract({
   client,

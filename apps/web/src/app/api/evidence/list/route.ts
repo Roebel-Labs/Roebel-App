@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { currentContractAddress } from "@/lib/verification-contracts";
 
 /**
  * GET /api/evidence/list?contract=citizen
@@ -27,11 +28,13 @@ export async function GET(request: NextRequest) {
 
     console.log("💾 [API] Fetching evidence list from Supabase...");
 
-    // Fetch all evidence for this contract type
+    // Fetch all evidence for this contract type, scoped to the current contract
+    // address so legacy rows from archived contracts are hidden.
     const { data, error } = await supabase
       .from("request_evidence")
       .select("request_id, contract_type, irys_id, irys_url, requester_address, evidence_data, created_at")
       .eq("contract_type", contractType)
+      .eq("contract_address", currentContractAddress(contractType))
       .order("created_at", { ascending: false });
 
     if (error) {
