@@ -7,7 +7,14 @@
 
 import { supabase } from './supabase';
 import { uploadToIrys, fetchFromIrys } from './irys-upload';
+import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
 import type { EncryptedEvidence } from './verification-types';
+
+// Scope reads/writes to the currently deployed contract addresses so legacy rows
+// from archived (pre-2026-05-23) CitizenNFT/AttesterNFT contracts no longer collide
+// on the (request_id, contract_type, contract_address) unique key.
+const currentContractAddress = (type: 'citizen' | 'attester'): string =>
+  (type === 'citizen' ? citizenNFTContract.address : attesterNFTContract.address).toLowerCase();
 
 /**
  * Upload encrypted evidence to Irys and store reference in Supabase
@@ -39,6 +46,7 @@ export async function uploadEncryptedEvidence(
       .insert({
         request_id: String(requestId),
         contract_type: evidence.metadata.type,
+        contract_address: currentContractAddress(evidence.metadata.type),
         requester_address: evidence.metadata.requester.toLowerCase(),
         irys_id: irysId,
         irys_url: irysUrl,
@@ -87,6 +95,7 @@ export async function fetchEvidenceByRequestId(
       .select('*')
       .eq('request_id', String(requestId))
       .eq('contract_type', contractType)
+      .eq('contract_address', currentContractAddress(contractType))
       .single();
 
     if (error) {
@@ -164,6 +173,7 @@ export async function evidenceExists(
       .select('id')
       .eq('request_id', String(requestId))
       .eq('contract_type', contractType)
+      .eq('contract_address', currentContractAddress(contractType))
       .single();
 
     return !error && !!data;
@@ -223,7 +233,14 @@ export async function fetchUserRequests(
       .order('created_at', { ascending: false });
 
     if (contractType) {
-      query = query.eq('contract_type', contractType);
+      query = query
+        .eq('contract_type', contractType)
+        .eq('contract_address', currentContractAddress(contractType));
+    } else {
+      query = query.in('contract_address', [
+        currentContractAddress('citizen'),
+        currentContractAddress('attester'),
+      ]);
     }
 
     const { data, error } = await query;
@@ -283,7 +300,14 @@ export async function fetchPendingRequests(
       .limit(limit);
 
     if (contractType) {
-      query = query.eq('contract_type', contractType);
+      query = query
+        .eq('contract_type', contractType)
+        .eq('contract_address', currentContractAddress(contractType));
+    } else {
+      query = query.in('contract_address', [
+        currentContractAddress('citizen'),
+        currentContractAddress('attester'),
+      ]);
     }
 
     const { data, error } = await query;

@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { VERIFICATION_CONTRACTS } from "@/lib/verification-contracts";
+
+// Scope each row to the contract that produced it, so legacy rows from archived
+// CitizenNFT/AttesterNFT contracts coexist with rows from the current contracts.
+const currentContractAddress = (type: "citizen" | "attester"): string =>
+  (type === "citizen"
+    ? VERIFICATION_CONTRACTS.citizenNFT
+    : VERIFICATION_CONTRACTS.attesterNFT
+  ).toLowerCase();
 
 /**
  * POST /api/evidence/store
@@ -131,6 +140,7 @@ export async function POST(request: NextRequest) {
       .insert({
         request_id: requestId,
         contract_type: contractType,
+        contract_address: currentContractAddress(contractType),
         requester_address: evidenceData.requester || evidenceData.metadata?.requester || requester,
         irys_id: irysId,
         irys_url: irysUrl,
