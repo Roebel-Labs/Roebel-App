@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import { useVerificationStatus } from "@/hooks/useVerificationStatus";
 import { prepareContractCall, waitForReceipt } from "thirdweb";
@@ -13,6 +13,9 @@ import { uploadToIrys } from "@/lib/irys";
 import {
   deriveEncryptionKey,
   encryptEvidence,
+  decryptEvidence,
+  decryptDataKey,
+  isEncrypted,
   type PersonalData,
   type PublicMetadata,
   type EncryptedEvidence,
@@ -29,7 +32,7 @@ interface EvidenceData {
 
 export default function RequestAttesterNFT() {
   const account = useActiveAccount();
-  const { isAttester, isLoading: statusLoading } = useVerificationStatus();
+  const { isAttester, isCitizen, isLoading: statusLoading } = useVerificationStatus();
 
   const [currentStep, setCurrentStep] = useState<Step>("eligibility");
   const [evidence, setEvidence] = useState<EvidenceData>({
@@ -45,8 +48,65 @@ export default function RequestAttesterNFT() {
 
   const { mutate: sendTransaction, isPending } = useSendTransaction();
 
-  // Check eligibility
-  const isEligible = account && !isAttester && !statusLoading;
+  const [prefillState, setPrefillState] = useState<
+    "idle" | "loading" | "done" | "none" | "error"
+  >("idle");
+
+  // Check eligibility — only existing Bürger (Citizens) may apply to become Bescheiniger.
+  const isEligible = account && isCitizen && !isAttester && !statusLoading;
+
+  // Prefill name + address from the requester's existing Bürger (citizen) request.
+  // Citizen evidence uses V2 encryption, which decrypts deterministically from the
+  // wallet with no signature prompt, so prefill is seamless. Anything else (legacy
+  // V1, missing data, decrypt failure) silently falls back to manual entry.
+  const prefillFromCitizenRequest = useCallback(async () => {
+    if (!account) return;
+    setPrefillState("loading");
+    try {
+      const res = await fetch(`/api/evidence/list?contract=citizen`);
+      if (!res.ok) {
+        setPrefillState("none");
+        return;
+      }
+      const json = await res.json();
+      const rows: Array<{ requester_address?: string; evidence_data?: unknown }> =
+        json.evidence || [];
+      const mine = rows.find(
+        (r) =>
+          r.requester_address?.toLowerCase() === account.address.toLowerCase()
+      );
+      const ev = mine?.evidence_data as EncryptedEvidence | undefined;
+      if (!ev || !isEncrypted(ev) || ev.metadata?.encryptionVersion !== "eip712-v2") {
+        setPrefillState("none");
+        return;
+      }
+      const encryptedKey = ev.metadata?.encryptedKey;
+      const keyNonce = ev.metadata?.keyNonce;
+      if (!encryptedKey || !keyNonce) {
+        setPrefillState("none");
+        return;
+      }
+
+      const dataKey = await decryptDataKey(account, encryptedKey, keyNonce);
+      const personal = decryptEvidence(ev.encrypted, dataKey);
+      setEvidence((prev) => ({
+        ...prev,
+        name: prev.name || personal.name || "",
+        address: prev.address || personal.address || "",
+      }));
+      setPrefillState("done");
+    } catch (error) {
+      console.error("⚠️ Prefill from citizen request failed:", error);
+      setPrefillState("error");
+    }
+  }, [account]);
+
+  // One-time seamless prefill when the requester reaches the upload step.
+  useEffect(() => {
+    if (currentStep === "upload" && prefillState === "idle" && isEligible) {
+      void prefillFromCitizenRequest();
+    }
+  }, [currentStep, prefillState, isEligible, prefillFromCitizenRequest]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -324,6 +384,22 @@ export default function RequestAttesterNFT() {
                       Du besitzt bereits einen Bescheiniger-Pass und musst keinen neuen Antrag stellen.
                     </p>
                   </div>
+                ) : !isCitizen ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
+                    <p className="text-sm text-yellow-800 font-medium">
+                      Nur verifizierte Bürger können Bescheiniger werden.
+                    </p>
+                    <p className="text-sm text-yellow-800">
+                      Du benötigst zuerst einen Bürger-Pass, bevor du dich als
+                      Bescheiniger bewerben kannst.
+                    </p>
+                    <Link
+                      href="/app/verifizierung/buerger-beantragen"
+                      className="inline-block bg-black hover:bg-foreground/90 text-white px-5 py-2.5 rounded-lg transition-colors font-medium"
+                    >
+                      Bürger-Pass beantragen →
+                    </Link>
+                  </div>
                 ) : (
                   <>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -363,6 +439,22 @@ export default function RequestAttesterNFT() {
                     Gib deine Informationen an und lade einen Nachweis hoch
                   </p>
                 </div>
+
+                {prefillState === "loading" && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      Daten aus deinem Bürgerantrag werden geladen …
+                    </p>
+                  </div>
+                )}
+                {prefillState === "done" && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-sm text-green-800">
+                      ✓ Name und Adresse aus deinem Bürgerantrag übernommen. Du
+                      kannst sie bei Bedarf anpassen.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div>
