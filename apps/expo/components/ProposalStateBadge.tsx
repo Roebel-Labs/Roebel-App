@@ -13,11 +13,13 @@ interface ProposalStateBadgeProps {
    *  uses that as the source of truth. The cached prop becomes the fallback
    *  for the brief window before the first chain read returns. */
   proposalId?: bigint;
+  /** Smaller tag variant for dense list cards (e.g. the Stadt-tab feed card). */
+  compact?: boolean;
 }
 
 const POLL_INTERVAL_MS = 30_000;
 
-export default function ProposalStateBadge({ state, proposalId }: ProposalStateBadgeProps) {
+export default function ProposalStateBadge({ state, proposalId, compact = false }: ProposalStateBadgeProps) {
   const [liveState, setLiveState] = useState<ProposalState>(state);
 
   // Re-sync to fallback when the parent's state prop changes (e.g. after a
@@ -58,8 +60,10 @@ export default function ProposalStateBadge({ state, proposalId }: ProposalStateB
   const colors = getProposalStateColor(liveState);
 
   return (
-    <View style={[styles.badge, { backgroundColor: colors.background }]}>
-      <Text style={[styles.badgeText, { color: colors.text }]}>{stateName}</Text>
+    <View style={[styles.badge, compact && styles.badgeCompact, { backgroundColor: colors.background }]}>
+      <Text style={[styles.badgeText, compact && styles.badgeTextCompact, { color: colors.text }]}>
+        {stateName}
+      </Text>
     </View>
   );
 }
@@ -71,10 +75,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
+  badgeCompact: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 9999,
+  },
   badgeText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  badgeTextCompact: {
+    fontSize: 10,
+    letterSpacing: 0.4,
   },
 });

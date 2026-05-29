@@ -19,6 +19,19 @@ export default function ProposalPreviewCard({ proposal }: Props) {
     router.push(`/proposal/${proposal.proposal_id}` as any);
   };
 
+  // Supabase vote columns only populate once the tally is published, so a
+  // non-zero total is the "results published" gate — keeps unpublished results
+  // out of the comment preview.
+  const toBig = (v: string): bigint => {
+    try {
+      return BigInt(v || '0');
+    } catch {
+      return 0n;
+    }
+  };
+  const resultsPublished =
+    toBig(proposal.for_votes) + toBig(proposal.against_votes) + toBig(proposal.abstain_votes) > 0n;
+
   return (
     <Pressable onPress={handlePress} style={[styles.container, { borderColor: colors.border }]}>
       <View style={styles.header}>
@@ -28,11 +41,13 @@ export default function ProposalPreviewCard({ proposal }: Props) {
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
         {proposal.title}
       </Text>
-      <CompactVotingBars
-        forVotes={proposal.for_votes}
-        againstVotes={proposal.against_votes}
-        abstainVotes={proposal.abstain_votes}
-      />
+      {resultsPublished && (
+        <CompactVotingBars
+          forVotes={proposal.for_votes}
+          againstVotes={proposal.against_votes}
+          abstainVotes={proposal.abstain_votes}
+        />
+      )}
     </Pressable>
   );
 }

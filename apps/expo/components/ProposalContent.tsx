@@ -15,7 +15,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
 
   if (isLoading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -30,7 +30,7 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
   // gray box and can find the source content via the on-chain links.
   if (trimmedContent.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.container}>
         <Text style={[styles.fallbackTitle, { color: colors.textPrimary }]}>
           Inhalt nicht verfügbar
         </Text>
@@ -191,10 +191,10 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={styles.container}>
       {isHTML ? (
         <RenderHTML
-          contentWidth={width - 64} // Account for padding
+          contentWidth={width - 40} // Account for horizontal padding (20 × 2)
           source={{ html: content }}
           tagsStyles={htmlStyles}
           systemFonts={['Inter-Regular', 'Inter-Medium', 'Inter-Medium', 'Inter-Bold']}
@@ -208,16 +208,12 @@ export default function ProposalContent({ content, isLoading = false }: Proposal
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 20,
+    paddingHorizontal: 20,
     marginVertical: 16,
-    borderWidth: 1,
   },
   loadingContainer: {
-    borderRadius: 16,
     padding: 40,
     marginVertical: 16,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

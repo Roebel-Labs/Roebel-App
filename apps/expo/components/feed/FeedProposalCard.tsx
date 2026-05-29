@@ -27,6 +27,28 @@ export default function FeedProposalCard({ proposal }: Props) {
     return `${day}. ${month}`;
   };
 
+  // Supabase vote columns are populated only after the tally is published on
+  // chain, so a non-zero total is a safe "results published" proxy here — it
+  // avoids a per-row MACI tally read inside the feed list.
+  const toBig = (v: string): bigint => {
+    try {
+      return BigInt(v || '0');
+    } catch {
+      return 0n;
+    }
+  };
+  const resultsPublished =
+    toBig(proposal.for_votes) + toBig(proposal.against_votes) + toBig(proposal.abstain_votes) > 0n;
+
+  let blockchainId: bigint | undefined;
+  try {
+    blockchainId = proposal.blockchain_proposal_id
+      ? BigInt(proposal.blockchain_proposal_id)
+      : undefined;
+  } catch {
+    blockchainId = undefined;
+  }
+
   return (
     <Pressable
       onPress={handlePress}
@@ -38,7 +60,7 @@ export default function FeedProposalCard({ proposal }: Props) {
     >
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.primary }]}>BÜRGERUMFRAGE</Text>
-        <ProposalStateBadge state={proposal.state as ProposalState} />
+        <ProposalStateBadge state={proposal.state as ProposalState} proposalId={blockchainId} compact />
       </View>
 
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -55,11 +77,13 @@ export default function FeedProposalCard({ proposal }: Props) {
         </Text>
       </View>
 
-      <CompactVotingBars
-        forVotes={proposal.for_votes}
-        againstVotes={proposal.against_votes}
-        abstainVotes={proposal.abstain_votes}
-      />
+      {resultsPublished && (
+        <CompactVotingBars
+          forVotes={proposal.for_votes}
+          againstVotes={proposal.against_votes}
+          abstainVotes={proposal.abstain_votes}
+        />
+      )}
     </Pressable>
   );
 }

@@ -1,0 +1,309 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+} from 'react-native-reanimated';
+import { useTheme } from '@/context/ThemeContext';
+import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
+import { useProposalTally } from '@/hooks/useProposalTally';
+import { shortenAddress } from '@/lib/governance-utils';
+import AnimatedGradientBorder from './AnimatedGradientBorder';
+import CompactVotingBars from '@/components/proposals/CompactVotingBars';
+
+const ILLUSTRATION = require('@/assets/illustration/buergerumfragen-cropped.png');
+
+/** How long the ended/calculating/results card lingers after the deadline. */
+const RESULTS_WINDOW_SEC = 48 * 3600;
+
+/** Picks the single proposal to feature: the active one, else the newest. */
+function useTopProposal(): SupabaseProposal | null {
+  const [proposal, setProposal] = useState<SupabaseProposal | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchProposals()
+      .then((list) => {
+        if (cancelled) return;
+        if (!list || list.length === 0) {
+          setProposal(null);
+          return;
+        }
+        const active = list.find((p) => p.state === 1);
+        setProposal(active ?? list[0]);
+      })
+      .catch(() => {
+        if (!cancelled) setProposal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return proposal;
+}
+
+function parseIdSafe(raw: string | number | null | undefined): bigint {
+  if (raw === null || raw === undefined || raw === '') return 0n;
+  try {
+    return BigInt(raw);
+  } catch {
+    return 0n;
+  }
+}
+
+function formatCountdown(totalSec: number): string {
+  if (totalSec <= 0) return '00:00:00';
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const core = `${pad(h)}:${pad(m)}:${pad(s)}`;
+  return d > 0 ? `${d}d ${core}` : core;
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  const day = date.getDate();
+  const month = date.toLocaleDateString('de-DE', { month: 'short' });
+  return `${day}. ${month}`;
+}
+
+export default function FeedProposalHeroCard() {
+  const { colors } = useTheme();
+  const router = useRouter();
+
+  const proposal = useTopProposal();
+  const proposalIdBig = useMemo(
+    () => parseIdSafe(proposal?.blockchain_proposal_id),
+    [proposal?.blockchain_proposal_id],
+  );
+  const tally = useProposalTally(proposalIdBig);
+
+  // 1 Hz local tick for the live countdown.
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Blinking red dot (active state only).
+  const blink = useSharedValue(1);
+  const deadlineSec = tally.deadlineSec;
+  const isActive = deadlineSec !== null && nowSec < deadlineSec;
+  useEffect(() => {
+    if (isActive) {
+      blink.value = withRepeat(withTiming(0.15, { duration: 600 }), -1, true);
+    } else {
+      cancelAnimation(blink);
+      blink.value = 1;
+    }
+    return () => cancelAnimation(blink);
+  }, [isActive, blink]);
+  const dotStyle = useAnimatedStyle(() => ({ opacity: blink.value }));
+
+  // ── Visibility gating ──────────────────────────────────────────────
+  if (!proposal) return null;
+  if (tally.orphan) return null;
+  if (deadlineSec === null) return null; // chain state not loaded yet
+
+  const ended = nowSec >= deadlineSec;
+  const windowEnd = deadlineSec + RESULTS_WINDOW_SEC;
+  if (ended && nowSec >= windowEnd) return null; // results expired → hide
+
+  const calculating = ended && !tally.published;
+  const results = ended && tally.published;
+
+  const secondsToEnd = Math.max(0, deadlineSec - nowSec);
+
+  const handlePress = () => {
+    router.push(`/proposal/${proposal.proposal_id}` as any);
+  };
+
+  // Result outcome label/colors derived from on-chain tally.
+  const accepted = tally.forVotes >= tally.againstVotes;
+
+  return (
+    <View style={styles.outer}>
+      <AnimatedGradientBorder
+        active={isActive}
+        radius={16}
+        borderWidth={2}
+        colors={[colors.primary, colors.primaryLight, colors.primary]}
+        backgroundColor={colors.background}
+        idleBorderColor={colors.border}
+      >
+        <Pressable
+          onPress={handlePress}
+          style={({ pressed }) => [
+            styles.card,
+            { backgroundColor: colors.background },
+            pressed && { backgroundColor: colors.pressedOverlay },
+          ]}
+        >
+          <Image source={ILLUSTRATION} style={styles.illustration} contentFit="contain" />
+
+          <View style={styles.body}>
+            <View style={styles.topRow}>
+              <Text style={[styles.label, { color: colors.primary }]}>Bürgerumfragen</Text>
+
+              {isActive ? (
+                <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
+                  <Text style={[styles.countdownText, { color: colors.textPrimary }]}>
+                    {formatCountdown(secondsToEnd)}
+                  </Text>
+                  <Animated.View style={[styles.redDot, { backgroundColor: colors.error }, dotStyle]} />
+                </View>
+              ) : calculating ? (
+                <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
+                  <Text style={[styles.calcText, { color: colors.textSecondary }]}>
+                    Wird ausgewertet
+                  </Text>
+                </View>
+              ) : results ? (
+                <View
+                  style={[
+                    styles.tag,
+                    { backgroundColor: accepted ? colors.successBackground : colors.errorBackground },
+                  ]}
+                >
+                  <Text
+                    style={[styles.resultText, { color: accepted ? colors.success : colors.error }]}
+                  >
+                    {accepted ? 'Angenommen' : 'Abgelehnt'}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
+              {proposal.title}
+            </Text>
+
+            <Text style={[styles.creator, { color: colors.textSecondary }]} numberOfLines={1}>
+              Von {shortenAddress(proposal.proposer_address)} • {formatDate(proposal.created_at)}
+            </Text>
+
+            {results ? (
+              <View style={styles.resultsBlock}>
+                <CompactVotingBars
+                  forVotes={tally.forVotes}
+                  againstVotes={tally.againstVotes}
+                  abstainVotes={tally.abstainVotes}
+                />
+                <Text style={[styles.totalVotes, { color: colors.textSecondary }]}>
+                  {tally.total.toString()} {tally.total === 1n ? 'Stimme' : 'Stimmen'}
+                </Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={handlePress}
+              style={({ pressed }) => [
+                styles.button,
+                { backgroundColor: colors.primary },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
+                {isActive ? 'Jetzt abstimmen' : 'Ergebnis ansehen'}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </AnimatedGradientBorder>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  outer: {
+    // Aligns with the feed's other cards: the FlatList contentContainer already
+    // supplies the 8px horizontal gutter. Only add bottom spacing here.
+    paddingBottom: 8,
+  },
+  card: {
+    flexDirection: 'row',
+    padding: 14,
+    gap: 12,
+  },
+  illustration: {
+    width: 64,
+    height: 64,
+    alignSelf: 'flex-start',
+  },
+  body: {
+    flex: 1,
+    gap: 6,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9999,
+  },
+  countdownText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    fontVariant: ['tabular-nums'],
+  },
+  redDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  calcText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  resultText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  title: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 22,
+  },
+  creator: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  resultsBlock: {
+    gap: 6,
+    marginTop: 2,
+  },
+  totalVotes: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  button: {
+    height: 32,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  buttonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+});

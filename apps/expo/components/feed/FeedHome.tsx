@@ -42,6 +42,7 @@ import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
+import FeedProposalHeroCard from './FeedProposalHeroCard';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
@@ -295,6 +296,10 @@ export default function FeedHome() {
     [walletAddress, isOwnerOf],
   );
 
+  // Onboarding "Bürger:in" gate for the pinned proposal hero card. Distinct
+  // from isCitizen (NFT-verified) — driven by the role picked in onboarding.
+  const isBuerger = user?.preferred_role === 'buerger';
+
   const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
 
   const handleTabChange = (tab: FeedType) => {
@@ -491,7 +496,12 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
-            listHeader={<HomeStoryBar />}
+            listHeader={
+              <>
+                <HomeStoryBar />
+                {isBuerger && <FeedProposalHeroCard />}
+              </>
+            }
             active={screenFocused && effectiveTab === 'main'}
             {...feedListProps}
           />
