@@ -11,7 +11,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
-import { useCreateCitizenRequest } from '@/hooks/useVerification';
+import { useCreateCitizenRequest, REQUEST_STAGE_LABEL } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
@@ -24,7 +24,7 @@ export default function RequestCitizenScreen() {
   const { colors } = useTheme();
   const account = useActiveAccount();
   const { hasCitizenNFT, activePendingRequest, refresh } = useVerificationContext();
-  const { createRequest, isLoading } = useCreateCitizenRequest();
+  const { createRequest, isLoading, stage } = useCreateCitizenRequest();
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -191,9 +191,16 @@ export default function RequestCitizenScreen() {
           accessibilityRole="button"
         >
           {isLoading ? (
-            <ActivityIndicator color={colors.onPrimary} />
+            <View style={styles.submitButtonContent}>
+              <ActivityIndicator color={colors.onPrimary} />
+              <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>
+                {REQUEST_STAGE_LABEL[stage === 'idle' ? 'encrypting' : stage]}
+              </Text>
+            </View>
           ) : (
-            <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>Absenden</Text>
+            <Text style={[styles.submitButtonText, { color: colors.onPrimary }]}>
+              {REQUEST_STAGE_LABEL.idle}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -292,11 +299,17 @@ const styles = StyleSheet.create({
   submitButton: {
     borderRadius: 16,
     paddingVertical: 18,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   submitButtonText: {
     fontFamily: 'Inter-Medium',

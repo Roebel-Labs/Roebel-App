@@ -21,11 +21,16 @@ const currentContractAddress = (type: 'citizen' | 'attester'): string =>
  *
  * @param evidence - Encrypted evidence bundle
  * @param requestId - Blockchain request ID
+ * @param onStage - Optional callback fired before each network step so callers
+ *                  can drive a stage-aware UI (e.g. a submit-button label).
  * @returns Irys URL
  */
+export type UploadEvidenceStage = 'uploading-evidence' | 'saving-reference';
+
 export async function uploadEncryptedEvidence(
   evidence: EncryptedEvidence,
-  requestId: number
+  requestId: number,
+  onStage?: (stage: UploadEvidenceStage) => void
 ): Promise<string> {
   console.log('📤 Uploading encrypted evidence to Irys + Supabase...');
 
@@ -38,9 +43,11 @@ export async function uploadEncryptedEvidence(
       version: '1.0',
     };
 
+    onStage?.('uploading-evidence');
     const { id: irysId, url: irysUrl } = await uploadToIrys(evidenceData);
 
     // 2. Store reference in Supabase request_evidence table
+    onStage?.('saving-reference');
     const { data, error} = await supabase
       .from('request_evidence')
       .insert({

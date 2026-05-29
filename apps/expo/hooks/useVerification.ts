@@ -34,12 +34,36 @@ import {
 import type { PersonalData, CitizenRequest, EncryptedEvidence } from '@/lib/verification-types';
 
 /**
+ * Phases of the create-request flow. Drives the submit-button label so the user
+ * sees progress through the 10-30s gas-less smart-account submission instead of
+ * a single opaque spinner.
+ */
+export type RequestStage =
+  | 'idle'
+  | 'encrypting'
+  | 'submitting-tx'
+  | 'awaiting-receipt'
+  | 'uploading-evidence'
+  | 'saving-reference';
+
+/** German labels for {@link RequestStage}, used by the submit button. */
+export const REQUEST_STAGE_LABEL: Record<RequestStage, string> = {
+  idle: 'Absenden',
+  encrypting: 'Daten werden verschlüsselt',
+  'submitting-tx': 'Antrag wird gesendet',
+  'awaiting-receipt': 'Bestätigung wird abgewartet',
+  'uploading-evidence': 'Nachweis wird hochgeladen',
+  'saving-reference': 'Antrag wird gespeichert',
+};
+
+/**
  * Hook to create a citizen attestation request
  */
 export function useCreateCitizenRequest() {
   const account = useActiveAccount();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [stage, setStage] = useState<RequestStage>('idle');
 
   const createRequest = useCallback(
     async (personalData: PersonalData, reason: string) => {
@@ -54,6 +78,7 @@ export function useCreateCitizenRequest() {
         console.log('🚀 Creating citizen attestation request...');
 
         // 1. Create encrypted evidence (V2 - no signature required!)
+        setStage('encrypting');
         const evidence = await createEncryptedEvidenceV2(
           personalData,
           reason,
@@ -68,6 +93,7 @@ export function useCreateCitizenRequest() {
           params: ['supabase://pending'], // Temporary URI
         });
 
+        setStage('submitting-tx');
         const { transactionHash } = await sendTransaction({
           transaction,
           account,
@@ -78,6 +104,7 @@ export function useCreateCitizenRequest() {
         // 3. Wait for receipt and read the actual requestId from the event log.
         // Using requestCount() races against other users (and against tx mining),
         // which causes duplicate (request_id, contract_type) inserts in Supabase.
+        setStage('awaiting-receipt');
         const receipt = await waitForReceipt({
           client,
           chain: base,
@@ -98,8 +125,8 @@ export function useCreateCitizenRequest() {
         }
         const requestId = Number(created.args.requestId);
 
-        // 4. Upload evidence to Supabase
-        const evidenceURI = await uploadEncryptedEvidence(evidence, requestId);
+        // 4. Upload evidence to Supabase (Irys then DB row, stages emitted via callback)
+        const evidenceURI = await uploadEncryptedEvidence(evidence, requestId, setStage);
 
         // 5. Create Supabase request record
         await createSupabaseRequestRecord(
@@ -111,12 +138,14 @@ export function useCreateCitizenRequest() {
 
         console.log(`✅ Citizen request created successfully! ID: ${requestId}`);
 
+        setStage('idle');
         setIsLoading(false);
         return { requestId, transactionHash };
       } catch (err) {
         console.error('❌ Failed to create request:', err);
         const error = err instanceof Error ? err : new Error('Unknown error');
         setError(error);
+        setStage('idle');
         setIsLoading(false);
         throw error;
       }
@@ -124,7 +153,7 @@ export function useCreateCitizenRequest() {
     [account]
   );
 
-  return { createRequest, isLoading, error };
+  return { createRequest, isLoading, error, stage };
 }
 
 /**
@@ -139,6 +168,7 @@ export function useCreateRevocationRequest() {
   const account = useActiveAccount();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [stage, setStage] = useState<RequestStage>('idle');
 
   const createRevocation = useCallback(
     async (params: {
@@ -165,6 +195,7 @@ export function useCreateRevocationRequest() {
       try {
         console.log(`🚀 Creating ${contractType} revocation request for ${target}...`);
 
+        setStage('encrypting');
         const evidence = await createEncryptedEvidenceV2(
           { name: reason.trim(), address: target.toLowerCase() },
           'Mitgliedschaftsentziehung',
@@ -180,9 +211,11 @@ export function useCreateRevocationRequest() {
           params: [target, 'supabase://pending'],
         });
 
+        setStage('submitting-tx');
         const { transactionHash } = await sendTransaction({ transaction, account });
         console.log('✅ Revocation transaction submitted:', transactionHash);
 
+        setStage('awaiting-receipt');
         const receipt = await waitForReceipt({ client, chain: base, transactionHash });
 
         const revocationEvent = prepareEvent({
@@ -196,16 +229,18 @@ export function useCreateRevocationRequest() {
         }
         const requestId = Number(created.args.requestId);
 
-        await uploadEncryptedEvidence(evidence, requestId);
+        await uploadEncryptedEvidence(evidence, requestId, setStage);
 
         console.log(`✅ Revocation request created! ID: ${requestId}`);
 
+        setStage('idle');
         setIsLoading(false);
         return { requestId, transactionHash };
       } catch (err) {
         console.error('❌ Failed to create revocation request:', err);
         const error = err instanceof Error ? err : new Error('Unknown error');
         setError(error);
+        setStage('idle');
         setIsLoading(false);
         throw error;
       }
@@ -213,7 +248,7 @@ export function useCreateRevocationRequest() {
     [account]
   );
 
-  return { createRevocation, isLoading, error };
+  return { createRevocation, isLoading, error, stage };
 }
 
 /**
