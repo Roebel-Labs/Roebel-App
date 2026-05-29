@@ -25,6 +25,8 @@ export interface ProposalTallyState {
   orphan: boolean;
   /** Coordinator has published the decrypted tally on-chain. */
   published: boolean;
+  /** Live governor.state(id) (OZ ProposalState enum); null until it resolves. */
+  state: number | null;
   /** Unix-seconds end of the voting window; null until polls() resolves. */
   deadlineSec: number | null;
   forVotes: bigint;
@@ -42,6 +44,7 @@ const INITIAL_STATE: ProposalTallyState = {
   loading: true,
   orphan: false,
   published: false,
+  state: null,
   deadlineSec: null,
   forVotes: 0n,
   againstVotes: 0n,
@@ -64,16 +67,24 @@ export function useProposalTally(proposalId: bigint): ProposalTallyState {
     const fetchOnce = async (isFirstFetch: boolean) => {
       if (isFirstFetch) setState((s) => ({ ...s, loading: true }));
       try {
-        const polls = (await readContract({
-          contract: governorContract,
-          method:
-            'function proposalPolls(uint256) view returns (uint256 pollId, address poll, address messageProcessor, address tally, uint256 deadline)',
-          params: [proposalId],
-        })) as readonly [bigint, string, string, string, bigint];
+        const [polls, stateRaw] = await Promise.all([
+          readContract({
+            contract: governorContract,
+            method:
+              'function proposalPolls(uint256) view returns (uint256 pollId, address poll, address messageProcessor, address tally, uint256 deadline)',
+            params: [proposalId],
+          }) as Promise<readonly [bigint, string, string, string, bigint]>,
+          readContract({
+            contract: governorContract,
+            method: 'function state(uint256 proposalId) view returns (uint8)',
+            params: [proposalId],
+          }).catch(() => null),
+        ]);
+        const liveState = stateRaw === null ? null : Number(stateRaw);
         const [, pollAddr, , tallyAddr, deadlineRaw] = polls;
         if (cancelled) return;
         if (!tallyAddr || tallyAddr.toLowerCase() === ZERO_ADDR) {
-          setState({ ...INITIAL_STATE, loading: false, orphan: true });
+          setState({ ...INITIAL_STATE, loading: false, orphan: true, state: liveState });
           return;
         }
         const deadlineSec = Number(toBigInt(deadlineRaw));
@@ -89,6 +100,7 @@ export function useProposalTally(proposalId: bigint): ProposalTallyState {
             loading: false,
             orphan: false,
             published: false,
+            state: liveState,
             deadlineSec,
             forVotes: 0n,
             againstVotes: 0n,
@@ -125,6 +137,7 @@ export function useProposalTally(proposalId: bigint): ProposalTallyState {
           loading: false,
           orphan: false,
           published: true,
+          state: liveState,
           deadlineSec,
           forVotes,
           againstVotes,

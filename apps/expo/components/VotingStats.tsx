@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Linking, Pressable } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useProposalTally } from '@/hooks/useProposalTally';
+import { ProposalState } from '@/lib/governance-types';
 
 interface VotingStatsProps {
   proposalId: bigint;
@@ -31,9 +32,18 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
 
   if (tally.loading) return null;
 
+  // Prefer the live governor state: while a vote is open (Pending/Active) we show
+  // nothing — the MACI poll deadline can lapse before the proposal leaves its
+  // Active window, so a deadline-only gate leaked the section into active votes.
+  // Fall back to the deadline check only when state() couldn't be read.
   const nowSec = Math.floor(Date.now() / 1000);
-  const votingEnded = tally.deadlineSec !== null && nowSec >= tally.deadlineSec;
-  const showPendingTally = !tally.published && !tally.orphan && votingEnded;
+  const votingEndedByDeadline = tally.deadlineSec !== null && nowSec >= tally.deadlineSec;
+  const ended =
+    tally.state !== null
+      ? tally.state !== ProposalState.Pending && tally.state !== ProposalState.Active
+      : votingEndedByDeadline;
+
+  const showPendingTally = !tally.published && !tally.orphan && ended;
   const visible = tally.published || tally.orphan || showPendingTally;
   if (!visible) return null;
 

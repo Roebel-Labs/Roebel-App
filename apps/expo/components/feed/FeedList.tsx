@@ -85,6 +85,11 @@ type Props = {
    * who can never reach them. Defaults to true.
    */
   enabled?: boolean;
+  /**
+   * Reports the newest item `created_at` (ISO) whenever the feed's items change.
+   * Used to drive the "new content" dot on inactive tabs. `null` when empty.
+   */
+  onNewestContent?: (feedType: FeedType, newestIso: string | null) => void;
 };
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
@@ -101,6 +106,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     bottomPadding = 0,
     active = true,
     enabled = true,
+    onNewestContent,
   },
   ref,
 ) {
@@ -108,6 +114,21 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost } =
     useFeed(feedType, enabled);
+
+  // Surface the newest content timestamp so FeedHome can flag unseen content
+  // on inactive tabs. Section cards (news/cinema/…) carry no created_at and are
+  // ignored.
+  React.useEffect(() => {
+    if (!onNewestContent) return;
+    let newest: number | null = null;
+    for (const item of items) {
+      const ts = (item.data as { created_at?: string })?.created_at;
+      if (!ts) continue;
+      const ms = new Date(ts).getTime();
+      if (!Number.isNaN(ms) && (newest === null || ms > newest)) newest = ms;
+    }
+    onNewestContent(feedType, newest === null ? null : new Date(newest).toISOString());
+  }, [items, feedType, onNewestContent]);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, initLikes } = usePostActions(walletAddress);
 

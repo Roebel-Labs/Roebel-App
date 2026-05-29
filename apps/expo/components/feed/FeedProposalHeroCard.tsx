@@ -2,13 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  cancelAnimation,
-} from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
 import { useProposalTally } from '@/hooks/useProposalTally';
@@ -73,7 +66,7 @@ function formatDate(dateString: string): string {
   return `${day}. ${month}`;
 }
 
-export default function FeedProposalHeroCard() {
+export default function FeedProposalHeroCard({ activeOnly = false }: { activeOnly?: boolean }) {
   const { colors } = useTheme();
   const router = useRouter();
 
@@ -91,25 +84,15 @@ export default function FeedProposalHeroCard() {
     return () => clearInterval(id);
   }, []);
 
-  // Blinking red dot (active state only).
-  const blink = useSharedValue(1);
   const deadlineSec = tally.deadlineSec;
   const isActive = deadlineSec !== null && nowSec < deadlineSec;
-  useEffect(() => {
-    if (isActive) {
-      blink.value = withRepeat(withTiming(0.15, { duration: 600 }), -1, true);
-    } else {
-      cancelAnimation(blink);
-      blink.value = 1;
-    }
-    return () => cancelAnimation(blink);
-  }, [isActive, blink]);
-  const dotStyle = useAnimatedStyle(() => ({ opacity: blink.value }));
 
   // ── Visibility gating ──────────────────────────────────────────────
   if (!proposal) return null;
   if (tally.orphan) return null;
   if (deadlineSec === null) return null; // chain state not loaded yet
+  // On the Stadt tab the hero is shown only while a vote is active.
+  if (activeOnly && !isActive) return null;
 
   const ended = nowSec >= deadlineSec;
   const windowEnd = deadlineSec + RESULTS_WINDOW_SEC;
@@ -149,14 +132,13 @@ export default function FeedProposalHeroCard() {
 
           <View style={styles.body}>
             <View style={styles.topRow}>
-              <Text style={[styles.label, { color: colors.primary }]}>Bürgerumfragen</Text>
+              <Text style={[styles.label, { color: colors.primary }]}>Bürgerumfrage</Text>
 
               {isActive ? (
                 <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
                   <Text style={[styles.countdownText, { color: colors.textPrimary }]}>
                     {formatCountdown(secondsToEnd)}
                   </Text>
-                  <Animated.View style={[styles.redDot, { backgroundColor: colors.error }, dotStyle]} />
                 </View>
               ) : calculating ? (
                 <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
@@ -247,7 +229,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
   tag: {
@@ -262,11 +244,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     fontVariant: ['tabular-nums'],
-  },
-  redDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
   },
   calcText: {
     fontSize: 12,

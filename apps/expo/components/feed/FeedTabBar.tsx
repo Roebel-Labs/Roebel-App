@@ -12,6 +12,8 @@ type Props = {
   activeTab: FeedType;
   onTabChange: (tab: FeedType) => void;
   scrollProgress?: SharedValue<number>;
+  /** Per-tab "new content" flag — renders a primary dot on inactive tabs. */
+  unread?: Partial<Record<FeedType, boolean>>;
 };
 
 const TABS: { key: FeedType; label: string }[] = [
@@ -22,7 +24,7 @@ const TABS: { key: FeedType; label: string }[] = [
 
 type Layout = { x: number; width: number };
 
-export default function FeedTabBar({ activeTab, onTabChange, scrollProgress }: Props) {
+export default function FeedTabBar({ activeTab, onTabChange, scrollProgress, unread }: Props) {
   const { colors } = useTheme();
   const [layouts, setLayouts] = useState<Record<number, Layout>>({});
 
@@ -55,6 +57,7 @@ export default function FeedTabBar({ activeTab, onTabChange, scrollProgress }: P
     <View style={[styles.container, { borderBottomColor: colors.border }]}>
       {TABS.map((tab, i) => {
         const isActive = tab.key === activeTab;
+        const showDot = !isActive && !!unread?.[tab.key];
         return (
           <Pressable
             key={tab.key}
@@ -62,17 +65,20 @@ export default function FeedTabBar({ activeTab, onTabChange, scrollProgress }: P
             onLayout={handleLayout(i)}
             style={styles.tab}
           >
-            <Text
-              style={[
-                styles.tabLabel,
-                {
-                  color: isActive ? colors.primary : colors.textTertiary,
-                  fontFamily: isActive ? 'Inter-Medium' : 'Inter-Regular',
-                },
-              ]}
-            >
-              {tab.label}
-            </Text>
+            <View style={styles.labelWrap}>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: isActive ? colors.primary : colors.textTertiary,
+                    fontFamily: isActive ? 'Inter-Medium' : 'Inter-Regular',
+                  },
+                ]}
+              >
+                {tab.label}
+              </Text>
+              {showDot && <View style={[styles.dot, { backgroundColor: colors.primary }]} />}
+            </View>
           </Pressable>
         );
       })}
@@ -95,8 +101,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
+  labelWrap: {
+    position: 'relative',
+  },
   tabLabel: {
     fontSize: 15,
+  },
+  dot: {
+    position: 'absolute',
+    top: -2,
+    right: -9,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   underline: {
     position: 'absolute',

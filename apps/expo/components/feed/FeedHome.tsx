@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -46,6 +46,7 @@ import FeedProposalHeroCard from './FeedProposalHeroCard';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
+import { useFeedTabSeen } from '@/hooks/useFeedTabSeen';
 import { usePendingPostFeedback } from '@/context/PendingPostFeedbackContext';
 
 const HANDWRITTEN_LIGHT = require('@/assets/handwritten/light-mode.png');
@@ -300,7 +301,33 @@ export default function FeedHome() {
   // from isCitizen (NFT-verified) — driven by the role picked in onboarding.
   const isBuerger = user?.preferred_role === 'buerger';
 
+  // "New content" dots on the Stadt/App tabs. Each FeedList reports its newest
+  // item timestamp; we compare against the persisted last-seen time.
+  const { lastSeen, markSeen } = useFeedTabSeen();
+  const [newestByTab, setNewestByTab] = useState<{ rathaus: string | null; app: string | null }>({
+    rathaus: null,
+    app: null,
+  });
+  const handleNewestContent = useCallback((feedType: FeedType, newestIso: string | null) => {
+    if (feedType !== 'rathaus' && feedType !== 'app') return;
+    setNewestByTab((prev) => (prev[feedType] === newestIso ? prev : { ...prev, [feedType]: newestIso }));
+  }, []);
+
+  const isUnseen = (newest: string | null, seen: string | undefined): boolean =>
+    newest !== null && (!seen || newest > seen);
+  const tabUnread = {
+    rathaus: isUnseen(newestByTab.rathaus, lastSeen.rathaus),
+    app: isUnseen(newestByTab.app, lastSeen.app),
+  };
+
   const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
+
+  // Mark the active tab as seen (clears its dot) while the user is viewing it,
+  // and keep it clear as new items stream in.
+  useEffect(() => {
+    if (!screenFocused) return;
+    if (activeTab === 'rathaus' || activeTab === 'app') markSeen(activeTab);
+  }, [activeTab, screenFocused, newestByTab.rathaus, newestByTab.app, markSeen]);
 
   const handleTabChange = (tab: FeedType) => {
     const idx = TAB_ORDER.indexOf(tab);
@@ -441,7 +468,12 @@ export default function FeedHome() {
       />
 
       {isCitizen && (
-        <FeedTabBar activeTab={activeTab} onTabChange={handleTabChange} scrollProgress={scrollProgress} />
+        <FeedTabBar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          scrollProgress={scrollProgress}
+          unread={tabUnread}
+        />
       )}
     </Animated.View>
   );
@@ -516,6 +548,8 @@ export default function FeedHome() {
             onMore={handleMore}
             active={screenFocused && effectiveTab === 'rathaus'}
             enabled={isCitizen}
+            onNewestContent={handleNewestContent}
+            listHeader={isBuerger ? <FeedProposalHeroCard activeOnly /> : undefined}
             {...feedListProps}
           />
         </View>
@@ -529,6 +563,7 @@ export default function FeedHome() {
             onMore={handleMore}
             active={screenFocused && effectiveTab === 'app'}
             enabled={isCitizen}
+            onNewestContent={handleNewestContent}
             {...feedListProps}
           />
         </View>
