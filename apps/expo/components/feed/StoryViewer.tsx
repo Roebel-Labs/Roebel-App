@@ -723,22 +723,32 @@ function SlideFace({ slide }: { slide: StorySlideInput | undefined }) {
   if (!slide) {
     return (
       <View style={[StyleSheet.absoluteFill, styles.imageFallback]}>
+        <Image
+          source={require('@/assets/illustration/story-bg.png')}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
         <ActivityIndicator color="#ffffff" />
       </View>
     );
   }
   const overlayTextColor = slide.textColor || '#000000';
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, styles.imageFallback]}>
+      {/* Shared illustration backdrop — fills the letterbox behind every
+          (contain-fitted) slide; fully covered by cover/video slides. */}
+      <Image
+        source={require('@/assets/illustration/story-bg.png')}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+      />
       {slide.backgroundUrl ? (
         <Image
           source={{ uri: slide.backgroundUrl }}
           style={StyleSheet.absoluteFill}
           contentFit={slide.imageFit ?? 'cover'}
         />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.imageFallback]} />
-      )}
+      ) : null}
       {slide.overlayText ? (
         <View style={styles.overlayTextWrap} pointerEvents="none">
           <Text style={[styles.overlayText, { color: overlayTextColor }]}>

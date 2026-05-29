@@ -800,7 +800,7 @@ export async function fetchThisWeekEvents(): Promise<any[]> {
 
   const { data, error } = await supabase
     .from('events')
-    .select('*, account:accounts(id, name, avatar_url)')
+    .select('*, account:accounts(id, name, avatar_url, account_type)')
     .eq('status', 'approved')
     .gte('date', todayStr)
     .lte('date', endOfWeekStr)
@@ -812,5 +812,99 @@ export async function fetchThisWeekEvents(): Promise<any[]> {
     return [];
   }
 
-  return data ?? [];
+  const events = (data ?? []) as any[];
+  await resolveEventAuthors(events);
+  return events;
+}
+
+/**
+ * Mutates the given event rows in place, attaching a normalized `author`
+ * ({ name, avatarUrl }) that is safe to display — NEVER a wallet address.
+ *
+ * - Organisation accounts: use the account's own name + avatar.
+ * - Personal (citizen) accounts: the `accounts` row is unreliable (its name
+ *   can be a truncated wallet and its avatar goes stale), so resolve the
+ *   owner's `users` row (username/display_name + profile_picture_url), which
+ *   is the source of truth — same logic PostAuthorRow uses for feed posts.
+ *
+ * Uses two simple queries rather than a chained `!inner` embed, which is
+ * flaky in PostgREST (see note in supabase-roebel-card-partners.ts).
+ */
+async function resolveEventAuthors(events: any[]): Promise<void> {
+  const isWalletLike = (s?: string | null) =>
+    !!s && /^0x[0-9a-fA-F]{4,}/.test(s.trim());
+
+  // Personal account ids that need owner → user resolution.
+  const personalAccountIds = Array.from(
+    new Set(
+      events
+        .filter((e) => e.account?.account_type === 'personal' && e.account?.id)
+        .map((e) => e.account.id as string),
+    ),
+  );
+
+  // accountId → owner user record (username/display_name/avatar).
+  const userByAccountId = new Map<
+    string,
+    { username: string | null; display_name: string | null; profile_picture_url: string | null }
+  >();
+
+  if (personalAccountIds.length > 0) {
+    const { data: owners } = await supabase
+      .from('account_owners' as any)
+      .select('account_id, wallet_address')
+      .in('account_id', personalAccountIds);
+
+    const ownerRows = (owners ?? []) as {
+      account_id: string;
+      wallet_address: string;
+    }[];
+    const wallets = Array.from(
+      new Set(ownerRows.map((r) => r.wallet_address.toLowerCase())),
+    );
+
+    if (wallets.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('wallet_address, username, display_name, profile_picture_url')
+        .in('wallet_address', wallets);
+
+      const userByWallet = new Map(
+        ((users ?? []) as any[]).map((u) => [
+          (u.wallet_address as string).toLowerCase(),
+          u,
+        ]),
+      );
+
+      for (const row of ownerRows) {
+        const u = userByWallet.get(row.wallet_address.toLowerCase());
+        if (u && !userByAccountId.has(row.account_id)) {
+          userByAccountId.set(row.account_id, u);
+        }
+      }
+    }
+  }
+
+  for (const event of events) {
+    const acc = event.account;
+    let name: string | undefined;
+    let avatarUrl: string | null = null;
+
+    if (acc?.account_type === 'organisation') {
+      name = acc.name ?? undefined;
+      avatarUrl = acc.avatar_url ?? null;
+    } else if (acc?.id && userByAccountId.has(acc.id)) {
+      const u = userByAccountId.get(acc.id)!;
+      name = u.username || u.display_name || undefined;
+      avatarUrl = u.profile_picture_url ?? null;
+    }
+
+    // Never expose a wallet-like string as the display name.
+    if (isWalletLike(name)) name = undefined;
+    if (!name && !isWalletLike(event.organizer_name)) {
+      name = event.organizer_name || undefined;
+    }
+
+    event.author = { name: name || 'Veranstalter', avatarUrl };
+  }
 }

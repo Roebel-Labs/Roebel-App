@@ -125,8 +125,10 @@ export default function HomeStoryBar() {
 
     if (events.length > 0) {
       const eventSlides: StorySlideInput[] = events.map((event) => {
-        const orgName = event.account?.name ?? event.organizer_name;
-        const orgAvatar = (event.account as any)?.avatar_url ?? null;
+        // Resolved at fetch time — org name/avatar or citizen username/avatar,
+        // never a wallet address. See resolveEventAuthors in supabase-posts.
+        const orgName = event.author?.name ?? 'Veranstalter';
+        const orgAvatar = event.author?.avatarUrl ?? null;
         return {
           backgroundUrl: event.image_url ?? '',
           imageFit: 'contain',
@@ -225,8 +227,8 @@ export default function HomeStoryBar() {
         {/* One bubble per event. Tapping any opens the SAME unified events
             story at that event's slide index. */}
         {events.map((event, idx) => {
-          const orgName = (event.account as any)?.name ?? event.organizer_name;
-          const orgAvatar = (event.account as any)?.avatar_url ?? null;
+          const orgName = event.author?.name ?? 'Veranstalter';
+          const orgAvatar = event.author?.avatarUrl ?? null;
           return (
             <Pressable
               key={`event-${event.id}`}

@@ -50,6 +50,9 @@ export type EventRecord = {
   // Creator account
   account_id: string | null;
   account?: Account;
+  // Normalized display identity, resolved at fetch time (never a wallet).
+  // Org accounts → account name/avatar; citizens → owner's users row.
+  author?: { name: string; avatarUrl: string | null };
 };
 
 // Extended type for event with all dates loaded
