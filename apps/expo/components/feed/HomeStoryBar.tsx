@@ -16,10 +16,11 @@ import type { EventRecord } from '@/lib/types';
 import { fetchEventStoriesAudioUrl } from '@/lib/supabase-app-settings';
 import {
   fetchHomeFeedStoryCollections,
-  fetchSlidesForCollection,
+  fetchSlidesForCollections,
   type StoryCollection,
   type StorySlide,
 } from '@/lib/supabase-story-collections';
+import { loadCachedStories, saveCachedStories } from '@/lib/story-cache';
 import StoryViewer, {
   type StoryGroup,
   type StorySlideInput,
@@ -50,6 +51,34 @@ let cachedCollections: StoryCollection[] = [];
 let cachedCollectionSlides: Record<string, StorySlide[]> = {};
 let cachedAudioUrl: string | null = null;
 let hasLoadedStories = false;
+// When the module cache was last refreshed from the network. While it's fresh
+// (within the TTL) a remount reuses the in-memory cache and skips re-querying.
+let lastFetchedAt = 0;
+const STORY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Warm expo-image's disk/memory cache for every story image so the full-screen
+// viewer (especially collection slide backgrounds, which the rail never shows)
+// opens instantly instead of fading in from network. Fire-and-forget.
+function prefetchStoryImages(
+  events: EventRecord[],
+  collections: StoryCollection[],
+  collectionSlides: Record<string, StorySlide[]>,
+): void {
+  const urls = new Set<string>();
+  for (const e of events) if (e.image_url) urls.add(e.image_url);
+  for (const c of collections) if (c.cover_image_url) urls.add(c.cover_image_url);
+  for (const slides of Object.values(collectionSlides)) {
+    for (const s of slides) {
+      if (s.background_image_url) urls.add(s.background_image_url);
+    }
+  }
+  if (urls.size === 0) return;
+  try {
+    void Image.prefetch(Array.from(urls), 'memory-disk');
+  } catch {
+    // Non-fatal — images simply load lazily when first rendered.
+  }
+}
 
 export default function HomeStoryBar() {
   const { colors } = useTheme();
@@ -72,39 +101,85 @@ export default function HomeStoryBar() {
   useEffect(() => {
     let cancelled = false;
 
+    // 1. Optimistic hydration from the persisted bundle (cold start only —
+    //    on a same-session remount the module cache already seeded state). The
+    //    `prev.length ? prev : …` guards ensure we never clobber fresher
+    //    in-memory or network data with the on-disk snapshot.
+    if (!hasLoadedStories) {
+      loadCachedStories().then((bundle) => {
+        if (cancelled || !bundle) return;
+        setEvents((prev) => (prev.length ? prev : bundle.events));
+        setCollections((prev) => (prev.length ? prev : bundle.collections));
+        setCollectionSlides((prev) =>
+          Object.keys(prev).length ? prev : bundle.collectionSlides,
+        );
+        setEventStoriesAudioUrl((prev) => prev ?? bundle.audioUrl);
+        setLoading(false);
+        prefetchStoryImages(
+          bundle.events,
+          bundle.collections,
+          bundle.collectionSlides,
+        );
+      });
+    }
+
+    // 2. Skip the network entirely while the in-memory cache is still fresh.
+    if (
+      hasLoadedStories &&
+      Date.now() - lastFetchedAt < STORY_CACHE_TTL_MS &&
+      (cachedEvents.length > 0 || cachedCollections.length > 0)
+    ) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // 3. Refresh from the network in the background.
+    let freshEvents: EventRecord[] = cachedEvents;
+    let freshCollections: StoryCollection[] = cachedCollections;
+    let freshSlides: Record<string, StorySlide[]> = cachedCollectionSlides;
+    let freshAudio: string | null = cachedAudioUrl;
+
     const eventsP = fetchThisWeekEvents().then((data) => {
       if (cancelled) return;
-      const list = data as EventRecord[];
-      cachedEvents = list;
-      setEvents(list);
+      freshEvents = data as EventRecord[];
+      cachedEvents = freshEvents;
+      setEvents(freshEvents);
     });
 
-    fetchEventStoriesAudioUrl().then((url) => {
+    const audioP = fetchEventStoriesAudioUrl().then((url) => {
       if (cancelled) return;
+      freshAudio = url;
       cachedAudioUrl = url;
       setEventStoriesAudioUrl(url);
     });
 
     const collectionsP = fetchHomeFeedStoryCollections().then(async (cols) => {
       if (cancelled) return;
+      freshCollections = cols;
       cachedCollections = cols;
       setCollections(cols);
-      // Pre-fetch all slides upfront — admin-curated, small list.
-      const results = await Promise.all(
-        cols.map((c) =>
-          fetchSlidesForCollection(c.id).then((s) => [c.id, s] as const),
-        ),
-      );
+      // One round-trip for all slides — admin-curated, small list.
+      const map = await fetchSlidesForCollections(cols.map((c) => c.id));
       if (cancelled) return;
-      const map = Object.fromEntries(results);
+      freshSlides = map;
       cachedCollectionSlides = map;
       setCollectionSlides(map);
     });
 
-    Promise.allSettled([eventsP, collectionsP]).then(() => {
+    Promise.allSettled([eventsP, audioP, collectionsP]).then(() => {
       if (cancelled) return;
       hasLoadedStories = true;
+      lastFetchedAt = Date.now();
       setLoading(false);
+      prefetchStoryImages(freshEvents, freshCollections, freshSlides);
+      void saveCachedStories({
+        events: freshEvents,
+        collections: freshCollections,
+        collectionSlides: freshSlides,
+        audioUrl: freshAudio,
+        savedAt: lastFetchedAt,
+      });
     });
 
     return () => {
@@ -361,7 +436,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   scroll: {
-    paddingHorizontal: 12,
+    // FeedList's contentContainer already supplies an 8px horizontal gutter;
+    // 8 + 8 = 16px from the phone edge for the first/last card.
+    paddingHorizontal: 8,
     paddingVertical: 12,
     gap: 10,
   },

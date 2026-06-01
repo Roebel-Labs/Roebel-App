@@ -67,3 +67,32 @@ export async function fetchSlidesForCollection(
   }
   return (data || []) as unknown as StorySlide[];
 }
+
+/**
+ * Fetch slides for many collections in a single round-trip and group them by
+ * `collection_id` (preserving display_order). Returns a map keyed by id; any
+ * collection without slides is simply absent from the map. Used by the home
+ * feed to avoid an N+1 query per collection.
+ */
+export async function fetchSlidesForCollections(
+  collectionIds: string[],
+): Promise<Record<string, StorySlide[]>> {
+  if (collectionIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('story_slides')
+    .select('*')
+    .in('collection_id', collectionIds)
+    .order('display_order', { ascending: true });
+
+  if (error) {
+    console.error('fetch story_slides (batch) error:', error);
+    return {};
+  }
+
+  const map: Record<string, StorySlide[]> = {};
+  for (const slide of (data || []) as unknown as StorySlide[]) {
+    (map[slide.collection_id] ??= []).push(slide);
+  }
+  return map;
+}
