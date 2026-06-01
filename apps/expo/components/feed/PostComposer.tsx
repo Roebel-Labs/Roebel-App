@@ -28,7 +28,7 @@ import type { UserRecord } from '@/lib/types';
 import CanvasIcon from '@/assets/icons/canvas.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 
-const MAX_CONTENT_LENGTH = 250;
+const MAX_CONTENT_LENGTH = 500;
 const MAX_IMAGES = 4;
 const MAX_POLL_OPTIONS = 4;
 

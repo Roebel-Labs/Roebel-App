@@ -17,7 +17,7 @@ import { CategorySelector } from "@/components/app/CategorySelector";
 import { GuidelinesBanner, GuidelinesInfoButton } from "@/components/app/CommunityGuidelines";
 import type { OGMetadata, CreatePollInput, PostCategory, FeedType } from "@/types/post";
 
-const MAX_CHARS = 250;
+const MAX_CHARS = 500;
 const MAX_IMAGES = 10;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_VIDEO_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB (matches bucket cap)

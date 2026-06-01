@@ -331,6 +331,21 @@ export default function CreateScreen() {
             autoFocus
           />
 
+          {/* Character counter */}
+          <Text
+            style={[
+              styles.charCount,
+              {
+                color:
+                  draft.content.length > MAX_CONTENT_LENGTH - 20
+                    ? colors.error
+                    : colors.textTertiary,
+              },
+            ]}
+          >
+            {draft.content.length}/{MAX_CONTENT_LENGTH}
+          </Text>
+
           {/* Linked event/marketplace preview */}
           {draft.linkedEventData && (
             <View style={styles.linkedItemWrapper}>
@@ -642,6 +657,13 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 120,
     textAlignVertical: 'top',
+  },
+  charCount: {
+    textAlign: 'right',
+    paddingHorizontal: 16,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 4,
   },
   linkedItemWrapper: {
     position: 'relative',

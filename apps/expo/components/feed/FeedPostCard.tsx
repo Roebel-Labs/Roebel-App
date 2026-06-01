@@ -16,6 +16,10 @@ import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 
+// Posts can hold up to 500 chars; in the feed we preview the first 250 and
+// reveal the rest inline via "Mehr anzeigen". The detail screen shows it all.
+const FEED_PREVIEW_LIMIT = 250;
+
 type Props = {
   post: PostRecord;
   isLiked: boolean;
@@ -40,6 +44,7 @@ export default function FeedPostCard({
   const { colors } = useTheme();
   const router = useRouter();
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const handlePress = () => {
     router.push(`/post/${post.id}` as any);
@@ -54,6 +59,11 @@ export default function FeedPostCard({
   const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
   const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
   const isMarketplacePost = !!post.linked_marketplace;
+
+  const showMoreToggle = !expanded && (displayContent?.length || 0) > FEED_PREVIEW_LIMIT;
+  const previewContent = showMoreToggle
+    ? displayContent.slice(0, FEED_PREVIEW_LIMIT).trimEnd() + '… '
+    : displayContent;
 
   return (
     <View
@@ -81,7 +91,17 @@ export default function FeedPostCard({
         />
 
         {displayContent ? (
-          <Text style={[styles.content, { color: colors.textPrimary }]}>{displayContent}</Text>
+          <Text style={[styles.content, { color: colors.textPrimary }]}>
+            {previewContent}
+            {showMoreToggle && (
+              <Text
+                style={[styles.moreToggle, { color: colors.primary }]}
+                onPress={() => setExpanded(true)}
+              >
+                Mehr anzeigen
+              </Text>
+            )}
+          </Text>
         ) : null}
 
         {post.linked_event && (
@@ -161,6 +181,11 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
+    lineHeight: 22,
+  },
+  moreToggle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
     lineHeight: 22,
   },
   sticker: {
