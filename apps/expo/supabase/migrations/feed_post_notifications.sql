@@ -20,11 +20,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_author text;
-  v_title  text;
-  v_body   text;
-  v_url    text;
-  v_key    text;
+  v_author   text;
+  v_title    text;
+  v_body     text;
+  v_url      text;
+  v_key      text;
+  v_event_id uuid;
+  v_data     jsonb;
 BEGIN
   -- Display name: account name → user display name → username → fallback.
   v_author := COALESCE(
@@ -40,6 +42,21 @@ BEGIN
     v_body := 'hat einen neuen Beitrag geteilt';
   ELSIF length(v_body) > 140 THEN
     v_body := left(v_body, 140) || '…';
+  END IF;
+
+  -- Routing: event-experience posts deep-link to the parent event detail page
+  -- (data.type='event'), all other "Für Alle" posts deep-link to the post page.
+  IF NEW.post_type = 'event_experience' THEN
+    v_event_id := COALESCE(
+      NEW.linked_event_id,
+      (SELECT ee.event_id FROM public.event_experiences ee WHERE ee.id = NEW.linked_experience_id)
+    );
+  END IF;
+
+  IF v_event_id IS NOT NULL THEN
+    v_data := jsonb_build_object('type', 'event', 'eventId', v_event_id);
+  ELSE
+    v_data := jsonb_build_object('type', 'post', 'postId', NEW.id);
   END IF;
 
   -- Edge Function endpoint + bearer key from Vault.
@@ -61,7 +78,7 @@ BEGIN
       'type', 'post_new',
       'title', v_title,
       'body', v_body,
-      'data', jsonb_build_object('type', 'post', 'postId', NEW.id)
+      'data', v_data
     )
   );
 
