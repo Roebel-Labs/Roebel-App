@@ -153,6 +153,7 @@ export default function FeedPostCard({
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl || ''}
+        images={mediaUrls}
         onClose={() => setZoomImageUrl(null)}
       />
     </View>

@@ -564,6 +564,7 @@ export default function CreateScreen() {
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl ?? ''}
+        images={draft.images}
         onClose={() => setZoomImageUrl(null)}
       />
     </SafeAreaView>

@@ -136,6 +136,7 @@ export default function ExperienceItem({
         <ImageZoomModal
           visible={!!zoomImageUrl}
           imageUrl={zoomImageUrl || ''}
+          images={imageUrls}
           onClose={() => setZoomImageUrl(null)}
         />
 

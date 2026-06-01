@@ -222,6 +222,7 @@ export default function ReviewScreen() {
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl ?? ''}
+        images={draft.images}
         onClose={() => setZoomImageUrl(null)}
       />
 

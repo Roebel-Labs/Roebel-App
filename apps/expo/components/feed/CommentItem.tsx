@@ -120,6 +120,7 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
         <ImageZoomModal
           visible={!!zoomImageUrl}
           imageUrl={zoomImageUrl || ''}
+          images={comment.media_urls ?? undefined}
           onClose={() => setZoomImageUrl(null)}
         />
       </View>

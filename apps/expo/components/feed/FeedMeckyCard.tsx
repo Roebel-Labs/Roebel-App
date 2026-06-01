@@ -93,6 +93,7 @@ export default function FeedMeckyCard({
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl || ''}
+        images={mediaUrls}
         onClose={() => setZoomImageUrl(null)}
       />
     </Pressable>

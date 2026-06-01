@@ -516,6 +516,7 @@ export default function PostDetailScreen() {
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl || ''}
+        images={mediaUrls}
         onClose={() => setZoomImageUrl(null)}
       />
     </SafeAreaView>

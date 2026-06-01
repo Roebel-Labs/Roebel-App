@@ -77,6 +77,7 @@ export default function FeedProposalCommentCard({ comment }: Props) {
       <ImageZoomModal
         visible={!!zoomImageUrl}
         imageUrl={zoomImageUrl || ''}
+        images={imageUrls}
         onClose={() => setZoomImageUrl(null)}
       />
     </Pressable>

@@ -163,6 +163,7 @@ export default function ProposalCommentItem({
         <ImageZoomModal
           visible={!!zoomImageUrl}
           imageUrl={zoomImageUrl || ''}
+          images={imageUrls}
           onClose={() => setZoomImageUrl(null)}
         />
 
