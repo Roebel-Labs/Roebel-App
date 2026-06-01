@@ -15,6 +15,9 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
+// Shared translucent background for the close (X) + chevron controls.
+const CONTROL_BG = 'rgba(0, 0, 0, 0.45)';
+
 type Props = {
   visible: boolean;
   /** Single image to show (legacy / comments). */
@@ -49,7 +52,7 @@ export default function ImageZoomModal({ visible, imageUrl, images, onClose }: P
 }
 
 /* ------------------------------------------------------------------ */
-/* Swipable multi-image gallery                                        */
+/* Swipable multi-image gallery (with per-image zoom)                  */
 /* ------------------------------------------------------------------ */
 
 function GalleryZoom({
@@ -67,15 +70,22 @@ function GalleryZoom({
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const listRef = useRef<FlatList<string>>(null);
   const [index, setIndex] = useState(initialIndex);
+  // Horizontal paging is disabled while the active image is zoomed in, so the
+  // pan gesture can move the image instead of changing pages.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Re-seat the gallery at the tapped image each time it (re)opens.
   useEffect(() => {
-    if (visible) setIndex(initialIndex);
+    if (visible) {
+      setIndex(initialIndex);
+      setScrollEnabled(true);
+    }
   }, [visible, initialIndex]);
 
   const goTo = (next: number) => {
     const clamped = Math.max(0, Math.min(urls.length - 1, next));
     setIndex(clamped);
+    setScrollEnabled(true);
     listRef.current?.scrollToIndex({ index: clamped, animated: true });
   };
 
@@ -85,8 +95,8 @@ function GalleryZoom({
       <GestureHandlerRootView style={styles.flex1}>
         <View style={styles.backdrop}>
           {/* Close */}
-          <Pressable style={[styles.closeButton, { backgroundColor: colors.tabIconActive }]} onPress={onClose}>
-            <Ionicons name="close" size={28} color={colors.textInverted} />
+          <Pressable style={styles.controlButton} onPress={onClose}>
+            <Ionicons name="close" size={24} color="#fff" />
           </Pressable>
 
           {/* Counter — "1 von 3 Bildern" */}
@@ -101,6 +111,7 @@ function GalleryZoom({
             data={urls}
             horizontal
             pagingEnabled
+            scrollEnabled={scrollEnabled}
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={initialIndex}
             getItemLayout={(_, i) => ({ length: screenWidth, offset: screenWidth * i, index: i })}
@@ -111,32 +122,29 @@ function GalleryZoom({
             onMomentumScrollEnd={(e) => {
               setIndex(Math.round(e.nativeEvent.contentOffset.x / screenWidth));
             }}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={onClose}
-                style={{ width: screenWidth, height: screenHeight, justifyContent: 'center', alignItems: 'center' }}
-              >
-                <Image
-                  source={{ uri: item }}
-                  style={{ width: screenWidth, height: screenHeight }}
-                  contentFit="contain"
-                  accessibilityIgnoresInvertColors
-                />
-              </Pressable>
+            renderItem={({ item, index: i }) => (
+              <ZoomablePage
+                uri={item}
+                width={screenWidth}
+                height={screenHeight}
+                active={i === index}
+                onZoomChange={(z) => setScrollEnabled(!z)}
+                onClose={onClose}
+              />
             )}
           />
 
           {/* Prev chevron */}
-          {index > 0 && (
-            <Pressable style={[styles.chevron, styles.chevronLeft]} onPress={() => goTo(index - 1)} hitSlop={8}>
-              <Ionicons name="chevron-back" size={28} color="#fff" />
+          {scrollEnabled && index > 0 && (
+            <Pressable style={[styles.controlButton, styles.chevronLeft]} onPress={() => goTo(index - 1)} hitSlop={8}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
           )}
 
           {/* Next chevron */}
-          {index < urls.length - 1 && (
-            <Pressable style={[styles.chevron, styles.chevronRight]} onPress={() => goTo(index + 1)} hitSlop={8}>
-              <Ionicons name="chevron-forward" size={28} color="#fff" />
+          {scrollEnabled && index < urls.length - 1 && (
+            <Pressable style={[styles.controlButton, styles.chevronRight]} onPress={() => goTo(index + 1)} hitSlop={8}>
+              <Ionicons name="chevron-forward" size={22} color="#fff" />
             </Pressable>
           )}
         </View>
@@ -145,12 +153,90 @@ function GalleryZoom({
   );
 }
 
+/* A single zoomable page inside the gallery FlatList. Reports its zoom state up
+ * so the parent can lock horizontal paging while the image is magnified. */
+function ZoomablePage({
+  uri,
+  width,
+  height,
+  active,
+  onZoomChange,
+  onClose,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+  active: boolean;
+  onZoomChange: (zoomed: boolean) => void;
+  onClose: () => void;
+}) {
+  const [zoomed, setZoomed] = useState(false);
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const handleZoom = (z: boolean) => {
+    setZoomed(z);
+    onZoomChange(z);
+  };
+
+  // When this page scrolls out of focus, drop any zoom so it's pristine on return.
+  useEffect(() => {
+    if (!active) {
+      scale.value = 1; savedScale.value = 1;
+      translateX.value = 0; translateY.value = 0;
+      savedTranslateX.value = 0; savedTranslateY.value = 0;
+      setZoomed(false);
+    }
+  }, [active]);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => { scale.value = savedScale.value * e.scale; })
+    .onEnd(() => {
+      if (scale.value < 1) { scale.value = withSpring(1); savedScale.value = 1; translateX.value = withSpring(0); translateY.value = withSpring(0); savedTranslateX.value = 0; savedTranslateY.value = 0; runOnJS(handleZoom)(false); }
+      else if (scale.value > 4) { scale.value = withSpring(4); savedScale.value = 4; runOnJS(handleZoom)(true); }
+      else { savedScale.value = scale.value; runOnJS(handleZoom)(scale.value > 1.01); }
+    });
+
+  const panGesture = Gesture.Pan()
+    .enabled(zoomed)
+    .onUpdate((e) => { if (scale.value > 1) { translateX.value = savedTranslateX.value + e.translationX; translateY.value = savedTranslateY.value + e.translationY; } })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value; savedTranslateY.value = translateY.value;
+      const maxX = (width * (scale.value - 1)) / 2;
+      const maxY = (height * (scale.value - 1)) / 2;
+      if (translateX.value > maxX) { translateX.value = withSpring(maxX); savedTranslateX.value = maxX; }
+      else if (translateX.value < -maxX) { translateX.value = withSpring(-maxX); savedTranslateX.value = -maxX; }
+      if (translateY.value > maxY) { translateY.value = withSpring(maxY); savedTranslateY.value = maxY; }
+      else if (translateY.value < -maxY) { translateY.value = withSpring(-maxY); savedTranslateY.value = -maxY; }
+    });
+
+  const doubleTapGesture = Gesture.Tap().numberOfTaps(2).onEnd((e) => {
+    if (scale.value > 1) { scale.value = withSpring(1); savedScale.value = 1; translateX.value = withSpring(0); translateY.value = withSpring(0); savedTranslateX.value = 0; savedTranslateY.value = 0; runOnJS(handleZoom)(false); }
+    else { scale.value = withSpring(2.5); savedScale.value = 2.5; const oX = width / 2 - e.x; const oY = height / 2 - e.y; translateX.value = withSpring(oX); translateY.value = withSpring(oY); savedTranslateX.value = oX; savedTranslateY.value = oY; runOnJS(handleZoom)(true); }
+  });
+
+  const singleTapGesture = Gesture.Tap().onEnd(() => { if (scale.value <= 1.1) { runOnJS(onClose)(); } });
+  const composedGesture = Gesture.Simultaneous(pinchGesture, Gesture.Exclusive(doubleTapGesture, singleTapGesture), panGesture);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={[{ width, height, justifyContent: 'center', alignItems: 'center' }, animatedStyle]}>
+        <Image source={{ uri }} style={{ width, height }} contentFit="contain" accessibilityIgnoresInvertColors />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Single-image pinch / pan / double-tap zoom (original behavior)      */
 /* ------------------------------------------------------------------ */
 
 function SingleImageZoom({ visible, imageUrl, onClose }: { visible: boolean; imageUrl: string; onClose: () => void }) {
-  const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -201,8 +287,8 @@ function SingleImageZoom({ visible, imageUrl, onClose }: { visible: boolean; ima
       <StatusBar backgroundColor="black" barStyle="light-content" />
       <GestureHandlerRootView style={styles.flex1}>
         <View style={styles.backdrop}>
-          <Pressable style={[styles.closeButton, { backgroundColor: colors.tabIconActive }]} onPress={handleClose}>
-            <Ionicons name="close" size={28} color={colors.textInverted} />
+          <Pressable style={styles.controlButton} onPress={handleClose}>
+            <Ionicons name="close" size={24} color="#fff" />
           </Pressable>
           <GestureDetector gesture={composedGesture}>
             <Animated.View style={[styles.imageContainer, animatedStyle]}>
@@ -221,12 +307,12 @@ function SingleImageZoom({ visible, imageUrl, onClose }: { visible: boolean; ima
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.95)' },
-  closeButton: { position: 'absolute', zIndex: 10, width: 44, height: 44, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', top: 60, right: 20 },
+  // Shared circular control (close + chevrons). Close sits top-right; chevrons override left/right + vertical center.
+  controlButton: { position: 'absolute', zIndex: 10, top: 60, right: 20, width: 40, height: 40, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', backgroundColor: CONTROL_BG },
   imageContainer: { justifyContent: 'center', alignItems: 'center' },
   hintContainer: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, bottom: 40, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
   counterContainer: { position: 'absolute', zIndex: 10, top: 64, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
   counterText: { color: '#fff', fontSize: 14, fontFamily: 'Inter-Medium' },
-  chevron: { position: 'absolute', zIndex: 10, top: '50%', marginTop: -28, width: 56, height: 56, borderRadius: 9999, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.45)' },
-  chevronLeft: { left: 10 },
-  chevronRight: { right: 10 },
+  chevronLeft: { top: '50%', marginTop: -20, left: 10, right: undefined },
+  chevronRight: { top: '50%', marginTop: -20, right: 10 },
 });

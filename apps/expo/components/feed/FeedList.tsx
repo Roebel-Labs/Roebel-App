@@ -3,7 +3,6 @@ import {
   View,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   ViewToken,
 } from 'react-native';
@@ -400,7 +399,9 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       }
       ListFooterComponent={
         isLoadingMore ? (
-          <ActivityIndicator style={styles.footerLoader} color={colors.primary} />
+          <View style={styles.footerLoader}>
+            <FeedPostSkeleton />
+          </View>
         ) : (
           <View style={{ height: bottomPadding + 40 }} />
         )
@@ -429,7 +430,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   footerLoader: {
-    padding: 20,
+    paddingTop: 4,
   },
   bottomPadding: {
     height: 100,
