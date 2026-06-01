@@ -47,6 +47,16 @@ export default function CalendarScreen() {
   const monthEnd = endOfMonth(currentDate);
   const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
+  // Add padding days so the 1st lands under its real weekday (Monday-first grid)
+  const startDayOfWeek = monthStart.getDay();
+  const paddingDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+  const paddingDaysArray = Array.from({ length: paddingDays }, (_, i) => {
+    const date = new Date(monthStart);
+    date.setDate(date.getDate() - (paddingDays - i));
+    return date;
+  });
+  const allDays = [...paddingDaysArray, ...calendarDays];
+
   // Group events by date
   const eventsByDate = useMemo(() => {
     const grouped: { [key: string]: EventRecord[] } = {};
@@ -75,6 +85,7 @@ export default function CalendarScreen() {
   };
 
   const handleDatePress = (date: Date) => {
+    if (!isSameMonth(date, currentDate)) return; // Ignore padding days from adjacent months
     setSelectedDate(isSameDay(date, selectedDate || new Date('1900-01-01')) ? null : date);
   };
 
@@ -171,7 +182,7 @@ export default function CalendarScreen() {
 
           {/* Calendar grid */}
           <View style={styles.calendarGrid}>
-            {calendarDays.map((date, index) => renderDay(date, index))}
+            {allDays.map((date, index) => renderDay(date, index))}
           </View>
         </View>
 
