@@ -42,7 +42,6 @@ import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
-import FeedProposalHeroCard from './FeedProposalHeroCard';
 import { HeaderWeather } from './HeaderWeather';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
@@ -528,12 +527,8 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
-            listHeader={
-              <>
-                <HomeStoryBar />
-                {isBuerger && <FeedProposalHeroCard />}
-              </>
-            }
+            listHeader={<HomeStoryBar />}
+            showProposalHero={isBuerger}
             active={screenFocused && effectiveTab === 'main'}
             {...feedListProps}
           />
@@ -549,7 +544,7 @@ export default function FeedHome() {
             active={screenFocused && effectiveTab === 'rathaus'}
             enabled={isCitizen}
             onNewestContent={handleNewestContent}
-            listHeader={isBuerger ? <FeedProposalHeroCard activeOnly /> : undefined}
+            showProposalHero={isBuerger}
             {...feedListProps}
           />
         </View>

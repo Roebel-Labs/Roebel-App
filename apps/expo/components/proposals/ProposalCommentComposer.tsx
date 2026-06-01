@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,22 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  BackHandler,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import BottomDrawer from '@/components/BottomDrawer';
 import { uploadMediaFile } from '@/lib/upload-media';
-import { createProposalComment } from '@/lib/supabase-proposal-comments';
+import {
+  createProposalComment,
+  type ProposalCommentRecord,
+} from '@/lib/supabase-proposal-comments';
 import EmojiIcon from '@/assets/icons/emoji.svg';
 
 const MAX_IMAGES = 4;
@@ -30,9 +37,15 @@ type Props = {
   onClose: () => void;
   proposalId: string;
   walletAddress: string;
-  onCommentCreated: () => void;
+  onCommentCreated: (created: ProposalCommentRecord) => void;
 };
 
+/**
+ * Comment composer modeled on the event-experiences composer: a transparent
+ * Modal with a dim scrim and a KeyboardAvoidingView that docks the input above
+ * the keyboard. This keeps the emoji tray inside the solid dock (never behind
+ * the scrim) and lets a single Send tap post + dismiss the keyboard AND overlay.
+ */
 export default function ProposalCommentComposer({
   visible,
   onClose,
@@ -43,6 +56,7 @@ export default function ProposalCommentComposer({
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
+  const inputRef = useRef<TextInput>(null);
 
   const [content, setContent] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
@@ -54,6 +68,27 @@ export default function ProposalCommentComposer({
 
   const canSubmit =
     (content.trim().length > 0 || !!selectedEmoji) && !isUploading && !isSubmitting;
+
+  // Android: hardware back dismisses keyboard + overlay together.
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      Keyboard.dismiss();
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
+  const handleShow = () => {
+    if (Platform.OS === 'ios') inputRef.current?.focus();
+    else setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleScrimPress = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
 
   const handlePickImages = async () => {
     const remaining = MAX_IMAGES - images.length;
@@ -132,10 +167,12 @@ export default function ProposalCommentComposer({
     if (result) {
       setContent('');
       setSelectedEmoji(null);
+      setShowEmojiTray(false);
       setImages([]);
       setVideoUrl(null);
+      Keyboard.dismiss();
+      onCommentCreated(result);
       onClose();
-      onCommentCreated();
       showSnackbar({ message: 'Kommentar geteilt', duration: 3000 });
     } else {
       showSnackbar({ message: 'Fehler beim Teilen', duration: 3000 });
@@ -143,53 +180,70 @@ export default function ProposalCommentComposer({
   };
 
   return (
-    <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.55}>
-      <View style={styles.container}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Kommentar schreiben</Text>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onShow={handleShow}
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.scrim} onPress={handleScrimPress} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.kbWrap}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.dock, { backgroundColor: colors.background }]}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Kommentar schreiben</Text>
 
-        {selectedEmoji && (
-          <View style={styles.selectedPreviewRow}>
-            <View style={[styles.emojiChip, { backgroundColor: colors.primaryLight }]}>
-              <Text style={styles.emojiText}>{selectedEmoji}</Text>
-              <Pressable onPress={() => setSelectedEmoji(null)} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
-              </Pressable>
+          {selectedEmoji && (
+            <View style={styles.selectedPreviewRow}>
+              <View style={[styles.emojiChip, { backgroundColor: colors.primaryLight }]}>
+                <Text style={styles.emojiText}>{selectedEmoji}</Text>
+                <Pressable onPress={() => setSelectedEmoji(null)} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
-        {(images.length > 0 || videoUrl) && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewRow}>
-            {images.map((uri, i) => (
-              <View key={i} style={styles.previewItem}>
-                <Image source={{ uri }} style={styles.previewImage} />
-                <Pressable onPress={() => handleRemoveImage(i)} style={styles.removeButton}>
-                  <Ionicons name="close-circle" size={20} color={colors.error} />
-                </Pressable>
-              </View>
-            ))}
-            {videoUrl && (
-              <View style={[styles.videoChip, { borderColor: colors.border }]}>
-                <Ionicons name="videocam" size={16} color={colors.textSecondary} />
-                <Text style={[styles.videoChipText, { color: colors.textSecondary }]}>Video</Text>
-                <Pressable onPress={handleRemoveVideo} hitSlop={8}>
-                  <Ionicons name="close-circle" size={16} color={colors.error} />
-                </Pressable>
-              </View>
-            )}
-          </ScrollView>
-        )}
+          {(images.length > 0 || videoUrl) && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={styles.previewRow}
+            >
+              {images.map((uri, i) => (
+                <View key={`${uri}-${i}`} style={styles.previewItem}>
+                  <Image source={{ uri }} style={styles.previewImage} />
+                  <Pressable onPress={() => handleRemoveImage(i)} style={styles.removeButton}>
+                    <Ionicons name="close-circle" size={20} color={colors.error} />
+                  </Pressable>
+                </View>
+              ))}
+              {videoUrl && (
+                <View style={[styles.videoChip, { borderColor: colors.border }]}>
+                  <Ionicons name="videocam" size={16} color={colors.textSecondary} />
+                  <Text style={[styles.videoChipText, { color: colors.textSecondary }]}>Video</Text>
+                  <Pressable onPress={handleRemoveVideo} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color={colors.error} />
+                  </Pressable>
+                </View>
+              )}
+            </ScrollView>
+          )}
 
-        {isUploading && (
-          <View style={styles.uploadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>
-              Wird hochgeladen...
-            </Text>
-          </View>
-        )}
+          {isUploading && (
+            <View style={styles.uploadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>
+                Wird hochgeladen...
+              </Text>
+            </View>
+          )}
 
-        <View style={styles.inputArea}>
           <View style={styles.mediaRow}>
             <TouchableOpacity
               onPress={handlePickImages}
@@ -251,6 +305,7 @@ export default function ProposalCommentComposer({
 
           <View style={styles.inputRow}>
             <TextInput
+              ref={inputRef}
               value={content}
               onChangeText={setContent}
               placeholder="Was denkst du über diesen Vorschlag?"
@@ -283,23 +338,35 @@ export default function ProposalCommentComposer({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </BottomDrawer>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  kbWrap: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  dock: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   selectedPreviewRow: {
     flexDirection: 'row',
-    marginBottom: 12,
   },
   emojiChip: {
     flexDirection: 'row',
@@ -313,7 +380,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   previewRow: {
-    marginBottom: 8,
     flexGrow: 0,
   },
   previewItem: {
@@ -348,14 +414,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
   },
   uploadingText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-  },
-  inputArea: {
-    gap: 8,
   },
   mediaRow: {
     flexDirection: 'row',
@@ -394,7 +456,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    paddingBottom: 16,
   },
   textInput: {
     flex: 1,
@@ -404,8 +465,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    minHeight: 100,
-    maxHeight: 160,
+    minHeight: 80,
+    maxHeight: 140,
     textAlignVertical: 'top',
   },
   sendButton: {

@@ -12,7 +12,7 @@ import CompactVotingBars from '@/components/proposals/CompactVotingBars';
 const ILLUSTRATION = require('@/assets/illustration/buergerumfragen-cropped.png');
 
 /** How long the ended/calculating/results card lingers after the deadline. */
-const RESULTS_WINDOW_SEC = 48 * 3600;
+const RESULTS_WINDOW_SEC = 24 * 3600;
 
 /** Picks the single proposal to feature: the active one, else the newest. */
 function useTopProposal(): SupabaseProposal | null {
@@ -66,7 +66,7 @@ function formatDate(dateString: string): string {
   return `${day}. ${month}`;
 }
 
-export default function FeedProposalHeroCard({ activeOnly = false }: { activeOnly?: boolean }) {
+export default function FeedProposalHeroCard() {
   const { colors } = useTheme();
   const router = useRouter();
 
@@ -91,8 +91,6 @@ export default function FeedProposalHeroCard({ activeOnly = false }: { activeOnl
   if (!proposal) return null;
   if (tally.orphan) return null;
   if (deadlineSec === null) return null; // chain state not loaded yet
-  // On the Stadt tab the hero is shown only while a vote is active.
-  if (activeOnly && !isActive) return null;
 
   const ended = nowSec >= deadlineSec;
   const windowEnd = deadlineSec + RESULTS_WINDOW_SEC;

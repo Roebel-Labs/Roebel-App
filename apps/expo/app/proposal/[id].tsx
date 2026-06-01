@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -31,6 +31,9 @@ export default function ProposalDetailScreen() {
 
   // Get proposal ID from route params (UUID string from Supabase)
   const proposalId = params.id as string | null;
+  // Optional deeplink target: a specific comment to scroll to + highlight.
+  const commentId = (params.commentId as string | undefined) || undefined;
+  const scrollRef = useRef<ScrollView>(null);
 
   const { proposal, userVoteStatus, loading, error, refetch } = useProposalDetails(
     proposalId,
@@ -163,6 +166,7 @@ export default function ProposalDetailScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -243,7 +247,12 @@ export default function ProposalDetailScreen() {
 
         {/* Discussion */}
         {proposalId && (
-          <ProposalCommentSection proposalId={proposalId} isCitizen={isCitizen} />
+          <ProposalCommentSection
+            proposalId={proposalId}
+            isCitizen={isCitizen}
+            highlightCommentId={commentId}
+            scrollViewRef={scrollRef}
+          />
         )}
 
         <View style={styles.bottomSpacer} />

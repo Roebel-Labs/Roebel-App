@@ -21,7 +21,7 @@ export default function FeedProposalCommentCard({ comment }: Props) {
   const proposalId = comment.proposal?.proposal_id || comment.proposal_id;
 
   const handlePress = () => {
-    if (proposalId) router.push(`/proposal/${proposalId}` as any);
+    if (proposalId) router.push(`/proposal/${proposalId}?commentId=${comment.id}` as any);
   };
 
   const imageUrls = comment.media_urls?.filter(Boolean) ?? [];

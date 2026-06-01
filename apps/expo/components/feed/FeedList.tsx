@@ -52,6 +52,7 @@ import MeckyTip from './MeckyTip';
 import FeedAudioPlayerCard from './FeedAudioPlayerCard';
 import FeedProposalCard from './FeedProposalCard';
 import FeedProposalCommentCard from './FeedProposalCommentCard';
+import FeedProposalHeroCard from './FeedProposalHeroCard';
 
 export type FeedListHandle = {
   refresh: () => void;
@@ -90,7 +91,14 @@ type Props = {
    * Used to drive the "new content" dot on inactive tabs. `null` when empty.
    */
   onNewestContent?: (feedType: FeedType, newestIso: string | null) => void;
+  /**
+   * When true, injects the animated proposal hero card just after the first
+   * feed item. The card self-gates (renders nothing when no eligible proposal).
+   */
+  showProposalHero?: boolean;
 };
+
+const PROPOSAL_HERO_ID = '__proposal_hero';
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   {
@@ -107,6 +115,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     active = true,
     enabled = true,
     onNewestContent,
+    showProposalHero = false,
   },
   ref,
 ) {
@@ -300,6 +309,9 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         case 'proposal_comment':
           return <FeedProposalCommentCard comment={item.data} />;
 
+        case 'proposal_hero':
+          return <FeedProposalHeroCard />;
+
         default:
           return null;
       }
@@ -308,6 +320,16 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
+
+  // Inject the animated proposal hero a little down the feed (after the first
+  // item) rather than pinning it at the very top. The card self-gates, so an
+  // injected sentinel renders nothing when there's no eligible proposal.
+  const displayData = React.useMemo(() => {
+    if (!showProposalHero) return items;
+    const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
+    const at = Math.min(1, items.length);
+    return [...items.slice(0, at), hero, ...items.slice(at)];
+  }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.
   // Always force visible at the top / on overscroll. Only triggers a new timing
@@ -345,7 +367,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   return (
     <Animated.FlatList
-      data={items}
+      data={displayData}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ListHeaderComponent={listHeader ? <>{listHeader}</> : undefined}

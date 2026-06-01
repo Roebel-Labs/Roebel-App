@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet, Linking } from 'react-native';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { View, Text, Pressable, Alert, StyleSheet, Linking, ScrollView, findNodeHandle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -22,12 +22,44 @@ type Props = {
   isOwner: boolean;
   walletAddress?: string;
   onDelete?: (comment: ProposalCommentRecord) => void;
+  isHighlighted?: boolean;
+  scrollViewRef?: RefObject<ScrollView | null>;
 };
 
-export default function ProposalCommentItem({ comment, isOwner, walletAddress, onDelete }: Props) {
+export default function ProposalCommentItem({
+  comment,
+  isOwner,
+  walletAddress,
+  onDelete,
+  isHighlighted = false,
+  scrollViewRef,
+}: Props) {
   const { colors } = useTheme();
   const [menuVisible, setMenuVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [showHighlight, setShowHighlight] = useState(false);
+  const cardRef = useRef<View>(null);
+
+  // Scroll into view + briefly flash when this comment is the deeplink target.
+  useEffect(() => {
+    if (!isHighlighted) return;
+    const node = cardRef.current;
+    const scrollNode = scrollViewRef?.current ? findNodeHandle(scrollViewRef.current) : null;
+    if (!node || !scrollNode) return;
+    const measureTimer = setTimeout(() => {
+      node.measureLayout(
+        scrollNode,
+        (_x, y) => scrollViewRef?.current?.scrollTo({ y: Math.max(0, y - 24), animated: true }),
+        () => {},
+      );
+    }, 250);
+    setShowHighlight(true);
+    const fadeTimer = setTimeout(() => setShowHighlight(false), 2200);
+    return () => {
+      clearTimeout(measureTimer);
+      clearTimeout(fadeTimer);
+    };
+  }, [isHighlighted, scrollViewRef]);
 
   const [isLiked, setIsLiked] = useState<boolean>(!!comment.is_liked);
   const [likeCount, setLikeCount] = useState<number>(comment.likes_count ?? 0);
@@ -81,7 +113,14 @@ export default function ProposalCommentItem({ comment, isOwner, walletAddress, o
   const imageUrls = comment.media_urls?.filter(Boolean) ?? [];
 
   return (
-    <View style={[styles.card, { borderColor: colors.border }]}>
+    <View
+      ref={cardRef}
+      style={[
+        styles.card,
+        { borderBottomColor: colors.border },
+        showHighlight && { backgroundColor: colors.primaryLight },
+      ]}
+    >
       {comment.emoji ? (
         <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
           <Text style={styles.emoji}>{comment.emoji}</Text>
@@ -107,7 +146,7 @@ export default function ProposalCommentItem({ comment, isOwner, walletAddress, o
         {menuVisible && isOwner && (
           <Pressable
             onPress={handleDelete}
-            style={[styles.deleteOption, { borderColor: colors.border }]}
+            style={[styles.deleteOption, { backgroundColor: colors.surfaceSecondary }]}
           >
             <Text style={[styles.deleteText, { color: colors.error }]}>Löschen</Text>
           </Pressable>
@@ -170,20 +209,19 @@ export default function ProposalCommentItem({ comment, isOwner, walletAddress, o
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   emojiBanner: {
     alignItems: 'center',
     paddingVertical: 12,
   },
   emoji: {
-    fontSize: 40,
+    fontSize: 48,
   },
   body: {
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
   headerRow: {
     flexDirection: 'row',
@@ -200,7 +238,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    borderWidth: 1,
     alignSelf: 'flex-end',
   },
   deleteText: {
