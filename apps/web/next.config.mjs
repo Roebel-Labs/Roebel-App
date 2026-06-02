@@ -18,6 +18,8 @@ const nextConfig = {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         got: false,
+        // react-pdf/pdfjs reference node "canvas" which is not needed in the browser
+        canvas: false,
       };
     }
     return config;
