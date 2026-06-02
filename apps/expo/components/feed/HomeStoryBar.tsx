@@ -326,7 +326,7 @@ export default function HomeStoryBar() {
                   {orgAvatar ? (
                     <Image
                       source={{ uri: orgAvatar }}
-                      style={StyleSheet.absoluteFill}
+                      style={[StyleSheet.absoluteFill, styles.storyOrgAvatarImg]}
                       contentFit="cover"
                     />
                   ) : (
@@ -503,6 +503,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Round the image itself (not just the container) so it stays a perfect
+  // circle on Android, where overflow:hidden clipping of an absolutely-
+  // positioned child image is unreliable.
+  storyOrgAvatarImg: {
+    borderRadius: 12,
   },
   storyOrgLetter: {
     color: '#ffffff',
