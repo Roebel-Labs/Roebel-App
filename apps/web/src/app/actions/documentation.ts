@@ -45,38 +45,54 @@ function safeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-80) || "datei.pdf"
 }
 
-// Upload a PDF to the documentation bucket; returns { path, publicUrl }.
-async function uploadPdf(
-  supabase: ReturnType<typeof createAdminClient>,
-  chapterId: string,
-  file: File
-): Promise<{ path: string; publicUrl: string }> {
-  const path = `chapters/${chapterId}/${Date.now()}-${safeName(file.name)}`
-  const buffer = Buffer.from(await file.arrayBuffer())
-
-  const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {
-    contentType: "application/pdf",
-    upsert: false,
-  })
-  if (error) throw error
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
-  return { path, publicUrl: data.publicUrl }
-}
-
-export async function createChapter(formData: FormData) {
+/**
+ * Mint a signed upload URL so the browser can upload the PDF DIRECTLY to
+ * Supabase Storage, bypassing the Vercel/Next Server Action body limit (~4.5MB)
+ * that otherwise causes a 413. Admin-gated: only this action (service-role) can
+ * create the token, so the bucket needs no public-write policy.
+ * Pass `chapterId` when replacing an existing chapter's file to reuse its folder.
+ */
+export async function createChapterUploadTarget(fileName: string, chapterId?: string) {
   try {
     const supabase = createAdminClient()
 
-    const title = (formData.get("title") as string)?.trim()
-    const file = formData.get("pdf") as File | null
+    const id = chapterId || randomUUID()
+    const path = `chapters/${id}/${Date.now()}-${safeName(fileName)}`
 
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUploadUrl(path)
+    if (error) throw error
+
+    const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path)
+
+    return {
+      success: true as const,
+      id,
+      path,
+      token: data.token,
+      publicUrl: pub.publicUrl,
+    }
+  } catch (error) {
+    console.error("Error creating upload target:", error)
+    return { success: false as const, error: "Fehler beim Vorbereiten des Uploads" }
+  }
+}
+
+/** Insert a chapter row after the browser has uploaded the PDF via signed URL. */
+export async function finalizeCreateChapter(args: {
+  id: string
+  title: string
+  storage_path: string
+  pdf_url: string
+}) {
+  try {
+    const supabase = createAdminClient()
+
+    const title = args.title?.trim()
     if (!title) return { success: false, error: "Titel ist erforderlich" }
-    if (!file || file.size === 0) return { success: false, error: "PDF-Datei ist erforderlich" }
 
-    const id = randomUUID()
     const slug = await uniqueSlug(supabase, generateSlug(title))
-    const { path, publicUrl } = await uploadPdf(supabase, id, file)
 
     // Next display_order = current max + 1.
     const { data: last } = await supabase
@@ -89,7 +105,14 @@ export async function createChapter(formData: FormData) {
 
     const { data, error } = await supabase
       .from("documentation_chapters")
-      .insert({ id, title, slug, pdf_url: publicUrl, storage_path: path, display_order })
+      .insert({
+        id: args.id,
+        title,
+        slug,
+        pdf_url: args.pdf_url,
+        storage_path: args.storage_path,
+        display_order,
+      })
       .select()
       .single()
 
@@ -105,13 +128,19 @@ export async function createChapter(formData: FormData) {
   }
 }
 
-export async function updateChapter(id: string, formData: FormData) {
+/**
+ * Update a chapter's title and, optionally, swap its PDF. The new file (if any)
+ * has already been uploaded by the browser via a signed URL; pass its
+ * storage_path/pdf_url to switch and delete the old object.
+ */
+export async function finalizeUpdateChapter(
+  id: string,
+  args: { title: string; storage_path?: string; pdf_url?: string }
+) {
   try {
     const supabase = createAdminClient()
 
-    const title = (formData.get("title") as string)?.trim()
-    const file = formData.get("pdf") as File | null
-
+    const title = args.title?.trim()
     if (!title) return { success: false, error: "Titel ist erforderlich" }
 
     const { data: current } = await supabase
@@ -126,12 +155,10 @@ export async function updateChapter(id: string, formData: FormData) {
       updated_at: new Date().toISOString(),
     }
 
-    // Optional PDF replace: upload new object, then delete the old one.
-    if (file && file.size > 0) {
-      const { path, publicUrl } = await uploadPdf(supabase, id, file)
-      updates.pdf_url = publicUrl
-      updates.storage_path = path
-      if (current?.storage_path) {
+    if (args.storage_path && args.pdf_url) {
+      updates.pdf_url = args.pdf_url
+      updates.storage_path = args.storage_path
+      if (current?.storage_path && current.storage_path !== args.storage_path) {
         await supabase.storage.from(BUCKET).remove([current.storage_path])
       }
     }

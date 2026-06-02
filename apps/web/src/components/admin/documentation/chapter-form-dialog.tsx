@@ -13,8 +13,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { createChapter, updateChapter } from "@/app/actions/documentation"
+import { createClient } from "@/lib/supabase/client"
+import {
+  createChapterUploadTarget,
+  finalizeCreateChapter,
+  finalizeUpdateChapter,
+} from "@/app/actions/documentation"
 import type { DocumentationChapter } from "@/lib/supabase-documentation"
+
+const BUCKET = "documentation"
 
 interface ChapterFormDialogProps {
   open: boolean
@@ -55,18 +62,76 @@ export function ChapterFormDialog({
     }
 
     setSubmitting(true)
-    const loadingToast = toast.loading(isEdit ? "Kapitel wird gespeichert…" : "Kapitel wird erstellt…")
+    const loadingToast = toast.loading(
+      file ? "PDF wird hochgeladen…" : isEdit ? "Kapitel wird gespeichert…" : "Kapitel wird erstellt…"
+    )
 
-    const formData = new FormData()
-    formData.append("title", title.trim())
-    if (file) formData.append("pdf", file)
+    try {
+      // If a PDF was selected, upload it DIRECTLY from the browser to Supabase
+      // Storage via a signed URL — this avoids the Server Action body limit
+      // (Vercel ~4.5MB) that otherwise returns a 413.
+      let uploaded: { path: string; publicUrl: string } | null = null
+      if (file) {
+        const target = await createChapterUploadTarget(file.name, isEdit ? chapter!.id : undefined)
+        if (!target.success) {
+          toast.error("Fehler", { id: loadingToast, description: target.error })
+          setSubmitting(false)
+          return
+        }
 
-    const result = isEdit
-      ? await updateChapter(chapter!.id, formData)
-      : await createChapter(formData)
+        const supabase = createClient()
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .uploadToSignedUrl(target.path, target.token, file, {
+            contentType: "application/pdf",
+          })
+        if (uploadError) {
+          toast.error("Upload fehlgeschlagen", {
+            id: loadingToast,
+            description: uploadError.message,
+          })
+          setSubmitting(false)
+          return
+        }
 
+        uploaded = { path: target.path, publicUrl: target.publicUrl }
+
+        // For a new chapter, reuse the id the upload target was created under.
+        if (!isEdit) {
+          const result = await finalizeCreateChapter({
+            id: target.id,
+            title: title.trim(),
+            storage_path: uploaded.path,
+            pdf_url: uploaded.publicUrl,
+          })
+          finishSave(result, loadingToast)
+          return
+        }
+      }
+
+      // Edit (rename and/or replace), or create without a separate upload step.
+      const result = isEdit
+        ? await finalizeUpdateChapter(chapter!.id, {
+            title: title.trim(),
+            storage_path: uploaded?.path,
+            pdf_url: uploaded?.publicUrl,
+          })
+        : // Should not reach here: create always has a file (guarded above).
+          { success: false, error: "PDF-Datei ist erforderlich" }
+
+      finishSave(result, loadingToast)
+    } catch (err) {
+      console.error("Chapter save failed:", err)
+      toast.error("Fehler", { id: loadingToast, description: "Speichern fehlgeschlagen" })
+      setSubmitting(false)
+    }
+  }
+
+  const finishSave = (
+    result: { success: boolean; message?: string; error?: string },
+    loadingToast: string | number
+  ) => {
     setSubmitting(false)
-
     if (result.success) {
       toast.success(isEdit ? "Kapitel gespeichert" : "Kapitel erstellt", {
         id: loadingToast,
