@@ -5,7 +5,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import { softShadow } from '@/lib/shadow';
 
-const ROEBEL_CARD = require('../../assets/illustration/profile/01.png');
 const ANZEIGE = require('../../assets/illustration/profile/05.png');
 const DIENSTLEISTUNG = require('../../assets/illustration/profile/06.png');
 const ADS_ILLUSTRATION = require('../../assets/illustration/profile/ads.png');
@@ -30,7 +29,6 @@ export default function OrgActionCards() {
   const cardBg = colors.background;
 
   const gridItems: GridItem[] = [
-    { label: 'Röbel Card', icon: ROEBEL_CARD, onPress: () => router.push('/roebel-card' as any) },
     {
       label: 'Anzeige\nerstellen',
       icon: ANZEIGE,

@@ -11,7 +11,6 @@ type Item = {
 };
 
 const ITEMS: Item[] = [
-  { label: 'Röbel Card', icon: require('../../assets/illustration/profile/01.png'), href: '/roebel-card' as Href },
   { label: 'Bürgerbefragung', icon: require('../../assets/illustration/profile/02.png'), href: '/governance' as Href },
   { label: 'Durchstarten', icon: require('../../assets/illustration/profile/03.png'), href: '/create-org' as Href },
   { label: 'Veranstaltung\neinsenden', icon: require('../../assets/illustration/profile/04.png'), href: '/submit-event' as Href },
