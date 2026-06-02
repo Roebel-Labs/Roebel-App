@@ -47,6 +47,7 @@ export default function NewConversationScreen() {
 
   const {
     address: prefillAddress,
+    accountId: prefillAccountId,
     listingId,
     listingTitle,
     listingPrice,
@@ -55,6 +56,7 @@ export default function NewConversationScreen() {
     listingCondition,
   } = useLocalSearchParams<{
     address?: string;
+    accountId?: string;
     listingId?: string;
     listingTitle?: string;
     listingPrice?: string;
@@ -119,11 +121,16 @@ export default function NewConversationScreen() {
   // peer has no personal account yet.
   useEffect(() => {
     if (autoTriggered.current) return;
-    if (!prefillAddress || !activeAccount?.id) return;
+    if (!activeAccount?.id) return;
+    if (!prefillAccountId && !prefillAddress) return;
     autoTriggered.current = true;
 
     (async () => {
-      const peerId = await fetchPersonalAccountIdByWallet(prefillAddress);
+      // Org listing deep-link: the peer account id is known directly.
+      // Personal listing: resolve the seller's wallet to their personal account.
+      const peerId = prefillAccountId
+        ? prefillAccountId
+        : await fetchPersonalAccountIdByWallet(prefillAddress!);
       if (!peerId) {
         setErrorMessage('Verkäufer konnte nicht gefunden werden.');
         return;
@@ -135,7 +142,7 @@ export default function NewConversationScreen() {
       openConversation(peerId);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillAddress, activeAccount?.id]);
+  }, [prefillAccountId, prefillAddress, activeAccount?.id]);
 
   const renderItem = ({ item, index }: { item: AccountSearchResult; index: number }) => (
     <AccountSearchRow

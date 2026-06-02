@@ -73,6 +73,7 @@ export interface ListingWithSeller extends MarketplaceListing {
 
 export interface CreateListingInput {
   seller_wallet_address: string
+  account_id?: string | null
   listing_type: ListingType
   title: string
   description?: string

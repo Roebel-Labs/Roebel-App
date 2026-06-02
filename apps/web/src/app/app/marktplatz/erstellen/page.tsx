@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, ShoppingBag, ClipboardList } from "lucide-react"
 import { useActiveAccount } from "thirdweb/react"
+import { useAccount } from "@/lib/context/AccountContext"
 import { createListing } from "@/app/actions/marketplace"
 import type {
   ListingType,
@@ -21,6 +22,7 @@ import { ListingForm } from "@/components/marketplace/ListingForm"
 export default function CreateListingPage() {
   const router = useRouter()
   const account = useActiveAccount()
+  const { activeAccount } = useAccount()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [listingType, setListingType] = useState<ListingType>("product")
 
@@ -42,6 +44,8 @@ export default function CreateListingPage() {
 
     const result = await createListing({
       seller_wallet_address: account.address,
+      account_id:
+        activeAccount?.account_type === "organisation" ? activeAccount.id : null,
       listing_type: listingType,
       title: data.title,
       description: data.description || undefined,
@@ -92,6 +96,11 @@ export default function CreateListingPage() {
               ? "Bieten Sie eine Dienstleistung an."
               : "Bieten Sie etwas zum Verkauf an."}
         </p>
+        {activeAccount && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Posten als <span className="font-medium text-foreground">{activeAccount.name}</span>
+          </p>
+        )}
       </div>
 
       {/* Listing Type Toggle */}

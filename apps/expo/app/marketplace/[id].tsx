@@ -27,6 +27,7 @@ import {
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { MarketplaceDetailSkeleton } from '@/components/SkeletonLoader';
 import { getAccountRole, canEditListings } from '@/lib/supabase-account-roles';
+import { fetchAccountById } from '@/lib/supabase-accounts';
 import { MARKETPLACE_CATEGORY_LABELS, PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import {
   ArrowLeftIcon,
@@ -90,15 +91,27 @@ export default function ListingDetailScreen() {
   }, [listing, user?.wallet_address]);
 
   useEffect(() => {
-    if (!listing?.seller_wallet_address) return;
+    if (!listing) return;
     let cancelled = false;
-    fetchSellerProfileByWallet(listing.seller_wallet_address).then((profile) => {
-      if (!cancelled) setSeller(profile);
-    });
+
+    // Org listing: author + DM target is the org account, not the seller's
+    // personal account. Personal listing (account_id null): resolve the
+    // seller's personal account by wallet.
+    if (listing.account_id) {
+      fetchAccountById(listing.account_id).then((acc) => {
+        if (cancelled || !acc) return;
+        setSeller({ accountId: acc.id, name: acc.name, avatarUrl: acc.avatar_url });
+      });
+    } else if (listing.seller_wallet_address) {
+      fetchSellerProfileByWallet(listing.seller_wallet_address).then((profile) => {
+        if (!cancelled) setSeller(profile);
+      });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [listing?.seller_wallet_address]);
+  }, [listing?.account_id, listing?.seller_wallet_address]);
 
   const loadData = async () => {
     try {
@@ -127,12 +140,15 @@ export default function ListingDetailScreen() {
   const handleContact = () => {
     if (!listing) return;
     const params = new URLSearchParams({
-      address: listing.seller_wallet_address,
       listingId: listing.id,
       listingTitle: listing.title,
       listingPrice: String(listing.price),
       listingPriceType: listing.price_type,
     });
+    // Org listing → message the org account directly; personal → resolve the
+    // seller's wallet to their personal account on the new-message screen.
+    if (listing.account_id) params.set('accountId', listing.account_id);
+    else params.set('address', listing.seller_wallet_address);
     if (listing.media_urls?.[0]) params.set('listingImage', listing.media_urls[0]);
     if (listing.condition) params.set('listingCondition', listing.condition);
     router.push(`/messages/new?${params.toString()}` as any);

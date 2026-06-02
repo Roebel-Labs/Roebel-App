@@ -208,6 +208,7 @@ export async function createListing(
       .insert([
         {
           seller_wallet_address: input.seller_wallet_address.toLowerCase(),
+          account_id: input.account_id ?? null,
           listing_type: input.listing_type || "product",
           title: input.title,
           description: input.description || null,
