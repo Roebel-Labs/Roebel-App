@@ -42,7 +42,7 @@ export function PdfViewer({ url, title }: PdfViewerProps) {
       </div>
 
       <p className="text-center text-xs text-muted-foreground sm:hidden">
-        Falls das Dokument hier nicht angezeigt wird, tippe auf „Im Vollbild öffnen".
+        Falls das Dokument hier nicht angezeigt wird, tippe auf „Im Vollbild öffnen“.
       </p>
     </div>
   )
