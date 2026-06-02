@@ -3,6 +3,7 @@ import { BookOpen } from "lucide-react"
 import { getChapters } from "@/lib/supabase-documentation"
 import { DocumentationGrid } from "@/components/documentation/documentation-grid"
 import { ShareQr } from "@/components/documentation/share-qr"
+import { WorkInProgressNotice } from "@/components/documentation/work-in-progress-notice"
 
 export const dynamic = "force-dynamic"
 
@@ -34,6 +35,9 @@ export default async function DokumentationPage() {
       </header>
 
       <main className="container mx-auto px-4 py-12">
+        <div className="mb-8">
+          <WorkInProgressNotice />
+        </div>
         {chapters.length === 0 ? (
           <div className="rounded-[10px] border border-border bg-card py-20 text-center">
             <BookOpen className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />

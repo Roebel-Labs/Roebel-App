@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 import { getChapterBySlug } from "@/lib/supabase-documentation"
 import { PdfViewer } from "@/components/documentation/pdf-viewer"
+import { WorkInProgressNotice } from "@/components/documentation/work-in-progress-notice"
 
 export const dynamic = "force-dynamic"
 
@@ -41,6 +42,9 @@ export default async function ChapterPage({ params }: PageProps) {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-6">
+          <WorkInProgressNotice />
+        </div>
         <PdfViewer url={chapter.pdf_url} title={chapter.title} />
       </main>
     </div>
