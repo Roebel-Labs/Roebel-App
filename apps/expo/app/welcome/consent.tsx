@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Image, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Image, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
@@ -36,37 +36,60 @@ export default function WelcomeConsentScreen() {
     }
     setSubmitting(true);
     try {
+      // Save the DSGVO consent FIRST and unconditionally. This is the actual
+      // data-permission, it only writes local SecureStore, and it does a full
+      // overwrite of stored preferences — so accepting here always supersedes
+      // an earlier "Nur Notwendige"/decline choice on the standalone screen.
+      await acceptAll('welcome_terms');
+
+      // The remaining profile/onboarding writes hit Supabase and must NEVER
+      // block the user (consent is already saved). A transient DB hiccup here
+      // used to surface a scary "Zustimmung konnte nicht gespeichert werden"
+      // modal even though consent succeeded.
       const trimmedName = state.displayName?.replace(/\s+/g, ' ').trim() ?? '';
-      let username: string | null = null;
-      let displayName: string | null = null;
+      let username: string | undefined;
+      let displayName: string | undefined;
       if (trimmedName.length >= 2) {
-        const baseSlug = slugifyDisplayName(trimmedName);
-        username = await ensureUniqueUsernameSlug(baseSlug, user.wallet_address);
-        displayName = trimmedName;
+        try {
+          const slug = await ensureUniqueUsernameSlug(
+            slugifyDisplayName(trimmedName),
+            user.wallet_address,
+          );
+          // users.username_length CHECK requires 3-30 chars.
+          if (slug.length >= 3) username = slug;
+          displayName = trimmedName;
+        } catch (err) {
+          console.error('username slug lookup failed (non-fatal):', err);
+          displayName = trimmedName;
+        }
       }
 
-      await updateUserOnboarding(user.wallet_address, {
-        username: username ?? undefined,
-        displayName: displayName ?? undefined,
-        preferredRole: state.preferredRole ?? undefined,
-        termsAccepted: true,
-        markCompleted: true,
-      });
-      await acceptAll('welcome_terms');
+      // Persist onboarding with one retry; on final failure proceed anyway.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await updateUserOnboarding(user.wallet_address, {
+            username,
+            displayName,
+            preferredRole: state.preferredRole ?? undefined,
+            termsAccepted: true,
+            markCompleted: true,
+          });
+          break;
+        } catch (err) {
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            continue;
+          }
+          console.error('Failed to persist onboarding (non-fatal):', err);
+        }
+      }
+
       await refreshUser();
+    } finally {
       await setNotificationPromptPending();
       dispatch({ type: 'RESET' });
-      router.replace('/');
-    } catch (err) {
-      console.error('Failed to save onboarding consent:', err);
-      Alert.alert(
-        'Fehler',
-        __DEV__
-          ? `Deine Zustimmung konnte nicht gespeichert werden.\n\n${(err as any)?.message ?? err}`
-          : 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuche es erneut.',
-      );
-    } finally {
       setSubmitting(false);
+      router.replace('/');
     }
   };
 
@@ -77,8 +100,12 @@ export default function WelcomeConsentScreen() {
         let username: string | undefined;
         let displayName: string | undefined;
         if (trimmedName.length >= 2) {
-          const baseSlug = slugifyDisplayName(trimmedName);
-          username = await ensureUniqueUsernameSlug(baseSlug, user.wallet_address);
+          const slug = await ensureUniqueUsernameSlug(
+            slugifyDisplayName(trimmedName),
+            user.wallet_address,
+          );
+          // users.username_length CHECK requires 3-30 chars.
+          if (slug.length >= 3) username = slug;
           displayName = trimmedName;
         }
         await updateUserOnboarding(user.wallet_address, {
