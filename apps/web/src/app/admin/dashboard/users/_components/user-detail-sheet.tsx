@@ -11,7 +11,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { AdminUserRow } from "@/app/actions/users-admin";
-import { formatWalletAddress, getRoleInfo } from "@/lib/user-types";
+import {
+  formatWalletAddress,
+  getRoleInfo,
+  type UserRoleOrTier,
+} from "@/lib/user-types";
 
 const numberFmt = new Intl.NumberFormat("de-DE");
 
@@ -134,7 +138,8 @@ export function UserDetailSheet({
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Badge variant="outline">
-                  {TIER_LABELS[user.tier] ?? getRoleInfo(user.tier).labelDe}
+                  {TIER_LABELS[user.tier] ??
+                    getRoleInfo(user.tier as UserRoleOrTier).labelDe}
                 </Badge>
                 <Badge
                   variant={

@@ -13,7 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AdminUserRow } from "@/app/actions/users-admin";
-import { formatWalletAddress, getRoleInfo } from "@/lib/user-types";
+import {
+  formatWalletAddress,
+  getRoleInfo,
+  type UserRoleOrTier,
+} from "@/lib/user-types";
 import { UserDetailSheet } from "./user-detail-sheet";
 
 const numberFmt = new Intl.NumberFormat("de-DE");
@@ -171,7 +175,7 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
               </tr>
             ) : (
               filtered.map((r) => {
-                const tierInfo = getRoleInfo(r.tier);
+                const tierInfo = getRoleInfo(r.tier as UserRoleOrTier);
                 const status =
                   VERIFICATION[r.verification_status] ?? VERIFICATION.pending;
                 return (
