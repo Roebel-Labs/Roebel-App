@@ -1,4 +1,4 @@
-import { Activity, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { Activity, Apple, Download, Smartphone, ShieldCheck, UserPlus, Users } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,7 +12,9 @@ import { SignupsChart } from "@/components/admin/users/SignupsChart";
 import { DailyActivityChart } from "@/components/admin/users/DailyActivityChart";
 import { OpenVerificationsKpi } from "@/components/admin/users/OpenVerificationsKpi";
 import { TopUsersBars } from "@/components/admin/users/TopUsersBars";
+import { StoreDownloadsChart } from "@/components/admin/users/StoreDownloadsChart";
 import { getUsersAdminData } from "@/app/actions/users-admin";
+import { getStoreMetrics } from "@/app/actions/store-admin";
 import { UsersTable } from "./_components/users-table";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +22,11 @@ export const dynamic = "force-dynamic";
 const numberFmt = new Intl.NumberFormat("de-DE");
 
 export default async function UsersAdminPage() {
-  const result = await getUsersAdminData();
+  const [result, storeResult] = await Promise.all([
+    getUsersAdminData(),
+    getStoreMetrics(),
+  ]);
+  const store = storeResult.success ? storeResult.data : undefined;
 
   if (!result.success || !result.rows || !result.metrics || !result.signupRows) {
     return (
@@ -130,6 +136,51 @@ export default async function UsersAdminPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Store downloads */}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <KpiCard
+            label="App Store Downloads"
+            value={numberFmt.format(store?.totals.ios ?? 0)}
+            hint="iOS · seit Tracking-Start"
+            icon={Apple}
+          />
+          <KpiCard
+            label="Play Store Downloads"
+            value={numberFmt.format(store?.totals.android ?? 0)}
+            hint="Android · Geräte-Installs"
+            icon={Smartphone}
+          />
+          <KpiCard
+            label="Downloads gesamt"
+            value={numberFmt.format(store?.totals.combined ?? 0)}
+            hint="beide Stores kombiniert"
+            icon={Download}
+          />
+        </div>
+
+        <Card className="bg-card border border-border shadow-none">
+          <CardHeader>
+            <CardTitle>Store-Downloads pro Tag (60 Tage)</CardTitle>
+            <CardDescription>
+              Tägliche Downloads aus App Store (Sales Reports) und Play Store
+              (Installs-Export).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {store?.hasData ? (
+              <StoreDownloadsChart daily={store.daily} />
+            ) : (
+              <div className="flex h-48 items-center justify-center text-center text-sm text-muted-foreground">
+                Noch keine Store-Daten – Zugangsdaten (Apple App Store Connect &amp;
+                Google Play) in Vercel hinterlegen. Der tägliche Cron-Job füllt die
+                Werte anschließend automatisch.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Charts row 2 — engagement */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

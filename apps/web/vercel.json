@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/mecky",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/store-metrics",
+      "schedule": "0 7 * * *"
     }
   ]
 }
