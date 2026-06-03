@@ -117,6 +117,7 @@ export default function EditProfileScreen() {
 
     setSaving(true);
     try {
+      const usernameChanged = (username || '') !== (user?.username || '');
       await updateProfile({
         username: username || undefined,
         bio: bio || undefined,
@@ -129,7 +130,13 @@ export default function EditProfileScreen() {
         changed_profile_picture: !!profilePicture,
         changed_neighborhood: !!neighborhood,
       });
-      router.back();
+      // The username drives the /user/[username] route param. If it changed, the
+      // previous screen's route no longer resolves, so land on the renamed profile.
+      if (usernameChanged && username) {
+        router.replace(`/user/${username}` as any);
+      } else {
+        router.back();
+      }
     } catch (error: any) {
       console.error('Error saving profile:', error);
       Alert.alert('Fehler', error?.message || 'Profil konnte nicht gespeichert werden.');

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
@@ -51,34 +51,45 @@ export default function PublicUserProfileScreen() {
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
-  useEffect(() => {
-    if (!username) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .single();
+  const loadProfile = useCallback(
+    (signal: { cancelled: boolean }) => {
+      if (!username) return;
+      (async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
 
-      if (cancelled) return;
-      if (error) {
-        console.error('Error loading user:', error);
-        setProfile(null);
-        setEquipped([]);
-      } else {
-        const userRow = data as UserRecord;
-        setProfile(userRow);
-        const rewards = await fetchEquippedRewards(userRow.wallet_address);
-        if (!cancelled) setEquipped(rewards);
-      }
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [username]);
+        if (signal.cancelled) return;
+        if (error) {
+          console.error('Error loading user:', error);
+          setProfile(null);
+          setEquipped([]);
+        } else {
+          const userRow = data as UserRecord;
+          setProfile(userRow);
+          const rewards = await fetchEquippedRewards(userRow.wallet_address);
+          if (!signal.cancelled) setEquipped(rewards);
+        }
+        if (!signal.cancelled) setLoading(false);
+      })();
+    },
+    [username]
+  );
+
+  // Refetch whenever the screen regains focus (e.g. returning from edit-profile)
+  // so username / avatar / bio changes reflect without a manual reload.
+  useFocusEffect(
+    useCallback(() => {
+      const signal = { cancelled: false };
+      loadProfile(signal);
+      return () => {
+        signal.cancelled = true;
+      };
+    }, [loadProfile])
+  );
 
   const isOwner = useMemo(() => {
     if (!currentUser || !profile) return false;
@@ -175,7 +186,7 @@ export default function PublicUserProfileScreen() {
         <View style={styles.header}>
           <View style={styles.nameRow}>
             <Text style={[styles.displayName, { color: colors.textPrimary }]} numberOfLines={1}>
-              {profile.username ? `@${profile.username}` : displayName}
+              {profile.username ?? displayName}
             </Text>
             {profile.is_verified_citizen && (
               <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>

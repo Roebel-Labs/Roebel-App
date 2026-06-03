@@ -503,6 +503,7 @@ const handleRefresh = async () => {
             const emoji = acc.account_type === 'personal' ? '👤' : (acc.sub_type ? SUB_TYPE_EMOJI[acc.sub_type] || '🏢' : '🏢');
             const typeLabel = acc.account_type === 'personal' ? 'Persönlich' : (acc.sub_type ? SUB_TYPE_LABEL[acc.sub_type] || 'Organisation' : 'Organisation');
             const avatarSource = acc.account_type === 'personal' ? user?.profile_picture_url : (acc.avatar_url || acc.cover_url);
+            const accDisplayName = acc.account_type === 'personal' ? (user?.username || acc.name) : acc.name;
             const accIsPending = acc.account_type === 'organisation' && !acc.is_verified;
 
             return (
@@ -523,7 +524,7 @@ const handleRefresh = async () => {
                   </View>
                 )}
                 <View style={accountSheetStyles.accountInfo}>
-                  <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{acc.name}</Text>
+                  <Text style={[accountSheetStyles.accountName, { color: colors.textPrimary }]}>{accDisplayName}</Text>
                   <Text style={[accountSheetStyles.accountType, { color: colors.textSecondary }]}>{typeLabel}</Text>
                 </View>
                 {accIsPending && (

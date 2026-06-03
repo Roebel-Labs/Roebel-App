@@ -8,8 +8,6 @@ import { Skeleton } from '@/components/SkeletonLoader';
 import type { AttesterProfile } from '@/lib/supabase-attesters';
 import type { Account } from '@/lib/types';
 
-type OrgEntry = { wallet: string; org: Account };
-
 interface AttesterGridProps {
   attesters: AttesterProfile[];
   isLoading: boolean;
@@ -27,22 +25,22 @@ export default function AttesterGrid({ attesters, isLoading }: AttesterGridProps
   const orgCardWidth = (contentWidth - COL_GAP) / 2;
   const tileWidth = (contentWidth - COL_GAP * 2) / 3;
 
-  const { orgEntries, personalAttesters } = useMemo(() => {
-    const entries: OrgEntry[] = [];
+  const { orgs, personalAttesters } = useMemo(() => {
+    const orgMap = new Map<string, Account>();
     const personal: AttesterProfile[] = [];
     for (const a of attesters) {
-      if (a.orgs.length === 0) {
-        personal.push(a);
-      } else {
-        for (const org of a.orgs) entries.push({ wallet: a.wallet, org });
-      }
+      // Every attester that resolves to a username is shown as an individual
+      // citizen tile — even if they also own an org. Never render a wallet.
+      if (a.user?.username) personal.push(a);
+      // Dedupe orgs by id so a single org owned by multiple attesters appears once.
+      for (const org of a.orgs) if (!orgMap.has(org.id)) orgMap.set(org.id, org);
     }
-    return { orgEntries: entries, personalAttesters: personal };
+    return { orgs: Array.from(orgMap.values()), personalAttesters: personal };
   }, [attesters]);
 
   const cardBg = isDark ? colors.surface : '#FFFFFF';
 
-  const renderOrgCard = ({ org }: OrgEntry) => (
+  const renderOrgCard = (org: Account) => (
     <Pressable
       key={org.id}
       onPress={() => router.push(`/account/${org.id}` as any)}
@@ -80,7 +78,8 @@ export default function AttesterGrid({ attesters, isLoading }: AttesterGridProps
   );
 
   const renderPersonalTile = (a: AttesterProfile) => {
-    const name = a.user?.username ?? `${a.wallet.slice(0, 6)}…`;
+    // personalAttesters is pre-filtered to entries with a username.
+    const name = a.user?.username ?? 'Bürger';
     return (
       <View
         key={a.wallet}
@@ -125,15 +124,15 @@ export default function AttesterGrid({ attesters, isLoading }: AttesterGridProps
         <View style={styles.grid}>
           {[0, 1, 2, 3].map(renderOrgSkeleton)}
         </View>
-      ) : attesters.length === 0 ? (
+      ) : orgs.length === 0 && personalAttesters.length === 0 ? (
         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
           Noch keine Bescheiniger.
         </Text>
       ) : (
         <>
-          {orgEntries.length > 0 && <View style={styles.grid}>{orgEntries.map(renderOrgCard)}</View>}
+          {orgs.length > 0 && <View style={styles.grid}>{orgs.map(renderOrgCard)}</View>}
           {personalAttesters.length > 0 && (
-            <View style={[styles.grid, { marginTop: orgEntries.length > 0 ? 12 : 0 }]}>
+            <View style={[styles.grid, { marginTop: orgs.length > 0 ? 12 : 0 }]}>
               {personalAttesters.map(renderPersonalTile)}
             </View>
           )}
