@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import MoreIcon from '@/assets/icons/more-02.svg';
 import type { ImageSource } from 'expo-image';
 import type { PostAuthor, PostCategory } from '@/lib/types/feed';
@@ -84,11 +85,7 @@ export default function PostAuthorRow({
           <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
             {displayName}
           </Text>
-          {isVerified && (
-            <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
-              <Text style={styles.verifiedCheck}>✓</Text>
-            </View>
-          )}
+          {isVerified && <VerifiedBadge size={16} />}
           {badge && (
             <Text style={[styles.badge, { color: colors.textTertiary }]}>{badge}</Text>
           )}
@@ -159,18 +156,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     flexShrink: 1,
-  },
-  verifiedBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  verifiedCheck: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '700',
   },
   badge: {
     fontSize: 11,

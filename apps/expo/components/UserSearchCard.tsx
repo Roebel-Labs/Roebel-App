@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import TierBadge from './RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
 import type { UserRecord } from '@/lib/types';
 
@@ -46,9 +47,7 @@ export default function UserSearchCard({ user, onPress }: Props) {
           <Text style={[styles.username, { color: colors.textPrimary }]} numberOfLines={1}>
             @{user.username}
           </Text>
-          {user.is_verified_citizen && (
-            <Text style={[styles.verifiedCheck, { color: colors.success }]}>✓</Text>
-          )}
+          {user.is_verified_citizen && <VerifiedBadge size={15} />}
           <TierBadge tier={user.tier} />
         </View>
         {user.bio && (
@@ -103,10 +102,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     flexShrink: 1,
-  },
-  verifiedCheck: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
   },
   bio: {
     fontSize: 13,

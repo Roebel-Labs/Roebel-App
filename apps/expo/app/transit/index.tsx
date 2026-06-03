@@ -97,6 +97,7 @@ export default function TransitScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         {MODE_FILTERS.map((f) => {
@@ -109,10 +110,12 @@ export default function TransitScreen() {
                 styles.filterChip,
                 {
                   backgroundColor: active ? colors.tabIconActive : colors.surface,
+                  borderColor: active ? 'transparent' : colors.border,
                 },
               ]}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.filterText,
                   { color: active ? '#fff' : colors.textSecondary },
@@ -281,16 +284,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+    alignItems: 'center',
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    minHeight: 36,
     borderRadius: 20,
-    marginRight: 8,
+    borderWidth: 1,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterText: { fontSize: 13, fontFamily: 'Inter-Medium' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 6 },

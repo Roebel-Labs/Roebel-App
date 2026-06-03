@@ -8,6 +8,7 @@ import { formatRelativeTimestamp } from '@/lib/utils';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
 type Props = {
@@ -59,11 +60,7 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
           <Pressable onPress={openProfile} disabled={!isInteractive} hitSlop={4}>
             <Text style={[styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
           </Pressable>
-          {isVerified && (
-            <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
-              <Text style={styles.verifiedCheck}>✓</Text>
-            </View>
-          )}
+          {isVerified && <VerifiedBadge size={14} />}
           <Text style={[styles.time, { color: colors.textTertiary }]}>
             · {formatRelativeTimestamp(comment.created_at)}
           </Text>
@@ -164,18 +161,6 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-  },
-  verifiedBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  verifiedCheck: {
-    color: '#ffffff',
-    fontSize: 8,
-    fontWeight: '700',
   },
   time: {
     fontSize: 12,

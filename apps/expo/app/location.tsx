@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 import DiscoverStroke from '@/assets/icons/bottom-nav/discover.svg';
 
 import { ArrowLeftIcon, CallIcon, LocationIcon, SearchIcon } from '@/components/Icons';
@@ -63,26 +62,9 @@ import {
   type LiveVehicle,
 } from '@/lib/live-vehicles';
 
-// Try to load Mapbox — fails gracefully in Expo Go
-let Mapbox: any = null;
-let isMapboxAvailable = false;
-try {
-  Mapbox = require('@rnmapbox/maps').default;
-  isMapboxAvailable = true;
-} catch {
-  // Native module not available (Expo Go)
-}
-
-const mapboxToken =
-  Constants.expoConfig?.extra?.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ||
-  process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ||
-  '';
-
-// Only initialize Mapbox if we actually have a token — passing '' has caused
-// crashes on iPad iPadOS 26.5 during App Review.
-if (isMapboxAvailable && Mapbox && mapboxToken) {
-  Mapbox.setAccessToken(mapboxToken);
-}
+// Mapbox SDK + token init is centralized so embedded maps work regardless of
+// which screen loads first. Fails gracefully in Expo Go (Mapbox === null).
+import { isMapboxAvailable } from '@/lib/map/mapbox';
 
 const SHEET_LIFT_PX = 200;
 

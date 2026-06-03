@@ -40,6 +40,12 @@ import { useTheme } from '@/context/ThemeContext';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  /**
+   * Called instead of onClose when the user leaves the modal by tapping a result
+   * or section tile (vs. cancelling). Lets the host (Explore) remember to reopen
+   * the search page when the user navigates back. Preserves the typed query.
+   */
+  onNavigate?: () => void;
 };
 
 type SearchResults = {
@@ -122,7 +128,7 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-export default function SearchModal({ visible, onClose }: Props) {
+export default function SearchModal({ visible, onClose, onNavigate }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -248,8 +254,12 @@ export default function SearchModal({ visible, onClose }: Props) {
     onClose();
   };
 
+  // Dismiss the modal because the user is navigating to a result/subpage.
+  // Keeps the query intact so the search page can be restored on back.
+  const dismissForNavigation = onNavigate ?? handleClose;
+
   const handleSectionPress = (route: string) => {
-    handleClose();
+    dismissForNavigation();
     router.push(route as any);
   };
 
@@ -268,25 +278,25 @@ export default function SearchModal({ visible, onClose }: Props) {
         <View style={styles.resultSectionContent}>
           {key === 'events' &&
             (items as EventRecord[]).map((event) => (
-              <Pressable key={event.id} onPress={handleClose}>
+              <Pressable key={event.id} onPress={dismissForNavigation}>
                 <EventCard event={event} />
               </Pressable>
             ))}
           {key === 'news' &&
             (items as NewsArticle[]).map((article) => (
-              <Pressable key={article.id} onPress={handleClose}>
+              <Pressable key={article.id} onPress={dismissForNavigation}>
                 <NewsCard article={article} horizontal />
               </Pressable>
             ))}
           {key === 'restaurants' &&
             (items as RestaurantRecord[]).map((restaurant) => (
-              <Pressable key={restaurant.id} onPress={handleClose}>
+              <Pressable key={restaurant.id} onPress={dismissForNavigation}>
                 <RestaurantCard restaurant={restaurant} compact />
               </Pressable>
             ))}
           {key === 'businesses' &&
             (items as BusinessRecord[]).map((business) => (
-              <Pressable key={business.id} onPress={handleClose}>
+              <Pressable key={business.id} onPress={dismissForNavigation}>
                 <BusinessCardCompact business={business} compact={false} />
               </Pressable>
             ))}
@@ -297,7 +307,7 @@ export default function SearchModal({ visible, onClose }: Props) {
                 result={acc}
                 index={i}
                 onPress={() => {
-                  handleClose();
+                  dismissForNavigation();
                   if (acc.accountType === 'organisation') {
                     router.push({ pathname: '/account/[id]' as any, params: { id: acc.id } });
                   } else if (acc.username) {
@@ -308,19 +318,19 @@ export default function SearchModal({ visible, onClose }: Props) {
             ))}
           {key === 'deals' &&
             (items as BusinessDealWithBusiness[]).map((deal) => (
-              <Pressable key={deal.id} onPress={handleClose}>
+              <Pressable key={deal.id} onPress={dismissForNavigation}>
                 <BusinessDealCard deal={deal} compact={false} />
               </Pressable>
             ))}
           {key === 'marketplace' &&
             (items as MarketplaceListingRecord[]).map((listing) => (
-              <Pressable key={listing.id} onPress={handleClose}>
+              <Pressable key={listing.id} onPress={dismissForNavigation}>
                 <MarketplaceCard listing={listing} compact={false} />
               </Pressable>
             ))}
           {key === 'movies' &&
             (items as MovieRecord[]).map((movie) => (
-              <Pressable key={movie.id} onPress={handleClose}>
+              <Pressable key={movie.id} onPress={dismissForNavigation}>
                 <MovieCard movie={movie} compact />
               </Pressable>
             ))}

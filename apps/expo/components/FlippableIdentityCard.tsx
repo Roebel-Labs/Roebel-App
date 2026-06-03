@@ -11,6 +11,7 @@ import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useEquippedRewards } from '@/hooks/useEquippedRewards';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import CitizenPassportCard from '@/components/profile/CitizenPassportCard';
 import { softShadow } from '@/lib/shadow';
 import type { UserTier } from '@/lib/types';
@@ -147,8 +148,8 @@ export default function FlippableIdentityCard({
             {/* Badge overlay */}
             {isCitizen && !isOrg && (
               <View style={styles.badgeContainer}>
-                <View style={[styles.verifiedBadge, { borderColor: colors.surface, backgroundColor: colors.primary }]}>
-                  <Text style={styles.verifiedCheckmark}>✓</Text>
+                <View style={[styles.verifiedBadge, { borderColor: colors.surface, backgroundColor: colors.surface }]}>
+                  <VerifiedBadge size={18} />
                 </View>
               </View>
             )}
@@ -317,11 +318,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  verifiedCheckmark: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
   },
 
   // --- Store badge (org) ---

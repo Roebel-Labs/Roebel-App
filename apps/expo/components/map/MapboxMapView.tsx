@@ -10,14 +10,7 @@ import {
 import type { MapGeoJSON } from '@/lib/map/geojson';
 import type { MapEntityType } from '@/lib/types';
 import MakiIcon from './MakiIcon';
-
-// Try to load Mapbox — fails gracefully in Expo Go
-let Mapbox: any = null;
-try {
-  Mapbox = require('@rnmapbox/maps').default;
-} catch {
-  // Native module not available (Expo Go)
-}
+import { Mapbox } from '@/lib/map/mapbox';
 
 type Props = {
   geojson: MapGeoJSON;

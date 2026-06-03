@@ -104,6 +104,7 @@ export default function ToursScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         {HOURS_OPTIONS.map((opt) => {
@@ -114,10 +115,14 @@ export default function ToursScreen() {
               onPress={() => setHoursFilter(opt.value)}
               style={[
                 styles.filterChip,
-                { backgroundColor: active ? colors.tabIconActive : colors.surface },
+                {
+                  backgroundColor: active ? colors.tabIconActive : colors.surface,
+                  borderColor: active ? 'transparent' : colors.border,
+                },
               ]}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.filterText,
                   { color: active ? '#fff' : colors.textSecondary },
@@ -134,6 +139,7 @@ export default function ToursScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         {CATEGORY_OPTIONS.map((opt) => {
@@ -144,10 +150,14 @@ export default function ToursScreen() {
               onPress={() => setCategoryFilter(opt.value)}
               style={[
                 styles.filterChip,
-                { backgroundColor: active ? '#194383' : colors.surface },
+                {
+                  backgroundColor: active ? '#194383' : colors.surface,
+                  borderColor: active ? 'transparent' : colors.border,
+                },
               ]}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.filterText,
                   { color: active ? '#fff' : colors.textSecondary },
@@ -317,8 +327,17 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
-  filterRow: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, alignItems: 'center' },
+  filterChip: {
+    paddingHorizontal: 16,
+    minHeight: 36,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   filterText: { fontSize: 13, fontFamily: 'Inter-Medium' },
   toggleRow: { paddingHorizontal: 16, paddingVertical: 6 },
   toggle: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, alignSelf: 'flex-start' },

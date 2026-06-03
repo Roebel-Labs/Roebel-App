@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { fetchBusinesses } from '@/lib/supabase-businesses';
@@ -55,6 +55,19 @@ export default function ExploreScreen() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [fabVisible, setFabVisible] = useState(true);
   const lastScrollY = useRef(0);
+  // When the user taps a result/tile inside the search modal we close the modal
+  // and navigate, but flag it to reopen once Explore regains focus — so pressing
+  // back from the subpage returns to the search page, not the bare feed.
+  const reopenSearch = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (reopenSearch.current) {
+        reopenSearch.current = false;
+        setShowSearchModal(true);
+      }
+    }, [])
+  );
 
   const fetchAllData = useCallback(async () => {
     try {
@@ -240,7 +253,14 @@ export default function ExploreScreen() {
       </ScrollView>
 
       {/* Search Modal */}
-      <SearchModal visible={showSearchModal} onClose={() => setShowSearchModal(false)} />
+      <SearchModal
+        visible={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onNavigate={() => {
+          reopenSearch.current = true;
+          setShowSearchModal(false);
+        }}
+      />
 
       {/* Map FAB */}
       <MapFAB visible={fabVisible} />

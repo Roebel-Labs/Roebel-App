@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import EmbeddedMap, { type EmbeddedMapPoint } from '@/components/map/EmbeddedMap';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import MeckyNotFound from '@/components/MeckyNotFound';
 
 import {
@@ -124,11 +125,21 @@ export default function TransitLineDetail() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {mapPoints.length > 0 ? (
-          <EmbeddedMap
-            height={220}
-            points={mapPoints}
-            drawRoute={mapPoints.length > 1 ? 'line' : 'none'}
-          />
+          <ErrorBoundary
+            fallback={
+              <View style={[styles.mapPlaceholder, { backgroundColor: colors.surface }]}>
+                <Text style={{ color: colors.textSecondary }}>
+                  Karte konnte nicht geladen werden.
+                </Text>
+              </View>
+            }
+          >
+            <EmbeddedMap
+              height={220}
+              points={mapPoints}
+              drawRoute={mapPoints.length > 1 ? 'line' : 'none'}
+            />
+          </ErrorBoundary>
         ) : (
           <View style={[styles.mapPlaceholder, { backgroundColor: colors.surface }]}>
             <Text style={{ color: colors.textSecondary }}>

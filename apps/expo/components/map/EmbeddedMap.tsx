@@ -2,11 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { ROEBEL_CENTER } from '@/lib/map/constants';
-
-let Mapbox: any = null;
-try {
-  Mapbox = require('@rnmapbox/maps').default;
-} catch {}
+import { Mapbox, mapboxToken } from '@/lib/map/mapbox';
 
 export type EmbeddedMapPoint = {
   id: string;
@@ -143,7 +139,7 @@ export default function EmbeddedMap({
     };
   }, [points, drawRoute]);
 
-  if (!Mapbox) {
+  if (!Mapbox || !mapboxToken) {
     return (
       <View style={[styles.container, { height, backgroundColor: colors.surface }]}>
         <Text style={{ color: colors.textSecondary, fontSize: 12 }}>

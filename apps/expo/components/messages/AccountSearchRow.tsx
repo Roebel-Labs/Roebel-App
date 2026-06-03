@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
-import CheckIcon from '@/assets/icons/check.svg';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import { SUB_TYPE_LABELS, SUB_TYPE_EMOJI } from '@/lib/types';
 import { safeDisplayName } from '@/lib/supabase-messages';
 import type { AccountSearchResult } from '@/lib/supabase-account-search';
@@ -54,11 +54,7 @@ export default function AccountSearchRow({ result, onPress, index = 0 }: Props) 
             >
               {displayName}
             </Text>
-            {result.isVerified && (
-              <View style={[styles.verifiedBadge, { backgroundColor: colors.primary }]}>
-                <CheckIcon width={10} height={10} color={colors.onPrimary} />
-              </View>
-            )}
+            {result.isVerified && <VerifiedBadge size={16} />}
           </View>
           {subtitle && (
             <Text
@@ -96,13 +92,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     flexShrink: 1,
-  },
-  verifiedBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   subtitle: {
     fontSize: 13,
