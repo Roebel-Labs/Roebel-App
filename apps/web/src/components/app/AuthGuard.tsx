@@ -1,7 +1,6 @@
 "use client";
 
 import { useActiveAccount, useIsAutoConnecting } from "thirdweb/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function AppLoadingSkeleton() {
@@ -53,9 +52,7 @@ function AppLoadingSkeleton() {
 }
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const account = useActiveAccount();
   const isAutoConnecting = useIsAutoConnecting();
-  const router = useRouter();
   const [hasChecked, setHasChecked] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
@@ -68,29 +65,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAutoConnecting || timedOut) {
       setHasChecked(true);
-      if (!account) {
-        // Read pathname+search from window.location to avoid using
-        // useSearchParams() inside a layout-level component (which would
-        // force every statically prerendered page into a Suspense boundary
-        // in Next 15). This effect runs client-side so window is defined.
-        const current =
-          typeof window !== "undefined"
-            ? window.location.pathname + window.location.search
-            : "/app";
-        router.replace(`/?returnTo=${encodeURIComponent(current)}`);
-      }
     }
-  }, [isAutoConnecting, account, router, timedOut]);
+  }, [isAutoConnecting, timedOut]);
 
-  // Still auto-connecting
+  // Still auto-connecting — wait so already-logged-in users don't flash the
+  // connect button before their session reconnects.
   if ((isAutoConnecting && !timedOut) || !hasChecked) {
     return <AppLoadingSkeleton />;
   }
 
-  // Not connected — redirect in progress
-  if (!account) {
-    return <AppLoadingSkeleton />;
-  }
-
+  // Render the app shell whether or not a wallet is connected. Unauthenticated
+  // visitors can browse and use the "Anmelden" button in the header to connect.
   return <>{children}</>;
 }

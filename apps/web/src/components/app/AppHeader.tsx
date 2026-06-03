@@ -126,6 +126,18 @@ export function AppHeader({ onToggleMobileSidebar }: AppHeaderProps) {
               chain={activeChain}
               wallets={wallets}
               autoConnect={false}
+              connectButton={{
+                label: "Anmelden",
+                style: {
+                  backgroundColor:
+                    resolvedTheme === "dark" ? "#8AB4F8" : "#194383",
+                  color: resolvedTheme === "dark" ? "#202124" : "#ffffff",
+                  borderRadius: "9999px",
+                  fontWeight: 600,
+                  minWidth: "auto",
+                  height: "40px",
+                },
+              }}
               connectModal={{
                 title: "Bei Röbel/Müritz DAO anmelden",
                 size: "compact",
