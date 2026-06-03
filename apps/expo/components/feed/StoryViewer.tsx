@@ -827,12 +827,27 @@ function Marquee({ text }: { text: string }) {
       style={styles.marqueeWindow}
       onLayout={(e) => setWindowWidth(e.nativeEvent.layout.width)}
     >
-      {/* Absolutely positioned (left only) so it sizes to its intrinsic
-          single-line width and can overflow the clipping window. */}
+      {/* Hidden measurer in a wide (1000px) container so Android does NOT
+          clamp the single line to the 126px window — gives the true width. */}
+      <View style={styles.marqueeMeasure} pointerEvents="none">
+        <Text
+          numberOfLines={1}
+          style={styles.marqueeText}
+          onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
+        >
+          {text}
+        </Text>
+      </View>
+      {/* Visible text rendered at its full measured width (no ellipsis on
+          either platform); the window's overflow:hidden clips it and
+          translateX scrolls it. */}
       <Animated.Text
         numberOfLines={1}
-        style={[styles.marqueeText, style]}
-        onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
+        style={[
+          styles.marqueeText,
+          contentWidth > 0 ? { width: contentWidth } : null,
+          style,
+        ]}
       >
         {text}
       </Animated.Text>
@@ -1102,6 +1117,13 @@ const styles = StyleSheet.create({
     height: 16,
     overflow: 'hidden',
     justifyContent: 'center',
+  },
+  marqueeMeasure: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 1000,
+    opacity: 0,
   },
   marqueeText: {
     position: 'absolute',
