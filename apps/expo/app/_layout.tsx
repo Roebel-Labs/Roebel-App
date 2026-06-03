@@ -3,7 +3,11 @@ import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { extractReferralCode, storePendingReferralCode } from '@/lib/referral-deeplink';
+import {
+  checkClipboardForReferral,
+  extractReferralCode,
+  storePendingReferralCode,
+} from '@/lib/referral-deeplink';
 import { TransitionStack } from '@/lib/navigation/TransitionStack';
 import { noTransition } from '@/lib/navigation/transitionPresets';
 import { AuthGateProvider } from '@/context/AuthGateContext';
@@ -164,6 +168,12 @@ function ReferralDeepLinkHandler() {
     Linking.getInitialURL()
       .then((url) => handle(url))
       .catch(() => {});
+
+    // Deferred deep link: if the app was installed from the store after tapping
+    // an invite link, the URL above is empty. The web landing page leaves the
+    // invite URL on the clipboard, so read it once on first launch and store
+    // any referral code silently (no auto-navigation — the match is heuristic).
+    void checkClipboardForReferral();
 
     const sub = Linking.addEventListener('url', (event) => {
       void handle(event.url);

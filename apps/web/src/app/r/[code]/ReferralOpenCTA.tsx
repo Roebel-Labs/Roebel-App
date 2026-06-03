@@ -30,7 +30,20 @@ export function ReferralOpenCTA({ code }: { code: string }) {
     [platform]
   )
 
+  // Deferred deep linking: the OS does not carry the referral link through a
+  // store install, so copy the invite URL to the clipboard while we still have
+  // a user gesture. The freshly installed app reads it once on first launch and
+  // redeems the code. We copy the full /r/<CODE> URL so the app can validate it.
+  function copyReferralToClipboard() {
+    try {
+      void navigator.clipboard?.writeText(`https://www.roebel.app/r/${code}`)
+    } catch {
+      // non-fatal — manual code entry in the app is the fallback
+    }
+  }
+
   function handleOpenApp() {
+    copyReferralToClipboard()
     const scheme = APP_SCHEME(code)
     // Try the deep link; fall back to the store after a short timeout.
     // If the app is installed, the page unload will cancel the redirect.
@@ -56,12 +69,14 @@ export function ReferralOpenCTA({ code }: { code: string }) {
         <div className="flex gap-3 justify-center">
           <a
             href={APP_STORE_URL}
+            onClick={copyReferralToClipboard}
             className="px-5 py-3 rounded-full bg-white text-[#194383] font-semibold text-sm hover:opacity-90 transition"
           >
             App Store
           </a>
           <a
             href={PLAY_STORE_URL}
+            onClick={copyReferralToClipboard}
             className="px-5 py-3 rounded-full bg-white text-[#194383] font-semibold text-sm hover:opacity-90 transition"
           >
             Play Store
@@ -87,6 +102,7 @@ export function ReferralOpenCTA({ code }: { code: string }) {
       </button>
       <a
         href={storeUrl}
+        onClick={copyReferralToClipboard}
         className="text-sm underline text-white/80 hover:text-white"
       >
         Direkt zum {platform === "ios" ? "App Store" : "Play Store"}
