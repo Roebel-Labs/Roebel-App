@@ -34,6 +34,8 @@ export default function MyEventsScreen() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<AccountRole | null>(null);
 
+  const isOrg = activeAccount?.account_type === 'organisation';
+
   const fetchEvents = useCallback(async () => {
     if (!activeAccount?.id) {
       setEvents([]);
@@ -49,12 +51,16 @@ export default function MyEventsScreen() {
       setRole(userRole);
     }
 
-    // Fetch events for active account
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('account_id', activeAccount.id)
-      .order('date', { ascending: false });
+    // Org accounts see only their own events (newest first).
+    // Personal/citizen accounts see ALL events (every status), upcoming first.
+    let query = supabase.from('events').select('*');
+    if (isOrg) {
+      query = query.eq('account_id', activeAccount.id).order('date', { ascending: false });
+    } else {
+      query = query.order('date', { ascending: true });
+    }
+
+    const { data, error } = await query;
 
     if (error || !data) {
       setEvents([]);
@@ -75,7 +81,7 @@ export default function MyEventsScreen() {
 
     setEvents(eventsWithStats);
     setLoading(false);
-  }, [activeAccount?.id, account?.address]);
+  }, [activeAccount?.id, account?.address, isOrg]);
 
   useEffect(() => {
     fetchEvents();
@@ -87,7 +93,9 @@ export default function MyEventsScreen() {
     return (
       <Pressable
         onPress={() => {
-          if (canEditEvents(role)) {
+          // Only org accounts may edit their own events; the citizen "all events"
+          // view is read-only since those events belong to other accounts.
+          if (isOrg && canEditEvents(role)) {
             router.push({ pathname: '/edit-event/[id]', params: { id: item.id } });
           } else {
             router.push({ pathname: '/event/[id]', params: { id: item.id } });
@@ -161,7 +169,7 @@ export default function MyEventsScreen() {
       ) : events.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Noch keine Veranstaltungen erstellt
+            {isOrg ? 'Noch keine Veranstaltungen erstellt' : 'Keine Veranstaltungen vorhanden'}
           </Text>
         </View>
       ) : (

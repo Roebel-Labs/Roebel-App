@@ -42,7 +42,7 @@ import SettingsIcon from '@/assets/icons/settings-01.svg';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import StarIcon from '@/assets/icons/star.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
-import { ListIcon } from '@/components/Icons';
+import CalendarIcon from '@/assets/icons/calendar-02.svg';
 
 const ORG_TYPE_LABELS: Record<string, string> = {
   restaurant: 'Restaurant',
@@ -196,7 +196,7 @@ const handleRefresh = async () => {
                   onPress={() => router.push('/submit-event')}
                 />
                 <ProfileMenuItem
-                  icon={<ListIcon size={20} color={colors.textPrimary} />}
+                  icon={<CalendarIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Meine Veranstaltungen"
                   onPress={() => router.push('/my-events')}
                 />
@@ -359,6 +359,11 @@ const handleRefresh = async () => {
                         onPress={() => router.push('/edit-org' as any)}
                       />
                       <ProfileMenuItem
+                        icon={<CalendarIcon width={20} height={20} color={colors.textPrimary} />}
+                        label="Meine Veranstaltungen"
+                        onPress={() => router.push('/my-events')}
+                      />
+                      <ProfileMenuItem
                         icon={<SentIcon width={20} height={20} color={colors.textPrimary} />}
                         label="Feedback geben"
                         onPress={() => router.push('/feedback')}
@@ -398,7 +403,7 @@ const handleRefresh = async () => {
                           />
                         )}
                         <ProfileMenuItem
-                          icon={<ListIcon size={20} color={colors.textPrimary} />}
+                          icon={<CalendarIcon width={20} height={20} color={colors.textPrimary} />}
                           label="Meine Veranstaltungen"
                           onPress={() => router.push('/my-events')}
                         />
