@@ -497,6 +497,10 @@ const styles = StyleSheet.create({
   clearText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
+    lineHeight: 16,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   cancelButton: {
     paddingVertical: 8,
