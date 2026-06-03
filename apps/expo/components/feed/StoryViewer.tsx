@@ -753,12 +753,19 @@ function SongTooltip({
   onPress: () => void;
 }) {
   const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.8);
+  const scale = useSharedValue(0.85);
   const ty = useSharedValue(-4);
   useEffect(() => {
+    // Single smooth scale-up — no spring overshoot/bounce.
     opacity.value = withTiming(1, { duration: 220 });
-    scale.value = withSpring(1, { damping: 14, stiffness: 180 });
-    ty.value = withSpring(0, { damping: 14, stiffness: 180 });
+    scale.value = withTiming(1, {
+      duration: 240,
+      easing: ReEasing.out(ReEasing.cubic),
+    });
+    ty.value = withTiming(0, {
+      duration: 240,
+      easing: ReEasing.out(ReEasing.cubic),
+    });
   }, [opacity, scale, ty]);
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -783,8 +790,7 @@ function SongTooltip({
 // once fully through, pauses, snaps back, then repeats. If the text fits the
 // window, it renders static (no animation).
 const MARQUEE_SPEED = 45; // px per second
-const MARQUEE_START_PAUSE = 700; // ms before each scroll pass
-const MARQUEE_END_PAUSE = 900; // ms held at the end before snapping back
+const MARQUEE_START_PAUSE = 3000; // ms held at the beginning before each pass
 function Marquee({ text }: { text: string }) {
   const [windowWidth, setWindowWidth] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
@@ -795,6 +801,8 @@ function Marquee({ text }: { text: string }) {
     tx.value = 0;
     if (distance <= 0 || windowWidth === 0) return;
     const duration = Math.max(1200, (distance / MARQUEE_SPEED) * 1000);
+    // Pause 3s at the start, slide fully through so the whole title is read,
+    // snap back to the beginning, then repeat.
     tx.value = withRepeat(
       withSequence(
         withDelay(
@@ -804,8 +812,7 @@ function Marquee({ text }: { text: string }) {
             easing: ReEasing.linear,
           }),
         ),
-        // hold at the end, then instantly snap back to the start
-        withDelay(MARQUEE_END_PAUSE, withTiming(0, { duration: 0 })),
+        withTiming(0, { duration: 0 }), // snap back to the beginning
       ),
       -1,
     );
