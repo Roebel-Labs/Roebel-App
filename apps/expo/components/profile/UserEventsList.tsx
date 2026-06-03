@@ -69,7 +69,7 @@ export default function UserEventsList({ walletAddress }: Props) {
   return (
     <View style={styles.list}>
       {events.map((event) => (
-        <HorizontalEventCard key={event.id} event={event} />
+        <HorizontalEventCard key={event.id} event={event} fullWidth />
       ))}
     </View>
   );

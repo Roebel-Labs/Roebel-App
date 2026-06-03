@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -10,28 +10,47 @@ import InterestButton from './InterestButton';
 
 type Props = {
   event: EventRecord;
+  /** Stretch the card to its container width and show the image at its
+   *  natural aspect ratio (no crop) instead of the fixed carousel size. */
+  fullWidth?: boolean;
 };
 
-export default function HorizontalEventCard({ event }: Props) {
+export default function HorizontalEventCard({ event, fullWidth = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const time = formatTime(event.time);
   const dateDisplay = formatEventCardDateSplit(event.date);
+  // In full-width mode we size the image container to the picture's own
+  // aspect ratio so it scales up without cropping. Default to 16:9 until loaded.
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-      style={({ pressed }) => [styles.card, { backgroundColor: colors.background }, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.card,
+        fullWidth && styles.cardFullWidth,
+        { backgroundColor: colors.background },
+        pressed && styles.cardPressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={`Details für ${event.title} öffnen`}
     >
-      <View style={styles.imageContainer}>
+      <View style={[styles.imageContainer, fullWidth && { height: undefined, aspectRatio }]}>
         {event.image_url ? (
           <Image
             source={{ uri: event.image_url }}
             style={[styles.image, { backgroundColor: colors.cardPlaceholder }]}
             contentFit="cover"
             accessibilityIgnoresInvertColors
+            onLoad={
+              fullWidth
+                ? (e) => {
+                    const { width, height } = e.source;
+                    if (width && height) setAspectRatio(width / height);
+                  }
+                : undefined
+            }
           />
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
@@ -69,6 +88,9 @@ export default function HorizontalEventCard({ event }: Props) {
 const styles = StyleSheet.create({
   card: {
     width: 240,
+  },
+  cardFullWidth: {
+    width: '100%',
   },
   cardPressed: {
     opacity: 0.9,
