@@ -2,7 +2,6 @@
 
 export const dynamic = "force-dynamic";
 
-import { useActiveAccount } from "thirdweb/react";
 import Link from "next/link";
 import { ProposalCard } from "@/components/proposals/ProposalCard";
 import { Card } from "@/components/ui/card";
@@ -13,7 +12,6 @@ import { de } from "@/lib/translations/de";
 import { Network, Layers, ArrowUpRight } from "lucide-react";
 
 export default function ProposalsPage() {
-  const account = useActiveAccount();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +53,6 @@ export default function ProposalsPage() {
               <h1 className="text-3xl font-medium text-foreground">{de.proposals.title}</h1>
               <p className="text-muted-foreground mt-1">{de.proposals.subtitle}</p>
             </div>
-            <Link
-              href="/app/proposals/create"
-              className="inline-flex items-center justify-center bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-            >
-              {de.proposals.createProposal}
-            </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
@@ -145,15 +137,7 @@ export default function ProposalsPage() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-muted-foreground mb-4">{de.proposals.noProposals}</p>
-                  {account && (
-                    <Link
-                      href="/app/proposals/create"
-                      className="inline-block bg-black hover:bg-foreground/90 text-white px-6 py-3 rounded-lg transition-colors font-medium"
-                    >
-                      {de.proposals.createFirstProposal}
-                    </Link>
-                  )}
+                  <p className="text-muted-foreground">{de.proposals.noProposals}</p>
                 </div>
               )}
             </div>

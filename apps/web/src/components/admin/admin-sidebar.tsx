@@ -182,6 +182,12 @@ export function AdminSidebar() {
       badgeKey: null,
     },
     {
+      name: "Vorschlag erstellen",
+      href: "/admin/dashboard/proposals/new",
+      icon: <Vote className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
       name: "Meldungen",
       href: "/admin/dashboard/alerts",
       icon: <AlertTriangle className="h-5 w-5" />,

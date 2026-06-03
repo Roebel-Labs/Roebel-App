@@ -15,6 +15,8 @@ import {
   Settings,
   UtensilsCrossed,
   BookOpen,
+  Vote,
+  ExternalLink,
 } from "lucide-react";
 import {
   subTypeFeatures,
@@ -100,6 +102,12 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       visible: features.storyCollections,
     },
     {
+      name: "Vorschlag erstellen",
+      href: "/dashboard/proposals/new",
+      icon: <Vote className="h-4 w-4" />,
+      visible: features.proposals,
+    },
+    {
       name: "Röbel Card",
       href: "/dashboard/partner",
       icon: <CreditCard className="h-4 w-4" />,
@@ -149,6 +157,16 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
             Extern · {account.extern_status ?? "pending"}
           </span>
         )}
+        {account.slug &&
+          !(account.is_extern && account.extern_status !== "approved") && (
+            <Link
+              href={`/app/orgs/${account.slug}`}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Öffentliches Profil
+            </Link>
+          )}
       </div>
       <nav className="p-2 space-y-1">
         {items

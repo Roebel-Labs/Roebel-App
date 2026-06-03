@@ -16,8 +16,8 @@ const MAX_FUND_ETH = 0.005;
 
 /**
  * Admin card that shows the current Irys node balance for the server
- * wallet and lets the caller top it up. Used on /app/proposals/create
- * so an Attester can fund the node before submitting if needed.
+ * wallet and lets the caller top it up. Used in the CreateProposalForm
+ * (org & admin dashboards) so an Attester can fund the node before submitting.
  */
 export function IrysBalanceCard() {
   const [balance, setBalance] = useState<IrysBalance | null>(null);
