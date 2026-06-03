@@ -7,6 +7,7 @@ import React, {
 import {
   ActivityIndicator,
   Easing,
+  Linking,
   Modal,
   Pressable,
   StatusBar,
@@ -17,13 +18,16 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  Easing as ReEasing,
   Extrapolation,
   interpolate,
   interpolateColor,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -37,6 +41,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
+import VolumeHighIcon from '@/assets/icons/story/volume-high-filled.svg';
+import VolumeMuteIcon from '@/assets/icons/story/volume-mute-filled.svg';
+import CloseIcon from '@/assets/icons/story/close.svg';
 
 // Defensive load of expo-audio. expo-audio is a NATIVE MODULE — its Swift /
 // Kotlin code only exists in binaries built after we added the package. If the
@@ -104,6 +111,10 @@ export type StoryGroup = {
   slides: StorySlideInput[];
   onSwipeUp?: () => void;
   audioUrl?: string | null;
+  // Optional metadata for the shared background track: shown in a small
+  // marquee tooltip under the speaker icon; tapping it opens audioLinkUrl.
+  audioTitle?: string | null;
+  audioLinkUrl?: string | null;
   // Per-slide auto-advance duration for this group; falls back to the
   // viewer's `durationMs` prop when unset.
   durationMs?: number;
@@ -618,16 +629,28 @@ export default function StoryViewer({
                     hitSlop={16}
                     style={styles.muteBtn}
                   >
-                    <Ionicons
-                      name={muted ? 'volume-mute' : 'volume-high'}
-                      size={22}
-                      color="#ffffff"
-                    />
+                    {muted ? (
+                      <VolumeMuteIcon width={22} height={22} />
+                    ) : (
+                      <VolumeHighIcon width={22} height={22} />
+                    )}
                   </Pressable>
                 ) : null}
                 <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
-                  <Ionicons name="close" size={26} color="#ffffff" />
+                  <CloseIcon width={26} height={26} />
                 </Pressable>
+                {hasAudio &&
+                (groupPlayer || slidePlayer) &&
+                !muted &&
+                currentGroup.audioTitle ? (
+                  <SongTooltip
+                    title={currentGroup.audioTitle}
+                    onPress={() => {
+                      const url = currentGroup.audioLinkUrl;
+                      if (url) Linking.openURL(url).catch(() => {});
+                    }}
+                  />
+                ) : null}
               </Animated.View>
             );
           })()}
@@ -715,6 +738,98 @@ function BounceChevron() {
     <Animated.View style={style} pointerEvents="none">
       <Ionicons name="chevron-up" size={18} color="#ffffff" />
     </Animated.View>
+  );
+}
+
+// ── SongTooltip ──────────────────────────────────────────────
+// Small rounded bubble anchored under the speaker icon. Smoothly pops up
+// (fade + scale + slight drop) on mount and marquee-scrolls the playing
+// song's title. Tapping it opens the song link (e.g. YouTube).
+function SongTooltip({
+  title,
+  onPress,
+}: {
+  title: string;
+  onPress: () => void;
+}) {
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.8);
+  const ty = useSharedValue(-4);
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 220 });
+    scale.value = withSpring(1, { damping: 14, stiffness: 180 });
+    ty.value = withSpring(0, { damping: 14, stiffness: 180 });
+  }, [opacity, scale, ty]);
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: ty.value }, { scale: scale.value }],
+  }));
+  return (
+    <Animated.View style={[styles.songTooltip, style]}>
+      <View style={styles.songTooltipCaret} pointerEvents="none" />
+      <Pressable
+        onPress={onPress}
+        hitSlop={8}
+        style={styles.songTooltipPressable}
+      >
+        <Marquee text={title} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ── Marquee ──────────────────────────────────────────────────
+// Horizontally scrolls `text` inside a fixed-width clipped window: scrolls
+// once fully through, pauses, snaps back, then repeats. If the text fits the
+// window, it renders static (no animation).
+const MARQUEE_SPEED = 45; // px per second
+const MARQUEE_START_PAUSE = 700; // ms before each scroll pass
+const MARQUEE_END_PAUSE = 900; // ms held at the end before snapping back
+function Marquee({ text }: { text: string }) {
+  const [windowWidth, setWindowWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const tx = useSharedValue(0);
+
+  const distance = Math.max(0, contentWidth - windowWidth);
+  useEffect(() => {
+    tx.value = 0;
+    if (distance <= 0 || windowWidth === 0) return;
+    const duration = Math.max(1200, (distance / MARQUEE_SPEED) * 1000);
+    tx.value = withRepeat(
+      withSequence(
+        withDelay(
+          MARQUEE_START_PAUSE,
+          withTiming(-distance, {
+            duration,
+            easing: ReEasing.linear,
+          }),
+        ),
+        // hold at the end, then instantly snap back to the start
+        withDelay(MARQUEE_END_PAUSE, withTiming(0, { duration: 0 })),
+      ),
+      -1,
+    );
+  }, [distance, windowWidth, tx]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }],
+  }));
+
+  return (
+    <View
+      style={styles.marqueeWindow}
+      onLayout={(e) => setWindowWidth(e.nativeEvent.layout.width)}
+    >
+      {/* Absolutely positioned (left only) so it sizes to its intrinsic
+          single-line width and can overflow the clipping window. */}
+      <Animated.Text
+        numberOfLines={1}
+        style={[styles.marqueeText, style]}
+        onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
+      >
+        {text}
+      </Animated.Text>
+    </View>
   );
 }
 
@@ -950,6 +1065,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 2,
+  },
+  songTooltip: {
+    position: 'absolute',
+    top: 44,
+    right: 30,
+    maxWidth: 150,
+    backgroundColor: 'rgba(40,40,40,0.92)',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  songTooltipCaret: {
+    position: 'absolute',
+    top: -5,
+    right: 14,
+    width: 10,
+    height: 10,
+    backgroundColor: 'rgba(40,40,40,0.92)',
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+  songTooltipPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  marqueeWindow: {
+    width: 126,
+    height: 16,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  marqueeText: {
+    position: 'absolute',
+    left: 0,
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Inter-Medium',
   },
   bottomGradient: {
     position: 'absolute',

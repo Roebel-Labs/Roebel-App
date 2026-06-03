@@ -26,6 +26,12 @@ import StoryViewer, {
   type StorySlideInput,
 } from './StoryViewer';
 
+// Shared background track playing under all event stories — title shown in
+// the marquee tooltip, link opened when the tooltip is tapped.
+const EVENT_STORIES_SONG_TITLE = 'Röbeler PLATTmusikanten | Wo sünd all de Lüd?';
+const EVENT_STORIES_SONG_URL =
+  'https://www.youtube.com/watch?v=Y55K5v1bL8Q&list=RDY55K5v1bL8Q&start_radio=1';
+
 function formatEventDate(dateStr: string): string {
   const d = new Date(dateStr);
   return d.toLocaleDateString('de-DE', {
@@ -238,6 +244,8 @@ export default function HomeStoryBar() {
         // Shared background track for ALL event slides — loops continuously
         // and is ducked under any per-event override track (see StoryViewer).
         audioUrl: eventStoriesAudioUrl,
+        audioTitle: EVENT_STORIES_SONG_TITLE,
+        audioLinkUrl: EVENT_STORIES_SONG_URL,
         // Event stories linger a little longer than collections (default 6s).
         durationMs: 10000,
         slides: eventSlides,
