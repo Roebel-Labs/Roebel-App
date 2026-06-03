@@ -12,6 +12,7 @@ import { governorContract, citizenNFTContract } from '@/constants/thirdweb';
 import { balanceOf } from 'thirdweb/extensions/erc721';
 import { VoteType, ProposalState } from '@/lib/governance-types';
 import { isProposalActive } from '@/lib/governance-utils';
+import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import VoteConfirmationDrawer from './VoteConfirmationDrawer';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
@@ -79,6 +80,14 @@ export default function VoteButtonsEnhanced({
       await sendTransaction({
         transaction,
         account,
+      });
+
+      // Best-effort mirror to Supabase so the voter's profile "Abstimmungen"
+      // count reflects this vote. Fire-and-forget; never blocks the success UX.
+      void recordVoteToSupabase({
+        walletAddress: account.address,
+        proposalId: proposalId.toString(),
+        voteType: voteTypeMap[selectedVote],
       });
 
       setShowConfirmation(false);

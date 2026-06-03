@@ -19,6 +19,7 @@ import LastVoteCard from './LastVoteCard';
 import StoryProgress from './StoryProgress';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
+import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { Events, track } from '@/lib/analytics';
 import {
   buildVoteMessage,
@@ -426,6 +427,15 @@ export default function VoteButtons({
       // itself stays encrypted on chain — this cache is purely UX.
       await recordVote(pollAddress, support, nonce, receipt.transactionHash);
       setChanging(false);
+
+      // Best-effort mirror to Supabase so the voter's profile "Abstimmungen"
+      // count reflects this vote. Fire-and-forget; never blocks the success UX.
+      void recordVoteToSupabase({
+        walletAddress: account.address,
+        proposalId: proposalId.toString(),
+        voteType: support,
+        transactionHash: receipt.transactionHash,
+      });
 
       setSuccessDrawer({
         visible: true,

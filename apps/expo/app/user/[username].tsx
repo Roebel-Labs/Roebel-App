@@ -15,6 +15,9 @@ import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
+import { fetchRoebelPointsCard } from '@/lib/supabase-roebel-points';
+import type { RoebelPointsCardRecord } from '@/lib/supabase-roebel-points';
+import { countUserVotes } from '@/lib/supabase-votes';
 import TierBadge from '@/components/RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
@@ -50,6 +53,8 @@ export default function PublicUserProfileScreen() {
   const [profile, setProfile] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
+  const [pointsCard, setPointsCard] = useState<RoebelPointsCardRecord | null>(null);
+  const [voteCount, setVoteCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
   const loadProfile = useCallback(
@@ -68,11 +73,21 @@ export default function PublicUserProfileScreen() {
           console.error('Error loading user:', error);
           setProfile(null);
           setEquipped([]);
+          setPointsCard(null);
+          setVoteCount(0);
         } else {
           const userRow = data as UserRecord;
           setProfile(userRow);
-          const rewards = await fetchEquippedRewards(userRow.wallet_address);
-          if (!signal.cancelled) setEquipped(rewards);
+          const [rewards, card, votes] = await Promise.all([
+            fetchEquippedRewards(userRow.wallet_address),
+            fetchRoebelPointsCard(userRow.wallet_address),
+            countUserVotes(userRow.wallet_address),
+          ]);
+          if (!signal.cancelled) {
+            setEquipped(rewards);
+            setPointsCard(card);
+            setVoteCount(votes);
+          }
         }
         if (!signal.cancelled) setLoading(false);
       })();
@@ -226,19 +241,19 @@ export default function PublicUserProfileScreen() {
             <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
               <View style={styles.stat}>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {profile.gamification_points}
+                  {pointsCard?.points_balance ?? 0}
                 </Text>
-                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Punkte</Text>
+                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Münzen</Text>
               </View>
               <View style={styles.stat}>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {profile.total_votes_cast}
+                  {voteCount}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Abstimmungen</Text>
               </View>
               <View style={styles.stat}>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {profile.voting_streak}
+                  {pointsCard?.streak_days ?? 0}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Streak</Text>
               </View>
