@@ -33,6 +33,10 @@ export interface AdminUserRow {
   vereine: string[]
   bio: string | null
 
+  // Device platform — derived from app_activity (latest) ∪ push_tokens (latest
+  // active). Null when the user has no device record yet.
+  platform: "ios" | "android" | "web" | null
+
   // On-chain / governance
   nft_balance: number
   has_delegated: boolean
@@ -56,33 +60,37 @@ export interface AdminUserRow {
   last_login_at: string | null
 }
 
+export interface DailyPoint {
+  date: string // YYYY-MM-DD
+  count: number
+}
+
 export interface UsersAdminMetrics {
   totalUsers: number
   verifiedCitizens: number
-  pendingVerifications: number
   newLast30Days: number
   activeLast30Days: number
-  totalPointsInCirculation: number
   tierDistribution: { tier: string; label: string; count: number }[]
-  verificationFunnel: { status: string; label: string; count: number }[]
-  signups: { weekLabel: string; cumulative: number; new: number }[]
   topByPoints: { label: string; fullAddress: string; value: number }[]
   topByVotes: { label: string; fullAddress: string; value: number }[]
+  // Daily series over the last 60 days
+  dailyRegistrations: DailyPoint[]
+  dailyActiveProxy: DailyPoint[] // distinct wallets/day from points ledger (proxy)
+  dailyActiveReal: DailyPoint[] // distinct wallets/day from app_activity (real DAU)
 }
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+/** Per-user signup row used by the signups chart (with platform filter). */
+export interface SignupRow {
+  created_at: string
+  platform: "ios" | "android" | "web" | null
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const TIER_LABELS: Record<string, string> = {
   citizen: "Bürger",
   tourist: "Gast",
   guest: "Gast",
-}
-
-const VERIFICATION_LABELS: Record<string, string> = {
-  pending: "Ausstehend",
-  approved: "Verifiziert",
-  rejected: "Abgelehnt",
 }
 
 function toNumber(value: unknown): number {
@@ -136,19 +144,40 @@ function displayLabel(row: AdminUserRow): string {
   return row.username || row.display_name || shortAddress(row.wallet_address)
 }
 
+const PLATFORM_VALUES = ["ios", "android", "web"] as const
+type Platform = (typeof PLATFORM_VALUES)[number]
+
+function asPlatform(value: unknown): Platform | null {
+  return PLATFORM_VALUES.includes(value as Platform) ? (value as Platform) : null
+}
+
 export async function getUsersAdminData(): Promise<{
   success: boolean
   rows?: AdminUserRow[]
+  signupRows?: SignupRow[]
   metrics?: UsersAdminMetrics
   error?: string
 }> {
   try {
     const supabase = createAdminClient()
+    const since60 = new Date(Date.now() - 60 * DAY_MS).toISOString()
 
-    const [usersResult, cardsResult] = await Promise.all([
-      supabase.from("users").select("*").order("created_at", { ascending: false }),
-      supabase.from("roebel_points_card").select("*"),
-    ])
+    const [usersResult, cardsResult, pushResult, activityResult, ledgerResult] =
+      await Promise.all([
+        supabase.from("users").select("*").order("created_at", { ascending: false }),
+        supabase.from("roebel_points_card").select("*"),
+        supabase
+          .from("push_tokens")
+          .select("wallet_address, platform, last_used_at")
+          .eq("is_active", true),
+        supabase
+          .from("app_activity")
+          .select("wallet_address, platform, activity_date, last_seen_at"),
+        supabase
+          .from("roebel_points_ledger")
+          .select("wallet_address, created_at")
+          .gte("created_at", since60),
+      ])
 
     if (usersResult.error) {
       return { success: false, error: usersResult.error.message }
@@ -158,6 +187,36 @@ export async function getUsersAdminData(): Promise<{
     for (const card of cardsResult.data ?? []) {
       const wallet = String((card as Record<string, unknown>).wallet_address ?? "").toLowerCase()
       if (wallet) cardsByWallet.set(wallet, card as Record<string, unknown>)
+    }
+
+    // Per-wallet platform: prefer app_activity (most recent), fall back to
+    // push_tokens (most recent active). Covers all logging-in users going
+    // forward; push-only for legacy users.
+    const platformByWallet = new Map<string, Platform>()
+    const platformSeenAt = new Map<string, number>()
+    const considerPlatform = (
+      walletRaw: unknown,
+      platformRaw: unknown,
+      tsRaw: unknown
+    ) => {
+      const wallet = String(walletRaw ?? "").toLowerCase()
+      const platform = asPlatform(platformRaw)
+      if (!wallet || !platform) return
+      const ts = tsRaw ? new Date(tsRaw as string).getTime() : 0
+      const prev = platformSeenAt.get(wallet) ?? -1
+      if (ts >= prev) {
+        platformSeenAt.set(wallet, ts)
+        platformByWallet.set(wallet, platform)
+      }
+    }
+    // push_tokens first (lower priority), then app_activity overwrites when newer
+    for (const t of pushResult.data ?? []) {
+      const r = t as Record<string, unknown>
+      considerPlatform(r.wallet_address, r.platform, r.last_used_at)
+    }
+    for (const a of activityResult.data ?? []) {
+      const r = a as Record<string, unknown>
+      considerPlatform(r.wallet_address, r.platform, r.last_seen_at)
     }
 
     const rows: AdminUserRow[] = (usersResult.data ?? []).map((raw) => {
@@ -175,6 +234,8 @@ export async function getUsersAdminData(): Promise<{
         phone_number: maskPhone(u.phone_number as string | null),
         phone_verified: !!u.phone_verified,
         auth_provider: (u.auth_provider as string) ?? null,
+
+        platform: platformByWallet.get(wallet.toLowerCase()) ?? null,
 
         tier: (u.tier as string) || "guest",
         is_verified_citizen: !!u.is_verified_citizen,
@@ -207,9 +268,29 @@ export async function getUsersAdminData(): Promise<{
       }
     })
 
-    const metrics = buildMetrics(rows)
+    const signupRows: SignupRow[] = rows.map((r) => ({
+      created_at: r.created_at,
+      platform: r.platform,
+    }))
 
-    return { success: true, rows, metrics }
+    const ledgerRows = (ledgerResult.data ?? []).map((l) => {
+      const r = l as Record<string, unknown>
+      return {
+        wallet: String(r.wallet_address ?? "").toLowerCase(),
+        created_at: r.created_at as string,
+      }
+    })
+    const activityRows = (activityResult.data ?? []).map((a) => {
+      const r = a as Record<string, unknown>
+      return {
+        wallet: String(r.wallet_address ?? "").toLowerCase(),
+        date: r.activity_date as string,
+      }
+    })
+
+    const metrics = buildMetrics(rows, ledgerRows, activityRows)
+
+    return { success: true, rows, signupRows, metrics }
   } catch (error) {
     console.error("[users-admin] Failed to load user data:", error)
     return {
@@ -219,25 +300,50 @@ export async function getUsersAdminData(): Promise<{
   }
 }
 
-function buildMetrics(rows: AdminUserRow[]): UsersAdminMetrics {
+/** Distinct-wallets-per-day series over the last `days` days (zero-filled). */
+function dailyDistinctSeries(
+  entries: { wallet: string; day: string }[],
+  days: number
+): DailyPoint[] {
+  const byDay = new Map<string, Set<string>>()
+  for (const e of entries) {
+    if (!e.day) continue
+    const set = byDay.get(e.day) ?? new Set<string>()
+    if (e.wallet) set.add(e.wallet)
+    byDay.set(e.day, set)
+  }
+  return lastNDays(days).map((date) => ({
+    date,
+    count: byDay.get(date)?.size ?? 0,
+  }))
+}
+
+/** Returns the last `days` calendar dates (UTC) as YYYY-MM-DD, oldest first. */
+function lastNDays(days: number): string[] {
+  const out: string[] = []
+  const today = Date.now()
+  for (let i = days - 1; i >= 0; i--) {
+    out.push(new Date(today - i * DAY_MS).toISOString().slice(0, 10))
+  }
+  return out
+}
+
+function buildMetrics(
+  rows: AdminUserRow[],
+  ledgerRows: { wallet: string; created_at: string }[],
+  activityRows: { wallet: string; date: string }[]
+): UsersAdminMetrics {
   const now = Date.now()
   const cutoff30 = now - 30 * DAY_MS
 
   const totalUsers = rows.length
   const verifiedCitizens = rows.filter((r) => r.is_verified_citizen).length
-  const pendingVerifications = rows.filter(
-    (r) => r.verification_status === "pending"
-  ).length
   const newLast30Days = rows.filter(
     (r) => new Date(r.created_at).getTime() >= cutoff30
   ).length
   const activeLast30Days = rows.filter(
     (r) => r.last_login_at && new Date(r.last_login_at).getTime() >= cutoff30
   ).length
-  const totalPointsInCirculation = rows.reduce(
-    (sum, r) => sum + (r.points_balance ?? 0),
-    0
-  )
 
   // Tier distribution
   const tierOrder = ["citizen", "tourist", "guest"]
@@ -254,42 +360,31 @@ function buildMetrics(rows: AdminUserRow[]): UsersAdminMetrics {
     }))
     .filter((d) => d.count > 0)
 
-  // Verification funnel
-  const statusOrder = ["pending", "approved", "rejected"]
-  const statusCounts = new Map<string, number>()
-  for (const r of rows) {
-    const s = statusOrder.includes(r.verification_status)
-      ? r.verification_status
-      : "pending"
-    statusCounts.set(s, (statusCounts.get(s) ?? 0) + 1)
-  }
-  const verificationFunnel = statusOrder.map((status) => ({
-    status,
-    label: VERIFICATION_LABELS[status] ?? status,
-    count: statusCounts.get(status) ?? 0,
-  }))
-
-  // Signups over time — weekly buckets, cumulative
-  const buckets = new Map<number, number>()
+  // Daily registrations (new users/day) over last 60 days
+  const regByDay = new Map<string, number>()
   for (const r of rows) {
     const ms = new Date(r.created_at).getTime()
     if (!Number.isFinite(ms)) continue
-    const bucket = Math.floor(ms / WEEK_MS) * WEEK_MS
-    buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1)
+    const day = new Date(ms).toISOString().slice(0, 10)
+    regByDay.set(day, (regByDay.get(day) ?? 0) + 1)
   }
-  const orderedBuckets = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0])
-  let cumulative = 0
-  const signups = orderedBuckets.map(([bucket, count]) => {
-    cumulative += count
-    return {
-      weekLabel: new Date(bucket).toLocaleDateString("de-DE", {
-        month: "short",
-        day: "2-digit",
-      }),
-      cumulative,
-      new: count,
-    }
-  })
+  const dailyRegistrations: DailyPoint[] = lastNDays(60).map((date) => ({
+    date,
+    count: regByDay.get(date) ?? 0,
+  }))
+
+  // Daily active — proxy (points ledger) and real (app_activity)
+  const dailyActiveProxy = dailyDistinctSeries(
+    ledgerRows.map((l) => ({
+      wallet: l.wallet,
+      day: new Date(l.created_at).toISOString().slice(0, 10),
+    })),
+    60
+  )
+  const dailyActiveReal = dailyDistinctSeries(
+    activityRows.map((a) => ({ wallet: a.wallet, day: a.date })),
+    60
+  )
 
   // Top users by points / votes
   const topByPoints = [...rows]
@@ -315,14 +410,13 @@ function buildMetrics(rows: AdminUserRow[]): UsersAdminMetrics {
   return {
     totalUsers,
     verifiedCitizens,
-    pendingVerifications,
     newLast30Days,
     activeLast30Days,
-    totalPointsInCirculation,
     tierDistribution,
-    verificationFunnel,
-    signups,
     topByPoints,
     topByVotes,
+    dailyRegistrations,
+    dailyActiveProxy,
+    dailyActiveReal,
   }
 }

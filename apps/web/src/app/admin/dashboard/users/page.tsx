@@ -1,11 +1,4 @@
-import {
-  Activity,
-  Coins,
-  Clock,
-  ShieldCheck,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { Activity, ShieldCheck, UserPlus, Users } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,8 +8,9 @@ import {
 } from "@/components/ui/card";
 import { KpiCard } from "@/components/admin/dao/KpiCard";
 import { TierDonut } from "@/components/admin/users/TierDonut";
-import { SignupsAreaChart } from "@/components/admin/users/SignupsAreaChart";
-import { VerificationFunnel } from "@/components/admin/users/VerificationFunnel";
+import { SignupsChart } from "@/components/admin/users/SignupsChart";
+import { DailyActivityChart } from "@/components/admin/users/DailyActivityChart";
+import { OpenVerificationsKpi } from "@/components/admin/users/OpenVerificationsKpi";
 import { TopUsersBars } from "@/components/admin/users/TopUsersBars";
 import { getUsersAdminData } from "@/app/actions/users-admin";
 import { UsersTable } from "./_components/users-table";
@@ -28,7 +22,7 @@ const numberFmt = new Intl.NumberFormat("de-DE");
 export default async function UsersAdminPage() {
   const result = await getUsersAdminData();
 
-  if (!result.success || !result.rows || !result.metrics) {
+  if (!result.success || !result.rows || !result.metrics || !result.signupRows) {
     return (
       <div className="space-y-6">
         <div>
@@ -47,7 +41,7 @@ export default async function UsersAdminPage() {
     );
   }
 
-  const { rows, metrics } = result;
+  const { rows, metrics, signupRows } = result;
 
   return (
     <div className="space-y-6">
@@ -60,7 +54,7 @@ export default async function UsersAdminPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           label="Nutzer gesamt"
           value={numberFmt.format(metrics.totalUsers)}
@@ -75,12 +69,7 @@ export default async function UsersAdminPage() {
           )} % aller Nutzer`}
           icon={ShieldCheck}
         />
-        <KpiCard
-          label="Offene Verifizierungen"
-          value={numberFmt.format(metrics.pendingVerifications)}
-          hint="warten auf Prüfung"
-          icon={Clock}
-        />
+        <OpenVerificationsKpi />
         <KpiCard
           label="Neu (30 Tage)"
           value={numberFmt.format(metrics.newLast30Days)}
@@ -90,18 +79,12 @@ export default async function UsersAdminPage() {
         <KpiCard
           label="Aktiv (30 Tage)"
           value={numberFmt.format(metrics.activeLast30Days)}
-          hint="zuletzt angemeldet"
+          hint="Login in den letzten 30 Tagen"
           icon={Activity}
-        />
-        <KpiCard
-          label="Punkte im Umlauf"
-          value={numberFmt.format(metrics.totalPointsInCirculation)}
-          hint="Summe aller Guthaben"
-          icon={Coins}
         />
       </div>
 
-      {/* Charts row 1 */}
+      {/* Registrations over time (with platform filter) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="bg-card border border-border shadow-none">
           <CardHeader>
@@ -119,25 +102,32 @@ export default async function UsersAdminPage() {
           <CardHeader>
             <CardTitle>Registrierungen im Zeitverlauf</CardTitle>
             <CardDescription>
-              Kumulierte Nutzerzahl pro Woche.
+              Kumulierte Nutzerzahl pro Woche. Plattform basiert auf erfasstem
+              Login/Gerät — ältere Nutzer ohne Geräteinfo zählen als „Unbekannt“.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SignupsAreaChart data={metrics.signups} />
+            <SignupsChart rows={signupRows} />
           </CardContent>
         </Card>
       </div>
 
-      {/* Verification funnel */}
+      {/* Daily activity / DAU */}
       <Card className="bg-card border border-border shadow-none">
         <CardHeader>
-          <CardTitle>Verifizierungs-Status</CardTitle>
+          <CardTitle>Tägliche Aktivität (60 Tage)</CardTitle>
           <CardDescription>
-            Aufschlüsselung nach Bürger-Verifizierungsstatus.
+            Registrierungen pro Tag, aktive Nutzer als Proxy (Punkte-Aktivität)
+            und echte DAU aus dem App-Aktivitätslog. Die echte DAU-Linie füllt
+            sich ab jetzt, da das Tracking neu eingeführt wurde.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <VerificationFunnel data={metrics.verificationFunnel} />
+          <DailyActivityChart
+            registrations={metrics.dailyRegistrations}
+            activeProxy={metrics.dailyActiveProxy}
+            activeReal={metrics.dailyActiveReal}
+          />
         </CardContent>
       </Card>
 

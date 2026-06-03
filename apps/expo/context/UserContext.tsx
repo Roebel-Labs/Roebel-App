@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet } from 'thirdweb/react';
 import { getUserEmail, getProfiles } from 'thirdweb/wallets/in-app';
@@ -8,6 +10,7 @@ import { useConsent } from '@/context/ConsentContext';
 import { setSentryUser } from '@/lib/sentry-init';
 import { Events, track } from '@/lib/analytics';
 import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
+import { logActivity } from '@/lib/supabase-activity';
 import { loadCachedUser, saveCachedUser } from '@/lib/user-cache';
 import { useWalletBoot } from '@/context/WalletBootContext';
 import type { UserRecord, UserTier } from '@/lib/types';
@@ -117,6 +120,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         const userRecord = await upsertUser(account!.address, email, authProvider);
         setUser(userRecord);
+
+        // Record daily activity + device platform for DAU/platform analytics.
+        // Fire-and-forget; never blocks login. Captures platform for ALL
+        // logging-in users (not only push-enabled ones).
+        const platform =
+          Platform.OS === 'ios' || Platform.OS === 'android'
+            ? Platform.OS
+            : 'web';
+        void logActivity(
+          account!.address,
+          platform,
+          Constants.expoConfig?.version,
+        );
 
         // Onboarding + consent re-prompt trigger — fires once per connection transition
         if (userRecord && onboardingTriggeredFor.current !== userRecord.wallet_address) {
