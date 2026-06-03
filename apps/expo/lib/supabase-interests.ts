@@ -63,10 +63,13 @@ export async function isInterested(
 export async function fetchAllUserInterests(
   walletAddress: string
 ): Promise<string[]> {
+  // Case-insensitive match: event_interests.user_wallet is stored checksummed
+  // (from thirdweb account.address), while users.wallet_address is lowercase.
+  // ilike avoids the mismatch (wallet addresses contain no SQL wildcard chars).
   const { data } = await supabase
     .from('event_interests')
     .select('event_id')
-    .eq('user_wallet', walletAddress);
+    .ilike('user_wallet', walletAddress);
 
   return data?.map((row) => row.event_id) ?? [];
 }
