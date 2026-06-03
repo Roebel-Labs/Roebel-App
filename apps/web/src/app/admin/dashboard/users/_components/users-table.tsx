@@ -13,11 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AdminUserRow } from "@/app/actions/users-admin";
-import {
-  formatWalletAddress,
-  getRoleInfo,
-  getUserDisplayName,
-} from "@/lib/user-types";
+import { formatWalletAddress, getRoleInfo } from "@/lib/user-types";
 import { UserDetailSheet } from "./user-detail-sheet";
 
 const numberFmt = new Intl.NumberFormat("de-DE");
@@ -190,7 +186,11 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
                           {r.profile_picture_url && (
                             <AvatarImage
                               src={r.profile_picture_url}
-                              alt={getUserDisplayName(r)}
+                              alt={
+                                r.username ||
+                                r.display_name ||
+                                formatWalletAddress(r.wallet_address)
+                              }
                             />
                           )}
                           <AvatarFallback className="text-xs">

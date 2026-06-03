@@ -11,11 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { AdminUserRow } from "@/app/actions/users-admin";
-import {
-  formatWalletAddress,
-  getRoleInfo,
-  getUserDisplayName,
-} from "@/lib/user-types";
+import { formatWalletAddress, getRoleInfo } from "@/lib/user-types";
 
 const numberFmt = new Intl.NumberFormat("de-DE");
 
@@ -107,7 +103,11 @@ export function UserDetailSheet({
                   {user.profile_picture_url && (
                     <AvatarImage
                       src={user.profile_picture_url}
-                      alt={getUserDisplayName(user)}
+                      alt={
+                        user.username ||
+                        user.display_name ||
+                        formatWalletAddress(user.wallet_address)
+                      }
                     />
                   )}
                   <AvatarFallback>
