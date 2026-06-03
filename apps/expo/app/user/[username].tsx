@@ -17,6 +17,7 @@ import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
 import TierBadge from '@/components/RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import UserIcon from '@/assets/icons/user.svg';
 import LocationSmallIcon from '@/assets/icons/location-small.svg';
@@ -188,11 +189,7 @@ export default function PublicUserProfileScreen() {
             <Text style={[styles.displayName, { color: colors.textPrimary }]} numberOfLines={1}>
               {profile.username ?? displayName}
             </Text>
-            {profile.is_verified_citizen && (
-              <View style={[styles.verifiedBadge, { backgroundColor: colors.success }]}>
-                <Text style={styles.verifiedCheck}>✓</Text>
-              </View>
-            )}
+            {profile.is_verified_citizen && <VerifiedBadge size={20} />}
           </View>
           <View style={styles.subRow}>
             <TierBadge
@@ -387,18 +384,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
     flexShrink: 1,
-  },
-  verifiedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifiedCheck: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   subRow: {
     flexDirection: 'row',
