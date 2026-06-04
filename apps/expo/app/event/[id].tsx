@@ -239,6 +239,7 @@ export default function EventDetails() {
     ? getNextUpcomingDate(eventDates.map(d => d.date)) || event.date
     : event.date;
   const isRecurring = event.is_recurring && eventDates.length > 1;
+  const dateBadge = formatEventCardDateSplit(displayDate);
   const start = `${formatDate(displayDate)}${formatTime(event.time) ? ` • ${formatTime(event.time)}` : ''}`;
   const end = formatTime(event.end_time);
 
@@ -284,6 +285,13 @@ export default function EventDetails() {
           <Pressable onPress={goBack} style={[styles.backBtn, { backgroundColor: colors.background }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
           </Pressable>
+
+          {event.image_url && (
+            <View style={[styles.dateOverlay, { backgroundColor: colors.background }]}>
+              <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateBadge.day}</Text>
+              <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateBadge.label}</Text>
+            </View>
+          )}
 
           <View style={styles.pageIndicator} />
         </View>
@@ -623,6 +631,33 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: 'rgba(255,255,255,0.8)',
     borderRadius: 2,
+  },
+  dateOverlay: {
+    position: 'absolute',
+    bottom: 60,
+    right: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    minWidth: 42,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  dateDay: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 20,
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 13,
+    marginTop: 1,
   },
   contentOverlay: {
     borderTopLeftRadius: 30,
