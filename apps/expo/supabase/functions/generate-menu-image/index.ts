@@ -29,7 +29,7 @@ const NANO_BANANA_PRO_MODEL = 'nano-banana-pro';
 const MAX_REFERENCE_IMAGES = 10;
 const BUCKET = 'images';
 const POLL_INTERVAL_MS = 2500;
-const POLL_BUDGET_MS = 50_000;
+const POLL_BUDGET_MS = 60_000;
 const VERSION_TAG = 'v3';
 
 const corsHeaders = {
@@ -295,9 +295,10 @@ serve(async (req: Request) => {
   const kieKey = req.headers.get('x-kie-key') ?? Deno.env.get('KIE_API_KEY');
   if (!kieKey) return json(500, { ok: false, code: 'NO_KIE_KEY' });
 
-  // Each kie.ai model family has a different input contract:
+  // Each kie.ai model family has a different input contract. Both target ~1K
+  // output so a generation finishes within the 60s poll budget:
   //  - Seedream 4.5: separate text-to-image / edit model ids, references via
-  //    `image_urls`, sized via `quality`.
+  //    `image_urls`, sized via `quality` ('basic' = the faster ~1K tier).
   //  - Nano Banana Pro: one model id for both modes, references via `image_input`
   //    (empty array for text-to-image), sized via `resolution`/`output_format`.
   let createBody: Record<string, unknown>;
@@ -308,7 +309,7 @@ serve(async (req: Request) => {
         prompt,
         image_input: useEdit ? referenceImageUrls : [],
         aspect_ratio: '16:9',
-        resolution: '2K',
+        resolution: '1K',
         output_format: 'jpg',
       },
     };

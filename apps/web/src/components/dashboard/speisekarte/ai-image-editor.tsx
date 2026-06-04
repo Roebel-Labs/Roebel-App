@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   ImagePlus,
@@ -39,6 +40,7 @@ import {
   type AiImageStyle,
   type AiImageModel,
 } from "@/types/restaurant";
+import { ImageCompareSlider } from "./image-compare-slider";
 
 const PRESETS: AiImageStyle[] = [
   "dark_stoneware",
@@ -53,9 +55,9 @@ const DEFAULT_MODEL: AiImageModel = "seedream";
 const modelStorageKey = (kind: ItemKind, itemId: string) =>
   `roebel:ai-model:${kind}:${itemId}`;
 
-// The Edge Function polls kie.ai for up to ~50s; the progress bar is paced to
+// The Edge Function polls kie.ai for up to ~60s; the progress bar is paced to
 // this budget so it feels honest without a real progress channel.
-const GENERATION_BUDGET_S = 50;
+const GENERATION_BUDGET_S = 60;
 
 const VARIANTS_LIMIT = 4;
 const variantsStorageKey = (kind: ItemKind, itemId: string) =>
@@ -94,6 +96,8 @@ export function AiImageEditor({
   const [variants, setVariants] = useState<string[]>([]);
   const [references, setReferences] = useState<string[]>([]);
   const [elapsed, setElapsed] = useState(0);
+  // The variant currently loaded into the big before/after slider (uncommitted).
+  const [compareUrl, setCompareUrl] = useState<string | null>(null);
 
   const itemReady = !!itemId;
   const busy = uploading || generating || clearing || committing || uploadingReference;
@@ -122,6 +126,7 @@ export function AiImageEditor({
         : "Wird gespeichert…";
 
   useEffect(() => {
+    setCompareUrl(null);
     if (!itemId) {
       setVariants([]);
       setReferences([]);
@@ -258,7 +263,8 @@ export function AiImageEditor({
         VARIANTS_LIMIT,
       );
       persistVariants(next);
-      toast.success("Variante erstellt — Klicke zum Übernehmen.");
+      setCompareUrl(res.image_url);
+      toast.success("Variante erstellt — vergleiche und übernimm.");
     } else {
       toast.error(res.error ?? "KI-Bilderzeugung fehlgeschlagen");
     }
@@ -271,6 +277,7 @@ export function AiImageEditor({
     setCommitting(false);
     if (res.success && res.image_url) {
       onImageChange(res.image_url);
+      setCompareUrl(null);
       toast.success(res.message ?? "Bild übernommen");
     } else {
       toast.error(res.error ?? "Übernehmen fehlgeschlagen");
@@ -279,6 +286,7 @@ export function AiImageEditor({
 
   const handleDiscardVariant = (url: string) => {
     persistVariants(variants.filter((v) => v !== url));
+    if (compareUrl === url) setCompareUrl(null);
   };
 
   const defaultPresetLabel = restaurantStyle
@@ -289,24 +297,30 @@ export function AiImageEditor({
     <div className="space-y-3">
       <Label className="text-sm font-medium">Bild</Label>
 
-      <div className="relative w-full aspect-[16/9] rounded-md overflow-hidden border border-border bg-muted">
-        {imageUrl ? (
-          <Image
-            src={imageUrl}
-            alt=""
-            fill
-            sizes="(max-width: 640px) 100vw, 540px"
-            className="object-cover"
-            unoptimized
-          />
+      <div className="relative">
+        {compareUrl && imageUrl && compareUrl !== imageUrl ? (
+          <ImageCompareSlider oldUrl={imageUrl} newUrl={compareUrl} />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-muted-foreground">
-            <ImageOff className="h-6 w-6" />
-            <span className="text-xs">Noch kein Bild</span>
+          <div className="relative w-full aspect-[16/9] rounded-md overflow-hidden border border-border bg-muted">
+            {compareUrl || imageUrl ? (
+              <Image
+                src={(compareUrl ?? imageUrl) as string}
+                alt=""
+                fill
+                sizes="(max-width: 640px) 100vw, 540px"
+                className="object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                <ImageOff className="h-6 w-6" />
+                <span className="text-xs">Noch kein Bild</span>
+              </div>
+            )}
           </div>
         )}
         {generating ? (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 px-6">
+          <div className="absolute inset-0 rounded-md bg-background/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 px-6">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <p className="text-sm font-medium text-foreground">{progressStep}</p>
             <div className="w-full max-w-[260px]">
@@ -323,12 +337,40 @@ export function AiImageEditor({
           </div>
         ) : (
           busy && (
-            <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-md bg-background/60 flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-foreground" />
             </div>
           )
         )}
       </div>
+
+      {compareUrl && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={!itemReady || busy}
+            onClick={() => handleCommitVariant(compareUrl)}
+            className="flex-1"
+          >
+            {committing ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Check className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Übernehmen
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => setCompareUrl(null)}
+          >
+            Verwerfen
+          </Button>
+        </div>
+      )}
 
       {!itemReady && (
         <p className="text-xs text-muted-foreground">
@@ -539,20 +581,23 @@ export function AiImageEditor({
 
             {variants.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Varianten — klicke zum Übernehmen</Label>
+                <Label className="text-xs">Varianten — klicke zum Vergleichen</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {variants.map((url) => {
-                    const isActive = url === imageUrl;
+                    const isComparing = url === compareUrl;
+                    const isCommitted = url === imageUrl;
                     return (
                       <div key={url} className="relative group">
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => handleCommitVariant(url)}
+                          onClick={() => setCompareUrl(url)}
                           className={`relative w-full aspect-[16/9] rounded-md overflow-hidden border transition-colors ${
-                            isActive
+                            isComparing
                               ? "border-primary ring-2 ring-primary"
-                              : "border-border hover:border-foreground"
+                              : isCommitted
+                                ? "border-primary"
+                                : "border-border hover:border-foreground"
                           }`}
                         >
                           <Image
@@ -578,7 +623,8 @@ export function AiImageEditor({
                   })}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  KI-Bilderzeugung kann bis zu 50 Sekunden dauern.
+                  Klicke eine Variante an, vergleiche sie im Bild oben und
+                  übernimm sie. KI-Bilderzeugung kann bis zu 60 Sekunden dauern.
                 </p>
               </div>
             )}
