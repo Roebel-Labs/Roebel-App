@@ -7,9 +7,12 @@
  *
  * v3 style — per-gastro brand, angle by food type, sharp, centered, no text.
  *
- * If `reference_image_urls` (1–10 public URLs) is provided, runs the
- * seedream/4.5-edit image-to-image model instead: the caller's real photo of the
- * dish is restyled into the branded studio look while keeping the actual food.
+ * If `reference_image_urls` (1–10 public URLs) is provided, runs the edit /
+ * image-to-image variant instead: the caller's real photo of the dish is
+ * restyled into the branded studio look while keeping the actual food.
+ *
+ * `model` selects the kie.ai backend: 'seedream' (default, Seedream 4.5) or
+ * 'nano_banana_pro' (Google Nano Banana Pro). Each has its own input contract.
  *
  * Auth: verify_jwt=false; protect with x-seed-token header matched against
  * SEED_TOKEN env. Optional x-kie-key header overrides KIE_API_KEY env.
@@ -22,6 +25,7 @@ const KIE_CREATE = 'https://api.kie.ai/api/v1/jobs/createTask';
 const KIE_POLL = 'https://api.kie.ai/api/v1/jobs/recordInfo';
 const SEEDREAM_MODEL = 'seedream/4.5-text-to-image';
 const SEEDREAM_EDIT_MODEL = 'seedream/4.5-edit';
+const NANO_BANANA_PRO_MODEL = 'nano-banana-pro';
 const MAX_REFERENCE_IMAGES = 10;
 const BUCKET = 'images';
 const POLL_INTERVAL_MS = 2500;
@@ -43,6 +47,11 @@ function json(status: number, body: Record<string, unknown>) {
 
 type GastroKey = 'mt' | 'delizia' | 'waage' | 'generic';
 type StylePreset = 'dark_stoneware' | 'italian_gingham' | 'light_concrete' | 'wooden_board';
+type ImageModel = 'seedream' | 'nano_banana_pro';
+
+function isValidModel(v: unknown): v is ImageModel {
+  return v === 'seedream' || v === 'nano_banana_pro';
+}
 
 function gastroFor(restaurantName: string): GastroKey {
   const n = restaurantName.toLowerCase();
@@ -204,6 +213,7 @@ serve(async (req: Request) => {
     prompt_hint?: string;
     quality?: 'basic' | 'high';
     style_preset?: string;
+    model?: string;
     reference_image_urls?: unknown;
   };
   try { body = await req.json(); } catch { return json(400, { ok: false, code: 'BAD_JSON' }); }
@@ -215,6 +225,10 @@ serve(async (req: Request) => {
   if (body.style_preset !== undefined && !isValidStylePreset(body.style_preset)) {
     return json(400, { ok: false, code: 'INVALID_STYLE_PRESET' });
   }
+  if (body.model !== undefined && !isValidModel(body.model)) {
+    return json(400, { ok: false, code: 'INVALID_MODEL' });
+  }
+  const model: ImageModel = isValidModel(body.model) ? body.model : 'seedream';
   const referenceImageUrls =
     body.reference_image_urls === undefined || body.reference_image_urls === null
       ? null
@@ -275,26 +289,45 @@ serve(async (req: Request) => {
     : buildPrompt(item.name, item.description, restaurant?.name ?? '', resolvedPreset, body.prompt_hint);
 
   if (body.dry_run) {
-    return json(200, { ok: true, prompt, dry_run: true, mode: useEdit ? 'edit' : 'text-to-image' });
+    return json(200, { ok: true, prompt, dry_run: true, model, mode: useEdit ? 'edit' : 'text-to-image' });
   }
 
   const kieKey = req.headers.get('x-kie-key') ?? Deno.env.get('KIE_API_KEY');
   if (!kieKey) return json(500, { ok: false, code: 'NO_KIE_KEY' });
 
-  const createBody = useEdit
-    ? {
-        model: SEEDREAM_EDIT_MODEL,
-        input: {
-          prompt,
-          image_urls: referenceImageUrls,
-          aspect_ratio: '16:9',
-          quality: body.quality ?? 'basic',
-        },
-      }
-    : {
-        model: SEEDREAM_MODEL,
-        input: { prompt, aspect_ratio: '16:9', quality: body.quality ?? 'basic' },
-      };
+  // Each kie.ai model family has a different input contract:
+  //  - Seedream 4.5: separate text-to-image / edit model ids, references via
+  //    `image_urls`, sized via `quality`.
+  //  - Nano Banana Pro: one model id for both modes, references via `image_input`
+  //    (empty array for text-to-image), sized via `resolution`/`output_format`.
+  let createBody: Record<string, unknown>;
+  if (model === 'nano_banana_pro') {
+    createBody = {
+      model: NANO_BANANA_PRO_MODEL,
+      input: {
+        prompt,
+        image_input: useEdit ? referenceImageUrls : [],
+        aspect_ratio: '16:9',
+        resolution: '2K',
+        output_format: 'jpg',
+      },
+    };
+  } else {
+    createBody = useEdit
+      ? {
+          model: SEEDREAM_EDIT_MODEL,
+          input: {
+            prompt,
+            image_urls: referenceImageUrls,
+            aspect_ratio: '16:9',
+            quality: body.quality ?? 'basic',
+          },
+        }
+      : {
+          model: SEEDREAM_MODEL,
+          input: { prompt, aspect_ratio: '16:9', quality: body.quality ?? 'basic' },
+        };
+  }
   const createResp = await fetch(KIE_CREATE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kieKey}` },
@@ -357,5 +390,5 @@ serve(async (req: Request) => {
     if (updErr) return json(500, { ok: false, code: 'DB_UPDATE_FAILED', error: updErr.message });
   }
 
-  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId, preview: !!body.preview, mode: useEdit ? 'edit' : 'text-to-image' });
+  return json(200, { ok: true, image_url: publicUrl, prompt, task_id: taskId, preview: !!body.preview, model, mode: useEdit ? 'edit' : 'text-to-image' });
 });

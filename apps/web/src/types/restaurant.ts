@@ -16,6 +16,18 @@ export const AI_IMAGE_STYLE_LABELS: Record<AiImageStyle, string> = {
   wooden_board: "Holzbrett",
 }
 
+export type AiImageModel = "seedream" | "nano_banana_pro"
+
+export const AI_IMAGE_MODEL_LABELS: Record<AiImageModel, string> = {
+  seedream: "Seedream 4.5",
+  nano_banana_pro: "Nano Banana Pro",
+}
+
+export const AI_IMAGE_MODEL_DESCRIPTIONS: Record<AiImageModel, string> = {
+  seedream: "Standard — schnell und zuverlässig.",
+  nano_banana_pro: "Google · höhere Detailtreue, etwas langsamer.",
+}
+
 export const AI_IMAGE_STYLE_DESCRIPTIONS: Record<AiImageStyle, string> = {
   dark_stoneware:
     "Anthrazitgraue Steinplatte auf mattem dunklem Untergrund — wirkt edel und reduziert.",

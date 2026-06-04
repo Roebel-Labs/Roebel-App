@@ -34,7 +34,10 @@ import {
 } from "@/app/actions/restaurants";
 import {
   AI_IMAGE_STYLE_LABELS,
+  AI_IMAGE_MODEL_LABELS,
+  AI_IMAGE_MODEL_DESCRIPTIONS,
   type AiImageStyle,
+  type AiImageModel,
 } from "@/types/restaurant";
 
 const PRESETS: AiImageStyle[] = [
@@ -44,6 +47,15 @@ const PRESETS: AiImageStyle[] = [
   "wooden_board",
 ];
 const DEFAULT_PRESET_VALUE = "__default__";
+
+const MODELS: AiImageModel[] = ["seedream", "nano_banana_pro"];
+const DEFAULT_MODEL: AiImageModel = "seedream";
+const modelStorageKey = (kind: ItemKind, itemId: string) =>
+  `roebel:ai-model:${kind}:${itemId}`;
+
+// The Edge Function polls kie.ai for up to ~50s; the progress bar is paced to
+// this budget so it feels honest without a real progress channel.
+const GENERATION_BUDGET_S = 50;
 
 const VARIANTS_LIMIT = 4;
 const variantsStorageKey = (kind: ItemKind, itemId: string) =>
@@ -78,17 +90,49 @@ export function AiImageEditor({
   const [editorOpen, setEditorOpen] = useState(false);
   const [promptHint, setPromptHint] = useState("");
   const [presetOverride, setPresetOverride] = useState<string>(DEFAULT_PRESET_VALUE);
+  const [model, setModel] = useState<AiImageModel>(DEFAULT_MODEL);
   const [variants, setVariants] = useState<string[]>([]);
   const [references, setReferences] = useState<string[]>([]);
+  const [elapsed, setElapsed] = useState(0);
 
   const itemReady = !!itemId;
   const busy = uploading || generating || clearing || committing || uploadingReference;
+
+  // Pace an estimated progress bar while a variant generates. Caps at 95% until
+  // the server action actually returns, then the overlay disappears.
+  useEffect(() => {
+    if (!generating) {
+      setElapsed(0);
+      return;
+    }
+    setElapsed(0);
+    const startedAt = Date.now();
+    const id = window.setInterval(() => {
+      setElapsed((Date.now() - startedAt) / 1000);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [generating]);
+
+  const progress = Math.min(95, (elapsed / GENERATION_BUDGET_S) * 100);
+  const progressStep =
+    elapsed < 5
+      ? "Prompt wird vorbereitet…"
+      : elapsed < 45
+        ? "Bild wird generiert…"
+        : "Wird gespeichert…";
 
   useEffect(() => {
     if (!itemId) {
       setVariants([]);
       setReferences([]);
+      setModel(DEFAULT_MODEL);
       return;
+    }
+    try {
+      const rawModel = window.localStorage.getItem(modelStorageKey(kind, itemId));
+      setModel(rawModel === "nano_banana_pro" ? "nano_banana_pro" : DEFAULT_MODEL);
+    } catch {
+      setModel(DEFAULT_MODEL);
     }
     try {
       const raw = window.localStorage.getItem(variantsStorageKey(kind, itemId));
@@ -127,6 +171,16 @@ export function AiImageEditor({
         referencesStorageKey(kind, itemId),
         JSON.stringify(next),
       );
+    } catch {
+      // localStorage may be unavailable (private window) — silent fail.
+    }
+  };
+
+  const persistModel = (next: AiImageModel) => {
+    setModel(next);
+    if (!itemId) return;
+    try {
+      window.localStorage.setItem(modelStorageKey(kind, itemId), next);
     } catch {
       // localStorage may be unavailable (private window) — silent fail.
     }
@@ -193,6 +247,7 @@ export function AiImageEditor({
     const res = await regenerateItemImageWithAi(kind, itemId, {
       prompt_hint: promptHint.trim() || undefined,
       style_preset: presetForCall,
+      model,
       preview: true,
       reference_image_urls: references.length ? references : undefined,
     });
@@ -250,10 +305,28 @@ export function AiImageEditor({
             <span className="text-xs">Noch kein Bild</span>
           </div>
         )}
-        {busy && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-foreground" />
+        {generating ? (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 px-6">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm font-medium text-foreground">{progressStep}</p>
+            <div className="w-full max-w-[260px]">
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+                {Math.floor(elapsed)}s · bis zu {GENERATION_BUDGET_S}s
+              </p>
+            </div>
           </div>
+        ) : (
+          busy && (
+            <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-foreground" />
+            </div>
+          )
         )}
       </div>
 
@@ -319,6 +392,31 @@ export function AiImageEditor({
 
         {editorOpen && (
           <div className="px-3 pb-3 pt-1 space-y-3 border-t border-border">
+            <div className="space-y-1.5">
+              <Label htmlFor="aiModel" className="text-xs">
+                KI-Modell
+              </Label>
+              <Select
+                value={model}
+                onValueChange={(v) => persistModel(v as AiImageModel)}
+                disabled={busy}
+              >
+                <SelectTrigger id="aiModel">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODELS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {AI_IMAGE_MODEL_LABELS[m]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {AI_IMAGE_MODEL_DESCRIPTIONS[model]}
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="aiPromptHint" className="text-xs">
                 Prompt-Hinweis (optional)
@@ -432,7 +530,11 @@ export function AiImageEditor({
               ) : (
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               )}
-              {references.length > 0 ? "Variante aus Foto generieren" : "Variante generieren"}
+              {generating
+                ? `Generiere… ${Math.round(progress)}%`
+                : references.length > 0
+                  ? "Variante aus Foto generieren"
+                  : "Variante generieren"}
             </Button>
 
             {variants.length > 0 && (

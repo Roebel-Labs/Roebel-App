@@ -22,6 +22,7 @@ import type {
   CreateSpecialMenuItemInput,
   UpdateSpecialMenuItemInput,
   AiImageStyle,
+  AiImageModel,
 } from "@/types/restaurant"
 import { generateSlug } from "@/types/restaurant"
 
@@ -972,6 +973,7 @@ export async function regenerateItemImageWithAi(
   opts?: {
     prompt_hint?: string
     style_preset?: AiImageStyle
+    model?: AiImageModel
     preview?: boolean
     reference_image_urls?: string[]
   }
@@ -993,6 +995,7 @@ export async function regenerateItemImageWithAi(
         : { special_menu_item_id: itemId }
     if (opts?.prompt_hint) payload.prompt_hint = opts.prompt_hint
     if (opts?.style_preset) payload.style_preset = opts.style_preset
+    if (opts?.model) payload.model = opts.model
     if (opts?.preview) payload.preview = true
     if (opts?.reference_image_urls?.length)
       payload.reference_image_urls = opts.reference_image_urls
