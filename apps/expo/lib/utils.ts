@@ -23,10 +23,10 @@ export function formatEventCardDateSplit(dateISO: string): { day: string; label:
   const date = parseISO(dateISO);
 
   if (isThisWeek(date, { locale: de, weekStartsOn: 1 })) {
-    // This week: show abbreviated day name as main value (Mo, Di, etc.)
+    // This week: weekday on top (no trailing dot), "8. Jun" below
     return {
-      day: format(date, 'EE', { locale: de }), // Short weekday (Mo, Di, Mi)
-      label: format(date, 'd', { locale: de }) // Day number as label
+      day: format(date, 'EE', { locale: de }).replace(/\.$/, ''), // Short weekday (Mo, Di, Do)
+      label: format(date, 'd. MMM', { locale: de }).replace(/\.$/, '') // "8. Jun"
     };
   } else {
     // Other weeks: show day number and abbreviated month
