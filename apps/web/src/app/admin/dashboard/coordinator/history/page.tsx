@@ -82,7 +82,7 @@ export default function CoordinatorHistoryPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Vollständiger zeitlicher Verlauf aller Coordinator-Operationen.
-            Filtere nach Event-Typ; scrolle nach unten und klicke "Mehr laden"
+            Filtere nach Event-Typ; scrolle nach unten und klicke &quot;Mehr laden&quot;
             für ältere Einträge.
           </p>
         </div>
