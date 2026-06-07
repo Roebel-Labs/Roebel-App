@@ -130,6 +130,23 @@ export default function SettingsScreen() {
 
         <Section title="WALLET" colors={colors}>
           <Pressable
+            style={[
+              styles.themeOptionRow,
+              { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary },
+            ]}
+            onPress={() => router.push('/wallet' as any)}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Wallet anzeigen
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Guthaben, Token und Sammlerstücke ansehen, senden und empfangen.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
+          <Pressable
             style={styles.themeOptionRow}
             onPress={() => router.push('/settings/reveal-key' as any)}
           >
