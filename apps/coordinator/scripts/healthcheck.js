@@ -114,18 +114,24 @@ async function startReconstructorSession({ pollId, timeoutMs }) {
     startedAt: new Date().toISOString(),
     sessionRow: null,
   };
+  let childExited = false;
+  let childExitCode = null;
   child.on("exit", (code) => {
     console.log(
       `[sessions] reconstructor for poll ${pollId} exited with code ${code}`,
     );
+    childExited = true;
+    childExitCode = code;
     activeSession = null;
   });
 
   // Poll Supabase for the session row the child writes during boot, so the
-  // API can return the session id immediately.
+  // API can return the session id immediately. Bail out early if the child
+  // crashes (e.g. no active key generation, missing env, etc.) so we don't
+  // dereference a null activeSession.
   const rowPollDeadline = Date.now() + 15000;
   let sessionRow = null;
-  while (Date.now() < rowPollDeadline && !sessionRow) {
+  while (Date.now() < rowPollDeadline && !sessionRow && !childExited) {
     try {
       const q = new URLSearchParams({
         select: "*",
@@ -144,7 +150,17 @@ async function startReconstructorSession({ pollId, timeoutMs }) {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  activeSession.sessionRow = sessionRow;
+
+  if (childExited) {
+    return {
+      ok: false,
+      status: 500,
+      error: `reconstructor exited during startup with code ${childExitCode}`,
+    };
+  }
+  if (activeSession) {
+    activeSession.sessionRow = sessionRow;
+  }
   return { ok: true, session: sessionRow, port };
 }
 
