@@ -18,7 +18,7 @@ function AttesterNode({ data }: NodeProps<AttesterNodeData>) {
       ? "px-4 py-3 rounded-lg shadow-sm border-2 border-dashed border-yellow-400 bg-yellow-50/80 text-yellow-900 text-sm font-medium min-w-[160px] opacity-90 transition-transform hover:scale-105"
       : status === "revoked"
         ? "px-4 py-3 rounded-lg shadow-sm border-2 border-border bg-muted text-muted-foreground text-sm font-medium min-w-[160px] opacity-70 transition-transform hover:scale-105"
-        : "px-4 py-3 rounded-lg shadow-lg border-2 bg-gradient-to-br from-yellow-500 via-teal-500 to-blue-600 border-teal-400 text-white text-sm font-medium min-w-[160px] transition-transform hover:scale-105";
+        : "px-4 py-3 rounded-lg shadow-lg border-2 bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 border-amber-300 text-amber-950 text-sm font-medium min-w-[160px] transition-transform hover:scale-105";
 
   return (
     <div className="relative">
