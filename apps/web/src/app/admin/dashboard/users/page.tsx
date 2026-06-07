@@ -28,6 +28,7 @@ import { getUsersAdminData } from "@/app/actions/users-admin";
 import { getStoreMetrics } from "@/app/actions/store-admin";
 import { getOrgAccountsAdminData } from "@/app/actions/orgs-admin";
 import { UsersTable } from "./_components/users-table";
+import { UsersByVerification } from "./_components/users-by-verification";
 import { RegisteredThisWeek } from "./_components/registered-this-week";
 import { VerificationRequestsPanel } from "./_components/verification-requests-panel";
 import { AttestersPanel } from "./_components/attesters-panel";
@@ -313,6 +314,20 @@ export default async function UsersAdminPage() {
         </CardHeader>
         <CardContent>
           <RegisteredThisWeek rows={rows} />
+        </CardContent>
+      </Card>
+
+      {/* Users grouped by verification status */}
+      <Card className="bg-card border border-border shadow-none">
+        <CardHeader>
+          <CardTitle>Nutzer nach Verifizierung</CardTitle>
+          <CardDescription>
+            Getrennte Tabellen: verifizierte Bürger (NFT), im Onboarding
+            gewählte aber noch nicht verifizierte Bürger, und Gäste/Touristen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UsersByVerification rows={rows} />
         </CardContent>
       </Card>
 
