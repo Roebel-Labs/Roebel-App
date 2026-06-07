@@ -324,10 +324,13 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   // item) rather than pinning it at the very top. The card self-gates, so an
   // injected sentinel renders nothing when there's no eligible proposal.
   const displayData = React.useMemo(() => {
-    if (!showProposalHero) return items;
-    const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
-    const at = Math.min(1, items.length);
-    return [...items.slice(0, at), hero, ...items.slice(at)];
+    // TEMPORARILY DISABLED FOR TESTING — proposal hero card hidden on the home
+    // feed. Re-enable by restoring the injection logic below.
+    return items;
+    // if (!showProposalHero) return items;
+    // const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
+    // const at = Math.min(1, items.length);
+    // return [...items.slice(0, at), hero, ...items.slice(at)];
   }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.

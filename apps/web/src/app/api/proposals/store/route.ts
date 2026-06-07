@@ -124,14 +124,16 @@ export async function POST(request: NextRequest) {
     console.log("✅ [API] Proposal stored successfully!");
     console.log("🔗 [API] Proposal URL: /proposals/" + proposalId);
 
-    // Create activity notification
-    createAppNotification({
-      type: "proposal_new",
-      title: `Neuer Vorschlag: ${title}`,
-      body: summary?.substring(0, 120) || null,
-      link: `/app/proposals/${proposalId}`,
-      reference_id: proposalId,
-    }).catch(console.error);
+    // TEMPORARILY DISABLED FOR TESTING — re-enable later.
+    // New-proposal notifications are turned off while testing. Restore by
+    // uncommenting the createAppNotification call below.
+    // createAppNotification({
+    //   type: "proposal_new",
+    //   title: `Neuer Vorschlag: ${title}`,
+    //   body: summary?.substring(0, 120) || null,
+    //   link: `/app/proposals/${proposalId}`,
+    //   reference_id: proposalId,
+    // }).catch(console.error);
     // Note: no image_url for proposals - uses default icon
 
     return NextResponse.json({
