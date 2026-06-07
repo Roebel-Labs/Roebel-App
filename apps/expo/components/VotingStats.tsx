@@ -105,9 +105,9 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
       {showPendingTally ? (
         <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-            Wahlergebnis wird berechnet. Der Koordinator entschlüsselt die Stimmen
-            und veröffentlicht das Ergebnis innerhalb von ca. 15 Minuten auf der
-            Blockchain – diese Seite aktualisiert sich automatisch.
+            Wahlergebnis wird berechnet. Eine unabhängige Stelle entschlüsselt die
+            Stimmen und veröffentlicht das Ergebnis innerhalb von ca. 15 Minuten im
+            dezentralen Netzwerk – diese Seite aktualisiert sich automatisch.
           </Text>
         </View>
       ) : null}

@@ -336,9 +336,9 @@ export default function ProposalTimeline({
           titleColor={anchors.tallyPublished ? colors.textPrimary : colors.textSecondary}
           subtitle={
             anchors.tallyPublished
-              ? 'auf der Blockchain'
+              ? 'im dezentralen Netzwerk'
               : isEnded
-                ? 'Koordinator berechnet…'
+                ? 'wird berechnet…'
                 : '—'
           }
         />

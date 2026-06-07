@@ -26,7 +26,7 @@ export default function BuergerWerdenBanner() {
       <View style={styles.textBlock}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Bürger werden</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Beantragen Sie Ihren Bürger-Pass
+          Beantragen Sie Ihre Bürgerschaft
         </Text>
         <Pressable
           onPress={onPress}

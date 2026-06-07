@@ -38,7 +38,7 @@ export default function VerificationCompleteDrawer({
         {/* Message */}
         <View style={styles.messageContainer}>
           <Text style={[styles.message, { color: colors.textSecondary }]}>
-            Sie haben nun Ihren <Text style={[styles.boldText, { color: colors.textPrimary }]}>Bürger-Pass</Text> erhalten und können an Abstimmungen teilnehmen.
+            Sie haben nun Ihre <Text style={[styles.boldText, { color: colors.textPrimary }]}>Bürgerschaft</Text> erhalten und können an Abstimmungen teilnehmen.
           </Text>
 
           <View style={[styles.infoBox, { backgroundColor: colors.successBackground, borderColor: colors.success }]}>

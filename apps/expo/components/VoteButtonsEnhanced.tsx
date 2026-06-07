@@ -135,15 +135,15 @@ export default function VoteButtonsEnhanced({
       <View style={styles.container}>
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={styles.infoIcon}>🎫</Text>
-          <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Bürger-Pass erforderlich</Text>
+          <Text style={[styles.infoTitle, { color: colors.textPrimary }]}>Bürgerschaft erforderlich</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            Du benötigst einen Bürger-Pass, um an Abstimmungen teilzunehmen.
+            Du benötigst eine Bürgerschaft, um an Abstimmungen teilzunehmen.
           </Text>
           <Pressable
             style={[styles.actionButton, { backgroundColor: colors.textPrimary }]}
             onPress={() => router.push('/verification/request-citizen' as any)}
           >
-            <Text style={[styles.actionButtonText, { color: colors.textInverted }]}>Bürger-Pass beantragen</Text>
+            <Text style={[styles.actionButtonText, { color: colors.textInverted }]}>Bürgerschaft beantragen</Text>
           </Pressable>
         </View>
       </View>

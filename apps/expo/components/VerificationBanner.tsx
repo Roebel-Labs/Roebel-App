@@ -92,7 +92,7 @@ export default function VerificationBanner() {
         <View style={styles.content}>
           <Text style={styles.registerIcon}>📝</Text>
           <View style={styles.textContainer}>
-            <Text style={styles.registerTitle}>Bürger-Pass beantragen</Text>
+            <Text style={styles.registerTitle}>Bürgerschaft beantragen</Text>
             <Text style={styles.registerSubtitle}>
               Werde verifizierter Bürger und stimme ab
             </Text>

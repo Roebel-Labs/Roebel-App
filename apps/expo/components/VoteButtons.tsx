@@ -235,6 +235,30 @@ export default function VoteButtons({
     }
   }, [serializedKeypair, signUpState.status, refreshSignUp]);
 
+  // Decide what to show after a signup attempt resolves: celebrate only when we
+  // actually reached `signed-up` (so the vote buttons are about to appear).
+  // Otherwise tell the user to retry instead of a misleading success.
+  const showSignUpResult = (
+    recovered: { status: string },
+    alreadyRegistered = false,
+  ) => {
+    if (recovered.status === 'signed-up') {
+      setSuccessDrawer({
+        visible: true,
+        message: alreadyRegistered
+          ? 'Du bist bereits für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen.'
+          : 'Du bist für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen — und deine Stimme bis zum Ende der Frist beliebig oft ändern.',
+        action: null,
+      });
+    } else {
+      setErrorDrawer({
+        visible: true,
+        message:
+          'Deine Anmeldung ließ sich gerade nicht bestätigen. Bitte versuche es in einem Moment erneut.',
+      });
+    }
+  };
+
   // ----- Step 1: generate keypair locally -----
   const handleGenerateKey = async () => {
     if (phase !== 'idle') return;
@@ -244,7 +268,7 @@ export default function VoteButtons({
       setSuccessDrawer({
         visible: true,
         message:
-          'Privater MACI-Schlüssel erstellt und sicher in deinem Gerät gespeichert. Nächster Schritt: einmalige Anmeldung bei MACI.',
+          'Privater Abstimmungsschlüssel erstellt und sicher auf deinem Gerät gespeichert. Nächster Schritt: einmalige Anmeldung zur Bürgerumfrage.',
         action: null,
       });
     } catch (err) {
@@ -267,7 +291,7 @@ export default function VoteButtons({
       return;
     }
     if (!serializedKeypair) {
-      setErrorDrawer({ visible: true, message: 'Bitte erstelle zuerst einen MACI-Schlüssel.' });
+      setErrorDrawer({ visible: true, message: 'Bitte erstelle zuerst deinen Abstimmungsschlüssel.' });
       return;
     }
     try {
@@ -330,38 +354,35 @@ export default function VoteButtons({
         const kp = getKeypair();
         const pubKeyHash = kp ? (kp.pubKey.hash() as bigint) : 0n;
         await markSignedUp(pubKeyHash, stateIndex);
-      } else {
-        // Fallback if the log can't be matched — recover via the event scan.
-        await refreshSignUp();
-      }
-
-      setSuccessDrawer({
-        visible: true,
-        message:
-          'Du bist bei MACI angemeldet. Du kannst jetzt verschlüsselt abstimmen — und deine Stimme bis zum Ende der Frist beliebig oft ändern.',
-        action: null,
-      });
-    } catch (err) {
-      console.error('[VoteButtons] signUp failed:', err);
-
-      // 0x3a81d6fc = AlreadyRegistered() from SignUpTokenGatekeeper.
-      // The user already signed up earlier; refreshSignUp will recover the
-      // stateIndex from the SignUp event and persist it locally.
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
-        await refreshSignUp();
         setSuccessDrawer({
           visible: true,
           message:
-            'Dein Bürger-Pass ist bereits bei MACI angemeldet. Du kannst jetzt verschlüsselt abstimmen.',
+            'Du bist für die Bürgerumfrage angemeldet. Du kannst jetzt geheim abstimmen — und deine Stimme bis zum Ende der Frist beliebig oft ändern.',
           action: null,
         });
+      } else {
+        // Log couldn't be matched — recover the state index via the event scan
+        // and only celebrate if we actually reached `signed-up`.
+        const recovered = await refreshSignUp();
+        showSignUpResult(recovered);
+      }
+    } catch (err) {
+      console.error('[VoteButtons] signUp failed:', err);
+
+      // 0x3a81d6fc = AlreadyRegistered() from the gatekeeper. The user already
+      // signed up earlier; recover the stateIndex from the SignUp event. Only
+      // show success if recovery actually reached `signed-up` — otherwise the
+      // vote buttons would stay hidden behind a misleading "success" message.
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
+        const recovered = await refreshSignUp();
+        showSignUpResult(recovered, /* alreadyRegistered */ true);
       } else {
         setErrorDrawer({
           visible: true,
           message: extractErrorMessage(
             err,
-            'Anmeldung bei MACI ist fehlgeschlagen.',
+            'Anmeldung für die Bürgerumfrage ist fehlgeschlagen.',
           ),
         });
       }
@@ -440,7 +461,7 @@ export default function VoteButtons({
       setSuccessDrawer({
         visible: true,
         message:
-          'Stimme verschlüsselt abgegeben. Sie wird erst nach Ablauf der Frist von einem unabhängigen Koordinator entschlüsselt und auf der Blockchain veröffentlicht. Du kannst deine Stimme bis dahin jederzeit ändern.',
+          'Stimme geheim abgegeben. Sie wird erst nach Ablauf der Frist von einer unabhängigen Stelle entschlüsselt und im dezentralen Netzwerk veröffentlicht. Du kannst deine Stimme bis dahin jederzeit ändern.',
         action: () => onVoteSuccess(),
       });
     } catch (err) {
@@ -472,7 +493,7 @@ export default function VoteButtons({
     return (
       <Container colors={colors}>
         <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          Bürger-Pass erforderlich, um abzustimmen.
+          Bürgerschaft erforderlich, um abzustimmen.
         </Text>
       </Container>
     );
@@ -484,7 +505,7 @@ export default function VoteButtons({
       <Container colors={colors}>
         <ActivityIndicator color={colors.textSecondary} />
         <Text style={[styles.messageText, { color: colors.textSecondary, marginTop: 8 }]}>
-          Lade verschlüsselte Abstimmung…
+          Lade geheime Abstimmung…
         </Text>
       </Container>
     );
@@ -546,8 +567,8 @@ export default function VoteButtons({
           Abstimmung beendet
         </Text>
         <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          Der Koordinator entschlüsselt jetzt die Stimmen und veröffentlicht das
-          Ergebnis innerhalb von ca. 15 Minuten auf der Blockchain.
+          Eine unabhängige Stelle entschlüsselt jetzt die Stimmen und veröffentlicht das
+          Ergebnis innerhalb von ca. 15 Minuten im dezentralen Netzwerk.
         </Text>
       </Container>
     );
@@ -567,13 +588,13 @@ export default function VoteButtons({
   if (signUpState.status === 'needs-keypair') {
     return (
       <View style={styles.container}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Verschlüsselt abstimmen</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Geheim abstimmen</Text>
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
           <StoryProgress step={1} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Erstelle einen privaten MACI-Schlüssel auf deinem Gerät. Damit verschlüsselst du
-            später deine Stimmen — niemand außer dem Koordinator kann sie lesen, und auch der
-            kann das Ergebnis nicht fälschen.
+            Erstelle einen privaten Abstimmungsschlüssel auf deinem Gerät. Damit machst du
+            deine Stimme geheim — niemand außer einer unabhängigen Stelle kann sie lesen, und
+            auch diese kann das Ergebnis nicht fälschen.
           </Text>
         </View>
         <Pressable
@@ -594,13 +615,13 @@ export default function VoteButtons({
   if (signUpState.status === 'needs-signup' || signUpState.status === 'unknown') {
     return (
       <View style={styles.container}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Verschlüsselt abstimmen</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Geheim abstimmen</Text>
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
           <StoryProgress step={2} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Einmalige Anmeldung bei MACI. Dein Bürger-Pass wird auf der Blockchain registriert,
-            damit du privat abstimmen kannst. Nur dieses Wallet zählt danach für genau eine
-            Stimme — egal wie viele Geräte du nutzt.
+            Einmalige Anmeldung zur Bürgerumfrage. Deine Bürgerschaft wird im dezentralen
+            Netzwerk registriert, damit du privat abstimmen kannst. Nur dieses Wallet zählt
+            danach für genau eine Stimme — egal wie viele Geräte du nutzt.
           </Text>
         </View>
         <Pressable
@@ -640,7 +661,7 @@ export default function VoteButtons({
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
           {lastVote
             ? 'Wähle erneut. Nur deine letzte Stimme zählt — die vorherige wird durch die neue überschrieben.'
-            : 'Verschlüsselte Stimme. Du kannst deine Wahl bis zum Ende der Frist beliebig oft ändern — nur die letzte zählt.'}
+            : 'Geheime Stimme. Du kannst deine Wahl bis zum Ende der Frist beliebig oft ändern — nur die letzte zählt.'}
         </Text>
       </View>
       <View style={styles.buttonsContainer}>
@@ -749,7 +770,7 @@ function Container({
  *   - (idle):        button is interactive — show the call-to-action
  */
 function getSignUpButtonLabel(phase: Phase, substate: TxSubstate): string {
-  if (phase !== 'signing-up') return 'Bei MACI anmelden';
+  if (phase !== 'signing-up') return 'Zur Bürgerumfrage anmelden';
   if (substate === 'wallet-prompt') return 'Wallet öffnet sich…';
   if (substate === 'tx-submitted') return 'Transaktion gesendet — warte auf Bestätigung…';
   return 'Anmeldung läuft…';

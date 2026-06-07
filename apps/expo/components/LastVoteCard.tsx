@@ -54,7 +54,7 @@ export default function LastVoteCard({ vote, canChange, onChangeVote }: LastVote
       </View>
       <View style={styles.metaRow}>
         <Text style={[styles.meta, { color: colors.textSecondary }]}>
-          Verschlüsselt gesendet · {ago} ·{' '}
+          Geheim gesendet · {ago} ·{' '}
         </Text>
         <Pressable onPress={() => Linking.openURL(txUrl)} hitSlop={6}>
           <Text style={[styles.txLink, { color: colors.textSecondary }]}>

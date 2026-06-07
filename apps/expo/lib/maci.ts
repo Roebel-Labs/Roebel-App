@@ -31,7 +31,7 @@ import {
   Message,
   PCommand,
 } from "maci-domainobjs";
-import { genRandomSalt } from "maci-crypto";
+import { genRandomSalt, SNARK_FIELD_SIZE } from "maci-crypto";
 import { encodeAbiParameters } from "thirdweb/utils";
 
 // Coordinator's BabyJubjub public key on the curve used by MACI v2.
@@ -61,6 +61,22 @@ export interface SerializedKeypair {
 
 export function generateMaciKeypair(): SerializedKeypair {
   const kp = new Keypair();
+  return serializeKeypair(kp);
+}
+
+/**
+ * Derive a *deterministic* MACI keypair from a seed (e.g. keccak256 of a wallet
+ * signature). The same wallet → same seed → same keypair on every device, so a
+ * reinstall, EAS rebuild, or new device re-derives the identical voting key
+ * instead of minting a fresh (unregistered) one — which is what previously left
+ * citizens stuck on "bereits angemeldet" with no vote buttons.
+ *
+ * The seed is reduced into the BabyJubjub scalar field; PrivKey then formats it
+ * for the curve when signing/encrypting.
+ */
+export function deriveMaciKeypairFromSeed(seed: bigint): SerializedKeypair {
+  const priv = ((seed % SNARK_FIELD_SIZE) + SNARK_FIELD_SIZE) % SNARK_FIELD_SIZE;
+  const kp = new Keypair(new PrivKey(priv));
   return serializeKeypair(kp);
 }
 

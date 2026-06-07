@@ -26,17 +26,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { getContractEvents, prepareEvent } from "thirdweb";
+import { keccak256 } from "thirdweb/utils";
 import { useActiveAccount } from "thirdweb/react";
 import { MACI_DEPLOY_BLOCK, maciContract } from "@/constants/thirdweb";
 import {
   deserializeKeypair,
-  generateMaciKeypair,
+  deriveMaciKeypairFromSeed,
   type SerializedKeypair,
   Keypair,
 } from "@/lib/maci";
 
 const SECURE_KEY = "roebel.maci.keypair.v1";
 const VOTES_KEY = "roebel.maci.votes.v1";
+
+/** Fixed message signed once per device to deterministically derive the
+ *  citizen's MACI voting key. Bump the version suffix only if the derivation
+ *  scheme must change (it would mint a new key → requires a fresh signup). */
+const KEY_DERIVATION_MESSAGE = "Röbel Bürgerumfrage – Abstimmungsschlüssel v1";
 
 type SignUpState =
   | { status: "unknown" } // not yet checked
@@ -70,7 +76,9 @@ interface MaciContextShape {
   signUpState: SignUpState;
   generateAndStoreKeypair: () => Promise<SerializedKeypair>;
   clearKeypair: () => Promise<void>;
-  refreshSignUp: () => Promise<void>;
+  /** Re-resolve sign-up state and return the resolved value, so callers can act
+   *  on the *actual* result rather than the stale closure `signUpState`. */
+  refreshSignUp: () => Promise<SignUpState>;
   /** Optimistically promote state to `signed-up` after a confirmed signUp tx,
    *  using the stateIndex parsed from the SignUp event log. Also persists
    *  the stateIndex to secure-store so cold-starts can skip the chain. */
@@ -138,10 +146,11 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     return next;
   }, []);
 
-  const refreshSignUp = useCallback(async () => {
+  const refreshSignUp = useCallback(async (): Promise<SignUpState> => {
     if (!serializedKeypair) {
-      setSignUpState({ status: "needs-keypair" });
-      return;
+      const s: SignUpState = { status: "needs-keypair" };
+      setSignUpState(s);
+      return s;
     }
 
     const kp = deserializeKeypair(serializedKeypair);
@@ -157,48 +166,72 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     ) {
       const stateIndex = BigInt(serializedKeypair.stateIndex);
       lastCheckedHash.current = pubKeyHash;
-      setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
+      const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
+      setSignUpState(s);
       console.log("[MaciContext] refreshSignUp: cache hit", { stateIndex: stateIndex.toString() });
-      return;
+      return s;
     }
 
     // Layer 2 — event scan. MACI v2 has no getStateIndex(pubKeyHash) view, so
     // we filter SignUp logs by the indexed pubX/pubY topics. Each pubkey can
     // appear at most once (the gatekeeper enforces uniqueness).
-    try {
-      const signUpEvent = prepareEvent({
-        signature:
-          "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
-        filters: { _userPubKeyX: pubX, _userPubKeyY: pubY },
-      });
-      const events = await getContractEvents({
-        contract: maciContract,
-        events: [signUpEvent],
-        fromBlock: MACI_DEPLOY_BLOCK,
-      });
+    //
+    // CRITICAL: distinguish "scan succeeded, no event" (→ needs-signup) from
+    // "scan failed" (RPC error/timeout). A transient failure must NOT be
+    // reported as needs-signup — that's what previously hid the vote buttons
+    // from already-registered citizens. On failure we keep `unknown` so the UI
+    // can retry instead of falsely prompting another signup.
+    const signUpEvent = prepareEvent({
+      signature:
+        "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
+      filters: { _userPubKeyX: pubX, _userPubKeyY: pubY },
+    });
 
-      if (events.length > 0) {
-        const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
-        const stateIndex = ev.args._stateIndex ?? 0n;
-        // Persist for future cold starts.
-        await persistKeypair({
-          ...serializedKeypair,
-          stateIndex: stateIndex.toString(),
-          pubKeyHash: pubKeyHash.toString(),
+    const MAX_ATTEMPTS = 3;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        const events = await getContractEvents({
+          contract: maciContract,
+          events: [signUpEvent],
+          fromBlock: MACI_DEPLOY_BLOCK,
         });
-        lastCheckedHash.current = pubKeyHash;
-        setSignUpState({ status: "signed-up", pubKeyHash, stateIndex });
-        console.log("[MaciContext] refreshSignUp: event scan hit", { stateIndex: stateIndex.toString() });
-        return;
-      }
 
-      // No log found.
-      setSignUpState({ status: "needs-signup", pubKeyHash });
-      console.log("[MaciContext] refreshSignUp: no event, status=needs-signup");
-    } catch (err) {
-      console.warn("[MaciContext] refreshSignUp: event scan failed", err);
-      setSignUpState({ status: "needs-signup", pubKeyHash });
+        if (events.length > 0) {
+          const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
+          const stateIndex = ev.args._stateIndex ?? 0n;
+          // Persist for future cold starts.
+          await persistKeypair({
+            ...serializedKeypair,
+            stateIndex: stateIndex.toString(),
+            pubKeyHash: pubKeyHash.toString(),
+          });
+          lastCheckedHash.current = pubKeyHash;
+          const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
+          setSignUpState(s);
+          console.log("[MaciContext] refreshSignUp: event scan hit", { stateIndex: stateIndex.toString() });
+          return s;
+        }
+
+        // Scan genuinely succeeded with zero matches → not signed up.
+        const s: SignUpState = { status: "needs-signup", pubKeyHash };
+        setSignUpState(s);
+        console.log("[MaciContext] refreshSignUp: no event, status=needs-signup");
+        return s;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[MaciContext] refreshSignUp: scan attempt ${attempt + 1}/${MAX_ATTEMPTS} failed`, err);
+        // Linear backoff before retrying the RPC.
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
     }
+
+    // All attempts errored — do NOT claim needs-signup. Stay `unknown` so the
+    // caller surfaces a retry rather than a misleading "please sign up" state.
+    console.warn("[MaciContext] refreshSignUp: scan failed after retries", lastErr);
+    const s: SignUpState = { status: "unknown" };
+    setSignUpState(s);
+    return s;
   }, [serializedKeypair, persistKeypair]);
 
   // Refresh signup whenever the keypair changes or wallet reconnects.
@@ -224,14 +257,29 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
   );
 
   const generateAndStoreKeypair = useCallback(async () => {
-    const fresh = generateMaciKeypair();
-    const persisted = await persistKeypair(fresh);
+    // Migration shim: if this device already has a key, keep it. Older installs
+    // minted a RANDOM key that may already be registered on-chain — overwriting
+    // it would orphan that registration. New installs fall through to the
+    // deterministic, wallet-derived path below.
+    if (serializedKeypair) return serializedKeypair;
+
+    if (!account) {
+      throw new Error("Bitte verbinde zuerst dein Wallet.");
+    }
+
+    // Derive the voting key deterministically from a wallet signature so the
+    // same wallet reproduces the same key on every device / after a reinstall.
+    const signature = await account.signMessage({ message: KEY_DERIVATION_MESSAGE });
+    const seed = BigInt(keccak256(signature as `0x${string}`));
+    const derived = deriveMaciKeypairFromSeed(seed);
+
+    const persisted = await persistKeypair(derived);
     setSignUpState({
       status: "needs-signup",
-      pubKeyHash: deserializeKeypair(fresh).pubKey.hash() as bigint,
+      pubKeyHash: deserializeKeypair(derived).pubKey.hash() as bigint,
     });
     return persisted;
-  }, [persistKeypair]);
+  }, [account, serializedKeypair, persistKeypair]);
 
   const clearKeypair = useCallback(async () => {
     await SecureStore.deleteItemAsync(SECURE_KEY);
