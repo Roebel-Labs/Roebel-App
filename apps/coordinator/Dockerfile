@@ -36,7 +36,8 @@ RUN npm i -g pnpm@9 \
     && pnpm add maci-cli@2.5.0 maci-contracts@2.5.0 maci-circuits@2.5.0 \
                 maci-domainobjs@2.5.0 maci-crypto@2.5.0 \
                 hardhat@^2.22.15 @nomicfoundation/hardhat-toolbox@^5.0.0 \
-                ethers@^6.13.4 dotenv
+                ethers@^6.13.4 dotenv \
+                shamir-secret-sharing@^0.0.4 tweetnacl@^1.0.3 tweetnacl-util@^0.15.1
 
 FROM deps AS zkeys
 

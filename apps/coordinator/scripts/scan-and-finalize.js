@@ -116,13 +116,47 @@ async function listPendingPolls(provider) {
   return result;
 }
 
-function finalizePoll(pollId) {
-  const finalize = path.join(__dirname, "finalize-poll.js");
-  const res = spawnSync("node", [finalize, String(pollId)], {
-    stdio: "inherit",
-    env: process.env,
-  });
-  return res.status === 0;
+/**
+ * Open a Shamir reconstructor session for `pollId` by POSTing to our own
+ * /sessions endpoint on localhost. The session writes a coordinator_sessions
+ * row to Supabase; the web app surfaces it to Attesters who then submit
+ * shares; once 3 of 5 arrive the reconstructor runs finalize and exits.
+ *
+ * Returns true if we successfully ENQUEUED a session (not "tally completed").
+ * Completion is asynchronous and visible via /status + Supabase.
+ */
+async function finalizePoll(pollId) {
+  const port = Number(process.env.PORT || 8080);
+  const finalizeToken = process.env.FINALIZE_TOKEN;
+  if (!finalizeToken) {
+    console.warn("[scan] FINALIZE_TOKEN unset — cannot open session for poll", pollId);
+    return false;
+  }
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Finalize-Token": finalizeToken,
+      },
+      body: JSON.stringify({ pollId: String(pollId) }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.warn(
+        `[scan] /sessions rejected for poll ${pollId}: ${res.status} ${text}`,
+      );
+      return false;
+    }
+    const body = await res.json();
+    console.log(
+      `[scan] opened session for poll ${pollId}: ${body.session?.id ?? "<unknown id>"}`,
+    );
+    return true;
+  } catch (err) {
+    console.warn(`[scan] /sessions request failed for poll ${pollId}:`, err.message);
+    return false;
+  }
 }
 
 async function main() {
@@ -158,8 +192,8 @@ async function main() {
   const finalized = [];
   const failed = [];
   for (const p of pending) {
-    console.log(`\n[scan] finalizing poll ${p.pollId} (tally=${p.tallyAddr})…`);
-    const ok = finalizePoll(p.pollId);
+    console.log(`\n[scan] opening tally session for poll ${p.pollId} (tally=${p.tallyAddr})…`);
+    const ok = await finalizePoll(p.pollId);
     if (ok) finalized.push(p);
     else failed.push(p);
   }

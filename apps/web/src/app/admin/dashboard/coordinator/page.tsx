@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useReadContract } from "thirdweb/react";
+import { useActiveAccount, useReadContract } from "thirdweb/react";
 import {
   Card,
   CardContent,
@@ -13,6 +13,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MACI_INFRA, maciGovernorContract } from "@/lib/maci-config";
+
+const FOUNDER_ALLOWLIST = new Set(
+  ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
+);
 
 const TOTAL_SHARES = 5;
 const THRESHOLD = 3;
@@ -59,17 +63,33 @@ type AuditRow = {
   created_at: string;
 };
 
+type SessionSummary = {
+  id: string;
+  poll_id: string;
+  state: "open" | "completed" | "expired" | "aborted";
+  submitted_shares_count: number;
+  expires_at: string;
+  created_at: string;
+  completed_at: string | null;
+};
+
 type CoordinatorState = {
   registrations: Registration[];
   activeGeneration: ActiveGeneration;
   latestGenerations: GenerationSummary[];
   recentAuditLog: AuditRow[];
+  recentSessions: SessionSummary[];
 };
 
 export default function CoordinatorStatusPage() {
+  const account = useActiveAccount();
+  const isFounder = !!account && FOUNDER_ALLOWLIST.has(account.address.toLowerCase());
   const [state, setState] = useState<CoordinatorState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [triggerPollId, setTriggerPollId] = useState("");
+  const [triggering, setTriggering] = useState(false);
+  const [markingExecuted, setMarkingExecuted] = useState<string | null>(null);
 
   const { data: onChainCoordinator } = useReadContract({
     contract: maciGovernorContract,
@@ -102,6 +122,73 @@ export default function CoordinatorStatusPage() {
   useEffect(() => {
     fetchState();
   }, [fetchState]);
+
+  const handleTriggerSession = useCallback(async () => {
+    if (!account || !triggerPollId.trim()) return;
+    setError(null);
+    setTriggering(true);
+    try {
+      const signedMessage = `Roebel DAO trigger tally session v1\npoll=${triggerPollId.trim()}`;
+      const signature = await account.signMessage({ message: signedMessage });
+      const res = await fetch("/api/coordinator/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          founderWallet: account.address,
+          signature,
+          pollId: triggerPollId.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setTriggerPollId("");
+      await fetchState();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTriggering(false);
+    }
+  }, [account, triggerPollId, fetchState]);
+
+  const handleMarkExecuted = useCallback(
+    async (generationId: string) => {
+      if (!account) return;
+      const txHash = window.prompt(
+        "On-chain execution tx hash (the queue+execute tx from /app/proposals):"
+      );
+      if (!txHash) return;
+      setError(null);
+      setMarkingExecuted(generationId);
+      try {
+        const message = [
+          "Roebel DAO coordinator rotation execution v1",
+          `gen=${generationId}`,
+          `tx=${txHash}`,
+        ].join("\n");
+        const signature = await account.signMessage({ message });
+        const res = await fetch(
+          `/api/coordinator/key-generations/${generationId}/executed`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              creatorWallet: account.address,
+              signature,
+              executionTxHash: txHash,
+            }),
+          }
+        );
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+        await fetchState();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setMarkingExecuted(null);
+      }
+    },
+    [account, fetchState]
+  );
 
   const allRegistered =
     state !== null && state.registrations.length >= TOTAL_SHARES;
@@ -137,6 +224,9 @@ export default function CoordinatorStatusPage() {
           </Button>
           <Link href="/admin/dashboard/coordinator/register-share-key">
             <Button variant="outline">Share-Key registrieren</Button>
+          </Link>
+          <Link href="/admin/dashboard/coordinator/history">
+            <Button variant="outline">Historie</Button>
           </Link>
           <Link href="/admin/dashboard/coordinator/generate-key">
             <Button>Rotation starten</Button>
@@ -299,12 +389,95 @@ export default function CoordinatorStatusPage() {
                       </a>
                     </div>
                   )}
+                  {isFounder && !g.activated_at && g.proposal_id && (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleMarkExecuted(g.id)}
+                        disabled={markingExecuted === g.id}
+                      >
+                        {markingExecuted === g.id
+                          ? "Markiere…"
+                          : "Als ausgeführt markieren"}
+                      </Button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
           ) : (
             <div className="text-sm text-muted-foreground">
               Noch keine Generationen.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Active tally sessions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tally-Sessions</CardTitle>
+          <CardDescription>
+            Aktive und kürzliche Reconstructor-Sessions. Eine offene Session
+            wartet auf {THRESHOLD} eingegangene Bescheiniger-Anteile.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isFounder && (
+            <div className="flex flex-col sm:flex-row gap-2 border-b border-border pb-3">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Poll ID"
+                value={triggerPollId}
+                onChange={(e) => setTriggerPollId(e.target.value)}
+                disabled={triggering}
+                className="w-full sm:w-40 bg-card border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-black"
+              />
+              <Button
+                type="button"
+                onClick={handleTriggerSession}
+                disabled={triggering || !triggerPollId.trim()}
+              >
+                {triggering ? "Triggere…" : "Session öffnen"}
+              </Button>
+            </div>
+          )}
+
+          {state && state.recentSessions.length > 0 ? (
+            <ul className="space-y-2">
+              {state.recentSessions.map((s) => (
+                <li
+                  key={s.id}
+                  className="border border-border rounded p-3 text-xs flex items-center justify-between gap-2"
+                >
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-mono text-muted-foreground">
+                      session={s.id.slice(0, 8)}… poll={s.poll_id}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Anteile: {s.submitted_shares_count}/{THRESHOLD} · Status:{" "}
+                      {s.state} · Ablauf{" "}
+                      {new Date(s.expires_at).toLocaleString("de-DE")}
+                    </div>
+                  </div>
+                  {s.state === "open" && (
+                    <Link
+                      href={`/admin/dashboard/coordinator/tally/${s.poll_id}`}
+                    >
+                      <Button size="sm" variant="outline">
+                        Beitragen →
+                      </Button>
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Keine Sessions.
             </div>
           )}
         </CardContent>

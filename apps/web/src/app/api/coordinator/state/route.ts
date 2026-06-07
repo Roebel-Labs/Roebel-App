@@ -15,7 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function GET() {
   const supabase = createAdminClient();
 
-  const [regsRes, activeRes, latestRes, auditRes] = await Promise.all([
+  const [regsRes, activeRes, latestRes, auditRes, sessionsRes] = await Promise.all([
     supabase
       .from("coordinator_share_keys")
       .select("wallet_address, registered_at")
@@ -43,6 +43,11 @@ export async function GET() {
       .select("id, event_type, actor_wallet, target_id, tx_hash, created_at")
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("coordinator_sessions")
+      .select("id, poll_id, state, submitted_shares_count, expires_at, created_at, completed_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   if (regsRes.error) {
@@ -65,5 +70,6 @@ export async function GET() {
     activeGeneration: activeRes.data ?? null,
     latestGenerations: latestRes.data ?? [],
     recentAuditLog: auditRes.data ?? [],
+    recentSessions: sessionsRes.data ?? [],
   });
 }

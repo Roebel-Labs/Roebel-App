@@ -7,12 +7,21 @@
 # we can resume mid-finalization if the machine restarts.
 #
 # Secrets to set with `fly secrets set <KEY>=<VALUE>` BEFORE first deploy:
-#   COORDINATOR_PRIV         — macisk.<…> Babyjubjub privkey from generate-coordinator-keypair.ts
-#   COORDINATOR_ETH_PRIV     — Ethereum private key for the EOA owning MP/Tally
-#   BASE_RPC_URL             — JSON-RPC endpoint (Alchemy/QuickNode recommended)
-#   MACI_ADDRESS             — from contracts/governor-contract/deployments/base.json
-#   VERIFIER_ADDRESS         — same
-#   VK_REGISTRY_ADDRESS      — same
+#   COORDINATOR_ETH_PRIV               — Ethereum private key for the EOA owning MP/Tally
+#   BASE_RPC_URL                       — JSON-RPC endpoint (Alchemy/QuickNode recommended)
+#   MACI_ADDRESS                       — from contracts/governor-contract/deployments/base.json
+#   GOVERNOR_ADDRESS                   — MaciAttesterGovernor address (see apps/web/src/lib/maci-config.ts)
+#   VERIFIER_ADDRESS                   — from deployments/base.json
+#   VK_REGISTRY_ADDRESS                — same
+#   FINALIZE_TOKEN                     — shared secret for /finalize-pending + /sessions auth
+#   COORDINATOR_SUPABASE_URL           — Supabase project URL (https://<ref>.supabase.co)
+#   COORDINATOR_SUPABASE_SERVICE_KEY   — Supabase service_role key (writes coordinator_* rows)
+#
+# AFTER the first Shamir tally has completed end-to-end, REMOVE:
+#   COORDINATOR_PRIV                   — legacy env-based macisk (no longer needed; the
+#                                        reconstructor reconstructs it from shares in RAM).
+# Run: `fly secrets unset COORDINATOR_PRIV` to make the legacy CLI break-open.
+# That's the marker that the privacy-from-coordinator gap is actually closed.
 #
 # Layer-1 hardening: replace COORDINATOR_ETH_PRIV with SAFE_API_TOKEN +
 # SAFE_ADDRESS once the 3-of-5 attester Safe is set up. Then finalize-poll.js
