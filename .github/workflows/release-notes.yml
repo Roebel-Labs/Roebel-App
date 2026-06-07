@@ -1,0 +1,46 @@
+name: AI release notes
+
+# Complements Changesets (which generates per-package CHANGELOGs) by turning a
+# published GitHub release into human-friendly, user-facing notes in German
+# (primary) and English (secondary) — matching the app's bilingual mandate.
+#
+# Trigger: publish a GitHub release (or run manually against the latest tag).
+# Required secret: ANTHROPIC_API_KEY.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate bilingual release notes
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          allowed_tools: "Bash(gh release:*),Bash(git log:*),Bash(git tag:*),Read,Grep,Glob"
+          prompt: |
+            Write user-facing release notes for the Roebel civic app.
+
+            1. Determine the latest release tag (`gh release view --json tagName`
+               or the most recent `git tag`). Read its current notes/body and
+               the git log + .changeset files since the previous tag for context.
+            2. Produce concise, non-technical release notes aimed at residents of
+               Röbel/Müritz — what's new, improved, and fixed. Group into
+               "Neu", "Verbessert", "Behoben".
+            3. Output BOTH languages: a German section (primary) first, then an
+               English section under a "---" divider. No internal jargon, no
+               commit hashes.
+            4. Update the GitHub release body with this content via
+               `gh release edit <tag> --notes "..."`. Preserve any auto-generated
+               changelog link at the bottom.

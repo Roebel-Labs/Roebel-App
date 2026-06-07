@@ -1,0 +1,27 @@
+# Path-based PR labels for actions/labeler@v5. Routes review attention across
+# the monorepo's surfaces.
+web:
+  - changed-files:
+      - any-glob-to-any-file: "apps/web/**"
+expo:
+  - changed-files:
+      - any-glob-to-any-file: "apps/expo/**"
+contracts:
+  - changed-files:
+      - any-glob-to-any-file: "contracts/**"
+supabase:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/supabase/**"
+          - "**/migrations/**"
+packages:
+  - changed-files:
+      - any-glob-to-any-file: "packages/**"
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"

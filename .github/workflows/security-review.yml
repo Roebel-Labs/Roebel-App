@@ -1,0 +1,85 @@
+name: Security review
+
+# Two-part AI security agent:
+#   1. pr-review    — diff-aware review on every same-repo PR (Anthropic's
+#                     official claude-code-security-review action).
+#   2. weekly-audit — scheduled full-repo security sweep that opens/updates a
+#                     tracking issue when it finds something.
+#
+# Required repo secret:
+#   CLAUDE_API_KEY    — Anthropic API key (Settings → Secrets → Actions).
+#                       (ANTHROPIC_API_KEY also referenced by the audit job;
+#                        set both to the same value, or rename to taste.)
+#
+# Prompt-injection note: fork PRs do NOT receive secrets, so pr-review is
+# guarded to same-repo PRs only. Review external contributions manually or
+# re-run via workflow_dispatch after a maintainer has eyeballed the diff.
+
+on:
+  pull_request:
+  schedule:
+    # Mondays 06:00 UTC — weekly full-repo sweep.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+
+      - uses: anthropics/claude-code-security-review@main
+        with:
+          comment-pr: true
+          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
+          # Single line to bump for a model upgrade (e.g. a future model):
+          claude-model: claude-opus-4-8
+          # Skip vendored / generated paths to save tokens and noise.
+          exclude-directories: "node_modules,.next,dist,ios,android,pnpm-lock.yaml"
+
+  weekly-audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Full-repo security sweep
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-opus-4-8
+          allowed_tools: "Bash(gh issue:*),Bash(git log:*),Read,Grep,Glob"
+          prompt: |
+            You are the scheduled security agent for the public AGPL-licensed
+            Roebel civic-tech monorepo (Next.js web, Expo mobile, Supabase,
+            Base L2 Solidity governance contracts).
+
+            Audit the repository for security issues with a bias toward the
+            things that matter most here:
+              - Hardcoded secrets / API keys (Stripe, Supabase service-role,
+                Anthropic, Irys, EXPO tokens) committed anywhere in the tree.
+              - Supabase Row-Level-Security gaps or service-role key leaking to
+                client code.
+              - Auth / wallet handling flaws in the web and Expo apps.
+              - Solidity access-control or governance bugs in contracts/.
+              - Dangerous dependencies or scripts.
+
+            Use `gh issue list --label security-audit` first. If you find one or
+            more real, high-confidence issues, create a single GitHub issue
+            titled "Weekly security audit — <date>" labelled `security-audit`
+            summarising findings with file:line references and severity. If you
+            find nothing material, do NOT open an issue — print "clean" and stop.
+            Be precise; avoid false positives.

@@ -1,0 +1,64 @@
+name: PR triage
+
+# Two jobs:
+#   label   — path-based labels (web/expo/contracts/supabase/...) via labeler.
+#             Safe on forks: it only reads the changed-file list, runs no code.
+#   summary — AI summary + checklist comment (missing changeset/tests, risk
+#             flags). Same-repo PRs only, so untrusted forks can't reach the API
+#             key (prompt-injection guard).
+#
+# Required secret for the summary job: ANTHROPIC_API_KEY.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true
+
+  summary:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: AI PR summary
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          allowed_tools: "Bash(gh pr:*),Bash(git diff:*),Bash(git log:*),Read,Grep,Glob"
+          prompt: |
+            Triage pull request #${{ github.event.pull_request.number }} in this
+            Turborepo monorepo (web / Expo / Supabase / Solidity contracts).
+
+            Post (or update, if you already left one) a single PR comment with:
+              1. A 2-4 sentence plain summary of what the PR changes.
+              2. Which surfaces it touches and any cross-app impact.
+              3. A short checklist of concerns: missing .changeset entry for
+                 user-facing changes, missing tests, new env vars not in
+                 .env.example, Supabase migrations without RLS, hardcoded
+                 secrets, or UI strings added in only one language (the app is
+                 German-primary, English-secondary).
+            Keep it tight and skimmable. Don't approve or request changes.

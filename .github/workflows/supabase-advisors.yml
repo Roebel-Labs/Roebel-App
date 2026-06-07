@@ -1,0 +1,76 @@
+name: Supabase advisors audit
+
+# Weekly Supabase security + performance advisor sweep via the Management API
+# (https://supabase.com/docs/reference/api/v1-get-security-advisors).
+# Opens/updates a tracking issue when ERROR/WARN-level lints exist — these are
+# the same findings the Supabase MCP `get_advisors` tool returns (RLS gaps,
+# function search_path, exposed extensions, etc.).
+#
+# Required secret:   SUPABASE_ACCESS_TOKEN — a Supabase personal access token
+#                    (https://supabase.com/dashboard/account/tokens).
+# Optional variable: SUPABASE_PROJECT_REF — defaults to this project's ref.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  advisors:
+    runs-on: ubuntu-latest
+    env:
+      REF: ${{ vars.SUPABASE_PROJECT_REF || 'wwbeqhkslxdxhktqzqti' }}
+      TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Fetch advisors and report
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN secret is not set."
+            exit 1
+          fi
+
+          fetch() {
+            curl -fsS "https://api.supabase.com/v1/projects/${REF}/advisors/$1" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Content-Type: application/json"
+          }
+
+          fetch security    > security.json
+          fetch performance > performance.json
+
+          # Keep only ERROR/WARN lints; build a markdown report.
+          jq -s '
+            (.[0].lints // []) + (.[1].lints // [])
+            | map(select(.level == "ERROR" or .level == "WARN"))
+          ' security.json performance.json > lints.json
+
+          COUNT=$(jq 'length' lints.json)
+          echo "Found $COUNT ERROR/WARN advisor lints."
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "clean — no issue opened."
+            exit 0
+          fi
+
+          {
+            echo "Supabase advisors flagged **$COUNT** ERROR/WARN item(s):"
+            echo
+            jq -r '.[] | "- **[\(.level)] \(.title)** (\(.categories | join(", ")))\n  - \(.description)\n  - Remediation: \(.remediation // "see docs")"' lints.json
+            echo
+            echo "_Run \`get_advisors\` via the Supabase MCP for full detail. Auto-generated weekly._"
+          } > body.md
+
+          TITLE="Supabase advisors: $COUNT finding(s)"
+          EXISTING=$(gh issue list --label supabase-advisor --state open --json number --jq '.[0].number' || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file body.md
+          else
+            gh label create supabase-advisor --color C5DEF5 --description "Supabase advisor findings" 2>/dev/null || true
+            gh issue create --title "$TITLE" --label supabase-advisor --body-file body.md
+          fi

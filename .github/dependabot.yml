@@ -1,0 +1,33 @@
+# Dependabot keeps dependencies patched and surfaces security advisories.
+# Dependabot security alerts can be assigned to an AI agent for remediation
+# in Settings → Code security → Dependabot. Enable that for hands-off fixes.
+version: 2
+updates:
+  # JS/TS dependencies (pnpm) across the workspace.
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/apps/web"
+      - "/apps/expo"
+      - "/packages/*"
+      - "/contracts/governor-contract"
+      - "/contracts/governor-contracts-new"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # One PR for the noisy low-risk stuff instead of dozens.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Keep the GitHub Actions themselves current and patched.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(ci)"
