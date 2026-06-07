@@ -16,7 +16,15 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 // Notification payload types
 interface NotificationPayload {
-  type: 'event_new' | 'news_breaking' | 'news_featured' | 'post_new' | 'direct_message';
+  type:
+    | 'event_new'
+    | 'news_breaking'
+    | 'news_featured'
+    | 'post_new'
+    | 'direct_message'
+    | 'post_like'
+    | 'post_comment'
+    | 'org_invite';
   title: string;
   body: string;
   data?: {
@@ -64,6 +72,9 @@ interface NotificationPreference {
   news_featured: boolean;
   feed_posts_enabled: boolean;
   dms_enabled: boolean;
+  likes_enabled: boolean;
+  comments_enabled: boolean;
+  org_invites_enabled: boolean;
 }
 
 serve(async (req: Request) => {
@@ -182,6 +193,18 @@ serve(async (req: Request) => {
         case 'direct_message':
           // New direct message — opt-out per device (defaults to on)
           return pref.dms_enabled !== false;
+
+        case 'post_like':
+          // Someone liked your post — opt-out per device (defaults to on)
+          return pref.likes_enabled !== false;
+
+        case 'post_comment':
+          // Someone commented on your post — opt-out per device (defaults to on)
+          return pref.comments_enabled !== false;
+
+        case 'org_invite':
+          // Organisation invitation — opt-out per device (defaults to on)
+          return pref.org_invites_enabled !== false;
 
         default:
           return true;

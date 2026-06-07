@@ -85,10 +85,15 @@ export default function NotificationsInboxScreen() {
       );
     }
 
-    // Generic user notification (future types)
+    // Generic user notification (e.g. post_like / post_comment).
+    // Deep-link to the post when metadata carries a post_id.
+    const postId = (item.data.metadata as { post_id?: string } | undefined)?.post_id;
     return (
       <Pressable
-        onPress={() => userNotifs.markAsRead(item.data.id)}
+        onPress={() => {
+          userNotifs.markAsRead(item.data.id);
+          if (postId) router.push(`/post/${postId}` as any);
+        }}
         style={[styles.genericCard, { backgroundColor: colors.surface }]}
       >
         <Text style={[styles.genericTitle, { color: colors.textPrimary }]}>{item.data.title}</Text>

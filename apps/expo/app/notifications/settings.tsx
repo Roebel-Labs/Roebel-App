@@ -345,6 +345,37 @@ export default function NotificationsScreen() {
           />
         </Section>
 
+        {/* Interactions Section */}
+        <Section title="Interaktionen" colors={colors}>
+          <ToggleRow
+            label="Gefällt mir"
+            description="Benachrichtigung, wenn jemandem dein Beitrag gefällt"
+            value={preferences?.likes_enabled ?? true}
+            onValueChange={(value) => updatePreference('likes_enabled', value)}
+            colors={colors}
+          />
+          <ToggleRow
+            label="Kommentare"
+            description="Benachrichtigung bei neuen Kommentaren zu deinen Beiträgen"
+            value={preferences?.comments_enabled ?? true}
+            onValueChange={(value) => updatePreference('comments_enabled', value)}
+            isLast
+            colors={colors}
+          />
+        </Section>
+
+        {/* Organisation Section */}
+        <Section title="Organisationen" colors={colors}>
+          <ToggleRow
+            label="Einladungen"
+            description="Benachrichtigung bei Einladungen in eine Organisation"
+            value={preferences?.org_invites_enabled ?? true}
+            onValueChange={(value) => updatePreference('org_invites_enabled', value)}
+            isLast
+            colors={colors}
+          />
+        </Section>
+
         {/* Info Section */}
         <View style={styles.infoSection}>
           <Text style={[styles.infoText, { color: colors.textTertiary }]}>

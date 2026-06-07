@@ -24,6 +24,9 @@ export interface NotificationPreferences {
   news_featured: boolean;
   feed_posts_enabled: boolean;
   dms_enabled: boolean;
+  likes_enabled: boolean;
+  comments_enabled: boolean;
+  org_invites_enabled: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -71,6 +74,9 @@ export const DEFAULT_PREFERENCES: Omit<NotificationPreferences, 'device_id'> = {
   news_featured: false,
   feed_posts_enabled: true,
   dms_enabled: true,
+  likes_enabled: true,
+  comments_enabled: true,
+  org_invites_enabled: true,
 };
 
 /**
