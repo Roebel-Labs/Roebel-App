@@ -38,22 +38,29 @@ export const SHARE_KEY_CHALLENGE =
   "Roebel DAO — share-encryption key registration v1";
 
 /**
- * Browser-friendly SHA-256 → 32 bytes.
- * Uses SubtleCrypto on the client side, falls back to node:crypto in Jest.
+ * SHA-256 → 32 bytes via SubtleCrypto. Available everywhere this module
+ * runs: browsers (always), Node 19+ (where webcrypto is exposed on
+ * globalThis.crypto), and the verify-shamir.mjs Node smoke script
+ * (which pins globalThis.crypto = webcrypto before calling in).
+ *
+ * We intentionally do NOT fall back to `require("node:crypto")` here —
+ * Next.js webpack treats that as a hard import even when guarded, which
+ * breaks client-component bundles. If you need to call this from a
+ * runtime where globalThis.crypto.subtle is missing, polyfill it at the
+ * entry point.
  */
 async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
   if (
-    typeof globalThis !== "undefined" &&
-    typeof globalThis.crypto !== "undefined" &&
-    "subtle" in globalThis.crypto
+    typeof globalThis === "undefined" ||
+    typeof globalThis.crypto === "undefined" ||
+    !("subtle" in globalThis.crypto)
   ) {
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-    return new Uint8Array(digest);
+    throw new Error(
+      "SubtleCrypto unavailable; polyfill globalThis.crypto before calling sha256()",
+    );
   }
-  // Test / node fallback. require() so webpack doesn't try to bundle node:crypto in the browser.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeCrypto = require("node:crypto") as typeof import("node:crypto");
-  return new Uint8Array(nodeCrypto.createHash("sha256").update(bytes).digest());
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return new Uint8Array(digest);
 }
 
 /**
