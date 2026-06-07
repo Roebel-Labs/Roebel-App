@@ -1,4 +1,15 @@
-import { Activity, Apple, Download, Smartphone, ShieldCheck, UserPlus, Users } from "lucide-react";
+import {
+  Activity,
+  Apple,
+  Building2,
+  CalendarPlus,
+  Download,
+  ShieldCheck,
+  Smartphone,
+  Stamp,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -15,16 +26,26 @@ import { TopUsersBars } from "@/components/admin/users/TopUsersBars";
 import { StoreDownloadsChart } from "@/components/admin/users/StoreDownloadsChart";
 import { getUsersAdminData } from "@/app/actions/users-admin";
 import { getStoreMetrics } from "@/app/actions/store-admin";
+import { getOrgAccountsAdminData } from "@/app/actions/orgs-admin";
 import { UsersTable } from "./_components/users-table";
+import { RegisteredThisWeek } from "./_components/registered-this-week";
+import { VerificationRequestsPanel } from "./_components/verification-requests-panel";
+import { AttestersPanel } from "./_components/attesters-panel";
+import { OrgAccountsPanel } from "./_components/org-accounts-panel";
+import {
+  buildDirectory,
+  buildMembershipByWallet,
+} from "./_lib/directory";
 
 export const dynamic = "force-dynamic";
 
 const numberFmt = new Intl.NumberFormat("de-DE");
 
 export default async function UsersAdminPage() {
-  const [result, storeResult] = await Promise.all([
+  const [result, storeResult, orgsResult] = await Promise.all([
     getUsersAdminData(),
     getStoreMetrics(),
+    getOrgAccountsAdminData(),
   ]);
   const store = storeResult.success ? storeResult.data : undefined;
 
@@ -49,6 +70,12 @@ export default async function UsersAdminPage() {
 
   const { rows, metrics, signupRows } = result;
 
+  // On-chain client panels (attesters, verification requests) resolve raw wallet
+  // addresses to names/orgs via these maps, built from data already fetched.
+  const orgs = orgsResult.success ? (orgsResult.orgs ?? []) : [];
+  const directory = buildDirectory(rows);
+  const membershipByWallet = buildMembershipByWallet(orgs);
+
   return (
     <div className="space-y-6">
       <div>
@@ -60,7 +87,7 @@ export default async function UsersAdminPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           label="Nutzer gesamt"
           value={numberFmt.format(metrics.totalUsers)}
@@ -77,6 +104,12 @@ export default async function UsersAdminPage() {
         />
         <OpenVerificationsKpi />
         <KpiCard
+          label="Neu (7 Tage)"
+          value={numberFmt.format(metrics.newLast7Days)}
+          hint="diese Woche registriert"
+          icon={CalendarPlus}
+        />
+        <KpiCard
           label="Neu (30 Tage)"
           value={numberFmt.format(metrics.newLast30Days)}
           hint="neue Registrierungen"
@@ -89,6 +122,20 @@ export default async function UsersAdminPage() {
           icon={Activity}
         />
       </div>
+
+      {/* Open verification requests (real on-chain list) */}
+      <Card className="bg-card border border-border shadow-none">
+        <CardHeader>
+          <CardTitle>Offene Verifizierungsanträge</CardTitle>
+          <CardDescription>
+            Echte offene On-Chain-Anträge (Bürger &amp; Bescheiniger) — live,
+            mit Namen aufgelöst.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VerificationRequestsPanel directory={directory} />
+        </CardContent>
+      </Card>
 
       {/* Registrations over time (with platform filter) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -214,6 +261,60 @@ export default async function UsersAdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Attesters (real on-chain roster + their orgs) */}
+      <Card className="bg-card border border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Stamp className="h-5 w-5 text-amber-500" />
+            Bescheiniger
+          </CardTitle>
+          <CardDescription>
+            Aktive Bescheiniger (Attester) mit Namen, Wallet, verifizierten
+            Bürgern und ihren Organisationskonten.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AttestersPanel
+            directory={directory}
+            membershipByWallet={membershipByWallet}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Organisation accounts + members */}
+      <Card className="bg-card border border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
+            Organisationskonten
+          </CardTitle>
+          <CardDescription>
+            Alle Organisationskonten und ihre Mitglieder. Konto aufklappen, um
+            die Mitglieder und Rollen zu sehen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OrgAccountsPanel
+            orgs={orgs}
+            directory={directory}
+            error={orgsResult.success ? undefined : orgsResult.error}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Registered this week */}
+      <Card className="bg-card border border-border shadow-none">
+        <CardHeader>
+          <CardTitle>Diese Woche registriert</CardTitle>
+          <CardDescription>
+            Nutzer, die in den letzten 7 Tagen beigetreten sind.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RegisteredThisWeek rows={rows} />
+        </CardContent>
+      </Card>
 
       {/* User table */}
       <Card className="bg-card border border-border shadow-none">

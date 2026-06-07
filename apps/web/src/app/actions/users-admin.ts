@@ -68,6 +68,7 @@ export interface DailyPoint {
 export interface UsersAdminMetrics {
   totalUsers: number
   verifiedCitizens: number
+  newLast7Days: number
   newLast30Days: number
   activeLast30Days: number
   tierDistribution: { tier: string; label: string; count: number }[]
@@ -334,10 +335,14 @@ function buildMetrics(
   activityRows: { wallet: string; date: string }[]
 ): UsersAdminMetrics {
   const now = Date.now()
+  const cutoff7 = now - 7 * DAY_MS
   const cutoff30 = now - 30 * DAY_MS
 
   const totalUsers = rows.length
   const verifiedCitizens = rows.filter((r) => r.is_verified_citizen).length
+  const newLast7Days = rows.filter(
+    (r) => new Date(r.created_at).getTime() >= cutoff7
+  ).length
   const newLast30Days = rows.filter(
     (r) => new Date(r.created_at).getTime() >= cutoff30
   ).length
@@ -410,6 +415,7 @@ function buildMetrics(
   return {
     totalUsers,
     verifiedCitizens,
+    newLast7Days,
     newLast30Days,
     activeLast30Days,
     tierDistribution,
