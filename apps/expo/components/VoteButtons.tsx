@@ -44,9 +44,10 @@ type Phase =
 
 // Substate inside a multi-step transaction phase. `wallet-prompt` = the wallet
 // popup is waiting on the user; `tx-submitted` = the tx is on chain and we're
-// waiting for inclusion. Surfaced as inline button labels so the user never sees
-// a bare spinner without context.
-type TxSubstate = 'wallet-prompt' | 'tx-submitted' | null;
+// waiting for inclusion; `recovering` = we're (re)scanning the chain to confirm
+// an existing signup (no wallet popup involved). Surfaced as inline button
+// labels so the user never sees a bare spinner without context.
+type TxSubstate = 'wallet-prompt' | 'tx-submitted' | 'recovering' | null;
 
 /**
  * Extract a human-readable error message from a thirdweb / ethers error.
@@ -363,6 +364,7 @@ export default function VoteButtons({
       } else {
         // Log couldn't be matched — recover the state index via the event scan
         // and only celebrate if we actually reached `signed-up`.
+        setTxSubstate('recovering');
         const recovered = await refreshSignUp();
         showSignUpResult(recovered);
       }
@@ -375,6 +377,7 @@ export default function VoteButtons({
       // vote buttons would stay hidden behind a misleading "success" message.
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('0x3a81d6fc') || /already.?registered/i.test(message)) {
+        setTxSubstate('recovering');
         const recovered = await refreshSignUp();
         showSignUpResult(recovered, /* alreadyRegistered */ true);
       } else {
@@ -771,6 +774,7 @@ function Container({
  */
 function getSignUpButtonLabel(phase: Phase, substate: TxSubstate): string {
   if (phase !== 'signing-up') return 'Zur Bürgerumfrage anmelden';
+  if (substate === 'recovering') return 'Anmeldung wird geprüft…';
   if (substate === 'wallet-prompt') return 'Wallet öffnet sich…';
   if (substate === 'tx-submitted') return 'Transaktion gesendet — warte auf Bestätigung…';
   return 'Anmeldung läuft…';

@@ -41,6 +41,7 @@ import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPost
 import { ConsentGate } from '@/components/consent/ConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
+import DebugLogOverlay from '@/components/DebugLogOverlay';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -312,6 +313,7 @@ function Layout() {
                                 <ConsentGate />
                                 <AppUpdateGate />
                                 <ThemedLayout />
+                                <DebugLogOverlay />
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>
                           </SnackbarProvider>
