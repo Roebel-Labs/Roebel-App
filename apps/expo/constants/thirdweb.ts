@@ -54,10 +54,10 @@ export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVE
 // Rotated 2026-05-24: new Governor binds to a fresh MACI core that uses the new
 // gatekeeper for signup (the prior MACI was permanently stuck on the old
 // gatekeeper). Voting period is now 1 h.
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xffCeE774e226f354f261B5Cd264ce1325385A926";
+export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91";
 
 // MACI v2 infrastructure. MACI core rotated 2026-05-24 (see governor comment above).
-export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E";
+export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a";
 export const maciVerifierAddress = process.env.NEXT_PUBLIC_MACI_VERIFIER || "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8";
 export const maciVkRegistryAddress = process.env.NEXT_PUBLIC_MACI_VK_REGISTRY || "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED";
 export const maciCoordinatorAddress = process.env.NEXT_PUBLIC_MACI_COORDINATOR || "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C";
@@ -71,7 +71,7 @@ export const maciCoordinatorAddress = process.env.NEXT_PUBLIC_MACI_COORDINATOR |
  *  address above — a stale value forces the SignUp event scan to span
  *  hundreds of thousands of blocks, which the public Base RPC will reject
  *  and which can crash the app at cold start. */
-export const MACI_DEPLOY_BLOCK = 46386000n;
+export const MACI_DEPLOY_BLOCK = 47070086n;
 
 export const attesterNFTContract = getContract({
 	client,

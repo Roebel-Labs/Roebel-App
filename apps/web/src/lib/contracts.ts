@@ -19,8 +19,8 @@ export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461
 // to the old gatekeeper, breaking signup for NEW CitizenNFT holders) and a 1-hour
 // voting period (was 7 days).
 // Source of truth: contracts/governor-contract/deployments/base.json
-export const MACI_GOVERNOR_ADDRESS = "0xffCeE774e226f354f261B5Cd264ce1325385A926";
-export const MACI_ADDRESS = "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E";
+export const MACI_GOVERNOR_ADDRESS = "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91";
+export const MACI_ADDRESS = "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a";
 
 // Convenience aliases — existing imports keep working but now point at the
 // new MACI Governor.

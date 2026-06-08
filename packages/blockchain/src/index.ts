@@ -22,16 +22,16 @@ export const CONTRACTS = {
   // gatekeeper swap was a no-op until MACI itself was redeployed). New
   // Governor + Timelock pair binds to this MACI. Voting period is now 1 h
   // (was 7 days).
-  maciAttesterGovernor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
-  maciTimelock: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
+  maciAttesterGovernor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
+  maciTimelock: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
 
   // MACI v2 infrastructure. MACI core rotated 2026-05-24; Verifier + VkRegistry
   // + Poseidon + factories + voice credit proxy + gatekeeper all reused (their
   // state is independent of MACI core).
-  maci: "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E",
+  maci: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
   maciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
   maciVkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
-  maciGatekeeper: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
+  maciGatekeeper: "0xc767fa3bbd9f0934Fb419137d7b6506E44105f74",
   maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
 
   // Archived (kept for historical proposal/revocation lookups)

@@ -22,7 +22,7 @@ export const MACI_INFRA = {
   // MACI v2 core — rotated 2026-05-24 (NEW core binds to the new gatekeeper;
   // prior MACI was permanently stuck on the old gatekeeper because
   // MACI.signUpGatekeeper is `immutable`).
-  maci: "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E",
+  maci: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
   verifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
   voiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
   pollFactory: "0x604B8b61488e02b2EEeeB4993825afD436D526fE",
@@ -31,7 +31,7 @@ export const MACI_INFRA = {
 
   // Rotated 2026-05-23 alongside the NFT redeploy (gatekeeper binds to the new CitizenNFT).
   // Re-pointed to the new MACI core via setMaciInstance() on 2026-05-24.
-  gatekeeper: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
+  gatekeeper: "0xc767fa3bbd9f0934Fb419137d7b6506E44105f74",
 
   // Rotated 2026-05-08 to align VK keys with the production zKey signature.
   vkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
@@ -41,8 +41,8 @@ export const MACI_INFRA = {
   // votingPeriod is now 1 h (was 7 days). NFTs still owned by the prior
   // Timelock at 0xe8B8149F… — NFT threshold changes go through the prior
   // Governor 0xb5333aFf… not this one.
-  governor: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
-  timelock: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
+  governor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
+  timelock: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
 
   // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
   coordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
@@ -76,13 +76,37 @@ export const COORDINATOR_BASE_URL = "https://roebel-maci-coordinator.fly.dev";
 // ----- archived addresses (rotation history) -----
 
 export interface ArchivedAddress {
-  kind: "governor" | "timelock" | "vkRegistry";
+  kind: "governor" | "timelock" | "vkRegistry" | "gatekeeper" | "maci";
   address: string;
   archivedAt: string; // ISO
   reason: string;
 }
 
 export const ROTATION_HISTORY: ArchivedAddress[] = [
+  {
+    kind: "gatekeeper",
+    address: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
+    archivedAt: "2026-06-08T00:00:00Z",
+    reason: "Clean-slate rotation: deployed a FRESH SignUpTokenGatekeeper so registeredTokenIds resets — citizens whose MACI key was lost (random per-device key) can sign up again, now with a deterministic wallet-derived key.",
+  },
+  {
+    kind: "maci",
+    address: "0xEbcF0628c987B34cf2C2261aCe7b2F92f664492E",
+    archivedAt: "2026-06-08T00:00:00Z",
+    reason: "Replaced in the clean-slate rotation; new MACI core binds to the fresh gatekeeper.",
+  },
+  {
+    kind: "governor",
+    address: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
+    archivedAt: "2026-06-08T00:00:00Z",
+    reason: "Rotated alongside the new MACI core (Governor.maci is immutable). Still owns AttesterNFT + CitizenNFT — NFT threshold proposals go through it, not the current Governor.",
+  },
+  {
+    kind: "timelock",
+    address: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
+    archivedAt: "2026-06-08T00:00:00Z",
+    reason: "Bound to the prior Governor; rotated alongside.",
+  },
   {
     kind: "governor",
     address: "0x3B13913efe6E8bAACeE51f98cc83892320445c2e",
