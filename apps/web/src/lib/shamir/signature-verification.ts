@@ -12,9 +12,9 @@
  *   ok       = recovered.toLowerCase() === expectedAddress.toLowerCase()
  *
  * Attester-NFT gating: read `hasAttesterNFT(address)` on the live
- * AttesterNFT contract. The current address comes from
- * `packages/blockchain/CONTRACTS.attesterNFT` so this code automatically
- * picks up whatever the latest rotation pointed at.
+ * AttesterNFT contract. The address is hard-coded as ATTESTER_NFT_ADDRESS
+ * below and MUST be kept in sync with `packages/blockchain`
+ * CONTRACTS.attesterNFT on every rotation — it does NOT update itself.
  *
  * Founder gating: a small hard-coded allowlist of founder wallets that
  * are permitted to run /coordinator/generate-key. Lives here so it's
@@ -26,11 +26,17 @@ import { readContract, getContract } from "thirdweb";
 import { base } from "thirdweb/chains";
 import { client } from "@/app/client";
 
-// Mirrors apps/web/src/lib/verification-contracts.ts. Kept inline here so
-// this server-only module has no client-side imports (the verification-
+// Mirrors apps/web/src/lib/verification-contracts.ts and
+// packages/blockchain CONTRACTS.attesterNFT. Kept inline here so this
+// server-only module has no client-side imports (the verification-
 // contracts module pulls in `getContract` instances at module load and
 // is otherwise client-flavored).
-const ATTESTER_NFT_ADDRESS = "0xa06F09Cb406880512326318fbC09Cdb28631DA73";
+//
+// IMPORTANT: bump this on every AttesterNFT rotation. It was previously
+// left at the pre-2026-05-23 address (0xa06F09Cb…), which silently
+// rejected attesters minted on the new contract with "is not an Attester"
+// even though they held a valid NFT (those NFTs live on 0x79B837…).
+const ATTESTER_NFT_ADDRESS = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
 
 /**
  * Founder allowlist. Keep this list of human-readable comments so any
