@@ -1,12 +1,10 @@
 import { Platform } from "react-native";
 import "react-native-get-random-values";
-import { installDebugLogCapture } from "./lib/debug-logs";
-
-// Mirror console.* into an on-device ring buffer for the in-app log viewer.
-// Installed first so the __DEV__ HMR suppression below wraps it as the outer
-// layer (suppressed HMR errors never reach the buffer). Works in standalone
-// preview builds where there's no Metro console.
-installDebugLogCapture();
+// DISABLED — in-app debug log viewer kept for later. To re-enable, uncomment
+// the two lines below AND the <DebugLogOverlay /> mount + import in app/_layout.tsx.
+// (Feature code lives in lib/debug-logs.ts + components/DebugLogOverlay.tsx.)
+// import { installDebugLogCapture } from "./lib/debug-logs";
+// installDebugLogCapture();
 
 // Sentry is initialized lazily inside <ConsentGate /> once the user opts in
 // to crash reporting. Until then, errors are buffered locally — see
