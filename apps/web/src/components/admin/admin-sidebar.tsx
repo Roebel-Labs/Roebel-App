@@ -17,8 +17,18 @@ export function AdminSidebar() {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isWeitereOpen, setIsWeitereOpen] = useState(false)
-  const isMobile = typeof window !== "undefined" ? window.innerWidth < 768 : false
+  const [isMobile, setIsMobile] = useState(false)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { counts } = useNotificationCounts(60000) // Poll every 60 seconds
+
+  // Track viewport so we can switch between the desktop collapse behaviour
+  // and the mobile off-canvas drawer.
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
 
   const broadcastSidebarState = (isOpen: boolean) => {
     setTimeout(() => {
@@ -40,7 +50,12 @@ export function AdminSidebar() {
   useEffect(() => {
     const handleToggle = () => {
       if (window.innerWidth < 768) {
-        broadcastSidebarState(true)
+        // On mobile the sidebar is an off-canvas drawer — toggle it open/closed.
+        setIsMobileOpen((prev) => {
+          const next = !prev
+          broadcastSidebarState(next)
+          return next
+        })
         return
       }
 
@@ -241,7 +256,8 @@ export function AdminSidebar() {
 
   const closeMobileSidebar = () => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
-      document.dispatchEvent(new CustomEvent("sidebar-toggle"))
+      setIsMobileOpen(false)
+      broadcastSidebarState(false)
     }
   }
 
@@ -285,11 +301,23 @@ export function AdminSidebar() {
   )
 
   return (
-    <div
-      className={`${
-        isCollapsed ? "w-20" : "w-64"
-      } h-screen bg-card border-r border-border flex flex-col transition-all duration-300`}
-    >
+    <>
+      {/* Backdrop (mobile only, when drawer is open) */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={closeMobileSidebar}
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 ${
+          isCollapsed ? "md:w-20" : "md:w-64"
+        } h-screen bg-card border-r border-border flex flex-col transition-transform md:transition-[width] duration-300 ${
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
+      >
       {/* Header */}
       <div className="h-16 border-b border-border flex items-center px-4 bg-card">
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -359,6 +387,7 @@ export function AdminSidebar() {
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

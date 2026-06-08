@@ -117,7 +117,7 @@ export default function RegisterShareKeyPage() {
               Nur für Bescheiniger verfügbar
             </CardTitle>
             <CardDescription className="text-red-800">
-              Diese Wallet (<code className="text-xs">{account.address}</code>)
+              Diese Wallet (<code className="text-xs break-all">{account.address}</code>)
               hält keinen AttesterNFT. Nur die 5 Bescheiniger dürfen einen
               Share-Key registrieren.
             </CardDescription>
