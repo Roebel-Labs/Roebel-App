@@ -21,7 +21,7 @@
  * easy to find and review in code, not buried in config.
  */
 
-import { verifyMessage } from "ethers";
+import { Contract, JsonRpcProvider, hashMessage, verifyMessage } from "ethers";
 import { readContract, getContract } from "thirdweb";
 import { base } from "thirdweb/chains";
 import { client } from "@/app/client";
@@ -49,19 +49,71 @@ const attesterNftContract = getContract({
   chain: base,
 });
 
+// ERC-1271 magic value returned by `isValidSignature(hash, sig)` when the
+// signature is considered valid by the smart account contract.
+const ERC1271_MAGIC_VALUE = "0x1626ba7e";
+
 /**
- * Verify that `signature` is a valid EIP-191 signature over `message`
- * produced by `expectedAddress`.
+ * Verify that `signature` is a valid signature over `message` produced
+ * by `expectedAddress`. Handles both:
+ *
+ * 1. **EOA / EIP-191 personal_sign** — `ethers.verifyMessage` recovers
+ *    the signing address; we compare it to `expectedAddress`.
+ *
+ * 2. **Smart-account / ERC-1271** — thirdweb's `inAppWallet + smartAccount`
+ *    setup signs with the underlying inAppWallet EOA but `account.address`
+ *    is the smart-account address. The raw EIP-191 recovery returns the
+ *    EOA, not the smart account, so the comparison above fails. In that
+ *    case we fall back to calling `isValidSignature(hash, signature)` on
+ *    the smart account contract and check for the ERC-1271 magic value.
+ *
+ * The fallback only triggers when EIP-191 recovery doesn't match the
+ * expected address AND the expected address is a contract (`code.length
+ * > 0`). We never make an RPC call for a plain EOA.
  */
-export function verifyWalletSignature(
+export async function verifyWalletSignature(
   message: string,
   signature: string,
   expectedAddress: string
-): boolean {
+): Promise<boolean> {
+  // Fast path: plain EIP-191 recovery.
   try {
     const recovered = verifyMessage(message, signature);
-    return recovered.toLowerCase() === expectedAddress.toLowerCase();
+    if (recovered.toLowerCase() === expectedAddress.toLowerCase()) {
+      return true;
+    }
   } catch {
+    // fall through to ERC-1271
+  }
+
+  // ERC-1271 fallback for smart accounts.
+  const rpcUrl = process.env.BASE_RPC_URL;
+  if (!rpcUrl) {
+    console.warn(
+      "[signature-verification] BASE_RPC_URL not configured — cannot do ERC-1271 fallback"
+    );
+    return false;
+  }
+  try {
+    const provider = new JsonRpcProvider(rpcUrl, undefined, { batchMaxCount: 1 });
+    const code = await provider.getCode(expectedAddress);
+    if (!code || code === "0x") {
+      // EOA — and EIP-191 already failed. Signature is invalid.
+      return false;
+    }
+    const contract = new Contract(
+      expectedAddress,
+      ["function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"],
+      provider
+    );
+    const hash = hashMessage(message);
+    const result: string = await contract.isValidSignature(hash, signature);
+    return (
+      typeof result === "string" &&
+      result.toLowerCase() === ERC1271_MAGIC_VALUE
+    );
+  } catch (err) {
+    console.error("[signature-verification] ERC-1271 verify failed", err);
     return false;
   }
 }

@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 1) ECDSA signature check.
-  if (!verifyWalletSignature(challenge, signature, walletAddress)) {
+  if (!(await verifyWalletSignature(challenge, signature, walletAddress))) {
     return NextResponse.json(
       { error: "signature does not match walletAddress" },
       { status: 401 }

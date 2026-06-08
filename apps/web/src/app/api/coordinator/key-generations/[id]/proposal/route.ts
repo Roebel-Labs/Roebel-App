@@ -59,7 +59,7 @@ export async function PATCH(
     proposalId,
     setPubkeyTxHash
   );
-  if (!verifyWalletSignature(message, signature, creatorWallet)) {
+  if (!(await verifyWalletSignature(message, signature, creatorWallet))) {
     return NextResponse.json(
       { error: "signature does not match creatorWallet" },
       { status: 401 }

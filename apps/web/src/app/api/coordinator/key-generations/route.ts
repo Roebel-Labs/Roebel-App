@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     messageHash
   );
 
-  if (!verifyWalletSignature(signedMessage, signature, creatorWallet)) {
+  if (!(await verifyWalletSignature(signedMessage, signature, creatorWallet))) {
     return NextResponse.json(
       { error: "signature does not match creatorWallet" },
       { status: 401 }

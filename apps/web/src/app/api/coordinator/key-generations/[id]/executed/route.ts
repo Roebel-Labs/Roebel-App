@@ -58,7 +58,7 @@ export async function POST(
     `gen=${generationId}`,
     `tx=${executionTxHash}`,
   ].join("\n");
-  if (!verifyWalletSignature(signedMessage, signature, creatorWallet)) {
+  if (!(await verifyWalletSignature(signedMessage, signature, creatorWallet))) {
     return NextResponse.json(
       { error: "signature does not match creatorWallet" },
       { status: 401 }

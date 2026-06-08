@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   }
 
   const signedMessage = `Roebel DAO trigger tally session v1\npoll=${pollId}`;
-  if (!verifyWalletSignature(signedMessage, signature, founderWallet)) {
+  if (!(await verifyWalletSignature(signedMessage, signature, founderWallet))) {
     return NextResponse.json(
       { error: "signature does not match founderWallet" },
       { status: 401 }
