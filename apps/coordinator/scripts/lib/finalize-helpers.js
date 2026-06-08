@@ -187,9 +187,39 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
     mergeMessages({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
   );
 
+  // Validate cached proofs against the CURRENT on-chain Poll address, not just
+  // file existence. After a MACI rotation, the cached tally.json from the old
+  // Poll contract would otherwise be reused and proveOnChain would die with
+  // "pollEndTimestamp mismatch" mid-submission, leaving the run unfinishable
+  // without a manual cache wipe.
   const cachedTallyExists = fs.existsSync(tallyFile);
   const cachedProcessExists = fs.existsSync(path.join(proofDir, "process_0.json"));
-  const useCachedProofs = cachedTallyExists && cachedProcessExists;
+  let cacheMatchesCurrentMaci = false;
+  if (cachedTallyExists && cachedProcessExists) {
+    try {
+      const cached = JSON.parse(fs.readFileSync(tallyFile, "utf8"));
+      const cachedMaci = String(cached.maci || "").toLowerCase();
+      const cachedPollAddr = String(cached.pollAddress || "").toLowerCase();
+      const currentMaci = String(maciAddress).toLowerCase();
+      const maciContract = new ethers.Contract(
+        maciAddress,
+        ["function polls(uint256) view returns (address poll, address messageProcessor, address tally)"],
+        txSigner,
+      );
+      const polls = await maciContract.polls(pollIdBig);
+      const currentPollAddr = String(polls.poll || polls[0]).toLowerCase();
+      if (cachedMaci === currentMaci && cachedPollAddr === currentPollAddr) {
+        cacheMatchesCurrentMaci = true;
+      } else {
+        console.log(
+          `[cache] invalidating stale proofs (cached maci=${cachedMaci} poll=${cachedPollAddr}, current maci=${currentMaci} poll=${currentPollAddr})`,
+        );
+      }
+    } catch (err) {
+      console.warn("[cache] failed to validate cached tally; regenerating", err);
+    }
+  }
+  const useCachedProofs = cacheMatchesCurrentMaci;
 
   let tallyData;
   if (useCachedProofs) {
@@ -232,9 +262,20 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
     });
   } catch (err) {
     const msg = String((err && err.message) || err);
-    if (/exceeds max transaction gas limit/i.test(msg)) {
+    // maci-cli's monolithic addTallyResults (5^voteOptionTreeDepth = 125 leaves)
+    // can fail in several ways on Base: an explicit "exceeds max gas limit" if
+    // the RPC computes a value before rejecting, or a silent "missing revert
+    // data" / "could not coalesce" if it bails earlier in estimation. All three
+    // shapes mean "the monolithic call did not land". Our chunked fallback below
+    // is idempotent (skips when totalTallyResults > 0), so swallowing here is
+    // safe in every "addTallyResults didn't land" case.
+    const monolithicRejected =
+      /exceeds max transaction gas limit/i.test(msg) ||
+      /missing revert data/i.test(msg) ||
+      /could not coalesce error/i.test(msg);
+    if (monolithicRejected) {
       console.log(
-        "[proveOnChain] maci-cli's monolithic addTallyResults call hit Base's 30M gas limit — falling back to chunked addTallyResults.",
+        "[proveOnChain] maci-cli's monolithic addTallyResults call rejected — falling back to chunked addTallyResults.",
       );
     } else {
       throw err;
