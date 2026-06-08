@@ -116,7 +116,7 @@ export const ATTESTER_GOVERNOR_ADDRESS = "0xNEW_GOVERNOR_ADDRESS";
 |----------|---------|
 | AttesterNFT (2-sig, governance-mutable) | `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` |
 | CitizenNFT (1+1 attest AND revoke, governance-mutable) | `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` |
-| SignUpTokenGatekeeper (bound to new CitizenNFT) | `0xcf12E8da5f7599dd9162e07388715bBa11739F2e` |
+| SignUpTokenGatekeeper (bound to new CitizenNFT) | `0xc767fa3bbd9f0934Fb419137d7b6506E44105f74` |
 | MaciAttesterGovernor (MACI v2, 5 governance setters) | `0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177` |
 | TimelockController (1h min delay, raise via `updateDelay()`) | `0xe8B8149F9373a56F55112e5Fc867E58308D014c1` |
 

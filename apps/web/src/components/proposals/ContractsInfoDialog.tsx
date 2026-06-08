@@ -17,11 +17,11 @@ import { de } from "@/lib/translations/de";
 const CONTRACT_ROWS = [
   {
     role: de.governance.roleGovernor,
-    address: "0xffCeE774e226f354f261B5Cd264ce1325385A926",
+    address: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
   },
   {
     role: de.governance.roleTimelock,
-    address: "0xB297f779ffBE41689Ce35927AEFC415B00abf8E0",
+    address: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
   },
   {
     role: de.governance.roleCitizenNFT,

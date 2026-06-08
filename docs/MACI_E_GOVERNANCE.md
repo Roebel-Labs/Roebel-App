@@ -196,7 +196,7 @@ These get deployed once and stay forever (assuming no protocol-version bump):
 | MACI core | `0x2922e42945a10d1F765E3f9Cab136421d4556D30` | Global signup pool; `deployPoll` factory |
 | Verifier | `0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8` | Groth16 proof verifier |
 | VkRegistry | `0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED` | Stores process + tally VKs keyed by tree depths |
-| SignUpTokenGatekeeper | `0xcf12E8da5f7599dd9162e07388715bBa11739F2e` | "You can sign up iff you hold CitizenNFT" (rotated 2026-05-23 to bind to new CitizenNFT) |
+| SignUpTokenGatekeeper | `0xc767fa3bbd9f0934Fb419137d7b6506E44105f74` | "You can sign up iff you hold CitizenNFT" (fresh instance from the 2026-06-08 clean-slate rotation) |
 | ConstantInitialVoiceCreditProxy | `0x5b358A77E89FF3d699607b4fC235b381d67f3d05` | Issues 1 voice credit per signup (non-QV) |
 | PoseidonT3 | `0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3` | Linked into PollFactory + MACI |
 | PoseidonT4 | `0x71f05e914Aa4E8Bc19c0c98073e5B0a59b2Ef0C6` | … |
