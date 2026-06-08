@@ -1,5 +1,5 @@
 import { createThirdwebClient, getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { base, defineChain } from "thirdweb/chains";
 import Constants from "expo-constants";
 
 const clientId = Constants.expoConfig?.extra?.THIRDWEB_CLIENT_ID ??
@@ -17,6 +17,14 @@ export const client = createThirdwebClient({
 });
 
 export const chain = base;
+
+// Read-only Base chain pinned to a reliable public RPC. The default thirdweb
+// hosted RPC (clientId-only) is intermittently rate-limited on preview builds,
+// which surfaced as "Blockchain RPC unavailable" and stalled the MACI SignUp
+// event scan. Use this for reads / event scans / eth_blockNumber; keep `base`
+// (+ client) for gasless tx submission, which needs the thirdweb bundler.
+const BASE_READ_RPC = process.env.EXPO_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+export const baseRead = defineChain({ ...base, rpc: BASE_READ_RPC });
 
 export const contract = getContract({
 	client,
@@ -93,6 +101,15 @@ export const maciContract = getContract({
 	client,
 	address: maciAddress,
 	chain: base,
+});
+
+// Same MACI core, but pinned to the reliable read RPC — used for the SignUp
+// event scan (recovering a citizen's stateIndex) so it isn't blocked by the
+// hosted-RPC rate limit.
+export const maciReadContract = getContract({
+	client,
+	address: maciAddress,
+	chain: baseRead,
 });
 
 /** Build a Poll contract handle for a per-proposal MACI Poll address. */

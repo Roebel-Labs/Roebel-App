@@ -55,18 +55,30 @@ export function useProposalDetails(
         let enrichedProposal: Proposal;
         try {
           console.log('🔄 Fetching real-time blockchain data...');
-          const [stateResult, votesResult] = await Promise.all([
-            readContract({
-              contract: governorContract,
-              method: 'function state(uint256) view returns (uint8)',
-              params: [blockchainProposalId],
-            }),
-            readContract({
-              contract: governorContract,
-              method: 'function proposalVotes(uint256) view returns (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes)',
-              params: [blockchainProposalId],
-            }),
-          ]);
+          // Light retry (3 attempts, short backoff) before falling back to stale
+          // Supabase data — the hosted RPC is intermittently rate-limited.
+          let stateResult: any;
+          let votesResult: any;
+          for (let attempt = 0; ; attempt++) {
+            try {
+              [stateResult, votesResult] = await Promise.all([
+                readContract({
+                  contract: governorContract,
+                  method: 'function state(uint256) view returns (uint8)',
+                  params: [blockchainProposalId],
+                }),
+                readContract({
+                  contract: governorContract,
+                  method: 'function proposalVotes(uint256) view returns (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes)',
+                  params: [blockchainProposalId],
+                }),
+              ]);
+              break;
+            } catch (retryErr) {
+              if (attempt >= 2) throw retryErr;
+              await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+            }
+          }
 
           enrichedProposal = {
             ...mappedProposal,

@@ -28,9 +28,8 @@ import * as SecureStore from "expo-secure-store";
 import { getContractEvents, prepareEvent } from "thirdweb";
 import { keccak256 } from "thirdweb/utils";
 import { getRpcClient, eth_blockNumber } from "thirdweb/rpc";
-import { base } from "thirdweb/chains";
 import { useActiveAccount } from "thirdweb/react";
-import { client, MACI_DEPLOY_BLOCK, maciContract } from "@/constants/thirdweb";
+import { client, MACI_DEPLOY_BLOCK, maciReadContract, baseRead } from "@/constants/thirdweb";
 import {
   deserializeKeypair,
   deriveMaciKeypairFromSeed,
@@ -179,16 +178,17 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     // appear at most once (the gatekeeper enforces uniqueness).
     //
     // Base RPC caps eth_getLogs at a 10k-block range, and the live range
-    // (MACI_DEPLOY_BLOCK → latest) is hundreds of thousands of blocks and grows
-    // every day since deploy — a single full-range call is ALWAYS rejected,
-    // which is what left already-registered citizens stuck. So we scan in <10k
-    // windows, NEWEST-FIRST, and stop at the first match: a recent signup
-    // resolves in a few requests. On a hit we persist the stateIndex (Layer 1),
-    // so this expensive scan runs at most once per device.
+    // (MACI_DEPLOY_BLOCK → latest) is hundreds of thousands of blocks. We split
+    // it into <10k windows and scan them with bounded concurrency against the
+    // reliable read RPC (maciReadContract), returning on the first window that
+    // contains this pubkey's SignUp. Parallel + direction-agnostic, so an early
+    // signup near the deploy block resolves in seconds instead of dozens of
+    // serial round-trips. On a hit we persist the stateIndex (Layer 1) so this
+    // scan runs at most once per device.
     //
     // CRITICAL: distinguish "scanned the whole range, no event" (→ needs-signup)
-    // from "a window errored / hit the safety cap" (→ unknown, retryable). A
-    // transient failure must NOT be reported as needs-signup.
+    // from "a window errored" (→ unknown, retryable) — a transient failure must
+    // NOT be reported as needs-signup.
     const signUpEvent = prepareEvent({
       signature:
         "event SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX, uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance, uint256 _timestamp)",
@@ -197,7 +197,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
 
     let latest: bigint;
     try {
-      latest = await eth_blockNumber(getRpcClient({ client, chain: base }));
+      latest = await eth_blockNumber(getRpcClient({ client, chain: baseRead }));
     } catch (err) {
       console.warn("[MaciContext] refreshSignUp: eth_blockNumber failed", err);
       const s: SignUpState = { status: "unknown" };
@@ -206,70 +206,83 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     }
 
     const WINDOW = 9_000n; // under Base's 10k eth_getLogs cap
-    const MAX_WINDOWS = 200; // ~1.8M blocks of headroom; bounds the worst case
-    let to = latest;
-    let windows = 0;
-    let scanErrored = false;
-
-    while (to >= MACI_DEPLOY_BLOCK && windows < MAX_WINDOWS) {
+    const CONCURRENCY = 6;
+    const ranges: { from: bigint; to: bigint }[] = [];
+    for (let to = latest; to >= MACI_DEPLOY_BLOCK; ) {
       const from = to - WINDOW + 1n > MACI_DEPLOY_BLOCK ? to - WINDOW + 1n : MACI_DEPLOY_BLOCK;
+      ranges.push({ from, to });
+      if (from === MACI_DEPLOY_BLOCK) break;
+      to = from - 1n;
+    }
+    console.log(
+      `[MaciContext] refreshSignUp: scanning ${ranges.length} windows [${MACI_DEPLOY_BLOCK}-${latest}] @${CONCURRENCY}x`,
+    );
 
-      let windowOk = false;
+    let hitStateIndex: bigint | null = null;
+    let anyError = false;
+    let cursor = 0;
+
+    const scanWindow = async (r: { from: bigint; to: bigint }): Promise<"hit" | "empty" | "error"> => {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const events = await getContractEvents({
-            contract: maciContract,
+            contract: maciReadContract,
             events: [signUpEvent],
-            fromBlock: from,
-            toBlock: to,
+            fromBlock: r.from,
+            toBlock: r.to,
           });
-          windowOk = true;
-
           if (events.length > 0) {
             const ev = events[0] as unknown as { args: { _stateIndex?: bigint } };
-            const stateIndex = ev.args._stateIndex ?? 0n;
-            // Persist for future cold starts (Layer 1 cache hit next time).
-            await persistKeypair({
-              ...serializedKeypair,
-              stateIndex: stateIndex.toString(),
-              pubKeyHash: pubKeyHash.toString(),
-            });
-            lastCheckedHash.current = pubKeyHash;
-            const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
-            setSignUpState(s);
-            console.log("[MaciContext] refreshSignUp: event scan hit", {
-              stateIndex: stateIndex.toString(),
-              window: `${from}-${to}`,
-            });
-            return s;
+            if (hitStateIndex === null) hitStateIndex = ev.args._stateIndex ?? 0n;
+            console.log(`[MaciContext] refreshSignUp: hit in window ${r.from}-${r.to}`);
+            return "hit";
           }
-          break; // window scanned cleanly, no match → move to the older window
+          return "empty";
         } catch (err) {
-          console.warn(
-            `[MaciContext] refreshSignUp: window ${from}-${to} attempt ${attempt + 1}/2 failed`,
-            err,
-          );
-          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          console.warn(`[MaciContext] refreshSignUp: window ${r.from}-${r.to} attempt ${attempt + 1}/2 failed`, err);
+          await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
         }
       }
-      if (!windowOk) scanErrored = true;
+      return "error";
+    };
 
-      if (from === MACI_DEPLOY_BLOCK) break;
-      to = from - 1n;
-      windows += 1;
+    const worker = async () => {
+      while (hitStateIndex === null && cursor < ranges.length) {
+        const r = ranges[cursor++];
+        const res = await scanWindow(r);
+        if (res === "error") anyError = true;
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, ranges.length) }, () => worker()),
+    );
+
+    if (hitStateIndex !== null) {
+      const stateIndex = hitStateIndex;
+      await persistKeypair({
+        ...serializedKeypair,
+        stateIndex: stateIndex.toString(),
+        pubKeyHash: pubKeyHash.toString(),
+      });
+      lastCheckedHash.current = pubKeyHash;
+      const s: SignUpState = { status: "signed-up", pubKeyHash, stateIndex };
+      setSignUpState(s);
+      console.log("[MaciContext] refreshSignUp: signed-up", { stateIndex: stateIndex.toString() });
+      return s;
     }
 
-    // No hit. Only trust "not registered" if every window scanned cleanly and we
-    // covered the whole range; otherwise stay `unknown` so the UI offers a retry.
-    if (scanErrored || windows >= MAX_WINDOWS) {
-      console.warn("[MaciContext] refreshSignUp: scan incomplete (window errors or cap reached)");
+    // No hit. Only trust "not registered" if every window scanned cleanly;
+    // otherwise stay `unknown` so the UI offers a retry.
+    if (anyError) {
+      console.warn(`[MaciContext] refreshSignUp: scan incomplete (window errors) across ${ranges.length} windows`);
       const s: SignUpState = { status: "unknown" };
       setSignUpState(s);
       return s;
     }
     const s: SignUpState = { status: "needs-signup", pubKeyHash };
     setSignUpState(s);
-    console.log("[MaciContext] refreshSignUp: no event in full range, status=needs-signup");
+    console.log(`[MaciContext] refreshSignUp: no SignUp across ${ranges.length} windows → needs-signup`);
     return s;
   }, [serializedKeypair, persistKeypair]);
 
