@@ -34,6 +34,7 @@ import {
   buildProposalAttachSignaturePayload,
 } from "@/lib/shamir/canonical-payload";
 import { buildRotationProposalCalldata } from "@/lib/shamir/coordinator-proposal";
+import { uploadToIrys } from "@/lib/irys";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -236,6 +237,46 @@ export default function GenerateKeyPage() {
             if (!patchRes.ok)
               throw new Error(patchJson?.error ?? `HTTP ${patchRes.status}`);
 
+            // Mirror the rotation to the standard `proposals` table so the
+            // existing /app/proposals/[id] UI can render it as a regular
+            // governance proposal (where Citizens will cast their votes).
+            // Best-effort: failure here doesn't roll back — the on-chain
+            // proposal already exists.
+            try {
+              const description = calldata.description;
+              const title = "MACI Coordinator Key Rotation";
+              const irysReceipt = await uploadToIrys(account, description, [
+                { name: "Content-Type", value: "text/markdown" },
+                { name: "App", value: "Roebel DAO" },
+                { name: "Type", value: "Proposal" },
+                { name: "Title", value: title },
+                { name: "Kind", value: "coordinator-rotation" },
+              ]);
+              await fetch("/api/proposals/store", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  proposalId: result.transactionHash,
+                  blockchainProposalId: pId,
+                  title,
+                  markdown: description,
+                  irysContentId: irysReceipt.id,
+                  irysUrl: irysReceipt.url,
+                  transactionHash: result.transactionHash,
+                  proposerAddress: account.address,
+                  blockNumber: Number(receipt.blockNumber),
+                  snapshotBlock: 0,
+                  deadlineBlock: 0,
+                  category: "governance",
+                }),
+              });
+            } catch (storeErr) {
+              console.warn(
+                "[generate-key] /api/proposals/store mirror failed — on-chain proposal still exists, may need manual backfill",
+                storeErr
+              );
+            }
+
             // Wipe the privkey from memory now that the proposal is live.
             setKeypair(null);
             setStage("done");
@@ -259,9 +300,12 @@ export default function GenerateKeyPage() {
   }, [account, generationId, keypair, sendTransaction]);
 
   const handleViewProposal = useCallback(() => {
-    if (!proposalId) return;
-    router.push(`/app/proposals/${proposalId}`);
-  }, [proposalId, router]);
+    // The `proposals` table mirror uses the tx hash as `proposal_id` (the
+    // column /app/proposals/[id] queries against), matching the user-facing
+    // CreateProposalForm convention. Navigate to the tx hash URL.
+    if (!proposeTxHash) return;
+    router.push(`/app/proposals/${proposeTxHash}`);
+  }, [proposeTxHash, router]);
 
   if (!account) {
     return (
