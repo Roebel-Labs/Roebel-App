@@ -8,6 +8,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { NotificationDot } from "@/components/ui/notification-dot"
+import { ConnectButton } from "thirdweb/react"
+import { client } from "@/app/client"
+import { activeChain } from "@/lib/chains"
+import { wallets } from "@/lib/wallet-config"
 import { toast } from "@/hooks/use-toast"
 import { useNotificationCounts } from "@/hooks/useNotificationCounts"
 import { logoutAction } from "@/app/actions/dashboard-auth"
@@ -368,7 +372,18 @@ export function AdminSidebar() {
       </div>
 
       {/* Footer with user info */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-4 space-y-3">
+        {!isCollapsed && (
+          <div className="[&_button]:w-full">
+            <ConnectButton
+              client={client}
+              chain={activeChain}
+              wallets={wallets}
+              connectButton={{ label: "Wallet verbinden" }}
+              connectModal={{ title: "Bei Röbel/Müritz DAO anmelden", size: "compact" }}
+            />
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar>
