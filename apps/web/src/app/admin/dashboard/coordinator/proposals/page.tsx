@@ -124,6 +124,11 @@ export default function AdminProposalsPage() {
   const [proposals, setProposals] = useState<ProposalRow[]>([]);
   const [liveState, setLiveState] = useState<Record<string, LiveState>>({});
   const [actionData, setActionData] = useState<Record<string, ProposalActionData>>({});
+  // Map of proposal_id → "this proposal has no executable action" so we can
+  // hide Execute and render an explanation instead of letting the user
+  // click into a GovernorDisabledDeposit revert. Populated lazily as soon
+  // as the proposal hits the queue stage and we fetch its action data.
+  const [isNoop, setIsNoop] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tallying, setTallying] = useState(false);
@@ -361,6 +366,39 @@ export default function AdminProposalsPage() {
     },
     [actionData]
   );
+
+  // A proposal is "no-op" when its only action is a self-call with empty
+  // calldata. Survey-style proposals (the citizen-poll path) end up here:
+  // the vote IS the proposal, no contract action attached. OZ Governor's
+  // receive() reverts with GovernorDisabledDeposit if anyone tries to
+  // execute one — so we hide Execute and explain instead.
+  const probeIsNoop = useCallback(
+    async (p: ProposalRow) => {
+      if (isNoop[p.proposal_id] !== undefined) return;
+      try {
+        const data = await getActionData(p.transaction_hash);
+        const noop =
+          data.calldatas.length === 1 &&
+          (data.calldatas[0] === "0x" || data.calldatas[0] === "") &&
+          data.values.every((v) => v === "0");
+        setIsNoop((prev) => ({ ...prev, [p.proposal_id]: noop }));
+      } catch {
+        // ignore — we'll just leave the button visible
+      }
+    },
+    [getActionData, isNoop]
+  );
+
+  // For any proposal that has reached the queue/execute window, probe
+  // whether it's a no-op so the row UI can react.
+  useEffect(() => {
+    for (const p of proposals) {
+      const live = liveState[p.proposal_id];
+      if (live && (live.state === 4 || live.state === 5)) {
+        probeIsNoop(p);
+      }
+    }
+  }, [proposals, liveState, probeIsNoop]);
 
   const handleTriggerTally = useCallback(async () => {
     if (!account || !isFounder) return;
@@ -770,7 +808,7 @@ export default function AdminProposalsPage() {
                             : "In Warteschlange (Queue)"}
                         </Button>
                       )}
-                      {live?.state === 5 && (
+                      {live?.state === 5 && !isNoop[p.proposal_id] && (
                         <Button
                           onClick={() => handleExecute(p)}
                           disabled={busyId === p.proposal_id || !timelockReady}
@@ -786,6 +824,20 @@ export default function AdminProposalsPage() {
                             ? "Ausführen (Execute)"
                             : "Wartet auf Timelock"}
                         </Button>
+                      )}
+                      {live?.state === 5 && isNoop[p.proposal_id] && (
+                        <div className="text-xs text-muted-foreground bg-muted/40 border border-border rounded p-2 w-full">
+                          <span className="font-medium text-foreground">
+                            Survey-Vorschlag — keine Ausführung möglich.
+                          </span>{" "}
+                          Dieser Vorschlag hat keine On-Chain-Aktion (calldata
+                          ist leer). Das Ergebnis steht im Tally-Vertrag, der
+                          Vorschlag bleibt dauerhaft im Zustand „In Timelock".
+                          OZ Governor lehnt Execute mit{" "}
+                          <code className="font-mono">GovernorDisabledDeposit</code>{" "}
+                          ab, weil es keinen Aufruf gibt, der durchgereicht
+                          werden könnte.
+                        </div>
                       )}
                       <Link href={`/app/proposals/${p.proposal_id}`}>
                         <Button variant="outline">Öffentliche Seite</Button>
