@@ -209,9 +209,45 @@ async function lookupSessionFromSupabase(sessionId) {
   return rows && rows[0] ? rows[0] : null;
 }
 
+// Browsers (the Attester tally page) POST decrypted shares straight to this
+// server — the share MUST NOT pass through Vercel because that would put the
+// plaintext share in front of another trust boundary. Direct cross-origin
+// POST from https://www.roebel.app requires CORS.
+//
+// Allowlist is narrow: only the production web origin + localhost for dev.
+// Submission endpoint only — never /sessions, /finalize-pending or /status,
+// which are server-to-server and shouldn't be reachable from a browser.
+const CORS_ORIGIN_ALLOWLIST = new Set([
+  "https://www.roebel.app",
+  "https://roebel.app",
+  "http://localhost:3000",
+]);
+
+function applyCorsForSubmissions(req, res) {
+  const origin = req.headers.origin;
+  if (origin && CORS_ORIGIN_ALLOWLIST.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+}
+
 const server = http.createServer((req, res) => {
   // Strip query string for routing.
   const url = req.url.split("?")[0];
+
+  // CORS preflight for /sessions/:id/submissions. Browsers send OPTIONS
+  // before the actual POST if Content-Type is application/json (which it is).
+  if (
+    req.method === "OPTIONS" &&
+    /^\/sessions\/[0-9a-f-]+\/submissions$/i.test(url)
+  ) {
+    applyCorsForSubmissions(req, res);
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "600");
+    res.writeHead(204);
+    return res.end();
+  }
 
   if (req.method === "GET" && url === "/healthz") {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -282,6 +318,7 @@ const server = http.createServer((req, res) => {
 
   const submitMatch = req.url.match(/^\/sessions\/([0-9a-f-]+)\/submissions$/i);
   if (req.method === "POST" && submitMatch) {
+    applyCorsForSubmissions(req, res);
     return forwardSubmissionToReconstructor(req, res, submitMatch[1]);
   }
 
