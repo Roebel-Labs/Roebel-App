@@ -121,7 +121,14 @@ export function verifySessionManifestFull(
     governorAddress: session.governor_address,
     sessionPubkeyBase64,
     attesterAllowlist,
-    expiresAt: session.expires_at,
+    // Fly's reconstructor signs with `new Date(...).toISOString()` ("...Z"),
+    // but Postgres returns the same timestamptz as `...+00:00`. Same
+    // instant, different bytes — the JSON.stringify in
+    // buildManifestPayload would include the DB form verbatim and the
+    // recovered signer would be a different address. Normalize back to
+    // the Z-suffix form here so the payload is byte-identical to what
+    // Fly signed.
+    expiresAt: new Date(session.expires_at).toISOString(),
   };
 
   const payload = buildManifestPayload(manifest);
