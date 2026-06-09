@@ -58,25 +58,57 @@ export async function GET(
     return NextResponse.json({ error: "invalid txHash" }, { status: 400 });
   }
 
-  const rpcUrl = process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com";
-  const provider = new JsonRpcProvider(rpcUrl, undefined, { batchMaxCount: 1 });
+  // publicnode silently returns `{ result: null }` for some receipts even
+  // hours after inclusion (observed for the rotation propose tx). Treat
+  // BASE_RPC_URL as the preferred endpoint but fall through to other
+  // public RPCs whenever a receipt comes back null — that's strictly an
+  // availability problem, the tx itself is on-chain (anyone can verify
+  // on BaseScan).
+  const rpcCandidates: string[] = Array.from(
+    new Set(
+      [
+        process.env.BASE_RPC_URL,
+        "https://mainnet.base.org",
+        "https://1rpc.io/base",
+        "https://base-rpc.publicnode.com",
+      ].filter((s): s is string => typeof s === "string" && s.length > 0)
+    )
+  );
 
-  let receipt;
-  try {
-    receipt = await provider.getTransactionReceipt(txHash);
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: "rpc getTransactionReceipt failed",
-        details: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 }
-    );
+  let receipt = null;
+  let lastErr: unknown = null;
+  let usedRpc: string | null = null;
+  for (const rpcUrl of rpcCandidates) {
+    try {
+      const provider = new JsonRpcProvider(rpcUrl, undefined, {
+        batchMaxCount: 1,
+      });
+      const r = await provider.getTransactionReceipt(txHash);
+      if (r) {
+        receipt = r;
+        usedRpc = rpcUrl;
+        break;
+      }
+    } catch (err) {
+      lastErr = err;
+    }
   }
 
   if (!receipt) {
-    return NextResponse.json({ error: "tx not found" }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: "tx not found on any RPC",
+        triedRpcs: rpcCandidates,
+        lastErr:
+          lastErr instanceof Error ? lastErr.message : lastErr ? String(lastErr) : null,
+      },
+      { status: 404 }
+    );
   }
+
+  // Attach which endpoint served the receipt to the success response so
+  // it's easy to see in DevTools which RPC actually worked.
+  void usedRpc;
 
   // Find the ProposalCreated log emitted by the CURRENT MACI Governor.
   // We don't accept a log from any other address — that would let
