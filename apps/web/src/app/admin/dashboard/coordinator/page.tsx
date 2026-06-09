@@ -222,6 +222,9 @@ export default function CoordinatorStatusPage() {
           <Button variant="outline" onClick={fetchState} disabled={loading}>
             ↻ Aktualisieren
           </Button>
+          <Link href="/admin/dashboard/coordinator/proposals">
+            <Button variant="outline">Vorschläge</Button>
+          </Link>
           <Link href="/admin/dashboard/coordinator/register-share-key">
             <Button variant="outline">Share-Key registrieren</Button>
           </Link>
