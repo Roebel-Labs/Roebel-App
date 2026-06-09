@@ -170,6 +170,29 @@ async function main() {
   };
   const manifestSignature = signManifest(manifest, process.env.COORDINATOR_ETH_PRIV);
 
+  // Sweep any orphaned `open` sessions for this poll → aborted BEFORE we
+  // insert ours. The parent (healthcheck.js startReconstructorSession)
+  // polls Supabase for "most recent open session for poll N" to wire up
+  // activeSession.sessionRow. If a prior reconstructor died (e.g. a Fly
+  // redeploy SIGINT) without closing its row, the orphan still reads as
+  // state=open and the parent's poll wins it before our INSERT lands.
+  // Marking the orphans aborted first guarantees the only `open` row the
+  // parent can see is the one we're about to write.
+  try {
+    await supabase.update(
+      "coordinator_sessions",
+      `poll_id=eq.${String(pollId)}&state=eq.open`,
+      {
+        state: "aborted",
+        completed_at: new Date().toISOString(),
+      },
+    );
+  } catch (err) {
+    console.warn(
+      `[reconstructor] orphan-session sweep failed (continuing): ${err?.message ?? err}`,
+    );
+  }
+
   await writeSessionRow({
     sessionId,
     keyGenerationId: generation.id,

@@ -129,6 +129,15 @@ async function startReconstructorSession({ pollId, timeoutMs }) {
   // API can return the session id immediately. Bail out early if the child
   // crashes (e.g. no active key generation, missing env, etc.) so we don't
   // dereference a null activeSession.
+  //
+  // CRITICAL: filter by `created_at >= startedAt` — without that filter,
+  // any orphaned `open` row from a prior (crashed/redeployed) reconstructor
+  // for the same poll wins our first poll, before the child has had time
+  // to INSERT its own row. We then lock activeSession.sessionRow.id to the
+  // orphan UUID and every submission against the real session id returns
+  // 410. The child also marks orphans `aborted` on boot, but this filter
+  // closes the race window directly.
+  const startedAt = new Date(activeSession.startedAt).toISOString();
   const rowPollDeadline = Date.now() + 15000;
   let sessionRow = null;
   while (Date.now() < rowPollDeadline && !sessionRow && !childExited) {
@@ -137,6 +146,7 @@ async function startReconstructorSession({ pollId, timeoutMs }) {
         select: "*",
         poll_id: `eq.${pollId}`,
         state: "eq.open",
+        created_at: `gte.${startedAt}`,
         order: "created_at.desc",
         limit: "1",
       });
