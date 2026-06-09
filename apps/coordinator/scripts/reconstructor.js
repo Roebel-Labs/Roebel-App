@@ -20,8 +20,8 @@
  *      The parent kills the localhost socket on our exit.
  *
  * Critical: this script MUST NOT write the macisk to disk at any point.
- * The proof artifacts (proofDir/poll-*/) are fine because they don't
- * contain the privkey — only the proven results.
+ * The proof artifacts under proofDir (poll-<id> subdirs) are fine because
+ * they don't contain the privkey — only the proven results.
  */
 
 const path = require("path");

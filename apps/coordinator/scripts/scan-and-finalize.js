@@ -117,6 +117,37 @@ async function listPendingPolls(provider) {
 }
 
 /**
+ * Run the LEGACY single-key tally for `pollId`. Spawns finalize-poll.js
+ * as a child synchronously — proof generation is CPU-bound and takes
+ * ~10-15 min, so we let it run to completion before moving on to the
+ * next poll (and prevent overlapping spawns via healthcheck.scanInFlight).
+ *
+ * Used only while COORDINATOR_PRIV is still set on this machine — that's
+ * the legacy-tally privacy regime. As soon as that env is removed (after
+ * the first Shamir tally succeeds end-to-end), this path becomes
+ * unreachable on purpose and every tally goes through finalizePoll().
+ */
+function finalizePollLegacy(pollId) {
+  console.log(
+    `[scan] (legacy COORDINATOR_PRIV) running finalize-poll.js for poll ${pollId}…`,
+  );
+  const result = spawnSync(
+    "node",
+    [path.join(__dirname, "finalize-poll.js"), String(pollId)],
+    { stdio: "inherit", env: process.env },
+  );
+  if (result.error) {
+    console.warn(`[scan] finalize-poll.js spawn error: ${result.error.message}`);
+    return false;
+  }
+  if (result.status !== 0) {
+    console.warn(`[scan] finalize-poll.js exited ${result.status} for poll ${pollId}`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Open a Shamir reconstructor session for `pollId` by POSTing to our own
  * /sessions endpoint on localhost. The session writes a coordinator_sessions
  * row to Supabase; the web app surfaces it to Attesters who then submit
@@ -188,12 +219,24 @@ async function main() {
     return;
   }
 
-  console.log(`[scan] ${pending.length} pending poll(s):`, pending.map((p) => p.pollId).join(", "));
+  const useLegacy = !!process.env.COORDINATOR_PRIV;
+  console.log(
+    `[scan] ${pending.length} pending poll(s):`,
+    pending.map((p) => p.pollId).join(", "),
+    `(mode: ${useLegacy ? "LEGACY single-key" : "SHAMIR reconstructor"})`,
+  );
+
   const finalized = [];
   const failed = [];
   for (const p of pending) {
-    console.log(`\n[scan] opening tally session for poll ${p.pollId} (tally=${p.tallyAddr})…`);
-    const ok = await finalizePoll(p.pollId);
+    const ok = useLegacy
+      ? finalizePollLegacy(p.pollId)
+      : await (async () => {
+          console.log(
+            `\n[scan] opening tally session for poll ${p.pollId} (tally=${p.tallyAddr})…`,
+          );
+          return finalizePoll(p.pollId);
+        })();
     if (ok) finalized.push(p);
     else failed.push(p);
   }
