@@ -131,7 +131,6 @@ export default function AdminProposalsPage() {
   const [isNoop, setIsNoop] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tallying, setTallying] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [flyStatus, setFlyStatus] = useState<{
@@ -400,34 +399,6 @@ export default function AdminProposalsPage() {
     }
   }, [proposals, liveState, probeIsNoop]);
 
-  const handleTriggerTally = useCallback(async () => {
-    if (!account || !isFounder) return;
-    setError(null);
-    setFeedback(null);
-    setTallying(true);
-    try {
-      const message = `Roebel DAO finalize-pending v1\nts=${Date.now()}`;
-      const signature = await account.signMessage({ message });
-      const res = await fetch("/api/coordinator/finalize-pending", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          founderWallet: account.address,
-          signature,
-          message,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-      setFeedback(
-        "Tally-Scan auf Fly gestartet. Status: /admin/dashboard/coordinator → Fly /status. Erstes Resultat üblicherweise in ~15 min (Proof-Gen + Submit)."
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setTallying(false);
-    }
-  }, [account, isFounder]);
 
   // Shared logic for queue() + execute(). Same 4-tuple, same signer,
   // only the method selector differs. Using direct sendTransaction +
@@ -601,11 +572,12 @@ export default function AdminProposalsPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <CardTitle>Pending Tallies</CardTitle>
+              <CardTitle>Auszählung — Shamir 3-von-5</CardTitle>
               <CardDescription>
-                Sammelt alle Vorschläge, deren Abstimmungs-Frist abgelaufen ist,
-                deren MACI-Poll aber noch nicht getallyt wurde. Der Coordinator
-                verarbeitet sie sequentiell (jeweils ~15 min für Proof-Gen + Submit).
+                Tallys laufen ausschließlich über den Shamir-Reconstructor.
+                3 von 5 Bescheinigern müssen ihren Anteil einreichen, dann
+                rekonstruiert der Coordinator den Schlüssel kurzzeitig im
+                RAM und legt die Auszählung On-Chain ab.
               </CardDescription>
             </div>
             {flyStatus && (
@@ -622,71 +594,61 @@ export default function AdminProposalsPage() {
                   />
                   <span className="text-muted-foreground">
                     {flyStatus.scanInFlight
-                      ? "Scan läuft"
+                      ? "Reconstructor läuft"
                       : flyStatus.ready
-                      ? "Fly bereit"
-                      : "Fly offline"}
+                      ? "Coordinator bereit"
+                      : "Coordinator offline"}
                   </span>
                 </div>
               </div>
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Button
-            onClick={handleTriggerTally}
-            disabled={tallying || flyStatus?.scanInFlight}
-            className="w-full sm:w-auto"
-            title={
-              flyStatus?.scanInFlight
-                ? "Scan läuft bereits — warten bis er durch ist."
-                : undefined
-            }
-          >
-            {tallying
-              ? "Sende…"
-              : flyStatus?.scanInFlight
-              ? "Scan läuft…"
-              : "Tally-Scan auf Fly starten"}
-          </Button>
+        <CardContent className="space-y-3 text-xs text-muted-foreground">
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>
+              Nach Abstimmungsende den Poll auf{" "}
+              <Link
+                href="/admin/dashboard/coordinator"
+                className="underline text-foreground hover:opacity-80"
+              >
+                Coordinator → Tally-Sessions
+              </Link>{" "}
+              öffnen (Poll-ID eintragen, „Session öffnen").
+            </li>
+            <li>
+              Die 5 Bescheiniger erhalten den Link
+              <code className="font-mono mx-1">
+                /admin/dashboard/coordinator/tally/&lt;pollId&gt;
+              </code>
+              und reichen ihren Anteil ein.
+            </li>
+            <li>
+              Sobald 3 Anteile beim Reconstructor sind, läuft die
+              Auszählung automatisch (≈10–15 min für Proof-Gen + Submit).
+              Status erscheint live auf der Coordinator-Übersicht.
+            </li>
+          </ol>
           {flyStatus?.lastRun && (
-            <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-3">
-              <div>
-                <span className="font-medium text-foreground">Letzter Run:</span>{" "}
-                Poll {flyStatus.lastRun.pollId} —{" "}
-                <span
-                  className={
-                    flyStatus.lastRun.status === "succeeded"
-                      ? "text-green-700"
-                      : flyStatus.lastRun.status === "failed"
-                      ? "text-red-700"
-                      : "text-amber-700"
-                  }
-                >
-                  {flyStatus.lastRun.status}
-                </span>
-              </div>
-              <div>
-                Start: {new Date(flyStatus.lastRun.startedAt).toLocaleString("de-DE")}
-              </div>
-              {flyStatus.lastRun.finishedAt && (
-                <div>
-                  Ende: {new Date(flyStatus.lastRun.finishedAt).toLocaleString("de-DE")}
-                </div>
-              )}
-              {flyStatus.lastRun.error && (
-                <div className="text-red-700 font-mono break-all">
-                  {flyStatus.lastRun.error}
-                </div>
-              )}
+            <div className="border-t border-border pt-3">
+              <span className="font-medium text-foreground">
+                Letzter Run:
+              </span>{" "}
+              Poll {flyStatus.lastRun.pollId} —{" "}
+              <span
+                className={
+                  flyStatus.lastRun.status === "succeeded"
+                    ? "text-green-700"
+                    : flyStatus.lastRun.status === "failed"
+                    ? "text-red-700"
+                    : "text-amber-700"
+                }
+              >
+                {flyStatus.lastRun.status}
+              </span>{" "}
+              ({new Date(flyStatus.lastRun.startedAt).toLocaleString("de-DE")})
             </div>
           )}
-          <p className="text-xs text-muted-foreground">
-            Verwendet den Legacy-Pfad (COORDINATOR_PRIV auf Fly). Sobald nach
-            der nächsten Rotation der erste Shamir-Tally durchläuft, wird
-            COORDINATOR_PRIV entfernt — danach ersetzt die Shamir-Session diese
-            Schaltfläche.
-          </p>
         </CardContent>
       </Card>
 

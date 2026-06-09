@@ -61,34 +61,27 @@ export default function TallyPage() {
     if (!pollId) return;
     setError(null);
     try {
-      // We look up the most-recent open session for this poll. The state
-      // endpoint already aggregates open sessions; for now we hit the
-      // dedicated session route once we have an id. Use the sessions API
-      // root that we know exists from /api/coordinator/state instead.
-      const stateRes = await fetch("/api/coordinator/state", { cache: "no-store" });
-      const stateJson = await stateRes.json();
-      const audit: { event_type: string; target_id: string }[] = stateJson.recentAuditLog ?? [];
-      const openSessionId = audit.find(
-        (r) =>
-          r.event_type === "session_opened" || r.event_type === "session_trigger_requested"
-      )?.target_id;
-      if (!openSessionId) {
-        setError("No open session found for this poll. Trigger one from the status page.");
-        return;
-      }
-
-      const res = await fetch(`/api/coordinator/sessions/${openSessionId}`, {
-        cache: "no-store",
-      });
+      // Direct lookup by pollId. The previous version scraped the audit
+      // log for a session_opened entry, but a session_trigger_requested
+      // row (whose target_id is the pollId, not a UUID) consistently came
+      // back first in the recent-events feed and produced an invalid
+      // UUID lookup downstream. Querying coordinator_sessions by poll_id
+      // is the contract this page actually needs.
+      const res = await fetch(
+        `/api/coordinator/sessions/by-poll/${encodeURIComponent(pollId)}`,
+        { cache: "no-store" }
+      );
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-      const sd = json as StateData;
-      if (sd.session.poll_id !== pollId) {
-        setError(
-          `Active session ${sd.session.id} is for poll ${sd.session.poll_id}, not ${pollId}.`
-        );
-        return;
+      if (!res.ok) {
+        if (res.status === 404) {
+          setError(
+            "Für diesen Poll ist noch keine Session offen. Öffne sie zuerst auf der Coordinator-Übersicht (→ Tally-Sessions)."
+          );
+          return;
+        }
+        throw new Error(json?.error ?? `HTTP ${res.status}`);
       }
+      const sd = json as StateData;
       setData(sd);
 
       try {
