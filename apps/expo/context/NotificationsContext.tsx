@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext } from 'react';
+import * as Notifications from 'expo-notifications';
 import useNotifications, { UseNotificationsReturn } from '@/hooks/useNotifications';
 import { useNotificationInbox } from '@/hooks/useNotificationInbox';
 import useUserNotifications from '@/hooks/useUserNotifications';
@@ -26,6 +27,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   const markAllAsRead = useCallback(async () => {
     await Promise.all([inbox.markAllAsRead(), userNotifs.markAllAsRead()]);
+    // Sync the OS state with the now-empty in-app inbox: clear the iOS app-icon
+    // badge and dismiss any notifications still sitting in the system tray
+    // (Android derives its launcher count from undismissed tray entries).
+    try {
+      await Promise.all([
+        Notifications.setBadgeCountAsync(0),
+        Notifications.dismissAllNotificationsAsync(),
+      ]);
+    } catch (err) {
+      console.error('Failed to clear notification badge:', err);
+    }
   }, [inbox.markAllAsRead, userNotifs.markAllAsRead]);
 
   return (

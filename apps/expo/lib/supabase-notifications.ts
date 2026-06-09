@@ -33,6 +33,15 @@ export interface NotificationPreferences {
 
 const NOTIFICATION_PAGE_SIZE = 20;
 
+// notification_log is a GLOBAL audit log of every push sent to anyone — it has
+// no recipient column. Personal notification types are already delivered to the
+// correct user via the per-recipient `notifications` table (see
+// useUserNotifications), so surfacing them from the global log would leak other
+// people's likes/comments/DMs/invites into everyone's inbox. Only broadcast
+// types (feed posts, news, events) legitimately belong to every user, so we
+// exclude the personal types here.
+const PERSONAL_LOG_TYPES = ['direct_message', 'post_like', 'post_comment', 'org_invite'];
+
 /**
  * Fetch notification log entries for the inbox
  */
@@ -47,6 +56,7 @@ export async function fetchNotificationLog(
       .from('notification_log') as any)
       .select('id, notification_type, title, body, data, status, created_at')
       .in('status', ['sent', 'partial'])
+      .not('notification_type', 'in', `(${PERSONAL_LOG_TYPES.join(',')})`)
       .order('created_at', { ascending: false })
       .range(from, to);
 
