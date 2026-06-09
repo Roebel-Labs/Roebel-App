@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useActiveAccount } from "thirdweb/react";
 import {
-  useActiveAccount,
-  useSendTransaction,
-} from "thirdweb/react";
-import { prepareContractCall, readContract } from "thirdweb";
+  prepareContractCall,
+  readContract,
+  sendTransaction,
+  waitForReceipt,
+} from "thirdweb";
+import { client } from "@/app/client";
 import {
   Card,
   CardContent,
@@ -105,7 +108,6 @@ export default function AdminProposalsPage() {
     lastScan: { startedAt: string; finishedAt: string | null } | null;
   } | null>(null);
 
-  const { mutate: sendTransaction } = useSendTransaction();
 
   const refreshProposals = useCallback(async () => {
     setLoading(true);
@@ -261,82 +263,106 @@ export default function AdminProposalsPage() {
     }
   }, [account, isFounder]);
 
-  const handleQueue = useCallback(
-    async (p: ProposalRow) => {
+  // Shared logic for queue() + execute(). Same 4-tuple, same signer,
+  // only the method selector differs. Using direct sendTransaction +
+  // waitForReceipt instead of useSendTransaction's mutate — the hook's
+  // callbacks were never firing in this page (no onSuccess, no onError,
+  // no console activity), so we drop down to the explicit promise API
+  // for a clean try/catch with full visibility.
+  const runGovernorAction = useCallback(
+    async (
+      p: ProposalRow,
+      action: "queue" | "execute",
+      successMessage: (txHash: string) => string
+    ) => {
       if (!account) return;
       setError(null);
       setFeedback(null);
       setBusyId(p.proposal_id);
+      console.log(`[admin/proposals] ${action} clicked for`, p.proposal_id);
       try {
         const data = await getActionData(p.transaction_hash);
-        const tx = prepareContractCall({
-          contract: maciGovernorContract,
-          method:
-            "function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) returns (uint256)",
-          params: [
-            data.targets,
-            data.values.map((v) => BigInt(v)),
-            data.calldatas as `0x${string}`[],
-            data.descriptionHash as `0x${string}`,
-          ],
+        console.log(`[admin/proposals] ${action} action-data:`, data);
+
+        const tx =
+          action === "queue"
+            ? prepareContractCall({
+                contract: maciGovernorContract,
+                method:
+                  "function queue(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) returns (uint256)",
+                params: [
+                  data.targets,
+                  data.values.map((v) => BigInt(v)),
+                  data.calldatas as `0x${string}`[],
+                  data.descriptionHash as `0x${string}`,
+                ],
+              })
+            : prepareContractCall({
+                contract: maciGovernorContract,
+                method:
+                  "function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) payable returns (uint256)",
+                params: [
+                  data.targets,
+                  data.values.map((v) => BigInt(v)),
+                  data.calldatas as `0x${string}`[],
+                  data.descriptionHash as `0x${string}`,
+                ],
+              });
+
+        console.log(`[admin/proposals] ${action} sending tx…`);
+        setFeedback(`${action === "queue" ? "Queue" : "Execute"}-Tx wird signiert + eingereicht…`);
+
+        const result = await sendTransaction({ transaction: tx, account });
+        console.log(`[admin/proposals] ${action} tx hash:`, result.transactionHash);
+
+        setFeedback(
+          `${action === "queue" ? "Queue" : "Execute"}-Tx eingereicht (${result.transactionHash.slice(0, 14)}…) — warte auf Confirmations…`
+        );
+
+        const receipt = await waitForReceipt({
+          client,
+          chain: maciGovernorContract.chain,
+          transactionHash: result.transactionHash,
         });
-        sendTransaction(tx, {
-          onSuccess: (result) => {
-            setFeedback(
-              `Queue-Tx eingereicht: ${result.transactionHash} — nach Timelock-Delay erscheint der Execute-Button.`
-            );
-            setBusyId(null);
-          },
-          onError: (err) => {
-            setError(err.message);
-            setBusyId(null);
-          },
-        });
+        console.log(`[admin/proposals] ${action} receipt:`, receipt);
+
+        if (receipt.status !== "success") {
+          throw new Error(
+            `tx reverted on-chain — receipt status: ${receipt.status}`
+          );
+        }
+
+        setFeedback(successMessage(result.transactionHash));
       } catch (err) {
+        console.error(`[admin/proposals] ${action} FAILED`, err);
         setError(err instanceof Error ? err.message : String(err));
+      } finally {
         setBusyId(null);
       }
     },
-    [account, getActionData, sendTransaction]
+    [account, getActionData]
+  );
+
+  const handleQueue = useCallback(
+    (p: ProposalRow) =>
+      runGovernorAction(
+        p,
+        "queue",
+        (h) =>
+          `Queue-Tx bestätigt: ${h} — nach Timelock-Delay (1 h) erscheint der Execute-Button.`
+      ),
+    [runGovernorAction]
   );
 
   const handleExecute = useCallback(
-    async (p: ProposalRow) => {
-      if (!account) return;
-      setError(null);
-      setFeedback(null);
-      setBusyId(p.proposal_id);
-      try {
-        const data = await getActionData(p.transaction_hash);
-        const tx = prepareContractCall({
-          contract: maciGovernorContract,
-          method:
-            "function execute(address[] targets, uint256[] values, bytes[] calldatas, bytes32 descriptionHash) payable returns (uint256)",
-          params: [
-            data.targets,
-            data.values.map((v) => BigInt(v)),
-            data.calldatas as `0x${string}`[],
-            data.descriptionHash as `0x${string}`,
-          ],
-        });
-        sendTransaction(tx, {
-          onSuccess: (result) => {
-            setFeedback(
-              `Execute-Tx eingereicht: ${result.transactionHash} — chain-listener flippt activated_at innerhalb 5 min.`
-            );
-            setBusyId(null);
-          },
-          onError: (err) => {
-            setError(err.message);
-            setBusyId(null);
-          },
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setBusyId(null);
-      }
-    },
-    [account, getActionData, sendTransaction]
+    (p: ProposalRow) =>
+      runGovernorAction(
+        p,
+        "execute",
+        (h) =>
+          `Execute-Tx bestätigt: ${h} — chain-listener flippt activated_at innerhalb 5 min.`
+      ),
+    [runGovernorAction]
   );
 
   const nowSec = useMemo(() => Math.floor(Date.now() / 1000), [liveState]);
