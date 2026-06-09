@@ -168,6 +168,7 @@ export async function updateEvent(
     const max_attendees = formData.get("max_attendees") as string
     const status = formData.get("status") as string
     const is_popular = formData.get("is_popular") === "true"
+    const is_cancelled = formData.get("is_cancelled") === "true"
     const image_url = formData.get("image_url") as string
     const audio_url = formData.get("audio_url") as string
     const livestream_url = formData.get("livestream_url") as string
@@ -190,6 +191,7 @@ export async function updateEvent(
         max_attendees: max_attendees ? parseInt(max_attendees) : null,
         status,
         is_popular,
+        is_cancelled,
         image_url: image_url || null,
         audio_url: audio_url || null,
         livestream_url: livestream_url || null,

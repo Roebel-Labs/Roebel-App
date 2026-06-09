@@ -60,6 +60,7 @@ export default function EditEventPage() {
     max_attendees: "",
     status: "pending" as "pending" | "approved" | "rejected",
     is_popular: false,
+    is_cancelled: false,
     is_recurring: false,
     image_url: "",
     audio_url: "",
@@ -94,6 +95,7 @@ export default function EditEventPage() {
           max_attendees: data.max_attendees?.toString() || "",
           status: data.status || "pending",
           is_popular: data.is_popular || false,
+          is_cancelled: data.is_cancelled || false,
           is_recurring: data.is_recurring || false,
           image_url: data.image_url || "",
           audio_url: data.audio_url || "",
@@ -487,6 +489,23 @@ export default function EditEventPage() {
             <Label htmlFor="is_popular" className="cursor-pointer">
               Als &ldquo;Event des Tages&rdquo; markieren (max. 3 Events)
             </Label>
+          </div>
+
+          {/* Cancelled Event Toggle */}
+          <div className="flex items-center gap-3 rounded-[10px] border border-red-200 bg-red-50 p-4">
+            <Switch
+              id="is_cancelled"
+              checked={formData.is_cancelled}
+              onCheckedChange={(checked) => setFormData({ ...formData, is_cancelled: checked })}
+            />
+            <div>
+              <Label htmlFor="is_cancelled" className="cursor-pointer font-medium text-red-700">
+                Event abgesagt
+              </Label>
+              <p className="text-xs text-red-600">
+                Zeigt ein rotes &ldquo;Abgesagt&rdquo;-Banner in der App. Das Event bleibt sichtbar.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -35,6 +35,7 @@ export type EventRecord = {
   created_at: string;
   updated_at: string;
   is_popular: boolean | null;
+  is_cancelled: boolean | null; // Whole event cancelled — shows "Abgesagt" badge
   is_recurring: boolean | null; // Whether event has multiple dates
   // Optional: populated when fetching with dates
   event_dates?: EventDateRecord[];
