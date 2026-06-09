@@ -7,6 +7,7 @@ import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { currency, formatDate, formatTime, formatEventCardDateSplit, formatLocation } from '@/lib/utils';
 import InterestButton from './InterestButton';
+import EventCancelledScrim from './EventCancelledScrim';
 
 type Props = {
   event: EventRecord;
@@ -22,12 +23,7 @@ export default function EventCard({ event }: Props) {
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: colors.background },
-        isCancelled && styles.cardCancelled,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.card, { backgroundColor: colors.background }, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`Details für ${event.title}${isCancelled ? ' (abgesagt)' : ''} öffnen`}
     >
@@ -49,12 +45,8 @@ export default function EventCard({ event }: Props) {
           <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateDisplay.label}</Text>
         </View>
 
-        {/* Cancelled badge */}
-        {isCancelled && (
-          <View style={[styles.cancelledBadge, { backgroundColor: colors.error }]}>
-            <Text style={[styles.cancelledBadgeText, { color: colors.textInverted }]}>ABGESAGT</Text>
-          </View>
-        )}
+        {/* Cancelled scrim */}
+        {isCancelled && <EventCancelledScrim radius={16} />}
       </View>
 
       <View style={styles.contentContainer}>
@@ -87,27 +79,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 32,
     overflow: 'hidden',
-  },
-  cardCancelled: {
-    opacity: 0.6,
-  },
-  cancelledBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  cancelledBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 0.5,
   },
   imageContainer: {
     height: 200,

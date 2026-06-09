@@ -7,6 +7,7 @@ import { formatEventCardDateSplit, formatLocation, formatTime } from '@/lib/util
 import { LocationSmallIcon } from './Icons';
 import { useTheme } from '@/context/ThemeContext';
 import InterestButton from './InterestButton';
+import EventCancelledScrim from './EventCancelledScrim';
 
 type Props = {
   event: EventRecord;
@@ -59,6 +60,7 @@ export default function HorizontalEventCard({ event, fullWidth = false }: Props)
           <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateDisplay.day}</Text>
           <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateDisplay.label}</Text>
         </View>
+        {event.is_cancelled && <EventCancelledScrim radius={12} compact />}
       </View>
 
       <View style={styles.contentContainer}>

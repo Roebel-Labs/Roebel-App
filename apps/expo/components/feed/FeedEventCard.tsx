@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { formatEventCardDateSplit, formatTime, formatLocation } from '@/lib/utils';
 import type { EventRecord } from '@/lib/types';
+import EventCancelledScrim from '@/components/EventCancelledScrim';
 
 import ClockIcon from '@/assets/icons/clock.svg';
 import LocationIcon from '@/assets/icons/location-small.svg';
@@ -59,6 +60,7 @@ export default function FeedEventCard({ event }: Props) {
             <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateSplit.day}</Text>
             <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateSplit.label}</Text>
           </View>
+          {event.is_cancelled && <EventCancelledScrim />}
         </View>
       ) : (
         <View style={[styles.noImageDateRow]}>

@@ -21,6 +21,7 @@ import ExperienceSection, { type ExperienceSectionHandle } from '@/components/ev
 import ExperienceComposerModal from '@/components/events/ExperienceComposerModal';
 import InterestCTA from '@/components/InterestCTA';
 import InterestButton from '@/components/InterestButton';
+import EventCancelledScrim from '@/components/EventCancelledScrim';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
@@ -282,6 +283,8 @@ export default function EventDetails() {
             <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
           )}
 
+          {event.is_cancelled && <EventCancelledScrim />}
+
           <Pressable onPress={goBack} style={[styles.backBtn, { backgroundColor: colors.background }]}>
             <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
           </Pressable>
@@ -307,15 +310,6 @@ export default function EventDetails() {
               )}
               <Text style={[styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
             </View>
-
-            {event.is_cancelled && (
-              <View style={[styles.cancelledBanner, { backgroundColor: colors.errorBackground }]}>
-                <View style={[styles.cancelledDot, { backgroundColor: colors.error }]} />
-                <Text style={[styles.cancelledBannerText, { color: colors.error }]}>
-                  Diese Veranstaltung wurde abgesagt.
-                </Text>
-              </View>
-            )}
 
             {event.livestream_active && event.livestream_url && (
               <Pressable
@@ -684,25 +678,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : 'Inter-Semibold',
-  },
-  cancelledBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  cancelledDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  cancelledBannerText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    flex: 1,
   },
   livestreamCta: {
     flexDirection: 'row',

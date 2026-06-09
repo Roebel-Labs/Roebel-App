@@ -18,6 +18,7 @@ import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { formatTime, formatLocation } from '@/lib/utils';
 import { softShadow } from '@/lib/shadow';
+import EventCancelledScrim from '@/components/EventCancelledScrim';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -337,6 +338,8 @@ function SwiperSlide({
                 <Text style={[styles.dayPillText, { color: colors.textPrimary }]}>{dayName}</Text>
               </View>
             ) : null}
+
+            {event.is_cancelled && <EventCancelledScrim radius={18} />}
           </View>
 
           {/* Content Section */}
