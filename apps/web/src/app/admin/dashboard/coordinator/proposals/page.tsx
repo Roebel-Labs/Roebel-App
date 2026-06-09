@@ -614,7 +614,7 @@ export default function AdminProposalsPage() {
               >
                 Coordinator → Tally-Sessions
               </Link>{" "}
-              öffnen (Poll-ID eintragen, „Session öffnen").
+              öffnen (Poll-ID eintragen, &bdquo;Session öffnen&ldquo;).
             </li>
             <li>
               Die 5 Bescheiniger erhalten den Link
@@ -794,7 +794,7 @@ export default function AdminProposalsPage() {
                           </span>{" "}
                           Dieser Vorschlag hat keine On-Chain-Aktion (calldata
                           ist leer). Das Ergebnis steht im Tally-Vertrag, der
-                          Vorschlag bleibt dauerhaft im Zustand „In Timelock".
+                          Vorschlag bleibt dauerhaft im Zustand &bdquo;In Timelock&ldquo;.
                           OZ Governor lehnt Execute mit{" "}
                           <code className="font-mono">GovernorDisabledDeposit</code>{" "}
                           ab, weil es keinen Aufruf gibt, der durchgereicht
