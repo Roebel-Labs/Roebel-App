@@ -82,22 +82,76 @@ function buildSubmissionPayload({ sessionPubkeyBase64, shareIndex, wallet }) {
 
 /**
  * Verify a share submission signature recovers to `wallet`.
+ *
+ * Handles both:
+ *   1. EOA / EIP-191 personal_sign — standard ethers.verifyMessage path.
+ *   2. ERC-1271 smart-account (thirdweb inAppWallet + smartAccount) —
+ *      verifyMessage recovers the EOA underneath the smart account, not
+ *      the smart-account address itself. We fall back to calling
+ *      isValidSignature(hash, sig) on the smart-account contract.
+ *
+ * The fallback only runs when EIP-191 recovery doesn't match AND `wallet`
+ * has code on-chain. Plain EOAs never trigger an RPC call.
+ *
+ * `wallet` is the address the Attester is claiming; we accept the
+ * submission iff one of the two paths confirms it.
  */
-function verifySubmissionSignature({
+const ERC1271_MAGIC_VALUE = "0x1626ba7e";
+
+async function verifySubmissionSignature({
   sessionPubkeyBase64,
   shareIndex,
   wallet,
   signature,
 }) {
+  const payload = buildSubmissionPayload({
+    sessionPubkeyBase64,
+    shareIndex,
+    wallet,
+  });
+
+  // Fast path: EIP-191 recovery.
   try {
-    const payload = buildSubmissionPayload({
-      sessionPubkeyBase64,
-      shareIndex,
-      wallet,
-    });
     const recovered = ethers.verifyMessage(payload, signature);
-    return recovered.toLowerCase() === wallet.toLowerCase();
+    if (recovered.toLowerCase() === wallet.toLowerCase()) return true;
   } catch {
+    // fall through to ERC-1271
+  }
+
+  // ERC-1271 fallback for smart accounts.
+  const rpcUrl = process.env.BASE_RPC_URL;
+  if (!rpcUrl) {
+    console.warn(
+      "[session-manifest] BASE_RPC_URL not set — cannot do ERC-1271 fallback",
+    );
+    return false;
+  }
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+      batchMaxCount: 1,
+    });
+    const code = await provider.getCode(wallet);
+    if (!code || code === "0x") {
+      // Plain EOA — EIP-191 already failed, signature is invalid.
+      return false;
+    }
+    const contract = new ethers.Contract(
+      wallet,
+      [
+        "function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)",
+      ],
+      provider,
+    );
+    const hash = ethers.hashMessage(payload);
+    const result = await contract.isValidSignature(hash, signature);
+    return (
+      typeof result === "string" &&
+      result.toLowerCase() === ERC1271_MAGIC_VALUE
+    );
+  } catch (err) {
+    console.warn(
+      `[session-manifest] ERC-1271 verify failed for ${wallet}: ${err?.message ?? err}`,
+    );
     return false;
   }
 }

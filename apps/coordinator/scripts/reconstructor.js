@@ -412,14 +412,13 @@ async function handleSubmission(payload, ctx) {
   if (!ctx.attesterAllowlist.includes(walletAddress.toLowerCase())) {
     return { ok: false, status: 403, error: "wallet not on allowlist" };
   }
-  if (
-    !verifySubmissionSignature({
-      sessionPubkeyBase64: ctx.sessionPubkeyBase64,
-      shareIndex,
-      wallet: walletAddress,
-      signature,
-    })
-  ) {
+  const sigOk = await verifySubmissionSignature({
+    sessionPubkeyBase64: ctx.sessionPubkeyBase64,
+    shareIndex,
+    wallet: walletAddress,
+    signature,
+  });
+  if (!sigOk) {
     return {
       ok: false,
       status: 401,
