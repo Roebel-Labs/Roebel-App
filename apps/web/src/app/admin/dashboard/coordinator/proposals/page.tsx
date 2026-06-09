@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { maciGovernorContract, basescanTx } from "@/lib/maci-config";
+import { getContract } from "thirdweb";
+import { base } from "thirdweb/chains";
+import { maciGovernorContract, basescanTx, MACI_INFRA } from "@/lib/maci-config";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -43,6 +45,9 @@ type LiveState = {
   voteStartTs: number | null;
   voteEndTs: number | null;
   eta: number | null;
+  tallyAddress: string | null;
+  isTallied: boolean | null;
+  totalTallyResults: string | null;
 };
 
 type ProposalActionData = {
@@ -52,6 +57,36 @@ type ProposalActionData = {
   description: string;
   descriptionHash: string;
 };
+
+/**
+ * Decode OZ Governor's custom revert errors into something a human can act
+ * on. The one that hits this page in practice is GovernorUnexpectedProposalState
+ * — fired when you queue a Succeeded proposal that's already been queued
+ * (state 5), or execute a Queued proposal that hasn't passed its Timelock
+ * delay. The raw error reads as a 200-char hex blob, so we map it to a
+ * short German sentence.
+ */
+function decodeRevertReason(err: unknown): string | null {
+  const text = err instanceof Error ? err.message : String(err);
+  const match = text.match(
+    /GovernorUnexpectedProposalState[^,]*,\s*(\d+)\s*,/
+  );
+  if (match) {
+    const current = Number(match[1]);
+    const stateName: Record<number, string> = {
+      0: "Ausstehend",
+      1: "Aktiv",
+      2: "Abgebrochen",
+      3: "Abgelehnt",
+      4: "Angenommen",
+      5: "In Timelock (bereits gequeued)",
+      6: "Abgelaufen",
+      7: "Ausgeführt",
+    };
+    return `Aktion fehlgeschlagen — der Vorschlag ist bereits im Zustand „${stateName[current] ?? `?${current}`}". Lade die Seite neu, um die aktuelle Aktion zu sehen.`;
+  }
+  return null;
+}
 
 const STATE_LABELS: Record<number, { label: string; tone: "neutral" | "amber" | "red" | "green" | "blue" }> = {
   [-1]: { label: "Anderer Governor", tone: "neutral" },
@@ -155,72 +190,165 @@ export default function AdminProposalsPage() {
     };
   }, []);
 
-  // For each proposal, fetch live state + votes from the Governor.
-  // Every read is wrapped in its own try/catch so a single revert (e.g.,
-  // proposal belongs to an archived Governor) does NOT block the rest of
-  // the row. Reverts on the CURRENT Governor mark the row as foreign so
-  // we can render an explanatory badge instead of a perpetual spinner.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const next: Record<string, LiveState> = {};
-      for (const p of proposals) {
-        const id = (() => {
-          try {
-            return BigInt(p.blockchain_proposal_id);
-          } catch {
-            return null;
-          }
-        })();
-        if (id == null) continue;
+  // Fetch live state + votes from the Governor (and Tally contract if the
+  // proposal has reached the tally stage) for a single proposal. Each
+  // read is wrapped in its own try/catch so a single revert (e.g. proposal
+  // belongs to an archived Governor, or MACI Governor's proposalVotes
+  // override reverts because votes live on the Tally contract instead)
+  // doesn't block the rest of the row.
+  const fetchLiveStateFor = useCallback(
+    async (p: ProposalRow): Promise<LiveState | null> => {
+      let id: bigint;
+      try {
+        id = BigInt(p.blockchain_proposal_id);
+      } catch {
+        return null;
+      }
 
-        const readOrNull = async <T,>(method: string): Promise<T | null> => {
+      const readGovOrNull = async <T,>(method: string): Promise<T | null> => {
+        try {
+          return (await readContract({
+            contract: maciGovernorContract,
+            method,
+            params: [id],
+          } as Parameters<typeof readContract>[0])) as T;
+        } catch {
+          return null;
+        }
+      };
+
+      const [stateRaw, snapshot, deadline, eta, pollId] = await Promise.all([
+        readGovOrNull<number | bigint>(
+          "function state(uint256) view returns (uint8)"
+        ),
+        readGovOrNull<bigint>(
+          "function proposalSnapshot(uint256) view returns (uint256)"
+        ),
+        readGovOrNull<bigint>(
+          "function proposalDeadline(uint256) view returns (uint256)"
+        ),
+        readGovOrNull<bigint>(
+          "function proposalEta(uint256) view returns (uint256)"
+        ),
+        readGovOrNull<bigint>(
+          "function proposalPoll(uint256) view returns (uint256)"
+        ),
+      ]);
+
+      // MaciAttesterGovernor stores the per-option vote counts on the
+      // Tally contract, not on the Governor itself. Resolve the Tally
+      // address via MACI.polls(pollId) → tally, then read totalTallyResults
+      // (proves a tally has landed) plus tallyResults(voteOption) for
+      // option 0/1/2 (against/for/abstain).
+      let tallyAddress: string | null = null;
+      let isTallied: boolean | null = null;
+      let totalTallyResults: string | null = null;
+      let forVotes = "0";
+      let againstVotes = "0";
+      let abstainVotes = "0";
+
+      if (pollId !== null) {
+        const maciCore = getContract({
+          client,
+          address: MACI_INFRA.maci,
+          chain: base,
+        });
+        try {
+          const polls = (await readContract({
+            contract: maciCore,
+            method:
+              "function polls(uint256) view returns (address poll, address messageProcessor, address tally)",
+            params: [pollId],
+          } as Parameters<typeof readContract>[0])) as readonly [
+            string,
+            string,
+            string,
+          ];
+          tallyAddress = polls[2];
+        } catch {
+          // ignore — older Governors may not expose proposalPoll
+        }
+      }
+
+      if (tallyAddress) {
+        const tallyContract = getContract({
+          client,
+          address: tallyAddress,
+          chain: base,
+        });
+        const readTallyOrNull = async <T,>(method: string, params: unknown[] = []): Promise<T | null> => {
           try {
             return (await readContract({
-              contract: maciGovernorContract,
+              contract: tallyContract,
               method,
-              params: [id],
+              params,
             } as Parameters<typeof readContract>[0])) as T;
           } catch {
             return null;
           }
         };
-
-        const [stateRaw, votesRaw, snapshot, deadline, eta] = await Promise.all([
-          readOrNull<number | bigint>(
-            "function state(uint256) view returns (uint8)"
+        const [tot, tallied, opt0, opt1, opt2] = await Promise.all([
+          readTallyOrNull<bigint>(
+            "function totalTallyResults() view returns (uint256)"
           ),
-          readOrNull<readonly [bigint, bigint, bigint]>(
-            "function proposalVotes(uint256) view returns (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes)"
+          readTallyOrNull<boolean>("function isTallied() view returns (bool)"),
+          readTallyOrNull<readonly [boolean, bigint]>(
+            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+            [0n]
           ),
-          readOrNull<bigint>(
-            "function proposalSnapshot(uint256) view returns (uint256)"
+          readTallyOrNull<readonly [boolean, bigint]>(
+            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+            [1n]
           ),
-          readOrNull<bigint>(
-            "function proposalDeadline(uint256) view returns (uint256)"
-          ),
-          readOrNull<bigint>(
-            "function proposalEta(uint256) view returns (uint256)"
+          readTallyOrNull<readonly [boolean, bigint]>(
+            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+            [2n]
           ),
         ]);
+        if (tot !== null) totalTallyResults = tot.toString();
+        if (tallied !== null) isTallied = tallied;
+        if (opt0) againstVotes = opt0[1].toString();
+        if (opt1) forVotes = opt1[1].toString();
+        if (opt2) abstainVotes = opt2[1].toString();
+      }
 
-        next[p.proposal_id] = {
-          state: stateRaw == null ? -1 : Number(stateRaw),
-          forVotes: votesRaw ? votesRaw[1].toString() : "0",
-          againstVotes: votesRaw ? votesRaw[0].toString() : "0",
-          abstainVotes: votesRaw ? votesRaw[2].toString() : "0",
-          voteStartTs: snapshot ? Number(snapshot) : null,
-          voteEndTs: deadline ? Number(deadline) : null,
-          eta: eta ? Number(eta) : null,
-        };
+      return {
+        state: stateRaw == null ? -1 : Number(stateRaw),
+        forVotes,
+        againstVotes,
+        abstainVotes,
+        voteStartTs: snapshot ? Number(snapshot) : null,
+        voteEndTs: deadline ? Number(deadline) : null,
+        eta: eta ? Number(eta) : null,
+        tallyAddress,
+        isTallied,
+        totalTallyResults,
+      };
+    },
+    []
+  );
+
+  // Hydrate every visible proposal's live state on mount + whenever the
+  // proposal list changes. Sequential per row — public RPC endpoints
+  // throttle fast bursts, and the data trickles in fast enough that the
+  // user sees rows resolve one-by-one.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, LiveState> = {};
+      for (const p of proposals) {
+        const live = await fetchLiveStateFor(p);
         if (cancelled) return;
-        setLiveState({ ...next });
+        if (live) {
+          next[p.proposal_id] = live;
+          setLiveState({ ...next });
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [proposals]);
+  }, [proposals, fetchLiveStateFor]);
 
   const getActionData = useCallback(
     async (txHash: string): Promise<ProposalActionData> => {
@@ -333,14 +461,24 @@ export default function AdminProposalsPage() {
         }
 
         setFeedback(successMessage(result.transactionHash));
+
+        // Refresh THIS proposal's live state immediately so the badge/
+        // buttons reflect reality without waiting for a manual refresh.
+        const fresh = await fetchLiveStateFor(p);
+        if (fresh) setLiveState((prev) => ({ ...prev, [p.proposal_id]: fresh }));
       } catch (err) {
         console.error(`[admin/proposals] ${action} FAILED`, err);
-        setError(err instanceof Error ? err.message : String(err));
+        setError(decodeRevertReason(err) ?? (err instanceof Error ? err.message : String(err)));
+        // Even on failure, re-read state — the proposal may already be
+        // in the next stage (race between our click and a parallel
+        // queue/execute from another tab or the chain-listener).
+        const fresh = await fetchLiveStateFor(p);
+        if (fresh) setLiveState((prev) => ({ ...prev, [p.proposal_id]: fresh }));
       } finally {
         setBusyId(null);
       }
     },
-    [account, getActionData]
+    [account, getActionData, fetchLiveStateFor]
   );
 
   const handleQueue = useCallback(
@@ -560,6 +698,11 @@ export default function AdminProposalsPage() {
                           {tallyPending && (
                             <Badge className="bg-amber-500 text-white hover:bg-amber-600">
                               Tally fehlt
+                            </Badge>
+                          )}
+                          {live?.isTallied && live?.state !== 1 && (
+                            <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">
+                              ✓ Ausgezählt
                             </Badge>
                           )}
                           {p.category && (
