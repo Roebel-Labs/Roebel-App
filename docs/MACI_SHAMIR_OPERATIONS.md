@@ -645,6 +645,32 @@ are therefore inherently unexecutable. The admin Vorschläge page
 detects empty calldata + zero values and replaces the Execute button
 with an inline note explaining the proposal is tally-only.
 
+### 10.10a CRITICAL: never hardcode the coordinator pubkey in a voting client
+
+The Expo app shipped with a hardcoded `MACI_COORDINATOR_PUBKEY` constant
+used for ECDH vote encryption. After the key rotation executed, new polls
+were deployed bound to the NEW pubkey while the app kept encrypting to
+the OLD one. The MACI Process circuit treats undecryptable messages as
+no-ops — so polls 3 and 4 tallied **0/0/0 with zero errors anywhere**,
+despite citizens voting. The Shamir pipeline was innocent: it correctly
+proved that no valid ballots existed.
+
+Fix (commit `4da83fd`): the client reads `coordinatorPubKey()` from the
+Poll contract itself at vote time (a poll is permanently bound to the
+key it was deployed with), and `buildVoteMessage` requires the key as an
+argument — the constant and its fallback were deleted so this bug class
+cannot recur. If the on-chain read fails, the vote aborts loudly.
+
+Detection heuristic for the future: `Poll.numMessages() > 0` but
+`tallyResults` all-zero after a successful tally = ballots encrypted to
+the wrong key. Check what pubkey the client used vs. the poll's
+DeployPoll event.
+
+Related decode trap: MACI v2's `tallyResults(uint256)` getter returns
+`(uint256 value, bool isSet)` — value FIRST. Declaring it backwards
+decodes the isSet flag as the count (reads as "1"), which masked this
+incident during initial verification.
+
 ### 10.10 No-cost on-chain merge pre-work from a failed legacy attempt
 
 If someone accidentally clicks the (now-removed) legacy Tally button

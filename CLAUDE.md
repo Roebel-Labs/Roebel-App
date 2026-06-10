@@ -106,11 +106,14 @@ is no fallback.
 
 - Conceptual deep-dive: [`docs/SHAMIR_CEREMONY.md`](docs/SHAMIR_CEREMONY.md)
 - Operational runbook: [`docs/MACI_SHAMIR_OPERATIONS.md`](docs/MACI_SHAMIR_OPERATIONS.md)
-- First Shamir tally: poll 3 (Bürgerumfrage mit Shamir Key Split),
-  on-chain results 1/1/1 (against/for/abstain), tally tx landed
-  2026-06-10 ~10:54 UTC. Session
-  `0a37d23d-1199-4e35-934e-541d7bcc267e`, three Attester wallets:
-  `0xc49de63c…fb28`, `0x90f677dc…6313`, `0xf468d87f…2b29`.
+- First Shamir tallies: polls 3 + 4 ran the full pipeline end-to-end
+  (3 Attester shares → reconstruct → genProofs → on-chain), BUT both
+  recorded **0/0/0** — every ballot was invalid because the Expo app
+  encrypted votes to a hardcoded, pre-rotation coordinator pubkey
+  (fixed in `4da83fd`: client now reads `Poll.coordinatorPubKey()`
+  on-chain at vote time; the constant is deleted). Runbook §10.10a.
+  The first poll created+voted AFTER `4da83fd` ships will be the first
+  with real Shamir-tallied vote counts.
 
 Key implications when working on coordinator code:
 - All polls created after 2026-06-09 18:40 UTC (rotation execution)
