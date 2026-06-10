@@ -25,6 +25,7 @@ import {
   buildVoteMessage,
   prepareInitialVoiceCreditProxyData,
   prepareSignUpGatekeeperData,
+  PubKey,
 } from '@/lib/maci';
 
 interface VoteButtonsProps {
@@ -415,6 +416,26 @@ export default function VoteButtons({
       // highest-nonce signed command per voter, so a stale local nonce would
       // get its publishMessage silently shadowed by an older vote.
       const nonce = getNextNonce(pollAddress);
+
+      // Read the coordinator pubkey from the Poll itself. A poll is
+      // permanently bound to the key it was deployed with — a hardcoded
+      // constant goes stale on every key rotation, and the MACI circuit
+      // silently discards ballots encrypted to the wrong key (this voided
+      // every vote on polls 3 + 4 after the 2026-06-09 Shamir rotation).
+      // If the read fails we ABORT instead of falling back: a loud error
+      // beats a silently-lost ballot.
+      const poll = getPollContract(pollAddress);
+      const pollCoordinatorPub = (await readContract({
+        contract: poll,
+        method:
+          'function coordinatorPubKey() view returns (uint256 x, uint256 y)',
+        params: [],
+      })) as readonly [bigint, bigint];
+      const coordinatorPubKey = new PubKey([
+        toBigInt(pollCoordinatorPub[0]),
+        toBigInt(pollCoordinatorPub[1]),
+      ]);
+
       const { message, encPubKey } = buildVoteMessage({
         voterKeypair: kp,
         voterStateIndex: signUpState.stateIndex,
@@ -422,11 +443,11 @@ export default function VoteButtons({
         voteOptionIndex: optionIndex,
         voiceCredits: 1n, // 1 NFT = 1 credit, all-in
         nonce,
+        coordinatorPubKey,
       });
 
       setPhase('submitting-vote');
       setTxSubstate('wallet-prompt');
-      const poll = getPollContract(pollAddress);
       // ABI requires uint256[10] (fixed length); coerce from bigint[] for TS.
       const messageFixed = message as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
       const tx = prepareContractCall({

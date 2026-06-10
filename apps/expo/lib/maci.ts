@@ -34,14 +34,19 @@ import {
 import { genRandomSalt, SNARK_FIELD_SIZE } from "maci-crypto";
 import { encodeAbiParameters } from "thirdweb/utils";
 
-// Coordinator's BabyJubjub public key on the curve used by MACI v2.
-// Source of truth: contracts/governor-contract/deployments/base.json.
-// Used by clients to ECDH-encrypt vote messages so only the coordinator
-// (or a Shamir-quorum of attesters in v1.1) can decrypt them.
-export const MACI_COORDINATOR_PUBKEY = {
-  x: "17750760918337237068203925046126855078152981024548838042861633066128051663100",
-  y: "8008521168745136880197848799504037322059936483887225034222289791088387810436",
-} as const;
+// NOTE: there is deliberately NO hardcoded coordinator pubkey here anymore.
+//
+// A previous constant (MACI_COORDINATOR_PUBKEY) silently invalidated every
+// ballot on polls 3 + 4: after the 2026-06-09 Shamir key rotation, new polls
+// were deployed with the NEW coordinator pubkey, but the app kept ECDH-
+// encrypting votes to the OLD hardcoded key. The MACI Process circuit
+// discards messages it can't decrypt as no-ops — so the tallies landed
+// "successfully" with zero valid votes and no error anywhere.
+//
+// The coordinator pubkey MUST be read from the Poll contract at vote time
+// (each Poll stores the key it was deployed with — see
+// VoteButtons.handleVote). That is correct across every past and future
+// rotation, with nothing to remember to bump.
 
 // -------------------------- Keypair helpers --------------------------
 
@@ -125,8 +130,14 @@ export interface BuildVoteMessageArgs {
   nonce: bigint;
   /** Optional: rotate the voter's keypair while voting (useful for vote-changing). Defaults to existing key. */
   newPubKey?: PubKey;
-  /** Coordinator's MACI pubkey. Defaults to the deployed Roebel coordinator. */
-  coordinatorPubKey?: PubKey;
+  /**
+   * Coordinator's MACI pubkey — REQUIRED, and it must come from the Poll
+   * contract's own coordinatorPubKey() read, never from a constant. A poll
+   * is permanently bound to the key it was deployed with; encrypting to
+   * anything else silently voids the ballot (see note at the top of this
+   * file).
+   */
+  coordinatorPubKey: PubKey;
 }
 
 export interface VoteMessagePayload {
@@ -143,7 +154,7 @@ export interface VoteMessagePayload {
  * holding shares of the coordinator key) can decrypt it.
  */
 export function buildVoteMessage(args: BuildVoteMessageArgs): VoteMessagePayload {
-  const coordinatorPub = args.coordinatorPubKey ?? defaultCoordinatorPubKey();
+  const coordinatorPub = args.coordinatorPubKey;
   const newPub = args.newPubKey ?? args.voterKeypair.pubKey;
 
   // Build the vote command. PCommand is the v2 "private command" used for
@@ -177,13 +188,6 @@ export function buildVoteMessage(args: BuildVoteMessageArgs): VoteMessagePayload
     message: messageData,
     encPubKey: { x: BigInt(x), y: BigInt(y) },
   };
-}
-
-export function defaultCoordinatorPubKey(): PubKey {
-  return new PubKey([
-    BigInt(MACI_COORDINATOR_PUBKEY.x),
-    BigInt(MACI_COORDINATOR_PUBKEY.y),
-  ]);
 }
 
 // -------------------------- Re-exports --------------------------

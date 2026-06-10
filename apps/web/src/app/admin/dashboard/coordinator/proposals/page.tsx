@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getContract } from "thirdweb";
 import { base } from "thirdweb/chains";
-import { maciGovernorContract, basescanTx, MACI_INFRA } from "@/lib/maci-config";
+import { maciGovernorContract, basescanTx } from "@/lib/maci-config";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -221,7 +221,7 @@ export default function AdminProposalsPage() {
         }
       };
 
-      const [stateRaw, snapshot, deadline, eta, pollId] = await Promise.all([
+      const [stateRaw, snapshot, deadline, eta, proposalPoll] = await Promise.all([
         readGovOrNull<number | bigint>(
           "function state(uint256) view returns (uint8)"
         ),
@@ -234,14 +234,16 @@ export default function AdminProposalsPage() {
         readGovOrNull<bigint>(
           "function proposalEta(uint256) view returns (uint256)"
         ),
-        readGovOrNull<bigint>(
-          "function proposalPoll(uint256) view returns (uint256)"
+        // Public mapping on MaciAttesterGovernor: proposalPolls(proposalId)
+        // → (pollId, poll, messageProcessor, tally, deadline). Gives us the
+        // Tally address directly — no MACI.polls() hop needed.
+        readGovOrNull<readonly [bigint, string, string, string, bigint]>(
+          "function proposalPolls(uint256) view returns (uint256 pollId, address poll, address messageProcessor, address tally, uint256 deadline)"
         ),
       ]);
 
       // MaciAttesterGovernor stores the per-option vote counts on the
-      // Tally contract, not on the Governor itself. Resolve the Tally
-      // address via MACI.polls(pollId) → tally, then read totalTallyResults
+      // Tally contract, not on the Governor itself. Read totalTallyResults
       // (proves a tally has landed) plus tallyResults(voteOption) for
       // option 0/1/2 (against/for/abstain).
       let tallyAddress: string | null = null;
@@ -251,27 +253,12 @@ export default function AdminProposalsPage() {
       let againstVotes = "0";
       let abstainVotes = "0";
 
-      if (pollId !== null) {
-        const maciCore = getContract({
-          client,
-          address: MACI_INFRA.maci,
-          chain: base,
-        });
-        try {
-          const polls = (await readContract({
-            contract: maciCore,
-            method:
-              "function polls(uint256) view returns (address poll, address messageProcessor, address tally)",
-            params: [pollId],
-          } as Parameters<typeof readContract>[0])) as readonly [
-            string,
-            string,
-            string,
-          ];
-          tallyAddress = polls[2];
-        } catch {
-          // ignore — older Governors may not expose proposalPoll
-        }
+      if (
+        proposalPoll &&
+        proposalPoll[3] &&
+        proposalPoll[3] !== "0x0000000000000000000000000000000000000000"
+      ) {
+        tallyAddress = proposalPoll[3];
       }
 
       if (tallyAddress) {
@@ -291,29 +278,31 @@ export default function AdminProposalsPage() {
             return null;
           }
         };
+        // MACI v2 Tally.sol: struct TallyResult { uint256 value; bool isSet; }
+        // — value comes FIRST in the public-mapping getter.
         const [tot, tallied, opt0, opt1, opt2] = await Promise.all([
           readTallyOrNull<bigint>(
             "function totalTallyResults() view returns (uint256)"
           ),
           readTallyOrNull<boolean>("function isTallied() view returns (bool)"),
-          readTallyOrNull<readonly [boolean, bigint]>(
-            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+          readTallyOrNull<readonly [bigint, boolean]>(
+            "function tallyResults(uint256) view returns (uint256 value, bool isSet)",
             [0n]
           ),
-          readTallyOrNull<readonly [boolean, bigint]>(
-            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+          readTallyOrNull<readonly [bigint, boolean]>(
+            "function tallyResults(uint256) view returns (uint256 value, bool isSet)",
             [1n]
           ),
-          readTallyOrNull<readonly [boolean, bigint]>(
-            "function tallyResults(uint256) view returns (bool isSet, uint256 value)",
+          readTallyOrNull<readonly [bigint, boolean]>(
+            "function tallyResults(uint256) view returns (uint256 value, bool isSet)",
             [2n]
           ),
         ]);
         if (tot !== null) totalTallyResults = tot.toString();
         if (tallied !== null) isTallied = tallied;
-        if (opt0) againstVotes = opt0[1].toString();
-        if (opt1) forVotes = opt1[1].toString();
-        if (opt2) abstainVotes = opt2[1].toString();
+        if (opt0) againstVotes = opt0[0].toString();
+        if (opt1) forVotes = opt1[0].toString();
+        if (opt2) abstainVotes = opt2[0].toString();
       }
 
       return {
