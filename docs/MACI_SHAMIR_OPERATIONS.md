@@ -523,3 +523,136 @@ positional access (`decoded.args[3]`) instead.
 | Reconstructor never spawns | `FINALIZE_TOKEN` missing or wrong on Vercel (`COORDINATOR_FINALIZE_TOKEN`) |
 | Active generation never marked activated | Chain listener cron not configured in `vercel.json`, or `BASE_RPC_URL` missing on Vercel |
 | `proveOnChain` fails with gas limit | Known issue — handled by `chunkedAddTallyResults`. If still failing, the maci-cli was updated; rebuild Docker image |
+
+---
+
+## 10. Production lessons (2026-06-09 / 2026-06-10 rollout)
+
+End-to-end Shamir tally hit a sequence of seven bugs the first time it
+was run on real data. All fixed; flagging them here so future
+contributors don't relearn the same lessons.
+
+### 10.1 publicnode RPC returns null receipts for some txs
+
+The Vercel default `BASE_RPC_URL` was `https://base-rpc.publicnode.com`.
+For the rotation propose tx specifically, `eth_getTransactionReceipt`
+returns `{ result: null }` even hours after confirmation — `mainnet.base.org`
+and `1rpc.io/base` return the full receipt. The
+`/api/coordinator/proposal-action/[txHash]` route now iterates through
+a fallback chain (`BASE_RPC_URL → mainnet.base.org → 1rpc.io/base →
+publicnode`) and uses whichever first returns a receipt. Don't pin a
+single endpoint.
+
+### 10.2 Smart-account propose() can't be decoded from tx input
+
+Thirdweb's inAppWallet+smartAccount stack lands `propose()` as
+`EntryPoint.handleOps(...)`, not as a direct call to the Governor.
+Decoding the tx input bytes as a propose() call therefore fails with
+422. Fix: decode from the `ProposalCreated` event log emitted by the
+Governor itself, which is wallet-stack-agnostic. The
+proposal-action route also re-derives `proposalId` from
+`keccak(abi.encode(targets, values, calldatas, descriptionHash))` and
+refuses to return mismatched data so a bad tuple can never trigger an
+on-chain revert.
+
+### 10.3 ethers v6 `Result.values` collides with `Array.prototype.values()`
+
+When parsing the ProposalCreated event log, `decoded.args.values`
+returns the iterator function instead of the `bigint[]` because
+ethers v6's Result type doesn't shadow prototype methods. Use
+positional access: `decoded.args[3]`. Cost us two hours.
+
+### 10.4 useSendTransaction silently drops callbacks
+
+thirdweb's `useSendTransaction().mutate(tx, { onSuccess, onError })`
+intermittently fires neither callback under conditions we never
+isolated. Symptom: 5-8 sec spinner, then nothing — no console log, no
+state change. Drop down to `sendTransaction({ transaction, account })`
++ `waitForReceipt(...)` directly. Explicit promise chain, real
+try/catch.
+
+### 10.5 Manifest signature: ISO `Z` vs `+00:00`
+
+The reconstructor signs the session manifest after `new Date(...).toISOString()`,
+producing `"…Z"`. Postgres returns the same timestamptz as `"…+00:00"`.
+Both represent the same instant but are different bytes. JSON.stringify
+in `buildManifestPayload` includes the value verbatim, so the verifier
+reconstructs a payload that doesn't byte-match what was signed — and
+EIP-191 recovery returns a wrong-but-deterministic address. Fix:
+normalize via `new Date(session.expires_at).toISOString()` in
+`verifySessionManifestFull` before assembling the manifest. The bug
+shows up as "Session-Manifest ungültig — manifest signature does not
+recover to coordinator" with a wrong (non-coordinator) recovered
+address.
+
+### 10.6 CORS on /sessions/:id/submissions
+
+Browsers POST decrypted shares **directly** to Fly (the share MUST NOT
+go through Vercel; that would add a trust boundary the privacy model
+is designed to avoid). The healthcheck.js server needs explicit CORS
+headers on that one endpoint:
+
+```js
+const CORS_ORIGIN_ALLOWLIST = new Set([
+  "https://www.roebel.app",
+  "https://roebel.app",
+  "http://localhost:3000",
+]);
+```
+
+Allowlist only the submission endpoint — `/status`, `/sessions`,
+`/finalize-pending` are server-to-server and have no business
+advertising cross-origin acceptance.
+
+### 10.7 Orphan-session race in startReconstructorSession
+
+When the parent (healthcheck.js) spawns a reconstructor child, it
+polls Supabase every 500 ms for "most recent open session for poll N"
+to wire up `activeSession.sessionRow`. The child's INSERT takes ~1 s
+(load deps → fetch generation → fetch shares → sign manifest →
+INSERT). In that gap, any prior `open` row for the same poll wins
+the query — locking `activeSession.sessionRow.id` to the orphan UUID.
+Every subsequent `/sessions/<new-id>/submissions` then 410s with
+"session not active on this machine."
+
+Two-layer fix:
+- **reconstructor.js** sweeps prior open sessions for its poll to
+  `aborted` BEFORE inserting its own row.
+- **healthcheck.js** filters its row-poll by `created_at >= startedAt`
+  — orphans can't be returned even before the child sweeps.
+
+This happens every Fly redeploy that interrupts a live session; the
+sweep is what cleans it up automatically on next session-open.
+
+### 10.8 ERC-1271 fallback in verifySubmissionSignature
+
+Attester wallets that are thirdweb smart-accounts produce signatures
+whose EIP-191 recovery returns the underlying EOA, not the smart-
+account address. `ethers.verifyMessage(payload, signature) === wallet`
+fails. Same fix already in `signature-verification.ts` for share-key
+registration: mirror it into `session-manifest.js` —
+`isValidSignature(hash, sig)` on the smart-account contract, check
+for the `0x1626ba7e` magic value. Plain EOAs skip the RPC call.
+
+### 10.9 Survey proposals trigger `GovernorDisabledDeposit` on execute
+
+The proposal-creation UI for citizen surveys produces proposals with
+`targets=[Governor], values=[0], calldatas=["0x"]`. OZ Governor's
+`execute()` routes the empty calldata to `receive()`, which reverts
+with `GovernorDisabledDeposit()` if `_executor() != address(this)` —
+i.e., always, since the Timelock is the executor. Survey proposals
+are therefore inherently unexecutable. The admin Vorschläge page
+detects empty calldata + zero values and replaces the Execute button
+with an inline note explaining the proposal is tally-only.
+
+### 10.10 No-cost on-chain merge pre-work from a failed legacy attempt
+
+If someone accidentally clicks the (now-removed) legacy Tally button
+on a poll bound to the new Shamir-split pubkey, `finalize-poll.js`
+calls `mergeSignups` + `mergeMessages` (key-independent, succeed
+on-chain) and then aborts at the `coordinatorKeypair.pubKey.hash() ===
+coordinatorPubKeyHashOnChain` assertion before doing any proof work.
+The merged state is committed on-chain and `runFinalize` from the
+subsequent Shamir flow detects it (`Poll.stateMerged()` and
+`Poll.messageAqMerged()`) and skips re-merging. The "failed legacy
+attempt" is effectively free pre-work for the Shamir tally.

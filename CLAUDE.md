@@ -94,35 +94,48 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 
 Source of truth: [`contracts/governor-contract/deployments/base.json`](contracts/governor-contract/deployments/base.json) and [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts).
 
-## Coordinator privacy — Shamir 3-of-5 federation (active since 2026-06-09)
+## Coordinator privacy — Shamir 3-of-5 federation (fully active 2026-06-10)
 
-The MACI coordinator privkey is no longer a single env var on Fly.
-It's been replaced with a **3-of-5 Shamir secret-sharing federation**
-across 5 AttesterNFT-holder wallets.
+The MACI coordinator privkey is no longer a single env var on Fly. It
+has been replaced with a **3-of-5 Shamir secret-sharing federation**
+across 5 AttesterNFT-holder wallets. As of 2026-06-10 10:54 UTC, the
+legacy `COORDINATOR_PRIV` env var has been **permanently removed**
+(`fly secrets unset COORDINATOR_PRIV -a roebel-maci-coordinator`).
+Decrypting any vote now requires 3-of-5 Attester cooperation. There
+is no fallback.
 
 - Conceptual deep-dive: [`docs/SHAMIR_CEREMONY.md`](docs/SHAMIR_CEREMONY.md)
 - Operational runbook: [`docs/MACI_SHAMIR_OPERATIONS.md`](docs/MACI_SHAMIR_OPERATIONS.md)
+- First Shamir tally: poll 3 (Bürgerumfrage mit Shamir Key Split),
+  on-chain results 1/1/1 (against/for/abstain), tally tx landed
+  2026-06-10 ~10:54 UTC. Session
+  `0a37d23d-1199-4e35-934e-541d7bcc267e`, three Attester wallets:
+  `0xc49de63c…fb28`, `0x90f677dc…6313`, `0xf468d87f…2b29`.
 
 Key implications when working on coordinator code:
-- New polls created after 2026-06-09 18:40 UTC (rotation execution) are
-  encrypted to the Shamir-split coordinator pubkey. The old privkey
-  (still on Fly as `COORDINATOR_PRIV` during the verification window)
-  cannot decrypt them — the legacy `finalize-poll.js` path will fail at
-  the `coordinatorKeypair.pubKey.hash() === coordinatorPubKeyHashOnChain`
-  assertion for any post-rotation poll.
-- Tallying a post-rotation poll requires opening a Tally-Session via
-  `/admin/dashboard/coordinator → Tally-Sessions` (NOT the legacy
-  Tally button on the Vorschläge page), then ≥3 Attesters submitting
-  their decrypted shares at `/admin/dashboard/coordinator/tally/<pollId>`.
-- Plaintext privkey only exists in the reconstructor child process's RAM
-  for ~10 minutes per tally. Never written to disk, zeroed after use.
-- `COORDINATOR_ETH_PRIV` (the ETH-tx-signing key) is a separate secret
-  that stays on Fly — it only authorizes on-chain state transitions
-  that ZK proofs already validate.
-- After the first end-to-end Shamir tally succeeds, run
-  `fly secrets unset COORDINATOR_PRIV -a roebel-maci-coordinator` to
-  permanently close the legacy fallback. That's the irreversible
-  privacy-closure moment.
+- All polls created after 2026-06-09 18:40 UTC (rotation execution)
+  are encrypted to the Shamir-split coordinator pubkey. The legacy
+  `finalize-poll.js` path is now dead — it exits 1 with `COORDINATOR_PRIV
+  not set` on every invocation. `scan-and-finalize.js`'s
+  `useLegacy = !!process.env.COORDINATOR_PRIV` is permanently false.
+- Tallying a poll requires opening a Tally-Session via
+  `/admin/dashboard/coordinator → Tally-Sessions`, then ≥3 Attesters
+  submitting their decrypted shares at
+  `/admin/dashboard/coordinator/tally/<pollId>`. The legacy Tally button
+  has been removed from the admin Vorschläge page.
+- Plaintext privkey exists only in the reconstructor child process's
+  RAM for ~10 minutes per tally. Never written to disk. Zeroed after
+  use. Between tallies the privkey does not exist anywhere.
+- `COORDINATOR_ETH_PRIV` (the ETH-tx-signing key) stays on Fly — it
+  only authorizes on-chain state transitions that ZK proofs already
+  validate. Compromising it does not enable vote decryption.
+- The "production lessons" section (§10) of the runbook documents the
+  10 bugs caught during the end-to-end rollout (publicnode RPC null
+  receipts, smart-account propose decoding via event log, ethers v6
+  `Result.values` collision, manifest `Z`-vs-`+00:00`, CORS on
+  submissions endpoint, orphan-session race, ERC-1271 fallback for
+  submission verify, GovernorDisabledDeposit on survey proposals, etc).
+  Read it before touching the coordinator scripts.
 
 ## Environment Variables
 
