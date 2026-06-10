@@ -53,7 +53,15 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
       {tally.published ? (
         <>
           <View style={styles.headerRow}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Wahlergebnisse</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>Wahlergebnisse</Text>
+              {/* Published = the tally was ZK-proven on-chain. Mirrors the
+                  admin dashboard's "✓ Ausgezählt" badge so citizens see the
+                  same signal: these numbers are final and verifiable. */}
+              <View style={styles.talliedBadge}>
+                <Text style={styles.talliedBadgeText}>✓ Ausgezählt</Text>
+              </View>
+            </View>
             {tally.tallyAddress ? (
               <Pressable
                 onPress={() => Linking.openURL(`https://basescan.org/address/${tally.tallyAddress}`)}
@@ -154,6 +162,22 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
+    fontFamily: 'Inter-Medium',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  talliedBadge: {
+    backgroundColor: '#10B981',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  talliedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontFamily: 'Inter-Medium',
   },
   basescanLink: {
