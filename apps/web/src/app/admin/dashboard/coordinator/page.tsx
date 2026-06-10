@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MACI_INFRA, maciGovernorContract } from "@/lib/maci-config";
+import { stageLabel, type CurrentStage } from "@/components/admin/TallyPipeline";
 
 const FOUNDER_ALLOWLIST = new Set(
   ["0xc49de63ccfee46c6c5c3e393293f66779799fb28"].map((a) => a.toLowerCase())
@@ -90,6 +91,7 @@ export default function CoordinatorStatusPage() {
   const [triggerPollId, setTriggerPollId] = useState("");
   const [triggering, setTriggering] = useState(false);
   const [markingExecuted, setMarkingExecuted] = useState<string | null>(null);
+  const [flyStage, setFlyStage] = useState<CurrentStage>(null);
 
   const { data: onChainCoordinator } = useReadContract({
     contract: maciGovernorContract,
@@ -104,23 +106,57 @@ export default function CoordinatorStatusPage() {
     params: [],
   });
 
-  const fetchState = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchState = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await fetch("/api/coordinator/state", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
       setState(json as CoordinatorState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!opts?.silent) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchState();
+  }, [fetchState]);
+
+  // Live reconstructor stage for the Tally-Sessions card. Polled every
+  // 10 s so an open session shows "ZK-Beweise generieren…" instead of a
+  // bare "open" while the pipeline runs. Also refreshes the session list
+  // when a run is in flight so the completed state appears without a
+  // manual reload.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/coordinator/status", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        setFlyStage((json?.currentStage as CurrentStage) ?? null);
+      } catch {
+        // keep prior value
+      }
+    };
+    tick();
+    const id = setInterval(() => {
+      tick();
+      // refresh sessions while a pipeline is running so progress counts
+      // and completed states stay current — silent: no loading flash
+      fetchState({ silent: true });
+    }, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [fetchState]);
 
   const handleTriggerSession = useCallback(async () => {
@@ -219,7 +255,7 @@ export default function CoordinatorStatusPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchState} disabled={loading}>
+          <Button variant="outline" onClick={() => fetchState()} disabled={loading}>
             ↻ Aktualisieren
           </Button>
           <Link href="/admin/dashboard/coordinator/proposals">
@@ -451,32 +487,79 @@ export default function CoordinatorStatusPage() {
 
           {state && state.recentSessions.length > 0 ? (
             <ul className="space-y-2">
-              {state.recentSessions.map((s) => (
-                <li
-                  key={s.id}
-                  className="border border-border rounded p-3 text-xs flex items-center justify-between gap-2"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="font-mono text-muted-foreground">
-                      session={s.id.slice(0, 8)}… poll={s.poll_id}
+              {state.recentSessions.map((s) => {
+                const liveLabel =
+                  s.state === "open"
+                    ? stageLabel(
+                        flyStage && flyStage.sessionId === s.id
+                          ? flyStage.stage
+                          : null,
+                        s.submitted_shares_count,
+                        THRESHOLD
+                      )
+                    : null;
+                return (
+                  <li
+                    key={s.id}
+                    className="border border-border rounded p-3 text-xs flex items-center justify-between gap-2"
+                  >
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-muted-foreground">
+                          session={s.id.slice(0, 8)}… poll={s.poll_id}
+                        </span>
+                        {s.state === "completed" && (
+                          <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0">
+                            ✓ Abgeschlossen
+                          </Badge>
+                        )}
+                        {s.state === "aborted" && (
+                          <Badge className="bg-red-600 text-white hover:bg-red-700 text-[10px] px-1.5 py-0">
+                            Abgebrochen
+                          </Badge>
+                        )}
+                        {s.state === "expired" && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            Abgelaufen
+                          </Badge>
+                        )}
+                        {liveLabel && (
+                          <span className="inline-flex items-center gap-1.5 text-blue-700">
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                            {liveLabel}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground">
+                        Anteile: {s.submitted_shares_count}/{THRESHOLD}
+                        {s.state === "open" && !liveLabel && " · wartet auf Anteile"}
+                        {" · Ablauf "}
+                        {new Date(s.expires_at).toLocaleString("de-DE")}
+                      </div>
                     </div>
-                    <div className="text-muted-foreground">
-                      Anteile: {s.submitted_shares_count}/{THRESHOLD} · Status:{" "}
-                      {s.state} · Ablauf{" "}
-                      {new Date(s.expires_at).toLocaleString("de-DE")}
-                    </div>
-                  </div>
-                  {s.state === "open" && (
-                    <Link
-                      href={`/admin/dashboard/coordinator/tally/${s.poll_id}`}
-                    >
-                      <Button size="sm" variant="outline">
-                        Beitragen →
-                      </Button>
-                    </Link>
-                  )}
-                </li>
-              ))}
+                    {s.state === "open" &&
+                      s.submitted_shares_count < THRESHOLD && (
+                        <Link
+                          href={`/admin/dashboard/coordinator/tally/${s.poll_id}`}
+                        >
+                          <Button size="sm" variant="outline">
+                            Beitragen →
+                          </Button>
+                        </Link>
+                      )}
+                    {s.state === "open" &&
+                      s.submitted_shares_count >= THRESHOLD && (
+                        <Link
+                          href={`/admin/dashboard/coordinator/tally/${s.poll_id}`}
+                        >
+                          <Button size="sm" variant="outline">
+                            Pipeline ansehen →
+                          </Button>
+                        </Link>
+                      )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <div className="text-sm text-muted-foreground">

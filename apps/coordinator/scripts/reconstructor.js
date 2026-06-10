@@ -299,11 +299,34 @@ async function main() {
     );
   });
 
+  // Write the current pipeline stage to a JSON file the healthcheck server
+  // exposes via GET /status → currentStage. This is what powers the live
+  // stepper on /admin/dashboard/coordinator/tally/[pollId]. Plain file, no
+  // secrets — only the stage name + timestamps.
+  const PROOF_DIR_ROOT = process.env.PROOF_DIR || "/app/proofs";
+  function writeStage(stageName) {
+    try {
+      fs.writeFileSync(
+        path.join(PROOF_DIR_ROOT, "current-stage.json"),
+        JSON.stringify({
+          sessionId,
+          pollId: String(pollId),
+          stage: stageName,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (err) {
+      console.warn(`[reconstructor] stage write failed: ${err?.message ?? err}`);
+    }
+  }
+  writeStage("awaiting-shares");
+
   async function doReconstructAndFinalize() {
     clearTimeout(submitTimeoutHandle);
     console.log(
       `[reconstructor] threshold met (${submittedShares.size}/${generation.threshold}) — reconstructing…`,
     );
+    writeStage("reconstructing");
 
     // sssCombine takes raw share Uint8Arrays.
     const shareBytes = Array.from(submittedShares.values()).map((s) => s.bytes);
@@ -332,7 +355,8 @@ async function main() {
       tallyResult = await runFinalize({
         pollId,
         coordinatorPrivKey: macisk,
-        proofDirRoot: process.env.PROOF_DIR || "/app/proofs",
+        proofDirRoot: PROOF_DIR_ROOT,
+        onStage: writeStage,
       });
     } catch (err) {
       // Zero the buffer even on failure paths.
@@ -343,6 +367,7 @@ async function main() {
       // Best effort: scrub the secret from RAM.
       zeroBuffer(secret);
     }
+    writeStage("completed");
 
     try {
       await supabase.update(
@@ -377,6 +402,7 @@ async function main() {
 
   function handleFatal(err) {
     console.error("[reconstructor] fatal:", err);
+    writeStage("failed");
     supabase
       .update("coordinator_sessions", `id=eq.${sessionId}`, {
         state: "aborted",

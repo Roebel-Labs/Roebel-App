@@ -265,6 +265,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "GET" && url === "/status") {
+    // currentStage is written by the reconstructor as it advances through
+    // the tally pipeline (awaiting-shares → reconstructing → merging →
+    // generating-proofs → submitting-proofs → uploading-results →
+    // verifying → completed | failed). Only meaningful while its sessionId
+    // matches the activeSession — stale files from finished runs are
+    // filtered out client-side by that comparison.
     return jsonResponse(res, 200, {
       ready: true,
       scanInFlight,
@@ -275,6 +281,7 @@ const server = http.createServer((req, res) => {
             sessionId: activeSession.sessionRow?.id ?? null,
           }
         : null,
+      currentStage: readJsonSafe("current-stage.json"),
       lastRun: readJsonSafe("last-run.json"),
       lastScan: readJsonSafe("last-scan.json"),
     });

@@ -17,6 +17,7 @@ import {
   submitShareToReconstructor,
   verifySessionManifestFull,
 } from "@/lib/shamir/tally-session";
+import { TallyPipeline, type CurrentStage } from "@/components/admin/TallyPipeline";
 
 type StateData = {
   session: SessionRow;
@@ -49,6 +50,7 @@ export default function TallyPage() {
   const [manifestError, setManifestError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [flyStage, setFlyStage] = useState<CurrentStage>(null);
 
   const { data: isAttester } = useReadContract({
     contract: attesterNFTContract,
@@ -98,11 +100,29 @@ export default function TallyPage() {
     }
   }, [pollId]);
 
+  // Poll Fly's /status for the reconstructor's pipeline stage. Drives the
+  // live stepper once shares hit the threshold. Best-effort: a failed
+  // fetch keeps the previous value.
+  const fetchFlyStage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/coordinator/status", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      setFlyStage((json?.currentStage as CurrentStage) ?? null);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchSession();
-    const id = setInterval(fetchSession, 15_000);
+    fetchFlyStage();
+    const id = setInterval(() => {
+      fetchSession();
+      fetchFlyStage();
+    }, 10_000);
     return () => clearInterval(id);
-  }, [fetchSession]);
+  }, [fetchSession, fetchFlyStage]);
 
   const myShare: EncryptedShareRow | undefined = useMemo(() => {
     if (!account || !data) return undefined;
@@ -207,31 +227,64 @@ export default function TallyPage() {
         </Card>
       )}
 
+      {data && data.session.state === "completed" && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Badge className="bg-green-600 text-white hover:bg-green-700">
+                ✓ Abgeschlossen
+              </Badge>
+              <CardTitle className="text-green-900">
+                Auszählung erfolgreich
+              </CardTitle>
+            </div>
+            <CardDescription className="text-green-800">
+              Der Coordinator-Schlüssel wurde aus {data.generation.threshold}{" "}
+              Anteilen rekonstruiert, die ZK-Beweise wurden on-chain
+              verifiziert und das Ergebnis steht im Tally-Vertrag. Der
+              Schlüssel wurde aus dem RAM gelöscht — er existiert nicht mehr.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {data.session.completed_at && (
+              <div className="text-xs text-green-900">
+                Abgeschlossen:{" "}
+                {new Date(data.session.completed_at).toLocaleString("de-DE")}
+              </div>
+            )}
+            <Link
+              href="/admin/dashboard/coordinator/proposals"
+              className="inline-block text-sm text-green-900 underline hover:text-green-950"
+            >
+              → Ergebnis im Vorschlags-Dashboard ansehen
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
       {data && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Session-Fortschritt</CardTitle>
+              <CardTitle>Auszählungs-Pipeline</CardTitle>
               <Badge variant="outline">
                 {data.session.submitted_shares_count}/{data.generation.threshold}
               </Badge>
             </div>
             <CardDescription>
               Session-ID: <code className="text-xs font-mono">{data.session.id}</code>
+              {" · "}Ablauf:{" "}
+              {new Date(data.session.expires_at).toLocaleString("de-DE")}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-xs">
-            <div>
-              <span className="text-muted-foreground">Status: </span>
-              <span className="font-mono">{data.session.state}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Ablauf: </span>
-              <span className="font-mono">
-                {new Date(data.session.expires_at).toLocaleString("de-DE")}
-              </span>
-            </div>
-            <div className="border-t border-border pt-2 mt-2">
+          <CardContent className="space-y-4">
+            <TallyPipeline
+              session={data.session}
+              threshold={data.generation.threshold}
+              currentStage={flyStage}
+            />
+
+            <div className="border-t border-border pt-3 text-xs">
               <div className="text-muted-foreground mb-1">
                 Eingegangene Anteile:
               </div>
@@ -274,7 +327,8 @@ export default function TallyPage() {
             ✓ Du hast deinen Anteil bereits eingereicht.
           </CardContent>
         </Card>
-      ) : data?.session.state !== "open" ? (
+      ) : data?.session.state === "completed" ? null : data?.session.state !==
+        "open" ? (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">
             Session ist nicht mehr offen (Status: {data?.session.state}).

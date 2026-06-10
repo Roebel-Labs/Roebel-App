@@ -139,11 +139,23 @@ async function chunkedAddTallyResults(tallyData, signer) {
  * @param {string} opts.proofDirRoot         Base dir for proofs (e.g. /app/proofs).
  * @returns {{ tallyFile: string, proofDir: string, tallyData: any }}
  */
-async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
+async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot, onStage }) {
   assertEnvAndArtifacts();
 
   if (!pollId) throw new Error("pollId required");
   if (!coordinatorPrivKey) throw new Error("coordinatorPrivKey required");
+
+  // Optional progress callback so callers (the reconstructor) can surface
+  // pipeline stages to the dashboard. Failures in the callback must never
+  // break the tally itself.
+  const stage = (name) => {
+    if (typeof onStage !== "function") return;
+    try {
+      onStage(name);
+    } catch {
+      /* progress reporting is best-effort */
+    }
+  };
 
   const PROOF_DIR = proofDirRoot || process.env.PROOF_DIR || "/app/proofs";
   fs.mkdirSync(PROOF_DIR, { recursive: true });
@@ -177,6 +189,7 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
     `[scan] latest=${latestBlock} startBlock=${startBlock} endBlock=${endBlock} window=${queryWindow}`,
   );
 
+  stage("merging");
   console.log(`\n[mergeSignups] poll=${pollId}`);
   await tolerateAlreadyMerged("mergeSignups", () =>
     mergeSignups({ pollId: pollIdBig, maciAddress, signer: txSigner, quiet: false }),
@@ -221,6 +234,7 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
   }
   const useCachedProofs = cacheMatchesCurrentMaci;
 
+  stage("generating-proofs");
   let tallyData;
   if (useCachedProofs) {
     console.log(`\n[genProofs] poll=${pollId} reusing cached proofs from ${proofDir}`);
@@ -250,6 +264,7 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
     });
   }
 
+  stage("submitting-proofs");
   console.log(`\n[proveOnChain] poll=${pollId}`);
   try {
     await proveOnChain({
@@ -282,8 +297,10 @@ async function runFinalize({ pollId, coordinatorPrivKey, proofDirRoot }) {
     }
   }
 
+  stage("uploading-results");
   await chunkedAddTallyResults(tallyData, txSigner);
 
+  stage("verifying");
   console.log(`\n[verify] poll=${pollId}`);
   await verify({
     pollId: pollIdBig,
