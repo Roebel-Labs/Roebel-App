@@ -94,6 +94,36 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 
 Source of truth: [`contracts/governor-contract/deployments/base.json`](contracts/governor-contract/deployments/base.json) and [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts).
 
+## Coordinator privacy — Shamir 3-of-5 federation (active since 2026-06-09)
+
+The MACI coordinator privkey is no longer a single env var on Fly.
+It's been replaced with a **3-of-5 Shamir secret-sharing federation**
+across 5 AttesterNFT-holder wallets.
+
+- Conceptual deep-dive: [`docs/SHAMIR_CEREMONY.md`](docs/SHAMIR_CEREMONY.md)
+- Operational runbook: [`docs/MACI_SHAMIR_OPERATIONS.md`](docs/MACI_SHAMIR_OPERATIONS.md)
+
+Key implications when working on coordinator code:
+- New polls created after 2026-06-09 18:40 UTC (rotation execution) are
+  encrypted to the Shamir-split coordinator pubkey. The old privkey
+  (still on Fly as `COORDINATOR_PRIV` during the verification window)
+  cannot decrypt them — the legacy `finalize-poll.js` path will fail at
+  the `coordinatorKeypair.pubKey.hash() === coordinatorPubKeyHashOnChain`
+  assertion for any post-rotation poll.
+- Tallying a post-rotation poll requires opening a Tally-Session via
+  `/admin/dashboard/coordinator → Tally-Sessions` (NOT the legacy
+  Tally button on the Vorschläge page), then ≥3 Attesters submitting
+  their decrypted shares at `/admin/dashboard/coordinator/tally/<pollId>`.
+- Plaintext privkey only exists in the reconstructor child process's RAM
+  for ~10 minutes per tally. Never written to disk, zeroed after use.
+- `COORDINATOR_ETH_PRIV` (the ETH-tx-signing key) is a separate secret
+  that stays on Fly — it only authorizes on-chain state transitions
+  that ZK proofs already validate.
+- After the first end-to-end Shamir tally succeeds, run
+  `fly secrets unset COORDINATOR_PRIV -a roebel-maci-coordinator` to
+  permanently close the legacy fallback. That's the irreversible
+  privacy-closure moment.
+
 ## Environment Variables
 
 Each app has its own `.env.example` showing required variables. Copy to `.env.local` (web) or `.env` (expo) and fill in real values.

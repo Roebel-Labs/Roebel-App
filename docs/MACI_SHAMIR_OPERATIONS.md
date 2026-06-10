@@ -3,6 +3,13 @@
 Operational guide for the 3-of-5 Shamir-split MACI coordinator that ships in
 M1 → M4. Read this in the order the sections are written.
 
+> **Status (2026-06-10):** end-to-end verified in production. Rotation
+> proposal executed on Base mainnet; first Shamir tally for poll 3 ran
+> successfully with 1/3 → 2/3 → 3/3 share submissions via the production
+> tally page. See [`SHAMIR_CEREMONY.md`](./SHAMIR_CEREMONY.md) for the
+> conceptual deep-dive on what the ceremony is and what Shamir actually
+> does.
+
 ---
 
 ## 1. System architecture (one-screen mental model)
@@ -325,7 +332,187 @@ If all six pass, the privacy-from-coordinator gap is closed.
 
 ---
 
-## 9. Where to look when something is wrong
+## 9. Production lessons from the first end-to-end run (2026-06-09 → -10)
+
+The first real Shamir tally surfaced five non-trivial bugs that
+would not have appeared in any local dev test. Each was fixed and
+re-deployed live. Documenting them here so anyone reverting to
+older code or rebuilding from scratch knows to keep these patches.
+
+### 9.1 Smart-wallet ERC-1271 verification
+
+**Symptom:** Attester clicks **Anteil einreichen**, gets HTTP 401
+`submission signature does not match wallet`. Wallet was definitely
+correct (Attester is on the allowlist, holds the share).
+
+**Cause:** thirdweb's `inAppWallet + smartAccount` setup signs via
+the underlying embedded EOA but `account.address` is the
+smart-account address. Plain `ethers.verifyMessage` (EIP-191
+recovery) returns the EOA, not the smart-account address →
+mismatch → 401.
+
+**Fix:** Mirror the ERC-1271 fallback that
+`apps/web/src/lib/shamir/signature-verification.ts` already
+implemented for share-key registration. See
+`apps/coordinator/scripts/lib/session-manifest.js → verifySubmissionSignature()`.
+The pattern: try EIP-191 recovery first; if it doesn't match AND
+`wallet` has on-chain bytecode, call
+`isValidSignature(hash, signature)` on the smart-account contract and
+accept when it returns the `0x1626ba7e` magic value. Plain EOAs
+never trigger an RPC call.
+
+Anywhere a *user-controlled* wallet signs anything verified
+server-side, this pattern is required. The same applies to the
+Governor's `coordinator()` value — if you ever switch the coordinator
+EOA to a smart account, the verifier on the tally page needs the
+same fallback.
+
+### 9.2 Manifest timestamp serialization mismatch
+
+**Symptom:** tally page shows red "Session-Manifest ungültig — manifest
+signature does not recover to coordinator: got 0xa0C5…8FE2" even
+though Fly's `COORDINATOR_ETH_PRIV` legitimately derives to the
+on-chain coordinator address.
+
+**Cause:** Fly's `reconstructor.js` signs the manifest payload after
+calling `new Date(...).toISOString()` on `expiresAt`, producing the
+`"…Z"` form (e.g. `"2026-06-09T23:53:56.407Z"`). Postgres returns
+the same `timestamptz` column as `"2026-06-09T23:53:56.407+00:00"`.
+Both represent the same instant but are different byte strings.
+`JSON.stringify` in `buildManifestPayload` includes the raw value
+verbatim → verifier reconstructs a different payload → recovers a
+deterministically-wrong address.
+
+**Fix:** `apps/web/src/lib/shamir/tally-session.ts → verifySessionManifestFull`
+normalizes `expiresAt` via `new Date(session.expires_at).toISOString()`
+before assembling the manifest. Both encoders now produce identical
+bytes.
+
+**Generalization:** any byte-canonical signed payload sourced from
+Postgres needs normalization at the boundary. Timestamps, addresses,
+JSON arrays (sort + lowercase!), and any whitespace from server
+formatters can all silently desync sign-side and verify-side.
+
+### 9.3 Orphan-session race in reconstructor spawn
+
+**Symptom:** open a fresh tally session, submit a share, get HTTP 410
+`session not active on this machine` even though Fly logs clearly show
+the reconstructor running and ready for the new session ID.
+
+**Cause:** `healthcheck.js → startReconstructorSession` polls Supabase
+every 500ms for "most recent open session for poll N" to wire up
+`activeSession.sessionRow`. The reconstructor child takes ~1s to do
+its boot (load deps, fetch active generation, fetch shares, sign
+manifest, INSERT row). In that gap, any prior open session row for
+the same poll (e.g. one orphaned by the previous Fly redeploy) wins
+the parent's query, and `activeSession.sessionRow.id` locks to the
+orphan UUID. Every subsequent `/sessions/<new-id>/submissions` POST
+fails the equality check at `forwardSubmissionToReconstructor` →
+returns 410.
+
+**Fix:** two-layer defense, either alone would close the race:
+
+1. `reconstructor.js` sweeps prior open sessions for its poll to
+   `state='aborted'` BEFORE inserting its own row. After this UPDATE
+   the orphan no longer reads as `open`.
+2. `healthcheck.js` filters the poll query by
+   `created_at >= startedAt`. Even if the child's UPDATE hasn't run
+   yet, the parent can't see any row older than the spawn timestamp.
+
+Keep both. (1) handles the case where the parent's poll wins the race
+mid-query; (2) handles the case where the parent polls before the
+child has even loaded.
+
+### 9.4 CORS on `/sessions/:id/submissions`
+
+**Symptom:** browser POST from `https://www.roebel.app` to Fly's
+submission endpoint blocked with `No 'Access-Control-Allow-Origin'
+header is present on the requested resource`.
+
+**Cause:** Fly's `healthcheck.js` had no CORS handling on any endpoint.
+For server-to-server routes (`/sessions`, `/finalize-pending`,
+`/status`) that's correct — they shouldn't accept browser cross-
+origin calls at all. But `/sessions/:id/submissions` is *specifically
+designed* to receive direct browser POSTs of decrypted shares — that
+share **must not** pass through Vercel because that would put it in
+front of an additional trust boundary.
+
+**Fix:** Allow exactly the prod web origin + localhost dev, and only
+on the submission endpoint. See the `CORS_ORIGIN_ALLOWLIST` and
+`applyCorsForSubmissions` in `healthcheck.js`. Handles the OPTIONS
+preflight (browsers send it before a JSON POST) and echoes
+`Access-Control-Allow-Origin` on the POST response.
+
+Do **not** generalize this to other endpoints. Leaving them
+non-CORS means a browser literally cannot call them — which is the
+correct security posture for an endpoint that shouldn't be browser-
+reachable in the first place.
+
+### 9.5 No-op survey proposals revert on execute
+
+**Symptom:** queue + execute on a survey proposal (e.g. `Bürgerumfrage
+finaler Test`) reverts with `GovernorDisabledDeposit`.
+
+**Cause:** OZ Governor's `receive()` reverts with
+`GovernorDisabledDeposit` unless `msg.sender == address(this)`. Survey-
+style proposals are created with `targets=[Governor], values=[0],
+calldatas=["0x"]`. The Timelock's `execute()` then calls the Governor
+with empty calldata → Solidity dispatches to `receive()` → revert. The
+proposal is structurally un-executable.
+
+**Fix:** Hide the Execute button when calldata is no-op. See
+`apps/web/src/app/admin/dashboard/coordinator/proposals/page.tsx →
+probeIsNoop`. The row instead shows: "Survey-Vorschlag — keine
+Ausführung möglich. Das Ergebnis steht im Tally-Vertrag, der Vorschlag
+bleibt dauerhaft im Zustand 'In Timelock'."
+
+This isn't a bug in the queue/execute code — it's a property of
+no-action proposals. The tally result IS the artifact; on-chain
+execution would be a no-op anyway.
+
+### 9.6 publicnode RPC sometimes returns null receipts
+
+**Symptom:** `/api/coordinator/proposal-action/[txHash]` returns 404
+`tx not found` even though the tx has hours of confirmations on
+BaseScan.
+
+**Cause:** `https://base-rpc.publicnode.com` (default `BASE_RPC_URL`
+in dev environments) occasionally returns `{ "result": null }` for
+`eth_getTransactionReceipt` on otherwise-confirmed transactions.
+Possibly a node lagging behind, possibly partial archive.
+
+**Fix:** RPC fallback chain. `apps/web/src/app/api/coordinator/proposal-action/[txHash]/route.ts`
+iterates through `BASE_RPC_URL → mainnet.base.org → 1rpc.io/base →
+publicnode` and uses whichever first returns a receipt.
+
+Worth applying this pattern to any Vercel route that reads on-chain
+receipts. RPC availability is the dominant source of flake in
+client-facing endpoints.
+
+### 9.7 propose() decoded from event, not tx input
+
+**Symptom (earlier):** queue button reverts with 422 `tx is not a
+propose() call` even on legit propose transactions.
+
+**Cause:** thirdweb's smart-account stack means the propose tx
+actually lands on-chain as `EntryPoint.handleOps(...)` (ERC-4337),
+not as a direct `Governor.propose(...)`. Decoding the tx's input
+bytes as a propose() call selector-mismatches and returns 422.
+
+**Fix:** Decode from the `ProposalCreated` **event log** the Governor
+emits, regardless of how the tx reached it. The event always carries
+`(proposalId, proposer, targets, values, signatures, calldatas,
+voteStart, voteEnd, description)`. See
+`apps/web/src/app/api/coordinator/proposal-action/[txHash]/route.ts`.
+
+Also caught a subtle ethers-v6 gotcha along the way:
+`decoded.args.values` returns `Array.prototype.values()` (the iterator
+method) instead of the `bigint[]` because of name shadowing. Use
+positional access (`decoded.args[3]`) instead.
+
+---
+
+## 10. Where to look when something is wrong
 
 | Symptom | First check |
 |---|---|
