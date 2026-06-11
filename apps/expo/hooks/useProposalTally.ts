@@ -6,15 +6,16 @@ import { toBigInt } from '@/lib/governance-utils';
 /**
  * Self-fetching MACI tally reader, shared by the single-instance proposal
  * surfaces (home hero card + detail-page VotingStats). Centralizes the
- * `governor.proposalPolls(id) → Tally.isTallied() → tallyResults(0/1/2)` flow
+ * `governor.proposalPolls(id) → Tally.totalTallyResults() → tallyResults(0/1/2)` flow
  * that VotingStats used to inline.
  *
  * Vote-option indices match VoteType: 0=Against, 1=For, 2=Abstain.
  *
  * "published" mirrors the codebase's canonical definition (see
  * ProposalTimeline): the coordinator has proven the tally on-chain, so the
- * decrypted results are available. We treat `isTallied() === true` as the
- * published signal and read the three result buckets once that flips.
+ * decrypted results are available. We treat `totalTallyResults() > 0` as
+ * the published signal (isTallied() is vacuously true pre-merge — see the
+ * inline note) and read the three result buckets once that flips.
  *
  * NOT for use inside list rows — each instance opens its own 30 s chain poll.
  */
@@ -89,11 +90,20 @@ export function useProposalTally(proposalId: bigint): ProposalTallyState {
         }
         const deadlineSec = Number(toBigInt(deadlineRaw));
         const tally = getTallyContract(tallyAddr);
-        const tallied = (await readContract({
+        // "Published" gate: totalTallyResults() > 0, NOT isTallied().
+        // MACI v2's isTallied() is tallyBatchNum * 5^intStateTreeDepth >=
+        // numSignUps — vacuously TRUE before mergeSignups has even run, so
+        // it reads as "published" during an active voting period and the
+        // results section (with all-zero bars) leaked into open votes.
+        // totalTallyResults only moves when addTallyResults() lands, which
+        // is the actual "results are on-chain" moment. Same fix as the
+        // coordinator's scan-and-finalize.js.
+        const totRaw = await readContract({
           contract: tally,
-          method: 'function isTallied() view returns (bool)',
+          method: 'function totalTallyResults() view returns (uint256)',
           params: [],
-        })) as boolean;
+        });
+        const tallied = toBigInt(totRaw) > 0n;
         if (cancelled) return;
         if (!tallied) {
           setState({

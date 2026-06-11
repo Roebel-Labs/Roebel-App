@@ -43,14 +43,19 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
       ? tally.state !== ProposalState.Pending && tally.state !== ProposalState.Active
       : votingEndedByDeadline;
 
-  const showPendingTally = !tally.published && !tally.orphan && ended;
-  const visible = tally.published || tally.orphan || showPendingTally;
+  // Results render ONLY after the voting window closed AND the decrypted
+  // tally landed on-chain. During an open vote nothing shows — not even
+  // empty bars. (Belt-and-suspenders with the hook's totalTallyResults
+  // gate: a stale/cached "published" can never leak into an active vote.)
+  const showResults = tally.published && ended;
+  const showPendingTally = !showResults && !tally.orphan && ended;
+  const visible = showResults || tally.orphan || showPendingTally;
   if (!visible) return null;
 
   return (
     <View style={styles.container}>
       {/* Heading + bars + total render ONLY once results are published. */}
-      {tally.published ? (
+      {showResults ? (
         <>
           <View style={styles.headerRow}>
             <View style={styles.titleRow}>
@@ -113,9 +118,10 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
       {showPendingTally ? (
         <View style={[styles.statusCard, { backgroundColor: colors.surfaceSecondary }]}>
           <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-            Wahlergebnis wird berechnet. Eine unabhängige Stelle entschlüsselt die
-            Stimmen und veröffentlicht das Ergebnis innerhalb von ca. 15 Minuten im
-            dezentralen Netzwerk – diese Seite aktualisiert sich automatisch.
+            Die Abstimmung ist beendet — die digitale Wahlurne wird geöffnet.
+            Dafür schließen mehrere Schlüsselhalter:innen aus Röbel gemeinsam
+            auf; keine:r kann das allein. Das geprüfte Ergebnis erscheint hier
+            automatisch.
           </Text>
         </View>
       ) : null}

@@ -1,13 +1,17 @@
 /**
  * Proposal Detail Skeleton Loader
  *
- * Displays animated skeleton placeholders while proposal content is loading
+ * Displays animated skeleton placeholders while proposal content is loading.
+ * All colors come from useTheme() — hardcoded light-gray hexes previously
+ * rendered as glaring white boxes in dark mode.
  */
 
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
 
 export default function ProposalDetailSkeleton() {
+  const { colors } = useTheme();
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -33,7 +37,9 @@ export default function ProposalDetailSkeleton() {
   });
 
   const SkeletonBox = ({ width, height, style }: { width: string | number; height: number; style?: any }) => (
-    <Animated.View style={[styles.skeleton, { width, height, opacity }, style]} />
+    <Animated.View
+      style={[styles.skeleton, { width, height, opacity, backgroundColor: colors.skeleton }, style]}
+    />
   );
 
   return (
@@ -71,7 +77,7 @@ export default function ProposalDetailSkeleton() {
       </View>
 
       {/* Voting Stats */}
-      <View style={styles.votingStatsCard}>
+      <View style={[styles.votingStatsCard, { backgroundColor: colors.surfaceSecondary }]}>
         <SkeletonBox width={100} height={20} style={{ marginBottom: 16 }} />
         <View style={styles.statRow}>
           <SkeletonBox width={60} height={16} />
@@ -98,7 +104,7 @@ export default function ProposalDetailSkeleton() {
       </View>
 
       {/* Timer at bottom */}
-      <View style={styles.timerBar}>
+      <View style={[styles.timerBar, { borderTopColor: colors.border }]}>
         <SkeletonBox width={140} height={16} />
         <SkeletonBox width={60} height={16} />
       </View>
@@ -111,7 +117,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   skeleton: {
-    backgroundColor: '#E5E7EB',
     borderRadius: 4,
   },
   statusContainer: {
@@ -137,7 +142,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 24,
     padding: 16,
-    backgroundColor: '#F9FAFB',
     borderRadius: 12,
   },
   statRow: {
@@ -157,7 +161,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
     marginBottom: 40,
   },
 });

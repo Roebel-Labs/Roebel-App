@@ -270,7 +270,7 @@ export default function VoteButtons({
       setSuccessDrawer({
         visible: true,
         message:
-          'Privater Abstimmungsschlüssel erstellt und sicher auf deinem Gerät gespeichert. Nächster Schritt: einmalige Anmeldung zur Bürgerumfrage.',
+          'Dein Wahlschlüssel ist erstellt und sicher auf deinem Gerät gespeichert. Jetzt noch einmalig zur Bürgerumfrage anmelden — dann kannst du geheim abstimmen.',
         action: null,
       });
     } catch (err) {
@@ -485,7 +485,7 @@ export default function VoteButtons({
       setSuccessDrawer({
         visible: true,
         message:
-          'Stimme geheim abgegeben. Sie wird erst nach Ablauf der Frist von einer unabhängigen Stelle entschlüsselt und im dezentralen Netzwerk veröffentlicht. Du kannst deine Stimme bis dahin jederzeit ändern.',
+          'Versiegelt und eingeworfen. Deine Stimme ist ab jetzt für niemanden sichtbar — nicht für die Stadt, nicht für uns. Erst nach Ablauf der Frist öffnen mehrere Schlüsselhalter:innen die digitale Wahlurne gemeinsam. Bis dahin kannst du deine Wahl jederzeit ändern.',
         action: () => onVoteSuccess(),
       });
     } catch (err) {
@@ -616,9 +616,9 @@ export default function VoteButtons({
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
           <StoryProgress step={1} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Erstelle einen privaten Abstimmungsschlüssel auf deinem Gerät. Damit machst du
-            deine Stimme geheim — niemand außer einer unabhängigen Stelle kann sie lesen, und
-            auch diese kann das Ergebnis nicht fälschen.
+            Erstelle deinen persönlichen Wahlschlüssel. Er bleibt auf deinem Gerät
+            und versiegelt jede deiner Stimmen — wie ein Briefumschlag, den niemand
+            allein öffnen kann. Nicht die Stadt, nicht die App. Niemand.
           </Text>
         </View>
         <Pressable
@@ -643,9 +643,9 @@ export default function VoteButtons({
         <View style={[styles.stepCard, { backgroundColor: colors.surfaceSecondary }]}>
           <StoryProgress step={2} totalSteps={2} />
           <Text style={[styles.stepBody, { color: colors.textPrimary }]}>
-            Einmalige Anmeldung zur Bürgerumfrage. Deine Bürgerschaft wird im dezentralen
-            Netzwerk registriert, damit du privat abstimmen kannst. Nur dieses Wallet zählt
-            danach für genau eine Stimme — egal wie viele Geräte du nutzt.
+            Melde dich einmalig zur Bürgerumfrage an. Danach gilt: ein Mensch,
+            eine Stimme — egal wie viele Geräte du nutzt. Keine Bots, keine
+            Doppelten, keine gekauften Meinungen.
           </Text>
         </View>
         <Pressable
@@ -685,7 +685,7 @@ export default function VoteButtons({
         <Text style={[styles.infoText, { color: colors.textSecondary }]}>
           {lastVote
             ? 'Wähle erneut. Nur deine letzte Stimme zählt — die vorherige wird durch die neue überschrieben.'
-            : 'Geheime Stimme. Du kannst deine Wahl bis zum Ende der Frist beliebig oft ändern — nur die letzte zählt.'}
+            : 'Deine Stimme ist geheim — wie ein versiegelter Umschlag in der Wahlurne. Bis zum Ende der Frist kannst du sie beliebig oft ändern; nur die letzte zählt.'}
         </Text>
       </View>
       <View style={styles.buttonsContainer}>
@@ -815,10 +815,10 @@ function getVoteButtonLabel(
   votingFor: VoteType | null,
 ): string {
   if (phase === 'idle' || votingFor !== forOption) return idleLabel;
-  if (phase === 'encrypting-vote') return 'Stimme wird verschlüsselt…';
+  if (phase === 'encrypting-vote') return 'Stimme wird versiegelt…';
   if (phase === 'submitting-vote') {
     if (substate === 'wallet-prompt') return 'Wallet öffnet sich…';
-    if (substate === 'tx-submitted') return 'Stimme wird auf die Blockchain gesendet…';
+    if (substate === 'tx-submitted') return 'Versiegelte Stimme wird eingeworfen…';
     return 'Abstimmen läuft…';
   }
   return idleLabel;
