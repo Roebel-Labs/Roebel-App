@@ -1,20 +1,19 @@
-"use client"
-
 import type React from "react"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { redirect } from "next/navigation"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { DashboardHeader } from "@/components/admin/dashboard-header"
+import { isAuthenticated } from "@/lib/auth/session"
 
-export default function AdminDashboardLayout({
+export default async function AdminDashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const router = useRouter()
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
-
-  
+  // Defense in depth: middleware already gates this route, but verify the
+  // session server-side here too so the dashboard never renders unauthenticated.
+  if (!(await isAuthenticated())) {
+    redirect("/admin/login")
+  }
 
   return (
     <div className="flex h-screen bg-card">

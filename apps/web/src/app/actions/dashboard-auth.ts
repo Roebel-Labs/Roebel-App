@@ -3,9 +3,10 @@
 import { redirect } from "next/navigation";
 import { createSession, destroySession } from "@/lib/auth/session";
 
-// Static credentials
-const VALID_USERNAME = "kulturausschuss";
-const VALID_PASSWORD = "Roebel2025!Kultur";
+// Credentials are read from environment variables (never hardcoded — this
+// repo is public). Set ADMIN_USERNAME and ADMIN_PASSWORD in the deployment env.
+const VALID_USERNAME = process.env.ADMIN_USERNAME;
+const VALID_PASSWORD = process.env.ADMIN_PASSWORD;
 
 interface LoginResult {
   success: boolean;
@@ -27,6 +28,18 @@ export async function loginAction(
     return {
       success: false,
       error: "Bitte geben Sie Benutzername und Passwort ein.",
+    };
+  }
+
+  // Guard against misconfiguration: if credentials aren't set in the
+  // environment, deny all logins rather than allowing an empty match.
+  if (!VALID_USERNAME || !VALID_PASSWORD) {
+    console.error(
+      "ADMIN_USERNAME / ADMIN_PASSWORD are not configured — login disabled."
+    );
+    return {
+      success: false,
+      error: "Anmeldung ist derzeit nicht konfiguriert.",
     };
   }
 
