@@ -56,7 +56,6 @@ export function AppFeed() {
       <PostComposer
         onPostCreated={handlePostCreated}
         defaultFeedType="app"
-        requireVerified={false}
       />
 
       {loading ? (

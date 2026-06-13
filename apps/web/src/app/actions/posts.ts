@@ -16,7 +16,9 @@ import type {
   CreateCommentInput,
 } from "@/types/post"
 import { createAppNotification } from "@/app/actions/app-notifications"
-import { isAccountOwner } from "@/lib/supabase-accounts"
+import { isAccountOwner, fetchAccountById } from "@/lib/supabase-accounts"
+import { isVerifiedCitizen } from "@/lib/server/verify-citizen"
+import { isOrgAccount } from "@/types/account"
 
 // ============================================
 // Helper: build poll results for a set of posts
@@ -425,6 +427,31 @@ export async function createPost(
 ): Promise<{ success: boolean; data?: Post; error?: string }> {
   try {
     const supabase = await createClient()
+
+    // Authoritative gate: only verified citizens (or attesters) may post.
+    // Org accounts can post if the caller owns the org — the org itself is a
+    // verified entity. This mirrors the client-side gate in PostComposer but
+    // is the real boundary, since the server action is directly callable.
+    if (!input.wallet_address) {
+      return { success: false, error: "Nicht angemeldet" }
+    }
+
+    let allowed = await isVerifiedCitizen(input.wallet_address)
+
+    if (!allowed && input.account_id) {
+      const account = await fetchAccountById(input.account_id)
+      allowed =
+        !!account &&
+        isOrgAccount(account) &&
+        (await isAccountOwner(input.account_id, input.wallet_address))
+    }
+
+    if (!allowed) {
+      return {
+        success: false,
+        error: "Nur verifizierte Bürger können Beiträge erstellen",
+      }
+    }
 
     const { data: post, error } = await supabase
       .from("posts")
