@@ -30,8 +30,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import RoebelPointsWidget from '@/components/RoebelPointsWidget';
-import { useRoebelPoints, RoebelPointsProvider } from '@/context/RoebelPointsContext';
 
 function shortenAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -109,21 +107,12 @@ function CollectibleRow({
 // Main screen
 // ---------------------------------------------------------------------------
 
-export default function WalletScreenWrapper() {
-  return (
-    <RoebelPointsProvider>
-      <WalletScreenContent />
-    </RoebelPointsProvider>
-  );
-}
-
-function WalletScreenContent() {
+export default function WalletScreenContent() {
   const router = useRouter();
   const account = useActiveAccount();
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
 
-  const { pointsBalance, tier, card } = useRoebelPoints();
   const [activeTab, setActiveTab] = useState<'tokens' | 'collectibles'>('tokens');
   const [sendVisible, setSendVisible] = useState(false);
   const [receiveVisible, setReceiveVisible] = useState(false);
@@ -238,13 +227,6 @@ function WalletScreenContent() {
       </View>
 
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
-        {/* Röbel Points */}
-        <RoebelPointsWidget
-          balance={pointsBalance}
-          tier={tier}
-          streak={card?.streak_days || 0}
-        />
-
         {/* Balance Section */}
         <View style={styles.balanceSection}>
           <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Guthaben</Text>
