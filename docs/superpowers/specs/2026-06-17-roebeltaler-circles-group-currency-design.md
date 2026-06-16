@@ -2,7 +2,7 @@
 
 > **Status:** Draft for review (supersedes v1).
 > **What changed vs v1:** v1 assumed a *split* architecture (identity/governance stays on Base,
-> Circles on Gnosis, joined by a backend bridge). With only **15 verified citizens (4 Attesters)**,
+> Circles on Gnosis, joined by a backend bridge). With only **15 verified citizens (5 Attesters)**,
 > a full migration to Gnosis is now cheap and is the long-term-correct home. This v2 is therefore
 > **two-phase**: Phase 0 migrates the identity/governance stack to Gnosis; Phase 1 builds the
 > Röbeltaler slice **natively, same-chain, with no cross-chain bridge**. The deletion of the bridge
@@ -20,13 +20,13 @@
 
 The single most important correction over v1: **we migrate, we do not bridge.** The cross-chain
 machinery in v1 existed only because `CitizenNFT` was live on Base while Circles is Gnosis-only.
-At 15 citizens / 4 Attesters this is the cheapest the migration will ever be, and Gnosis is the
+At 15 citizens / 5 Attesters this is the cheapest the migration will ever be, and Gnosis is the
 natural long-term home for the entire Netizen Stack (Safe is Gnosis-native; Circles, EURe/Monerium,
 and Gnosis Pay are all native there; Base's consumer-liquidity advantages are irrelevant to an
 invisible-crypto civic app).
 
 Consequence: once `CitizenNFT` lives on Gnosis, the Röbeltaler group's membership condition reads
-citizenship **directly on-chain, same chain**. The v1 backend bridge (`§4.2`), the two-address
+citizenship **directly on-chain, same chain**. The v1 backend bridge, the two-address
 problem, and the future cross-chain treasury-execution problem all disappear.
 
 - **Phase 0** — Migrate identity + governance to Gnosis. (Own runbook; summarized in `§4`.)
@@ -100,7 +100,7 @@ points migration, EURe/RöbelCard euro rail, transaction privacy.
 
   THREE MONEY POOLS — keep strictly separate:
    (A) Collateral Vault   : backs Röbeltaler, belongs to depositors, mechanical, demurrages, unspendable.
-   (B) Group admin Safe   : 3-of-N Attester Safe; owns the GROUP (membership, trust, policy params, fee addr).
+   (B) Group admin Safe   : 3-of-5 Attester Safe; owns the GROUP (membership, trust, policy params, fee addr).
    (C) Stadt-Safe (civic) : the spendable civic treasury; funded by fees + grants + business fees + donations.
                             Empty/deferred in Phase 1. NOT funded by demurrage.
 ```
@@ -117,7 +117,7 @@ Scoped briefly here because it gates Phase 1; the full migration (especially MAC
 ceremony) deserves its own detailed runbook/spec.
 
 - **CitizenNFT + AttesterNFT:** redeploy soulbound contracts on Gnosis; re-issue to the 15 citizens
-  / 4 Attesters. Because soulbound, this is a re-mint ceremony (cannot transfer), trivial at 15.
+  / 5 Attesters. Because soulbound, this is a re-mint ceremony (cannot transfer), trivial at 15.
   Each citizen confirms their Gnosis smart account (same thirdweb login) during re-issuance.
 - **MACI / Governor / Timelock:** redeploy on Gnosis. zKeys are circuit-specific, not chain-specific,
   so the production trusted-setup keys port unchanged. Past pilot proposals: restart fresh on Gnosis
@@ -240,9 +240,8 @@ model — that's a custom mechanism that trades against the standard-policy fung
   change threshold as the community grows.
 - **Three roles, deliberately aligned but distinct:** `AttesterNFT` holders (issue/revoke citizens),
   Safe owners (own the group + civic treasury), Shamir keyholders (split the MACI coordinator key).
-  They may overlap; keep them explicitly mapped. *(Open: pin the canonical set — v1 said "5 Attesters"
-  and "3-of-5"; current count is "4 Attesters". A 3-of-5 needs 5 owners, so clarify 3-of-4 vs a 5th
-  non-Attester owner vs an actual 5th Attester.)*
+  They may overlap; keep them explicitly mapped. *(Resolved: there are **5 Attesters** and the 5
+  Safe owners already exist → committee threshold is **3-of-5**.)*
 - **Trajectory:** the Safe is an **execution layer**. The legitimacy source moves over time:
   committee discretion → committee executes **MACI** citizen votes (participatory budgeting, `§4.9`
   of the vision doc) → progressively more decentralized. "Who manages the treasury" evolves from
@@ -308,7 +307,7 @@ model — that's a custom mechanism that trades against the standard-policy fung
 - **Smart-account incompatibility (Spike #1):** if Safe is required, all units use Safe accounts; gate
   the rest behind this result.
 - **CitizenNFT revoked:** the on-chain membership condition refuses new joins automatically (same
-  chain — no bridge lag). v1 does **not** auto-unwind an already-issued Circles membership; documented
+  chain — no bridge lag). Phase 1 does **not** auto-unwind an already-issued Circles membership; documented
   limitation for a later spec (revocation propagation is now trivial since it's same-chain).
 - **Idempotency:** join + registration are idempotent; re-taps never double-register.
 - **RPC reliability:** reliable Gnosis RPC; verify tx receipts (reapply the publicnode null-receipt
@@ -341,7 +340,7 @@ model — that's a custom mechanism that trades against the standard-policy fung
 | Smart account | Safe smart account on Gnosis, managed via thirdweb (pending Spike #1) |
 | Treasury model | Three pools: collateral vault (mechanical) / group admin Safe / Stadt-Safe (civic, deferred) |
 | Fee | Redeem-fee → fee-collection-address → Stadt-Safe; pilot rate = 0; set at registration |
-| Committee | Gnosis Safe, n-of-m, reconfigurable; later driven by MACI votes |
+| Committee | Gnosis Safe, **3-of-5** (5 existing Attester owners), reconfigurable; later driven by MACI votes |
 | Points migration | **None.** Off-chain points kept as an independent backup |
 | Privacy | Public in Phase 1 (stated honestly in UX); zk privacy a real later workstream |
 | Gas | thirdweb paymaster on Gnosis; fallback = fund accounts (sub-cent gas) |
