@@ -7,22 +7,40 @@ export type SellerProfile = {
   avatarUrl: string | null;
 };
 
+// Never surface a wallet address as a display name. `accounts.name` is
+// defaulted to the truncated owner wallet (e.g. "0x12ab34cd...") when a user
+// signs up without a username, so a plain 40-hex regex isn't enough — treat
+// anything starting with "0x" as wallet-like.
+const isWalletLike = (s: string | null | undefined): boolean =>
+  !!s && /^0x[a-fA-F0-9]/.test(s.trim());
+
 /**
  * Resolve a seller wallet address to their personal account profile (name +
  * avatar) for display on the listing detail screen. A wallet can own several
- * accounts (e.g. orgs), so we pick the personal one.
+ * accounts (e.g. orgs), so we pick the personal one. The display name is taken
+ * from the user's profile (display_name → username) so we never render a raw
+ * wallet address; the account name is only used as a last resort when it isn't
+ * itself a wallet.
  */
 export async function fetchSellerProfileByWallet(
   wallet: string
 ): Promise<SellerProfile | null> {
-  const { data, error } = await supabase
-    .from('account_owners' as any)
-    .select('account_id, accounts:account_id(id, account_type, name, avatar_url)')
-    .eq('wallet_address', wallet.toLowerCase());
+  const lower = wallet.toLowerCase();
+  const [ownersRes, userRes] = await Promise.all([
+    supabase
+      .from('account_owners' as any)
+      .select('account_id, accounts:account_id(id, account_type, name, avatar_url)')
+      .eq('wallet_address', lower),
+    supabase
+      .from('users')
+      .select('username, display_name, profile_picture_url')
+      .eq('wallet_address', lower)
+      .maybeSingle(),
+  ]);
 
-  if (error || !data) return null;
+  if (ownersRes.error || !ownersRes.data) return null;
 
-  const rows = data as Array<{
+  const rows = ownersRes.data as Array<{
     account_id: string;
     accounts: {
       id: string;
@@ -34,10 +52,22 @@ export async function fetchSellerProfileByWallet(
   const personal = rows.find((r) => r.accounts?.account_type === 'personal');
   if (!personal?.accounts) return null;
 
+  const user = userRes.data as {
+    username: string | null;
+    display_name: string | null;
+    profile_picture_url: string | null;
+  } | null;
+
+  const name =
+    (user?.display_name && !isWalletLike(user.display_name) && user.display_name) ||
+    (user?.username && !isWalletLike(user.username) && user.username) ||
+    (!isWalletLike(personal.accounts.name) && personal.accounts.name) ||
+    'Jemand';
+
   return {
     accountId: personal.accounts.id,
-    name: personal.accounts.name,
-    avatarUrl: personal.accounts.avatar_url,
+    name,
+    avatarUrl: user?.profile_picture_url || personal.accounts.avatar_url,
   };
 }
 
