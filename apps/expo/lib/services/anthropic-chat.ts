@@ -41,7 +41,7 @@ export class AnthropicChatService {
     }
 
     this.apiKey = options.apiKey;
-    this.model = options.model || "claude-sonnet-4-20250514";
+    this.model = options.model || "claude-sonnet-4-6";
     this.maxTokens = options.maxTokens || 4096;
     this.temperature = options.temperature || 1.0;
   }
@@ -303,7 +303,7 @@ export function getAnthropicChatService(consented = false): AnthropicChatService
 
     anthropicServiceInstance = new AnthropicChatService({
       apiKey,
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       maxTokens: 4096,
       temperature: 1.0,
     });
