@@ -230,11 +230,11 @@ export default function BusinessDetailScreen() {
           <View style={styles.infoCards}>
             {business.address && (
               <Pressable
-                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }, pressed && { opacity: 0.8 }]}
                 onPress={handleDirections}
               >
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <LocationSmallIcon size={20} color={colors.primary} />
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <LocationSmallIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Adresse</Text>
@@ -245,11 +245,11 @@ export default function BusinessDetailScreen() {
 
             {business.phone && (
               <Pressable
-                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }, pressed && { opacity: 0.8 }]}
                 onPress={handleCall}
               >
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <CallIcon size={20} color={colors.primary} />
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <CallIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Telefon</Text>
@@ -260,11 +260,11 @@ export default function BusinessDetailScreen() {
 
             {business.email && (
               <Pressable
-                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }, pressed && { opacity: 0.8 }]}
                 onPress={() => Linking.openURL(`mailto:${business.email}`)}
               >
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <MailIcon size={20} color={colors.primary} />
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <MailIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>E-Mail</Text>
@@ -275,11 +275,11 @@ export default function BusinessDetailScreen() {
 
             {business.website_url && (
               <Pressable
-                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [styles.infoCard, { backgroundColor: colors.card, borderColor: colors.borderSecondary }, pressed && { opacity: 0.8 }]}
                 onPress={() => Linking.openURL(business.website_url!)}
               >
-                <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <ShareIcon size={20} color={colors.primary} />
+                <View style={[styles.iconContainer, { backgroundColor: colors.card, borderColor: colors.borderSecondary }]}>
+                  <ShareIcon size={24} color={colors.textPrimary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Webseite</Text>
@@ -521,6 +521,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
+    borderWidth: 1,
     padding: 16,
     gap: 12,
   },
@@ -528,6 +529,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
