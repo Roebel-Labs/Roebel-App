@@ -37,6 +37,7 @@ import {
   MailSmallIcon,
 } from '@/components/Icons';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
+import ImageZoomModal from '@/components/ImageZoomModal';
 import ListingCategoryIcon from '@/components/ListingCategoryIcon';
 import { PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from '@/constants/listing-categories';
 import MarketplaceCard from '@/components/MarketplaceCard';
@@ -68,6 +69,7 @@ export default function ListingDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [canEdit, setCanEdit] = useState(false);
   const [seller, setSeller] = useState<SellerProfile | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -209,10 +211,10 @@ export default function ListingDetailScreen() {
   const categoryLabel =
     categoryDef?.label || MARKETPLACE_CATEGORY_LABELS[listing.category] || listing.category;
   const conditionLabel = listing.condition ? CONDITION_LABELS[listing.condition] : null;
-  const sellerShort = listing.seller_wallet_address
-    ? `${listing.seller_wallet_address.slice(0, 6)}...${listing.seller_wallet_address.slice(-4)}`
-    : 'Unbekannt';
-  const sellerName = seller?.name || sellerShort;
+  // Never expose a raw 0x… wallet address in the UI — resolve to the seller's
+  // display name, falling back to a neutral placeholder while it loads / when
+  // it can't be resolved. See feedback: never show wallet addresses.
+  const sellerName = seller?.name || 'Jemand';
 
   // Hide "Kontaktieren" only when the ACTIVE account is the seller's account
   // (you can't message yourself). A wallet owns several accounts (personal +
@@ -256,13 +258,22 @@ export default function ListingDetailScreen() {
               }}
             >
               {images.map((uri, index) => (
-                <Image
+                <Pressable
                   key={index}
-                  source={{ uri }}
-                  style={styles.heroImage}
-                  contentFit="cover"
-                  accessibilityIgnoresInvertColors
-                />
+                  onPress={() => {
+                    setActiveImageIndex(index);
+                    setLightboxOpen(true);
+                  }}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="Bild vergrößern"
+                >
+                  <Image
+                    source={{ uri }}
+                    style={styles.heroImage}
+                    contentFit="cover"
+                    accessibilityIgnoresInvertColors
+                  />
+                </Pressable>
               ))}
             </ScrollView>
           ) : (
@@ -295,11 +306,20 @@ export default function ListingDetailScreen() {
             </Pressable>
           </View>
 
-          {/* Price pill — sibling of the carousel so it stays fixed during swipes */}
-          <View style={[styles.priceBadge, { backgroundColor: colors.background }]}>
-            <Text style={[styles.priceBadgeText, { color: colors.textPrimary }]}>{priceBase}</Text>
+          {/* Price pill — sibling of the carousel so it stays fixed during swipes.
+              Always white bg + black text for consistent contrast over any image. */}
+          <View style={[styles.priceBadge, { backgroundColor: '#FFFFFF' }]}>
+            <Text style={[styles.priceBadgeText, { color: '#000000' }]}>{priceBase}</Text>
           </View>
         </View>
+
+        {/* Fullscreen image lightbox */}
+        <ImageZoomModal
+          visible={lightboxOpen}
+          images={images}
+          imageUrl={images[activeImageIndex]}
+          onClose={() => setLightboxOpen(false)}
+        />
 
         {/* Content overlay */}
         <View style={[styles.contentOverlay, { backgroundColor: colors.background }]}>
@@ -315,7 +335,15 @@ export default function ListingDetailScreen() {
 
           {/* Seller row */}
           <View style={styles.sellerRow}>
-            <View style={styles.sellerInfo}>
+            <Pressable
+              style={({ pressed }) => [styles.sellerInfo, pressed && { opacity: 0.6 }]}
+              onPress={() => {
+                if (seller?.accountId) router.push(`/account/${seller.accountId}` as any);
+              }}
+              disabled={!seller?.accountId}
+              accessibilityRole="button"
+              accessibilityLabel={`Profil von ${sellerName} öffnen`}
+            >
               <UserAvatarWithFrame
                 size={44}
                 uri={seller?.avatarUrl ?? null}
@@ -325,7 +353,7 @@ export default function ListingDetailScreen() {
               <Text style={[styles.sellerName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {sellerName}
               </Text>
-            </View>
+            </Pressable>
             {!isOwn && (
               <Pressable
                 style={({ pressed }) => [
@@ -615,7 +643,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter',
     lineHeight: 22,
-    opacity: 0.85,
     marginBottom: 24,
   },
   // Seller

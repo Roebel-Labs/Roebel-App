@@ -8,7 +8,7 @@ export async function fetchBusinesses(): Promise<BusinessRecord[]> {
   const { data, error } = await supabase
     .from('businesses')
     .select('*')
-    .eq('status', 'approved')
+    .eq('status', 'published')
     .order('name', { ascending: true });
 
   if (error) {
@@ -27,7 +27,7 @@ export async function fetchBusinessBySlug(slug: string): Promise<BusinessRecord 
     .from('businesses')
     .select('*')
     .eq('slug', slug)
-    .eq('status', 'approved')
+    .eq('status', 'published')
     .single();
 
   if (error) {

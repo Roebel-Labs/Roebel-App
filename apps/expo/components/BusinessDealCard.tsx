@@ -41,7 +41,7 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
             </View>
           )}
           {deal.deal_value && (
-            <View style={[styles.dealBadge, { backgroundColor: colors.primary }]}>
+            <View style={styles.dealBadge}>
               <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
             </View>
           )}
@@ -168,14 +168,20 @@ const styles = StyleSheet.create({
   },
   dealBadge: {
     position: 'absolute',
-    top: 10,
+    bottom: 10,
     right: 10,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
   },
   dealBadgeText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
   },
@@ -223,6 +229,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   typeBadge: {
+    alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
