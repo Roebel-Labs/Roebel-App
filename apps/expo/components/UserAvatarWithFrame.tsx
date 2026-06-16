@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useEquippedRewards } from '@/hooks/useEquippedRewards';
 import { useTheme } from '@/context/ThemeContext';
@@ -71,9 +71,16 @@ export default function UserAvatarWithFrame({
         }}
       >
         {uri ? (
-          <Image
+          // expo-image (not RN Image) so avatars are cached in memory + on
+          // disk. Repeat appearances across the DM list and chat then render
+          // instantly instead of re-fetching over the network every time.
+          <ExpoImage
             source={{ uri }}
             style={{ width: size, height: size }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+            recyclingKey={uri}
             accessibilityIgnoresInvertColors
           />
         ) : fallbackInitial ? (

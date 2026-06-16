@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/SkeletonLoader';
 import { ChatLoadingSkeletons } from '@/components/messages/MessageBubbleSkeleton';
 import { safeDisplayName, type Message } from '@/lib/supabase-messages';
 import { setActiveConversationId } from '@/lib/active-conversation';
+import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -62,6 +63,16 @@ export default function ChatScreen() {
     ? safeDisplayName(peerAccount.name, peerAccount.username)
     : '';
 
+  // Personal peers live at /user/[username]; orgs at /account/[id]. Route via
+  // the shared helper instead of always pushing /account/[id] (which is the
+  // org-only page and renders nothing for a person).
+  const profileRef = peerAccount
+    ? {
+        account: { id: peerAccount.id, account_type: peerAccount.accountType },
+        author: { username: peerAccount.username },
+      }
+    : null;
+
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
       message={item}
@@ -80,10 +91,8 @@ export default function ChatScreen() {
         </Pressable>
         <Pressable
           style={styles.headerCenter}
-          onPress={() =>
-            peerAccount?.id && router.push(`/account/${peerAccount.id}` as any)
-          }
-          disabled={!peerAccount?.id}
+          onPress={() => profileRef && openAuthorProfile(router, profileRef)}
+          disabled={!profileRef || !canOpenProfile(profileRef)}
         >
           {isLoadingPeer && !peerAccount ? (
             <View style={styles.headerCenterSkeleton}>
