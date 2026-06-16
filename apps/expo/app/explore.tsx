@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { fetchBusinesses } from '@/lib/supabase-businesses';
 import { fetchActiveDeals } from '@/lib/supabase-deals';
 import { fetchMarketplaceListings } from '@/lib/supabase-marketplace';
 import { isEventTodayOrFuture, isEventInRoebel } from '@/lib/utils';
@@ -13,7 +12,6 @@ import type {
   NewsArticle,
   MovieRecord,
   RestaurantRecord,
-  BusinessRecord,
   BusinessDealWithBusiness,
   MarketplaceListingRecord,
 } from '@/lib/types';
@@ -26,7 +24,6 @@ import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
 import DealsGridSection from '@/components/DealsGridSection';
 import NewsSection from '@/components/NewsSection';
-import BusinessSection from '@/components/BusinessSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
 import MarketplaceSection from '@/components/MarketplaceSection';
@@ -45,7 +42,6 @@ export default function ExploreScreen() {
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
   const [movies, setMovies] = useState<MovieRecord[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
-  const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
   const [deals, setDeals] = useState<BusinessDealWithBusiness[]>([]);
   const [popularEvents, setPopularEvents] = useState<EventRecord[]>([]);
   const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
@@ -77,7 +73,6 @@ export default function ExploreScreen() {
         newsResult,
         moviesResult,
         restaurantsResult,
-        businessesResult,
         dealsResult,
         listingsResult,
       ] = await Promise.all([
@@ -111,7 +106,6 @@ export default function ExploreScreen() {
           .eq('status', 'published')
           .order('sort_order', { ascending: true })
           .order('name', { ascending: true }),
-        fetchBusinesses(),
         fetchActiveDeals(),
         fetchMarketplaceListings({ limit: 10 }),
       ]);
@@ -121,7 +115,6 @@ export default function ExploreScreen() {
       if (newsResult.data) setNewsArticles(newsResult.data as NewsArticle[]);
       if (moviesResult.data) setMovies(moviesResult.data as MovieRecord[]);
       if (restaurantsResult.data) setRestaurants(restaurantsResult.data as RestaurantRecord[]);
-      setBusinesses(businessesResult);
       setDeals(dealsResult as BusinessDealWithBusiness[]);
       setListings(listingsResult);
     } catch (error) {
@@ -230,9 +223,6 @@ export default function ExploreScreen() {
 
             {/* News */}
             <NewsSection articles={newsArticles} />
-
-            {/* Local Businesses */}
-            <BusinessSection businesses={businesses} />
 
             {/* Restaurants */}
             <RestaurantSection restaurants={restaurants} />
