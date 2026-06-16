@@ -162,6 +162,7 @@ type AccountFields = {
 type UserFields = {
   wallet_address: string;
   username: string | null;
+  profile_picture_url: string | null;
   equipped_frame_asset_url: string | null;
 };
 
@@ -229,7 +230,7 @@ export async function fetchConversations(
     if (wallets.length > 0) {
       const { data: users } = await supabase
         .from('users')
-        .select('wallet_address, username, equipped_frame_asset_url')
+        .select('wallet_address, username, profile_picture_url, equipped_frame_asset_url')
         .in('wallet_address', wallets);
       const userByWallet = new Map<string, UserFields>();
       for (const u of (users ?? []) as UserFields[]) {
@@ -289,11 +290,15 @@ export async function fetchConversations(
         peerSlug: peerAccount.slug,
         peerUsername: peerUser?.username ?? null,
         peerIsVerified: peerAccount.is_verified,
-        peerAvatarUrl: peerAccount.avatar_url,
+        // Personal peers carry their photo on the owner's `users` row; the
+        // `accounts.avatar_url` is unreliable/stale for them (same rule the
+        // feed uses — see resolveEventAuthors in supabase-posts.ts). Orgs have
+        // no peerUser, so they fall through to the account avatar.
+        peerAvatarUrl: peerUser?.profile_picture_url ?? peerAccount.avatar_url,
         peerEquippedFrameUrl: peerUser?.equipped_frame_asset_url ?? null,
         // Legacy mirror fields kept for back-compat with older renderers.
         peerAddress: peerId,
-        peerProfilePictureUrl: peerAccount.avatar_url,
+        peerProfilePictureUrl: peerUser?.profile_picture_url ?? peerAccount.avatar_url,
         lastMessage,
         lastReadAt,
         hasUnread,

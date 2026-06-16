@@ -90,7 +90,7 @@ export function useConversation(conversationId: string) {
         const { data: acc } = await supabase
           .from('accounts' as any)
           .select(
-            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, equipped_frame_asset_url))'
+            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, profile_picture_url, equipped_frame_asset_url))'
           )
           .eq('id', peerId)
           .single();
@@ -112,7 +112,11 @@ export function useConversation(conversationId: string) {
           subType: row.sub_type,
           name: row.name,
           username: isPersonal ? ownerUser?.username ?? null : null,
-          avatarUrl: row.avatar_url,
+          // Personal peers: photo lives on the owner's `users` row, not the
+          // (stale) accounts.avatar_url. Orgs use the account avatar.
+          avatarUrl: isPersonal
+            ? ownerUser?.profile_picture_url ?? row.avatar_url
+            : row.avatar_url,
           equippedFrameUrl: isPersonal ? ownerUser?.equipped_frame_asset_url ?? null : null,
           isVerified: row.is_verified,
         });
