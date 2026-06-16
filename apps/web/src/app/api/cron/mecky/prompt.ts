@@ -68,7 +68,7 @@ export async function generateMeckyPosts(
     .join("\n\n")
 
   const { object } = await generateObject({
-    model: anthropic("claude-sonnet-4-20250514"),
+    model: anthropic("claude-sonnet-4-6"),
     schema: MeckyPostsSchema,
     system: MECKY_SYSTEM_PROMPT,
     prompt: `Hier sind die aktuellen Nachrichtenartikel aus der Region. Wähle die 3 relevantesten für Röbel/Müritz aus und schreibe jeweils einen Post in Meckys Stimme.
