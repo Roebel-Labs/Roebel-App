@@ -30,7 +30,11 @@ const SALT_TYPES = {
 
 const SALT_MESSAGE = { purpose: 'Derive Roebel citizen commitment salt' } as const;
 
-/** Convert "DD.MM.YYYY" to canonical ISO "YYYY-MM-DD", or null if invalid. */
+/**
+ * Convert "DD.MM.YYYY" to canonical ISO "YYYY-MM-DD", or null if invalid.
+ * Rejects impossible calendar dates (e.g. 31.04, 29.02 on a non-leap year) so a
+ * stored birthdate is always a real date — it later feeds age-gating.
+ */
 export function germanDateToIso(input: string): string | null {
   const m = input.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!m) return null;
@@ -40,6 +44,15 @@ export function germanDateToIso(input: string): string | null {
   const year = Number(yyyy);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   if (year < 1900 || year > 2100) return null;
+  // Calendar validity: round-trip through Date and confirm nothing rolled over.
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -98,7 +111,13 @@ export async function loadCitizenPreimage(
   address: string
 ): Promise<CitizenPreimage | null> {
   const raw = await SecureStore.getItemAsync(preimageKey(address));
-  return raw ? (JSON.parse(raw) as CitizenPreimage) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as CitizenPreimage;
+  } catch {
+    // Corrupt entry — treat as absent rather than throwing.
+    return null;
+  }
 }
 
 /**

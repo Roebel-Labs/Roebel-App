@@ -15,6 +15,11 @@ describe('germanDateToIso', () => {
     expect(germanDateToIso('5.3.90')).toBeNull();
     expect(germanDateToIso('32.13.1990')).toBeNull();
   });
+  it('rejects impossible calendar dates', () => {
+    expect(germanDateToIso('31.04.1990')).toBeNull(); // April has 30 days
+    expect(germanDateToIso('29.02.2023')).toBeNull(); // 2023 is not a leap year
+    expect(germanDateToIso('29.02.2024')).toBe('2024-02-29'); // 2024 is a leap year
+  });
 });
 
 describe('fieldFromString', () => {
