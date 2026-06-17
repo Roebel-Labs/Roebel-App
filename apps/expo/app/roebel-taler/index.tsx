@@ -8,7 +8,7 @@ import { formatTaler } from "@/lib/roebel-taler";
 
 export default function RoebelTalerScreen() {
 	const { colors, isDark } = useTheme();
-	const { balanceRaw, onboarded, loading, minting, dailyMint, account } = useRoebelTaler();
+	const { balanceRaw, onboarded, loading, minting, onboarding, dailyMint, onboard, account } = useRoebelTaler();
 
 	const onDailyMint = useCallback(async () => {
 		try {
@@ -18,10 +18,13 @@ export default function RoebelTalerScreen() {
 		}
 	}, [dailyMint]);
 
-	const onJoin = useCallback(() => {
-		// SEAM: onboarding registers the citizen via a Röbel operator invite (backend).
-		Alert.alert("Bald verfügbar", "Die Anmeldung für Röbel-Taler wird in Kürze freigeschaltet.");
-	}, []);
+	const onJoin = useCallback(async () => {
+		try {
+			await onboard();
+		} catch {
+			Alert.alert("Nicht möglich", "Die Anmeldung ist gerade nicht möglich. Bitte versuche es später erneut.");
+		}
+	}, [onboard]);
 
 	const styles = makeStyles(colors);
 
@@ -56,8 +59,8 @@ export default function RoebelTalerScreen() {
 							{minting ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Heute abholen</Text>}
 						</Pressable>
 					) : (
-						<Pressable style={styles.cta} onPress={onJoin}>
-							<Text style={styles.ctaText}>Bei Röbel-Taler mitmachen</Text>
+						<Pressable style={[styles.cta, onboarding && styles.ctaDisabled]} onPress={onJoin} disabled={onboarding}>
+							{onboarding ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Bei Röbel-Taler mitmachen</Text>}
 						</Pressable>
 					))}
 

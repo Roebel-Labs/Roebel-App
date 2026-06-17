@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { sendTransaction } from "thirdweb";
 import { useGnosisWallet } from "@/context/GnosisWalletContext";
+import { supabase } from "@/lib/supabase";
 import {
 	isOnboarded,
 	getRoebelTalerBalance,
 	formatTaler,
 	prepareDailyMint,
+	prepareOnboard,
 } from "@/lib/roebel-taler";
 
 /**
@@ -21,6 +23,7 @@ export function useRoebelTaler() {
 	const [onboarded, setOnboarded] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [minting, setMinting] = useState(false);
+	const [onboarding, setOnboarding] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!address) { setLoading(false); return; }
@@ -50,6 +53,28 @@ export function useRoebelTaler() {
 		}
 	}, [gnosisAccount, refresh]);
 
+	/**
+	 * Onboard the citizen: the server-held Röbel operator trusts this address (the
+	 * Circles invitation), then we register on-chain (gasless). After this the
+	 * citizen can mint their daily Röbel-Taler.
+	 */
+	const onboard = useCallback(async () => {
+		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
+		setOnboarding(true);
+		try {
+			const { data, error } = await supabase.functions.invoke("circles-invite", {
+				body: { gnosisAddress: gnosisAccount.address },
+			});
+			if (error) throw error;
+			if (!data?.alreadyRegistered && data?.inviter) {
+				await sendTransaction({ account: gnosisAccount, transaction: prepareOnboard(data.inviter) });
+			}
+			await refresh();
+		} finally {
+			setOnboarding(false);
+		}
+	}, [gnosisAccount, refresh]);
+
 	return {
 		/** Display number for CoinBalanceHero (2-decimal). */
 		talerBalance: Number(formatTaler(balanceRaw)),
@@ -57,7 +82,9 @@ export function useRoebelTaler() {
 		onboarded,
 		loading: loading || !ready,
 		minting,
+		onboarding,
 		dailyMint,
+		onboard,
 		refresh,
 		account: gnosisAccount,
 	};

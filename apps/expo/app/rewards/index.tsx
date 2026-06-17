@@ -56,7 +56,9 @@ export default function RewardsIndexScreen() {
     talerBalance,
     onboarded: talerOnboarded,
     minting: talerMinting,
+    onboarding: talerOnboarding,
     dailyMint,
+    onboard,
   } = useRoebelTaler();
 
   const insets = useSafeAreaInsets();
@@ -184,7 +186,7 @@ export default function RewardsIndexScreen() {
           />
         </View>
 
-        {isConnected && talerOnboarded && (
+        {isConnected && (talerOnboarded ? (
           <Pressable
             onPress={async () => {
               try {
@@ -213,7 +215,36 @@ export default function RewardsIndexScreen() {
               </Text>
             )}
           </Pressable>
-        )}
+        ) : (
+          <Pressable
+            onPress={async () => {
+              try {
+                await onboard();
+                showSnackbar({ message: 'Willkommen beim Röbel-Taler!' });
+              } catch {
+                showSnackbar({ message: 'Anmeldung gerade nicht möglich' });
+              }
+            }}
+            disabled={talerOnboarding}
+            style={{
+              marginHorizontal: 16,
+              marginTop: 12,
+              backgroundColor: colors.primary,
+              borderRadius: 16,
+              paddingVertical: 16,
+              alignItems: 'center',
+              opacity: talerOnboarding ? 0.6 : 1,
+            }}
+          >
+            {talerOnboarding ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#fff' }}>
+                Bei Röbel-Taler mitmachen
+              </Text>
+            )}
+          </Pressable>
+        ))}
 
         <CheckinStreakStrip
           streak={streak}
