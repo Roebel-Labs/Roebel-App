@@ -136,7 +136,7 @@ export function useCreateAttesterRequest() {
   const [stage, setStage] = useState<RequestStage>('idle');
 
   const createRequest = useCallback(
-    async (personalData: PersonalData, reason: string) => {
+    async (identity: CitizenIdentity, reason: string) => {
       if (!account) {
         throw new Error('No wallet connected');
       }
@@ -145,64 +145,42 @@ export function useCreateAttesterRequest() {
       setError(null);
 
       try {
-        console.log('🚀 Creating attester attestation request...');
-
-        // 1. Create encrypted evidence (V2 - no signature required!)
         setStage('encrypting');
-        const evidence = await createEncryptedEvidenceV2(
-          personalData,
+        const { evidenceURI, evidence } = await buildCitizenCommitment(
+          identity,
           reason,
           'attester',
           account
         );
 
-        // 2. Create blockchain transaction (get request ID from the receipt)
         const transaction = prepareContractCall({
           contract: attesterNFTContract,
           method: 'function createAttestationRequest(string evidenceURI) returns (uint256)',
-          params: ['supabase://pending'], // Temporary URI
+          params: [evidenceURI],
         });
 
         setStage('submitting-tx');
-        const { transactionHash } = await sendTransaction({
-          transaction,
-          account,
-        });
+        const { transactionHash } = await sendTransaction({ transaction, account });
 
-        console.log('✅ Transaction submitted:', transactionHash);
-
-        // 3. Wait for receipt and read the actual requestId from the event log.
         setStage('awaiting-receipt');
-        const receipt = await waitForReceipt({
-          client,
-          chain: base,
-          transactionHash,
-        });
-
+        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
         const requestCreatedEvent = prepareEvent({
           signature:
             'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
         });
-        const events = parseEventLogs({
-          events: [requestCreatedEvent],
-          logs: receipt.logs,
-        });
+        const events = parseEventLogs({ events: [requestCreatedEvent], logs: receipt.logs });
         const created = events[0];
         if (!created) {
           throw new Error('Could not read request ID from transaction receipt');
         }
         const requestId = Number(created.args.requestId);
 
-        // 4. Upload evidence to Supabase (Irys then DB row, stages via callback)
-        await uploadEncryptedEvidence(evidence, requestId, setStage);
-
-        console.log(`✅ Attester request created successfully! ID: ${requestId}`);
+        await uploadCommitmentEvidence(evidence, requestId, setStage);
 
         setStage('idle');
         setIsLoading(false);
         return { requestId, transactionHash };
       } catch (err) {
-        console.error('❌ Failed to create attester request:', err);
         const error = err instanceof Error ? err : new Error('Unknown error');
         setError(error);
         setStage('idle');
