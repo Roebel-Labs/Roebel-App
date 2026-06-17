@@ -36,6 +36,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { ThirdwebProvider } from 'thirdweb/react';
 import { useScreenTracking } from '@/hooks/useAnalytics';
 import { WalletBootProvider } from '@/context/WalletBootContext';
+import { GnosisWalletProvider } from '@/context/GnosisWalletContext';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
 import { ConsentGate } from '@/components/consent/ConsentGate';
@@ -295,6 +296,7 @@ function Layout() {
               <ConditionalPostHogProvider>
                 <ThirdwebProvider>
                   <WalletBootProvider>
+                  <GnosisWalletProvider>
                   <AuthGateProvider>
                     <VerificationProvider>
                       <UserProvider>
@@ -331,6 +333,7 @@ function Layout() {
                       </UserProvider>
                     </VerificationProvider>
                   </AuthGateProvider>
+                  </GnosisWalletProvider>
                   </WalletBootProvider>
                 </ThirdwebProvider>
               </ConditionalPostHogProvider>

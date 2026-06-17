@@ -1,54 +1,22 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback } from "react";
 import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import { useTheme } from "@/context/ThemeContext";
-import {
-	isOnboarded,
-	getRoebelTalerBalance,
-	formatTaler,
-	prepareDailyMint,
-} from "@/lib/roebel-taler";
+import { useRoebelTaler } from "@/hooks/useRoebelTaler";
+import { formatTaler } from "@/lib/roebel-taler";
 
-// NOTE: the on-chain address must be the citizen's GNOSIS smart account. Until the
-// dedicated Gnosis wallet provider lands we read the active account address (same
-// thirdweb login). Marked as the integration seam.
 export default function RoebelTalerScreen() {
 	const { colors, isDark } = useTheme();
-	const account = useActiveAccount();
-	const address = account?.address;
-	const { mutateAsync: send, isPending: minting } = useSendTransaction();
-
-	const [loading, setLoading] = useState(true);
-	const [onboarded, setOnboarded] = useState(false);
-	const [balance, setBalance] = useState<bigint>(0n);
-
-	const refresh = useCallback(async () => {
-		if (!address) { setLoading(false); return; }
-		setLoading(true);
-		try {
-			const [ob, bal] = await Promise.all([
-				isOnboarded(address).catch(() => false),
-				getRoebelTalerBalance(address).catch(() => 0n),
-			]);
-			setOnboarded(ob);
-			setBalance(bal);
-		} finally {
-			setLoading(false);
-		}
-	}, [address]);
-
-	useEffect(() => { refresh(); }, [refresh]);
+	const { balanceRaw, onboarded, loading, minting, dailyMint, account } = useRoebelTaler();
 
 	const onDailyMint = useCallback(async () => {
 		try {
-			await send(prepareDailyMint());
-			await refresh();
+			await dailyMint();
 		} catch {
 			Alert.alert("Heute schon abgeholt", "Dein tägliches Röbel-Taler steht erst morgen wieder bereit.");
 		}
-	}, [send, refresh]);
+	}, [dailyMint]);
 
 	const onJoin = useCallback(() => {
 		// SEAM: onboarding registers the citizen via a Röbel operator invite (backend).
@@ -78,12 +46,12 @@ export default function RoebelTalerScreen() {
 						) : (
 							<>
 								<Text style={styles.balanceLabel}>Dein Guthaben</Text>
-								<Text style={styles.balanceValue}>{formatTaler(balance)} <Text style={styles.balanceUnit}>Röbel-Taler</Text></Text>
+								<Text style={styles.balanceValue}>{formatTaler(balanceRaw)} <Text style={styles.balanceUnit}>Röbel-Taler</Text></Text>
 							</>
 						)}
 					</View>
 
-					{!loading && (onboarded ? (
+					{!loading && account && (onboarded ? (
 						<Pressable style={[styles.cta, minting && styles.ctaDisabled]} onPress={onDailyMint} disabled={minting}>
 							{minting ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Heute abholen</Text>}
 						</Pressable>

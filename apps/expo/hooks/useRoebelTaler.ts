@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import { sendTransaction } from "thirdweb";
+import { useGnosisWallet } from "@/context/GnosisWalletContext";
 import {
 	isOnboarded,
 	getRoebelTalerBalance,
@@ -8,18 +9,18 @@ import {
 } from "@/lib/roebel-taler";
 
 /**
- * Isolated hook for the real on-chain Röbel-Taler (Gnosis, via thirdweb). Keeps the
- * currency logic out of RewardsContext (which stays the off-chain gamification points).
- * The user-facing currency is always "Röbel-Taler" — never surface CRC/Circles.
+ * Real on-chain Röbel-Taler (Circles on Gnosis), via the parallel Gnosis smart
+ * account (gasless / sponsored). Keeps currency logic out of RewardsContext (which
+ * stays the off-chain gamification points). User-facing term is always "Röbel-Taler".
  */
 export function useRoebelTaler() {
-	const account = useActiveAccount();
-	const address = account?.address;
-	const { mutateAsync: send, isPending: minting } = useSendTransaction();
+	const { gnosisAccount, ready } = useGnosisWallet();
+	const address = gnosisAccount?.address;
 
 	const [balanceRaw, setBalanceRaw] = useState<bigint>(0n);
 	const [onboarded, setOnboarded] = useState(false);
 	const [loading, setLoading] = useState(true);
+	const [minting, setMinting] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!address) { setLoading(false); return; }
@@ -39,18 +40,25 @@ export function useRoebelTaler() {
 	useEffect(() => { refresh(); }, [refresh]);
 
 	const dailyMint = useCallback(async () => {
-		await send(prepareDailyMint());
-		await refresh();
-	}, [send, refresh]);
+		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
+		setMinting(true);
+		try {
+			await sendTransaction({ account: gnosisAccount, transaction: prepareDailyMint() });
+			await refresh();
+		} finally {
+			setMinting(false);
+		}
+	}, [gnosisAccount, refresh]);
 
 	return {
 		/** Display number for CoinBalanceHero (2-decimal). */
 		talerBalance: Number(formatTaler(balanceRaw)),
 		balanceRaw,
 		onboarded,
-		loading,
+		loading: loading || !ready,
 		minting,
 		dailyMint,
 		refresh,
+		account: gnosisAccount,
 	};
 }
