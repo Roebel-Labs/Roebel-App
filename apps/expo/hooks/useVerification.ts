@@ -428,7 +428,6 @@ export function useRequestDetails(requestId: number, nftType: 'citizen' | 'attes
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [request, setRequest] = useState<any | null>(null);
-  const [evidence, setEvidence] = useState<EncryptedEvidence | null>(null);
   const [decryptedData, setDecryptedData] = useState<PersonalData | null>(null);
 
   const fetchRequest = useCallback(async () => {
@@ -465,22 +464,16 @@ export function useRequestDetails(requestId: number, nftType: 'citizen' | 'attes
 
       setRequest(parsedRequest);
 
-      // Fetch evidence from Supabase by request ID
-      try {
-        const evidenceData = await fetchEvidenceByRequestId(requestId, nftType);
-        setEvidence(evidenceData);
-
-        // Try to decrypt if user is the requester
-        if (account && evidenceData.metadata.requester.toLowerCase() === account.address.toLowerCase()) {
-          try {
-            const decrypted = await decryptEvidenceV2(evidenceData, account);
-            setDecryptedData(decrypted);
-          } catch (decryptError) {
-            console.log('Could not decrypt (expected if not owner)');
+      // Owner-only: show the name from the on-device preimage (no server PII).
+      if (account && parsedRequest.requester.toLowerCase() === account.address.toLowerCase()) {
+        try {
+          const pre = await loadCitizenPreimage(account.address);
+          if (pre) {
+            setDecryptedData({ name: `${pre.firstName} ${pre.lastName}`.trim(), address: pre.address });
           }
+        } catch (e) {
+          console.log('No local preimage for this request');
         }
-      } catch (evidenceError) {
-        console.log('Evidence not yet available (may still be uploading)');
       }
 
       setIsLoading(false);
@@ -492,7 +485,7 @@ export function useRequestDetails(requestId: number, nftType: 'citizen' | 'attes
     }
   }, [requestId, nftType, account]);
 
-  return { request, evidence, decryptedData, isLoading, error, fetchRequest };
+  return { request, decryptedData, isLoading, error, fetchRequest };
 }
 
 /**
