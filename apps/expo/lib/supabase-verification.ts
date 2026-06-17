@@ -8,7 +8,7 @@
 import { supabase } from './supabase';
 import { uploadToIrys, fetchFromIrys } from './irys-upload';
 import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
-import type { EncryptedEvidence } from './verification-types';
+import type { EncryptedEvidence, CommitmentEvidence } from './verification-types';
 
 // Scope reads/writes to the currently deployed contract addresses so legacy rows
 // from archived (pre-2026-05-23) CitizenNFT/AttesterNFT contracts no longer collide
@@ -79,6 +79,45 @@ export async function uploadEncryptedEvidence(
   } catch (error) {
     console.error('❌ Failed to upload evidence:', error);
     throw error;
+  }
+}
+
+/**
+ * Store a non-PII commitment evidence row. Unlike uploadEncryptedEvidence, this
+ * writes NO recoverable personal data — only the non-reversible commitment.
+ */
+export async function uploadCommitmentEvidence(
+  evidence: CommitmentEvidence,
+  requestId: number,
+  onStage?: (stage: UploadEvidenceStage) => void
+): Promise<void> {
+  onStage?.('saving-reference');
+
+  const { error } = await supabase.from('request_evidence').insert({
+    request_id: String(requestId),
+    contract_type: evidence.type,
+    contract_address: currentContractAddress(evidence.type),
+    requester_address: evidence.requester.toLowerCase(),
+    irys_id: 'commitment',
+    irys_url: 'commitment',
+    evidence_data: {
+      commitment: evidence.commitment,
+      version: evidence.version,
+      reason: evidence.reason,
+      timestamp: evidence.timestamp,
+      redacted: true, // no PII; preimage stays on the requester's device
+    },
+    is_encrypted: false,
+    encryption_version: evidence.version,
+    status: 'pending',
+    nft_type: evidence.type,
+    attester_signatures: 0,
+    citizen_signatures: 0,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw new Error(`Failed to store commitment evidence: ${error.message}`);
   }
 }
 
