@@ -24,6 +24,7 @@ import ProfileHeaderCard from '@/components/profile/ProfileHeaderCard';
 import CoinsCard from '@/components/profile/CoinsCard';
 import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
+import CompleteCitizenDataBanner from '@/components/profile/CompleteCitizenDataBanner';
 import TouristActionRow from '@/components/profile/TouristActionRow';
 import OrgActionCards from '@/components/profile/OrgActionCards';
 import StoryCollectionsBar from '@/components/feed/StoryCollectionsBar';
@@ -278,6 +279,7 @@ const handleRefresh = async () => {
                   </>
                 ) : isCitizen ? (
                   <>
+                    <CompleteCitizenDataBanner />
                     <ProfileHeaderCard
                       name={displayName || 'Bürger'}
                       avatarUrl={user?.profile_picture_url ?? null}

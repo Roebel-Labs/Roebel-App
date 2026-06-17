@@ -21,7 +21,7 @@ import type { CitizenIdentity, CitizenPreimage, CommitmentEvidence } from './ver
 const SALT_DOMAIN = {
   name: 'Roebel Citizen Commitment',
   version: '1',
-  chainId: 8453, // Base today; ported to Gnosis (100) in Circles Phase 0.
+  chainId: 100, // Gnosis. Frozen domain separator — never change once anyone enrolls.
 } as const;
 
 const SALT_TYPES = {
@@ -147,4 +147,22 @@ export async function buildCitizenCommitment(
   };
 
   return { evidenceURI: `commit:${commitment}`, evidence, preimage };
+}
+
+/**
+ * Backfill the commitment for an ALREADY-verified citizen (e.g. one bulk-minted
+ * during the Gnosis migration, who never ran the request form). Derives the
+ * wallet-bound salt and stores the preimage on-device only — NO on-chain tx and
+ * NO Supabase row, since they already hold the NFT. This is what powers the
+ * name display, attester-upgrade prefill, and future age/uniqueness proofs.
+ */
+export async function enrollExistingCitizen(
+  identity: CitizenIdentity,
+  account: Account
+): Promise<{ commitment: string; preimage: CitizenPreimage }> {
+  const salt = await deriveCommitmentSalt(account);
+  const preimage: CitizenPreimage = { ...identity, salt };
+  const commitment = computeCommitment(preimage);
+  await storeCitizenPreimage(account.address, preimage);
+  return { commitment, preimage };
 }
