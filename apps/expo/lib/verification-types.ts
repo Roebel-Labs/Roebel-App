@@ -13,6 +13,36 @@ export interface PersonalData {
 }
 
 /**
+ * Citizen identity collected in the request form. Never stored server-side in
+ * plaintext — only hashed into a commitment whose preimage stays on-device.
+ * `birthdate` is canonical ISO `YYYY-MM-DD`.
+ */
+export interface CitizenIdentity {
+  firstName: string;
+  lastName: string;
+  birthdate: string; // ISO YYYY-MM-DD
+  address: string;
+}
+
+/** On-device preimage = identity + the wallet-bound salt (decimal field element). */
+export interface CitizenPreimage extends CitizenIdentity {
+  salt: string; // decimal string of a BabyJubjub field element
+}
+
+/**
+ * Non-PII evidence written to Supabase + (the commitment) on-chain. Contains NO
+ * recoverable personal data — only the non-reversible Poseidon commitment.
+ */
+export interface CommitmentEvidence {
+  commitment: string; // 0x-hex Poseidon output
+  type: 'citizen' | 'attester';
+  requester: string;
+  reason: string;
+  timestamp: string;
+  version: 'commit-v1';
+}
+
+/**
  * Encrypted blob structure
  */
 export interface EncryptedBlob {
