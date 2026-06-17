@@ -92,6 +92,40 @@ contract AttesterNFT is ERC721, Ownable {
         }
     }
 
+    // ---- One-time migration (cross-chain re-issue) ----
+
+    bool public migrationFinalized;
+
+    event MigrationMinted(address indexed attester, uint256 indexed tokenId);
+    event MigrationFinalized();
+
+    /// @notice One-time, owner-only bulk re-issue used to migrate an existing
+    /// attester set onto a new chain. Idempotent (skips current holders) and
+    /// permanently disabled by `finalizeMigration()`. Uses `_mint` so a
+    /// smart-account attester that doesn't implement onERC721Received cannot
+    /// brick the batch; tokens are soulbound regardless.
+    function migrationMint(address[] calldata attesters) external onlyOwner {
+        require(!migrationFinalized, "Migration finalized");
+        for (uint256 i = 0; i < attesters.length; i++) {
+            address to = attesters[i];
+            if (to == address(0) || hasAttesterNFT[to]) continue;
+            uint256 tokenId = _nextTokenId++;
+            _mint(to, tokenId);
+            hasAttesterNFT[to] = true;
+            hasEverHeldAttesterNFT[to] = true;
+            _tokenIdByOwner[to] = tokenId;
+            emit AttesterNFTMinted(to, tokenId, 0);
+            emit MigrationMinted(to, tokenId);
+        }
+    }
+
+    /// @notice Permanently disables `migrationMint`. One-way: afterwards every
+    /// new attester must go through the multi-sig attestation flow.
+    function finalizeMigration() external onlyOwner {
+        migrationFinalized = true;
+        emit MigrationFinalized();
+    }
+
     // ---- Request lifecycle ----
 
     function createAttestationRequest(string calldata evidenceURI) external returns (uint256) {

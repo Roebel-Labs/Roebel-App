@@ -127,6 +127,41 @@ contract CitizenNFT is ERC721, ERC721Votes, Ownable {
         }
     }
 
+    // ---- One-time migration (cross-chain re-issue) ----
+
+    bool public migrationFinalized;
+
+    event MigrationMinted(address indexed citizen, uint256 indexed tokenId);
+    event MigrationFinalized();
+
+    /// @notice One-time, owner-only bulk re-issue used to migrate an existing
+    /// citizen set onto a new chain. Idempotent (skips current holders) and
+    /// permanently disabled by `finalizeMigration()`. Uses `_mint` (not
+    /// `_safeMint`) so a smart-account citizen that doesn't implement
+    /// onERC721Received cannot brick the batch; tokens are soulbound regardless.
+    function migrationMint(address[] calldata citizens) external onlyOwner {
+        require(!migrationFinalized, "Migration finalized");
+        for (uint256 i = 0; i < citizens.length; i++) {
+            address to = citizens[i];
+            if (to == address(0) || hasCitizenNFT[to]) continue;
+            uint256 tokenId = _nextTokenId++;
+            _mint(to, tokenId);
+            _delegate(to, to);
+            hasCitizenNFT[to] = true;
+            hasEverHeldCitizenNFT[to] = true;
+            _tokenIdByOwner[to] = tokenId;
+            emit CitizenNFTMinted(to, tokenId, 0);
+            emit MigrationMinted(to, tokenId);
+        }
+    }
+
+    /// @notice Permanently disables `migrationMint`. One-way: afterwards every
+    /// new citizen must go through the multi-sig attestation flow.
+    function finalizeMigration() external onlyOwner {
+        migrationFinalized = true;
+        emit MigrationFinalized();
+    }
+
     // ---- Request lifecycle ----
 
     function createAttestationRequest(string calldata evidenceURI) external returns (uint256) {

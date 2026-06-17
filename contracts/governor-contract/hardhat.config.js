@@ -55,6 +55,11 @@ module.exports = {
       chainId: 84532,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     },
+    gnosis: {
+      url: process.env.GNOSIS_RPC_URL || "https://rpc.gnosischain.com",
+      chainId: 100,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
   },
   etherscan: {
     // Etherscan v2 unified API — single key works across all chains; the chain is
