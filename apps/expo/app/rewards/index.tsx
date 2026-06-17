@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -17,6 +18,9 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
+import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -48,6 +52,41 @@ export default function RewardsIndexScreen() {
     refresh,
     isLoading,
   } = useRewards();
+
+  // The real on-chain Röbel-Taler (Circles on Gnosis). This page IS the Röbel-Taler
+  // home: the headline + daily mint are the real coin; off-chain points/streaks below
+  // stay the gamification layer.
+  const {
+    talerBalance,
+    onboarded: talerOnboarded,
+    minting: talerMinting,
+    onboarding: talerOnboarding,
+    dailyMint,
+    onboard,
+  } = useRoebelTaler();
+  const weekly = useRoebelTalerWeekly();
+
+  const onDailyMint = useCallback(async () => {
+    try {
+      await dailyMint();
+      showSnackbar({ message: 'Dein tägliches Röbel-Taler ist da' });
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      console.error('[Röbel-Taler] daily mint failed:', msg);
+      Alert.alert('Heute abholen fehlgeschlagen', msg);
+    }
+  }, [dailyMint, showSnackbar]);
+
+  const onJoin = useCallback(async () => {
+    try {
+      await onboard();
+      showSnackbar({ message: 'Willkommen beim Röbel-Taler!' });
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      console.error('[Röbel-Taler] onboarding failed:', msg);
+      Alert.alert('Anmeldung fehlgeschlagen', msg);
+    }
+  }, [onboard, showSnackbar]);
 
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
@@ -160,19 +199,43 @@ export default function RewardsIndexScreen() {
       >
         <View style={styles.heroBleed}>
           <CoinBalanceHero
-            balance={coins}
-            label="Mein Guthaben"
+            balance={talerBalance}
+            label="Röbel-Taler"
             sublabel={
               !isConnected
-                ? 'Melde dich an, um Münzen zu sammeln'
-                : keyCount > 0
-                  ? `${keyCount} Schlüssel bereit für die Schatzkammer`
+                ? 'Melde dich an, um Röbel-Taler zu sammeln'
+                : !talerOnboarded
+                  ? 'Mach mit, um täglich Röbel-Taler abzuholen'
                   : hasCheckedInToday
-                    ? `Check-in erledigt · Serie ${streak} Tage`
-                    : undefined
+                    ? `Serie ${streak} Tage`
+                    : 'Hol dir dein tägliches Röbel-Taler'
             }
           />
         </View>
+
+        {isConnected && (talerOnboarded ? (
+          <Pressable
+            onPress={onDailyMint}
+            disabled={talerMinting}
+            style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerMinting ? 0.6 : 1 }]}
+          >
+            {talerMinting ? <ActivityIndicator color="#fff" /> : <Text style={styles.talerCtaText}>Heute abholen</Text>}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={onJoin}
+            disabled={talerOnboarding}
+            style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerOnboarding ? 0.6 : 1 }]}
+          >
+            {talerOnboarding ? <ActivityIndicator color="#fff" /> : <Text style={styles.talerCtaText}>Bei Röbel-Taler mitmachen</Text>}
+          </Pressable>
+        ))}
+
+        {isConnected && talerOnboarded && (
+          <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+            <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
+          </View>
+        )}
 
         <CheckinStreakStrip
           streak={streak}
@@ -337,6 +400,18 @@ const styles = StyleSheet.create({
   },
   heroBleed: {
     marginHorizontal: -16,
+  },
+  talerCta: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  talerCtaText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#fff',
   },
   primaryCTA: {
     borderRadius: 999,

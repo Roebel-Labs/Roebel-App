@@ -194,7 +194,7 @@ const handleRefresh = async () => {
                 <ProfileMenuItem
                   icon={<StarIcon width={20} height={20} color={colors.primary} />}
                   label="Röbel-Taler"
-                  onPress={() => router.push('/roebel-taler' as any)}
+                  onPress={() => router.push('/rewards' as any)}
                 />
                 <ProfileMenuItem
                   icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
