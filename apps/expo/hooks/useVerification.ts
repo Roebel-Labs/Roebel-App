@@ -43,7 +43,9 @@ export type RequestStage =
 /** German labels for {@link RequestStage}, used by the submit button. */
 export const REQUEST_STAGE_LABEL: Record<RequestStage, string> = {
   idle: 'Absenden',
-  encrypting: 'Daten werden verschlüsselt',
+  // 'encrypting' is the (now) commitment-preparation stage — the label reflects
+  // that we build an on-device commitment, not encrypt server-stored PII.
+  encrypting: 'Antrag wird vorbereitet',
   'submitting-tx': 'Antrag wird gesendet',
   'awaiting-receipt': 'Bestätigung wird abgewartet',
   'uploading-evidence': 'Nachweis wird hochgeladen',
