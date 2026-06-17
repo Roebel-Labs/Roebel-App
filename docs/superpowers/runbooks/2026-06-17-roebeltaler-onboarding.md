@@ -24,20 +24,18 @@ supabase secrets set GNOSIS_RPC_URL=https://rpc.gnosischain.com
   `WELCOME_BONUS` per citizen). Key lives ONLY as the `OPERATOR_PRIVKEY` secret.
 - Register it BEFORE retiring any bootstrap wallet that invited it.
 
-## ⚠️ OPEN — the CRC bootstrap (question for the Circles team)
-The invite economics have a genuine cold-start: an inviter needs **CRC** to invite,
-but CRC only accrues (~24/day) **after** a human registers. Today **no Röbel wallet
-holds CRC** (the burner is registered but `personalMint` reverted — likely
-just-registered/issuance-not-accrued or `stopped`). So the *first* registrations
-can't be funded by a normal invite. Resolve with Circles:
-- Is there an **invitation farm / Gnosis Pay invite quota** (`invitationFarmAddress`,
-  `gnosisPayInviteQuotaGranteeAddress` in `circlesConfig[100]`) that seeds the first
-  inviter without pre-existing CRC?
-- Why did `personalMint` revert for the freshly-registered burner — timing, or a
-  required prior step? (Decode the revert with the Circles team.)
-- Recommended once unblocked: register the **operator early** so it accrues CRC, and
-  onboard citizens as CRC allows; or have the Circles team bootstrap the operator.
+## Bootstrap — SOLVED: use the Circles InviteFarm community quota
+Normal invites cost the inviter ~96 CRC (invitee receives 48), so a fresh operator
+with no CRC can't cold-start. The fix is Circles' **InviteFarm**: a community gets an
+invitation **quota** that onboards people WITHOUT spending CRC per invite.
+- Package: **`@aboutcircles/sdk-invitations`** — `InviteFarm.generateInvites()` /
+  `generateReferrals(count)` (the latter pre-deploys accounts for brand-new users).
+- One-time: request Röbel's quota from the Circles team (Telegram).
+- Then the operator/Edge Function mints invites from the quota instead of spending CRC.
 
-Everything in the app + the Edge Function is built and correct for the standard
-`trust` → `registerHuman` flow; this bootstrap is the only thing between "built" and
-"a citizen can self-onboard end-to-end."
+Implementation switch: replace the operator's `trust()` (CRC-funded) path in
+`circles-invite` with an InviteFarm `generateInvites()` call backed by the quota.
+The app's `registerHuman(inviter)` step is unchanged.
+
+(Side note: `personalMint` reverting on the just-registered burner was the standard
+"no issuance accrued yet" case — irrelevant once InviteFarm handles onboarding.)

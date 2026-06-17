@@ -18,6 +18,8 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
+import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -60,6 +62,7 @@ export default function RewardsIndexScreen() {
     dailyMint,
     onboard,
   } = useRoebelTaler();
+  const weekly = useRoebelTalerWeekly();
 
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
@@ -245,6 +248,12 @@ export default function RewardsIndexScreen() {
             )}
           </Pressable>
         ))}
+
+        {isConnected && talerOnboarded && (
+          <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+            <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
+          </View>
+        )}
 
         <CheckinStreakStrip
           streak={streak}
