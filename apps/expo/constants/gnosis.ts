@@ -21,9 +21,15 @@ export const attesterNFTGnosisAddress =
 export const attesterSafeGnosisAddress =
 	process.env.EXPO_PUBLIC_ATTESTER_SAFE_GNOSIS || "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa";
 
-// Röbeltaler group address, set after the one-time group registration.
+// Röbeltaler Circles v2 BaseGroup (registered 2026-06-17; owner = Attester Safe,
+// standard mint policy, fee 0, citizen-gated via owner-curated trust of the 15
+// CitizenNFT holders).
 export const roebeltalerGroupAddress =
-	process.env.EXPO_PUBLIC_ROEBELTALER_GROUP || "";
+	process.env.EXPO_PUBLIC_ROEBELTALER_GROUP || "0xAc2CeCdBead594F97358a0d3132454f24F3E470c";
+
+// Circles v2 protocol addresses on Gnosis (from @aboutcircles/sdk-core circlesConfig[100]).
+export const circlesHubAddress = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
+export const circlesBaseGroupFactory = "0xD0B5Bd9962197BEaC4cbA24244ec3587f19Bd06d";
 
 /** Returns a contract handle for the CitizenNFT on Gnosis. */
 export const citizenNFTGnosisContract = () =>
