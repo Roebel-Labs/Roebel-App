@@ -50,6 +50,7 @@ async function circlesQuery(query: Record<string, unknown>): Promise<Record<stri
 export async function findInviter(addr: string): Promise<string | null> {
 	try {
 		const lower = addr.toLowerCase();
+		const group = roebeltalerGroupAddress.toLowerCase();
 		const rows = await circlesQuery({
 			Namespace: "V_Crc",
 			Table: "TrustRelations",
@@ -62,8 +63,17 @@ export async function findInviter(addr: string): Promise<string | null> {
 			}],
 			Order: [],
 		});
-		const row = rows.find((r) => r.truster && String(r.truster).toLowerCase() !== lower);
-		return row ? String(row.truster) : null;
+		// Candidates that trust us — EXCLUDING ourselves and the Röbeltaler GROUP
+		// (the group trusts all citizens for collateral, but it is NOT a valid human
+		// inviter — registerHuman(group) reverts with CirclesErrorOneAddressArg).
+		const candidates = rows
+			.map((r) => String(r.truster ?? ""))
+			.filter((t) => t && t.toLowerCase() !== lower && t.toLowerCase() !== group);
+		// Prefer a candidate that is a registered human (a real inviter, e.g. Metri).
+		for (const c of candidates) {
+			try { if (await isOnboarded(c)) return c; } catch { /* keep looking */ }
+		}
+		return candidates[0] ?? null;
 	} catch {
 		return null;
 	}
