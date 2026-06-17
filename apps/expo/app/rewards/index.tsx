@@ -17,9 +17,6 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
-import { useRoebelTaler } from '@/hooks/useRoebelTaler';
-import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
-import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -51,18 +48,6 @@ export default function RewardsIndexScreen() {
     refresh,
     isLoading,
   } = useRewards();
-
-  // Real on-chain Röbel-Taler (Hybrid: headline balance + daily mint are the real
-  // coin; the points above stay for the off-chain gamification — lootboxes/tasks).
-  const {
-    talerBalance,
-    onboarded: talerOnboarded,
-    minting: talerMinting,
-    onboarding: talerOnboarding,
-    dailyMint,
-    onboard,
-  } = useRoebelTaler();
-  const weekly = useRoebelTalerWeekly();
 
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
@@ -175,85 +160,19 @@ export default function RewardsIndexScreen() {
       >
         <View style={styles.heroBleed}>
           <CoinBalanceHero
-            balance={talerBalance}
-            label="Röbel-Taler"
+            balance={coins}
+            label="Mein Guthaben"
             sublabel={
               !isConnected
-                ? 'Melde dich an, um Röbel-Taler zu sammeln'
-                : !talerOnboarded
-                  ? 'Mach mit, um täglich Röbel-Taler abzuholen'
+                ? 'Melde dich an, um Münzen zu sammeln'
+                : keyCount > 0
+                  ? `${keyCount} Schlüssel bereit für die Schatzkammer`
                   : hasCheckedInToday
-                    ? `Serie ${streak} Tage · ${keyCount} Schlüssel`
+                    ? `Check-in erledigt · Serie ${streak} Tage`
                     : undefined
             }
           />
         </View>
-
-        {isConnected && (talerOnboarded ? (
-          <Pressable
-            onPress={async () => {
-              try {
-                await dailyMint();
-                showSnackbar({ message: 'Dein tägliches Röbel-Taler ist da' });
-              } catch {
-                showSnackbar({ message: 'Heute schon abgeholt' });
-              }
-            }}
-            disabled={talerMinting}
-            style={{
-              marginHorizontal: 16,
-              marginTop: 12,
-              backgroundColor: colors.primary,
-              borderRadius: 16,
-              paddingVertical: 16,
-              alignItems: 'center',
-              opacity: talerMinting ? 0.6 : 1,
-            }}
-          >
-            {talerMinting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#fff' }}>
-                Heute abholen
-              </Text>
-            )}
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={async () => {
-              try {
-                await onboard();
-                showSnackbar({ message: 'Willkommen beim Röbel-Taler!' });
-              } catch {
-                showSnackbar({ message: 'Anmeldung gerade nicht möglich' });
-              }
-            }}
-            disabled={talerOnboarding}
-            style={{
-              marginHorizontal: 16,
-              marginTop: 12,
-              backgroundColor: colors.primary,
-              borderRadius: 16,
-              paddingVertical: 16,
-              alignItems: 'center',
-              opacity: talerOnboarding ? 0.6 : 1,
-            }}
-          >
-            {talerOnboarding ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#fff' }}>
-                Bei Röbel-Taler mitmachen
-              </Text>
-            )}
-          </Pressable>
-        ))}
-
-        {isConnected && talerOnboarded && (
-          <View style={{ marginHorizontal: 16, marginTop: 16 }}>
-            <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
-          </View>
-        )}
 
         <CheckinStreakStrip
           streak={streak}
