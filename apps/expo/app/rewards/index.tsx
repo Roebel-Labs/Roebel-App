@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
@@ -64,6 +65,7 @@ export default function RewardsIndexScreen() {
     onboarding: talerOnboarding,
     dailyMint,
     onboard,
+    account: talerAccount,
   } = useRoebelTaler();
   const weekly = useRoebelTalerWeekly();
 
@@ -231,6 +233,24 @@ export default function RewardsIndexScreen() {
             {talerOnboarding ? <ActivityIndicator color="#fff" /> : <Text style={styles.talerCtaText}>Bei Röbel-Taler mitmachen</Text>}
           </Pressable>
         ))}
+
+        {isConnected && !talerOnboarded && !!talerAccount && (
+          <Pressable
+            onPress={async () => {
+              await Clipboard.setStringAsync(talerAccount.address);
+              showSnackbar({ message: 'Adresse kopiert — jetzt in Metri einladen' });
+            }}
+            style={{ marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+          >
+            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textSecondary }}>So machst du mit</Text>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+              Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann tippe „Bei Röbel-Taler mitmachen“.
+            </Text>
+            <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary, marginTop: 6 }}>
+              {`${talerAccount.address.slice(0, 8)}…${talerAccount.address.slice(-6)}`}  ·  Adresse kopieren
+            </Text>
+          </Pressable>
+        )}
 
         {isConnected && (
           <View style={{ marginHorizontal: 16, marginTop: 16 }}>
