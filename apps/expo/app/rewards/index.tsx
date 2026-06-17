@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -48,6 +49,15 @@ export default function RewardsIndexScreen() {
     refresh,
     isLoading,
   } = useRewards();
+
+  // Real on-chain Röbel-Taler (Hybrid: headline balance + daily mint are the real
+  // coin; the points above stay for the off-chain gamification — lootboxes/tasks).
+  const {
+    talerBalance,
+    onboarded: talerOnboarded,
+    minting: talerMinting,
+    dailyMint,
+  } = useRoebelTaler();
 
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
@@ -160,19 +170,50 @@ export default function RewardsIndexScreen() {
       >
         <View style={styles.heroBleed}>
           <CoinBalanceHero
-            balance={coins}
-            label="Mein Guthaben"
+            balance={talerBalance}
+            label="Röbel-Taler"
             sublabel={
               !isConnected
-                ? 'Melde dich an, um Münzen zu sammeln'
-                : keyCount > 0
-                  ? `${keyCount} Schlüssel bereit für die Schatzkammer`
+                ? 'Melde dich an, um Röbel-Taler zu sammeln'
+                : !talerOnboarded
+                  ? 'Mach mit, um täglich Röbel-Taler abzuholen'
                   : hasCheckedInToday
-                    ? `Check-in erledigt · Serie ${streak} Tage`
+                    ? `Serie ${streak} Tage · ${keyCount} Schlüssel`
                     : undefined
             }
           />
         </View>
+
+        {isConnected && talerOnboarded && (
+          <Pressable
+            onPress={async () => {
+              try {
+                await dailyMint();
+                showSnackbar({ message: 'Dein tägliches Röbel-Taler ist da' });
+              } catch {
+                showSnackbar({ message: 'Heute schon abgeholt' });
+              }
+            }}
+            disabled={talerMinting}
+            style={{
+              marginHorizontal: 16,
+              marginTop: 12,
+              backgroundColor: colors.primary,
+              borderRadius: 16,
+              paddingVertical: 16,
+              alignItems: 'center',
+              opacity: talerMinting ? 0.6 : 1,
+            }}
+          >
+            {talerMinting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#fff' }}>
+                Heute abholen
+              </Text>
+            )}
+          </Pressable>
+        )}
 
         <CheckinStreakStrip
           streak={streak}
