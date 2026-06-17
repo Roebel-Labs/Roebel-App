@@ -16,6 +16,7 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
+import { germanDateToIso } from '@/lib/citizen-commitment';
 
 const DEFAULT_REASON = 'Bürger in Röbel';
 
@@ -26,7 +27,9 @@ export default function RequestCitizenScreen() {
   const { hasCitizenNFT, activePendingRequest, refresh } = useVerificationContext();
   const { createRequest, isLoading, stage } = useCreateCitizenRequest();
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [birthdate, setBirthdate] = useState('');
   const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
@@ -34,8 +37,14 @@ export default function RequestCitizenScreen() {
   const lockIcon = require('@/assets/illustration/small/encryption.png');
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihren Namen ein.' });
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Vor- und Nachnamen ein.' });
+      return;
+    }
+
+    const iso = germanDateToIso(birthdate);
+    if (!iso) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihr Geburtsdatum als TT.MM.JJJJ ein.' });
       return;
     }
 
@@ -51,7 +60,7 @@ export default function RequestCitizenScreen() {
 
     try {
       const result = await createRequest(
-        { name: name.trim(), address: address.trim() },
+        { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
         DEFAULT_REASON
       );
 
@@ -129,12 +138,12 @@ export default function RequestCitizenScreen() {
           <Image source={lockIcon} style={styles.lockIcon} resizeMode="contain" accessibilityIgnoresInvertColors />
           <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Antrag stellen</Text>
           <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
-            Ihr Name und Adresse werden mit End-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten später sehen.
+            Ihre Angaben bleiben auf Ihrem Gerät. Gespeichert wird nur ein nicht umkehrbarer Fingerabdruck — niemand kann daraus Ihren Namen lesen.
           </Text>
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textPrimary }]}>Vollständiger Name *</Text>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Vorname *</Text>
           <TextInput
             style={[
               styles.input,
@@ -144,12 +153,52 @@ export default function RequestCitizenScreen() {
                 color: colors.textPrimary,
               },
             ]}
-            placeholder="Max Mustermann"
+            placeholder="Anna"
             placeholderTextColor={colors.textTertiary}
-            value={name}
-            onChangeText={setName}
+            value={firstName}
+            onChangeText={setFirstName}
             editable={!isLoading}
             autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Nachname *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Müller"
+            placeholderTextColor={colors.textTertiary}
+            value={lastName}
+            onChangeText={setLastName}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Geburtsdatum (TT.MM.JJJJ) *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="05.03.1990"
+            placeholderTextColor={colors.textTertiary}
+            value={birthdate}
+            onChangeText={setBirthdate}
+            editable={!isLoading}
+            keyboardType="numbers-and-punctuation"
           />
         </View>
 
