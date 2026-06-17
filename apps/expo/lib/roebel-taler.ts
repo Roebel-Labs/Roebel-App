@@ -46,6 +46,16 @@ export async function getRoebelTalerBalance(address: string): Promise<bigint> {
 	});
 }
 
+/** A citizen's own personal CRC (token id = uint256(self)) — the daily-claimed
+ *  issuance that gets converted into Röbel-Taler. */
+export async function getPersonalCrcBalance(address: string): Promise<bigint> {
+	return readContract({
+		contract: hubRead,
+		method: "function balanceOf(address,uint256) view returns (uint256)",
+		params: [address, BigInt(address)],
+	});
+}
+
 /** Format an 18-decimal on-chain amount as a friendly Röbel-Taler string. */
 export function formatTaler(raw: bigint): string {
 	const whole = raw / 10n ** 18n;

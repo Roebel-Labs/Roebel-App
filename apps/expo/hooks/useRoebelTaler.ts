@@ -5,10 +5,12 @@ import { supabase } from "@/lib/supabase";
 import {
 	isOnboarded,
 	getRoebelTalerBalance,
+	getPersonalCrcBalance,
 	formatTaler,
 	prepareDailyMint,
 	prepareOnboard,
 	prepareSendRoebelTaler,
+	prepareContributeToRoebelTaler,
 } from "@/lib/roebel-taler";
 
 /**
@@ -44,11 +46,23 @@ export function useRoebelTaler() {
 
 	useEffect(() => { refresh(); }, [refresh]);
 
+	/**
+	 * Daily "Heute abholen": (1) claim accrued personal CRC (personalMint), then
+	 * (2) deposit it as collateral to mint Röbel-Taler (groupMint). One tap → the
+	 * citizen ends up with Röbel-Taler. Both txs are gasless on Gnosis.
+	 */
 	const dailyMint = useCallback(async () => {
 		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
 		setMinting(true);
 		try {
 			await sendTransaction({ account: gnosisAccount, transaction: prepareDailyMint() });
+			const pcrc = await getPersonalCrcBalance(gnosisAccount.address).catch(() => 0n);
+			if (pcrc > 0n) {
+				await sendTransaction({
+					account: gnosisAccount,
+					transaction: prepareContributeToRoebelTaler(gnosisAccount.address, pcrc),
+				});
+			}
 			await refresh();
 		} finally {
 			setMinting(false);
