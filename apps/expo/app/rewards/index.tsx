@@ -21,6 +21,7 @@ import { useRewards } from '@/context/RewardsContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
 import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
+import TreasuryCard from '@/components/roebeltaler/TreasuryCard';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -237,6 +238,25 @@ export default function RewardsIndexScreen() {
           </View>
         )}
 
+        {isConnected && talerOnboarded && (
+          <>
+            <View style={styles.squareRow}>
+              <Pressable
+                style={[styles.square, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => router.push('/rewards/schatzkammer' as any)}
+              >
+                <Text style={[styles.squareValue, { color: colors.textPrimary }]}>{keyCount}</Text>
+                <Text style={[styles.squareLabel, { color: colors.textSecondary }]}>Schatzkammer-Schlüssel</Text>
+              </Pressable>
+              <View style={[styles.square, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+                <Text style={[styles.squareValue, { color: colors.textPrimary }]}>{streak}</Text>
+                <Text style={[styles.squareLabel, { color: colors.textSecondary }]}>Tage Serie</Text>
+              </View>
+            </View>
+            <TreasuryCard />
+          </>
+        )}
+
         <CheckinStreakStrip
           streak={streak}
           recentCheckins={recentCheckins}
@@ -412,6 +432,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#fff',
+  },
+  squareRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  square: {
+    flex: 1,
+    aspectRatio: 1.4,
+    backgroundColor: '#00000000',
+    borderRadius: 20,
+    padding: 16,
+    justifyContent: 'center',
+  },
+  squareValue: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 28,
+  },
+  squareLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    marginTop: 4,
   },
   primaryCTA: {
     borderRadius: 999,

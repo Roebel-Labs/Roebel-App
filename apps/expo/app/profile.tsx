@@ -191,11 +191,13 @@ const handleRefresh = async () => {
             {/* Menu Items */}
             <View style={styles.menuSection}>
               <View style={styles.menuGroup}>
-                <ProfileMenuItem
-                  icon={<StarIcon width={20} height={20} color={colors.primary} />}
-                  label="Röbel-Taler"
-                  onPress={() => router.push('/rewards' as any)}
-                />
+                {isConnected && isCitizen && (
+                  <ProfileMenuItem
+                    icon={<StarIcon width={20} height={20} color={colors.primary} />}
+                    label="Röbel-Taler"
+                    onPress={() => router.push('/rewards' as any)}
+                  />
+                )}
                 <ProfileMenuItem
                   icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Veranstaltung einsenden"
