@@ -18,8 +18,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useCreateAttesterRequest, REQUEST_STAGE_LABEL } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
-import { fetchUserRequests } from '@/lib/supabase-verification';
-import { decryptEvidenceV2 } from '@/lib/encryption';
+import { loadCitizenPreimage, germanDateToIso } from '@/lib/citizen-commitment';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
 
@@ -32,7 +31,9 @@ export default function RequestAttesterScreen() {
   const { hasCitizenNFT, hasAttesterNFT, refresh } = useVerificationContext();
   const { createRequest, isLoading, stage } = useCreateAttesterRequest();
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [birthdate, setBirthdate] = useState('');
   const [address, setAddress] = useState('');
   const [prefilling, setPrefilling] = useState(false);
 
@@ -40,32 +41,25 @@ export default function RequestAttesterScreen() {
 
   const lockIcon = require('@/assets/illustration/small/encryption.png');
 
-  // Best-effort, silent prefill from the user's existing Bürger request. Citizen
-  // evidence is V2-encrypted and decrypts deterministically from the wallet (no
-  // signature prompt). Any miss simply leaves the fields blank for manual entry.
+  // Prefill from the on-device citizen preimage (no decrypt, no network).
   useEffect(() => {
     let cancelled = false;
     async function prefill() {
       if (!account || !hasCitizenNFT) return;
       setPrefilling(true);
       try {
-        const reqs = await fetchUserRequests(account.address, 'citizen');
-        const withEvidence = (reqs || []).find(
-          (r: any) => r?.evidence_data?.encrypted && r?.evidence_data?.metadata,
-        );
-        if (!withEvidence) return;
-        const decrypted = await decryptEvidenceV2(
-          {
-            encrypted: withEvidence.evidence_data.encrypted,
-            metadata: withEvidence.evidence_data.metadata,
-          },
-          account,
-        );
-        if (cancelled) return;
-        setName((prev) => prev || decrypted.name || '');
-        setAddress((prev) => prev || decrypted.address || '');
+        const pre = await loadCitizenPreimage(account.address);
+        if (cancelled || !pre) return;
+        setFirstName((p) => p || pre.firstName || '');
+        setLastName((p) => p || pre.lastName || '');
+        // birthdate is stored ISO; show it back as DD.MM.YYYY
+        if (pre.birthdate) {
+          const [y, m, d] = pre.birthdate.split('-');
+          if (y && m && d) setBirthdate((p) => p || `${d}.${m}.${y}`);
+        }
+        setAddress((p) => p || pre.address || '');
       } catch (err) {
-        console.log('Prefill from citizen request skipped:', err);
+        console.log('Prefill from citizen preimage skipped:', err);
       } finally {
         if (!cancelled) setPrefilling(false);
       }
@@ -77,8 +71,13 @@ export default function RequestAttesterScreen() {
   }, [account, hasCitizenNFT]);
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihren Namen ein.' });
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Vor- und Nachnamen ein.' });
+      return;
+    }
+    const iso = germanDateToIso(birthdate);
+    if (!iso) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihr Geburtsdatum als TT.MM.JJJJ ein.' });
       return;
     }
     if (!address.trim()) {
@@ -92,7 +91,7 @@ export default function RequestAttesterScreen() {
 
     try {
       const result = await createRequest(
-        { name: name.trim(), address: address.trim() },
+        { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
         DEFAULT_REASON,
       );
 
@@ -179,12 +178,12 @@ export default function RequestAttesterScreen() {
           <Image source={lockIcon} style={styles.lockIcon} resizeMode="contain" accessibilityIgnoresInvertColors />
           <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Bescheiniger werden</Text>
           <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
-            Ihr Name und Adresse werden mit Ende-zu-Ende-Verschlüsselung gesichert. Nur Sie können diese Daten später sehen.
+            Ihre Angaben bleiben auf Ihrem Gerät. Gespeichert wird nur ein nicht umkehrbarer Fingerabdruck — niemand kann daraus Ihren Namen lesen.
           </Text>
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textPrimary }]}>Vollständiger Name *</Text>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Vorname *</Text>
           <TextInput
             style={[
               styles.input,
@@ -194,12 +193,52 @@ export default function RequestAttesterScreen() {
                 color: colors.textPrimary,
               },
             ]}
-            placeholder="Max Mustermann"
+            placeholder="Anna"
             placeholderTextColor={colors.textTertiary}
-            value={name}
-            onChangeText={setName}
+            value={firstName}
+            onChangeText={setFirstName}
             editable={!isLoading}
             autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Nachname *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Müller"
+            placeholderTextColor={colors.textTertiary}
+            value={lastName}
+            onChangeText={setLastName}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Geburtsdatum (TT.MM.JJJJ) *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="05.03.1990"
+            placeholderTextColor={colors.textTertiary}
+            value={birthdate}
+            onChangeText={setBirthdate}
+            editable={!isLoading}
+            keyboardType="numbers-and-punctuation"
           />
         </View>
 
