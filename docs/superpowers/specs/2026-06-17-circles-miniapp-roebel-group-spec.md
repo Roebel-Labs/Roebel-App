@@ -36,33 +36,34 @@ invites, no onboarding cold-start. This is the clean home for the Circles-native
   — read method: `hasCitizenNFT(address) → bool` (soulbound; 15 holders today).
 - circlesRpcUrl: `https://rpc.aboutcircles.com/`
 
-## 3. Contract to build: `CitizenMembershipCondition`
-A small Solidity contract on Gnosis that the BaseGroup calls to gate membership.
+## 3. Contract to build: `CitizenMembershipCondition` (interface CONFIRMED)
+The exact interface is `aboutcircles/circles-groups`
+`src/membership-conditions/IMembershipCondition.sol`:
 ```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-interface ICitizenNFT { function hasCitizenNFT(address) external view returns (bool); }
-
-/// Membership condition for the Röbel BaseGroup: only CitizenNFT holders pass.
-/// NOTE: confirm the EXACT function name/signature the BaseGroup expects against the
-/// aboutcircles base-group contracts (the `setMembershipCondition` / `trustBatchWithConditions`
-/// callsites). It is a single-address predicate — implement BOTH a `view` and the
-/// expected interface name. Common shape: `passesMembershipCondition(address) returns (bool)`.
-contract CitizenMembershipCondition {
-    ICitizenNFT public immutable citizenNFT;
-    constructor(address _citizenNFT) { citizenNFT = ICitizenNFT(_citizenNFT); }
-
-    function passesMembershipCondition(address _avatar) external view returns (bool) {
-        return citizenNFT.hasCitizenNFT(_avatar);
-    }
-    // If the BaseGroup interface differs (e.g. `isAllowed`/`check`), add that signature too.
+interface IMembershipCondition {
+    function passesMembershipCondition(address avatar) external returns (bool);
 }
 ```
-**TODO for the building agent:** pin the exact condition interface from the aboutcircles
-**base-group** repo (the `BaseGroup.sol` that backs `BaseGroupFactory` `0xD0B5…`). The
-core `circles-contracts-v2` repo only has the mint policy; the BaseGroup + conditions live
-in the base-group contracts. The deployed factory's verified source on gnosisscan is the
-ground truth.
+Their `IsHumanCondition` (checks `hub.isHuman`) is the template. The Röbel version checks
+the CitizenNFT instead — already written + compiling in the production repo at
+`contracts/governor-contract/contracts/verification-system/CitizenMembershipCondition.sol`:
+```solidity
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.28;
+interface IMembershipCondition { function passesMembershipCondition(address avatar) external returns (bool); }
+interface ICitizenNFT { function hasCitizenNFT(address account) external view returns (bool); }
+
+contract CitizenMembershipCondition is IMembershipCondition {
+    ICitizenNFT public immutable citizenNFT;
+    constructor(address _citizenNFT) { require(_citizenNFT != address(0), "citizenNFT=0"); citizenNFT = ICitizenNFT(_citizenNFT); }
+    function passesMembershipCondition(address avatar) external view returns (bool) {
+        return citizenNFT.hasCitizenNFT(avatar);
+    }
+}
+```
+Deploy with `_citizenNFT = 0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4` (Gnosis CitizenNFT).
+The BaseGroup contracts live in `aboutcircles/circles-groups` (`src/base-group/`,
+`src/membership-conditions/`) — reference for the building agent.
 
 ## 4. Register the group (one-time, via Circles SDK `@aboutcircles/sdk`)
 ```ts
