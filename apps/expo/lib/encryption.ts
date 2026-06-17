@@ -284,6 +284,13 @@ export async function decryptEvidence(
  * @param account - Thirdweb account instance
  * @returns Session key and encrypted data key
  */
+/**
+ * @deprecated REVERSIBLE — the session key is derived from the PUBLIC wallet
+ * address, so anyone who reads the stored row can recompute it. Do NOT use for
+ * citizen/attester identity PII. Retained ONLY for revocation reasons, which are
+ * intentionally human-readable by approvers. New identity flows use
+ * lib/citizen-commitment.ts (on-device preimage, non-reversible commitment).
+ */
 export async function deriveSessionKey(
   account: Account
 ): Promise<SessionKeyResult> {
