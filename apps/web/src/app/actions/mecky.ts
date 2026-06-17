@@ -163,3 +163,46 @@ export async function rejectMeckyDraft(
     return { success: false, error: "Fehler beim Ablehnen des Vorschlags" }
   }
 }
+
+export async function deleteMeckyDraft(
+  draftId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient()
+
+    // Fetch the draft to find out if it was already published as a post
+    const { data: draft, error: fetchError } = await supabase
+      .from("mecky_drafts")
+      .select("id, approved_post_id")
+      .eq("id", draftId)
+      .single()
+
+    if (fetchError || !draft) {
+      return { success: false, error: "Vorschlag nicht gefunden" }
+    }
+
+    // If approved, also take the published post down from the feed
+    if (draft.approved_post_id) {
+      const { error: postError } = await supabase.rpc("admin_delete_post", {
+        p_post_id: draft.approved_post_id,
+      })
+      if (postError) throw postError
+    }
+
+    // Permanently remove the draft row
+    const { error: deleteError } = await supabase
+      .from("mecky_drafts")
+      .delete()
+      .eq("id", draftId)
+
+    if (deleteError) throw deleteError
+
+    revalidatePath("/admin/dashboard/mecky")
+    revalidatePath("/app")
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error deleting Mecky draft:", error)
+    return { success: false, error: "Fehler beim Löschen des Vorschlags" }
+  }
+}

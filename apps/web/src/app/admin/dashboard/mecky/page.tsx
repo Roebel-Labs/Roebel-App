@@ -33,12 +33,14 @@ import {
   XCircle,
   Loader2,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
   getMeckyDrafts,
   approveMeckyDraft,
   rejectMeckyDraft,
+  deleteMeckyDraft,
   triggerMeckyGeneration,
 } from "@/app/actions/mecky"
 import type { MeckyDraft } from "@/types/mecky"
@@ -94,6 +96,24 @@ export default function MeckyDashboardPage() {
 
     if (result.success) {
       toast.success("Vorschlag abgelehnt", {
+        id: loadingToast,
+      })
+      fetchDrafts()
+    } else {
+      toast.error("Fehler", {
+        id: loadingToast,
+        description: result.error,
+      })
+    }
+  }
+
+  const handleDelete = async (draftId: string) => {
+    const loadingToast = toast.loading("Vorschlag wird gelöscht...")
+
+    const result = await deleteMeckyDraft(draftId)
+
+    if (result.success) {
+      toast.success("Vorschlag gelöscht", {
         id: loadingToast,
       })
       fetchDrafts()
@@ -319,46 +339,80 @@ export default function MeckyDashboardPage() {
               )}
 
               {/* Action Buttons */}
-              {draft.status === "pending" && (
-                <div className="flex items-center gap-2 pt-2 border-t border-border">
-                  <Button
-                    size="sm"
-                    onClick={() => handleApprove(draft.id)}
-                    className="bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                  >
-                    <Check className="h-4 w-4" />
-                    Genehmigen
-                  </Button>
+              <div className="flex items-center gap-2 pt-2 border-t border-border">
+                {draft.status === "pending" && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(draft.id)}
+                      className="bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                    >
+                      <Check className="h-4 w-4" />
+                      Genehmigen
+                    </Button>
 
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <X className="h-4 w-4" />
-                        Ablehnen
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Vorschlag ablehnen?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Der Vorschlag wird als abgelehnt markiert und nicht im
-                          Feed veröffentlicht.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleReject(draft.id)}
-                        >
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="outline" className="gap-1.5">
+                          <X className="h-4 w-4" />
                           Ablehnen
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Vorschlag ablehnen?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Der Vorschlag wird als abgelehnt markiert und nicht im
+                            Feed veröffentlicht.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleReject(draft.id)}
+                          >
+                            Ablehnen
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
+                )}
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Löschen
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Vorschlag löschen?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {draft.approved_post_id
+                          ? "Der Vorschlag und der bereits veröffentlichte Post werden dauerhaft gelöscht und aus dem Feed entfernt. Diese Aktion kann nicht rückgängig gemacht werden."
+                          : "Der Vorschlag wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(draft.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Löschen
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
 
               {/* Reviewed info */}
               {draft.reviewed_at && (
