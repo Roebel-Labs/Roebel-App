@@ -17,21 +17,15 @@ import {
 import { base } from 'thirdweb/chains';
 import { client } from '@/constants/thirdweb';
 import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
-import {
-  createEncryptedEvidence,
-  createEncryptedEvidenceV2,
-  decryptEvidence,
-  decryptEvidenceV2,
-} from '@/lib/encryption';
+import { createEncryptedEvidenceV2 } from '@/lib/encryption'; // revocation only
+import { buildCitizenCommitment, loadCitizenPreimage } from '@/lib/citizen-commitment';
 import {
   uploadEncryptedEvidence,
-  fetchEvidenceByRequestId,
-  fetchEvidenceByURI,
-  createSupabaseRequestRecord,
+  uploadCommitmentEvidence,
   updateSupabaseRequestStatus,
   fetchPendingRequests,
 } from '@/lib/supabase-verification';
-import type { PersonalData, CitizenRequest, EncryptedEvidence } from '@/lib/verification-types';
+import type { PersonalData, CitizenIdentity } from '@/lib/verification-types';
 
 /**
  * Phases of the create-request flow. Drives the submit-button label so the user
@@ -66,7 +60,7 @@ export function useCreateCitizenRequest() {
   const [stage, setStage] = useState<RequestStage>('idle');
 
   const createRequest = useCallback(
-    async (personalData: PersonalData, reason: string) => {
+    async (identity: CitizenIdentity, reason: string) => {
       if (!account) {
         throw new Error('No wallet connected');
       }
@@ -75,74 +69,46 @@ export function useCreateCitizenRequest() {
       setError(null);
 
       try {
-        console.log('🚀 Creating citizen attestation request...');
-
-        // 1. Create encrypted evidence (V2 - no signature required!)
+        // 1. Build the on-device commitment (preimage cached in secure-store).
         setStage('encrypting');
-        const evidence = await createEncryptedEvidenceV2(
-          personalData,
+        const { evidenceURI, evidence } = await buildCitizenCommitment(
+          identity,
           reason,
           'citizen',
           account
         );
 
-        // 2. Create blockchain transaction (get request ID first)
+        // 2. Create the on-chain request with the commitment as the evidenceURI.
         const transaction = prepareContractCall({
           contract: citizenNFTContract,
           method: 'function createAttestationRequest(string evidenceURI) returns (uint256)',
-          params: ['supabase://pending'], // Temporary URI
+          params: [evidenceURI],
         });
 
         setStage('submitting-tx');
-        const { transactionHash } = await sendTransaction({
-          transaction,
-          account,
-        });
+        const { transactionHash } = await sendTransaction({ transaction, account });
 
-        console.log('✅ Transaction submitted:', transactionHash);
-
-        // 3. Wait for receipt and read the actual requestId from the event log.
-        // Using requestCount() races against other users (and against tx mining),
-        // which causes duplicate (request_id, contract_type) inserts in Supabase.
+        // 3. Read the real requestId from the event log (avoids requestCount races).
         setStage('awaiting-receipt');
-        const receipt = await waitForReceipt({
-          client,
-          chain: base,
-          transactionHash,
-        });
-
+        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
         const requestCreatedEvent = prepareEvent({
           signature:
             'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
         });
-        const events = parseEventLogs({
-          events: [requestCreatedEvent],
-          logs: receipt.logs,
-        });
+        const events = parseEventLogs({ events: [requestCreatedEvent], logs: receipt.logs });
         const created = events[0];
         if (!created) {
           throw new Error('Could not read request ID from transaction receipt');
         }
         const requestId = Number(created.args.requestId);
 
-        // 4. Upload evidence to Supabase (Irys then DB row, stages emitted via callback)
-        const evidenceURI = await uploadEncryptedEvidence(evidence, requestId, setStage);
-
-        // 5. Create Supabase request record
-        await createSupabaseRequestRecord(
-          requestId,
-          'citizen',
-          account.address,
-          evidenceURI
-        );
-
-        console.log(`✅ Citizen request created successfully! ID: ${requestId}`);
+        // 4. Store the non-PII commitment row.
+        await uploadCommitmentEvidence(evidence, requestId, setStage);
 
         setStage('idle');
         setIsLoading(false);
         return { requestId, transactionHash };
       } catch (err) {
-        console.error('❌ Failed to create request:', err);
         const error = err instanceof Error ? err : new Error('Unknown error');
         setError(error);
         setStage('idle');
