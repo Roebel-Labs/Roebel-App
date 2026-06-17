@@ -83,3 +83,21 @@ export function prepareContributeToRoebelTaler(self: string, amount: bigint): Pr
 		params: [roebeltalerGroupAddress, [self], [amount], "0x"],
 	});
 }
+
+/** Send `amount` (18-dec) Röbel-Taler from `from` to `to` (ERC1155 group token). */
+export function prepareSendRoebelTaler(from: string, to: string, amount: bigint): PreparedTransaction {
+	return prepareContractCall({
+		contract: hubWrite,
+		method: "function safeTransferFrom(address,address,uint256,uint256,bytes)",
+		params: [from, to, groupTokenId, amount, "0x"],
+	});
+}
+
+/** Parse a user-entered Röbel-Taler amount ("12,50" or "12.5") to 18-dec bigint. */
+export function parseTalerAmount(input: string): bigint {
+	const clean = input.replace(",", ".").trim();
+	if (!/^\d*\.?\d*$/.test(clean) || clean === "" || clean === ".") return 0n;
+	const [whole, frac = ""] = clean.split(".");
+	const fracPadded = (frac + "0".repeat(18)).slice(0, 18);
+	return BigInt(whole || "0") * 10n ** 18n + BigInt(fracPadded || "0");
+}

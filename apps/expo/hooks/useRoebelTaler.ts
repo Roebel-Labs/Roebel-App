@@ -8,6 +8,7 @@ import {
 	formatTaler,
 	prepareDailyMint,
 	prepareOnboard,
+	prepareSendRoebelTaler,
 } from "@/lib/roebel-taler";
 
 /**
@@ -24,6 +25,7 @@ export function useRoebelTaler() {
 	const [loading, setLoading] = useState(true);
 	const [minting, setMinting] = useState(false);
 	const [onboarding, setOnboarding] = useState(false);
+	const [sending, setSending] = useState(false);
 
 	const refresh = useCallback(async () => {
 		if (!address) { setLoading(false); return; }
@@ -75,6 +77,21 @@ export function useRoebelTaler() {
 		}
 	}, [gnosisAccount, refresh]);
 
+	/** Send Röbel-Taler to another address (18-dec amount). Gasless. */
+	const send = useCallback(async (to: string, amount: bigint) => {
+		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
+		setSending(true);
+		try {
+			await sendTransaction({
+				account: gnosisAccount,
+				transaction: prepareSendRoebelTaler(gnosisAccount.address, to, amount),
+			});
+			await refresh();
+		} finally {
+			setSending(false);
+		}
+	}, [gnosisAccount, refresh]);
+
 	return {
 		/** Display number for CoinBalanceHero (2-decimal). */
 		talerBalance: Number(formatTaler(balanceRaw)),
@@ -83,8 +100,10 @@ export function useRoebelTaler() {
 		loading: loading || !ready,
 		minting,
 		onboarding,
+		sending,
 		dailyMint,
 		onboard,
+		send,
 		refresh,
 		account: gnosisAccount,
 	};
