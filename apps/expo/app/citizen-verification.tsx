@@ -8,6 +8,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import CitizenPassportCard from '@/components/profile/CitizenPassportCard';
+import CompleteCitizenDataBanner from '@/components/profile/CompleteCitizenDataBanner';
 
 export default function CitizenVerificationScreen() {
   const router = useRouter();
@@ -47,6 +48,8 @@ export default function CitizenVerificationScreen() {
           verificationRequestId={citizenRequest?.request_id}
           height={220}
         />
+
+        <CompleteCitizenDataBanner embedded />
 
         <Text style={[styles.body, { color: colors.textPrimary }]}>
           Vertrauen ist die Grundlage unserer Bürgergemeinschaft, und die Identitätsprüfung ist

@@ -19,7 +19,12 @@ import { useCitizenEnrollment } from '@/hooks/useCitizenEnrollment';
 const ILLUSTRATION = require('@/assets/illustration/small/encryption.png');
 const dismissKey = (addr: string) => `citizen-enroll-dismissed:${addr.toLowerCase()}`;
 
-export default function CompleteCitizenDataBanner() {
+/**
+ * @param embedded When true, drops the component's own outer margins so it aligns
+ *   with a parent that already provides horizontal padding / gap (e.g. the
+ *   citizen-verification page). Default false = full-bleed feed margins.
+ */
+export default function CompleteCitizenDataBanner({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const account = useActiveAccount();
@@ -56,7 +61,11 @@ export default function CompleteCitizenDataBanner() {
     return (
       <Pressable
         onPress={goComplete}
-        style={({ pressed }) => [styles.row, { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 }]}
+        style={({ pressed }) => [
+          styles.row,
+          { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
+          embedded && { marginHorizontal: 0, marginTop: 0 },
+        ]}
         accessibilityRole="button"
         accessibilityLabel="Angaben vervollständigen"
       >
@@ -71,7 +80,7 @@ export default function CompleteCitizenDataBanner() {
 
   // Full banner card.
   return (
-    <View style={[styles.card, { backgroundColor: colors.background }, softShadow(2, isDark)]}>
+    <View style={[styles.card, { backgroundColor: colors.background }, embedded && { marginHorizontal: 0, marginTop: 0 }, softShadow(2, isDark)]}>
       <Pressable
         onPress={dismiss}
         hitSlop={10}
