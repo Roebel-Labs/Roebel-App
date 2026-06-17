@@ -232,13 +232,13 @@ export default function RewardsIndexScreen() {
           </Pressable>
         ))}
 
-        {isConnected && talerOnboarded && (
+        {isConnected && (
           <View style={{ marginHorizontal: 16, marginTop: 16 }}>
             <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
           </View>
         )}
 
-        {isConnected && talerOnboarded && (
+        {isConnected && (
           <>
             <View style={styles.squareRow}>
               <Pressable

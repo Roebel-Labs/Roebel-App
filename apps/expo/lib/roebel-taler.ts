@@ -28,6 +28,47 @@ const groupTokenId = BigInt(roebeltalerGroupAddress);
 
 const ZERO_METADATA = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 
+const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
+
+async function circlesQuery(query: Record<string, unknown>): Promise<Record<string, any>[]> {
+	const res = await fetch(CIRCLES_RPC, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_query", params: [query] }),
+	});
+	const json = await res.json();
+	const result = json?.result ?? { columns: [], rows: [] };
+	const columns: string[] = result.columns ?? [];
+	const rows: any[][] = result.rows ?? [];
+	return rows.map((r) => Object.fromEntries(columns.map((c, i) => [c, r[i]])));
+}
+
+/**
+ * Finds the citizen who invited `addr` (i.e. trusted them — e.g. via Metri). That
+ * inviter is required for registerHuman. Returns null if nobody has invited them yet.
+ */
+export async function findInviter(addr: string): Promise<string | null> {
+	try {
+		const lower = addr.toLowerCase();
+		const rows = await circlesQuery({
+			Namespace: "V_Crc",
+			Table: "TrustRelations",
+			Columns: [],
+			Filter: [{
+				Type: "Conjunction", ConjunctionType: "And", Predicates: [
+					{ Type: "FilterPredicate", FilterType: "Equals", Column: "version", Value: 2 },
+					{ Type: "FilterPredicate", FilterType: "Equals", Column: "trustee", Value: lower },
+				],
+			}],
+			Order: [],
+		});
+		const row = rows.find((r) => r.truster && String(r.truster).toLowerCase() !== lower);
+		return row ? String(row.truster) : null;
+	} catch {
+		return null;
+	}
+}
+
 /** True once the address is onboarded (a Circles human) — i.e. can mint daily. */
 export async function isOnboarded(address: string): Promise<boolean> {
 	return readContract({

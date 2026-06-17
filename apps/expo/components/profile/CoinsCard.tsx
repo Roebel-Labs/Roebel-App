@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
+import { useUser } from '@/context/UserContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { formatTaler } from '@/lib/roebel-taler';
 import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
 import { softShadow } from '@/lib/shadow';
 
@@ -12,7 +15,11 @@ export default function CoinsCard() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { coins } = useRewards();
+  const { isCitizen } = useUser();
+  const { balanceRaw } = useRoebelTaler();
   const cardBg = colors.background;
+  // Verified citizens see their real Röbel-Taler balance; others see gamification points.
+  const display = isCitizen ? formatTaler(balanceRaw) : coins.toLocaleString('de-DE');
 
   return (
     <View
@@ -30,7 +37,7 @@ export default function CoinsCard() {
       >
         <Image source={COIN_STACK} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.balance, { color: colors.textPrimary }]}>
-          {coins.toLocaleString('de-DE')}
+          {display}{isCitizen ? ' Röbel-Taler' : ''}
         </Text>
         <ChevronRightIcon width={16} height={16} color={colors.textSecondary} />
       </Pressable>

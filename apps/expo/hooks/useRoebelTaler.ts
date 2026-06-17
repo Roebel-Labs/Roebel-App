@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { sendTransaction } from "thirdweb";
 import { useGnosisWallet } from "@/context/GnosisWalletContext";
-import { supabase } from "@/lib/supabase";
 import {
 	isOnboarded,
+	findInviter,
 	getRoebelTalerBalance,
 	getPersonalCrcBalance,
 	formatTaler,
@@ -78,13 +78,17 @@ export function useRoebelTaler() {
 		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
 		setOnboarding(true);
 		try {
-			const { data, error } = await supabase.functions.invoke("circles-invite", {
-				body: { gnosisAddress: gnosisAccount.address },
-			});
-			if (error) throw error;
-			if (!data?.alreadyRegistered && data?.inviter) {
-				await sendTransaction({ account: gnosisAccount, transaction: prepareOnboard(data.inviter) });
+			// Already a Circles human? Nothing to do.
+			if (await isOnboarded(gnosisAccount.address)) { await refresh(); return; }
+			// Citizen-invites-citizen: find who invited us (trusted our address, e.g.
+			// via Metri), then register directly — gasless, no backend operator.
+			const inviter = await findInviter(gnosisAccount.address);
+			if (!inviter) {
+				throw new Error(
+					"Du wurdest noch nicht eingeladen. Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann hier erneut tippen.",
+				);
 			}
+			await sendTransaction({ account: gnosisAccount, transaction: prepareOnboard(inviter) });
 			await refresh();
 		} finally {
 			setOnboarding(false);
