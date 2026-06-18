@@ -1,0 +1,29 @@
+{
+  "name": "roebel-circles-inviter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Röbel Circles mini-app — invite verified citizens (existing thirdweb wallets) into Circles via InviteFarm quota. Runs inside the Circles miniapp iframe.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aboutcircles/miniapp-sdk": "^0.1.25",
+    "@aboutcircles/sdk-invitations": "^0.1.25",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "viem": "^2.46.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.3.0"
+  }
+}
