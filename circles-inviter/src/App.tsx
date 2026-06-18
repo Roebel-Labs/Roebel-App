@@ -68,20 +68,20 @@ export default function App() {
   const overQuota = quotaNum != null && inviteCount > quotaNum;
 
   const invite = useCallback(async () => {
-    if (!inviter) return setMsg({ kind: "err", text: "Keine Wallet verbunden — öffne diese App in der Circles-App." });
+    if (!inviter) return setMsg({ kind: "err", text: "No wallet connected — open this app inside the Circles app." });
     const list = [...selectedList];
     if (extraValid) list.push(getAddress(extra.trim()) as Address);
-    if (!list.length) return setMsg({ kind: "err", text: "Keine Adressen ausgewählt." });
+    if (!list.length) return setMsg({ kind: "err", text: "No addresses selected." });
 
     setBusy(true);
-    setMsg({ kind: "info", text: `Baue Einladungen für ${list.length} Adresse(n)…` });
+    setMsg({ kind: "info", text: `Building invitations for ${list.length} address(es)…` });
     try {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
-      setMsg({ kind: "info", text: "Bitte in deiner Wallet bestätigen…" });
+      setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
       setMsg({
         kind: "ok",
-        text: `✓ ${list.length} Bürger eingeladen. Sie verifizieren sich jetzt in der Röbel-App ("Bei Röbel-Taler mitmachen").`,
+        text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel-Taler").`,
       });
       setExtra("");
       await refreshStatus();
@@ -99,22 +99,22 @@ export default function App() {
       <div className="w-full max-w-xl">
         {/* Header */}
         <header className="mb-5">
-          <h1 className="text-2xl font-bold text-navy">Bürger einladen</h1>
+          <h1 className="text-2xl font-bold text-navy">Invite citizens</h1>
           <p className="text-sm text-slate-500">
-            Lade verifizierte Röbel-Bürger in Circles ein — über dein Einladungs-Kontingent (Quota).
+            Invite verified Röbel citizens into Circles — using your invitation quota.
           </p>
         </header>
 
         {/* Connection + quota */}
         <div className="mb-4 grid grid-cols-2 gap-3">
-          <Stat label="Eingeladen von">
+          <Stat label="Inviting as">
             {inviter ? (
               <span className="font-mono text-sm text-slate-800">{shortAddr(inviter)}</span>
             ) : (
-              <span className="text-sm text-amber-600">In Circles-App öffnen</span>
+              <span className="text-sm text-amber-600">Open in the Circles app</span>
             )}
           </Stat>
-          <Stat label="Verfügbare Quota">
+          <Stat label="Available quota">
             <span className={`text-lg font-semibold ${quotaNum ? "text-navy" : "text-slate-400"}`}>
               {quotaNum == null ? "…" : quotaNum}
             </span>
@@ -123,17 +123,17 @@ export default function App() {
 
         {quotaNum === 0 && (
           <Banner kind="info">
-            Noch keine Quota. Teile deine Circles-Adresse mit dem Gnosis-Team, um Quota zugewiesen zu
-            bekommen — danach erscheinen hier deine Einladungen.
+            No quota yet. Share your Circles address with the Gnosis team to get quota assigned — your
+            invites will appear here once it's set.
           </Banner>
         )}
 
         {/* Citizen list */}
         <div className="rounded-2xl border border-slate-200 bg-white">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <span className="text-sm font-medium text-slate-700">Bürger ({citizens.length})</span>
+            <span className="text-sm font-medium text-slate-700">Citizens ({citizens.length})</span>
             <button onClick={refreshStatus} className="text-xs text-navy hover:underline">
-              Status aktualisieren
+              Refresh status
             </button>
           </div>
           <ul className="divide-y divide-slate-100">
@@ -162,7 +162,7 @@ export default function App() {
 
           {/* Extra address */}
           <div className="px-4 py-3 border-t border-slate-100">
-            <label className="text-xs text-slate-500">Weitere Adresse (optional)</label>
+            <label className="text-xs text-slate-500">Additional address (optional)</label>
             <input
               value={extra}
               onChange={(e) => setExtra(e.target.value.trim())}
@@ -170,14 +170,14 @@ export default function App() {
               spellCheck={false}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm outline-none focus:border-navy"
             />
-            {extra && !extraValid && <p className="mt-1 text-xs text-red-500">Keine gültige Adresse.</p>}
+            {extra && !extraValid && <p className="mt-1 text-xs text-red-500">Not a valid address.</p>}
           </div>
         </div>
 
         {/* Action */}
         <div className="mt-4 flex items-center justify-between gap-3">
           <span className="text-sm text-slate-500">
-            Ausgewählt: <strong className="text-slate-800">{inviteCount}</strong>
+            Selected: <strong className="text-slate-800">{inviteCount}</strong>
             {quotaNum != null && <> · Quota: {quotaNum}</>}
           </span>
           <button
@@ -185,11 +185,11 @@ export default function App() {
             disabled={busy || !inviter || inviteCount === 0 || !!overQuota}
             className="rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white transition disabled:opacity-40 hover:bg-navy-600"
           >
-            {busy ? "Lädt ein…" : `Einladen (${inviteCount})`}
+            {busy ? "Inviting…" : `Invite (${inviteCount})`}
           </button>
         </div>
         {overQuota && (
-          <p className="mt-2 text-xs text-amber-600">Mehr ausgewählt als Quota — bitte Auswahl reduzieren.</p>
+          <p className="mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>
         )}
 
         {msg && (
@@ -199,9 +199,8 @@ export default function App() {
         )}
 
         <p className="mt-6 text-[11px] leading-relaxed text-slate-400">
-          „Einladen“ vertraut die Adressen über dein Quota (kein eigenes Guthaben nötig). Bereits
-          registrierte Bürger werden übersprungen. Danach schließt jeder die Verifizierung in der
-          Röbel-App ab (registerHuman).
+          "Invite" trusts the addresses using your quota (no CRC from your own balance). Already-registered
+          citizens are skipped. Each citizen then completes verification in the Röbel app (registerHuman).
         </p>
       </div>
     </div>
@@ -219,9 +218,9 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 
 function StatusBadge({ status }: { status: RowStatus }) {
   if (status === "registered")
-    return <span className="text-[11px] rounded-full bg-green-100 text-green-700 px-2 py-0.5">✓ verifiziert</span>;
+    return <span className="text-[11px] rounded-full bg-green-100 text-green-700 px-2 py-0.5">✓ verified</span>;
   if (status === "open")
-    return <span className="text-[11px] rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">einladbar</span>;
+    return <span className="text-[11px] rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">invitable</span>;
   if (status === "unknown") return <span className="text-[11px] text-slate-400">?</span>;
   return <span className="text-[11px] text-slate-300">…</span>;
 }
