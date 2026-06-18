@@ -6,6 +6,8 @@ interface CoinBalanceHeroProps {
   balance: number;
   label?: string;
   sublabel?: string;
+  /** Verification status pill: true = verified, false = not yet, null/undefined = hide. */
+  verified?: boolean | null;
 }
 
 const HERO_IMAGE = require('../../assets/illustration/gamification/hero-coin.png');
@@ -14,12 +16,27 @@ export default function CoinBalanceHero({
   balance,
   label = 'Mein Guthaben',
   sublabel,
+  verified,
 }: CoinBalanceHeroProps) {
   const { colors, isDark } = useTheme();
+
+  const pillBg = verified
+    ? 'rgba(34,197,94,0.16)'
+    : 'rgba(245,158,11,0.16)';
+  const pillColor = verified
+    ? (isDark ? '#4ADE80' : '#15803D')
+    : (isDark ? '#FBBF24' : '#B45309');
 
   return (
     <View style={styles.container}>
       <View style={styles.textBlock}>
+        {verified != null && (
+          <View style={[styles.statusPill, { backgroundColor: pillBg }]}>
+            <Text style={[styles.statusText, { color: pillColor }]}>
+              {verified ? '✓ Verifiziert' : '● Nicht verifiziert'}
+            </Text>
+          </View>
+        )}
         <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
         <Text style={[styles.balance, { color: colors.textPrimary }]}>
           {balance.toLocaleString('de-DE')}

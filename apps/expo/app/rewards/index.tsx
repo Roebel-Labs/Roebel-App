@@ -61,6 +61,7 @@ export default function RewardsIndexScreen() {
   const {
     talerBalance,
     onboarded: talerOnboarded,
+    loading: talerLoading,
     minting: talerMinting,
     onboarding: talerOnboarding,
     dailyMint,
@@ -204,6 +205,7 @@ export default function RewardsIndexScreen() {
           <CoinBalanceHero
             balance={talerBalance}
             label="Röbel-Taler"
+            verified={!isConnected || talerLoading ? null : talerOnboarded}
             sublabel={
               !isConnected
                 ? 'Melde dich an, um Röbel-Taler zu sammeln'
@@ -240,7 +242,7 @@ export default function RewardsIndexScreen() {
               await Clipboard.setStringAsync(talerAccount.address);
               showSnackbar({ message: 'Adresse kopiert — jetzt in Metri einladen' });
             }}
-            style={{ marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+            style={{ marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
           >
             <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textSecondary }}>So machst du mit</Text>
             <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
@@ -253,7 +255,7 @@ export default function RewardsIndexScreen() {
         )}
 
         {isConnected && (
-          <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+          <View style={{ marginTop: 16 }}>
             <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
           </View>
         )}
@@ -442,7 +444,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -16,
   },
   talerCta: {
-    marginHorizontal: 16,
     marginTop: 12,
     borderRadius: 16,
     paddingVertical: 16,
@@ -456,7 +457,6 @@ const styles = StyleSheet.create({
   squareRow: {
     flexDirection: 'row',
     gap: 12,
-    marginHorizontal: 16,
     marginTop: 16,
   },
   square: {

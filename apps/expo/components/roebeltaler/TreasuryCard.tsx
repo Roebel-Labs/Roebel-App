@@ -49,7 +49,7 @@ export default function TreasuryCard() {
 
 function makeStyles(colors: any) {
 	return StyleSheet.create({
-		card: { marginHorizontal: 16, marginTop: 16, backgroundColor: colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: colors.border },
+		card: { marginTop: 16, backgroundColor: colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: colors.border },
 		row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 		label: { fontFamily: "Inter-Medium", fontSize: 14, color: colors.textSecondary },
 		eur: { fontFamily: "Inter-Bold", fontSize: 26, color: colors.textPrimary, marginTop: 2 },
