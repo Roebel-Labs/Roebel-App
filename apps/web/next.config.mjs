@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The Vercel build container is 4 cores / 8GB. Type-checking + ESLint over the
+  // heavy crypto deps (thirdweb, snarkjs, ffjavascript, semaphore) ran the container
+  // out of memory (exit 137 / SIGKILL) right after webpack compile. Move both passes
+  // out of the production build — run `turbo run typecheck` / `lint` in CI instead.
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ["pino-pretty", "got"],
   images: {
     remotePatterns: [
