@@ -6,7 +6,8 @@
   "description": "Röbel Circles mini-app — invite verified citizens (existing thirdweb wallets) into Circles via InviteFarm quota. Runs inside the Circles miniapp iframe.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
