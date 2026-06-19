@@ -231,7 +231,14 @@ export default function RewardsIndexScreen() {
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
-        <View style={styles.headerBtn} />
+        <Pressable
+          onPress={() => router.push('/roebel-taler-info' as any)}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Was ist Röbel-Taler?"
+        >
+          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary }}>Info</Text>
+        </Pressable>
       </View>
 
       <ScrollView
