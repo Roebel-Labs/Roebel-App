@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
@@ -33,6 +34,21 @@ import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
+
+// Daily-claim cooldown helpers: "Heute abholen" resets at local midnight.
+const rtClaimKey = (addr: string) => `rt_lastclaim_${addr.toLowerCase()}`;
+const nextMidnight = (t: number) => {
+  const d = new Date(t);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+};
+const fmtCountdown = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0 ? `${h} h ${m} min` : `${m} min ${sec} s`;
+};
 
 export default function RewardsIndexScreen() {
   const router = useRouter();
@@ -70,16 +86,43 @@ export default function RewardsIndexScreen() {
   } = useRoebelTaler();
   const weekly = useRoebelTalerWeekly();
 
+  // "Heute abholen" daily cooldown (resets at local midnight), tracked per wallet.
+  const [lastClaim, setLastClaim] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState(Date.now());
+  useEffect(() => {
+    const addr = talerAccount?.address;
+    if (!addr) {
+      setLastClaim(null);
+      return;
+    }
+    AsyncStorage.getItem(rtClaimKey(addr))
+      .then((v) => setLastClaim(v ? Number(v) : null))
+      .catch(() => {});
+  }, [talerAccount?.address]);
+  useEffect(() => {
+    if (lastClaim == null || Date.now() >= nextMidnight(lastClaim)) return;
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lastClaim]);
+  const cooldownEnd = lastClaim != null ? nextMidnight(lastClaim) : 0;
+  const talerClaimedToday = lastClaim != null && nowTs < cooldownEnd;
+  const cooldownMs = talerClaimedToday ? cooldownEnd - nowTs : 0;
+
   const onDailyMint = useCallback(async () => {
     try {
       await dailyMint();
+      const ts = Date.now();
+      setLastClaim(ts);
+      setNowTs(Date.now());
+      const addr = talerAccount?.address;
+      if (addr) AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
       showSnackbar({ message: 'Dein tägliches Röbel-Taler ist da' });
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       console.error('[Röbel-Taler] daily mint failed:', msg);
       Alert.alert('Heute abholen fehlgeschlagen', msg);
     }
-  }, [dailyMint, showSnackbar]);
+  }, [dailyMint, showSnackbar, talerAccount]);
 
   const onJoin = useCallback(async () => {
     try {
@@ -218,23 +261,47 @@ export default function RewardsIndexScreen() {
           />
         </View>
 
-        {isConnected && (talerOnboarded ? (
-          <Pressable
-            onPress={onDailyMint}
-            disabled={talerMinting}
-            style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerMinting ? 0.6 : 1 }]}
-          >
-            {talerMinting ? <ActivityIndicator color="#fff" /> : <Text style={styles.talerCtaText}>Heute abholen</Text>}
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={onJoin}
-            disabled={talerOnboarding}
-            style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerOnboarding ? 0.6 : 1 }]}
-          >
-            {talerOnboarding ? <ActivityIndicator color="#fff" /> : <Text style={styles.talerCtaText}>Bei Röbel-Taler mitmachen</Text>}
-          </Pressable>
-        ))}
+        {isConnected && (
+          !talerOnboarded ? (
+            // Not yet a verified Circles member → join (registerHuman)
+            <Pressable
+              onPress={onJoin}
+              disabled={talerOnboarding || talerLoading}
+              style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerOnboarding || talerLoading ? 0.6 : 1 }]}
+            >
+              {talerOnboarding ? (
+                <View style={styles.ctaRow}>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.talerCtaText}>Verifiziere dich…</Text>
+                </View>
+              ) : (
+                <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Bei Röbel-Taler mitmachen'}</Text>
+              )}
+            </Pressable>
+          ) : talerClaimedToday ? (
+            // Already collected today → disabled with a countdown to next midnight
+            <View style={[styles.talerCta, { backgroundColor: isDark ? colors.surface : '#EEF2F7' }]}>
+              <Text style={[styles.talerCtaText, { color: colors.textSecondary }]}>Heute abgeholt ✓</Text>
+              <Text style={[styles.ctaSub, { color: colors.textTertiary }]}>Nächste Abholung in {fmtCountdown(cooldownMs)}</Text>
+            </View>
+          ) : (
+            // Verified + claimable → daily mint
+            <Pressable
+              onPress={onDailyMint}
+              disabled={talerMinting}
+              style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerMinting ? 0.6 : 1 }]}
+            >
+              {talerMinting ? (
+                <View style={styles.ctaRow}>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
+                </View>
+              ) : (
+                <Text style={styles.talerCtaText}>Heute abholen</Text>
+              )}
+            </Pressable>
+          )
+        )}
 
         {isConnected && !talerOnboarded && !!talerAccount && (
           <Pressable
@@ -453,6 +520,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#fff',
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  ctaSub: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    marginTop: 3,
   },
   squareRow: {
     flexDirection: 'row',

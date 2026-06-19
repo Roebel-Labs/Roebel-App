@@ -31,6 +31,7 @@ type Row = {
   attester: boolean;
   citizenNFT: boolean | null;
   isHuman: boolean | null;
+  invited: boolean | null;
   collateralTrusted: boolean | null;
   personalRaw: number;
   personalWrapped: number;
@@ -60,17 +61,51 @@ async function tokenBalances(addr: string) {
   return { personalRaw, personalWrapped, roebelTaler };
 }
 
+// "Invited" = a HUMAN (not the group, not self) trusts this address but it isn't a
+// registered human yet — the intermediate state between unverified and verified.
+async function invitedByHuman(addr: string): Promise<boolean> {
+  try {
+    const res = await fetch(circlesRpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1, method: "circles_query",
+        params: [{
+          Namespace: "V_Crc", Table: "TrustRelations", Columns: [],
+          Filter: [{ Type: "Conjunction", ConjunctionType: "And", Predicates: [
+            { Type: "FilterPredicate", FilterType: "Equals", Column: "version", Value: 2 },
+            { Type: "FilterPredicate", FilterType: "Equals", Column: "trustee", Value: addr.toLowerCase() },
+          ]}],
+          Order: [],
+        }],
+      }),
+    });
+    const json = await res.json();
+    const cols: string[] = json?.result?.columns ?? [];
+    const rows: any[][] = json?.result?.rows ?? [];
+    const ti = cols.indexOf("truster");
+    const self = addr.toLowerCase();
+    return rows.some((r) => {
+      const t = String(r[ti] ?? "").toLowerCase();
+      return t && t !== self && t !== GROUP;
+    });
+  } catch {
+    return false;
+  }
+}
+
 async function loadRow(c: { address: string; attester: boolean }): Promise<Row> {
   try {
-    const [citizenNFT, isHuman, collateralTrusted, bal] = await Promise.all([
+    const [citizenNFT, isHuman, collateralTrusted, bal, invited] = await Promise.all([
       readContract({ contract: citizenNft, method: "function hasCitizenNFT(address) view returns (bool)", params: [c.address] }),
       readContract({ contract: hub, method: "function isHuman(address) view returns (bool)", params: [c.address] }),
       readContract({ contract: hub, method: "function isTrusted(address,address) view returns (bool)", params: [roebeltalerGroupAddress, c.address] }),
       tokenBalances(c.address),
+      invitedByHuman(c.address),
     ]);
-    return { ...c, citizenNFT, isHuman, collateralTrusted, ...bal };
+    return { ...c, citizenNFT, isHuman, collateralTrusted, ...bal, invited };
   } catch {
-    return { ...c, citizenNFT: null, isHuman: null, collateralTrusted: null, personalRaw: 0, personalWrapped: 0, roebelTaler: 0, error: true };
+    return { ...c, citizenNFT: null, isHuman: null, invited: null, collateralTrusted: null, personalRaw: 0, personalWrapped: 0, roebelTaler: 0, error: true };
   }
 }
 
@@ -148,9 +183,15 @@ export default function CirclesVerificationPage() {
                       </td>
                       <td className="py-3 pr-4"><Bool v={r.citizenNFT} /></td>
                       <td className="py-3 pr-4">
-                        {r.isHuman == null ? <Dim>?</Dim> : r.isHuman
-                          ? <Badge className="bg-green-600/15 text-green-700 hover:bg-green-600/15 border-0">✓ Verifiziert</Badge>
-                          : <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 border-0">Nicht verifiziert</Badge>}
+                        {r.isHuman == null ? (
+                          <Dim>?</Dim>
+                        ) : r.isHuman ? (
+                          <Badge className="bg-green-600/15 text-green-700 hover:bg-green-600/15 border-0">✓ Verifiziert</Badge>
+                        ) : r.invited ? (
+                          <Badge className="bg-blue-600/15 text-blue-700 hover:bg-blue-600/15 border-0">Eingeladen</Badge>
+                        ) : (
+                          <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/15 border-0">Nicht verifiziert</Badge>
+                        )}
                       </td>
                       <td className="py-3 pr-4 tabular-nums text-foreground">{fmt(r.roebelTaler)}</td>
                       <td className="py-3 pr-4 tabular-nums">
