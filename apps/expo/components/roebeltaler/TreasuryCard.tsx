@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
 import { getTreasuryEuro } from "@/lib/roebel-taler";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
+import Skeleton from "@/components/ui/Skeleton";
 
 /**
  * Stadtkasse card — shows the civic Safe's REAL holdings (native xDAI + EURe + Röbel Münzen)
@@ -31,7 +32,7 @@ export default function TreasuryCard() {
 				<View>
 					<Text style={styles.label}>Stadtkasse</Text>
 					{euro === null ? (
-						<ActivityIndicator color={colors.primary} style={{ marginTop: 6, alignSelf: "flex-start" }} />
+						<Skeleton width={130} height={28} radius={8} style={{ marginTop: 6 }} />
 					) : (
 						<Text style={styles.eur}>
 							ca. {euro.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €

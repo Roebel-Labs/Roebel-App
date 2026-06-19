@@ -74,6 +74,7 @@ export default function CheckinStreakStrip({
                   backgroundColor: isDark ? '#22324c' : '#EEF4FB',
                   borderColor: primary,
                   borderWidth: 2,
+                  borderRadius: 14,
                 },
               ]}
             >
@@ -131,7 +132,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   dayLabel: {
     fontFamily: 'Inter-Medium',

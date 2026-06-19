@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -188,6 +188,7 @@ export default function RewardsIndexScreen() {
     }
   }, [onboard, showSnackbar]);
 
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
@@ -256,31 +257,8 @@ export default function RewardsIndexScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backBtn,
-            { backgroundColor: isDark ? colors.surface : 'rgba(255,255,255,0.9)', opacity: pressed ? 0.6 : 1 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
-          <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
-        <Pressable
-          onPress={() => router.push('/roebel-taler-info' as any)}
-          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Was ist Röbel Münzen?"
-        >
-          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary }}>Info</Text>
-        </Pressable>
-      </View>
-
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
@@ -290,15 +268,18 @@ export default function RewardsIndexScreen() {
           />
         }
       >
-        {/* Warm gradient lives INSIDE the scroll content so it moves with the
-            scroll and fades into the page background as you go down. */}
+        {/* Warm gradient lives INSIDE the scroll content so it scrolls with the
+            page, fades to the background, and sits BEHIND the transparent header. */}
         <LinearGradient
           colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', colors.background]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
-          style={styles.scrollGradient}
+          style={[styles.scrollGradient, { height: insets.top + 460 }]}
           pointerEvents="none"
         />
+
+        {/* Spacer so the hero clears the floating header. */}
+        <View style={{ height: insets.top + 44 }} />
 
         <View style={styles.heroBleed}>
           <CoinBalanceHero
@@ -335,13 +316,17 @@ export default function RewardsIndexScreen() {
               )}
             </Pressable>
           ) : talerClaimedToday ? (
-            // Already collected today → disabled button showing the countdown only
+            // Already collected today → fully-rounded white disabled button + countdown
             <View
-              style={[styles.talerCta, { backgroundColor: isDark ? colors.surface : '#EEF2F7' }]}
+              style={[
+                styles.talerCta,
+                styles.talerCtaCountdown,
+                { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border },
+              ]}
               accessibilityRole="button"
               accessibilityState={{ disabled: true }}
             >
-              <Text style={[styles.talerCtaText, { color: colors.textSecondary }]}>
+              <Text style={[styles.talerCtaText, styles.talerCtaCountdownText, { color: colors.textSecondary }]}>
                 Nächste Röbel Münze in {fmtCountdown(cooldownMs)}
               </Text>
             </View>
@@ -487,7 +472,34 @@ export default function RewardsIndexScreen() {
           </View>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Floating transparent header over the gradient (no background). */}
+      <View style={[styles.header, { paddingTop: insets.top }]} pointerEvents="box-none">
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [
+            styles.backBtn,
+            {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+              opacity: pressed ? 0.6 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Zurück"
+        >
+          <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
+        <Pressable
+          onPress={() => router.push('/roebel-taler-info' as any)}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Was ist Röbel Münzen?"
+        >
+          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary }}>Info</Text>
+        </Pressable>
+      </View>
+
       <MintSuccessOverlay
         visible={showMintSuccess}
         balance={talerBalance}
@@ -524,6 +536,7 @@ function EmptyState({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  scroll: { flex: 1 },
   scrollGradient: {
     position: 'absolute',
     top: 0,
@@ -531,13 +544,17 @@ const styles = StyleSheet.create({
     right: -16,
     height: 440,
   },
-  safe: { flex: 1 },
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingBottom: 8,
     gap: 8,
   },
   headerBtn: { minWidth: 44, alignItems: 'center', justifyContent: 'center' },
@@ -562,10 +579,16 @@ const styles = StyleSheet.create({
   },
   talerCta: {
     marginTop: 12,
-    borderRadius: 16,
+    borderRadius: 999,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  talerCtaCountdown: {
+    borderWidth: 1,
+  },
+  talerCtaCountdownText: {
+    fontSize: 13,
   },
   talerCtaText: {
     fontFamily: 'Inter-SemiBold',

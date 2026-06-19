@@ -139,6 +139,85 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	return xdai * XDAI_EUR + eure + rt;
 }
 
+export interface TreasuryAssets {
+	/** Röbel Münzen held by the address. */
+	roebel: number;
+	/** Native xDAI balance. */
+	xdai: number;
+	/** EURe (regulated euro) balance. */
+	eure: number;
+	/** Indicative € total (xDAI→€ + EURe + Röbel Münzen). */
+	euroTotal: number;
+}
+
+/** Real per-asset breakdown of a treasury address (Röbel Münzen + xDAI + EURe). */
+export async function getTreasuryAssets(address: string): Promise<TreasuryAssets> {
+	let xdai = 0;
+	try {
+		const res = await fetch("https://rpc.gnosischain.com", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
+		});
+		const j = await res.json();
+		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
+	} catch {
+		/* ignore */
+	}
+	let eure = 0;
+	try {
+		const e = (await readContract({
+			contract: getContract({ client, chain: gnosisRead, address: EURE_ADDRESS }),
+			method: "function balanceOf(address) view returns (uint256)",
+			params: [address],
+		})) as bigint;
+		eure = Number(e) / 1e18;
+	} catch {
+		/* ignore */
+	}
+	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
+	return { roebel, xdai, eure, euroTotal: xdai * XDAI_EUR + eure + roebel };
+}
+
+export interface TreasuryTx {
+	direction: "in" | "out" | "admin";
+	/** xDAI amount moved (0 for admin/Safe txs). */
+	xdai: number;
+	/** Epoch ms, 0 if unknown. */
+	timestamp: number;
+	/** Human label (Eingang / Ausgang / method). */
+	label: string;
+}
+
+/**
+ * Recent on-chain transactions of a treasury address, via the Gnosis Blockscout
+ * API. Addresses are deliberately NOT surfaced (per the no-wallet rule) — only
+ * direction, amount and time.
+ */
+export async function getTreasuryTransactions(address: string): Promise<TreasuryTx[]> {
+	try {
+		const res = await fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`);
+		const j = await res.json();
+		const items: any[] = Array.isArray(j?.items) ? j.items : [];
+		const self = address.toLowerCase();
+		return items.slice(0, 12).map((t) => {
+			const to = (t?.to?.hash ?? "").toLowerCase();
+			let xdai = 0;
+			try {
+				xdai = Number(BigInt(t?.value ?? "0")) / 1e18;
+			} catch {
+				xdai = 0;
+			}
+			const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
+			const direction: "in" | "out" | "admin" = xdai === 0 ? "admin" : to === self ? "in" : "out";
+			const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
+			return { direction, xdai, timestamp, label };
+		});
+	} catch {
+		return [];
+	}
+}
+
 /** Format an 18-decimal on-chain amount as a friendly Röbel Münzen string. */
 export function formatTaler(raw: bigint): string {
 	const whole = raw / 10n ** 18n;
