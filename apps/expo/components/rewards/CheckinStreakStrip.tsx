@@ -10,18 +10,15 @@ interface CheckinStreakStripProps {
   hasCheckedInToday: boolean;
 }
 
-const BASE = 20;
-const SINGLE_COIN = require('../../assets/illustration/gamification/single.png');
+// One full day of personal mint = ~24 Röbel Münzen (1 per hour), so every day
+// in the streak is worth 24.
+const DAILY_AMOUNT = 24;
 const STACK_COIN = require('../../assets/illustration/gamification/stack.png');
 
-const YELLOW = '#E9B949';
-const YELLOW_BG_LIGHT = '#FFFBEA';
-const YELLOW_BG_DARK = '#3c2a12';
-
 /**
- * Visualises the user's 7-day streak window centred on "today". Past days show
- * a check mark if they were claimed; today is highlighted in primary; every
- * 3rd consecutive day is the bonus (stack) image for 2×.
+ * Visualises the user's 7-day Röbel Münzen streak window centred on "today".
+ * Past days show a check mark if collected; today is highlighted in primary;
+ * every day is worth 24 and uses the stack-coin illustration.
  */
 export default function CheckinStreakStrip({
   streak,
@@ -36,11 +33,9 @@ export default function CheckinStreakStrip({
     const start = Math.max(1, todayStreak - 2);
     return Array.from({ length: 7 }, (_, i) => {
       const streakDay = start + i;
-      const isBonus = streakDay % 3 === 0;
-      const amount = isBonus ? BASE * 2 : BASE;
       const state: 'past' | 'today' | 'future' =
         streakDay < todayStreak ? 'past' : streakDay === todayStreak ? 'today' : 'future';
-      return { streakDay, amount, isBonus, state };
+      return { streakDay, amount: DAILY_AMOUNT, state };
     });
   }, [streak, hasCheckedInToday]);
 
@@ -80,22 +75,12 @@ export default function CheckinStreakStrip({
                   borderColor: primary,
                   borderWidth: 2,
                 },
-                item.isBonus &&
-                  !isToday && {
-                    backgroundColor: isDark ? YELLOW_BG_DARK : YELLOW_BG_LIGHT,
-                  },
               ]}
             >
               <Text
                 style={[
                   styles.dayLabel,
-                  {
-                    color: isToday
-                      ? primary
-                      : item.isBonus
-                        ? YELLOW
-                        : colors.textSecondary,
-                  },
+                  { color: isToday ? primary : colors.textSecondary },
                   isToday && styles.dayLabelToday,
                 ]}
               >
@@ -105,11 +90,7 @@ export default function CheckinStreakStrip({
                 {wasCompleted ? (
                   <Text style={[styles.check, { color: primary }]}>✓</Text>
                 ) : (
-                  <Image
-                    source={item.isBonus ? STACK_COIN : SINGLE_COIN}
-                    style={styles.coinImg}
-                    resizeMode="contain"
-                  />
+                  <Image source={STACK_COIN} style={styles.coinImg} resizeMode="contain" />
                 )}
               </View>
               <Text

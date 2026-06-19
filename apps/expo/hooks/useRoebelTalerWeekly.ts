@@ -47,15 +47,12 @@ export function useRoebelTalerWeekly() {
                 Namespace: "V_CrcV2",
                 Table: "Transfers",
                 Columns: [],
+                // The Circles RPC does NOT allow filtering V_CrcV2_Transfers by
+                // `tokenAddress` (errors -32602: column not filterable), which made
+                // the whole query throw → flat 0 chart. So we filter by `to` only and
+                // keep just the Röbel Münzen group token client-side (below).
                 Filter: [
-                  {
-                    Type: "Conjunction",
-                    ConjunctionType: "And",
-                    Predicates: [
-                      { Type: "FilterPredicate", FilterType: "Equals", Column: "to", Value: gnosisAddress.toLowerCase() },
-                      { Type: "FilterPredicate", FilterType: "Equals", Column: "tokenAddress", Value: roebeltalerGroupAddress.toLowerCase() },
-                    ],
-                  },
+                  { Type: "FilterPredicate", FilterType: "Equals", Column: "to", Value: gnosisAddress.toLowerCase() },
                 ],
                 Order: [{ Column: "blockNumber", SortOrder: "Desc" }],
                 Limit: 500,
@@ -68,9 +65,14 @@ export function useRoebelTalerWeekly() {
         const rows: any[][] = json?.result?.rows ?? [];
         const ti = cols.indexOf("timestamp");
         const vi = cols.indexOf("value");
+        const tki = cols.indexOf("tokenAddress");
+        const group = roebeltalerGroupAddress.toLowerCase();
         const now = Date.now();
         const buckets = [0, 0, 0, 0, 0, 0];
         for (const r of rows) {
+          // Keep ONLY Röbel Münzen group-token receipts; skip the intermediate
+          // personal-CRC mints (same `to`, different token).
+          if (tki >= 0 && String(r[tki] ?? "").toLowerCase() !== group) continue;
           const ts = Number(r[ti] ?? 0) * 1000;
           let v = 0;
           try {

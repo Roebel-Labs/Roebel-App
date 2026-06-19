@@ -1,7 +1,7 @@
 // Stadtkasse (civic treasury) — assets + transactions. The treasury is the Attester
 // Safe's Röbel Münzen holdings. EUR figures are INDICATIVE only (not redeemable).
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
@@ -9,7 +9,7 @@ import { getRoebelTalerBalance, formatTaler } from "@/lib/roebel-taler";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import ChevronLeftIcon from "@/assets/icons/chevron-left.svg";
 
-const COIN = require("../assets/illustration/taler/single.png");
+const COIN = require("../assets/illustration/taler/multiple.png");
 
 export default function TreasuryScreen() {
 	const { colors } = useTheme();
@@ -38,6 +38,7 @@ export default function TreasuryScreen() {
 			</View>
 
 			<ScrollView contentContainerStyle={styles.content}>
+				<Image source={COIN} style={styles.heroCoin} resizeMode="contain" />
 				<Text style={styles.totalLabel}>Gesamtwert (ca.)</Text>
 				{taler === null ? (
 					<ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
@@ -51,7 +52,7 @@ export default function TreasuryScreen() {
 					<View style={styles.assetLeft}>
 						<View style={styles.coinWrap}>
 							{/* coin illustration */}
-							<View style={styles.coinBg}><Text>🪙</Text></View>
+							<Image source={COIN} style={styles.coinImg} resizeMode="contain" />
 						</View>
 						<View>
 							<Text style={styles.assetName}>Röbel Münzen</Text>
@@ -78,6 +79,8 @@ function makeStyles(colors: any) {
 		backBtn: { width: 40, height: 40, justifyContent: "center" },
 		headerTitle: { fontFamily: "Inter-SemiBold", fontSize: 18, color: colors.textPrimary },
 		content: { padding: 20 },
+			heroCoin: { width: 120, height: 120, alignSelf: "center", marginBottom: 4 },
+			coinImg: { width: 40, height: 40 },
 		totalLabel: { fontFamily: "Inter-Medium", fontSize: 14, color: colors.textSecondary, textAlign: "center", marginTop: 8 },
 		total: { fontFamily: "Inter-Bold", fontSize: 40, color: colors.textPrimary, textAlign: "center", marginTop: 2 },
 		disclaimer: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textTertiary, textAlign: "center", marginTop: 6 },

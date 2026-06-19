@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +32,7 @@ import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
+import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
 
@@ -48,6 +49,15 @@ const fmtCountdown = (ms: number) => {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return h > 0 ? `${h} h ${m} min` : `${m} min ${sec} s`;
+};
+
+// Local Röbel-Münzen daily-mint streak (decoupled from the off-chain check-in
+// streak so it reflects the REAL new currency, starting fresh per wallet).
+const rtStreakKey = (addr: string) => `rt_streak_${addr.toLowerCase()}`;
+const dayStart = (t: number) => {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 };
 
 export default function RewardsIndexScreen() {
@@ -108,6 +118,21 @@ export default function RewardsIndexScreen() {
   const talerClaimedToday = lastClaim != null && nowTs < cooldownEnd;
   const cooldownMs = talerClaimedToday ? cooldownEnd - nowTs : 0;
 
+  // Röbel-Münzen streak (consecutive collected days), local per wallet. Starts
+  // fresh, so it reflects the real new streak with Röbel Münzen.
+  const [rtStreak, setRtStreak] = useState(0);
+  const [showMintSuccess, setShowMintSuccess] = useState(false);
+  useEffect(() => {
+    const addr = talerAccount?.address;
+    if (!addr) { setRtStreak(0); return; }
+    AsyncStorage.getItem(rtStreakKey(addr))
+      .then((v) => {
+        if (v) { try { setRtStreak(JSON.parse(v)?.count ?? 0); return; } catch {} }
+        setRtStreak(0);
+      })
+      .catch(() => {});
+  }, [talerAccount?.address]);
+
   const onDailyMint = useCallback(async () => {
     try {
       await dailyMint();
@@ -116,13 +141,32 @@ export default function RewardsIndexScreen() {
       setNowTs(Date.now());
       const addr = talerAccount?.address;
       if (addr) AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
-      showSnackbar({ message: 'Deine Röbel Münzen für heute sind da' });
+      // Advance the local Röbel-Münzen streak (consecutive collected days).
+      const today = dayStart(ts);
+      let nextStreak = 1;
+      try {
+        const raw = addr ? await AsyncStorage.getItem(rtStreakKey(addr)) : null;
+        if (raw) {
+          const { count = 0, lastDay = 0 } = JSON.parse(raw);
+          if (lastDay === today) nextStreak = count;
+          else if (lastDay === today - 86_400_000) nextStreak = count + 1;
+          else nextStreak = 1;
+        }
+      } catch { /* fresh streak */ }
+      setRtStreak(nextStreak);
+      if (addr) {
+        AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: nextStreak, lastDay: today })).catch(() => {});
+      }
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      setShowMintSuccess(true);
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       console.error('[Röbel Münzen] daily mint failed:', msg);
       Alert.alert('Heute abholen fehlgeschlagen', msg);
     }
-  }, [dailyMint, showSnackbar, talerAccount]);
+  }, [dailyMint, talerAccount]);
 
   const onJoin = useCallback(async () => {
     try {
@@ -135,16 +179,9 @@ export default function RewardsIndexScreen() {
     }
   }, [onboard, showSnackbar]);
 
-  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TaskTabValue>('available');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
-  // Gradient backdrop ends exactly at the bottom of the "Zur Schatzkammer"
-  // CTA. We measure the header height + the CTA's offset within the scroll
-  // content so the gradient can fade to the page background by that point.
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const [ctaBottom, setCtaBottom] = useState(0);
-  const gradientHeight = insets.top + headerHeight + ctaBottom;
 
   useFocusEffect(
     useCallback(() => {
@@ -210,15 +247,8 @@ export default function RewardsIndexScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', '#FFFFFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[styles.gradient, gradientHeight > 0 && { height: gradientHeight }]}
-        pointerEvents="none"
-      />
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
+      <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => [
@@ -251,6 +281,16 @@ export default function RewardsIndexScreen() {
           />
         }
       >
+        {/* Warm gradient lives INSIDE the scroll content so it moves with the
+            scroll and fades into the page background as you go down. */}
+        <LinearGradient
+          colors={isDark ? ['#2A261A', colors.background] : ['#FBEFBA', colors.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.scrollGradient}
+          pointerEvents="none"
+        />
+
         <View style={styles.heroBleed}>
           <CoinBalanceHero
             balance={talerBalance}
@@ -261,8 +301,8 @@ export default function RewardsIndexScreen() {
                 ? 'Melde dich an, um Röbel Münzen zu sammeln'
                 : !talerOnboarded
                   ? 'Mach mit, um täglich Röbel Münzen abzuholen'
-                  : hasCheckedInToday
-                    ? `Serie ${streak} Tage`
+                  : talerClaimedToday
+                    ? `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'}`
                     : 'Hol dir deine täglichen Röbel Münzen'
             }
           />
@@ -286,10 +326,15 @@ export default function RewardsIndexScreen() {
               )}
             </Pressable>
           ) : talerClaimedToday ? (
-            // Already collected today → disabled with a countdown to next midnight
-            <View style={[styles.talerCta, { backgroundColor: isDark ? colors.surface : '#EEF2F7' }]}>
-              <Text style={[styles.talerCtaText, { color: colors.textSecondary }]}>Heute abgeholt ✓</Text>
-              <Text style={[styles.ctaSub, { color: colors.textTertiary }]}>Nächste Abholung in {fmtCountdown(cooldownMs)}</Text>
+            // Already collected today → disabled button showing the countdown only
+            <View
+              style={[styles.talerCta, { backgroundColor: isDark ? colors.surface : '#EEF2F7' }]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: true }}
+            >
+              <Text style={[styles.talerCtaText, { color: colors.textSecondary }]}>
+                Nächste Röbel Münze in {fmtCountdown(cooldownMs)}
+              </Text>
             </View>
           ) : (
             // Verified + claimable → daily mint
@@ -328,41 +373,16 @@ export default function RewardsIndexScreen() {
           </Pressable>
         )}
 
+        {/* Streak — directly under the mint button */}
         {isConnected && (
-          <View style={{ marginTop: 16 }}>
-            <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
-          </View>
+          <CheckinStreakStrip
+            streak={rtStreak}
+            recentCheckins={[]}
+            hasCheckedInToday={talerClaimedToday}
+          />
         )}
-
-        {isConnected && (
-          <>
-            <View style={styles.squareRow}>
-              <Pressable
-                style={[styles.square, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
-                onPress={() => router.push('/rewards/schatzkammer' as any)}
-              >
-                <Text style={[styles.squareValue, { color: colors.textPrimary }]}>{keyCount}</Text>
-                <Text style={[styles.squareLabel, { color: colors.textSecondary }]}>Schatzkammer-Schlüssel</Text>
-              </Pressable>
-              <View style={[styles.square, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
-                <Text style={[styles.squareValue, { color: colors.textPrimary }]}>{streak}</Text>
-                <Text style={[styles.squareLabel, { color: colors.textSecondary }]}>Tage Serie</Text>
-              </View>
-            </View>
-            <TreasuryCard />
-          </>
-        )}
-
-        <CheckinStreakStrip
-          streak={streak}
-          recentCheckins={recentCheckins}
-          hasCheckedInToday={hasCheckedInToday}
-        />
 
         <Pressable
-          onLayout={(e) =>
-            setCtaBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
-          }
           onPress={() => router.push('/rewards/schatzkammer' as any)}
           style={({ pressed }) => [
             styles.primaryCTA,
@@ -376,6 +396,14 @@ export default function RewardsIndexScreen() {
         >
           <Text style={styles.primaryCTAText}>Zur Schatzkammer</Text>
         </Pressable>
+
+        {/* Diese Woche verdient */}
+        {isConnected && (
+          <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
+        )}
+
+        {/* Stadtkasse — under the graph */}
+        {isConnected && <TreasuryCard />}
 
         <View style={styles.missionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -451,6 +479,11 @@ export default function RewardsIndexScreen() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+      <MintSuccessOverlay
+        visible={showMintSuccess}
+        balance={talerBalance}
+        onClose={() => setShowMintSuccess(false)}
+      />
     </View>
   );
 }
@@ -482,11 +515,12 @@ function EmptyState({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  gradient: {
+  scrollGradient: {
     position: 'absolute',
     top: 0,
-    left: 0,
-    right: 0,
+    left: -16,
+    right: -16,
+    height: 440,
   },
   safe: { flex: 1 },
   header: {
@@ -520,8 +554,9 @@ const styles = StyleSheet.create({
   talerCta: {
     marginTop: 12,
     borderRadius: 16,
-    paddingVertical: 16,
+    height: 48,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   talerCtaText: {
     fontFamily: 'Inter-SemiBold',
