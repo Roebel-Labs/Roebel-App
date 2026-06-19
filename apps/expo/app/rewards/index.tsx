@@ -125,12 +125,21 @@ export default function RewardsIndexScreen() {
   useEffect(() => {
     const addr = talerAccount?.address;
     if (!addr) { setRtStreak(0); return; }
-    AsyncStorage.getItem(rtStreakKey(addr))
-      .then((v) => {
-        if (v) { try { setRtStreak(JSON.parse(v)?.count ?? 0); return; } catch {} }
-        setRtStreak(0);
-      })
-      .catch(() => {});
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem(rtStreakKey(addr));
+        if (v) { setRtStreak(JSON.parse(v)?.count ?? 0); return; }
+        // No stored streak yet → bootstrap to 1 if they already collected today,
+        // so a fresh start still reflects today's mint.
+        const lc = await AsyncStorage.getItem(rtClaimKey(addr));
+        if (lc && Date.now() < nextMidnight(Number(lc))) {
+          setRtStreak(1);
+          AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: 1, lastDay: dayStart(Date.now()) })).catch(() => {});
+        } else {
+          setRtStreak(0);
+        }
+      } catch { setRtStreak(0); }
+    })();
   }, [talerAccount?.address]);
 
   const onDailyMint = useCallback(async () => {
