@@ -33,6 +33,9 @@ import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
+import ReceiveSheet from '@/components/rewards/ReceiveSheet';
+import SendIcon from '@/assets/icons/sent.svg';
+import QrIcon from '@/assets/icons/qr-code.svg';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
 
@@ -63,7 +66,7 @@ const dayStart = (t: number) => {
 export default function RewardsIndexScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { isConnected } = useUser();
+  const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
   const {
     coins,
@@ -122,6 +125,7 @@ export default function RewardsIndexScreen() {
   // fresh, so it reflects the real new streak with Röbel Münzen.
   const [rtStreak, setRtStreak] = useState(0);
   const [showMintSuccess, setShowMintSuccess] = useState(false);
+  const [showReceive, setShowReceive] = useState(false);
   useEffect(() => {
     const addr = talerAccount?.address;
     if (!addr) { setRtStreak(0); return; }
@@ -285,7 +289,7 @@ export default function RewardsIndexScreen() {
           <CoinBalanceHero
             balance={talerBalance}
             label="Röbel Münzen"
-            verified={!isConnected || talerLoading ? null : talerOnboarded}
+            verified={null}
             sublabel={
               !isConnected
                 ? 'Melde dich an, um Röbel Münzen zu sammeln'
@@ -297,6 +301,36 @@ export default function RewardsIndexScreen() {
             }
           />
         </View>
+
+        {/* Senden / Empfangen — above the daily mint button */}
+        {isConnected && talerOnboarded && (
+          <View style={styles.sendRecvRow}>
+            <Pressable
+              onPress={() => router.push('/rewards/send' as any)}
+              style={({ pressed }) => [
+                styles.srBtn,
+                { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Röbel Münzen senden"
+            >
+              <SendIcon width={20} height={20} color={colors.primary} />
+              <Text style={[styles.srText, { color: colors.textPrimary }]}>Senden</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowReceive(true)}
+              style={({ pressed }) => [
+                styles.srBtn,
+                { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Röbel Münzen empfangen"
+            >
+              <QrIcon width={20} height={20} color={colors.primary} />
+              <Text style={[styles.srText, { color: colors.textPrimary }]}>Empfangen</Text>
+            </Pressable>
+          </View>
+        )}
 
         {isConnected && (
           !talerOnboarded ? (
@@ -505,6 +539,13 @@ export default function RewardsIndexScreen() {
         balance={talerBalance}
         onClose={() => setShowMintSuccess(false)}
       />
+
+      <ReceiveSheet
+        visible={showReceive}
+        address={talerAccount?.address}
+        name={user?.username ?? user?.display_name ?? null}
+        onClose={() => setShowReceive(false)}
+      />
     </View>
   );
 }
@@ -599,6 +640,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  sendRecvRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  srBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 48,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  srText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
   },
   ctaSub: {
     fontFamily: 'Inter-Medium',
