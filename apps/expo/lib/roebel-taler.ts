@@ -107,6 +107,38 @@ export async function getPersonalCrcBalance(address: string): Promise<bigint> {
 	});
 }
 
+const XDAI_EUR = 0.92; // approx USD→EUR (xDAI is USD-pegged); indicative only
+const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
+
+/** Stadtkasse value in € (indicative): native xDAI + EURe + Röbel Münzen, converted. */
+export async function getTreasuryEuro(address: string): Promise<number> {
+	let xdai = 0;
+	try {
+		const res = await fetch("https://rpc.gnosischain.com", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
+		});
+		const j = await res.json();
+		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
+	} catch {
+		/* ignore */
+	}
+	const rt = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
+	let eure = 0;
+	try {
+		const e = (await readContract({
+			contract: getContract({ client, chain: gnosisRead, address: EURE_ADDRESS }),
+			method: "function balanceOf(address) view returns (uint256)",
+			params: [address],
+		})) as bigint;
+		eure = Number(e) / 1e18;
+	} catch {
+		/* ignore */
+	}
+	return xdai * XDAI_EUR + eure + rt;
+}
+
 /** Format an 18-decimal on-chain amount as a friendly Röbel Münzen string. */
 export function formatTaler(raw: bigint): string {
 	const whole = raw / 10n ** 18n;

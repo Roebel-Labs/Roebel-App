@@ -8,7 +8,8 @@
   "addresses": {
     "attesterNFT": "0x7bD6Fd97385BCCf6000380ADd3BF19737c6063C4",
     "citizenNFT": "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4",
-    "ownerSafe": "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa"
+    "ownerSafe": "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa",
+    "citizenMembershipCondition": "0x10644F137cDBE9Af5651C8607A6FBa8AfA5276f6"
   },
   "holders": {
     "citizens": [
