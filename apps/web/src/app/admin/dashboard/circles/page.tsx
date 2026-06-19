@@ -178,7 +178,15 @@ export default function CirclesVerificationPage() {
                 : rows.map((r) => (
                     <tr key={r.address} className="border-b border-border">
                       <td className="py-3 pr-4">
-                        <span className="font-mono text-xs text-foreground">{shortAddr(r.address)}</span>
+                        <a
+                          href={`https://explorer.aboutcircles.com/avatar/${r.address}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-xs text-foreground hover:underline"
+                          title="Auf dem Circles Explorer ansehen"
+                        >
+                          {shortAddr(r.address)} <span className="text-muted-foreground">↗</span>
+                        </a>
                         {r.attester && <Badge variant="outline" className="ml-2 text-[10px]">Attester</Badge>}
                       </td>
                       <td className="py-3 pr-4"><Bool v={r.citizenNFT} /></td>
@@ -205,10 +213,18 @@ export default function CirclesVerificationPage() {
                   ))}
             </tbody>
           </table>
-          <p className="mt-4 text-xs text-muted-foreground">
-            „Persönl. CRC (roh / wrapped)“: Einladen verbrennt <strong>rohes</strong> ERC-1155-Guthaben — gewrapptes
-            (ERC-20) muss erst entpackt werden. Adressen gekürzt; Namensauflösung folgt.
-          </p>
+          <div className="mt-4 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              „Persönl. CRC (roh / wrapped)“: Einladen verbrennt <strong>rohes</strong> ERC-1155-Guthaben — gewrapptes
+              (ERC-20) muss erst entpackt werden. Jede Wallet verlinkt zu ihrem Profil auf dem Circles Explorer.
+            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              <span className="text-muted-foreground">Onchain-Belege:</span>
+              <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://explorer.aboutcircles.com/avatar/${roebeltalerGroupAddress}`}>Röbel-Taler Gruppe ↗</a>
+              <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://gnosisscan.io/address/${citizenNFTGnosisAddress}`}>CitizenNFT ↗</a>
+              <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://gnosisscan.io/address/${circlesHubAddress}`}>Circles Hub ↗</a>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

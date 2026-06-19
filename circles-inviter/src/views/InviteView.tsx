@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { inviteFarm, getQuota, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo } from "../lib/circles";
-import { ROEBEL_CITIZENS, shortAddr } from "../lib/citizens";
+import { ROEBEL_CITIZENS, shortAddr, explorerAvatar } from "../lib/citizens";
 import { Stat, Banner } from "../components/ui";
 
 type RowStatus = "checking" | "registered" | "open" | "unknown";
@@ -147,7 +147,9 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
             return (
               <li key={c.address} className="flex items-center gap-3 px-4 py-3">
                 <input type="checkbox" className="h-4 w-4 accent-[#194383]" checked={checked} disabled={disabled} onChange={() => toggle(c.address)} />
-                <span className="font-mono text-xs text-slate-700 flex-1">{shortAddr(c.address)}</span>
+                <a href={explorerAvatar(c.address)} target="_blank" rel="noreferrer" className="font-mono text-xs text-slate-700 flex-1 hover:text-navy hover:underline">
+                  {shortAddr(c.address)} ↗
+                </a>
                 {c.attester && <span className="text-[10px] rounded-full bg-navy/10 text-navy px-2 py-0.5">Attester</span>}
                 <StatusBadge status={st} />
               </li>

@@ -25,3 +25,7 @@ export const ROEBEL_CITIZENS: Citizen[] = [
 ];
 
 export const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+// On-chain proof links (Circles Explorer).
+export const explorerAvatar = (a: string) => `https://explorer.aboutcircles.com/avatar/${a}`;
+export const explorerTx = (h: string) => `https://explorer.aboutcircles.com/tx/${h}`;

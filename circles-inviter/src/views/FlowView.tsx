@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getRecentTransfers, type Transfer } from "../lib/circlesData";
 import { Loading, Stat } from "../components/ui";
-import { shortAddr } from "../lib/citizens";
+import { shortAddr, explorerAvatar, explorerTx } from "../lib/citizens";
 
 const fmtAmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const fmtTime = (t: number) =>
@@ -38,11 +38,11 @@ export default function FlowView() {
           <ul className="divide-y divide-slate-100">
             {txs.map((t, i) => (
               <li key={t.tx + i} className="flex items-center gap-2 px-4 py-3 text-sm">
-                <span className="font-mono text-xs text-slate-600">{shortAddr(t.from)}</span>
+                <a href={explorerAvatar(t.from)} target="_blank" rel="noreferrer" className="font-mono text-xs text-slate-600 hover:underline">{shortAddr(t.from)}</a>
                 <span className="text-slate-300">→</span>
-                <span className="font-mono text-xs text-slate-600">{shortAddr(t.to)}</span>
+                <a href={explorerAvatar(t.to)} target="_blank" rel="noreferrer" className="font-mono text-xs text-slate-600 hover:underline">{shortAddr(t.to)}</a>
                 <span className="ml-auto font-semibold text-slate-900 tabular-nums">{fmtAmt(t.amount)}</span>
-                <span className="text-[11px] text-slate-400 w-28 text-right">{fmtTime(t.time)}</span>
+                <a href={explorerTx(t.tx)} target="_blank" rel="noreferrer" className="text-[11px] text-slate-400 w-28 text-right hover:underline" title="Transaktion im Circles Explorer">{fmtTime(t.time)} ↗</a>
               </li>
             ))}
           </ul>

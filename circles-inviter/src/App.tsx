@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { onWalletChange } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
+import { ROEBEL_GROUP } from "./lib/circles";
+import { explorerAvatar } from "./lib/citizens";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import FlowView from "./views/FlowView";
@@ -53,7 +55,12 @@ export default function App() {
         {tab === "flow" && <FlowView />}
         {tab === "network" && <NetworkView />}
 
-        <p className="mt-8 text-[11px] text-slate-400">Röbel/Müritz · Circles v2 on Gnosis · data is live &amp; public.</p>
+        <p className="mt-8 text-[11px] text-slate-400">
+          Röbel/Müritz · Circles v2 on Gnosis ·{" "}
+          <a href={explorerAvatar(ROEBEL_GROUP)} target="_blank" rel="noreferrer" className="text-navy hover:underline">
+            on-chain proof ↗
+          </a>
+        </p>
       </div>
     </div>
   );
