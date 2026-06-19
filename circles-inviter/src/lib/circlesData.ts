@@ -1,7 +1,7 @@
 // Read-only Circles data for the Röbel Circles dashboards. Public Circles RPC queries
 // (no wallet needed). Every function catches and returns empty/zero — the UI never throws.
 // Query shapes verified live against rpc.aboutcircles.com (circles_tables schema).
-import { isHuman, ROEBEL_GROUP } from "./circles";
+import { isHuman, getCollateralLocked, ROEBEL_GROUP } from "./circles";
 import { ROEBEL_CITIZENS } from "./citizens";
 
 const RPC = "https://rpc.aboutcircles.com/";
@@ -40,13 +40,14 @@ export async function getVerifiedSet(): Promise<Set<string>> {
 
 export interface TownStats { supply: number; collateral: number; holders: number; verified: number; citizens: number; }
 export async function getTownStats(verified: number): Promise<TownStats> {
-  const [supplyRows, collRows, holderRows] = await Promise.all([
+  const [supplyRows, collateral, holderRows] = await Promise.all([
     q("V_CrcV2", "GroupTokenSupply", [eq("group", GROUP)]),
-    q("V_CrcV2", "GroupCollateralByToken", [eq("group", GROUP)]),
+    // BaseGroup collateral lives in its own vault, not the legacy GroupCollateralByToken
+    // view — read the vault's real personal-CRC holdings instead.
+    getCollateralLocked(),
     q("V_CrcV2", "GroupTokenHoldersBalance", [eq("group", GROUP)]),
   ]);
   const supply = toCrc(supplyRows[0]?.demurragedTotalSupply ?? supplyRows[0]?.totalSupply);
-  const collateral = collRows.reduce((s, r) => s + toCrc(r.demurragedAmountLocked ?? r.amountLocked), 0);
   return { supply, collateral, holders: holderRows.length, verified, citizens: ROEBEL_CITIZENS.length };
 }
 

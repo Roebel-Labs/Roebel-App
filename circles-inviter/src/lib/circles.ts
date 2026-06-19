@@ -118,6 +118,41 @@ export async function getSelfFundInfo(inviter: Address): Promise<SelfFundInfo> {
   return { rawAtto, wrappedAtto, wrapperAddress, affordable };
 }
 
+// ── Collateral locked ────────────────────────────────────────────────────────
+// Röbel Münzen are a BaseGroup token: every coin is backed 1:1 by a member's personal
+// CRC locked in the group's vault (BaseTreasury). The Circles RPC view
+// `GroupCollateralByToken` only indexes the LEGACY StandardTreasury flow, so for a
+// BaseGroup it returns nothing (→ a false "0"). We instead read the group's own
+// BASE_TREASURY address on-chain and sum the personal CRC it actually holds.
+const groupTreasuryAbi = [
+  { type: "function", name: "BASE_TREASURY", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
+
+/** Total personal CRC locked in the group's vault — the real collateral behind the supply. */
+export async function getCollateralLocked(): Promise<number> {
+  try {
+    const treasury = (await publicClient.readContract({
+      address: ROEBEL_GROUP,
+      abi: groupTreasuryAbi,
+      functionName: "BASE_TREASURY",
+    })) as Address;
+    const res = await fetch(CIRCLES_RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_getTokenBalances", params: [treasury] }),
+    });
+    const list: Record<string, unknown>[] = (await res.json())?.result ?? [];
+    let atto = 0n;
+    for (const t of list) {
+      if (t.isGroup) continue; // collateral is members' PERSONAL CRC, never the group token
+      atto += BigInt((t.attoCircles as string) ?? "0");
+    }
+    return Number(atto / 10n ** 16n) / 100; // CRC, 2 dp
+  } catch {
+    return 0;
+  }
+}
+
 /** Self-fund tx batch: unwrap any shortfall, then trust each invitee. Signed by the host. */
 export function buildSelfFundTxs(info: SelfFundInfo, invitees: Address[]): { to: string; data: string; value: string }[] {
   const need = BigInt(invitees.length) * INVITATION_FEE;
