@@ -13,6 +13,8 @@ import { gnosis } from "viem/chains";
 
 export const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8" as const;
 export const INVITATION_FARM = "0xd28b7C4f148B1F1E190840A1f7A796C5525D8902" as const;
+// Röbel-Taler Circles v2 BaseGroup (the town's group token).
+export const ROEBEL_GROUP = "0xAc2CeCdBead594F97358a0d3132454f24F3E470c" as const;
 export const GNOSIS_RPC = "https://rpc.gnosischain.com";
 
 // CirclesConfig (sdk-types). Cast keeps us decoupled from the exact exported type.

@@ -57,10 +57,10 @@ The launcher reads a registry: **`static/miniapps.json`** in `aboutcircles/Circl
 ```json
 {
   "slug": "roebel-inviter",
-  "name": "Röbel · Invite Citizens",
+  "name": "Röbel Circles",
   "logo": "https://circles-inviter.vercel.app/logo.svg",
   "url": "https://circles-inviter.vercel.app/",
-  "description": "Invite verified Röbel citizens into Circles using your invitation quota.",
+  "description": "Invite verified citizens into Circles and visualize a town's on-chain economy — trust graph, supply, transfers, and the network of towns.",
   "tags": ["town", "internal"],
   "category": "miniapp",
   "isHidden": true
