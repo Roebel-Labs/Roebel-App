@@ -15,6 +15,10 @@ export const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8" as const;
 export const INVITATION_FARM = "0xd28b7C4f148B1F1E190840A1f7A796C5525D8902" as const;
 // Röbel Münzen Circles v2 BaseGroup (the town's group token).
 export const ROEBEL_GROUP = "0xAc2CeCdBead594F97358a0d3132454f24F3E470c" as const;
+// The group's collateral vault (BaseTreasury). IMMUTABLE on the group contract — only a
+// full group redeploy could change it (in which case bump ROEBEL_GROUP too). Holds members'
+// personal CRC 1:1 behind the supply. Verified: group.BASE_TREASURY() === this address.
+export const ROEBEL_VAULT = "0x0476fd3bD5EbCE0Af18C70dE221eC47F508e8763" as const;
 export const GNOSIS_RPC = "https://rpc.gnosischain.com";
 
 // CirclesConfig (sdk-types). Cast keeps us decoupled from the exact exported type.
@@ -120,26 +124,16 @@ export async function getSelfFundInfo(inviter: Address): Promise<SelfFundInfo> {
 
 // ── Collateral locked ────────────────────────────────────────────────────────
 // Röbel Münzen are a BaseGroup token: every coin is backed 1:1 by a member's personal
-// CRC locked in the group's vault (BaseTreasury). The Circles RPC view
+// CRC locked in the group's vault (BaseTreasury, = ROEBEL_VAULT). The Circles RPC view
 // `GroupCollateralByToken` only indexes the LEGACY StandardTreasury flow, so for a
-// BaseGroup it returns nothing (→ a false "0"). We instead read the group's own
-// BASE_TREASURY address on-chain and sum the personal CRC it actually holds.
-const groupTreasuryAbi = [
-  { type: "function", name: "BASE_TREASURY", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-] as const;
-
-/** Total personal CRC locked in the group's vault — the real collateral behind the supply. */
+// BaseGroup it returns nothing (→ a false "0"). We instead sum the personal CRC the vault
+// actually holds via circles_getTokenBalances — one reliable RPC call, no contract read.
 export async function getCollateralLocked(): Promise<number> {
   try {
-    const treasury = (await publicClient.readContract({
-      address: ROEBEL_GROUP,
-      abi: groupTreasuryAbi,
-      functionName: "BASE_TREASURY",
-    })) as Address;
     const res = await fetch(CIRCLES_RPC, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_getTokenBalances", params: [treasury] }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_getTokenBalances", params: [ROEBEL_VAULT] }),
     });
     const list: Record<string, unknown>[] = (await res.json())?.result ?? [];
     let atto = 0n;
