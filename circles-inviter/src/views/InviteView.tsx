@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
-import { inviteFarm, getQuota, isHuman, toHostTxs } from "../lib/circles";
+import { inviteFarm, getQuota, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo } from "../lib/circles";
 import { ROEBEL_CITIZENS, shortAddr } from "../lib/citizens";
 import { Stat, Banner } from "../components/ui";
 
 type RowStatus = "checking" | "registered" | "open" | "unknown";
 type Msg = { kind: "ok" | "err" | "info"; text: string } | null;
 
+const crc = (a: bigint) => (Number(a) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 0 });
+
 export default function InviteView({ inviter }: { inviter: Address | null }) {
   const [quota, setQuota] = useState<bigint | null>(null);
+  const [selfFund, setSelfFund] = useState<SelfFundInfo | null>(null);
   const [status, setStatus] = useState<Record<string, RowStatus>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [extra, setExtra] = useState("");
@@ -19,8 +22,13 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const citizens = ROEBEL_CITIZENS;
 
   const loadQuota = useCallback(() => {
-    if (!inviter) return setQuota(null);
+    if (!inviter) {
+      setQuota(null);
+      setSelfFund(null);
+      return;
+    }
     getQuota(inviter).then(setQuota).catch(() => setQuota(0n));
+    getSelfFundInfo(inviter).then(setSelfFund).catch(() => setSelfFund(null));
   }, [inviter]);
   useEffect(loadQuota, [loadQuota]);
 
@@ -78,6 +86,27 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       setBusy(false);
     }
   }, [inviter, selectedList, extra, extraValid, refreshStatus, loadQuota]);
+
+  const selfFundInvite = useCallback(async () => {
+    if (!inviter || !selfFund) return;
+    const list = selectedList.slice(0, selfFund.affordable);
+    if (!list.length) return setMsg({ kind: "err", text: "Not enough CRC to self-fund (96 per invite). Select fewer, or unwrap more." });
+    setBusy(true);
+    setMsg({ kind: "info", text: `Unwrapping CRC + trusting ${list.length} citizen(s)…` });
+    try {
+      await sendTransactions(buildSelfFundTxs(selfFund, list));
+      setMsg({
+        kind: "ok",
+        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel-Taler") — 96 CRC burns from you per registration.`,
+      });
+      await refreshStatus();
+      getSelfFundInfo(inviter).then(setSelfFund).catch(() => {});
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }, [inviter, selfFund, selectedList, refreshStatus]);
 
   return (
     <div>
@@ -152,6 +181,23 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         </button>
       </div>
       {overQuota && <p className="mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>}
+
+      {inviter && selfFund && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="text-xs font-medium text-slate-600">Self-fund — no quota needed</div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Uses your own CRC (96 per invite). You have {crc(selfFund.rawAtto)} raw + {crc(selfFund.wrappedAtto)} wrapped → funds{" "}
+            <strong>{selfFund.affordable}</strong> invite(s). Citizens then register in the Röbel app.
+          </p>
+          <button
+            onClick={selfFundInvite}
+            disabled={busy || selfFund.affordable === 0 || selectedList.length === 0}
+            className="mt-2 w-full rounded-lg border border-navy bg-white px-4 py-2 text-sm font-semibold text-navy transition disabled:opacity-40 hover:bg-slate-50"
+          >
+            {busy ? "Working…" : `Self-fund invite (${Math.min(selectedList.length, selfFund.affordable)})`}
+          </button>
+        </div>
+      )}
 
       {msg && (
         <Banner kind={msg.kind} className="mt-4">

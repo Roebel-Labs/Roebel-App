@@ -8,7 +8,7 @@
 //
 // Config values mirror the official aboutcircles/circles-invitation-links-manager.
 import { InviteFarm } from "@aboutcircles/sdk-invitations";
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, http, encodeFunctionData, getAddress, type Address } from "viem";
 import { gnosis } from "viem/chains";
 
 export const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8" as const;
@@ -65,4 +65,73 @@ export function toHostTxs(transactions: { to: string; data: string; value?: bigi
     data: tx.data,
     value: tx.value ? String(tx.value) : "0",
   }));
+}
+
+// ── Self-fund path (no quota) ────────────────────────────────────────────────
+// Inviting an existing address burns 96 personal CRC (raw ERC-1155) from the inviter
+// when the invitee registers. The inviter's CRC may be WRAPPED to ERC-20 — so we unwrap
+// the shortfall (DemurrageCircles.unwrap) and then trust(invitee). The 96-burn lands later
+// on the invitee's registerHuman (done in the Röbel app). trust() itself costs no CRC.
+export const INVITATION_FEE = 96n * 10n ** 18n;
+const FAR_EXPIRY = 4102444800n; // ~year 2100 (uint96)
+const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
+
+const trustUnwrapAbi = [
+  { type: "function", name: "trust", stateMutability: "nonpayable", inputs: [{ name: "_trustReceiver", type: "address" }, { name: "_expiry", type: "uint96" }], outputs: [] },
+  { type: "function", name: "unwrap", stateMutability: "nonpayable", inputs: [{ name: "_amount", type: "uint256" }], outputs: [] },
+] as const;
+const balAbi = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "a", type: "address" }, { name: "id", type: "uint256" }], outputs: [{ type: "uint256" }] },
+] as const;
+
+export interface SelfFundInfo {
+  rawAtto: bigint;
+  wrappedAtto: bigint;
+  wrapperAddress: string | null;
+  affordable: number; // how many 96-CRC invites the inviter can self-fund
+}
+
+/** Inviter's own personal CRC: raw (ERC-1155 in the Hub) + wrapped (ERC-20), via Circles RPC. */
+export async function getSelfFundInfo(inviter: Address): Promise<SelfFundInfo> {
+  const rawAtto = (await publicClient
+    .readContract({ address: HUB, abi: balAbi, functionName: "balanceOf", args: [inviter, BigInt(inviter)] })
+    .catch(() => 0n)) as bigint;
+  let wrappedAtto = 0n;
+  let wrapperAddress: string | null = null;
+  try {
+    const res = await fetch(CIRCLES_RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "circles_getTokenBalances", params: [inviter] }),
+    });
+    const list: Record<string, unknown>[] = (await res.json())?.result ?? [];
+    for (const t of list) {
+      if (String(t.tokenOwner).toLowerCase() === inviter.toLowerCase() && t.isWrapped && !t.isGroup && !t.isInflationary) {
+        wrappedAtto += BigInt((t.attoCircles as string) ?? "0");
+        wrapperAddress = getAddress(t.tokenAddress as string);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  const affordable = Number((rawAtto + wrappedAtto) / INVITATION_FEE);
+  return { rawAtto, wrappedAtto, wrapperAddress, affordable };
+}
+
+/** Self-fund tx batch: unwrap any shortfall, then trust each invitee. Signed by the host. */
+export function buildSelfFundTxs(info: SelfFundInfo, invitees: Address[]): { to: string; data: string; value: string }[] {
+  const need = BigInt(invitees.length) * INVITATION_FEE;
+  const txs: { to: string; data: string; value: string }[] = [];
+  if (need > info.rawAtto && info.wrapperAddress) {
+    let shortfall = need - info.rawAtto;
+    shortfall += shortfall / 50n; // ~2% demurrage buffer
+    if (shortfall > info.wrappedAtto) shortfall = info.wrappedAtto;
+    if (shortfall > 0n) {
+      txs.push({ to: info.wrapperAddress, data: encodeFunctionData({ abi: trustUnwrapAbi, functionName: "unwrap", args: [shortfall] }), value: "0" });
+    }
+  }
+  for (const c of invitees) {
+    txs.push({ to: HUB, data: encodeFunctionData({ abi: trustUnwrapAbi, functionName: "trust", args: [c, FAR_EXPIRY] }), value: "0" });
+  }
+  return txs;
 }
