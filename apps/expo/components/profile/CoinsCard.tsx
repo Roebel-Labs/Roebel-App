@@ -18,7 +18,7 @@ export default function CoinsCard() {
   const { isCitizen } = useUser();
   const { balanceRaw } = useRoebelTaler();
   const cardBg = colors.background;
-  // Verified citizens see their real Röbel-Taler balance; others see gamification points.
+  // Verified citizens see their real Röbel Münzen balance; others see gamification points.
   const display = isCitizen ? formatTaler(balanceRaw) : coins.toLocaleString('de-DE');
 
   return (
@@ -37,7 +37,7 @@ export default function CoinsCard() {
       >
         <Image source={COIN_STACK} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.balance, { color: colors.textPrimary }]}>
-          {display}{isCitizen ? ' Röbel-Taler' : ''}
+          {display}{isCitizen ? ' Röbel Münzen' : ''}
         </Text>
         <ChevronRightIcon width={16} height={16} color={colors.textSecondary} />
       </Pressable>

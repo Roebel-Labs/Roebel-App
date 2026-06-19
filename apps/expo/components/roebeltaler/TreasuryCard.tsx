@@ -6,8 +6,8 @@ import { getRoebelTalerBalance, formatTaler } from "@/lib/roebel-taler";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 
 /**
- * Stadtkasse (civic treasury) card — shows the treasury's Röbel-Taler holdings with
- * an INDICATIVE euro preview (Röbel-Taler is NOT euro-redeemable; the "ca. €" is an
+ * Stadtkasse (civic treasury) card — shows the treasury's Röbel Münzen holdings with
+ * an INDICATIVE euro preview (Röbel Münzen is NOT euro-redeemable; the "ca. €" is an
  * orientation value only). Taps through to the full assets + transactions page.
  */
 export default function TreasuryCard() {
@@ -36,7 +36,7 @@ export default function TreasuryCard() {
 					) : (
 						<>
 							<Text style={styles.eur}>ca. {taler.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Text>
-							<Text style={styles.sub}>{taler.toLocaleString("de-DE")} Röbel-Taler</Text>
+							<Text style={styles.sub}>{taler.toLocaleString("de-DE")} Röbel Münzen</Text>
 						</>
 					)}
 				</View>

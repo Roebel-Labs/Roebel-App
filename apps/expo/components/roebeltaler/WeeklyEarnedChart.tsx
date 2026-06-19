@@ -33,7 +33,7 @@ function buildPath(points: number[]): string {
 }
 
 /**
- * Weekly "earned Röbel-Taler" chart — mirrors the Metri weekly-earnings card,
+ * Weekly "earned Röbel Münzen" chart — mirrors the Metri weekly-earnings card,
  * Röbel-branded. Flat baseline when there's nothing earned yet (accurate, not faked).
  */
 export default function WeeklyEarnedChart({ points, labels, changePct }: WeeklyEarnedChartProps) {
@@ -58,7 +58,7 @@ export default function WeeklyEarnedChart({ points, labels, changePct }: WeeklyE
 		<View style={styles.card}>
 			<Text style={styles.label}>Diese Woche verdient</Text>
 			<View style={styles.valueRow}>
-				<Text style={styles.value}>{total.toFixed(2)} <Text style={styles.unit}>Röbel-Taler</Text></Text>
+				<Text style={styles.value}>{total.toFixed(2)} <Text style={styles.unit}>Röbel Münzen</Text></Text>
 				{typeof changePct === "number" && (
 					<Text style={[styles.pct, { color: changePct >= 0 ? colors.success : colors.textSecondary }]}>
 						{changePct >= 0 ? "+" : ""}{changePct}%

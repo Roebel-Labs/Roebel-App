@@ -14,9 +14,9 @@ import {
 } from "@/lib/roebel-taler";
 
 /**
- * Real on-chain Röbel-Taler (Circles on Gnosis), via the parallel Gnosis smart
+ * Real on-chain Röbel Münzen (Circles on Gnosis), via the parallel Gnosis smart
  * account (gasless / sponsored). Keeps currency logic out of RewardsContext (which
- * stays the off-chain gamification points). User-facing term is always "Röbel-Taler".
+ * stays the off-chain gamification points). User-facing term is always "Röbel Münzen".
  */
 export function useRoebelTaler() {
 	const { gnosisAccount, ready } = useGnosisWallet();
@@ -48,8 +48,8 @@ export function useRoebelTaler() {
 
 	/**
 	 * Daily "Heute abholen": (1) claim accrued personal CRC (personalMint), then
-	 * (2) deposit it as collateral to mint Röbel-Taler (groupMint). One tap → the
-	 * citizen ends up with Röbel-Taler. Both txs are gasless on Gnosis.
+	 * (2) deposit it as collateral to mint Röbel Münzen (groupMint). One tap → the
+	 * citizen ends up with Röbel Münzen. Both txs are gasless on Gnosis.
 	 */
 	const dailyMint = useCallback(async () => {
 		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
@@ -72,7 +72,7 @@ export function useRoebelTaler() {
 	/**
 	 * Onboard the citizen: the server-held Röbel operator trusts this address (the
 	 * Circles invitation), then we register on-chain (gasless). After this the
-	 * citizen can mint their daily Röbel-Taler.
+	 * citizen can mint their daily Röbel Münzen.
 	 */
 	const onboard = useCallback(async () => {
 		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
@@ -95,7 +95,7 @@ export function useRoebelTaler() {
 		}
 	}, [gnosisAccount, refresh]);
 
-	/** Send Röbel-Taler to another address (18-dec amount). Gasless. */
+	/** Send Röbel Münzen to another address (18-dec amount). Gasless. */
 	const send = useCallback(async (to: string, amount: bigint) => {
 		if (!gnosisAccount) throw new Error("Gnosis-Konto noch nicht bereit");
 		setSending(true);

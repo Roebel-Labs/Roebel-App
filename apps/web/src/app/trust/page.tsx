@@ -1,10 +1,10 @@
 "use client";
 
-// Röbel-Taler "Trust" tool — invite a wallet into Circles from a PASSKEY wallet
+// Röbel Münzen "Trust" tool — invite a wallet into Circles from a PASSKEY wallet
 // (e.g. your Metri account 0x1f14…) that a script can't sign for. You connect that
 // wallet via WalletConnect (Metri scans the QR) and approve Hub.trust(trustee) with
 // your passkey. That is the Circles invitation; the trustee then registers in the
-// Röbel app ("Bei Röbel-Taler mitmachen"), which burns 96 of YOUR personal CRC and
+// Röbel app ("Bei Röbel Münzen mitmachen"), which burns 96 of YOUR personal CRC and
 // mints a 48 CRC welcome bonus to them.
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -122,7 +122,7 @@ function TrustInner() {
       setMsg({
         kind: "ok",
         text:
-          "Einladung gesendet ✓ — du vertraust dieser Adresse jetzt. Öffne die Röbel-App mit dieser Wallet und tippe „Bei Röbel-Taler mitmachen“, um die Verifizierung abzuschließen.",
+          "Einladung gesendet ✓ — du vertraust dieser Adresse jetzt. Öffne die Röbel-App mit dieser Wallet und tippe „Bei Röbel Münzen mitmachen“, um die Verifizierung abzuschließen.",
       });
       // Give the node a moment, then re-read.
       setTimeout(() => void refresh(), 3000);
@@ -139,10 +139,10 @@ function TrustInner() {
   return (
     <div className="min-h-screen bg-muted">
       <div className="mx-auto w-full max-w-md px-4 py-10">
-        <h1 className="text-xl font-semibold text-foreground">Wallet verifizieren (Röbel-Taler)</h1>
+        <h1 className="text-xl font-semibold text-foreground">Wallet verifizieren (Röbel Münzen)</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Verbinde deine persönliche Circles-Wallet (z. B. Metri) per WalletConnect und lade die
-          Adresse deiner App-Wallet ein. Das kostet beim Abschluss <strong>96 Röbel-Taler</strong>{" "}
+          Adresse deiner App-Wallet ein. Das kostet beim Abschluss <strong>96 Röbel Münzen</strong>{" "}
           aus deinem persönlichen Guthaben.
         </p>
 
@@ -216,8 +216,8 @@ function TrustInner() {
         )}
 
         <p className="mt-6 text-[11px] leading-relaxed text-muted-foreground">
-          „Vertrauen“ ist die Circles-Einladung — es bewegt noch kein Guthaben. Die 96 Röbel-Taler
-          werden erst verbrannt, wenn die App-Wallet im 2. Schritt „Bei Röbel-Taler mitmachen“
+          „Vertrauen“ ist die Circles-Einladung — es bewegt noch kein Guthaben. Die 96 Röbel Münzen
+          werden erst verbrannt, wenn die App-Wallet im 2. Schritt „Bei Röbel Münzen mitmachen“
           aufruft (sie erhält dabei 48 als Willkommensbonus). Vertraue der App-Adresse, nicht der
           Gruppe.
         </p>

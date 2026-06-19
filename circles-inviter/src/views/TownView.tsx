@@ -33,7 +33,7 @@ export default function TownView() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Verified citizens"><span className="text-xl font-semibold text-navy tabular-nums">{stats ? `${stats.verified}/${stats.citizens}` : "…"}</span></Stat>
-        <Stat label="Röbel-Taler supply"><span className="text-xl font-semibold text-slate-900 tabular-nums">{stats ? fmt(stats.supply) : "…"}</span></Stat>
+        <Stat label="Röbel Münzen supply"><span className="text-xl font-semibold text-slate-900 tabular-nums">{stats ? fmt(stats.supply) : "…"}</span></Stat>
         <Stat label="Holders"><span className="text-xl font-semibold text-slate-900 tabular-nums">{stats ? stats.holders : "…"}</span></Stat>
         <Stat label="Collateral locked"><span className="text-xl font-semibold text-slate-900 tabular-nums">{stats ? fmt(stats.collateral) : "…"}</span></Stat>
       </div>
@@ -41,14 +41,14 @@ export default function TownView() {
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
         <div className="text-sm font-medium text-slate-700 mb-1">Trust graph</div>
         <p className="text-xs text-slate-400 mb-2">
-          Citizens trusted by the Röbel-Taler group. Green = verified human · navy = attester · gray dashed = not yet
+          Citizens trusted by the Röbel Münzen group. Green = verified human · navy = attester · gray dashed = not yet
           trusted/verified.
         </p>
         {loading && !graph ? (
           <Loading />
         ) : (
           <RadialGraph
-            center={{ label: graph?.centerLabel ?? "Röbel-Taler", sub: stats ? `${stats.verified} verified` : undefined }}
+            center={{ label: graph?.centerLabel ?? "Röbel Münzen", sub: stats ? `${stats.verified} verified` : undefined }}
             nodes={nodes}
             emptyLabel="no citizens yet"
           />

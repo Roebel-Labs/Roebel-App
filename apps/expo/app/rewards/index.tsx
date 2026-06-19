@@ -71,7 +71,7 @@ export default function RewardsIndexScreen() {
     isLoading,
   } = useRewards();
 
-  // The real on-chain Röbel-Taler (Circles on Gnosis). This page IS the Röbel-Taler
+  // The real on-chain Röbel Münzen (Circles on Gnosis). This page IS the Röbel Münzen
   // home: the headline + daily mint are the real coin; off-chain points/streaks below
   // stay the gamification layer.
   const {
@@ -116,10 +116,10 @@ export default function RewardsIndexScreen() {
       setNowTs(Date.now());
       const addr = talerAccount?.address;
       if (addr) AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
-      showSnackbar({ message: 'Dein tägliches Röbel-Taler ist da' });
+      showSnackbar({ message: 'Deine Röbel Münzen für heute sind da' });
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      console.error('[Röbel-Taler] daily mint failed:', msg);
+      console.error('[Röbel Münzen] daily mint failed:', msg);
       Alert.alert('Heute abholen fehlgeschlagen', msg);
     }
   }, [dailyMint, showSnackbar, talerAccount]);
@@ -127,10 +127,10 @@ export default function RewardsIndexScreen() {
   const onJoin = useCallback(async () => {
     try {
       await onboard();
-      showSnackbar({ message: 'Willkommen beim Röbel-Taler!' });
+      showSnackbar({ message: 'Willkommen bei Röbel Münzen!' });
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      console.error('[Röbel-Taler] onboarding failed:', msg);
+      console.error('[Röbel Münzen] onboarding failed:', msg);
       Alert.alert('Anmeldung fehlgeschlagen', msg);
     }
   }, [onboard, showSnackbar]);
@@ -235,7 +235,7 @@ export default function RewardsIndexScreen() {
           onPress={() => router.push('/roebel-taler-info' as any)}
           style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
           accessibilityRole="button"
-          accessibilityLabel="Was ist Röbel-Taler?"
+          accessibilityLabel="Was ist Röbel Münzen?"
         >
           <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary }}>Info</Text>
         </Pressable>
@@ -254,16 +254,16 @@ export default function RewardsIndexScreen() {
         <View style={styles.heroBleed}>
           <CoinBalanceHero
             balance={talerBalance}
-            label="Röbel-Taler"
+            label="Röbel Münzen"
             verified={!isConnected || talerLoading ? null : talerOnboarded}
             sublabel={
               !isConnected
-                ? 'Melde dich an, um Röbel-Taler zu sammeln'
+                ? 'Melde dich an, um Röbel Münzen zu sammeln'
                 : !talerOnboarded
-                  ? 'Mach mit, um täglich Röbel-Taler abzuholen'
+                  ? 'Mach mit, um täglich Röbel Münzen abzuholen'
                   : hasCheckedInToday
                     ? `Serie ${streak} Tage`
-                    : 'Hol dir dein tägliches Röbel-Taler'
+                    : 'Hol dir deine täglichen Röbel Münzen'
             }
           />
         </View>
@@ -282,7 +282,7 @@ export default function RewardsIndexScreen() {
                   <Text style={styles.talerCtaText}>Verifiziere dich…</Text>
                 </View>
               ) : (
-                <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Bei Röbel-Taler mitmachen'}</Text>
+                <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Bei Röbel Münzen mitmachen'}</Text>
               )}
             </Pressable>
           ) : talerClaimedToday ? (
@@ -320,7 +320,7 @@ export default function RewardsIndexScreen() {
           >
             <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textSecondary }}>So machst du mit</Text>
             <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-              Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann tippe „Bei Röbel-Taler mitmachen“.
+              Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann tippe „Bei Röbel Münzen mitmachen“.
             </Text>
             <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary, marginTop: 6 }}>
               {`${talerAccount.address.slice(0, 8)}…${talerAccount.address.slice(-6)}`}  ·  Adresse kopieren

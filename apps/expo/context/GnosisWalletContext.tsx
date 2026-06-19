@@ -17,7 +17,7 @@ const GnosisWalletContext = createContext<GnosisWalletValue | undefined>(undefin
 /**
  * Connects a parallel Gnosis smart account from the SAME in-app login (auto-connect
  * reuses the stored session — no second login). Gated on the Base account being
- * present so we only attempt it once the user is authenticated. Powers Röbel-Taler
+ * present so we only attempt it once the user is authenticated. Powers Röbel Münzen
  * (Circles) on Gnosis with gasless (sponsored) transactions.
  */
 export function GnosisWalletProvider({ children }: { children: React.ReactNode }) {

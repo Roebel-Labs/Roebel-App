@@ -194,7 +194,7 @@ const handleRefresh = async () => {
                 {isConnected && isCitizen && (
                   <ProfileMenuItem
                     icon={<StarIcon width={20} height={20} color={colors.primary} />}
-                    label="Röbel-Taler"
+                    label="Röbel Münzen"
                     onPress={() => router.push('/rewards' as any)}
                   />
                 )}

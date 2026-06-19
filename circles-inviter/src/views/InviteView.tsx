@@ -76,7 +76,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
       setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
-      setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel-Taler").` });
+      setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel Münzen").` });
       setExtra("");
       await refreshStatus();
       loadQuota();
@@ -97,7 +97,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       await sendTransactions(buildSelfFundTxs(selfFund, list));
       setMsg({
         kind: "ok",
-        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel-Taler") — 96 CRC burns from you per registration.`,
+        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel Münzen") — 96 CRC burns from you per registration.`,
       });
       await refreshStatus();
       getSelfFundInfo(inviter).then(setSelfFund).catch(() => {});

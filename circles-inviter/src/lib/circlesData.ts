@@ -63,7 +63,7 @@ export async function getTrustGraph(verifiedSet: Set<string>): Promise<TrustGrap
     const tone: NodeTone = verifiedSet.has(a) ? "verified" : attester.has(a) ? "attester" : "open";
     return { id: c.address, label: `${c.address.slice(0, 6)}…`, tone, trusted: trusted.has(a) };
   });
-  return { centerLabel: "Röbel-Taler", nodes };
+  return { centerLabel: "Röbel Münzen", nodes };
 }
 
 export interface Transfer { from: string; to: string; amount: number; time: number; tx: string; }

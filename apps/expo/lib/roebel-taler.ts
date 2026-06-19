@@ -1,11 +1,11 @@
-// Röbel-Taler on-chain service (Gnosis / Circles v2), accessed via thirdweb so we
+// Röbel Münzen on-chain service (Gnosis / Circles v2), accessed via thirdweb so we
 // don't bundle the heavy Circles SDK into React Native. NOTE: per project rule the
-// user-facing currency is ALWAYS "Röbel-Taler" — never surface "CRC"/Circles here.
+// user-facing currency is ALWAYS "Röbel Münzen" — never surface "CRC"/Circles here.
 //
 // Mechanics (hidden from the user): each citizen is a Circles human on Gnosis;
-//  - personalMint()          → the daily Röbel-Taler ("Heute abholen")
-//  - groupMint(group,[me],[amt],"0x") → contributes to the shared Röbel-Taler
-//  - Hub ERC1155 balanceOf(me, id=group) → the Röbel-Taler balance
+//  - personalMint()          → the daily Röbel Münzen ("Heute abholen")
+//  - groupMint(group,[me],[amt],"0x") → contributes to the shared Röbel Münzen
+//  - Hub ERC1155 balanceOf(me, id=group) → the Röbel Münzen balance
 import {
 	getContract,
 	readContract,
@@ -88,7 +88,7 @@ export async function isOnboarded(address: string): Promise<boolean> {
 	});
 }
 
-/** Röbel-Taler balance (demurraged ERC1155 balance of the group token). */
+/** Röbel Münzen balance (demurraged ERC1155 balance of the group token). */
 export async function getRoebelTalerBalance(address: string): Promise<bigint> {
 	return readContract({
 		contract: hubRead,
@@ -98,7 +98,7 @@ export async function getRoebelTalerBalance(address: string): Promise<bigint> {
 }
 
 /** A citizen's own personal CRC (token id = uint256(self)) — the daily-claimed
- *  issuance that gets converted into Röbel-Taler. */
+ *  issuance that gets converted into Röbel Münzen. */
 export async function getPersonalCrcBalance(address: string): Promise<bigint> {
 	return readContract({
 		contract: hubRead,
@@ -107,14 +107,14 @@ export async function getPersonalCrcBalance(address: string): Promise<bigint> {
 	});
 }
 
-/** Format an 18-decimal on-chain amount as a friendly Röbel-Taler string. */
+/** Format an 18-decimal on-chain amount as a friendly Röbel Münzen string. */
 export function formatTaler(raw: bigint): string {
 	const whole = raw / 10n ** 18n;
 	const frac = (raw % 10n ** 18n) / 10n ** 16n; // 2 decimals
 	return `${whole}.${frac.toString().padStart(2, "0")}`;
 }
 
-/** Daily Röbel-Taler ("Heute abholen"). */
+/** Daily Röbel Münzen ("Heute abholen"). */
 export function prepareDailyMint(): PreparedTransaction {
 	return prepareContractCall({
 		contract: hubWrite,
@@ -136,7 +136,7 @@ export function prepareOnboard(inviter: string): PreparedTransaction {
 	});
 }
 
-/** Contribute `amount` (18-dec) of the citizen's own daily mint to the shared Röbel-Taler. */
+/** Contribute `amount` (18-dec) of the citizen's own daily mint to the shared Röbel Münzen. */
 export function prepareContributeToRoebelTaler(self: string, amount: bigint): PreparedTransaction {
 	return prepareContractCall({
 		contract: hubWrite,
@@ -145,7 +145,7 @@ export function prepareContributeToRoebelTaler(self: string, amount: bigint): Pr
 	});
 }
 
-/** Send `amount` (18-dec) Röbel-Taler from `from` to `to` (ERC1155 group token). */
+/** Send `amount` (18-dec) Röbel Münzen from `from` to `to` (ERC1155 group token). */
 export function prepareSendRoebelTaler(from: string, to: string, amount: bigint): PreparedTransaction {
 	return prepareContractCall({
 		contract: hubWrite,
@@ -154,7 +154,7 @@ export function prepareSendRoebelTaler(from: string, to: string, amount: bigint)
 	});
 }
 
-/** Parse a user-entered Röbel-Taler amount ("12,50" or "12.5") to 18-dec bigint. */
+/** Parse a user-entered Röbel Münzen amount ("12,50" or "12.5") to 18-dec bigint. */
 export function parseTalerAmount(input: string): bigint {
 	const clean = input.replace(",", ".").trim();
 	if (!/^\d*\.?\d*$/.test(clean) || clean === "" || clean === ".") return 0n;

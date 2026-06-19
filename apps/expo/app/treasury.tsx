@@ -1,5 +1,5 @@
 // Stadtkasse (civic treasury) — assets + transactions. The treasury is the Attester
-// Safe's Röbel-Taler holdings. EUR figures are INDICATIVE only (not redeemable).
+// Safe's Röbel Münzen holdings. EUR figures are INDICATIVE only (not redeemable).
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,7 +44,7 @@ export default function TreasuryScreen() {
 				) : (
 					<Text style={styles.total}>{taler.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</Text>
 				)}
-				<Text style={styles.disclaimer}>Orientierungswert — Röbel-Taler ist nicht in Euro auszahlbar.</Text>
+				<Text style={styles.disclaimer}>Orientierungswert — Röbel Münzen sind nicht in Euro auszahlbar.</Text>
 
 				<Text style={styles.section}>Vermögenswerte</Text>
 				<View style={styles.assetRow}>
@@ -54,7 +54,7 @@ export default function TreasuryScreen() {
 							<View style={styles.coinBg}><Text>🪙</Text></View>
 						</View>
 						<View>
-							<Text style={styles.assetName}>Röbel-Taler</Text>
+							<Text style={styles.assetName}>Röbel Münzen</Text>
 							<Text style={styles.assetSub}>Gemeinschaftswährung</Text>
 						</View>
 					</View>

@@ -20,7 +20,7 @@ export default function FlowView() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-slate-500">Röbel-Taler changing hands — circulation in the town.</p>
+        <p className="text-sm text-slate-500">Röbel Münzen changing hands — circulation in the town.</p>
         <button onClick={load} className="text-xs text-navy hover:underline">Refresh</button>
       </div>
 
@@ -33,7 +33,7 @@ export default function FlowView() {
         {txs === null ? (
           <Loading />
         ) : txs.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">No transfers yet — fills as citizens send Röbel-Taler.</div>
+          <div className="py-10 text-center text-sm text-slate-400">No transfers yet — fills as citizens send Röbel Münzen.</div>
         ) : (
           <ul className="divide-y divide-slate-100">
             {txs.map((t, i) => (

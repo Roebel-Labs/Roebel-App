@@ -1,9 +1,9 @@
 "use client";
 
 // Admin · Circles Verification — a visual on-chain record of where every Röbel
-// citizen stands toward being a verified Röbel-Taler member (Circles human on Gnosis).
+// citizen stands toward being a verified Röbel Münzen member (Circles human on Gnosis).
 // Read-only: Hub.isHuman / CitizenNFT.hasCitizenNFT / group-trust via thirdweb, and
-// per-token balances (raw vs WRAPPED personal CRC, Röbel-Taler) via the Circles RPC.
+// per-token balances (raw vs WRAPPED personal CRC, Röbel Münzen) via the Circles RPC.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getContract, readContract } from "thirdweb";
 import { client } from "@/app/client";
@@ -137,7 +137,7 @@ export default function CirclesVerificationPage() {
         <div>
           <h1 className="text-2xl font-medium text-foreground">Circles-Verifizierung</h1>
           <p className="text-sm text-muted-foreground">
-            On-chain Status jedes Bürgers Richtung Röbel-Taler-Mitgliedschaft (Gnosis · Circles v2).
+            On-chain Status jedes Bürgers Richtung Röbel Münzen-Mitgliedschaft (Gnosis · Circles v2).
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
@@ -149,7 +149,7 @@ export default function CirclesVerificationPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />} label="Verifizierte Circles-Menschen" value={`${stats.humans} / ${stats.total}`} />
         <StatCard icon={<Users className="h-4 w-4 text-muted-foreground" />} label="CitizenNFT (Gnosis)" value={`${stats.nfts} / ${stats.total}`} />
-        <StatCard icon={<Coins className="h-4 w-4 text-muted-foreground" />} label="Halten Röbel-Taler" value={`${stats.holders} / ${stats.total}`} />
+        <StatCard icon={<Coins className="h-4 w-4 text-muted-foreground" />} label="Halten Röbel Münzen" value={`${stats.holders} / ${stats.total}`} />
       </div>
 
       <Card className="bg-card border border-border shadow-none">
@@ -163,7 +163,7 @@ export default function CirclesVerificationPage() {
                 <th className="py-2 pr-4 font-medium">Wallet</th>
                 <th className="py-2 pr-4 font-medium">CitizenNFT</th>
                 <th className="py-2 pr-4 font-medium">Verifiziert</th>
-                <th className="py-2 pr-4 font-medium">Röbel-Taler</th>
+                <th className="py-2 pr-4 font-medium">Röbel Münzen</th>
                 <th className="py-2 pr-4 font-medium">Persönl. CRC (roh / wrapped)</th>
                 <th className="py-2 pr-4 font-medium">Sicherheit</th>
               </tr>
@@ -220,7 +220,7 @@ export default function CirclesVerificationPage() {
             </p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
               <span className="text-muted-foreground">Onchain-Belege:</span>
-              <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://explorer.aboutcircles.com/avatar/${roebeltalerGroupAddress}`}>Röbel-Taler Gruppe ↗</a>
+              <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://explorer.aboutcircles.com/avatar/${roebeltalerGroupAddress}`}>Röbel Münzen Gruppe ↗</a>
               <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://gnosisscan.io/address/${citizenNFTGnosisAddress}`}>CitizenNFT ↗</a>
               <a className="text-primary hover:underline" target="_blank" rel="noreferrer" href={`https://gnosisscan.io/address/${circlesHubAddress}`}>Circles Hub ↗</a>
             </div>

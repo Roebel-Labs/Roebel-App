@@ -1,7 +1,7 @@
 // Edge Function: circles-invite
 // The Röbel operator (a registered Circles human, server-held key) TRUSTS a verified
 // citizen on Gnosis — the Circles "invitation". The app then calls registerHuman(operator)
-// so the citizen becomes a Röbel-Taler member. The operator key never leaves the server.
+// so the citizen becomes a Röbel Münzen member. The operator key never leaves the server.
 //
 // Required Supabase secrets:
 //   OPERATOR_PRIVKEY  — the operator human's private key (holds CRC for WELCOME_BONUS/invite)
