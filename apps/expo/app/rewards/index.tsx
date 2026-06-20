@@ -629,8 +629,126 @@ function EmptyState({
   );
 }
 
+function TxHistoryList({
+  items,
+  loading,
+  colors,
+  isDark,
+}: {
+  items: TalerTx[];
+  loading: boolean;
+  colors: ReturnType<typeof useTheme>['colors'];
+  isDark: boolean;
+}) {
+  if (loading) {
+    return <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />;
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState colors={colors} isDark={isDark}>
+        Noch keine Transaktionen.
+      </EmptyState>
+    );
+  }
+  return (
+    <View style={{ gap: 10 }}>
+      {items.map((tx) => (
+        <View
+          key={tx.id}
+          style={[styles.txRow, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border }]}
+        >
+          <View
+            style={[
+              styles.txIcon,
+              { backgroundColor: tx.direction === 'in' ? (isDark ? '#16361F' : '#E7F6EC') : (isDark ? '#3A1E1E' : '#FDECEC') },
+            ]}
+          >
+            <Text style={{ fontSize: 16, color: tx.direction === 'in' ? '#1B873F' : '#C0392B' }}>
+              {tx.direction === 'in' ? '↓' : '↑'}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.txTitle, { color: colors.textPrimary }]}>
+              {tx.direction === 'in' ? 'Erhalten' : 'Gesendet'}
+            </Text>
+            <Text style={[styles.txDate, { color: colors.textSecondary }]}>
+              {new Date(tx.timestamp).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </Text>
+          </View>
+          <Text style={[styles.txAmount, { color: tx.direction === 'in' ? '#1B873F' : colors.textPrimary }]}>
+            {tx.direction === 'in' ? '+' : '−'}
+            {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  sheet: {
+    marginHorizontal: -16,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+    gap: 16,
+  },
+  headerSide: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerSideEnd: {
+    alignItems: 'flex-end',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 999,
+    padding: 4,
+    gap: 4,
+  },
+  tabItem: {
+    flex: 1,
+    height: 40,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+  },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  txIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  txTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+  },
+  txDate: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  txAmount: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+  },
   scroll: { flex: 1 },
   scrollGradient: {
     position: 'absolute',

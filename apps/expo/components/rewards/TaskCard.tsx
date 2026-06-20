@@ -2,6 +2,16 @@ import React from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import type { RewardTask } from '@/lib/supabase-rewards';
+import CheckIcon from '@/assets/icons/check.svg';
+import BellIcon from '@/assets/icons/notification-01.svg';
+import ImageIcon from '@/assets/icons/image-01.svg';
+import UserIcon from '@/assets/icons/user.svg';
+import SparklesIcon from '@/assets/icons/sparkles.svg';
+import CalendarIcon from '@/assets/icons/calendar.svg';
+import TicketIcon from '@/assets/icons/ticket.svg';
+import BookIcon from '@/assets/icons/book.svg';
+import ShareIcon from '@/assets/icons/share-02.svg';
+import StarIcon from '@/assets/icons/star.svg';
 
 interface TaskCardProps {
   task: RewardTask;
@@ -14,23 +24,32 @@ interface TaskCardProps {
 
 const COIN_ICON = require('../../assets/illustration/gamification/single.png');
 
-// A matching emoji per mission, so the placeholder square isn't a generic target.
-const TASK_EMOJI: Record<string, string> = {
-  verify_citizen: '🪪',
-  activate_push: '🔔',
-  add_profile_picture: '📷',
-  complete_profile: '👤',
+// A matching black icon per mission, shown in the yellow thumb square.
+type IconCmp = React.FC<{ width?: number; height?: number; color?: string }>;
+const TASK_ICON: Record<string, IconCmp> = {
+  verify_citizen: CheckIcon,
+  activate_push: BellIcon,
+  add_profile_picture: ImageIcon,
+  complete_profile: UserIcon,
+  first_login: SparklesIcon,
+  attend_event: CalendarIcon,
+  join_first_event: TicketIcon,
+  read_help_hub: BookIcon,
+  refer_friend: ShareIcon,
+  vote_on_proposal: StarIcon,
 };
-function taskEmoji(key: string): string {
-  if (TASK_EMOJI[key]) return TASK_EMOJI[key];
-  if (/push|notif/.test(key)) return '🔔';
-  if (/picture|photo|avatar/.test(key)) return '📷';
-  if (/profile/.test(key)) return '👤';
-  if (/citizen|verif/.test(key)) return '🪪';
-  if (/referr|invite|friend/.test(key)) return '🤝';
-  if (/vote|poll|wahl/.test(key)) return '🗳️';
-  if (/event|veranst/.test(key)) return '📅';
-  return '🎯';
+function taskIcon(key: string): IconCmp {
+  if (TASK_ICON[key]) return TASK_ICON[key];
+  if (/push|notif/.test(key)) return BellIcon;
+  if (/picture|photo|avatar/.test(key)) return ImageIcon;
+  if (/profile/.test(key)) return UserIcon;
+  if (/citizen|verif/.test(key)) return CheckIcon;
+  if (/referr|invite|friend/.test(key)) return ShareIcon;
+  if (/event|veranst/.test(key)) return CalendarIcon;
+  if (/help|hilfe|tipp/.test(key)) return BookIcon;
+  if (/vote|poll|wahl/.test(key)) return StarIcon;
+  if (/login|welcome|willkommen/.test(key)) return SparklesIcon;
+  return StarIcon;
 }
 
 const YELLOW = '#E9B949';
@@ -85,11 +104,7 @@ export default function TaskCard({
           { backgroundColor: isDark ? colors.surfaceSecondary : YELLOW_BG },
         ]}
       >
-        {task.image_url ? (
-          <Image source={{ uri: task.image_url }} style={styles.thumbImage} resizeMode="cover" />
-        ) : (
-          <Text style={styles.thumbEmoji}>{taskEmoji(task.key)}</Text>
-        )}
+        {React.createElement(taskIcon(task.key), { width: 30, height: 30, color: colors.textPrimary })}
       </View>
       <View style={styles.body}>
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
