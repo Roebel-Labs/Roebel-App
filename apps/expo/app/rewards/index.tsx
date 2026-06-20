@@ -45,6 +45,8 @@ const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
 // Min claimable Röbel Münzen before the mint button activates (≈6 min of accrual at
 // ~1/hour) — avoids dust-sized mints while still letting citizens collect hourly.
 const MIN_MINTABLE = 0.1;
+// One full Röbel Münze accrues ≈1h after a mint — drives the in-button countdown.
+const MINT_COOLDOWN_MS = 3_600_000;
 const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
 const SCHATZTRUHE_IMG = require('../../assets/illustration/muenzen/schatztruhe.png');
 
@@ -118,7 +120,9 @@ export default function RewardsIndexScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  // "Heute abholen" daily cooldown (resets at local midnight), tracked per wallet.
+  // Hourly mint cooldown: a mint claims the accrued coin, then the next whole
+  // Röbel Münze lands ≈1h later. We anchor a real 60-min countdown on the last
+  // mint timestamp (persisted per wallet, so it survives reloads).
   const [lastClaim, setLastClaim] = useState<number | null>(null);
   const [nowTs, setNowTs] = useState(Date.now());
   useEffect(() => {
@@ -132,33 +136,16 @@ export default function RewardsIndexScreen() {
       .catch(() => {});
   }, [talerAccount?.address]);
   useEffect(() => {
-    if (lastClaim == null || Date.now() >= nextMidnight(lastClaim)) return;
+    if (lastClaim == null || Date.now() >= lastClaim + MINT_COOLDOWN_MS) return;
     const id = setInterval(() => setNowTs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [lastClaim]);
-  const cooldownEnd = lastClaim != null ? nextMidnight(lastClaim) : 0;
-  const talerClaimedToday = lastClaim != null && nowTs < cooldownEnd;
-  const cooldownMs = talerClaimedToday ? cooldownEnd - nowTs : 0;
-
-  // Live hourly counter: Röbel Münzen accrue continuously at ≈1/hour, so project
-  // when the next whole coin lands (from the fractional part already accrued) and
-  // tick it down each second. Re-anchored whenever the on-chain mintable refreshes.
-  const [nextCoinAt, setNextCoinAt] = useState<number | null>(null);
-  useEffect(() => {
-    if (!isConnected || !talerOnboarded) { setNextCoinAt(null); return; }
-    const frac = ((talerMintable % 1) + 1) % 1;
-    setNextCoinAt(Date.now() + Math.round((1 - frac) * 3_600_000));
-  }, [talerMintable, isConnected, talerOnboarded]);
-  useEffect(() => {
-    if (nextCoinAt == null) return;
-    const id = setInterval(() => {
-      const t = Date.now();
-      setNowTs(t);
-      if (t >= nextCoinAt) setNextCoinAt(t + 3_600_000); // roll to the next hour
-    }, 1000);
-    return () => clearInterval(id);
-  }, [nextCoinAt]);
-  const msToNextCoin = nextCoinAt != null ? Math.max(0, nextCoinAt - nowTs) : 0;
+  const cooldownEnd = lastClaim != null ? lastClaim + MINT_COOLDOWN_MS : 0;
+  const talerInCooldown = lastClaim != null && nowTs < cooldownEnd;
+  const cooldownMs = talerInCooldown ? cooldownEnd - nowTs : 0;
+  // Separate "claimed today" flag for the streak strip — calendar day, not the
+  // 1h cooldown, so the streak stays lit for the rest of the day after a mint.
+  const talerClaimedToday = lastClaim != null && dayStart(lastClaim) === dayStart(nowTs);
 
   // Röbel-Münzen streak (consecutive collected days), local per wallet. Starts
   // fresh, so it reflects the real new streak with Röbel Münzen.
@@ -432,6 +419,22 @@ export default function RewardsIndexScreen() {
                 <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
               </View>
             </View>
+          ) : talerInCooldown ? (
+            // Just minted → real 60-min countdown INSIDE the button until the
+            // next whole Röbel Münze lands.
+            <View
+              style={[
+                styles.talerCta,
+                styles.talerCtaCountdown,
+                { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: true }}
+            >
+              <Text style={[styles.talerCtaText, styles.talerCtaCountdownText, { color: colors.textSecondary }]}>
+                Nächste Röbel Münze in {fmtCountdown(cooldownMs)}
+              </Text>
+            </View>
           ) : talerMintable >= MIN_MINTABLE ? (
             // Münzen have accrued (≈1/Stunde) → collect whatever is claimable now
             <Pressable
@@ -463,13 +466,6 @@ export default function RewardsIndexScreen() {
               </Text>
             </View>
           )
-        )}
-
-        {/* Live hourly counter under the mint button — time until the next coin. */}
-        {isConnected && talerOnboarded && !talerMinting && nextCoinAt != null && (
-          <Text style={[styles.ctaSub, { color: colors.textSecondary, textAlign: 'center' }]}>
-            Nächste Röbel Münze in {fmtCountdown(msToNextCoin)}
-          </Text>
         )}
 
         {/* Streak — CheckinStreakStrip already provides its own card + shadow */}
