@@ -56,6 +56,19 @@ const verifiers: Record<string, Verifier> = {
       .eq("account_id", ev.account_id).ilike("wallet_address", wallet).limit(1);
     return own && own.length ? { ok: true } : { ok: false, reason: "event not owned by wallet" };
   },
+  // Rewards completing an explorer checkpoint (ref = checkpoint id).
+  checkpoint: async (wallet, ref) => {
+    const { data } = await db.from("explorer_completions").select("id")
+      .eq("checkpoint_id", ref).ilike("wallet_address", wallet).limit(1);
+    return data && data.length ? { ok: true } : { ok: false, reason: "checkpoint not completed" };
+  },
+  // Rewards the REFERRER when someone redeems their invite. wallet = referrer (paid),
+  // ref = the referred wallet (so the reward is once per invited person).
+  referral: async (wallet, ref) => {
+    const { data } = await db.from("referral_redemptions").select("id")
+      .ilike("referrer_wallet", wallet).ilike("referred_wallet", ref).limit(1);
+    return data && data.length ? { ok: true } : { ok: false, reason: "referral not found" };
+  },
 };
 
 Deno.serve(async (req: Request) => {

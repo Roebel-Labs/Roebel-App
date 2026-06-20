@@ -34,6 +34,7 @@ import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
+import { claimReward } from '@/lib/rewards-claim';
 import type { ColorTokens } from '@/constants/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -628,6 +629,8 @@ export default function SubmitEventScreen() {
         category: eventData.category,
       });
       setIsSuccess(true);
+      // Reward submitting an event in Röbel Münzen (fire-and-forget; pays once funder is live).
+      if (user?.wallet_address) void claimReward(user.wallet_address, 'event_submit', eventData.id);
       logEventSubmission(true, 'manual');
       track(Events.EVENT_SUBMITTED, {
         event_id: eventData.id,

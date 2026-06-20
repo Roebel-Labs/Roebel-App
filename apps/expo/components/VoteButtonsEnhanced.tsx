@@ -13,6 +13,7 @@ import { balanceOf } from 'thirdweb/extensions/erc721';
 import { VoteType, ProposalState } from '@/lib/governance-types';
 import { isProposalActive } from '@/lib/governance-utils';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
+import { claimReward } from '@/lib/rewards-claim';
 import VoteConfirmationDrawer from './VoteConfirmationDrawer';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
@@ -89,6 +90,10 @@ export default function VoteButtonsEnhanced({
         proposalId: proposalId.toString(),
         voteType: voteTypeMap[selectedVote],
       });
+
+      // Reward participation in Röbel Münzen (once per proposal, never the choice).
+      // Fire-and-forget: pays once the funder is live, no-op until then.
+      void claimReward(account.address, 'proposal_vote', proposalId.toString());
 
       setShowConfirmation(false);
       setSuccessDrawer({

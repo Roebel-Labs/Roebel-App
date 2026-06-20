@@ -30,6 +30,17 @@ Built & deployed (the SINK side — spend Münzen on lootbox keys → back to th
 chest *opening* (`open_lootbox`) is unchanged — it consumes keys, not currency. `coin_bundle`
 drops still grant points today; they'll become a funder payout (or be retired) in Phase 4.
 
+## Implementation status (Phase 3 — earn triggers wired — 2026-06-20)
+
+Real civic actions now call the rail (fire-and-forget, alongside existing points so nothing
+regresses; pays once the funder is live):
+- **Verifiers added** to `claim-reward` (v2, ACTIVE): `checkpoint` (`explorer_completions`), `referral` (`referral_redemptions` — rewards the **referrer**, once per invited person). Config seeded ([`supabase/migrations/20260620_roebel_muenzen_phase3_verifiers.sql`](../../../supabase/migrations/20260620_roebel_muenzen_phase3_verifiers.sql)): checkpoint 0.5 Münze, referral 2 Münzen (cap 10/day).
+- **Wired triggers** (`void claimReward(...)`): proposal vote → [`VoteButtonsEnhanced.tsx`](../../../apps/expo/components/VoteButtonsEnhanced.tsx); event submit → [`submit-event.tsx`](../../../apps/expo/app/submit-event.tsx); checkpoint → [`explorer.tsx`](../../../apps/expo/app/explorer.tsx); referral → [`rewards/referral.tsx`](../../../apps/expo/app/rewards/referral.tsx). Type extended in [`lib/rewards-claim.ts`](../../../apps/expo/lib/rewards-claim.ts).
+
+Still gated only by the funder float (set `FUNDER_PRIVKEY` + seed). Until then every trigger
+records a claim that resolves `failed: insufficient/not configured` — no double-pay, retries
+once funded. Phase 4 (retire points) is the remaining phase.
+
 ## 1. Goal
 
 Migrate the Röbel app's off-chain "points" economy (Missions, Schatzkammer keys,

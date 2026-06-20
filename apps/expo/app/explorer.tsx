@@ -7,6 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { useRoebelPoints, RoebelPointsProvider } from '@/context/RoebelPointsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { fetchCheckpoints, fetchCompletions, completeCheckpoint, type ExplorerCheckpoint } from '@/lib/supabase-explorer';
+import { claimReward } from '@/lib/rewards-claim';
 import QRScanner, { type QRScanResult } from '@/components/QRScanner';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
@@ -68,6 +69,8 @@ function ExplorerScreen() {
     const { success } = await completeCheckpoint(user.wallet_address, checkpoint.id);
     if (success) {
       await earnPoints('checkpoint', 'checkpoint', checkpoint.id, `Checkpoint: ${checkpoint.name}`);
+      // Reward in Röbel Münzen too (fire-and-forget; pays once the funder is live).
+      void claimReward(user.wallet_address, 'checkpoint', checkpoint.id);
       setCompletedIds(prev => new Set([...prev, checkpoint.id]));
       showSnackbar(`✅ ${checkpoint.name} — +${checkpoint.points_reward} Punkte!`);
     } else {

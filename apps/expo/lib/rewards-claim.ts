@@ -6,7 +6,7 @@
 // safe to call optimistically (e.g. right after a vote) and safe to retry.
 import { supabase } from "@/lib/supabase";
 
-export type RewardAction = "proposal_vote" | "event_submit";
+export type RewardAction = "proposal_vote" | "event_submit" | "checkpoint" | "referral";
 
 export type ClaimResult =
   | { status: "paid"; amountAtto: string; txHash: string }

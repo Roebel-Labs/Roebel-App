@@ -16,6 +16,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useUser } from '@/context/UserContext';
 import { redeemReferral } from '@/lib/supabase-rewards';
+import { claimReward } from '@/lib/rewards-claim';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import ReferralShareCard from '@/components/rewards/ReferralShareCard';
 
@@ -51,6 +52,9 @@ export default function ReferralScreen() {
       if (res.success) {
         setRedeemInput('');
         setRedeemMsg({ type: 'success', text: 'Code eingelöst! Münzen gutgeschrieben.' });
+        // Reward the REFERRER in Röbel Münzen for the successful invite (once per invited
+        // person). Fire-and-forget; pays to the referrer once the funder is live.
+        if (res.referrer) void claimReward(res.referrer, 'referral', wallet);
         await refresh();
       } else {
         const reason = res.error || 'unknown';
