@@ -222,7 +222,7 @@ export default function RewardsIndexScreen() {
   }, [onboard, showSnackbar]);
 
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<'missionen' | 'verlauf'>('missionen');
+  const [tab, setTab] = useState<'missionen' | 'verlauf'>('verlauf');
   const history = useRoebelTalerHistory();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
