@@ -307,14 +307,14 @@ export default function RewardsIndexScreen() {
 
         <View style={styles.heroBleed}>
           <CoinBalanceHero
-            balance={talerBalance}
+            balance={Math.round(talerBalance)}
             loading={isConnected && talerLoading}
             label={showEur ? 'Wert in Euro (ca.)' : 'Röbel Münzen'}
             verified={null}
             onPress={isConnected && talerOnboarded ? () => setShowEur((v) => !v) : undefined}
             valueText={
               showEur
-                ? `≈ ${talerToEuro(talerBalance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+                ? `≈ ${Math.round(talerToEuro(talerBalance)).toLocaleString('de-DE')} €`
                 : undefined
             }
             sublabel={
@@ -589,7 +589,7 @@ export default function RewardsIndexScreen() {
 
       <MintSuccessOverlay
         visible={showMintSuccess}
-        balance={talerBalance}
+        balance={Math.round(talerBalance)}
         onClose={() => setShowMintSuccess(false)}
       />
 
