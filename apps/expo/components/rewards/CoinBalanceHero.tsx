@@ -10,7 +10,7 @@ interface CoinBalanceHeroProps {
   verified?: boolean | null;
 }
 
-const HERO_IMAGE = require('../../assets/illustration/gamification/hero-coin.png');
+const HERO_IMAGE = require('../../assets/illustration/muenzen/top_hero_coin.png');
 
 export default function CoinBalanceHero({
   balance,
@@ -69,19 +69,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   balance: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 44,
-    letterSpacing: -0.5,
+    fontFamily: 'Inter-Medium',
+    fontSize: 40,
+    letterSpacing: -0.8,
     marginTop: 4,
   },
   sublabel: {
     fontFamily: 'Inter-Regular',
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 4,
   },
   image: {
-    width: 108,
-    height: 108,
-    marginRight: -10,
+    width: 96,
+    height: 104,
+    marginRight: -6,
   },
 });

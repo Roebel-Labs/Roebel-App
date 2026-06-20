@@ -23,7 +23,6 @@ import { useRewards } from '@/context/RewardsContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
 import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
-import TreasuryCard from '@/components/roebeltaler/TreasuryCard';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -34,10 +33,16 @@ import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
-import SendIcon from '@/assets/icons/sent.svg';
+import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
+import CoinsIcon from '@/assets/icons/coins-01.svg';
+import { softShadow } from '@/lib/shadow';
+import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
+const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
+const SCHATZTRUHE_IMG = require('../../assets/illustration/muenzen/schatztruhe.png');
 
 // Daily-claim cooldown helpers: "Heute abholen" resets at local midnight.
 const rtClaimKey = (addr: string) => `rt_lastclaim_${addr.toLowerCase()}`;
@@ -71,6 +76,7 @@ export default function RewardsIndexScreen() {
   const {
     coins,
     keyCount,
+    lootboxes,
     streak,
     tasks,
     completions,
@@ -98,6 +104,16 @@ export default function RewardsIndexScreen() {
     account: talerAccount,
   } = useRoebelTaler();
   const weekly = useRoebelTalerWeekly();
+
+  // Stadtkasse euro figure (same source as the old TreasuryCard).
+  const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getTreasuryEuro(attesterSafeGnosisAddress)
+      .then((e) => { if (!cancelled) setStadtkasseEuro(e); })
+      .catch(() => { if (!cancelled) setStadtkasseEuro(0); });
+    return () => { cancelled = true; };
+  }, []);
 
   // "Heute abholen" daily cooldown (resets at local midnight), tracked per wallet.
   const [lastClaim, setLastClaim] = useState<number | null>(null);
@@ -309,25 +325,25 @@ export default function RewardsIndexScreen() {
               onPress={() => router.push('/rewards/send' as any)}
               style={({ pressed }) => [
                 styles.srBtn,
-                { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+                { backgroundColor: isDark ? colors.surface : '#E8E8E8', opacity: pressed ? 0.6 : 1 },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Röbel Münzen senden"
             >
-              <SendIcon width={20} height={20} color={colors.primary} />
-              <Text style={[styles.srText, { color: colors.textPrimary }]}>Senden</Text>
+              <NavigationIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
+              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#001A42' }]}>Senden</Text>
             </Pressable>
             <Pressable
               onPress={() => setShowReceive(true)}
               style={({ pressed }) => [
                 styles.srBtn,
-                { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+                { backgroundColor: isDark ? colors.surface : '#E8E8E8', opacity: pressed ? 0.6 : 1 },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Röbel Münzen empfangen"
             >
-              <QrIcon width={20} height={20} color={colors.primary} />
-              <Text style={[styles.srText, { color: colors.textPrimary }]}>Empfangen</Text>
+              <QrIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
+              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#001A42' }]}>Empfangen</Text>
             </Pressable>
           </View>
         )}
@@ -377,7 +393,10 @@ export default function RewardsIndexScreen() {
                   <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
                 </View>
               ) : (
-                <Text style={styles.talerCtaText}>Heute abholen</Text>
+                <View style={styles.ctaRow}>
+                  <CoinsIcon width={20} height={20} color="#fff" />
+                  <Text style={styles.talerCtaText}>Tägliche Münzen erhalten</Text>
+                </View>
               )}
             </Pressable>
           )
@@ -401,37 +420,62 @@ export default function RewardsIndexScreen() {
           </Pressable>
         )}
 
-        {/* Streak — directly under the mint button */}
+        {/* Streak — directly under the mint button (soft-shadow card) */}
         {isConnected && (
-          <CheckinStreakStrip
-            streak={rtStreak}
-            recentCheckins={[]}
-            hasCheckedInToday={talerClaimedToday}
-          />
+          <View style={[styles.streakCard, { backgroundColor: colors.card }, softShadow(2, isDark)]}>
+            <CheckinStreakStrip
+              streak={rtStreak}
+              recentCheckins={[]}
+              hasCheckedInToday={talerClaimedToday}
+            />
+          </View>
         )}
 
-        <Pressable
-          onPress={() => router.push('/rewards/schatzkammer' as any)}
-          style={({ pressed }) => [
-            styles.primaryCTA,
-            {
-              backgroundColor: colors.primary,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Zur Schatzkammer navigieren"
-        >
-          <Text style={styles.primaryCTAText}>Zur Schatzkammer</Text>
-        </Pressable>
+        {/* Stadtkasse + Schatzkammer — two soft-shadow square cards */}
+        {isConnected && (
+          <View style={styles.cardsRow}>
+            <Pressable
+              onPress={() => router.push('/treasury' as any)}
+              style={({ pressed }) => [
+                styles.squareCard,
+                { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+                softShadow(2, isDark),
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Stadtkasse ansehen"
+            >
+              <Text style={[styles.squareTitle, { color: colors.textPrimary }]}>Stadtkasse</Text>
+              <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                {stadtkasseEuro == null
+                  ? '…'
+                  : `${stadtkasseEuro.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
+              </Text>
+              <Image source={STADTKASSE_IMG} style={styles.squareImg} resizeMode="contain" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push('/rewards/schatzkammer' as any)}
+              style={({ pressed }) => [
+                styles.squareCard,
+                { backgroundColor: colors.card, opacity: pressed ? 0.9 : 1 },
+                softShadow(2, isDark),
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Zur Schatzkammer navigieren"
+            >
+              <Text style={[styles.squareTitle, { color: colors.textPrimary }]}>Schatzkammer</Text>
+              <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                {keyCount}/{lootboxes.length}
+              </Text>
+              <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
+            </Pressable>
+          </View>
+        )}
 
         {/* Diese Woche verdient */}
         {isConnected && (
           <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
         )}
-
-        {/* Stadtkasse — under the graph */}
-        {isConnected && <TreasuryCard />}
 
         <View style={styles.missionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -530,7 +574,7 @@ export default function RewardsIndexScreen() {
           accessibilityRole="button"
           accessibilityLabel="Was ist Röbel Münzen?"
         >
-          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary }}>Info</Text>
+          <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textPrimary }}>Mehr erfahren</Text>
         </Pressable>
       </View>
 
@@ -621,7 +665,7 @@ const styles = StyleSheet.create({
   talerCta: {
     marginTop: 12,
     borderRadius: 999,
-    height: 48,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -650,41 +694,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    height: 48,
+    gap: 10,
+    height: 56,
     borderRadius: 999,
-    borderWidth: 1,
   },
   srText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
   },
   ctaSub: {
     fontFamily: 'Inter-Medium',
     fontSize: 12,
     marginTop: 3,
   },
-  squareRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  square: {
-    flex: 1,
-    aspectRatio: 1.4,
-    backgroundColor: '#00000000',
-    borderRadius: 20,
+  streakCard: {
+    borderRadius: 16,
     padding: 16,
-    justifyContent: 'center',
+    minHeight: 120,
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  squareCard: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 16,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  squareTitle: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
   },
   squareValue: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 28,
-  },
-  squareLabel: {
     fontFamily: 'Inter-Medium',
-    fontSize: 13,
+    fontSize: 16,
     marginTop: 4,
+  },
+  squareImg: {
+    position: 'absolute',
+    right: -4,
+    bottom: -6,
+    width: 118,
+    height: 104,
   },
   primaryCTA: {
     borderRadius: 999,
