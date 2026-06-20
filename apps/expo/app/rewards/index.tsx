@@ -24,6 +24,7 @@ import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import InfoIcon from '@/assets/icons/information-circle.svg';
 
 import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import Skeleton from '@/components/ui/Skeleton';
@@ -138,6 +139,26 @@ export default function RewardsIndexScreen() {
   const cooldownEnd = lastClaim != null ? nextMidnight(lastClaim) : 0;
   const talerClaimedToday = lastClaim != null && nowTs < cooldownEnd;
   const cooldownMs = talerClaimedToday ? cooldownEnd - nowTs : 0;
+
+  // Live hourly counter: Röbel Münzen accrue continuously at ≈1/hour, so project
+  // when the next whole coin lands (from the fractional part already accrued) and
+  // tick it down each second. Re-anchored whenever the on-chain mintable refreshes.
+  const [nextCoinAt, setNextCoinAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isConnected || !talerOnboarded) { setNextCoinAt(null); return; }
+    const frac = ((talerMintable % 1) + 1) % 1;
+    setNextCoinAt(Date.now() + Math.round((1 - frac) * 3_600_000));
+  }, [talerMintable, isConnected, talerOnboarded]);
+  useEffect(() => {
+    if (nextCoinAt == null) return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNowTs(t);
+      if (t >= nextCoinAt) setNextCoinAt(t + 3_600_000); // roll to the next hour
+    }, 1000);
+    return () => clearInterval(id);
+  }, [nextCoinAt]);
+  const msToNextCoin = nextCoinAt != null ? Math.max(0, nextCoinAt - nowTs) : 0;
 
   // Röbel-Münzen streak (consecutive collected days), local per wallet. Starts
   // fresh, so it reflects the real new streak with Röbel Münzen.
@@ -301,8 +322,42 @@ export default function RewardsIndexScreen() {
           pointerEvents="none"
         />
 
-        {/* Spacer so the hero clears the floating header. */}
-        <View style={{ height: insets.top + 44 }} />
+        {/* Header scrolls with the page (not fixed) — only visible at the top. */}
+        <View style={[styles.header, { paddingTop: insets.top }]}>
+          <View style={styles.headerSide}>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.backBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+                  opacity: pressed ? 0.6 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Zurück"
+            >
+              <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
+          <View style={[styles.headerSide, styles.headerSideEnd]}>
+            <Pressable
+              onPress={() => router.push('/roebel-taler-info' as any)}
+              style={({ pressed }) => [
+                styles.backBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+                  opacity: pressed ? 0.6 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Was ist Röbel Münzen?"
+            >
+              <InfoIcon width={22} height={22} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+        </View>
 
         <View style={styles.heroBleed}>
           <CoinBalanceHero
@@ -329,7 +384,7 @@ export default function RewardsIndexScreen() {
               onPress={() => router.push('/rewards/send' as any)}
               style={({ pressed }) => [
                 styles.srBtn,
-                { backgroundColor: isDark ? colors.surface : '#E8E8E8', opacity: pressed ? 0.6 : 1 },
+                { backgroundColor: isDark ? colors.surface : '#F2F2F2', opacity: pressed ? 0.6 : 1 },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Röbel Münzen senden"
@@ -341,7 +396,7 @@ export default function RewardsIndexScreen() {
               onPress={() => setShowReceive(true)}
               style={({ pressed }) => [
                 styles.srBtn,
-                { backgroundColor: isDark ? colors.surface : '#E8E8E8', opacity: pressed ? 0.6 : 1 },
+                { backgroundColor: isDark ? colors.surface : '#F2F2F2', opacity: pressed ? 0.6 : 1 },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Röbel Münzen empfangen"
@@ -408,6 +463,13 @@ export default function RewardsIndexScreen() {
               </Text>
             </View>
           )
+        )}
+
+        {/* Live hourly counter under the mint button — time until the next coin. */}
+        {isConnected && talerOnboarded && !talerMinting && nextCoinAt != null && (
+          <Text style={[styles.ctaSub, { color: colors.textSecondary, textAlign: 'center' }]}>
+            Nächste Röbel Münze in {fmtCountdown(msToNextCoin)}
+          </Text>
         )}
 
         {/* Streak — CheckinStreakStrip already provides its own card + shadow */}
@@ -546,37 +608,6 @@ export default function RewardsIndexScreen() {
         )}
         </View>
       </ScrollView>
-
-      {/* Floating transparent header over the gradient (no background). */}
-      <View style={[styles.header, { paddingTop: insets.top }]} pointerEvents="box-none">
-        <View style={styles.headerSide}>
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [
-              styles.backBtn,
-              {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
-                opacity: pressed ? 0.6 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
-        <View style={[styles.headerSide, styles.headerSideEnd]}>
-          <Pressable
-            onPress={() => router.push('/roebel-taler-info' as any)}
-            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Was ist Röbel Münzen?"
-          >
-            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textPrimary }}>Mehr erfahren</Text>
-          </Pressable>
-        </View>
-      </View>
 
       <MintSuccessOverlay
         visible={showMintSuccess}
@@ -770,14 +801,10 @@ const styles = StyleSheet.create({
     height: 440,
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginHorizontal: -16,
     paddingHorizontal: 12,
     paddingBottom: 8,
     gap: 8,
