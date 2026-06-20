@@ -596,7 +596,8 @@ export default function RewardsIndexScreen() {
       <ReceiveSheet
         visible={showReceive}
         address={talerAccount?.address}
-        name={user?.username ?? user?.display_name ?? null}
+        name={user?.display_name ?? user?.username ?? null}
+        username={user?.username ?? null}
         onClose={() => setShowReceive(false)}
       />
     </View>

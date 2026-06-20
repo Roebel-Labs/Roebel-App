@@ -1,38 +1,110 @@
 import React from 'react';
 import { Modal, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import QRCode from 'react-native-qrcode-svg';
+import QRCodeStyled from 'react-native-qrcode-styled';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import ShareIcon from '@/assets/icons/share-02.svg';
+
+/** Near-black used for the QR modules — reads as black, ties to the brand navy. */
+const QR_COLOR = '#0B1220';
 
 interface ReceiveSheetProps {
   visible: boolean;
   address?: string | null;
+  /** Display name — shown as the title, in its natural casing (never uppercased). */
   name?: string | null;
+  /** Handle used for the Profil-URL row (without the leading @). */
+  username?: string | null;
   onClose: () => void;
 }
 
-/** Custom bottom sheet to receive Röbel Münzen — QR of the wallet + address. */
-export default function ReceiveSheet({ visible, address, name, onClose }: ReceiveSheetProps) {
-  const { colors, isDark } = useTheme();
+function CopyIcon({ size = 18, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={9} y={9} width={11} height={11} rx={2.5} stroke={color} strokeWidth={1.8} />
+      <Path d="M5 15V6a2 2 0 0 1 2-2h8" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function ShareIcon({ size = 18, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M14 4h6v6" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 4l-9 9" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Custom bottom sheet to receive Röbel Münzen — name, black rounded QR + share rows. */
+export default function ReceiveSheet({ visible, address, name, username, onClose }: ReceiveSheetProps) {
+  const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
+
   const addr = address ?? '';
   const short = addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '';
+  const handle = username ? username.replace(/^@/, '') : '';
+  const profileUrl = handle ? `https://roebel.app/profile/${handle}` : '';
+  const title = name || handle || 'Empfangen';
 
-  const copy = async () => {
-    if (!addr) return;
-    await Clipboard.setStringAsync(addr);
-    showSnackbar({ message: 'Adresse kopiert' });
+  const copyTo = async (value: string, message: string) => {
+    if (!value) return;
+    await Clipboard.setStringAsync(value);
+    showSnackbar({ message });
   };
-  const share = async () => {
-    if (!addr) return;
+  const shareValue = async (value: string) => {
+    if (!value) return;
     try {
-      await Share.share({ message: addr });
+      await Share.share({ message: value });
     } catch {
       /* dismissed */
     }
   };
+
+  const InfoRow = ({
+    label,
+    value,
+    onCopy,
+    onShare,
+  }: {
+    label: string;
+    value: string;
+    onCopy: () => void;
+    onShare: () => void;
+  }) => (
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{label}</Text>
+        <Text style={[styles.rowValue, { color: colors.textSecondary }]} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+      <Pressable
+        onPress={onCopy}
+        hitSlop={6}
+        style={({ pressed }) => [styles.iconBtn, { backgroundColor: colors.surface, opacity: pressed ? 0.6 : 1 }]}
+        accessibilityLabel="Kopieren"
+      >
+        <CopyIcon color={colors.textPrimary} />
+      </Pressable>
+      <Pressable
+        onPress={onShare}
+        hitSlop={6}
+        style={({ pressed }) => [styles.iconBtn, { backgroundColor: colors.surface, opacity: pressed ? 0.6 : 1 }]}
+        accessibilityLabel="Teilen"
+      >
+        <ShareIcon color={colors.textPrimary} />
+      </Pressable>
+    </View>
+  );
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -41,39 +113,46 @@ export default function ReceiveSheet({ visible, address, name, onClose }: Receiv
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
-          {(name || 'Empfangen').toUpperCase()}
+          {title}
         </Text>
 
-        <View style={styles.qrWrap}>
-          {!!addr && <QRCode value={addr} size={196} color="#194383" backgroundColor="#FFFFFF" />}
+        <View style={styles.qrCard}>
+          {!!addr && (
+            <QRCodeStyled
+              data={addr}
+              style={styles.qr}
+              size={216}
+              padding={8}
+              pieceBorderRadius="50%"
+              isPiecesGlued
+              color={QR_COLOR}
+              outerEyesOptions={{ borderRadius: '30%', color: QR_COLOR }}
+              innerEyesOptions={{ borderRadius: '40%', color: QR_COLOR }}
+            />
+          )}
         </View>
 
-        <View style={[styles.warn, { backgroundColor: isDark ? '#3a2a12' : '#FBEFE3' }]}>
-          <Text style={styles.warnTitle}>Nur Gnosis Chain</Text>
-          <Text style={[styles.warnSub, { color: colors.textSecondary }]}>
-            Gelder von anderen Netzwerken können verloren gehen.
-          </Text>
+        {!!handle && (
+          <InfoRow
+            label="Profil-URL"
+            value={`@${handle}`}
+            onCopy={() => copyTo(profileUrl, 'Profil-Link kopiert')}
+            onShare={() => shareValue(profileUrl)}
+          />
+        )}
+
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.dividerLabel, { color: colors.textSecondary }]}>Erweitert</Text>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
-        <View style={styles.addrRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.addrLabel, { color: colors.textSecondary }]}>Wallet-Adresse</Text>
-            <Text style={[styles.addrVal, { color: colors.textPrimary }]}>{short}</Text>
-          </View>
-          <Pressable
-            onPress={copy}
-            style={({ pressed }) => [styles.copyBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Text style={styles.copyText}>Kopieren</Text>
-          </Pressable>
-          <Pressable
-            onPress={share}
-            style={({ pressed }) => [styles.iconBtn, { backgroundColor: colors.surface, opacity: pressed ? 0.6 : 1 }]}
-            accessibilityLabel="Teilen"
-          >
-            <ShareIcon width={20} height={20} color={colors.primary} />
-          </Pressable>
-        </View>
+        <InfoRow
+          label="Wallet-Adresse"
+          value={short}
+          onCopy={() => copyTo(addr, 'Adresse kopiert')}
+          onShare={() => shareValue(addr)}
+        />
       </View>
     </Modal>
   );
@@ -94,15 +173,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   handle: { width: 44, height: 5, borderRadius: 3, marginBottom: 18 },
-  name: { fontFamily: 'Inter-Bold', fontSize: 24, letterSpacing: 0.5, marginBottom: 18 },
-  qrWrap: { padding: 16, backgroundColor: '#FFFFFF', borderRadius: 20 },
-  warn: { width: '100%', borderRadius: 16, padding: 14, marginTop: 22 },
-  warnTitle: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: '#B45309' },
-  warnSub: { fontFamily: 'Inter-Regular', fontSize: 12, marginTop: 2 },
-  addrRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 10 },
-  addrLabel: { fontFamily: 'Inter-Medium', fontSize: 12 },
-  addrVal: { fontFamily: 'Inter-SemiBold', fontSize: 16, marginTop: 2 },
-  copyBtn: { height: 44, borderRadius: 999, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
-  copyText: { color: '#fff', fontFamily: 'Inter-SemiBold', fontSize: 14 },
+  name: { fontFamily: 'Inter-Bold', fontSize: 24, marginBottom: 18 },
+  qrCard: { padding: 16, backgroundColor: '#FFFFFF', borderRadius: 24 },
+  qr: { backgroundColor: 'transparent' },
+  row: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 10 },
+  rowLabel: { fontFamily: 'Inter-SemiBold', fontSize: 15 },
+  rowValue: { fontFamily: 'Inter-Regular', fontSize: 14, marginTop: 2 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  divider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 24, gap: 12 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth + 1, borderRadius: 1 },
+  dividerLabel: { fontFamily: 'Inter-Medium', fontSize: 12 },
 });
