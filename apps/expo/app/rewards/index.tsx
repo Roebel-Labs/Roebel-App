@@ -24,7 +24,7 @@ import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import InfoIcon from '@/assets/icons/information-circle.svg';
+import InfoIcon from '@/assets/icons/info.svg';
 
 import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import Skeleton from '@/components/ui/Skeleton';
