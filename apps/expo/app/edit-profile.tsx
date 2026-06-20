@@ -18,6 +18,7 @@ import {
 } from '@/lib/supabase-rewards';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 import LogoutDrawer from '@/components/LogoutDrawer';
+import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import FrameCarousel from '@/components/rewards/FrameCarousel';
 import BannerSelectionGrid from '@/components/rewards/BannerSelectionGrid';
@@ -39,6 +40,7 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showLogoutDrawer, setShowLogoutDrawer] = useState(false);
+  const [circlesError, setCirclesError] = useState<{ visible: boolean; message?: string }>({ visible: false });
 
   const [frameCatalogue, setFrameCatalogue] = useState<LootboxReward[]>([]);
   const [bannerCatalogue, setBannerCatalogue] = useState<LootboxReward[]>([]);
@@ -178,7 +180,7 @@ export default function EditProfileScreen() {
                   imageUrl: profilePicture || undefined,
                 });
               } catch (e: any) {
-                Alert.alert('Fehler', e?.message || 'Profil konnte nicht veröffentlicht werden.');
+                setCirclesError({ visible: true, message: e?.message });
               }
             },
           },
@@ -197,7 +199,7 @@ export default function EditProfileScreen() {
               try {
                 await circles.unpublish();
               } catch (e: any) {
-                Alert.alert('Fehler', e?.message || 'Profil konnte nicht entfernt werden.');
+                setCirclesError({ visible: true, message: e?.message });
               }
             },
           },
@@ -356,9 +358,8 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Circles-Netzwerk Sichtbarkeit (nur für verifizierte Bürger:innen) */}
-        {user?.is_verified_citizen && (
-          <View style={styles.fieldSection}>
+        {/* Circles-Netzwerk Sichtbarkeit — für alle sichtbar */}
+        <View style={styles.fieldSection}>
             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CIRCLES-NETZWERK</Text>
             <View style={[styles.circlesCard, { backgroundColor: colors.surface }]}>
               <View style={styles.circlesRow}>
@@ -388,7 +389,6 @@ export default function EditProfileScreen() {
               </Text>
             </View>
           </View>
-        )}
 
         {/* Save Button */}
         <Pressable
@@ -419,6 +419,53 @@ export default function EditProfileScreen() {
         onClose={() => setShowLogoutDrawer(false)}
         onLogout={handleLogout}
       />
+
+      <BottomDrawer visible={circlesError.visible} onClose={() => setCirclesError({ visible: false })}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28, gap: 10 }}>
+          <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 18, color: colors.textPrimary }}>
+            Veröffentlichen hat nicht geklappt
+          </Text>
+          <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+            Das kann verschiedene Gründe haben — probiere bitte Folgendes:
+          </Text>
+          <View style={{ gap: 8, marginTop: 2 }}>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+              • Dein Konto ist evtl. noch nicht bereit. Warte einen Moment und versuche es erneut.
+            </Text>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+              • Du musst zuerst bei Röbel Münzen mitmachen (ein registrierter Circles-Avatar), bevor dein Profil sichtbar werden kann.
+            </Text>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+              • Setze einen Namen und ein Profilbild, bevor du veröffentlichst.
+            </Text>
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 14, lineHeight: 20, color: colors.textSecondary }}>
+              • Bei einer Netzwerkstörung: in ein paar Minuten erneut versuchen.
+            </Text>
+          </View>
+          {!!circlesError.message && (
+            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textTertiary, marginTop: 4 }} numberOfLines={3}>
+              Details: {circlesError.message}
+            </Text>
+          )}
+          <Pressable
+            style={({ pressed }) => ({
+              marginTop: 8, height: 50, borderRadius: 14, backgroundColor: colors.primary,
+              alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1,
+            })}
+            onPress={() => { setCirclesError({ visible: false }); router.push('/rewards' as any); }}
+            accessibilityRole="button"
+          >
+            <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 15, color: colors.onPrimary }}>Zu Röbel Münzen</Text>
+          </Pressable>
+          <Pressable
+            style={{ height: 44, alignItems: 'center', justifyContent: 'center' }}
+            onPress={() => setCirclesError({ visible: false })}
+            accessibilityRole="button"
+          >
+            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 14, color: colors.textSecondary }}>Verstanden</Text>
+          </Pressable>
+        </View>
+      </BottomDrawer>
     </SafeAreaView>
   );
 }
