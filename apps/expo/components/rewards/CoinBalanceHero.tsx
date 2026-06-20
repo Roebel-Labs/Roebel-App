@@ -1,9 +1,12 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import Skeleton from '@/components/ui/Skeleton';
 
 interface CoinBalanceHeroProps {
   balance: number;
+  /** Show a pulsing placeholder for the balance while it loads. */
+  loading?: boolean;
   label?: string;
   sublabel?: string;
   /** Verification status pill: true = verified, false = not yet, null/undefined = hide. */
@@ -14,6 +17,7 @@ const HERO_IMAGE = require('../../assets/illustration/muenzen/top_hero_coin.png'
 
 export default function CoinBalanceHero({
   balance,
+  loading,
   label = 'Mein Guthaben',
   sublabel,
   verified,
@@ -38,9 +42,13 @@ export default function CoinBalanceHero({
           </View>
         )}
         <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
-        <Text style={[styles.balance, { color: colors.textPrimary }]}>
-          {balance.toLocaleString('de-DE')}
-        </Text>
+        {loading ? (
+          <Skeleton width={120} height={46} radius={12} style={{ marginTop: 4 }} />
+        ) : (
+          <Text style={[styles.balance, { color: colors.textPrimary }]}>
+            {balance.toLocaleString('de-DE')}
+          </Text>
+        )}
         {!!sublabel && (
           <Text style={[styles.sublabel, { color: colors.textSecondary }]}>{sublabel}</Text>
         )}

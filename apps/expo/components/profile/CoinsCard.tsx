@@ -37,7 +37,7 @@ export default function CoinsCard() {
       >
         <Image source={COIN_STACK} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.balance, { color: colors.textPrimary }]}>
-          {display}{isCitizen ? ' Röbel Münzen' : ''}
+          {display}{isCitizen ? ' Münzen' : ''}
         </Text>
         <ChevronRightIcon width={16} height={16} color={colors.textSecondary} />
       </Pressable>

@@ -6,11 +6,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
 import ChevronLeftIcon from "@/assets/icons/chevron-left.svg";
+import WeeklyEarnedChart from "@/components/roebeltaler/WeeklyEarnedChart";
+import { useRoebelTalerWeekly } from "@/hooks/useRoebelTalerWeekly";
 
 export default function RoebelTalerInfoScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const styles = makeStyles(colors);
+  const weekly = useRoebelTalerWeekly();
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -27,6 +30,10 @@ export default function RoebelTalerInfoScreen() {
           Röbel Münzen sind die digitale Gemeinschaftswährung von Röbel/Müritz — von Bürgern für
           Bürger. Sie soll Wertschöpfung in der Stadt halten und das lokale Miteinander stärken.
         </Text>
+
+        <View style={{ marginBottom: 16 }}>
+          <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
+        </View>
 
         <Section colors={colors} title="Wer kann mitmachen?" emoji="🪪">
           Nur verifizierte Bürger. Deine Bürger-Verifizierung ist dein Schlüssel — nur wer als

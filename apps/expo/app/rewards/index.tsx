@@ -15,19 +15,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
-import { useRoebelTalerWeekly } from '@/hooks/useRoebelTalerWeekly';
-import WeeklyEarnedChart from '@/components/roebeltaler/WeeklyEarnedChart';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
+import Skeleton from '@/components/ui/Skeleton';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
 import TaskCard from '@/components/rewards/TaskCard';
@@ -103,8 +101,6 @@ export default function RewardsIndexScreen() {
     onboard,
     account: talerAccount,
   } = useRoebelTaler();
-  const weekly = useRoebelTalerWeekly();
-
   // Stadtkasse euro figure (same source as the old TreasuryCard).
   const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
   useEffect(() => {
@@ -304,6 +300,7 @@ export default function RewardsIndexScreen() {
         <View style={styles.heroBleed}>
           <CoinBalanceHero
             balance={talerBalance}
+            loading={isConnected && talerLoading}
             label="Röbel Münzen"
             verified={null}
             sublabel={
@@ -402,24 +399,6 @@ export default function RewardsIndexScreen() {
           )
         )}
 
-        {isConnected && !talerOnboarded && !!talerAccount && (
-          <Pressable
-            onPress={async () => {
-              await Clipboard.setStringAsync(talerAccount.address);
-              showSnackbar({ message: 'Adresse kopiert — jetzt in Metri einladen' });
-            }}
-            style={{ marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-          >
-            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textSecondary }}>So machst du mit</Text>
-            <Text style={{ fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-              Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann tippe „Bei Röbel Münzen mitmachen“.
-            </Text>
-            <Text style={{ fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.primary, marginTop: 6 }}>
-              {`${talerAccount.address.slice(0, 8)}…${talerAccount.address.slice(-6)}`}  ·  Adresse kopieren
-            </Text>
-          </Pressable>
-        )}
-
         {/* Streak — directly under the mint button (soft-shadow card) */}
         {isConnected && (
           <View style={[styles.streakCard, { backgroundColor: colors.card }, softShadow(2, isDark)]}>
@@ -445,11 +424,13 @@ export default function RewardsIndexScreen() {
               accessibilityLabel="Stadtkasse ansehen"
             >
               <Text style={[styles.squareTitle, { color: colors.textPrimary }]}>Stadtkasse</Text>
-              <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                {stadtkasseEuro == null
-                  ? '…'
-                  : `${stadtkasseEuro.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
-              </Text>
+              {stadtkasseEuro == null ? (
+                <Skeleton width={72} height={18} radius={6} style={{ marginTop: 6 }} />
+              ) : (
+                <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {`${stadtkasseEuro.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
+                </Text>
+              )}
               <Image source={STADTKASSE_IMG} style={styles.squareImg} resizeMode="contain" />
             </Pressable>
 
@@ -464,17 +445,16 @@ export default function RewardsIndexScreen() {
               accessibilityLabel="Zur Schatzkammer navigieren"
             >
               <Text style={[styles.squareTitle, { color: colors.textPrimary }]}>Schatzkammer</Text>
-              <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                {keyCount}/{lootboxes.length}
-              </Text>
+              {isLoading && lootboxes.length === 0 ? (
+                <Skeleton width={48} height={18} radius={6} style={{ marginTop: 6 }} />
+              ) : (
+                <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {keyCount}/{lootboxes.length}
+                </Text>
+              )}
               <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
             </Pressable>
           </View>
-        )}
-
-        {/* Diese Woche verdient */}
-        {isConnected && (
-          <WeeklyEarnedChart points={weekly.points} labels={weekly.labels} changePct={weekly.changePct} />
         )}
 
         <View style={styles.missionHeader}>

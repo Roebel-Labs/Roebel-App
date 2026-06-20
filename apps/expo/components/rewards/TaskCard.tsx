@@ -14,6 +14,25 @@ interface TaskCardProps {
 
 const COIN_ICON = require('../../assets/illustration/gamification/single.png');
 
+// A matching emoji per mission, so the placeholder square isn't a generic target.
+const TASK_EMOJI: Record<string, string> = {
+  verify_citizen: '🪪',
+  activate_push: '🔔',
+  add_profile_picture: '📷',
+  complete_profile: '👤',
+};
+function taskEmoji(key: string): string {
+  if (TASK_EMOJI[key]) return TASK_EMOJI[key];
+  if (/push|notif/.test(key)) return '🔔';
+  if (/picture|photo|avatar/.test(key)) return '📷';
+  if (/profile/.test(key)) return '👤';
+  if (/citizen|verif/.test(key)) return '🪪';
+  if (/referr|invite|friend/.test(key)) return '🤝';
+  if (/vote|poll|wahl/.test(key)) return '🗳️';
+  if (/event|veranst/.test(key)) return '📅';
+  return '🎯';
+}
+
 const YELLOW = '#E9B949';
 const YELLOW_DARK = '#8A5A00';
 const YELLOW_BG = '#FFFBEA';
@@ -69,7 +88,7 @@ export default function TaskCard({
         {task.image_url ? (
           <Image source={{ uri: task.image_url }} style={styles.thumbImage} resizeMode="cover" />
         ) : (
-          <Text style={styles.thumbEmoji}>🎯</Text>
+          <Text style={styles.thumbEmoji}>{taskEmoji(task.key)}</Text>
         )}
       </View>
       <View style={styles.body}>
