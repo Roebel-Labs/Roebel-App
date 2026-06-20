@@ -1,8 +1,21 @@
 # Röbel Münzen Economy — Design Spec
 
 **Date:** 2026-06-20
-**Status:** Draft for review
+**Status:** Phase 1 (payout rail) IMPLEMENTED & deployed — 2 ops steps remain (see below)
 **Author:** Max + Claude
+
+## Implementation status (Phase 1 — 2026-06-20)
+
+Built & deployed to prod (Supabase MCP):
+- DB: `reward_config`, `reward_claims` (unique anti-double-pay), `funder_ledger` (RLS on, service-role only). Seeded `proposal_vote` (1 Münze) + `event_submit` (3 Münzen). Migration: [`supabase/migrations/20260620_roebel_muenzen_reward_rail.sql`](../../../supabase/migrations/20260620_roebel_muenzen_reward_rail.sql).
+- Edge fn `claim-reward` (ACTIVE, verify_jwt): config → daily-cap → reserve claim (unique lock) → verify → pay (funder `safeTransferFrom` ERC-1155) → ledger. Source: [`apps/expo/supabase/functions/claim-reward/index.ts`](../../../apps/expo/supabase/functions/claim-reward/index.ts). Verifiers: `proposal_vote` (DB `vote_history` — participation only, **dodges the Gnosis-MACI dependency**), `event_submit` (`events`→`account_owners`).
+- Client: [`apps/expo/lib/rewards-claim.ts`](../../../apps/expo/lib/rewards-claim.ts) `claimReward(wallet, action, referenceId)`.
+
+**Two ops steps to go live (require you — key custody + Safe funds):**
+1. **Create the funder + set the secret.** Run `pnpm exec tsx scripts/circles/gen-funder-wallet.ts`, set Supabase secret `FUNDER_PRIVKEY`, fund the printed address with a little xDAI for gas.
+2. **Seed the float.** Send some Röbel Münzen to the funder address (from your wallet or the Stadtkasse Safe). Until then payouts return `failed: insufficient funder float` (no double-pay risk — claims just retry).
+
+Then wire `claimReward(wallet, "proposal_vote", proposalId)` into the vote-success path to see it end-to-end. Tune amounts anytime in `reward_config` (no deploy).
 
 ## 1. Goal
 
