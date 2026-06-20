@@ -104,7 +104,7 @@ export default function TaskCard({
           { backgroundColor: isDark ? colors.surfaceSecondary : YELLOW_BG },
         ]}
       >
-        {React.createElement(taskIcon(task.key), { width: 30, height: 30, color: colors.textPrimary })}
+        {React.createElement(taskIcon(task.key), { width: 22, height: 22, color: colors.textPrimary })}
       </View>
       <View style={styles.body}>
         <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -160,8 +160,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   thumb: {
-    width: 72,
-    height: 72,
+    width: 48,
+    height: 48,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

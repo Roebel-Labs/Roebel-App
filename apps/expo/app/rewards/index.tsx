@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -642,35 +643,50 @@ function TxHistoryList({
   }
   return (
     <View style={{ gap: 10 }}>
-      {items.map((tx) => (
-        <View
-          key={tx.id}
-          style={[styles.txRow, { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border }]}
-        >
-          <View
-            style={[
-              styles.txIcon,
-              { backgroundColor: tx.direction === 'in' ? (isDark ? '#16361F' : '#E7F6EC') : (isDark ? '#3A1E1E' : '#FDECEC') },
+      {items.map((tx) => {
+        const label = tx.direction === 'in' ? 'Erhalten' : 'Gesendet';
+        return (
+          <Pressable
+            key={tx.id}
+            onPress={() => {
+              if (tx.txHash) Linking.openURL(`https://gnosisscan.io/tx/${tx.txHash}`).catch(() => {});
+            }}
+            style={({ pressed }) => [
+              styles.txRow,
+              { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${label} — Transaktion onchain ansehen`}
           >
-            <Text style={{ fontSize: 16, color: tx.direction === 'in' ? '#1B873F' : '#C0392B' }}>
-              {tx.direction === 'in' ? '↓' : '↑'}
+            {tx.avatarUrl ? (
+              <Image source={{ uri: tx.avatarUrl }} style={styles.txAvatar} />
+            ) : (
+              <View
+                style={[
+                  styles.txIcon,
+                  { backgroundColor: tx.direction === 'in' ? (isDark ? '#16361F' : '#E7F6EC') : (isDark ? '#3A1E1E' : '#FDECEC') },
+                ]}
+              >
+                <Text style={{ fontSize: 16, color: tx.direction === 'in' ? '#1B873F' : '#C0392B' }}>
+                  {tx.direction === 'in' ? '↓' : '↑'}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.txTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                {tx.name || label}
+              </Text>
+              <Text style={[styles.txDate, { color: colors.textSecondary }]} numberOfLines={1}>
+                {label} · {new Date(tx.timestamp).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </Text>
+            </View>
+            <Text style={[styles.txAmount, { color: tx.direction === 'in' ? '#1B873F' : colors.textPrimary }]}>
+              {tx.direction === 'in' ? '+' : '−'}
+              {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
             </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.txTitle, { color: colors.textPrimary }]}>
-              {tx.direction === 'in' ? 'Erhalten' : 'Gesendet'}
-            </Text>
-            <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-              {new Date(tx.timestamp).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
-            </Text>
-          </View>
-          <Text style={[styles.txAmount, { color: tx.direction === 'in' ? '#1B873F' : colors.textPrimary }]}>
-            {tx.direction === 'in' ? '+' : '−'}
-            {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-          </Text>
-        </View>
-      ))}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -698,6 +714,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     padding: 4,
     gap: 4,
+    marginTop: 16,
   },
   tabItem: {
     flex: 1,
@@ -720,11 +737,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   txIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  txAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   txTitle: {
     fontFamily: 'Inter-SemiBold',
