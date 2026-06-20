@@ -51,7 +51,6 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
 
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isFocused, setIsFocused] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,15 +59,12 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
   }));
 
   const canSubmit = (text.trim().length > 0 || !!imageUrl) && !isUploading && !isSubmitting;
-  const showImageIcon = isFocused || !!imageUrl;
 
   const handleFocus = () => {
-    setIsFocused(true);
     onFocusChange?.(true);
   };
 
   const handleBlur = () => {
-    setIsFocused(false);
     onFocusChange?.(false);
   };
 
@@ -148,20 +144,18 @@ const ExperienceInput = forwardRef<ExperienceInputHandle, Props>(function Experi
             maxLength={MAX_CONTENT_LENGTH}
             multiline
           />
-          {showImageIcon && (
-            <Pressable
-              onPress={handlePickImage}
-              style={styles.imageButton}
-              hitSlop={6}
-              accessibilityLabel="Bild anhängen"
-            >
-              {isUploading ? (
-                <ActivityIndicator size="small" color={colors.textSecondary} />
-              ) : (
-                <ImageIcon width={22} height={22} color={colors.textSecondary} />
-              )}
-            </Pressable>
-          )}
+          <Pressable
+            onPress={handlePickImage}
+            style={styles.imageButton}
+            hitSlop={6}
+            accessibilityLabel="Bild anhängen"
+          >
+            {isUploading ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            ) : (
+              <ImageIcon width={22} height={22} color={colors.textSecondary} />
+            )}
+          </Pressable>
         </View>
         <Pressable
           onPress={handleSubmit}
