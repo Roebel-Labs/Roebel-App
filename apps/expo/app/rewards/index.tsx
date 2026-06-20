@@ -35,7 +35,7 @@ import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import { softShadow } from '@/lib/shadow';
-import { getTreasuryEuro, talerToEuro } from '@/lib/roebel-taler';
+import { getTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
@@ -106,8 +106,6 @@ export default function RewardsIndexScreen() {
     onboard,
     account: talerAccount,
   } = useRoebelTaler();
-  // Tap the balance to flip between Röbel Münzen and its indicative € value.
-  const [showEur, setShowEur] = useState(false);
   // Stadtkasse euro figure (same source as the old TreasuryCard).
   const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
   useEffect(() => {
@@ -309,22 +307,14 @@ export default function RewardsIndexScreen() {
           <CoinBalanceHero
             balance={Math.round(talerBalance)}
             loading={isConnected && talerLoading}
-            label={showEur ? 'Wert in Euro (ca.)' : 'Röbel Münzen'}
+            label="Röbel Münzen"
             verified={null}
-            onPress={isConnected && talerOnboarded ? () => setShowEur((v) => !v) : undefined}
-            valueText={
-              showEur
-                ? `≈ ${Math.round(talerToEuro(talerBalance)).toLocaleString('de-DE')} €`
-                : undefined
-            }
             sublabel={
               !isConnected
                 ? 'Melde dich an, um Röbel Münzen zu sammeln'
                 : !talerOnboarded
                   ? 'Mach mit, um täglich Röbel Münzen abzuholen'
-                  : showEur
-                    ? 'Orientierungswert · antippen für Münzen'
-                    : `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'} · antippen für €`
+                  : `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'}`
             }
           />
         </View>
