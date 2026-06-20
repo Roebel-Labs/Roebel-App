@@ -107,6 +107,31 @@ export async function getPersonalCrcBalance(address: string): Promise<bigint> {
 	});
 }
 
+/** Indicative € value of 1 Röbel Münze (orientation only — NOT euro-redeemable). */
+export const MUENZE_EUR = 1;
+/** Convert a Röbel Münzen amount (display number) to its indicative € value. */
+export function talerToEuro(taler: number): number {
+	return taler * MUENZE_EUR;
+}
+
+/**
+ * How many Röbel Münzen the citizen can mint RIGHT NOW. Circles issues ~1 CRC/hour
+ * continuously; `calculateIssuance` returns the accrued-but-unclaimed amount (1:1 with
+ * the Münzen they'll get after conversion). 0 if not yet a human / nothing accrued.
+ */
+export async function getMintableTaler(address: string): Promise<bigint> {
+	try {
+		const res = (await readContract({
+			contract: hubRead,
+			method: "function calculateIssuance(address) view returns (uint256, uint256, uint256)",
+			params: [address],
+		})) as readonly bigint[];
+		return res?.[0] ?? 0n;
+	} catch {
+		return 0n;
+	}
+}
+
 const XDAI_EUR = 0.92; // approx USD→EUR (xDAI is USD-pegged); indicative only
 const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
 

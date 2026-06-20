@@ -27,7 +27,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import Skeleton from '@/components/ui/Skeleton';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
-import TaskTabs, { type TaskTabValue } from '@/components/rewards/TaskTabs';
+import { useRoebelTalerHistory, type TalerTx } from '@/hooks/useRoebelTalerHistory';
 import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
@@ -35,10 +35,14 @@ import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import { softShadow } from '@/lib/shadow';
-import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { getTreasuryEuro, talerToEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
+
+// Min claimable Röbel Münzen before the mint button activates (≈6 min of accrual at
+// ~1/hour) — avoids dust-sized mints while still letting citizens collect hourly.
+const MIN_MINTABLE = 0.1;
 const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
 const SCHATZTRUHE_IMG = require('../../assets/illustration/muenzen/schatztruhe.png');
 
@@ -93,6 +97,7 @@ export default function RewardsIndexScreen() {
   // stay the gamification layer.
   const {
     talerBalance,
+    mintable: talerMintable,
     onboarded: talerOnboarded,
     loading: talerLoading,
     minting: talerMinting,
@@ -101,6 +106,8 @@ export default function RewardsIndexScreen() {
     onboard,
     account: talerAccount,
   } = useRoebelTaler();
+  // Tap the balance to flip between Röbel Münzen and its indicative € value.
+  const [showEur, setShowEur] = useState(false);
   // Stadtkasse euro figure (same source as the old TreasuryCard).
   const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
   useEffect(() => {
@@ -205,7 +212,8 @@ export default function RewardsIndexScreen() {
   }, [onboard, showSnackbar]);
 
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<TaskTabValue>('available');
+  const [tab, setTab] = useState<'missionen' | 'verlauf'>('missionen');
+  const history = useRoebelTalerHistory();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
 
@@ -301,20 +309,28 @@ export default function RewardsIndexScreen() {
           <CoinBalanceHero
             balance={talerBalance}
             loading={isConnected && talerLoading}
-            label="Röbel Münzen"
+            label={showEur ? 'Wert in Euro (ca.)' : 'Röbel Münzen'}
             verified={null}
+            onPress={isConnected && talerOnboarded ? () => setShowEur((v) => !v) : undefined}
+            valueText={
+              showEur
+                ? `≈ ${talerToEuro(talerBalance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+                : undefined
+            }
             sublabel={
               !isConnected
                 ? 'Melde dich an, um Röbel Münzen zu sammeln'
                 : !talerOnboarded
                   ? 'Mach mit, um täglich Röbel Münzen abzuholen'
-                  : talerClaimedToday
-                    ? `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'}`
-                    : 'Hol dir deine täglichen Röbel Münzen'
+                  : showEur
+                    ? 'Orientierungswert · antippen für Münzen'
+                    : `Serie ${rtStreak} ${rtStreak === 1 ? 'Tag' : 'Tage'} · antippen für €`
             }
           />
         </View>
 
+        {/* White rounded sheet wraps everything from Senden/Empfangen down */}
+        <View style={[styles.sheet, { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}>
         {/* Senden / Empfangen — above the daily mint button */}
         {isConnected && talerOnboarded && (
           <View style={styles.sendRecvRow}>
@@ -362,8 +378,29 @@ export default function RewardsIndexScreen() {
                 <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Bei Röbel Münzen mitmachen'}</Text>
               )}
             </Pressable>
-          ) : talerClaimedToday ? (
-            // Already collected today → fully-rounded white disabled button + countdown
+          ) : talerMinting ? (
+            // Minting in progress
+            <View style={[styles.talerCta, { backgroundColor: colors.primary, opacity: 0.6 }]}>
+              <View style={styles.ctaRow}>
+                <ActivityIndicator color="#fff" />
+                <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
+              </View>
+            </View>
+          ) : talerMintable >= MIN_MINTABLE ? (
+            // Münzen have accrued (≈1/Stunde) → collect whatever is claimable now
+            <Pressable
+              onPress={onDailyMint}
+              style={[styles.talerCta, { backgroundColor: colors.primary }]}
+            >
+              <View style={styles.ctaRow}>
+                <CoinsIcon width={20} height={20} color="#fff" />
+                <Text style={styles.talerCtaText}>
+                  {talerMintable.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Röbel Münzen abholen
+                </Text>
+              </View>
+            </Pressable>
+          ) : (
+            // Still accruing — show the live amount; the protocol issues continuously
             <View
               style={[
                 styles.talerCta,
@@ -374,40 +411,21 @@ export default function RewardsIndexScreen() {
               accessibilityState={{ disabled: true }}
             >
               <Text style={[styles.talerCtaText, styles.talerCtaCountdownText, { color: colors.textSecondary }]}>
-                Nächste Röbel Münze in {fmtCountdown(cooldownMs)}
+                {talerMintable > 0
+                  ? `Sammelt sich… ≈ ${talerMintable.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Röbel Münzen`
+                  : 'Deine Röbel Münzen sammeln sich…'}
               </Text>
             </View>
-          ) : (
-            // Verified + claimable → daily mint
-            <Pressable
-              onPress={onDailyMint}
-              disabled={talerMinting}
-              style={[styles.talerCta, { backgroundColor: colors.primary, opacity: talerMinting ? 0.6 : 1 }]}
-            >
-              {talerMinting ? (
-                <View style={styles.ctaRow}>
-                  <ActivityIndicator color="#fff" />
-                  <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
-                </View>
-              ) : (
-                <View style={styles.ctaRow}>
-                  <CoinsIcon width={20} height={20} color="#fff" />
-                  <Text style={styles.talerCtaText}>Tägliche Münzen erhalten</Text>
-                </View>
-              )}
-            </Pressable>
           )
         )}
 
-        {/* Streak — directly under the mint button (soft-shadow card) */}
+        {/* Streak — CheckinStreakStrip already provides its own card + shadow */}
         {isConnected && (
-          <View style={[styles.streakCard, { backgroundColor: colors.card }, softShadow(2, isDark)]}>
-            <CheckinStreakStrip
-              streak={rtStreak}
-              recentCheckins={[]}
-              hasCheckedInToday={talerClaimedToday}
-            />
-          </View>
+          <CheckinStreakStrip
+            streak={rtStreak}
+            recentCheckins={[]}
+            hasCheckedInToday={talerClaimedToday}
+          />
         )}
 
         {/* Stadtkasse + Schatzkammer — two soft-shadow square cards */}
@@ -457,105 +475,116 @@ export default function RewardsIndexScreen() {
           </View>
         )}
 
-        <View style={styles.missionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Missionen für Münzen
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Sammle mehr Münzen, wenn du Mecky&apos;s Missionen abschließt
-          </Text>
+        {/* Tabs: Missionen | Verlauf */}
+        <View style={[styles.tabBar, { backgroundColor: isDark ? colors.surface : '#F1F2F4' }]}>
+          <Pressable
+            onPress={() => setTab('missionen')}
+            style={[styles.tabItem, tab === 'missionen' && { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.tabText, { color: tab === 'missionen' ? colors.textPrimary : colors.textSecondary }]}>
+              Missionen
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setTab('verlauf')}
+            style={[styles.tabItem, tab === 'verlauf' && { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.tabText, { color: tab === 'verlauf' ? colors.textPrimary : colors.textSecondary }]}>
+              Verlauf
+            </Text>
+          </Pressable>
         </View>
 
-        <TaskTabs
-          value={tab}
-          onChange={setTab}
-          availableCount={availableTasks.length}
-          completedCount={completedTasks.length}
-        />
+        {tab === 'missionen' ? (
+          <>
+            <View style={styles.taskList}>
+              {isLoading && tasks.length === 0 ? (
+                <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
+              ) : tasks.length === 0 ? (
+                <EmptyState colors={colors} isDark={isDark}>
+                  Alles erledigt! Schau später wieder vorbei.
+                </EmptyState>
+              ) : (
+                tasks.map((task) => {
+                  const done = hasCompleted(task.key) && !task.is_repeatable;
+                  return (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      completed={done}
+                      eligible={isTaskEligible(task.key) && !hasCompleted(task.key)}
+                      claiming={claimingKey === task.key}
+                      onPress={() => { if (!done) handleTaskPress(task.key, task.cta_route); }}
+                    />
+                  );
+                })
+              )}
+            </View>
 
-        <View style={styles.taskList}>
-          {isLoading && tasks.length === 0 ? (
-            <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
-          ) : tab === 'available' ? (
-            availableTasks.length === 0 ? (
-              <EmptyState colors={colors} isDark={isDark}>
-                Alles erledigt! Schau später wieder vorbei.
-              </EmptyState>
-            ) : (
-              availableTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  eligible={isTaskEligible(task.key) && !hasCompleted(task.key)}
-                  claiming={claimingKey === task.key}
-                  onPress={() => handleTaskPress(task.key, task.cta_route)}
-                />
-              ))
-            )
-          ) : completedTasks.length === 0 ? (
-            <EmptyState colors={colors} isDark={isDark}>
-              Noch keine Missionen abgeschlossen.
-            </EmptyState>
-          ) : (
-            completedTasks.map((task) => (
-              <TaskCard key={task.id} task={task} completed onPress={() => {}} />
-            ))
-          )}
+            <Pressable
+              onPress={() => router.push('/rewards/referral' as any)}
+              style={({ pressed }) => [
+                styles.referralBanner,
+                {
+                  backgroundColor: isDark ? '#1a3a5c' : '#EEF4FB',
+                  borderColor: colors.primary,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Image source={WELCOME_MECKY} style={styles.referralMecky} resizeMode="contain" />
+              <View style={styles.referralText}>
+                <Text style={[styles.referralTitle, { color: colors.textPrimary }]}>
+                  Freunde einladen
+                </Text>
+                <Text style={[styles.referralSubtitle, { color: colors.textSecondary }]}>
+                  Du und dein Freund bekommen 200 / 100 Münzen
+                </Text>
+                {!!referralCode && (
+                  <Text style={[styles.referralCode, { color: colors.primary }]}>
+                    Code: {referralCode}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+          </>
+        ) : (
+          <TxHistoryList items={history.items} loading={history.loading} colors={colors} isDark={isDark} />
+        )}
         </View>
-
-        <Pressable
-          onPress={() => router.push('/rewards/referral' as any)}
-          style={({ pressed }) => [
-            styles.referralBanner,
-            {
-              backgroundColor: isDark ? '#1a3a5c' : '#EEF4FB',
-              borderColor: colors.primary,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <Image source={WELCOME_MECKY} style={styles.referralMecky} resizeMode="contain" />
-          <View style={styles.referralText}>
-            <Text style={[styles.referralTitle, { color: colors.textPrimary }]}>
-              Freunde einladen
-            </Text>
-            <Text style={[styles.referralSubtitle, { color: colors.textSecondary }]}>
-              Du und dein Freund bekommen 200 / 100 Münzen
-            </Text>
-            {!!referralCode && (
-              <Text style={[styles.referralCode, { color: colors.primary }]}>
-                Code: {referralCode}
-              </Text>
-            )}
-          </View>
-        </Pressable>
       </ScrollView>
 
       {/* Floating transparent header over the gradient (no background). */}
       <View style={[styles.header, { paddingTop: insets.top }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backBtn,
-            {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
-              opacity: pressed ? 0.6 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
-          <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
-        </Pressable>
+        <View style={styles.headerSide}>
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.backBtn,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+                opacity: pressed ? 0.6 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Zurück"
+          >
+            <ChevronLeftIcon width={22} height={22} color={colors.textPrimary} />
+          </Pressable>
+        </View>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Belohnungen</Text>
-        <Pressable
-          onPress={() => router.push('/roebel-taler-info' as any)}
-          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Was ist Röbel Münzen?"
-        >
-          <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textPrimary }}>Mehr erfahren</Text>
-        </Pressable>
+        <View style={[styles.headerSide, styles.headerSideEnd]}>
+          <Pressable
+            onPress={() => router.push('/roebel-taler-info' as any)}
+            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Was ist Röbel Münzen?"
+          >
+            <Text style={{ fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textPrimary }}>Mehr erfahren</Text>
+          </Pressable>
+        </View>
       </View>
 
       <MintSuccessOverlay

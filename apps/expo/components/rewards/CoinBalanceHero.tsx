@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import Skeleton from '@/components/ui/Skeleton';
 
@@ -11,6 +11,10 @@ interface CoinBalanceHeroProps {
   sublabel?: string;
   /** Verification status pill: true = verified, false = not yet, null/undefined = hide. */
   verified?: boolean | null;
+  /** Override the big number (e.g. to show "≈ 12,00 €"). Falls back to the formatted balance. */
+  valueText?: string;
+  /** Tap handler on the balance (e.g. toggle Münzen ⇄ € value). */
+  onPress?: () => void;
 }
 
 const HERO_IMAGE = require('../../assets/illustration/muenzen/top_hero_coin.png');
@@ -21,6 +25,8 @@ export default function CoinBalanceHero({
   label = 'Mein Guthaben',
   sublabel,
   verified,
+  valueText,
+  onPress,
 }: CoinBalanceHeroProps) {
   const { colors, isDark } = useTheme();
 
@@ -45,9 +51,11 @@ export default function CoinBalanceHero({
         {loading ? (
           <Skeleton width={120} height={46} radius={12} style={{ marginTop: 4 }} />
         ) : (
-          <Text style={[styles.balance, { color: colors.textPrimary }]}>
-            {balance.toLocaleString('de-DE')}
-          </Text>
+          <Pressable onPress={onPress} disabled={!onPress} hitSlop={10}>
+            <Text style={[styles.balance, { color: colors.textPrimary }]}>
+              {valueText ?? balance.toLocaleString('de-DE')}
+            </Text>
+          </Pressable>
         )}
         {!!sublabel && (
           <Text style={[styles.sublabel, { color: colors.textSecondary }]}>{sublabel}</Text>

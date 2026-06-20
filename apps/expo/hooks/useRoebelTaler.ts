@@ -6,6 +6,7 @@ import {
 	findInviter,
 	getRoebelTalerBalance,
 	getPersonalCrcBalance,
+	getMintableTaler,
 	formatTaler,
 	prepareDailyMint,
 	prepareOnboard,
@@ -23,6 +24,7 @@ export function useRoebelTaler() {
 	const address = gnosisAccount?.address;
 
 	const [balanceRaw, setBalanceRaw] = useState<bigint>(0n);
+	const [mintableRaw, setMintableRaw] = useState<bigint>(0n);
 	const [onboarded, setOnboarded] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [minting, setMinting] = useState(false);
@@ -33,18 +35,29 @@ export function useRoebelTaler() {
 		if (!address) { setLoading(false); return; }
 		setLoading(true);
 		try {
-			const [ob, bal] = await Promise.all([
+			const [ob, bal, mintable] = await Promise.all([
 				isOnboarded(address).catch(() => false),
 				getRoebelTalerBalance(address).catch(() => 0n),
+				getMintableTaler(address).catch(() => 0n),
 			]);
 			setOnboarded(ob);
 			setBalanceRaw(bal);
+			setMintableRaw(mintable);
 		} finally {
 			setLoading(false);
 		}
 	}, [address]);
 
 	useEffect(() => { refresh(); }, [refresh]);
+
+	// The mintable amount accrues continuously (~1 CRC/hour). Poll it (lightweight, no
+	// loading flag) so the button shows a live, ticking-up amount of Röbel Münzen.
+	useEffect(() => {
+		if (!address || !onboarded) return;
+		const tick = () => { void getMintableTaler(address).then(setMintableRaw).catch(() => {}); };
+		const id = setInterval(tick, 60_000);
+		return () => clearInterval(id);
+	}, [address, onboarded]);
 
 	/**
 	 * Daily "Heute abholen": (1) claim accrued personal CRC (personalMint), then
@@ -114,6 +127,9 @@ export function useRoebelTaler() {
 		/** Display number for CoinBalanceHero (2-decimal). */
 		talerBalance: Number(formatTaler(balanceRaw)),
 		balanceRaw,
+		/** Röbel Münzen claimable right now (live, accrues ~1/hour). */
+		mintable: Number(formatTaler(mintableRaw)),
+		mintableRaw,
 		onboarded,
 		loading: loading || !ready,
 		minting,
