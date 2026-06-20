@@ -1,10 +1,12 @@
 import React from 'react';
-import { Modal, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import QRCodeStyled from 'react-native-qrcode-styled';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useTheme } from '@/context/ThemeContext';
 import { useSnackbar } from '@/context/SnackbarContext';
+import BottomDrawer from '@/components/BottomDrawer';
 
 /** Near-black used for the QR modules — reads as black, ties to the brand navy. */
 const QR_COLOR = '#0B1220';
@@ -48,6 +50,7 @@ function ShareIcon({ size = 18, color }: { size?: number; color: string }) {
 export default function ReceiveSheet({ visible, address, name, username, onClose }: ReceiveSheetProps) {
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
+  const insets = useSafeAreaInsets();
 
   const addr = address ?? '';
   const short = addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '';
@@ -107,11 +110,8 @@ export default function ReceiveSheet({ visible, address, name, username, onClose
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: colors.background }]}>
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-
+    <BottomDrawer visible={visible} onClose={onClose}>
+      <View style={[styles.inner, { paddingBottom: Math.max(20, insets.bottom) }]}>
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {title}
         </Text>
@@ -154,29 +154,16 @@ export default function ReceiveSheet({ visible, address, name, username, onClose
           onShare={() => shareValue(addr)}
         />
       </View>
-    </Modal>
+    </BottomDrawer>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
-    alignItems: 'center',
-  },
-  handle: { width: 44, height: 5, borderRadius: 3, marginBottom: 18 },
-  name: { fontFamily: 'Inter-Bold', fontSize: 24, marginBottom: 18 },
+  inner: { alignItems: 'center', paddingTop: 4 },
+  name: { fontFamily: 'Inter-Bold', fontSize: 22, marginBottom: 22 },
   qrCard: { padding: 16, backgroundColor: '#FFFFFF', borderRadius: 24 },
   qr: { backgroundColor: 'transparent' },
-  row: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 20, gap: 10 },
   rowLabel: { fontFamily: 'Inter-SemiBold', fontSize: 15 },
   rowValue: { fontFamily: 'Inter-Regular', fontSize: 14, marginTop: 2 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
