@@ -54,6 +54,15 @@ export default function SendRoebelScreen() {
     (r) => !query || (r.name ?? '').toLowerCase().includes(query.toLowerCase())
   );
 
+  // Allow sending to any pasted wallet address (e.g. the reward funder), not just the
+  // citizen list. Röbel Münzen (a group token) can be received by any address.
+  const trimmed = query.trim();
+  const isAddr = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
+  const manualRecipient: Recipient | null =
+    isAddr && !(recipients ?? []).some((r) => r.address.toLowerCase() === trimmed.toLowerCase())
+      ? { address: trimmed, name: `${trimmed.slice(0, 6)}…${trimmed.slice(-4)}`, imageUrl: null, registered: false, isMetri: false }
+      : null;
+
   const onSend = useCallback(async () => {
     if (!selected) return;
     const amt = parseTalerAmount(amount);
@@ -119,10 +128,25 @@ export default function SendRoebelScreen() {
                 </View>
               ))}
             </View>
-          ) : filtered.length === 0 ? (
-            <Text style={themed.empty}>Keine Empfänger gefunden.</Text>
+          ) : filtered.length === 0 && !manualRecipient ? (
+            <Text style={themed.empty}>
+              Keine Empfänger gefunden.{'\n'}Tipp: Eine Wallet-Adresse (0x…) einfügen, um an eine beliebige Adresse zu senden.
+            </Text>
           ) : (
             <View style={themed.list}>
+              {manualRecipient && (
+                <Pressable
+                  key="manual"
+                  onPress={() => setSelected(manualRecipient)}
+                  style={({ pressed }) => [themed.recRow, { opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Avatar r={manualRecipient} colors={colors} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={themed.recName}>An diese Adresse senden</Text>
+                    <Text style={themed.recSub}>{manualRecipient.address.slice(0, 10)}…{manualRecipient.address.slice(-6)}</Text>
+                  </View>
+                </Pressable>
+              )}
               {filtered.map((r) => (
                 <Pressable
                   key={r.address}
