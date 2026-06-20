@@ -101,7 +101,7 @@ export default function TaskCard({
       <View
         style={[
           styles.thumb,
-          { backgroundColor: isDark ? colors.surfaceSecondary : YELLOW_BG },
+          { backgroundColor: isDark ? colors.surfaceSecondary : '#F1F2F4' },
         ]}
       >
         {React.createElement(taskIcon(task.key), { width: 22, height: 22, color: colors.textPrimary })}

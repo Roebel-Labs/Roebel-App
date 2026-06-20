@@ -36,11 +36,14 @@ import ReceiveSheet from '@/components/rewards/ReceiveSheet';
 import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
+import CircleArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
+import CircleArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
 import { softShadow } from '@/lib/shadow';
 import { getTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
+const RECEIVE_IMG = require('../../assets/illustration/gamification/receive.png');
 
 // Min claimable Röbel Münzen before the mint button activates (≈6 min of accrual at
 // ~1/hour) — avoids dust-sized mints while still letting citizens collect hourly.
@@ -556,7 +559,13 @@ export default function RewardsIndexScreen() {
                   Alles erledigt! Schau später wieder vorbei.
                 </EmptyState>
               ) : (
-                tasks.map((task) => {
+                [...tasks]
+                  .sort(
+                    (a, b) =>
+                      Number(hasCompleted(a.key) && !a.is_repeatable) -
+                      Number(hasCompleted(b.key) && !b.is_repeatable)
+                  )
+                  .map((task) => {
                   const done = hasCompleted(task.key) && !task.is_repeatable;
                   return (
                     <TaskCard
@@ -647,6 +656,14 @@ function EmptyState({
   );
 }
 
+function txDayLabel(ts: number): string {
+  const start = (t: number) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const diff = Math.round((start(Date.now()) - start(ts)) / 86_400_000);
+  if (diff === 0) return 'Heute';
+  if (diff === 1) return 'Gestern';
+  return new Date(ts).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
 function TxHistoryList({
   items,
   loading,
@@ -668,52 +685,66 @@ function TxHistoryList({
       </EmptyState>
     );
   }
+
+  // Group by day (items are already newest-first).
+  const groups: { label: string; rows: TalerTx[] }[] = [];
+  for (const tx of items) {
+    const label = txDayLabel(tx.timestamp);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.rows.push(tx);
+    else groups.push({ label, rows: [tx] });
+  }
+
   return (
-    <View style={{ gap: 10 }}>
-      {items.map((tx) => {
-        const label = tx.direction === 'in' ? 'Erhalten' : 'Gesendet';
-        return (
-          <Pressable
-            key={tx.id}
-            onPress={() => {
-              if (tx.txHash) Linking.openURL(`https://gnosisscan.io/tx/${tx.txHash}`).catch(() => {});
-            }}
-            style={({ pressed }) => [
-              styles.txRow,
-              { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={`${label} — Transaktion onchain ansehen`}
-          >
-            {tx.avatarUrl ? (
-              <Image source={{ uri: tx.avatarUrl }} style={styles.txAvatar} />
-            ) : (
-              <View
-                style={[
-                  styles.txIcon,
-                  { backgroundColor: tx.direction === 'in' ? (isDark ? '#16361F' : '#E7F6EC') : (isDark ? '#3A1E1E' : '#FDECEC') },
-                ]}
+    <View style={{ gap: 18 }}>
+      {groups.map((g) => (
+        <View key={g.label} style={{ gap: 2 }}>
+          <Text style={[styles.txDayHeader, { color: colors.textTertiary }]}>{g.label.toUpperCase()}</Text>
+          {g.rows.map((tx) => {
+            const isIn = tx.direction === 'in';
+            const label = isIn ? 'Erhalten' : 'Gesendet';
+            return (
+              <Pressable
+                key={tx.id}
+                onPress={() => {
+                  if (tx.txHash) Linking.openURL(`https://gnosisscan.io/tx/${tx.txHash}`).catch(() => {});
+                }}
+                style={({ pressed }) => [styles.txRow, { opacity: pressed ? 0.6 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`${tx.name || label} — Transaktion onchain ansehen`}
               >
-                <Text style={{ fontSize: 16, color: tx.direction === 'in' ? '#1B873F' : '#C0392B' }}>
-                  {tx.direction === 'in' ? '↓' : '↑'}
+                <View style={styles.txIconWrap}>
+                  <Image source={tx.avatarUrl ? { uri: tx.avatarUrl } : RECEIVE_IMG} style={styles.txAvatar} />
+                  <View
+                    style={[
+                      styles.txBadge,
+                      { backgroundColor: isIn ? '#22C55E' : '#2563EB', borderColor: isDark ? colors.background : '#FFFFFF' },
+                    ]}
+                  >
+                    {isIn ? (
+                      <CircleArrowDownIcon width={12} height={12} />
+                    ) : (
+                      <CircleArrowUpIcon width={12} height={12} />
+                    )}
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.txTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {tx.name || label}
+                  </Text>
+                  <Text style={[styles.txTime, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {new Date(tx.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+                <Text style={[styles.txAmount, { color: isIn ? '#16A34A' : colors.textPrimary }]}>
+                  {isIn ? '+ ' : '− '}
+                  {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
                 </Text>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.txTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                {tx.name || label}
-              </Text>
-              <Text style={[styles.txDate, { color: colors.textSecondary }]} numberOfLines={1}>
-                {label} · {new Date(tx.timestamp).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
-              </Text>
-            </View>
-            <Text style={[styles.txAmount, { color: tx.direction === 'in' ? '#1B873F' : colors.textPrimary }]}>
-              {tx.direction === 'in' ? '+' : '−'}
-              {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-            </Text>
-          </Pressable>
-        );
-      })}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -754,39 +785,51 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
   },
+  txDayHeader: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 14,
+    paddingVertical: 9,
   },
-  txIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  txIconWrap: {
+    width: 44,
+    height: 44,
+  },
+  txAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ECECEC',
+  },
+  txBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  txAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
   txTitle: {
     fontFamily: 'Inter-SemiBold',
-    fontSize: 15,
+    fontSize: 16,
   },
-  txDate: {
+  txTime: {
     fontFamily: 'Inter-Regular',
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 2,
   },
   txAmount: {
     fontFamily: 'Inter-SemiBold',
-    fontSize: 15,
+    fontSize: 16,
   },
   scroll: { flex: 1 },
   scrollGradient: {
