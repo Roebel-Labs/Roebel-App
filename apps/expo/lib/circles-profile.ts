@@ -5,6 +5,8 @@ import { roebeltalerGroupAddress } from "@/constants/gnosis";
 
 const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
 const PROFILE_SVC = "https://rpc.aboutcircles.com/profiles/get?cid=";
+const PROFILE_PIN = "https://rpc.aboutcircles.com/profiles/pin";
+const ZERO_DIGEST = "0x" + "0".repeat(64);
 
 /** The user's personal Metri Circles wallet (town inviter), pinned first in Senden. */
 export const METRI_WALLET = "0x1f14C82926227d948b9a756Db9aEB77fe51273c3";
@@ -30,6 +32,69 @@ function digestToCidV0(hex: string): string {
 	const bytes = [0x12, 0x20];
 	for (let i = 0; i < h.length; i += 2) bytes.push(parseInt(h.slice(i, i + 2), 16));
 	return base58(bytes);
+}
+
+function base58Decode(str: string): number[] {
+	let num = 0n;
+	for (const ch of str) {
+		const idx = B58.indexOf(ch);
+		if (idx < 0) throw new Error("invalid base58 char");
+		num = num * 58n + BigInt(idx);
+	}
+	const bytes: number[] = [];
+	while (num > 0n) {
+		bytes.unshift(Number(num % 256n));
+		num /= 256n;
+	}
+	for (let i = 0; i < str.length && str[i] === "1"; i++) bytes.unshift(0); // leading zeros
+	return bytes;
+}
+
+/** CIDv0 (Qm…) → bytes32 metadata digest (0x…) by stripping the 0x1220 multihash prefix. */
+export function cidV0ToDigest(cid: string): string {
+	const bytes = base58Decode(cid); // 34 bytes: [0x12, 0x20, ...32 digest bytes]
+	const digest = bytes.slice(2);
+	if (digest.length !== 32) throw new Error("unexpected CID length");
+	return "0x" + digest.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export interface CirclesProfileInput {
+	name: string;
+	description?: string;
+	previewImageUrl?: string;
+	imageUrl?: string;
+}
+
+/** Pin a profile JSON to the Circles profile service. Returns its CIDv0. */
+export async function pinCirclesProfile(profile: CirclesProfileInput): Promise<string> {
+	const res = await fetch(PROFILE_PIN, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(profile),
+	});
+	if (!res.ok) throw new Error(`Profil-Upload fehlgeschlagen (${res.status})`);
+	const json = await res.json();
+	if (!json?.cid) throw new Error("Profil-Upload ohne CID");
+	return json.cid as string;
+}
+
+/** The avatar's currently published metadata digest, or null if none/zero (not published). */
+export async function getPublishedDigest(address: string): Promise<string | null> {
+	try {
+		const rows = await circlesQuery({
+			Namespace: "V_CrcV2",
+			Table: "Avatars",
+			Columns: [],
+			Filter: [{ Type: "FilterPredicate", FilterType: "Equals", Column: "avatar", Value: address.toLowerCase() }],
+			Order: [],
+			Limit: 1,
+		});
+		const d = rows[0]?.cidV0Digest as string | undefined;
+		if (!d || d === ZERO_DIGEST) return null;
+		return d;
+	} catch {
+		return null;
+	}
 }
 
 async function circlesQuery(query: Record<string, unknown>): Promise<Record<string, any>[]> {

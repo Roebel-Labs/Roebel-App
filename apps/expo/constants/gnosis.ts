@@ -30,6 +30,10 @@ export const roebeltalerGroupAddress =
 // Circles v2 protocol addresses on Gnosis (from @aboutcircles/sdk-core circlesConfig[100]).
 export const circlesHubAddress = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
 export const circlesBaseGroupFactory = "0xD0B5Bd9962197BEaC4cbA24244ec3587f19Bd06d";
+// NameRegistry — an avatar sets its own profile (name + photo) via updateMetadataDigest(bytes32).
+// Read by Metri / the Explorer / every Circles app, so a Röbel citizen shows up as a person.
+export const nameRegistryAddress =
+	process.env.EXPO_PUBLIC_CIRCLES_NAME_REGISTRY || "0xA27566fD89162cC3D40Cb59c87AAaA49B85F3474";
 
 /** Returns a contract handle for the CitizenNFT on Gnosis. */
 export const citizenNFTGnosisContract = () =>

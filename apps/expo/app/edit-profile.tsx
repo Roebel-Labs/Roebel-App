@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator, Image, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRewards } from '@/context/RewardsContext';
+import { useCirclesProfileSync } from '@/hooks/useCirclesProfileSync';
 import { supabase } from '@/lib/supabase';
 import { Events, track } from '@/lib/analytics';
 import {
@@ -29,6 +30,7 @@ export default function EditProfileScreen() {
   const { userRewards, refresh: refreshRewards } = useRewards();
   const wallet = useActiveWallet();
   const { disconnect } = useDisconnect();
+  const circles = useCirclesProfileSync();
 
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -130,6 +132,19 @@ export default function EditProfileScreen() {
         changed_profile_picture: !!profilePicture,
         changed_neighborhood: !!neighborhood,
       });
+      // Keep the public Circles profile in sync if the citizen opted in (best-effort:
+      // never block the profile save on a Circles network hiccup).
+      if (circles.published) {
+        try {
+          await circles.publish({
+            name: username || user?.display_name || 'Röbel-Bürger:in',
+            description: bio || undefined,
+            imageUrl: profilePicture || undefined,
+          });
+        } catch (e) {
+          console.warn('[circles] profile resync failed:', e);
+        }
+      }
       // The username drives the /user/[username] route param. If it changed, the
       // previous screen's route no longer resolves, so land on the renamed profile.
       if (usernameChanged && username) {
@@ -142,6 +157,52 @@ export default function EditProfileScreen() {
       Alert.alert('Fehler', error?.message || 'Profil konnte nicht gespeichert werden.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleCircles = (next: boolean) => {
+    if (circles.busy) return;
+    if (next) {
+      Alert.alert(
+        'Öffentlich im Circles-Netzwerk',
+        'Dein Name und dein Profilbild werden öffentlich und dauerhaft im Circles-Netzwerk gespeichert (IPFS + Blockchain). Sie sind dann mit deiner Wallet und deinen Zahlungen verknüpft und in Apps wie Metri sichtbar.\n\nMöchtest du fortfahren?',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          {
+            text: 'Veröffentlichen',
+            onPress: async () => {
+              try {
+                await circles.publish({
+                  name: username || user?.display_name || 'Röbel-Bürger:in',
+                  description: bio || undefined,
+                  imageUrl: profilePicture || undefined,
+                });
+              } catch (e: any) {
+                Alert.alert('Fehler', e?.message || 'Profil konnte nicht veröffentlicht werden.');
+              }
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        'Aus Circles-Netzwerk entfernen',
+        'Dein Name und Foto werden aus deinem Circles-Profil entfernt — in anderen Apps erscheinst du dann wieder nur als Adresse. (Bereits kopierte Daten können im Netzwerk fortbestehen.)',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          {
+            text: 'Entfernen',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await circles.unpublish();
+              } catch (e: any) {
+                Alert.alert('Fehler', e?.message || 'Profil konnte nicht entfernt werden.');
+              }
+            },
+          },
+        ],
+      );
     }
   };
 
@@ -295,6 +356,40 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
+        {/* Circles-Netzwerk Sichtbarkeit (nur für verifizierte Bürger:innen) */}
+        {user?.is_verified_citizen && (
+          <View style={styles.fieldSection}>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>CIRCLES-NETZWERK</Text>
+            <View style={[styles.circlesCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.circlesRow}>
+                <View style={styles.circlesTextWrap}>
+                  <Text style={[styles.circlesTitle, { color: colors.textPrimary }]}>
+                    In anderen Circles-Apps anzeigen
+                  </Text>
+                  <Text style={[styles.circlesDesc, { color: colors.textSecondary }]}>
+                    Zeigt deinen Namen & dein Foto in Apps wie Metri – statt nur deiner Adresse.
+                  </Text>
+                </View>
+                {circles.busy ? (
+                  <ActivityIndicator color={colors.primary} style={{ width: 51 }} />
+                ) : (
+                  <Switch
+                    value={circles.published === true}
+                    onValueChange={handleToggleCircles}
+                    disabled={circles.published === null}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.onPrimary}
+                    ios_backgroundColor={colors.border}
+                  />
+                )}
+              </View>
+              <Text style={[styles.circlesNote, { color: colors.textTertiary }]}>
+                Öffentlich & dauerhaft. Du kannst es jederzeit wieder ausschalten.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Save Button */}
         <Pressable
           style={[styles.saveButton, { backgroundColor: colors.primary }, saving && { opacity: 0.6 }]}
@@ -424,6 +519,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     marginTop: 6,
+  },
+  circlesCard: {
+    borderRadius: 12,
+    padding: 16,
+  },
+  circlesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  circlesTextWrap: {
+    flex: 1,
+  },
+  circlesTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+  },
+  circlesDesc: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    marginTop: 2,
+  },
+  circlesNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 12,
   },
   saveButton: {
     height: 48,
