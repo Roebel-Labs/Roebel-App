@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CalendarIcon, BookIcon } from '@/components/Icons';
 import { formatRelativeTimestamp } from '@/lib/utils';
+import { cleanNotificationTitle, cleanNotificationBody } from '@/lib/notification-display';
 import type { NotificationLogEntry } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -26,11 +27,36 @@ export default function NotificationCard({ notification, isRead, onPress }: Prop
   const handlePress = () => {
     onPress(notification);
 
-    const data = notification.data;
-    if (data?.type === 'event' && data?.eventId) {
-      router.push(`/event/${data.eventId}` as any);
-    } else if (data?.type === 'news' && data?.slug) {
-      router.push(`/news/${data.slug}` as any);
+    const data = notification.data as
+      | {
+          type?: string;
+          eventId?: string;
+          slug?: string;
+          postId?: string;
+          conversationId?: string;
+          [key: string]: unknown;
+        }
+      | null;
+
+    switch (data?.type) {
+      case 'event':
+        if (data.eventId) router.push(`/event/${data.eventId}` as any);
+        break;
+      case 'news':
+        if (data.slug) router.push(`/news/${data.slug}` as any);
+        break;
+      case 'post':
+      case 'post_like':
+      case 'post_comment':
+        if (data.postId) router.push(`/post/${data.postId}` as any);
+        break;
+      case 'direct_message':
+        if (data.conversationId) router.push(`/messages/${data.conversationId}` as any);
+        break;
+      // org_invite is actioned via the in-app InviteNotificationCard in the
+      // same inbox; tapping the push entry has no separate destination.
+      default:
+        break;
     }
   };
 
@@ -48,10 +74,10 @@ export default function NotificationCard({ notification, isRead, onPress }: Prop
           style={[styles.title, { color: colors.textPrimary, fontFamily: isRead ? 'Inter-Regular' : 'Inter-Medium' }]}
           numberOfLines={1}
         >
-          {notification.title}
+          {cleanNotificationTitle(notification.title, notification.notification_type)}
         </Text>
         <Text style={[styles.body, { color: colors.textSecondary }]} numberOfLines={2}>
-          {notification.body}
+          {cleanNotificationBody(notification.body)}
         </Text>
       </View>
       <Text style={[styles.timestamp, { color: colors.textTertiary }]}>

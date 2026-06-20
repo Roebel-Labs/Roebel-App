@@ -17,6 +17,19 @@ Built & deployed to prod (Supabase MCP):
 
 Then wire `claimReward(wallet, "proposal_vote", proposalId)` into the vote-success path to see it end-to-end. Tune amounts anytime in `reward_config` (no deploy).
 
+## Implementation status (Phase 2 — close the loop — 2026-06-20)
+
+Built & deployed (the SINK side — spend Münzen on lootbox keys → back to the funder):
+- DB: `lootboxes.muenzen_price_atto` (per-box price, seeded 5 Münzen on published boxes, tunable); `muenzen_charges` (unique `tx_hash` = idempotency); `grant_lootbox_key()` RPC (grants a key without touching points). Migration: [`supabase/migrations/20260620_roebel_muenzen_lootbox_spend.sql`](../../../supabase/migrations/20260620_roebel_muenzen_lootbox_spend.sql).
+- Edge fn `spend-muenzen` (ACTIVE): **quote** (`→ funder, priceAtto`) + **settle** (verify the user's ERC-1155 payment tx to the funder by parsing `TransferSingle` logs, then grant). Source: [`apps/expo/supabase/functions/spend-muenzen/index.ts`](../../../apps/expo/supabase/functions/spend-muenzen/index.ts).
+- Client: [`apps/expo/lib/lootbox-muenzen.ts`](../../../apps/expo/lib/lootbox-muenzen.ts) `buyLootboxKeyWithMuenzen(account, lootboxId)` (quote → pay funder → settle).
+
+**UI cutover deferred on purpose:** the live Schatzkammer still buys keys with points via
+`purchase_lootbox_key`. Swapping the button to `buyLootboxKeyWithMuenzen` should happen only
+**after the funder float is seeded** (step above) so key-buying never breaks for users. The
+chest *opening* (`open_lootbox`) is unchanged — it consumes keys, not currency. `coin_bundle`
+drops still grant points today; they'll become a funder payout (or be retired) in Phase 4.
+
 ## 1. Goal
 
 Migrate the Röbel app's off-chain "points" economy (Missions, Schatzkammer keys,

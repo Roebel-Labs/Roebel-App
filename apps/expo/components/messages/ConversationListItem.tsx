@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import { safeDisplayName, type ConversationWithLastMessage } from '@/lib/supabase-messages';
+import { cleanNotificationBody } from '@/lib/notification-display';
 
 type Props = {
   conversation: ConversationWithLastMessage;
@@ -34,16 +35,9 @@ function formatTimestamp(isoDate: string): string {
 function getPreviewText(message: ConversationWithLastMessage['lastMessage']): string {
   if (!message) return '';
   if (message.sticker_reward_id) return '🎁 Sticker';
-  const content = message.content ?? '';
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed?.type === 'listing_inquiry' || parsed?.type === 'product_inquiry') {
-      return `📦 ${parsed.title || 'Marktplatz-Anfrage'}`;
-    }
-  } catch {
-    // Not JSON
-  }
-  return content;
+  // Shared with notification rendering: marketplace inquiries (JSON payloads)
+  // become a short "📦 …" preview instead of raw JSON.
+  return cleanNotificationBody(message.content ?? '');
 }
 
 export default function ConversationListItem({ conversation, onPress }: Props) {

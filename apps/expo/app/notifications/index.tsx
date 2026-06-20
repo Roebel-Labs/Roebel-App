@@ -14,6 +14,7 @@ import { useNotificationsContext } from '@/context/NotificationsContext';
 import NotificationCard from '@/components/NotificationCard';
 import InviteNotificationCard from '@/components/InviteNotificationCard';
 import { NotificationCardSkeleton } from '@/components/SkeletonLoader';
+import { cleanNotificationTitle, cleanNotificationBody } from '@/lib/notification-display';
 import type { NotificationLogEntry, UserNotification } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -96,8 +97,12 @@ export default function NotificationsInboxScreen() {
         }}
         style={[styles.genericCard, { backgroundColor: colors.surface }]}
       >
-        <Text style={[styles.genericTitle, { color: colors.textPrimary }]}>{item.data.title}</Text>
-        <Text style={[styles.genericBody, { color: colors.textSecondary }]}>{item.data.body}</Text>
+        <Text style={[styles.genericTitle, { color: colors.textPrimary }]}>
+          {cleanNotificationTitle(item.data.title, item.data.type)}
+        </Text>
+        <Text style={[styles.genericBody, { color: colors.textSecondary }]}>
+          {cleanNotificationBody(item.data.body)}
+        </Text>
       </Pressable>
     );
   };

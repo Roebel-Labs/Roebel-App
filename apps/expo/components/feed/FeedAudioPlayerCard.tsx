@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   GestureResponderEvent,
   LayoutChangeEvent,
   Platform,
@@ -168,6 +169,24 @@ export default function FeedAudioPlayerCard({ data }: Props) {
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
   }, [isPlaying]);
+
+  // ── Stop when the app leaves the foreground ─────────────
+  // Without background-audio mode the OS suspends the session on close and would
+  // otherwise auto-resume on the next launch. Explicitly stop so the track stays
+  // paused until the user taps play again.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        try {
+          player?.pause();
+        } catch {
+          /* noop */
+        }
+        setIsPlaying(false);
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
 
   const toggle = useCallback(async () => {
     if (!player) return;
