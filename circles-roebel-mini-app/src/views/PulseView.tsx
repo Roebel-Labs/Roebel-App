@@ -16,7 +16,8 @@ import { explorerTx } from "../lib/citizens";
 import { fmt, fmtInt, shortAddr, timeAgo } from "../lib/format";
 import { ChartCard, PageHeader, KpiCard, Pill, ScoreBar, Skeleton, SkeletonGrid, EmptyHint } from "../components/ui";
 import { AreaChart, SplitBar } from "../components/charts";
-import { Coins, Activity, Users, Flame, ArrowUpRight } from "../components/icons";
+import { Activity, Users, Flame, ArrowUpRight } from "../components/icons";
+import coinImg from "../assets/roebel-coin.png";
 
 const KINDS: (FlowKind | "all")[] = ["all", "mint", "reward", "spend", "transfer"];
 const KIND_TONE: Record<FlowKind, "info" | "success" | "danger" | "violet"> = {
@@ -61,7 +62,7 @@ export default function PulseView() {
         <SkeletonGrid count={4} />
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <KpiCard label="Volume" value={fmt(summary.totalAmount, 0)} sub="Röbel Coins (recent)" tone="primary" icon={<Coins className="h-5 w-5" />} />
+          <KpiCard label="Volume" value={fmt(summary.totalAmount, 0)} sub="Röbel Coins (recent)" tone="primary" icon={<img src={coinImg} alt="" className="h-6 w-6" />} />
           <KpiCard label="Transfers" value={fmtInt(summary.totalCount)} sub="on-chain events" tone="info" icon={<Activity className="h-5 w-5" />} />
           <KpiCard label="Active" value={fmtInt(summary.activeAddresses)} sub="wallets moving coins" tone="success" icon={<Users className="h-5 w-5" />} />
           <KpiCard label="Mints" value={fmtInt(mintCount)} sub="new coins minted" tone="warning" icon={<Flame className="h-5 w-5" />} />

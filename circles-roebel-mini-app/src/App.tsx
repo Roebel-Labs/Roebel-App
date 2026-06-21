@@ -5,6 +5,7 @@ import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
 import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
 import { Coins, Activity, Globe, UserPlus, Ticket, ArrowUpRight } from "./components/icons";
+import roebelLogo from "./assets/roebel-logo.png";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import NetworkView from "./views/NetworkView";
@@ -85,9 +86,11 @@ export default function App() {
       {/* Sticky brand + tab bar */}
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 px-4 pb-2.5 pt-3 backdrop-blur-md">
         <div className="mb-2.5 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-gradient-to-br from-[#2b5aa8] to-[#194383] text-white shadow-[0_6px_16px_-6px_rgba(25,67,131,0.7)]">
-            <Coins className="h-5 w-5" />
-          </div>
+          <img
+            src={roebelLogo}
+            alt="Röbel"
+            className="h-9 w-9 rounded-[11px] shadow-[0_6px_16px_-6px_rgba(25,67,131,0.7)]"
+          />
           <div className="min-w-0 leading-tight">
             <h1 className="font-display text-[17px] font-extrabold tracking-tight text-foreground">Röbel</h1>
             <p className="truncate text-[11px] text-muted-foreground">A town's money on Circles · Gnosis</p>

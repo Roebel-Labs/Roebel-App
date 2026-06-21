@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Address } from "viem";
 import { Card, ChartCard, PageHeader } from "../components/ui";
 import { Ticket, Printer, Plus, Sparkles } from "../components/icons";
+import coin3d from "../assets/roebel-coin-3d.png";
 import { SUPABASE_URL, SUPABASE_ANON as ANON } from "../lib/supabase";
 import { track } from "../lib/analytics";
 
@@ -136,6 +137,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
       ) : (
         <>
           <Card className="p-5 text-center">
+            <img src={coin3d} alt="" className="mx-auto mb-2 h-16 w-16 drop-shadow-[0_10px_18px_rgba(25,67,131,0.2)]" />
             <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
               <Sparkles className="h-3 w-3" /> Event live
             </div>

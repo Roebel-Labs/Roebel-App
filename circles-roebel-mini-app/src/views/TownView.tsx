@@ -19,9 +19,10 @@ import { toCsv, downloadCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { Coins, ShieldCheck, Users, Lock, Trophy, Activity, Download } from "../components/icons";
+import { ShieldCheck, Users, Lock, Trophy, Activity, Download } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
+import coinImg from "../assets/roebel-coin.png";
 
 export default function TownView({ connected }: { connected: Address | null }) {
   const [stats, setStats] = useState<TownStats | null>(null);
@@ -63,7 +64,7 @@ export default function TownView({ connected }: { connected: Address | null }) {
             <Skeleton className="h-[74px]" />
           ) : (
             <div className="grid grid-cols-3 gap-3">
-              <KpiCard label="Your coins" value={fmt(impact.balance, 0)} sub="Röbel Coins" tone="primary" icon={<Coins className="h-5 w-5" />} />
+              <KpiCard label="Your coins" value={fmt(impact.balance, 0)} sub="Röbel Coins" tone="primary" icon={<img src={coinImg} alt="" className="h-6 w-6" />} />
               <KpiCard label="Your rank" value={impact.rank ? `#${impact.rank}` : "—"} sub={`of ${impact.total}`} tone="success" icon={<Trophy className="h-5 w-5" />} />
               <KpiCard label="Flows" value={`${impact.inCount}↓ ${impact.outCount}↑`} sub="in / out" tone="info" icon={<Activity className="h-5 w-5" />} />
             </div>
@@ -77,7 +78,7 @@ export default function TownView({ connected }: { connected: Address | null }) {
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <KpiCard label="Verified" value={`${stats.verified}/${stats.citizens}`} sub="citizens" tone="success" icon={<ShieldCheck className="h-5 w-5" />} />
-          <KpiCard label="Supply" value={fmt(stats.supply, 0)} sub="Röbel Coins" tone="primary" icon={<Coins className="h-5 w-5" />} />
+          <KpiCard label="Supply" value={fmt(stats.supply, 0)} sub="Röbel Coins" tone="primary" icon={<img src={coinImg} alt="" className="h-6 w-6" />} />
           <KpiCard label="Holders" value={fmtInt(stats.holders)} sub="wallets" tone="info" icon={<Users className="h-5 w-5" />} />
           <KpiCard label="Collateral" value={fmt(stats.collateral, 0)} sub="personal CRC locked" tone="violet" icon={<Lock className="h-5 w-5" />} />
         </div>
