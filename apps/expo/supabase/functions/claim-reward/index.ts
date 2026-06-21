@@ -72,11 +72,19 @@ const verifiers: Record<string, Verifier> = {
   // Rewards attending a registered local event (ref = reward_events.id) with a small RCRC
   // "was in Röbel" badge — citizens AND onboarded tourists. Gated to active, in-window events.
   event_attend: async (_wallet, ref) => {
-    const { data } = await db.from("reward_events").select("active, starts_at, expires_at").eq("id", ref).maybeSingle();
+    const { data } = await db.from("reward_events").select("active, starts_at, expires_at, max_rewards").eq("id", ref).maybeSingle();
     if (!data || !data.active) return { ok: false, reason: "event not active" };
     const now = Date.now();
     if (data.starts_at && now < Date.parse(data.starts_at)) return { ok: false, reason: "event not started" };
     if (data.expires_at && now > Date.parse(data.expires_at)) return { ok: false, reason: "event ended" };
+    // Per-event budget cap (anti-Sybil): reject once the event has paid out its quota.
+    // The current claim is already reserved (pending), so it's included in the count.
+    if (data.max_rewards != null) {
+      const { count } = await db.from("reward_claims")
+        .select("id", { count: "exact", head: true })
+        .eq("action", "event_attend").eq("reference_id", ref).neq("status", "rejected");
+      if ((count ?? 0) > data.max_rewards) return { ok: false, reason: "event reward budget reached" };
+    }
     return { ok: true };
   },
 };

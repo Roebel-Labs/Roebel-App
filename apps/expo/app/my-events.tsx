@@ -2,9 +2,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, Stack } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import { useActiveAccount } from 'thirdweb/react';
+import Skeleton from '@/components/ui/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { ArrowLeftIcon, HeartIcon, EyeIcon } from '@/components/Icons';
@@ -29,12 +32,21 @@ export default function MyEventsScreen() {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const account = useActiveAccount();
+  const { user } = useUser();
 
   const [events, setEvents] = useState<EventWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<AccountRole | null>(null);
 
   const isOrg = activeAccount?.account_type === 'organisation';
+  // Only verified citizens may create reward-bearing event QRs (the mini-app + edge fn
+  // re-check CitizenNFT server-side — this just hides the button for non-citizens).
+  const isCitizen = !!user?.is_verified_citizen;
+
+  const openCreateQr = useCallback(() => {
+    const base = process.env.EXPO_PUBLIC_CIRCLES_INVITER_URL || 'https://circles-inviter.vercel.app';
+    void openBrowserAsync(`${base}?inviter=${account?.address ?? ''}`);
+  }, [account?.address]);
 
   const fetchEvents = useCallback(async () => {
     if (!activeAccount?.id) {
@@ -162,9 +174,32 @@ export default function MyEventsScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
+      {isCitizen && (
+        <Pressable
+          onPress={openCreateQr}
+          style={({ pressed }) => [styles.qrCta, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Event-QR-Code erstellen"
+        >
+          <Text style={styles.qrCtaText}>＋ Event-QR-Code erstellen</Text>
+        </Pressable>
+      )}
+
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View
+              key={i}
+              style={[styles.eventRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Skeleton width={60} height={60} radius={8} />
+              <View style={{ flex: 1, gap: 8, justifyContent: 'center' }}>
+                <Skeleton width={170} height={14} radius={6} />
+                <Skeleton width={100} height={11} radius={6} />
+                <Skeleton width={120} height={18} radius={10} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : events.length === 0 ? (
         <View style={styles.center}>
@@ -217,6 +252,19 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
+  },
+  qrCta: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrCtaText: {
+    color: '#fff',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
   },
   list: {
     padding: 16,
