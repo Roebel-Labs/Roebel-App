@@ -130,13 +130,12 @@ only ever pays for real attendees.
 
 **Live:** RCRC mint (1:1 backed) · on-chain mint gate · earn rail (5 verifiers, funder funded
 with 20 RCRC) · daily/hourly mint · Circles avatar profiles · Smart Event QR (create+scan+A4 PDF,
-edge fns deployed) · tourist onboarding primitive.
+edge fns deployed) · tourist onboarding primitive · **lootbox keys bought with RCRC** (Schatzkammer
+buy flow + top-right balance tag now show/charge Röbel Münzen → spend recycles to the funder).
 
-**Pending wires (small):**
-- **Lootbox purchase in RCRC** — backend (`spend-muenzen`) + client helper deployed; the
-  Schatzkammer buy button still charges off-chain points. One UI cutover to flip.
-- **Treasury screen** shows the Safe; add an "operative Mittel" line for the funder's RCRC.
+**Pending:**
 - **Adoption:** 2 of 15 citizens have joined+minted; onboarding the rest is operational.
+- **Operator CRC budget** — keep the operator funded with personal CRC for tourist/event invites.
 - **Phase 4:** retire off-chain points entirely (needs a balance-migration policy decision).
 
 ---

@@ -21,11 +21,18 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import BottomDrawer from '@/components/BottomDrawer';
 import LootboxCard from '@/components/rewards/LootboxCard';
 import OpenedLootboxCard from '@/components/rewards/OpenedLootboxCard';
-import CoinBalanceBadge from '@/components/rewards/CoinBalanceBadge';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { buyLootboxKeyWithMuenzen } from '@/lib/lootbox-muenzen';
 import type { Lootbox, UserLootboxReward } from '@/lib/supabase-rewards';
 
 const HERO = require('../../assets/illustration/gamification/treasury_chamber.png');
 const COIN_SMALL = require('../../assets/illustration/gamification/single.png');
+
+/** Lootbox key price in whole Röbel Münzen (from muenzen_price_atto; default 5). */
+const priceRcrc = (lb: Lootbox | null) => {
+  const atto = (lb as any)?.muenzen_price_atto;
+  return atto != null ? Math.round(Number(atto) / 1e18) : 5;
+};
 
 export default function SchatzkammerScreen() {
   const router = useRouter();
@@ -33,14 +40,14 @@ export default function SchatzkammerScreen() {
   const { isConnected } = useUser();
   const { showSnackbar } = useSnackbar();
   const {
-    coins,
     lootboxes,
     userRewards,
     keyCountFor,
-    buyKey,
     refresh,
     isLoading,
   } = useRewards();
+  // Lootbox keys are now bought with real Röbel Münzen (RCRC), not off-chain points.
+  const { talerBalance, account: gnosisAccount } = useRoebelTaler();
 
   const { buy } = useLocalSearchParams<{ buy?: string }>();
   const [buySheetLootbox, setBuySheetLootbox] = useState<Lootbox | null>(null);
@@ -83,33 +90,36 @@ export default function SchatzkammerScreen() {
         } as any);
         return;
       }
-      if (coins >= lootbox.coins_per_key) {
+      const price = priceRcrc(lootbox);
+      if (talerBalance >= price) {
         setBuySheetLootbox(lootbox);
       } else {
         showSnackbar({
-          message: `Noch ${lootbox.coins_per_key - coins} Münzen nötig`,
+          message: `Noch ${Math.ceil(price - talerBalance)} Röbel Münzen nötig`,
         });
       }
     },
-    [coins, isConnected, keyCountFor, router, showSnackbar]
+    [talerBalance, isConnected, keyCountFor, router, showSnackbar]
   );
 
   const handleBuyKey = useCallback(async () => {
     if (!buySheetLootbox) return;
+    if (!gnosisAccount) {
+      showSnackbar({ message: 'Wallet noch nicht bereit' });
+      return;
+    }
+    const target = buySheetLootbox;
     setIsBuying(true);
     try {
-      const res = await buyKey(buySheetLootbox.id);
-      if (res.success) {
+      const res = await buyLootboxKeyWithMuenzen(gnosisAccount, target.id);
+      if (res.status === 'settled' || res.status === 'already_settled') {
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         }
-        const target = buySheetLootbox;
         setBuySheetLootbox(null);
-        showSnackbar({
-          message: `Schlüssel gekauft (−${target.coins_per_key} Münzen)`,
-        });
-        // Jump straight to the lootbox detail page; the user has a key in
-        // hand now, so the page will show the "Jetzt öffnen" CTA.
+        showSnackbar({ message: `Schlüssel gekauft (−${priceRcrc(target)} Röbel Münzen)` });
+        await refresh();
+        // Jump to the detail page; the user has a key now → "Jetzt öffnen" CTA.
         setTimeout(
           () =>
             router.push({
@@ -118,15 +128,15 @@ export default function SchatzkammerScreen() {
             } as any),
           250
         );
-      } else if (res.error === 'insufficient_balance') {
-        showSnackbar({ message: 'Nicht genug Münzen' });
+      } else if (res.status === 'insufficient') {
+        showSnackbar({ message: 'Nicht genug Röbel Münzen' });
       } else {
-        showSnackbar({ message: 'Fehler beim Kauf' });
+        showSnackbar({ message: res.reason || 'Fehler beim Kauf' });
       }
     } finally {
       setIsBuying(false);
     }
-  }, [buyKey, buySheetLootbox, router, showSnackbar]);
+  }, [gnosisAccount, buySheetLootbox, router, showSnackbar, refresh]);
 
   const handleOpenedPress = useCallback(
     (ur: UserLootboxReward) => {
@@ -175,7 +185,15 @@ export default function SchatzkammerScreen() {
           >
             <ChevronLeftIcon width={24} height={24} color="#000" />
           </Pressable>
-          <CoinBalanceBadge />
+          <Pressable
+            onPress={() => router.push('/rewards' as any)}
+            style={styles.rcrcBadge}
+            accessibilityRole="button"
+            accessibilityLabel={`${Math.round(talerBalance)} Röbel Münzen`}
+          >
+            <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
+            <Text style={styles.rcrcBadgeText}>{Math.round(talerBalance).toLocaleString('de-DE')}</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
 
@@ -209,7 +227,7 @@ export default function SchatzkammerScreen() {
                       key={lootbox.id}
                       lootbox={lootbox}
                       hasKey={keyCountFor(lootbox.id) > 0}
-                      canAfford={coins >= lootbox.coins_per_key}
+                      canAfford={talerBalance >= priceRcrc(lootbox)}
                       onPress={() => handleChestPress(lootbox)}
                     />
                   ))}
@@ -262,8 +280,8 @@ export default function SchatzkammerScreen() {
             Schlüssel kaufen
           </Text>
           <Text style={[styles.buyBody, { color: colors.textSecondary }]}>
-            Mecky gibt dir einen Schlüssel für {buySheetLootbox?.coins_per_key ?? 200}{' '}
-            Münzen. Damit kannst du die Truhe einmal öffnen.
+            Mecky gibt dir einen Schlüssel für {priceRcrc(buySheetLootbox)}{' '}
+            Röbel Münzen. Damit kannst du die Truhe einmal öffnen.
           </Text>
           <View
             style={[
@@ -280,22 +298,18 @@ export default function SchatzkammerScreen() {
             <View style={styles.balanceInline}>
               <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
               <Text style={[styles.buyStatValue, { color: colors.textPrimary }]}>
-                {coins.toLocaleString('de-DE')}
+                {Math.round(talerBalance).toLocaleString('de-DE')}
               </Text>
             </View>
           </View>
           <Pressable
             onPress={handleBuyKey}
-            disabled={
-              isBuying ||
-              !buySheetLootbox ||
-              coins < (buySheetLootbox?.coins_per_key ?? 0)
-            }
+            disabled={isBuying || !buySheetLootbox || talerBalance < priceRcrc(buySheetLootbox)}
             style={({ pressed }) => [
               styles.buyCTA,
               {
                 backgroundColor:
-                  !buySheetLootbox || coins < buySheetLootbox.coins_per_key
+                  !buySheetLootbox || talerBalance < priceRcrc(buySheetLootbox)
                     ? colors.disabled
                     : colors.primary,
                 opacity: pressed ? 0.85 : 1,
@@ -308,9 +322,9 @@ export default function SchatzkammerScreen() {
               <Text style={styles.buyCTAText}>
                 {!buySheetLootbox
                   ? 'Schlüssel kaufen'
-                  : coins < buySheetLootbox.coins_per_key
-                    ? 'Nicht genug Münzen'
-                    : `Für ${buySheetLootbox.coins_per_key} Münzen kaufen`}
+                  : talerBalance < priceRcrc(buySheetLootbox)
+                    ? 'Nicht genug Röbel Münzen'
+                    : `Für ${priceRcrc(buySheetLootbox)} Röbel Münzen kaufen`}
               </Text>
             )}
           </Pressable>
@@ -388,6 +402,20 @@ const styles = StyleSheet.create({
   },
   filler: {
     flex: 1,
+  },
+  rcrcBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    height: 36,
+  },
+  rcrcBadgeText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    color: '#194383',
   },
   balanceInline: {
     flexDirection: 'row',

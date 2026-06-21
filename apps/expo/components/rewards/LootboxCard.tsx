@@ -99,7 +99,9 @@ export default function LootboxCard({
                 },
               ]}
             >
-              {lootbox.coins_per_key}
+              {(lootbox as any).muenzen_price_atto != null
+                ? Math.round(Number((lootbox as any).muenzen_price_atto) / 1e18)
+                : 5}
             </Text>
           </>
         )}
