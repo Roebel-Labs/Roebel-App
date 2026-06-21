@@ -16,5 +16,5 @@ create table if not exists public.reward_events (
 alter table public.reward_events enable row level security;
 
 insert into public.reward_config (action, amount_atto, enabled, per_reference, daily_cap, description) values
-  ('event_attend', 500000000000000000, true, true, null, 'Bei einem lokalen Röbel-Event dabei gewesen (1x pro Event; auch für Gäste)')
+  ('event_attend', 5000000000000000000, true, true, null, 'Bei einem lokalen Röbel-Event dabei gewesen (1x pro Event; auch für Gäste)')
 on conflict (action) do nothing;
