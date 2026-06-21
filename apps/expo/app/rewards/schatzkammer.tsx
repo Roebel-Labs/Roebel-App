@@ -27,6 +27,7 @@ import type { Lootbox, UserLootboxReward } from '@/lib/supabase-rewards';
 
 const HERO = require('../../assets/illustration/gamification/treasury_chamber.png');
 const COIN_SMALL = require('../../assets/illustration/gamification/single.png');
+const KEY_IMG = require('../../assets/illustration/gamification/key.png');
 
 /** Lootbox key price in whole Röbel Münzen (from muenzen_price_atto; default 5). */
 const priceRcrc = (lb: Lootbox | null) => {
@@ -271,7 +272,7 @@ export default function SchatzkammerScreen() {
         onClose={() => setBuySheetLootbox(null)}
       >
         <View style={styles.buySheet}>
-          <Text style={styles.buyEmoji}>🗝️</Text>
+          <Image source={KEY_IMG} style={styles.buyKeyImage} resizeMode="contain" />
           <Text style={[styles.buyTitle, { color: colors.textPrimary }]}>
             Schlüssel kaufen
           </Text>
@@ -428,8 +429,9 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     alignItems: 'stretch',
   },
-  buyEmoji: {
-    fontSize: 40,
+  buyKeyImage: {
+    width: 72,
+    height: 72,
     alignSelf: 'center',
   },
   buyTitle: {
