@@ -272,6 +272,28 @@ export function prepareOnboard(inviter: string): PreparedTransaction {
 	});
 }
 
+const FAR_EXPIRY = 4102444800n; // ~year 2100 (uint96) — far-future trust expiry
+
+/**
+ * Peer-invite: a citizen trusts `addr` (the Circles "invitation"). Once trusted, that
+ * address can registerHuman(citizen) and become a plain Circles human — minting their own
+ * personal "Münzen" (NOT the Röbel Münzen group token). The ~96 CRC invite cost is burned
+ * from the citizen when the guest registers. This does NOT grant RCRC minting (that needs a
+ * CitizenNFT + the group's on-chain membership condition).
+ */
+export function prepareTrust(addr: string): PreparedTransaction {
+	return prepareContractCall({
+		contract: hubWrite,
+		method: "function trust(address,uint96)",
+		params: [addr, FAR_EXPIRY],
+	});
+}
+
+/** A guest's own personal Circles balance shown in-app as "Münzen" (their personal CRC). */
+export async function getMuenzenBalance(address: string): Promise<bigint> {
+	return getPersonalCrcBalance(address);
+}
+
 /** Contribute `amount` (18-dec) of the citizen's own daily mint to the shared Röbel Münzen. */
 export function prepareContributeToRoebelTaler(self: string, amount: bigint): PreparedTransaction {
 	return prepareContractCall({
