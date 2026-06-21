@@ -112,7 +112,8 @@ export function TrustGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphE
   const idx = React.useMemo(() => new Map(nodes.map((n, i) => [n.id, i])), [nodes]);
   const [view, setView] = React.useState({ x: 0, y: 0, scale: 1 });
   const [hover, setHover] = React.useState<string | null>(null);
-  const drag = React.useRef<{ x: number; y: number } | null>(null);
+  const drag = React.useRef<{ ox: number; oy: number } | null>(null);
+  const svgRef = React.useRef<SVGSVGElement | null>(null);
 
   const neighbors = React.useMemo(() => {
     if (!hover) return null;
@@ -124,18 +125,32 @@ export function TrustGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphE
     return set;
   }, [hover, edges]);
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.12 : 0.89;
-    setView((v) => ({ ...v, scale: Math.max(0.4, Math.min(3, v.scale * factor)) }));
+  // Wheel zoom via a native, non-passive listener — React registers onWheel as
+  // passive, so e.preventDefault() there would warn and no-op.
+  React.useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      setView((v) => ({ ...v, scale: Math.max(0.4, Math.min(3, v.scale * factor)) }));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    drag.current = { ox: e.clientX - view.x, oy: e.clientY - view.y };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
-  const onPointerDown = (e: React.PointerEvent) => {
-    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    setView((v) => ({ ...v, x: e.clientX - drag.current!.x, y: e.clientY - drag.current!.y }));
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Capture the origin locally: the setView updater can run after pointerup
+    // has cleared drag.current, so never deref the ref inside it.
+    const d = drag.current;
+    if (!d) return;
+    const nx = e.clientX - d.ox;
+    const ny = e.clientY - d.oy;
+    setView((v) => ({ ...v, x: nx, y: ny }));
   };
   const onPointerUp = () => {
     drag.current = null;
@@ -154,10 +169,10 @@ export function TrustGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphE
   return (
     <div className="relative">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         className="w-full cursor-grab touch-none rounded-md border border-border bg-muted/20 active:cursor-grabbing"
         style={{ height: 540 }}
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
