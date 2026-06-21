@@ -165,6 +165,23 @@ const startOfDay = (ms: number) => {
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
+// Personal "your impact" for the connected wallet, derived from the reputation
+// list the dashboards already fetch (no extra RPC). A coin-holder is always in
+// the reputation list (it includes every holder), so held === group balance.
+export interface MyImpact {
+  balance: number;
+  rank: number | null;
+  total: number;
+  inCount: number;
+  outCount: number;
+}
+export function getMyImpact(wallet: string, rep: RepNode[]): MyImpact {
+  const w = wallet.toLowerCase();
+  const idx = rep.findIndex((r) => r.address.toLowerCase() === w);
+  const node = idx >= 0 ? rep[idx] : null;
+  return { balance: node?.held ?? 0, rank: idx >= 0 ? idx + 1 : null, total: rep.length, inCount: node?.inCount ?? 0, outCount: node?.outCount ?? 0 };
+}
+
 /** Bucket transfer volume by day over the last `days` (oldest → newest) for the area chart. */
 export function dailyVolume(transfers: Transfer[], days = 14): DayBucket[] {
   const dayMs = 86_400_000;

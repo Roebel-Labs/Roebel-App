@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { onWalletChange } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
+import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
 import { Coins, Activity, Globe, UserPlus, Ticket, ArrowUpRight } from "./components/icons";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
@@ -19,28 +20,65 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "event", label: "Event", icon: Ticket },
 ];
 
-// The Röbel app links here as `?inviter=<citizen address>` — use it as the initial inviter
-// (and jump straight to the Event tab) even before the Circles host injects the wallet.
-const urlInviter = (() => {
+const urlParam = (k: string) => {
   try {
-    const p = new URLSearchParams(window.location.search).get("inviter");
-    return p && isAddress(p) ? getAddress(p) : null;
+    return new URLSearchParams(window.location.search).get(k);
   } catch {
     return null;
   }
+};
+// The Röbel app links here as `?inviter=<citizen address>` — use it as the initial inviter
+// (and jump straight to the Event tab) even before the Circles host injects the wallet.
+const urlInviter = (() => {
+  const p = urlParam("inviter");
+  return p && isAddress(p) ? getAddress(p) : null;
+})();
+// `?ref=<wallet>` — a referral link shared from inside the app (the GrowCard).
+const urlRef = (() => {
+  const p = urlParam("ref");
+  return p && isAddress(p) ? getAddress(p) : null;
 })();
 
 export default function App() {
   const [tab, setTab] = useState<Tab>(urlInviter ? "event" : "town");
   const [inviter, setInviter] = useState<Address | null>(urlInviter);
+  const [connected, setConnected] = useState<Address | null>(null);
+  const connectedOnce = useRef(false);
+  const refLanded = useRef(false);
 
-  // The Circles host injects the connected wallet (used by the Invite/Event views).
+  // Analytics: app_open + visibility-aware heartbeat (time spent).
   useEffect(() => {
-    const ret = onWalletChange((addr: string | null) => setInviter(addr && isAddress(addr) ? getAddress(addr) : urlInviter));
+    initAnalytics({ ref: urlRef });
+    track("app_open", { tab: urlInviter ? "event" : "town", hasInviter: !!urlInviter, hasRef: !!urlRef });
+    return startHeartbeat(25);
+  }, []);
+
+  // The Circles host injects the connected wallet (used by Invite/Event + analytics).
+  useEffect(() => {
+    const ret = onWalletChange((addr: string | null) => {
+      const a = addr && isAddress(addr) ? getAddress(addr) : null;
+      setConnected(a);
+      setInviter(a ?? urlInviter);
+      setAnalyticsWallet(a);
+      if (a && !connectedOnce.current) {
+        connectedOnce.current = true;
+        track("wallet_connect", {});
+        // Referral attribution: a new wallet connected inside the app via someone's link.
+        if (urlRef && !refLanded.current && urlRef.toLowerCase() !== a.toLowerCase()) {
+          refLanded.current = true;
+          track("referral_landed", { ref: urlRef.toLowerCase() });
+        }
+      }
+    });
     return () => {
       if (typeof ret === "function") (ret as () => void)();
     };
   }, []);
+
+  const selectTab = (id: Tab) => {
+    setTab(id);
+    track("tab_view", { tab: id });
+  };
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col">
@@ -69,7 +107,7 @@ export default function App() {
             return (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => selectTab(t.id)}
                 className={`flex flex-1 min-w-[60px] flex-col items-center gap-1 rounded-[9px] py-1.5 text-[11px] font-medium transition ${
                   active ? "bg-card text-[#194383] shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
@@ -86,7 +124,7 @@ export default function App() {
         <div key={tab} className="rc-rise">
           {tab === "invite" && <InviteView inviter={inviter} />}
           {tab === "event" && <EventInviteView inviter={inviter} />}
-          {tab === "town" && <TownView />}
+          {tab === "town" && <TownView connected={connected} />}
           {tab === "pulse" && <PulseView />}
           {tab === "network" && <NetworkView />}
         </div>

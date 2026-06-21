@@ -1,24 +1,43 @@
-// Town overview — the town's on-chain Röbel Coin economy at a glance: KPIs, collateral
-// backing gauge, citizen verification progress, and the group → citizens trust graph.
-import { useCallback, useEffect, useState } from "react";
-import { getVerifiedSet, getTownStats, getTrustGraph, type TownStats, type TrustGraph } from "../lib/circlesData";
+// Town overview — referral share, personal impact, KPIs, collateral backing,
+// verification, the trust graph, and a weekly CSV export of the on-chain economy.
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Address } from "viem";
+import {
+  getVerifiedSet,
+  getTownStats,
+  getTrustGraph,
+  getReputation,
+  getMyImpact,
+  getRecentTransfers,
+  type TownStats,
+  type TrustGraph,
+  type RepNode,
+} from "../lib/circlesData";
+import { ROEBEL_CITIZENS } from "../lib/citizens";
 import { fmt, fmtInt, pct } from "../lib/format";
+import { toCsv, downloadCsv, todayStamp } from "../lib/csv";
+import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { Coins, ShieldCheck, Users, Lock } from "../components/icons";
+import { Coins, ShieldCheck, Users, Lock, Trophy, Activity, Download } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
+import GrowCard from "../components/GrowCard";
 
-export default function TownView() {
+export default function TownView({ connected }: { connected: Address | null }) {
   const [stats, setStats] = useState<TownStats | null>(null);
   const [graph, setGraph] = useState<TrustGraph | null>(null);
+  const [rep, setRep] = useState<RepNode[] | null>(null);
+  const [verifiedSet, setVerifiedSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     const verified = await getVerifiedSet();
-    const [s, g] = await Promise.all([getTownStats(verified.size), getTrustGraph(verified)]);
+    setVerifiedSet(verified);
+    const [s, g, r] = await Promise.all([getTownStats(verified.size), getTrustGraph(verified), getReputation(verified)]);
     setStats(s);
     setGraph(g);
+    setRep(r);
     setLoading(false);
   }, []);
   useEffect(() => {
@@ -28,10 +47,29 @@ export default function TownView() {
   const nodes: RadialNode[] = (graph?.nodes ?? []).map((nd) => ({ id: nd.id, label: nd.label, tone: nd.tone, dashed: !nd.trusted }));
   const backing = stats && stats.supply > 0 ? stats.collateral / stats.supply : 0;
   const verifiedPct = stats && stats.citizens > 0 ? (stats.verified / stats.citizens) * 100 : 0;
+  const impact = useMemo(() => (connected && rep ? getMyImpact(connected, rep) : null), [connected, rep]);
 
   return (
     <div className="space-y-4">
       <PageHeader title="Town overview" description="The town's on-chain economy, live from Circles v2 on Gnosis." onRefresh={load} refreshing={loading} />
+
+      {/* Referral share — bring a new wallet into the app */}
+      <GrowCard wallet={connected} />
+
+      {/* Your impact (connected) */}
+      {connected && (
+        <ChartCard title="Your impact" subtitle="Your standing in the town economy">
+          {!impact ? (
+            <Skeleton className="h-[74px]" />
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <KpiCard label="Your coins" value={fmt(impact.balance, 0)} sub="Röbel Coins" tone="primary" icon={<Coins className="h-5 w-5" />} />
+              <KpiCard label="Your rank" value={impact.rank ? `#${impact.rank}` : "—"} sub={`of ${impact.total}`} tone="success" icon={<Trophy className="h-5 w-5" />} />
+              <KpiCard label="Flows" value={`${impact.inCount}↓ ${impact.outCount}↑`} sub="in / out" tone="info" icon={<Activity className="h-5 w-5" />} />
+            </div>
+          )}
+        </ChartCard>
+      )}
 
       {/* KPI grid */}
       {!stats ? (
@@ -95,6 +133,9 @@ export default function TownView() {
           </>
         )}
       </ChartCard>
+
+      {/* Weekly CSV export */}
+      <ExportCard verifiedSet={verifiedSet} rep={rep} />
     </div>
   );
 }
@@ -114,5 +155,90 @@ function Legend() {
         </span>
       ))}
     </div>
+  );
+}
+
+function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNode[] | null }) {
+  const [range, setRange] = useState<"7d" | "all">("7d");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const exportTransfers = async () => {
+    setBusy("transfers");
+    try {
+      const all = await getRecentTransfers(200);
+      const cutoff = Math.floor(Date.now() / 1000) - 7 * 86400;
+      const rows = all
+        .filter((t) => (range === "all" ? true : t.time >= cutoff))
+        .map((t) => ({
+          date: t.time ? new Date(t.time * 1000).toISOString() : "",
+          kind: t.kind,
+          from: t.from,
+          to: t.to,
+          amount: t.amount,
+          tx: t.tx,
+        }));
+      downloadCsv(`roebel-transfers-${todayStamp()}.csv`, toCsv(rows, ["date", "kind", "from", "to", "amount", "tx"]));
+      track("csv_export", { kind: "transfers", rows: rows.length, range });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportCitizens = () => {
+    const rows = ROEBEL_CITIZENS.map((c) => ({ address: c.address, attester: c.attester, verified: verifiedSet.has(c.address.toLowerCase()) }));
+    downloadCsv(`roebel-citizens-${todayStamp()}.csv`, toCsv(rows, ["address", "attester", "verified"]));
+    track("csv_export", { kind: "citizens", rows: rows.length });
+  };
+
+  const exportReputation = () => {
+    const rows = (rep ?? []).map((r, i) => ({
+      rank: i + 1,
+      address: r.address,
+      held: r.held,
+      inCount: r.inCount,
+      outCount: r.outCount,
+      score: r.score,
+      verified: r.verified,
+    }));
+    downloadCsv(`roebel-reputation-${todayStamp()}.csv`, toCsv(rows, ["rank", "address", "held", "inCount", "outCount", "score", "verified"]));
+    track("csv_export", { kind: "reputation", rows: rows.length });
+  };
+
+  const btn = "inline-flex items-center justify-center gap-2 rounded-[10px] border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground transition hover:bg-muted active:scale-[0.99] disabled:opacity-50";
+
+  return (
+    <ChartCard
+      title="Export data"
+      subtitle="Download the town's on-chain activity as CSV."
+      action={
+        <div className="flex rounded-[10px] border border-border p-0.5">
+          {(["7d", "all"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`rounded-[7px] px-2 py-1 text-[11px] font-medium transition ${range === r ? "bg-[#194383] text-white" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {r === "7d" ? "Last 7 days" : "All"}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={exportTransfers} disabled={busy === "transfers"} className={btn}>
+          <Download className="h-4 w-4" />
+          {busy === "transfers" ? "…" : "Transfers"}
+        </button>
+        <button onClick={exportCitizens} className={btn}>
+          <Download className="h-4 w-4" />
+          Citizens
+        </button>
+        <button onClick={exportReputation} disabled={!rep} className={btn}>
+          <Download className="h-4 w-4" />
+          Reputation
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">Transfers honour the range; citizens & reputation are a current snapshot.</p>
+    </ChartCard>
   );
 }

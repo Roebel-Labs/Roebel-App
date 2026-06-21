@@ -5,6 +5,7 @@ import { inviteFarm, getQuota, getQuotaFunding, isHuman, toHostTxs, getSelfFundI
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar } from "../lib/citizens";
 import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner } from "../components/ui";
 import { UserPlus, Wallet, Check, ExternalLink } from "../components/icons";
+import { track } from "../lib/analytics";
 
 type RowStatus = "checking" | "registered" | "open" | "unknown";
 type Msg = { kind: "ok" | "err" | "info"; text: string } | null;
@@ -85,6 +86,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
       setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel Coins").` });
+      track("invite_sent", { count: list.length });
       setExtra("");
       await refreshStatus();
       loadQuota();
@@ -114,6 +116,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         kind: "ok",
         text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel Coins") — 96 CRC burns from you per registration.`,
       });
+      track("self_fund_sent", { count: list.length });
       await refreshStatus();
       getSelfFundInfo(inviter).then(setSelfFund).catch(() => {});
     } catch (e) {

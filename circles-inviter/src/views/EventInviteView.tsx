@@ -3,12 +3,9 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Address } from "viem";
 import { Card, ChartCard, PageHeader } from "../components/ui";
 import { Ticket, Printer, Plus, Sparkles } from "../components/icons";
+import { SUPABASE_URL, SUPABASE_ANON as ANON } from "../lib/supabase";
+import { track } from "../lib/analytics";
 
-// Public Supabase project + anon key (publishable; safe in client). The edge fns gate
-// server-side (create-reward-event requires CitizenNFT).
-const SUPABASE_URL = "https://wwbeqhkslxdxhktqzqti.supabase.co";
-const ANON =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YmVxaGtzbHhkeGhrdHF6cXRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxMTUyMTIsImV4cCI6MjA2ODY5MTIxMn0.ETISOumSNns3OVO-FC10FDQAZQVdJnubx3Qu_iHGHGI";
 // The Röbel app scans this and reads the event id from /e/<id>.
 const EVENT_BASE = "https://www.roebel.app/e/";
 
@@ -72,6 +69,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
       const j = await res.json();
       if (!res.ok || !j.id) throw new Error(j.error || "Could not create event");
       setEvent({ id: j.id, label: label.trim(), expiresAt });
+      track("event_created", { hours });
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
