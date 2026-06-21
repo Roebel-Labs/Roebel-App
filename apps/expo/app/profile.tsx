@@ -198,6 +198,20 @@ const handleRefresh = async () => {
                     onPress={() => router.push('/rewards' as any)}
                   />
                 )}
+                {/* Citizen-only: create a Circles invitation in the mini-app (the invite
+                    creator needs the Circles host-injected wallet, which only the mini-app
+                    has). Opens it with this citizen pre-filled as the inviter. */}
+                {isConnected && isCitizen && (
+                  <ProfileMenuItem
+                    icon={<QrCodeIcon width={20} height={20} color={colors.primary} />}
+                    label="Bürger:in einladen"
+                    onPress={() =>
+                      openBrowserAsync(
+                        `${process.env.EXPO_PUBLIC_CIRCLES_INVITER_URL || 'https://circles-inviter.vercel.app'}?inviter=${user?.wallet_address ?? ''}`
+                      )
+                    }
+                  />
+                )}
                 <ProfileMenuItem
                   icon={<UploadIcon width={20} height={20} color={colors.textPrimary} />}
                   label="Veranstaltung einsenden"
