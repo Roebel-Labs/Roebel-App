@@ -56,7 +56,17 @@ export default function EventScanScreen() {
             setMsg('Du hast diesen Event-Beleg bereits erhalten.');
           } else if (r.status === 'rejected') {
             setEmoji('⌛');
-            setMsg(r.reason === 'event ended' ? 'Dieses Event ist abgelaufen.' : 'Dieser Event-Code ist nicht (mehr) gültig.');
+            // Map the claim-reward verifier reasons (event_attend) to friendly copy.
+            const reason = r.reason ?? '';
+            if (reason === 'event ended') {
+              setMsg('Dieses Event ist abgelaufen.');
+            } else if (reason === 'event not started') {
+              setMsg('Dieses Event hat noch nicht begonnen. Schau später noch einmal vorbei.');
+            } else if (reason === 'event reward budget reached') {
+              setMsg('Für dieses Event sind alle Belege vergeben. Schade — beim nächsten Mal bist du dabei!');
+            } else {
+              setMsg('Dieser Event-Code ist nicht (mehr) gültig.');
+            }
           } else {
             throw new Error(r.reason || 'Konnte nicht eingelöst werden.');
           }
