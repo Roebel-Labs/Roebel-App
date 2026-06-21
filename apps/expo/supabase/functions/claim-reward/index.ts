@@ -69,6 +69,16 @@ const verifiers: Record<string, Verifier> = {
       .ilike("referrer_wallet", wallet).ilike("referred_wallet", ref).limit(1);
     return data && data.length ? { ok: true } : { ok: false, reason: "referral not found" };
   },
+  // Rewards attending a registered local event (ref = reward_events.id) with a small RCRC
+  // "was in Röbel" badge — citizens AND onboarded tourists. Gated to active, in-window events.
+  event_attend: async (_wallet, ref) => {
+    const { data } = await db.from("reward_events").select("active, starts_at, expires_at").eq("id", ref).maybeSingle();
+    if (!data || !data.active) return { ok: false, reason: "event not active" };
+    const now = Date.now();
+    if (data.starts_at && now < Date.parse(data.starts_at)) return { ok: false, reason: "event not started" };
+    if (data.expires_at && now > Date.parse(data.expires_at)) return { ok: false, reason: "event ended" };
+    return { ok: true };
+  },
 };
 
 Deno.serve(async (req: Request) => {
