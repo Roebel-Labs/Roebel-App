@@ -5,14 +5,14 @@ import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
-import FlowView from "./views/FlowView";
 import NetworkView from "./views/NetworkView";
 import EventInviteView from "./views/EventInviteView";
+import PulseView from "./views/PulseView";
 
-type Tab = "town" | "flow" | "network" | "invite" | "event";
+type Tab = "town" | "pulse" | "network" | "invite" | "event";
 const TABS: { id: Tab; label: string }[] = [
   { id: "town", label: "Town" },
-  { id: "flow", label: "Flow" },
+  { id: "pulse", label: "Pulse" },
   { id: "network", label: "Network" },
   { id: "invite", label: "Invite" },
   { id: "event", label: "Event" },
@@ -66,7 +66,7 @@ export default function App() {
         {tab === "invite" && <InviteView inviter={inviter} />}
         {tab === "event" && <EventInviteView inviter={inviter} />}
         {tab === "town" && <TownView />}
-        {tab === "flow" && <FlowView />}
+        {tab === "pulse" && <PulseView />}
         {tab === "network" && <NetworkView />}
 
         <p className="mt-8 text-[11px] text-slate-400">

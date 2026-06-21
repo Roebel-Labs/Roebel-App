@@ -67,14 +67,51 @@ export async function getTrustGraph(verifiedSet: Set<string>): Promise<TrustGrap
   return { centerLabel: "Röbel Münzen", nodes };
 }
 
-export interface Transfer { from: string; to: string; amount: number; time: number; tx: string; }
-export async function getRecentTransfers(limit = 12): Promise<Transfer[]> {
+// The operational funder (rewards out + lootbox spend in) — classifies the token flows.
+export const FUNDER = "0x5ac82fd7f576c86aed8d174074ba707ec1979d9b";
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+export type FlowKind = "mint" | "reward" | "spend" | "transfer";
+const KIND_LABEL: Record<FlowKind, string> = { mint: "Mint", reward: "Reward", spend: "Lootbox", transfer: "Transfer" };
+export const flowLabel = (k: FlowKind) => KIND_LABEL[k];
+function classify(from: string, to: string): FlowKind {
+  const f = from.toLowerCase(), t = to.toLowerCase();
+  if (f === ZERO || f === GROUP) return "mint";       // RCRC minted (citizen groupMint)
+  if (t === FUNDER) return "spend";                    // payment into the funder (e.g. lootbox key)
+  if (f === FUNDER) return "reward";                   // funder reward payout
+  return "transfer";                                   // peer-to-peer
+}
+
+export interface Transfer { from: string; to: string; amount: number; time: number; tx: string; kind: FlowKind; }
+export async function getRecentTransfers(limit = 40): Promise<Transfer[]> {
   const rows = await q("V_CrcV2", "Transfers", [eq("tokenAddress", GROUP)], [{ Column: "blockNumber", SortOrder: "Desc" }], limit);
-  return rows.map((r) => ({
-    from: String(r.from ?? ""),
-    to: String(r.to ?? ""),
-    amount: toCrc(r.value),
-    time: Number(r.timestamp ?? 0),
-    tx: String(r.transactionHash ?? ""),
-  }));
+  return rows.map((r) => {
+    const from = String(r.from ?? ""), to = String(r.to ?? "");
+    return { from, to, amount: toCrc(r.value), time: Number(r.timestamp ?? 0), tx: String(r.transactionHash ?? ""), kind: classify(from, to) };
+  });
+}
+
+// Per-address reputation: RCRC held + flow activity. A simple, transparent score for the
+// reputation graph (held weighted highest, then inbound, then outbound flows).
+export interface RepNode { address: string; held: number; inCount: number; outCount: number; score: number; verified: boolean; }
+export async function getReputation(verifiedSet: Set<string>): Promise<RepNode[]> {
+  const [holders, transfers] = await Promise.all([
+    q("V_CrcV2", "GroupTokenHoldersBalance", [eq("group", GROUP)]),
+    getRecentTransfers(200),
+  ]);
+  const map = new Map<string, RepNode>();
+  const get = (addr: string) => {
+    const k = addr.toLowerCase();
+    if (!map.has(k)) map.set(k, { address: k, held: 0, inCount: 0, outCount: 0, score: 0, verified: verifiedSet.has(k) });
+    return map.get(k)!;
+  };
+  for (const h of holders) get(String(h.holder)).held = toCrc(h.demurragedTotalBalance ?? h.totalBalance);
+  for (const t of transfers) {
+    if (t.from && t.from.toLowerCase() !== ZERO) get(t.from).outCount++;
+    if (t.to) get(t.to).inCount++;
+  }
+  for (const n of map.values()) n.score = n.held + n.inCount * 0.5 + n.outCount * 0.25;
+  return [...map.values()]
+    .filter((n) => n.address !== ZERO && n.address !== GROUP && (n.held > 0 || n.inCount || n.outCount))
+    .sort((a, b) => b.score - a.score);
 }
