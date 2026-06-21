@@ -75,7 +75,7 @@ export async function GET(req: Request) {
           const { count } = await supabase
             .from("reward_claims")
             .select("id", { count: "exact", head: true })
-            .eq("status", "error");
+            .eq("status", "failed");
           erroredClaims = count ?? 0;
         } catch {
           /* ignore */

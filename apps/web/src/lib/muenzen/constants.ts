@@ -155,6 +155,12 @@ export function attoToNumber(v: bigint | string | number | null | undefined): nu
   }
 }
 
+/** Convert a whole-Münzen amount to an 18-decimal atto string (6-dp precision, no float drift). */
+export function numberToAtto(amount: number): string {
+  if (!Number.isFinite(amount) || amount < 0) return "0";
+  return (BigInt(Math.round(amount * 1_000_000)) * 1_000_000_000_000n).toString();
+}
+
 /** Truncate an address for the secondary monospace label (name-first rule). */
 export function shortAddr(addr: string | null | undefined): string {
   if (!addr) return "";
