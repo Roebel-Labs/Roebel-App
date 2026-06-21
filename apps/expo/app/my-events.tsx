@@ -5,7 +5,7 @@ import { useRouter, Stack } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
-import { useUser } from '@/context/UserContext';
+import { useVerificationContext } from '@/context/VerificationContext';
 import { useActiveAccount } from 'thirdweb/react';
 import Skeleton from '@/components/ui/Skeleton';
 import { supabase } from '@/lib/supabase';
@@ -32,16 +32,17 @@ export default function MyEventsScreen() {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const account = useActiveAccount();
-  const { user } = useUser();
+  const { hasCitizenNFT } = useVerificationContext();
 
   const [events, setEvents] = useState<EventWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<AccountRole | null>(null);
 
   const isOrg = activeAccount?.account_type === 'organisation';
-  // Only verified citizens may create reward-bearing event QRs (the mini-app + edge fn
-  // re-check CitizenNFT server-side — this just hides the button for non-citizens).
-  const isCitizen = !!user?.is_verified_citizen;
+  // Only CitizenNFT holders may create reward-bearing event QRs. Gate on the LIVE on-chain
+  // check (useVerificationContext), not the DB is_verified_citizen flag — that flag is stale
+  // for citizens verified on Gnosis. The mini-app + edge fn re-check CitizenNFT server-side too.
+  const isCitizen = hasCitizenNFT;
 
   const openCreateQr = useCallback(() => {
     const base = process.env.EXPO_PUBLIC_CIRCLES_INVITER_URL || 'https://circles-inviter.vercel.app';
