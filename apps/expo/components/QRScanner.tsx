@@ -15,7 +15,7 @@ import ErrorDrawer from './ErrorDrawer';
 const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
@@ -79,6 +79,12 @@ function parseQRCode(data: string): QRScanResult {
       id: cardV1Match[1],
       cardPayload: data,
     };
+  }
+
+  // Smart Event QR: https://www.roebel.app/e/<eventId>
+  const eventMatch = data.match(/roebel\.app\/e\/([0-9a-f-]{36})/i);
+  if (eventMatch) {
+    return { type: 'event', data, id: eventMatch[1] };
   }
 
   // Restaurant order: https://roebel.app/order/{slug}/{tableNumber}
@@ -165,6 +171,9 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         pathname: '/verification/request/[id]',
         params: { id: result.id, type: result.nftType ?? 'citizen' },
       });
+      return;
+    } else if (result.type === 'event' && result.id) {
+      router.push(`/e/${result.id}` as any);
       return;
     } else if (result.type === 'checkpoint') {
       // Handled by parent via onScan
