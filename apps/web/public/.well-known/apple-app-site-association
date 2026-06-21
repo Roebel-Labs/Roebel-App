@@ -11,6 +11,7 @@
           { "/": "/admin/*", "exclude": true, "comment": "Exclude admin" },
           { "/": "/api/*", "exclude": true, "comment": "Exclude API routes" },
 
+          { "/": "/e/*", "comment": "Smart Event QR (Röbel Münzen attendance)" },
           { "/": "/event/*", "comment": "Events (expo native path)" },
           { "/": "/events/*", "comment": "Events (web plural path)" },
           { "/": "/app/events/*", "comment": "Events (authenticated)" },

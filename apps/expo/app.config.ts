@@ -179,6 +179,19 @@ const config: ExpoConfig = {
         },
         category: ['BROWSABLE', 'DEFAULT']
       },
+      // Smart Event QR (/e/<id>) deep links — attendance reward
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'roebel.app', pathPrefix: '/e/' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'www.roebel.app', pathPrefix: '/e/' },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
       // Event deep links
       {
         autoVerify: true,
