@@ -89,7 +89,7 @@ export default function App() {
             <Coins className="h-5 w-5" />
           </div>
           <div className="min-w-0 leading-tight">
-            <h1 className="font-display text-[17px] font-extrabold tracking-tight text-foreground">Röbel Circles</h1>
+            <h1 className="font-display text-[17px] font-extrabold tracking-tight text-foreground">Röbel</h1>
             <p className="truncate text-[11px] text-muted-foreground">A town's money on Circles · Gnosis</p>
           </div>
           {inviter && (

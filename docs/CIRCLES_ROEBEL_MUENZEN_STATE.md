@@ -38,9 +38,9 @@ to "Punkte".
 
 ## Deployed surfaces
 1. **Mini-app "Röbel Circles"** — `https://circles-inviter.vercel.app` (Vercel project `circles-inviter`).
-   Repo: top-level `/circles-inviter` (Vite+React19+TS+Tailwind4; **NOT a pnpm-workspace member** → isolated from web/Expo builds).
+   Repo: top-level `/circles-roebel-mini-app` (Vite+React19+TS+Tailwind4; **NOT a pnpm-workspace member** → isolated from web/Expo builds).
    Tabs: **Town** (stats + radial trust graph), **Flow** (transfers), **Network** (towns map), **Invite** (generateInvites + self-fund).
-   Deploy: `cd circles-inviter && npx vercel --prod --yes`. Runs inside the Circles host iframe (wallet via `@aboutcircles/miniapp-sdk`).
+   Deploy: `cd circles-roebel-mini-app && npx vercel --prod --yes`. Runs inside the Circles host iframe (wallet via `@aboutcircles/miniapp-sdk`).
    Registry PR (listing in launcher): **github.com/aboutcircles/CirclesMiniapps#58** — PENDING MERGE.
 2. **Web admin dashboard** — `roebel-web` `/admin/dashboard/circles` ("Circles-Verifizierung").
    Per-citizen: CitizenNFT, **Verifiziert / Eingeladen / Nicht verifiziert**, Röbel Münzen, personal CRC (raw/wrapped), group-trust;

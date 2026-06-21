@@ -1,16 +1,16 @@
 # Circles Mini-App — Hackathon Improvements Spec
 
 Implementation spec for four improvements to the **Röbel Circles** mini-app
-(`circles-inviter/`), targeting the Garage Circles Mini-App Hackathon scoring
+(`circles-roebel-mini-app/`), targeting the Garage Circles Mini-App Hackathon scoring
 criteria.
 
 > **✅ STATUS — mini-app side SHIPPED.** F1–F4 below are implemented in
-> `circles-inviter/` (analytics backend `public.miniapp_events` created + RLS;
+> `circles-roebel-mini-app/` (analytics backend `public.miniapp_events` created + RLS;
 > `analytics.ts`, `GrowCard.tsx`, `csv.ts`, `getMyImpact`, Town cards, event
 > wiring). `pnpm typecheck` + `pnpm build` pass; anon insert verified (201).
 > **Remaining work is in the Röbel Expo app — see §9 (the to-do spec for the
 > app-specific agent).** Deploy the mini-app with
-> `cd circles-inviter && npx -y vercel@latest --prod --yes`.
+> `cd circles-roebel-mini-app && npx -y vercel@latest --prod --yes`.
 
 > **Read first:** this app was just redesigned in the admin "Münzen" shadcn
 > design language. Match it exactly. All UI copy is **English**. Mobile-first.
@@ -49,7 +49,7 @@ F1 and F2 close the only two real scoring gaps.
   - `src/lib/citizens.ts` — `ROEBEL_CITIZENS`, `shortAddr`, `explorerAvatar`, `explorerTx`.
 - **App shell** (`src/App.tsx`): tabs `town | pulse | network | invite | event`; `onWalletChange` sets `inviter`; `urlInviter` from `?inviter=`. Town is the default tab (most-visited → put F1 + F4 there).
 - **Supabase** is already used: `src/views/EventInviteView.tsx` hardcodes `SUPABASE_URL = "https://wwbeqhkslxdxhktqzqti.supabase.co"` and the publishable `ANON` JWT, and POSTs to an edge function. **Reuse these** (extract to `src/lib/supabase.ts`). Project ref: `wwbeqhkslxdxhktqzqti`.
-- **Deploy:** this app is **NOT git-connected on Vercel** — a `git push` does **not** redeploy. Ship with: `cd circles-inviter && npx -y vercel@latest --prod --yes`.
+- **Deploy:** this app is **NOT git-connected on Vercel** — a `git push` does **not** redeploy. Ship with: `cd circles-roebel-mini-app && npx -y vercel@latest --prod --yes`.
 
 ### Shared prep (do once)
 
@@ -320,7 +320,7 @@ CSV.", with a **range toggle** (`Last 7 days` default / `All`) and three buttons
 - Mobile-first; everything must look right at ~360px wide inside the iframe.
 - `pnpm typecheck` and `pnpm build` clean.
 - Analytics must be **non-blocking and silent on failure**.
-- Deploy with `npx -y vercel@latest --prod --yes` from `circles-inviter/`
+- Deploy with `npx -y vercel@latest --prod --yes` from `circles-roebel-mini-app/`
   (git push will NOT deploy this app).
 - After deploy, sanity-check in the Circles Playground
   (`https://circles.gnosis.io` → load the app URL): app_open + wallet_connect +
