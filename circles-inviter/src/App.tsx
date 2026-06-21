@@ -7,22 +7,35 @@ import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import FlowView from "./views/FlowView";
 import NetworkView from "./views/NetworkView";
+import EventInviteView from "./views/EventInviteView";
 
-type Tab = "town" | "flow" | "network" | "invite";
+type Tab = "town" | "flow" | "network" | "invite" | "event";
 const TABS: { id: Tab; label: string }[] = [
   { id: "town", label: "Town" },
   { id: "flow", label: "Flow" },
   { id: "network", label: "Network" },
   { id: "invite", label: "Invite" },
+  { id: "event", label: "Event" },
 ];
 
-export default function App() {
-  const [tab, setTab] = useState<Tab>("town");
-  const [inviter, setInviter] = useState<Address | null>(null);
+// The Röbel app links here as `?inviter=<citizen address>` — use it as the initial inviter
+// (and jump straight to the Event tab) even before the Circles host injects the wallet.
+const urlInviter = (() => {
+  try {
+    const p = new URLSearchParams(window.location.search).get("inviter");
+    return p && isAddress(p) ? getAddress(p) : null;
+  } catch {
+    return null;
+  }
+})();
 
-  // The Circles host injects the connected wallet (used by the Invite view).
+export default function App() {
+  const [tab, setTab] = useState<Tab>(urlInviter ? "event" : "town");
+  const [inviter, setInviter] = useState<Address | null>(urlInviter);
+
+  // The Circles host injects the connected wallet (used by the Invite/Event views).
   useEffect(() => {
-    const ret = onWalletChange((addr: string | null) => setInviter(addr && isAddress(addr) ? getAddress(addr) : null));
+    const ret = onWalletChange((addr: string | null) => setInviter(addr && isAddress(addr) ? getAddress(addr) : urlInviter));
     return () => {
       if (typeof ret === "function") (ret as () => void)();
     };
@@ -51,6 +64,7 @@ export default function App() {
         </nav>
 
         {tab === "invite" && <InviteView inviter={inviter} />}
+        {tab === "event" && <EventInviteView inviter={inviter} />}
         {tab === "town" && <TownView />}
         {tab === "flow" && <FlowView />}
         {tab === "network" && <NetworkView />}
