@@ -101,7 +101,7 @@ export default function SendRoebelScreen() {
       </View>
 
       <Text style={themed.balance}>
-        Verfügbar: {talerBalance.toLocaleString('de-DE')} Röbel Münzen
+        Verfügbar: {Math.round(talerBalance).toLocaleString('de-DE')} Röbel Münzen
       </Text>
 
       {!selected ? (

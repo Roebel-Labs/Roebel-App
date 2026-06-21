@@ -738,7 +738,7 @@ function TxHistoryList({
                 </View>
                 <Text style={[styles.txAmount, { color: isIn ? '#16A34A' : colors.textPrimary }]}>
                   {isIn ? '+ ' : '− '}
-                  {tx.value.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                  {Math.round(tx.value).toLocaleString('de-DE')}
                 </Text>
               </Pressable>
             );

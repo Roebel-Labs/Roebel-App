@@ -43,7 +43,7 @@ export default function TreasuryScreen() {
 
 	const assetRows = assets
 		? [
-				{ key: "rt", name: "Röbel Münzen", sub: "Gemeinschaftswährung", value: fmtNum(assets.roebel), badge: "coin" as const },
+				{ key: "rt", name: "Röbel Münzen", sub: "Gemeinschaftswährung", value: Math.round(assets.roebel).toLocaleString("de-DE"), badge: "coin" as const },
 				{ key: "xdai", name: "xDAI", sub: "Gnosis-Guthaben", value: fmtNum(assets.xdai), badge: "x" as const },
 				{ key: "eure", name: "EURe", sub: "Euro-Guthaben", value: fmtNum(assets.eure), badge: "e" as const },
 			]
