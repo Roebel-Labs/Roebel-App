@@ -57,6 +57,51 @@ export async function getQuota(inviter: Address): Promise<bigint> {
   }
 }
 
+// ── Quota funding check ──────────────────────────────────────────────────────
+// `getQuota` returns a nominal allowance, but a quota invite ALSO needs the farm
+// to actually dispense 96 CRC per invite of the funder's personal token. If the
+// farm pool is empty AND the funder hasn't approved the farm, the quota is
+// un-fundable on-chain and `generateInvites` reverts with a bare `0x`. This
+// reads the on-chain truth so the UI can warn instead of letting it fail.
+const erc1155Abi = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "isApprovedForAll", stateMutability: "view", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "bool" }] },
+] as const;
+// InvitationFarm: preview which token id(s) a claim of `count` would draw (view).
+const SIMULATE_CLAIM_SELECTOR = "0xe28208a1";
+
+export interface QuotaFunding {
+  quota: number;
+  /** How many of the quota invites are actually fundable on-chain right now. */
+  fundableInvites: number;
+}
+export async function getQuotaFunding(inviter: Address): Promise<QuotaFunding | null> {
+  try {
+    const quota = Number(await getQuota(inviter));
+    if (quota <= 0) return { quota: 0, fundableInvites: 0 };
+    // Ask the farm which token a single claim would draw (the funder's CRC token).
+    const data = (SIMULATE_CLAIM_SELECTOR + (1).toString(16).padStart(64, "0")) as `0x${string}`;
+    const res = await publicClient.call({ account: inviter, to: INVITATION_FARM, data });
+    const ret = res.data;
+    if (!ret || ret.length < 2 + 64 * 3) return null; // [offset][len][elem0]
+    const funderId = BigInt("0x" + ret.slice(2 + 64 * 2, 2 + 64 * 3));
+    if (funderId === 0n) return null;
+    const funder = getAddress(("0x" + funderId.toString(16).padStart(40, "0").slice(-40)) as `0x${string}`);
+    const [farmBal, funderBal, approved] = await Promise.all([
+      publicClient.readContract({ address: HUB, abi: erc1155Abi, functionName: "balanceOf", args: [INVITATION_FARM, funderId] }),
+      publicClient.readContract({ address: HUB, abi: erc1155Abi, functionName: "balanceOf", args: [funder, funderId] }),
+      publicClient.readContract({ address: HUB, abi: erc1155Abi, functionName: "isApprovedForAll", args: [funder, INVITATION_FARM] }),
+    ]);
+    // The farm dispenses from its own pool, plus the funder's balance if the
+    // funder approved the farm to pull on its behalf.
+    const dispensable = (farmBal as bigint) + (approved ? (funderBal as bigint) : 0n);
+    const fundableInvites = Math.min(quota, Number(dispensable / INVITATION_FEE));
+    return { quota, fundableInvites };
+  } catch {
+    return null; // unknown → UI falls back to attempting + graceful error handling
+  }
+}
+
 /** True once `addr` is a registered Circles human (skip — don't waste quota on it). */
 export async function isHuman(addr: Address): Promise<boolean> {
   return publicClient.readContract({ address: HUB, abi: hubAbi, functionName: "isHuman", args: [addr] });

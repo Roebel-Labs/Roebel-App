@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
-import { inviteFarm, getQuota, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo } from "../lib/circles";
+import { inviteFarm, getQuota, getQuotaFunding, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar } from "../lib/citizens";
 import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner } from "../components/ui";
 import { UserPlus, Wallet, Check, ExternalLink } from "../components/icons";
@@ -13,6 +13,7 @@ const crc = (a: bigint) => (Number(a) / 1e18).toLocaleString("en-US", { maximumF
 
 export default function InviteView({ inviter }: { inviter: Address | null }) {
   const [quota, setQuota] = useState<bigint | null>(null);
+  const [funding, setFunding] = useState<QuotaFunding | null>(null);
   const [selfFund, setSelfFund] = useState<SelfFundInfo | null>(null);
   const [status, setStatus] = useState<Record<string, RowStatus>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -25,10 +26,12 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const loadQuota = useCallback(() => {
     if (!inviter) {
       setQuota(null);
+      setFunding(null);
       setSelfFund(null);
       return;
     }
     getQuota(inviter).then(setQuota).catch(() => setQuota(0n));
+    getQuotaFunding(inviter).then(setFunding).catch(() => setFunding(null));
     getSelfFundInfo(inviter).then(setSelfFund).catch(() => setSelfFund(null));
   }, [inviter]);
   useEffect(loadQuota, [loadQuota]);
@@ -64,6 +67,9 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const inviteCount = selectedList.length + (extraValid ? 1 : 0);
   const quotaNum = quota == null ? null : Number(quota);
   const overQuota = quotaNum != null && inviteCount > quotaNum;
+  const fundable = funding?.fundableInvites ?? null;
+  const overFunded = fundable != null && inviteCount > fundable;
+  const quotaUnfunded = funding != null && quotaNum != null && quotaNum > 0 && funding.fundableInvites < quotaNum;
   const registeredCount = citizens.filter((c) => status[c.address.toLowerCase()] === "registered").length;
 
   const invite = useCallback(async () => {
@@ -83,7 +89,14 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       await refreshStatus();
       loadQuota();
     } catch (e) {
-      setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+      const raw = e instanceof Error ? e.message : String(e);
+      const reverted = /revert|simulation|insufficient|0x"|reason: 0x/i.test(raw);
+      setMsg({
+        kind: "err",
+        text: reverted
+          ? "The invite reverted on-chain — your quota isn't funded (the invitation pool is empty). Use Self-fund below, or ask the pool funder to top up the farm."
+          : raw,
+      });
     } finally {
       setBusy(false);
     }
@@ -125,8 +138,8 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         <KpiCard
           label="Quota"
           value={quotaNum == null ? "…" : quotaNum}
-          sub="invites available"
-          tone={quotaNum ? "success" : "muted"}
+          sub={funding == null ? "invites available" : fundable! < (quotaNum ?? 0) ? `${fundable} funded on-chain` : "invites available"}
+          tone={quotaNum ? (funding && fundable === 0 ? "warning" : "success") : "muted"}
           icon={<UserPlus className="h-5 w-5" />}
         />
       </div>
@@ -135,6 +148,19 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         <Banner kind="info">
           No quota yet. Share your Circles address with the Gnosis team to get quota assigned — your invites will appear here once
           it's set. You can still self-fund below.
+        </Banner>
+      )}
+
+      {quotaUnfunded && (
+        <Banner kind="warn">
+          Your quota ({quotaNum}) isn't funded on-chain yet — the invitation pool is empty, so a quota invite would revert.{" "}
+          {selfFund && selfFund.affordable > 0 ? (
+            <>
+              Use <strong>Self-fund</strong> below ({selfFund.affordable} from your own CRC).
+            </>
+          ) : (
+            <>Ask the pool funder to top up the farm.</>
+          )}
         </Banner>
       )}
 
@@ -192,7 +218,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         </span>
         <button
           onClick={invite}
-          disabled={busy || !inviter || inviteCount === 0 || !!overQuota}
+          disabled={busy || !inviter || inviteCount === 0 || !!overQuota || !!overFunded}
           className="inline-flex items-center gap-2 rounded-[12px] bg-[#194383] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(25,67,131,0.9)] transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
           <UserPlus className="h-4 w-4" />
@@ -200,6 +226,11 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         </button>
       </div>
       {overQuota && <p className="-mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>}
+      {!overQuota && overFunded && (
+        <p className="-mt-2 text-xs text-amber-600">
+          Only {fundable} of your quota {fundable === 0 ? "is" : "are"} funded on-chain — use Self-fund below{fundable! > 0 ? ", or reduce the selection" : ""}.
+        </p>
+      )}
 
       {inviter && selfFund && (
         <Card className="p-3.5">
