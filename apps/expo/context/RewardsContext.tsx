@@ -350,7 +350,9 @@ export function RewardsProvider({ children }: { children: React.ReactNode }) {
   const coins = pointsCard?.points_balance ?? 0;
   const keysByLootbox = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const k of userKeys) m[k.lootbox_id] = k.key_count;
+    // Sum (not overwrite) so any duplicate rows for the same lootbox under
+    // different address casings are counted together.
+    for (const k of userKeys) m[k.lootbox_id] = (m[k.lootbox_id] ?? 0) + k.key_count;
     return m;
   }, [userKeys]);
   const keyCount = useMemo(

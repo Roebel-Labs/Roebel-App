@@ -18,12 +18,18 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import CoinBalanceBadge from '@/components/rewards/CoinBalanceBadge';
 import { fetchLootboxes, type Lootbox } from '@/lib/supabase-rewards';
 
 const CHEST = require('../../../assets/illustration/gamification/lootbox.png');
 const COIN_SMALL = require('../../../assets/illustration/gamification/single.png');
+
+/** Key price in whole Röbel Münzen (from the admin-set muenzen_price_atto; default 5). */
+const priceRcrc = (lb: Lootbox | null) => {
+  const atto = (lb as any)?.muenzen_price_atto;
+  return atto != null ? Math.round(Number(atto) / 1e18) : 5;
+};
 
 /**
  * Lootbox detail page. After the refinement this page has one job: show the
@@ -40,7 +46,9 @@ export default function LootboxDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors, isDark } = useTheme();
   const { showSnackbar } = useSnackbar();
-  const { lootboxes, coins, keyCountFor, openChest } = useRewards();
+  const { lootboxes, keyCountFor, openChest } = useRewards();
+  // Lootbox keys are paid in real Röbel Münzen (RCRC), not off-chain points.
+  const { talerBalance } = useRoebelTaler();
 
   const [directLootbox, setDirectLootbox] = useState<Lootbox | null>(null);
   const [isOpening, setIsOpening] = useState(false);
@@ -63,6 +71,7 @@ export default function LootboxDetailScreen() {
 
   const keyCount = lootbox ? keyCountFor(lootbox.id) : 0;
   const hasKey = keyCount > 0;
+  const price = priceRcrc(lootbox);
 
   const handleOpen = () => {
     if (!lootbox || isOpening) return;
@@ -189,7 +198,17 @@ export default function LootboxDetailScreen() {
         >
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <CoinBalanceBadge />
+        <Pressable
+          onPress={() => router.push('/rewards' as any)}
+          style={[styles.rcrcBadge, { backgroundColor: isDark ? colors.surface : '#F3F4F6' }]}
+          accessibilityRole="button"
+          accessibilityLabel={`${Math.round(talerBalance)} Röbel Münzen`}
+        >
+          <Image source={COIN_SMALL} style={styles.rcrcIcon} resizeMode="contain" />
+          <Text style={[styles.rcrcBadgeText, { color: colors.textPrimary }]}>
+            {Math.round(talerBalance).toLocaleString('de-DE')}
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -237,7 +256,7 @@ export default function LootboxDetailScreen() {
               Kostet
             </Text>
             <Text style={[styles.costValue, { color: colors.textPrimary }]}>
-              {lootbox.coins_per_key} Münzen pro Schlüssel
+              {price} Röbel Münzen pro Schlüssel
             </Text>
           </View>
           {hasKey && (
@@ -280,15 +299,15 @@ export default function LootboxDetailScreen() {
             style={({ pressed }) => [
               styles.primaryCTA,
               {
-                backgroundColor: coins >= lootbox.coins_per_key ? colors.primary : colors.disabled,
+                backgroundColor: talerBalance >= price ? colors.primary : colors.disabled,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
             <Text style={styles.primaryCTAText}>
-              {coins >= lootbox.coins_per_key
-                ? `Schlüssel kaufen für ${lootbox.coins_per_key} Münzen`
-                : `Noch ${lootbox.coins_per_key - coins} Münzen nötig`}
+              {talerBalance >= price
+                ? `Schlüssel kaufen für ${price} Röbel Münzen`
+                : `Noch ${Math.ceil(price - talerBalance)} Röbel Münzen nötig`}
             </Text>
           </Pressable>
         )}
@@ -311,6 +330,23 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rcrcBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    height: 36,
+  },
+  rcrcIcon: {
+    width: 18,
+    height: 18,
+  },
+  rcrcBadgeText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
   },
   content: {
     padding: 20,

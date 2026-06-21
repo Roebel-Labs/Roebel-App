@@ -61,7 +61,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const body = await req.json();
-    const wallet = getAddress(body.wallet);
+    // Validate checksum, then store/compare lowercase so the granted key matches
+    // how the rest of the app keys user_lootbox_keys (lowercase wallet_address).
+    const wallet = getAddress(body.wallet).toLowerCase();
     const kind = String(body.kind ?? "");
     const referenceId = String(body.referenceId ?? "");
     const txHash = body.txHash ? String(body.txHash) : null;

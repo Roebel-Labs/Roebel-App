@@ -117,17 +117,13 @@ export default function SchatzkammerScreen() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         }
         setBuySheetLootbox(null);
-        showSnackbar({ message: `Schlüssel gekauft (−${priceRcrc(target)} Röbel Münzen)` });
         await refresh();
-        // Jump to the detail page; the user has a key now → "Jetzt öffnen" CTA.
-        setTimeout(
-          () =>
-            router.push({
-              pathname: '/rewards/lootbox/[id]',
-              params: { id: target.id },
-            } as any),
-          250
-        );
+        // Key granted → go straight to the detail page so the user can open it
+        // (no success snackbar).
+        router.push({
+          pathname: '/rewards/lootbox/[id]',
+          params: { id: target.id },
+        } as any);
       } else if (res.status === 'insufficient') {
         showSnackbar({ message: 'Nicht genug Röbel Münzen' });
       } else {

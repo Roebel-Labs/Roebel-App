@@ -251,8 +251,10 @@ export async function fetchUserKeys(
 ): Promise<UserLootboxKeyRecord[]> {
   const { data, error } = await supabase
     .from('user_lootbox_keys')
+    // Wallet addresses are stored lowercase; normalize the lookup so a key
+    // granted by the RCRC spend path (which checksums the address) still matches.
     .select('*')
-    .eq('wallet_address', walletAddress)
+    .eq('wallet_address', walletAddress.toLowerCase())
     .gt('key_count', 0);
 
   if (error) {
