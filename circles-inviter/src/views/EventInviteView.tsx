@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Address } from "viem";
+import { Card, ChartCard, PageHeader } from "../components/ui";
+import { Ticket, Printer, Plus, Sparkles } from "../components/icons";
 
 // Public Supabase project + anon key (publishable; safe in client). The edge fns gate
 // server-side (create-reward-event requires CitizenNFT).
@@ -11,10 +13,10 @@ const ANON =
 const EVENT_BASE = "https://www.roebel.app/e/";
 
 const DURATIONS = [
-  { label: "1 Stunde", hours: 1 },
-  { label: "4 Stunden", hours: 4 },
-  { label: "Heute (24 h)", hours: 24 },
-  { label: "1 Woche", hours: 168 },
+  { label: "1 hour", hours: 1 },
+  { label: "4 hours", hours: 4 },
+  { label: "Today (24 h)", hours: 24 },
+  { label: "1 week", hours: 168 },
 ];
 
 const PRINT_CSS = `
@@ -44,15 +46,18 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
 
   if (!inviter) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
-        Öffne diese Mini-App in der Circles-App, um dein Wallet zu verbinden — dann kannst du als Bürger:in ein Event-QR erstellen.
+      <div className="space-y-4">
+        <PageHeader title="Event invite" description="Create a QR code for a local event." />
+        <Card className="p-5 text-[13px] leading-relaxed text-muted-foreground">
+          Open this mini-app inside the Circles app to connect your wallet — then, as a citizen, you can create an event QR code.
+        </Card>
       </div>
     );
   }
 
   const create = async () => {
     if (!label.trim()) {
-      setError("Bitte einen Event-Namen eingeben.");
+      setError("Please enter an event name.");
       return;
     }
     setCreating(true);
@@ -65,7 +70,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
         body: JSON.stringify({ creator: inviter, label: label.trim(), expiresAt }),
       });
       const j = await res.json();
-      if (!res.ok || !j.id) throw new Error(j.error || "Konnte Event nicht erstellen");
+      if (!res.ok || !j.id) throw new Error(j.error || "Could not create event");
       setEvent({ id: j.id, label: label.trim(), expiresAt });
     } catch (e: any) {
       setError(e?.message ?? String(e));
@@ -79,32 +84,37 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
   return (
     <div className="space-y-4">
       <style>{PRINT_CSS}</style>
+      <PageHeader title="Event invite" description="A QR code for a local event: guests join Circles and everyone collects a few Röbel Coins as a 'was-in-Röbel' proof — paid from the town treasury, not from you." />
 
       {!event ? (
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-navy">Event-Einladung erstellen</h2>
-            <p className="text-sm text-slate-500">
-              Ein QR-Code für ein lokales Event: Gäste treten Circles bei und sammeln eigene Münzen, alle erhalten ein paar
-              Röbel Münzen als „War-in-Röbel“-Beleg. Bezahlt aus der Stadtkasse — nicht von dir.
-            </p>
+        <ChartCard>
+          <div className="mb-4 flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#194383]/10 text-[#194383]">
+              <Ticket className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">Create event QR</h3>
+              <p className="text-xs text-muted-foreground">Guests scan → join Circles → collect coins</p>
+            </div>
           </div>
-          <label className="block text-sm font-medium text-slate-700">
-            Event-Name
+
+          <label className="block">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Event name</span>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="z. B. Röbel Wochenmarkt"
+              placeholder="e.g. Röbel weekly market"
               maxLength={80}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
             />
           </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Gültig für
+
+          <label className="mt-3 block">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Valid for</span>
             <select
               value={hours}
               onChange={(e) => setHours(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
             >
               {DURATIONS.map((d) => (
                 <option key={d.hours} value={d.hours}>
@@ -113,48 +123,63 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               ))}
             </select>
           </label>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
           <button
             onClick={create}
             disabled={creating}
-            className="w-full rounded-lg bg-navy px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#194383] px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(25,67,131,0.9)] transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
           >
-            {creating ? "Wird erstellt…" : "Event-QR erstellen"}
+            <Plus className="h-4 w-4" />
+            {creating ? "Creating…" : "Create event QR"}
           </button>
-        </div>
+        </ChartCard>
       ) : (
         <>
-          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 text-center">
-            <h2 className="text-lg font-semibold text-navy">{event.label}</h2>
-            <div className="flex justify-center">
-              <QRCodeSVG value={link} size={220} level="M" />
+          <Card className="p-5 text-center">
+            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+              <Sparkles className="h-3 w-3" /> Event live
             </div>
-            <p className="text-xs text-slate-500">Gültig bis {new Date(event.expiresAt).toLocaleString("de-DE")}</p>
-            <div className="flex gap-2">
-              <button onClick={() => window.print()} className="flex-1 rounded-lg bg-navy px-4 py-2.5 text-sm font-semibold text-white">
-                Als A4-PDF drucken
+            <h3 className="font-display text-lg font-bold tracking-tight text-foreground">{event.label}</h3>
+            <div className="my-4 flex justify-center">
+              <div className="rounded-[16px] border border-border bg-white p-4 shadow-sm">
+                <QRCodeSVG value={link} size={208} level="M" fgColor="#0b1220" />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Valid until {new Date(event.expiresAt).toLocaleString("en-US")}</p>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
+              >
+                <Printer className="h-4 w-4" />
+                Print A4 poster
               </button>
-              <button onClick={() => setEvent(null)} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-600">
-                Neu
+              <button
+                onClick={() => setEvent(null)}
+                className="rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99]"
+              >
+                New
               </button>
             </div>
-          </div>
+          </Card>
 
           {/* A4 print layout — hidden on screen, shown only when printing/saving as PDF */}
           <div id="event-print" className="print-only">
             <div className="a4">
               <p className="a4-kicker">RÖBEL · CIRCLES</p>
-              <h1 className="a4-title">Werde Teil von Röbel</h1>
+              <h1 className="a4-title">Become part of Röbel</h1>
               <p className="a4-sub">{event.label}</p>
               <div className="a4-qr">
-                <QRCodeSVG value={link} size={340} level="M" />
+                <QRCodeSVG value={link} size={340} level="M" fgColor="#194383" />
               </div>
               <p className="a4-steps">
-                Scanne den Code mit der Röbel-App
+                Scan the code with the Röbel app
                 <br />
-                → tritt Circles bei → sammle deine Münzen
+                → join Circles → collect your coins
               </p>
-              <p className="a4-foot">Gültig bis {new Date(event.expiresAt).toLocaleString("de-DE")} · roebel.app</p>
+              <p className="a4-foot">Valid until {new Date(event.expiresAt).toLocaleString("en-US")} · roebel.app</p>
             </div>
           </div>
         </>

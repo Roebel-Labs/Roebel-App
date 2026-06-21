@@ -1,6 +1,10 @@
+// Network of towns — the federation model: a meta-group that trusts verified town
+// currencies. Röbel is the one live town today; the rest are placeholders for Stage 2.
 import { useEffect, useState } from "react";
 import { TOWNS, META_GROUP_LABEL } from "../lib/towns";
 import { getVerifiedSet } from "../lib/circlesData";
+import { ChartCard, PageHeader, KpiCard, Banner } from "../components/ui";
+import { Globe, Sparkles, ShieldCheck } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 
 export default function NetworkView() {
@@ -11,6 +15,9 @@ export default function NetworkView() {
       .catch(() => setVerified(0));
   }, []);
 
+  const live = TOWNS.filter((t) => t.real).length;
+  const planned = TOWNS.length - live;
+
   const nodes: RadialNode[] = TOWNS.map((t) => ({
     id: t.id,
     label: t.name,
@@ -20,19 +27,34 @@ export default function NetworkView() {
   }));
 
   return (
-    <div>
-      <p className="text-sm text-slate-500 mb-3">
-        From a town's money to a <strong>network of towns</strong>: a meta-group that trusts verified town currencies.
-        Acceptance federates; minting stays local.
-      </p>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <RadialGraph center={{ label: META_GROUP_LABEL, sub: "meta-group" }} nodes={nodes} />
+    <div className="space-y-4">
+      <PageHeader
+        title="Network of towns"
+        description="From a town's money to a network of towns — a meta-group that trusts verified town currencies. Acceptance federates; minting stays local."
+      />
+
+      <div className="grid grid-cols-3 gap-3">
+        <KpiCard label="Live" value={live} sub="town" tone="primary" icon={<Globe className="h-5 w-5" />} />
+        <KpiCard label="Planned" value={planned} sub="towns" tone="muted" icon={<Sparkles className="h-5 w-5" />} />
+        <KpiCard label="Verified" value={verified == null ? "…" : verified} sub="in Röbel" tone="success" icon={<ShieldCheck className="h-5 w-5" />} />
       </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-        Röbel is the one live town today (navy). The dashed nodes are placeholders for future towns running the
-        verified-citizen stack — each keeps its own supply and citizen gate. Real towns appear here automatically as they
-        launch.
-      </p>
+
+      <ChartCard title="Federation map" subtitle="Verified Towns meta-group → town currencies">
+        <RadialGraph center={{ label: META_GROUP_LABEL, sub: "meta-group" }} nodes={nodes} />
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#194383]" /> Live town
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-300 bg-slate-50" /> Planned
+          </span>
+        </div>
+      </ChartCard>
+
+      <Banner kind="info">
+        Röbel is the one live town today (navy). Dashed nodes are placeholders for future towns running the verified-citizen
+        stack — each keeps its own supply and citizen gate. Real towns appear here automatically as they launch.
+      </Banner>
     </div>
   );
 }

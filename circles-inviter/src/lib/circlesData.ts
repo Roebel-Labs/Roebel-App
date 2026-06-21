@@ -115,3 +115,70 @@ export async function getReputation(verifiedSet: Set<string>): Promise<RepNode[]
     .filter((n) => n.address !== ZERO && n.address !== GROUP && (n.held > 0 || n.inCount || n.outCount))
     .sort((a, b) => b.score - a.score);
 }
+
+// ── Derived analytics (pure — no extra RPC; computed from real transfers) ─────
+export const FLOW_COLOR: Record<FlowKind, string> = {
+  mint: "#0ea5e9", // sky — new coins minted
+  reward: "#16a34a", // green — reward payouts from the town treasury
+  spend: "#dc2626", // red — paid into the treasury (e.g. lootbox)
+  transfer: "#8b5cf6", // violet — peer-to-peer
+};
+
+export interface FlowSummary {
+  kind: FlowKind;
+  label: string;
+  color: string;
+  count: number;
+  amount: number;
+}
+export function summarizeFlows(transfers: Transfer[]): {
+  byKind: FlowSummary[];
+  totalAmount: number;
+  totalCount: number;
+  activeAddresses: number;
+} {
+  const kinds: FlowKind[] = ["mint", "reward", "spend", "transfer"];
+  const byKind = kinds.map((k) => {
+    const items = transfers.filter((t) => t.kind === k);
+    return { kind: k, label: KIND_LABEL[k], color: FLOW_COLOR[k], count: items.length, amount: items.reduce((a, t) => a + t.amount, 0) };
+  });
+  const active = new Set<string>();
+  for (const t of transfers) {
+    if (t.from && t.from.toLowerCase() !== ZERO) active.add(t.from.toLowerCase());
+    if (t.to) active.add(t.to.toLowerCase());
+  }
+  active.delete(GROUP);
+  active.delete(ZERO);
+  return { byKind, totalAmount: byKind.reduce((a, s) => a + s.amount, 0), totalCount: transfers.length, activeAddresses: active.size };
+}
+
+export interface DayBucket {
+  label: string;
+  mint: number;
+  reward: number;
+  spend: number;
+  transfer: number;
+  total: number;
+}
+const startOfDay = (ms: number) => {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+/** Bucket transfer volume by day over the last `days` (oldest → newest) for the area chart. */
+export function dailyVolume(transfers: Transfer[], days = 14): DayBucket[] {
+  const dayMs = 86_400_000;
+  const todayStart = startOfDay(Date.now());
+  const buckets: DayBucket[] = Array.from({ length: days }, (_, i) => {
+    const d = new Date(todayStart - (days - 1 - i) * dayMs);
+    return { label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), mint: 0, reward: 0, spend: 0, transfer: 0, total: 0 };
+  });
+  for (const t of transfers) {
+    const ms = t.time < 1e12 ? t.time * 1000 : t.time;
+    const idx = days - 1 - Math.round((todayStart - startOfDay(ms)) / dayMs);
+    if (idx < 0 || idx >= days) continue;
+    buckets[idx][t.kind] += t.amount;
+    buckets[idx].total += t.amount;
+  }
+  return buckets;
+}

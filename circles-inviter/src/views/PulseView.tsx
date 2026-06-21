@@ -1,132 +1,175 @@
-// Pulse — the town's Röbel Münzen economy at a glance: a reputation ranking (held RCRC +
-// flow activity) and a filterable feed of all token flows (mint / reward / lootbox / transfer).
+// Economy pulse — the town's Röbel Coin flows and reputation: KPIs, a daily-volume area
+// chart, flow composition, a reputation leaderboard, and a filterable flow feed.
 import { useEffect, useMemo, useState } from "react";
 import {
   getVerifiedSet,
   getRecentTransfers,
   getReputation,
+  summarizeFlows,
+  dailyVolume,
   flowLabel,
   type Transfer,
   type FlowKind,
   type RepNode,
 } from "../lib/circlesData";
-import { shortAddr, explorerTx, explorerAvatar } from "../lib/citizens";
+import { explorerTx } from "../lib/citizens";
+import { fmt, fmtInt, shortAddr, timeAgo } from "../lib/format";
+import { ChartCard, PageHeader, KpiCard, Pill, ScoreBar, Skeleton, SkeletonGrid, EmptyHint } from "../components/ui";
+import { AreaChart, SplitBar } from "../components/charts";
+import { Coins, Activity, Users, Flame, ArrowUpRight } from "../components/icons";
 
 const KINDS: (FlowKind | "all")[] = ["all", "mint", "reward", "spend", "transfer"];
-const KIND_COLOR: Record<FlowKind, string> = {
-  mint: "bg-emerald-100 text-emerald-700",
-  reward: "bg-sky-100 text-sky-700",
-  spend: "bg-amber-100 text-amber-700",
-  transfer: "bg-slate-100 text-slate-600",
+const KIND_TONE: Record<FlowKind, "info" | "success" | "danger" | "violet"> = {
+  mint: "info",
+  reward: "success",
+  spend: "danger",
+  transfer: "violet",
 };
-
-const Skeleton = () => <div className="h-24 animate-pulse rounded-lg bg-slate-100" />;
-const Empty = () => <p className="text-xs text-slate-400">Noch keine Daten.</p>;
 
 export default function PulseView() {
   const [transfers, setTransfers] = useState<Transfer[] | null>(null);
   const [rep, setRep] = useState<RepNode[] | null>(null);
   const [filter, setFilter] = useState<FlowKind | "all">("all");
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
+    setLoading(true);
     setTransfers(null);
     setRep(null);
     const verified = await getVerifiedSet().catch(() => new Set<string>());
-    const [tf, rp] = await Promise.all([getRecentTransfers(40), getReputation(verified)]);
+    const [tf, rp] = await Promise.all([getRecentTransfers(150), getReputation(verified)]);
     setTransfers(tf);
     setRep(rp);
+    setLoading(false);
   };
   useEffect(() => {
     void load();
   }, []);
 
-  const filtered = useMemo(
-    () => (transfers ?? []).filter((t) => filter === "all" || t.kind === filter),
-    [transfers, filter],
-  );
+  const summary = useMemo(() => summarizeFlows(transfers ?? []), [transfers]);
+  const series = useMemo(() => dailyVolume(transfers ?? [], 14), [transfers]);
+  const filtered = useMemo(() => (transfers ?? []).filter((t) => filter === "all" || t.kind === filter).slice(0, 40), [transfers, filter]);
   const maxScore = useMemo(() => Math.max(1, ...(rep ?? []).map((r) => r.score)), [rep]);
+  const mintCount = summary.byKind.find((b) => b.kind === "mint")?.count ?? 0;
 
   return (
-    <div className="space-y-6">
-      {/* Reputation ranking */}
-      <section>
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">Reputation</h2>
-          <button onClick={load} className="text-xs font-medium text-navy hover:underline">
-            Refresh
-          </button>
+    <div className="space-y-4">
+      <PageHeader title="Economy pulse" description="Live Röbel Coin flows and reputation across the town." onRefresh={load} refreshing={loading} />
+
+      {/* KPIs */}
+      {transfers === null ? (
+        <SkeletonGrid count={4} />
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Volume" value={fmt(summary.totalAmount, 0)} sub="Röbel Coins (recent)" tone="primary" icon={<Coins className="h-5 w-5" />} />
+          <KpiCard label="Transfers" value={fmtInt(summary.totalCount)} sub="on-chain events" tone="info" icon={<Activity className="h-5 w-5" />} />
+          <KpiCard label="Active" value={fmtInt(summary.activeAddresses)} sub="wallets moving coins" tone="success" icon={<Users className="h-5 w-5" />} />
+          <KpiCard label="Mints" value={fmtInt(mintCount)} sub="new coins minted" tone="warning" icon={<Flame className="h-5 w-5" />} />
         </div>
-        <p className="mb-3 text-xs text-slate-400">
-          Aktivität im Netzwerk — gehaltene RCRC + Ein-/Ausgänge. Grün = verifizierte:r Bürger:in.
-        </p>
-        {rep === null ? (
-          <Skeleton />
-        ) : rep.length === 0 ? (
-          <Empty />
+      )}
+
+      {/* Daily volume area chart */}
+      <ChartCard title="Daily volume" subtitle="Röbel Coins moved per day · last 14 days">
+        {transfers === null ? (
+          <Skeleton className="h-44" />
+        ) : summary.totalAmount === 0 ? (
+          <EmptyHint>No transfers yet — invite citizens to get the economy moving.</EmptyHint>
         ) : (
-          <div className="space-y-2">
-            {rep.slice(0, 12).map((n) => (
-              <a key={n.address} href={explorerAvatar(n.address)} target="_blank" rel="noreferrer" className="block">
-                <div className="mb-0.5 flex items-center gap-2 text-xs">
-                  <span className={`h-2 w-2 rounded-full ${n.verified ? "bg-emerald-500" : "bg-slate-300"}`} />
-                  <span className="font-medium text-slate-700">{shortAddr(n.address)}</span>
-                  <span className="text-slate-400">
-                    · {n.held.toFixed(0)} RCRC · {n.inCount}↓ {n.outCount}↑
-                  </span>
+          <AreaChart series={[{ color: "#194383", points: series.map((d) => d.total) }]} labels={series.map((d) => d.label)} height={190} />
+        )}
+      </ChartCard>
+
+      {/* Flow composition */}
+      <ChartCard title="Flow composition" subtitle="Where coins move, by type">
+        {transfers === null ? (
+          <Skeleton className="h-20" />
+        ) : (
+          <div className="space-y-3">
+            <SplitBar parts={summary.byKind.map((b) => ({ value: b.amount, color: b.color }))} />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {summary.byKind.map((b) => (
+                <div key={b.kind} className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                  <span className="text-[13px] text-foreground">{b.label}</span>
+                  <span className="ml-auto text-[13px] font-semibold tabular-nums text-foreground">{fmt(b.amount, 0)}</span>
+                  <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">{b.count}×</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-navy" style={{ width: `${Math.max(4, (n.score / maxScore) * 100)}%` }} />
-                </div>
-              </a>
-            ))}
+              ))}
+            </div>
           </div>
         )}
-      </section>
+      </ChartCard>
 
-      {/* Filterable token-flow feed */}
-      <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700">Token-Flüsse</h2>
-        <div className="mb-3 flex flex-wrap gap-1">
+      {/* Reputation leaderboard */}
+      <ChartCard title="Reputation" subtitle="Coins held + flow activity · green = verified citizen">
+        {rep === null ? (
+          <Skeleton className="h-40" />
+        ) : rep.length === 0 ? (
+          <EmptyHint>No reputation data yet.</EmptyHint>
+        ) : (
+          <ol className="space-y-2.5">
+            {rep.slice(0, 12).map((n, i) => (
+              <li key={n.address}>
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="w-4 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${n.verified ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <a href={`https://explorer.aboutcircles.com/avatar/${n.address}`} target="_blank" rel="noreferrer" className="font-mono text-[13px] font-medium text-foreground hover:text-[#194383]">
+                    {shortAddr(n.address)}
+                  </a>
+                  <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">
+                    {fmt(n.held, 0)} · {n.inCount}↓ {n.outCount}↑
+                  </span>
+                </div>
+                <div className="pl-6">
+                  <ScoreBar value={(n.score / maxScore) * 100} tone={n.verified ? "success" : "primary"} />
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </ChartCard>
+
+      {/* Filterable flow feed */}
+      <ChartCard title="Flow feed" subtitle="Most recent coin movements">
+        <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto">
           {KINDS.map((k) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                filter === k ? "bg-navy text-white" : "bg-slate-100 text-slate-500 hover:text-slate-700"
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
+                filter === k ? "bg-[#194383] text-white" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >
-              {k === "all" ? "Alle" : flowLabel(k as FlowKind)}
+              {k === "all" ? "All" : flowLabel(k as FlowKind)}
             </button>
           ))}
         </div>
         {transfers === null ? (
-          <Skeleton />
+          <Skeleton className="h-32" />
         ) : filtered.length === 0 ? (
-          <Empty />
+          <EmptyHint>No flows of this type yet.</EmptyHint>
         ) : (
-          <div className="space-y-1.5">
+          <ul className="divide-y divide-border">
             {filtered.map((t, i) => (
-              <a
-                key={t.tx + i}
-                href={explorerTx(t.tx)}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 hover:bg-slate-50"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${KIND_COLOR[t.kind]}`}>
-                    {flowLabel(t.kind)}
-                  </span>
-                  <span className="truncate text-xs text-slate-500">
-                    {shortAddr(t.from)} → {shortAddr(t.to)}
-                  </span>
-                </div>
-                <span className="text-xs font-semibold tabular-nums text-slate-700">{t.amount.toFixed(2)}</span>
-              </a>
+              <li key={t.tx + i}>
+                <a href={explorerTx(t.tx)} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2.5 transition hover:opacity-80">
+                  <Pill tone={KIND_TONE[t.kind]}>{flowLabel(t.kind)}</Pill>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-mono text-[12px] text-muted-foreground">
+                      {shortAddr(t.from)} → {shortAddr(t.to)}
+                    </div>
+                    {t.time > 0 && <div className="text-[11px] text-muted-foreground/80">{timeAgo(t.time)}</div>}
+                  </div>
+                  <div className="flex items-center gap-1 text-right">
+                    <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(t.amount, 2)}</span>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                </a>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </section>
+      </ChartCard>
     </div>
   );
 }

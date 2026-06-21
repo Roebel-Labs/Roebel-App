@@ -3,7 +3,8 @@ import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { inviteFarm, getQuota, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo } from "../lib/circles";
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar } from "../lib/citizens";
-import { Stat, Banner } from "../components/ui";
+import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner } from "../components/ui";
+import { UserPlus, Wallet, Check, ExternalLink } from "../components/icons";
 
 type RowStatus = "checking" | "registered" | "open" | "unknown";
 type Msg = { kind: "ok" | "err" | "info"; text: string } | null;
@@ -63,6 +64,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const inviteCount = selectedList.length + (extraValid ? 1 : 0);
   const quotaNum = quota == null ? null : Number(quota);
   const overQuota = quotaNum != null && inviteCount > quotaNum;
+  const registeredCount = citizens.filter((c) => status[c.address.toLowerCase()] === "registered").length;
 
   const invite = useCallback(async () => {
     if (!inviter) return setMsg({ kind: "err", text: "No wallet connected — open this app inside the Circles app." });
@@ -76,7 +78,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
       setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
-      setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel Münzen").` });
+      setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel Coins").` });
       setExtra("");
       await refreshStatus();
       loadQuota();
@@ -97,7 +99,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       await sendTransactions(buildSelfFundTxs(selfFund, list));
       setMsg({
         kind: "ok",
-        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel Münzen") — 96 CRC burns from you per registration.`,
+        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel Coins") — 96 CRC burns from you per registration.`,
       });
       await refreshStatus();
       getSelfFundInfo(inviter).then(setSelfFund).catch(() => {});
@@ -109,110 +111,129 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   }, [inviter, selfFund, selectedList, refreshStatus]);
 
   return (
-    <div>
-      <p className="mb-4 text-sm text-slate-500">Invite verified Röbel citizens into Circles — using your invitation quota.</p>
+    <div className="space-y-4">
+      <PageHeader title="Invite citizens" description="Bring verified Röbel citizens into Circles using your invitation quota." onRefresh={refreshStatus} />
 
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Stat label="Inviting as">
-          {inviter ? (
-            <span className="font-mono text-sm text-slate-800">{shortAddr(inviter)}</span>
-          ) : (
-            <span className="text-sm text-amber-600">Open in the Circles app</span>
-          )}
-        </Stat>
-        <Stat label="Available quota">
-          <span className={`text-lg font-semibold ${quotaNum ? "text-navy" : "text-slate-400"}`}>{quotaNum == null ? "…" : quotaNum}</span>
-        </Stat>
+      <div className="grid grid-cols-2 gap-3">
+        <KpiCard
+          label="Inviting as"
+          value={inviter ? <span className="font-mono text-base">{shortAddr(inviter)}</span> : <span className="text-base text-amber-600">Connect</span>}
+          sub={inviter ? "connected wallet" : "open in the Circles app"}
+          tone={inviter ? "primary" : "warning"}
+          icon={<Wallet className="h-5 w-5" />}
+        />
+        <KpiCard
+          label="Quota"
+          value={quotaNum == null ? "…" : quotaNum}
+          sub="invites available"
+          tone={quotaNum ? "success" : "muted"}
+          icon={<UserPlus className="h-5 w-5" />}
+        />
       </div>
 
       {quotaNum === 0 && (
         <Banner kind="info">
-          No quota yet. Share your Circles address with the Gnosis team to get quota assigned — your invites will appear here
-          once it's set.
+          No quota yet. Share your Circles address with the Gnosis team to get quota assigned — your invites will appear here once
+          it's set. You can still self-fund below.
         </Banner>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white mt-1">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <span className="text-sm font-medium text-slate-700">Citizens ({citizens.length})</span>
-          <button onClick={refreshStatus} className="text-xs text-navy hover:underline">
-            Refresh status
-          </button>
-        </div>
-        <ul className="divide-y divide-slate-100">
+      <ChartCard
+        title={`Citizens (${citizens.length})`}
+        subtitle={`${registeredCount} verified · ${citizens.length - registeredCount} invitable`}
+      >
+        <ul className="-mx-1 divide-y divide-border">
           {citizens.map((c) => {
             const st = status[c.address.toLowerCase()] ?? "checking";
             const checked = selected.has(c.address.toLowerCase());
             const disabled = st === "registered";
             return (
-              <li key={c.address} className="flex items-center gap-3 px-4 py-3">
-                <input type="checkbox" className="h-4 w-4 accent-[#194383]" checked={checked} disabled={disabled} onChange={() => toggle(c.address)} />
-                <a href={explorerAvatar(c.address)} target="_blank" rel="noreferrer" className="font-mono text-xs text-slate-700 flex-1 hover:text-navy hover:underline">
-                  {shortAddr(c.address)} ↗
-                </a>
-                {c.attester && <span className="text-[10px] rounded-full bg-navy/10 text-navy px-2 py-0.5">Attester</span>}
-                <StatusBadge status={st} />
+              <li key={c.address}>
+                <label className={`flex items-center gap-3 px-1 py-2.5 ${disabled ? "opacity-60" : "cursor-pointer"}`}>
+                  <input
+                    type="checkbox"
+                    className="h-[18px] w-[18px] shrink-0 accent-[#194383]"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => toggle(c.address)}
+                  />
+                  <img src={explorerAvatar(c.address)} alt="" loading="lazy" className="h-7 w-7 shrink-0 rounded-full border border-border bg-muted object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <a href={explorerAvatar(c.address)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-[13px] text-foreground hover:text-[#194383]">
+                      {shortAddr(c.address)}
+                      <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    </a>
+                  </div>
+                  {c.attester && <Pill tone="primary">Attester</Pill>}
+                  <StatusBadge status={st} />
+                </label>
               </li>
             );
           })}
         </ul>
-        <div className="px-4 py-3 border-t border-slate-100">
-          <label className="text-xs text-slate-500">Additional address (optional)</label>
+
+        <div className="mt-3 border-t border-border pt-3">
+          <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Additional address (optional)</label>
           <input
             value={extra}
             onChange={(e) => setExtra(e.target.value.trim())}
             placeholder="0x…"
             spellCheck={false}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm outline-none focus:border-navy"
+            className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2 font-mono text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
           />
           {extra && !extraValid && <p className="mt-1 text-xs text-red-500">Not a valid address.</p>}
         </div>
-      </div>
+      </ChartCard>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-sm text-slate-500">
-          Selected: <strong className="text-slate-800">{inviteCount}</strong>
-          {quotaNum != null && <> · Quota: {quotaNum}</>}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-muted-foreground">
+          Selected <strong className="text-foreground">{inviteCount}</strong>
+          {quotaNum != null && <> · quota {quotaNum}</>}
         </span>
         <button
           onClick={invite}
           disabled={busy || !inviter || inviteCount === 0 || !!overQuota}
-          className="rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white transition disabled:opacity-40 hover:bg-navy-600"
+          className="inline-flex items-center gap-2 rounded-[12px] bg-[#194383] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(25,67,131,0.9)] transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
+          <UserPlus className="h-4 w-4" />
           {busy ? "Inviting…" : `Invite (${inviteCount})`}
         </button>
       </div>
-      {overQuota && <p className="mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>}
+      {overQuota && <p className="-mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>}
 
       {inviter && selfFund && (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-medium text-slate-600">Self-fund — no quota needed</div>
-          <p className="text-[11px] text-slate-500 mt-1">
+        <Card className="p-3.5">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-[#194383]" />
+            <span className="text-[13px] font-semibold text-foreground">Self-fund — no quota needed</span>
+          </div>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
             Uses your own CRC (96 per invite). You have {crc(selfFund.rawAtto)} raw + {crc(selfFund.wrappedAtto)} wrapped → funds{" "}
-            <strong>{selfFund.affordable}</strong> invite(s). Citizens then register in the Röbel app.
+            <strong className="text-foreground">{selfFund.affordable}</strong> invite(s). Citizens then register in the Röbel app.
           </p>
           <button
             onClick={selfFundInvite}
             disabled={busy || selfFund.affordable === 0 || selectedList.length === 0}
-            className="mt-2 w-full rounded-lg border border-navy bg-white px-4 py-2 text-sm font-semibold text-navy transition disabled:opacity-40 hover:bg-slate-50"
+            className="mt-2.5 w-full rounded-[10px] border border-[#194383] bg-card px-4 py-2.5 text-sm font-semibold text-[#194383] transition hover:bg-[#194383]/5 active:scale-[0.99] disabled:opacity-40"
           >
             {busy ? "Working…" : `Self-fund invite (${Math.min(selectedList.length, selfFund.affordable)})`}
           </button>
-        </div>
+        </Card>
       )}
 
-      {msg && (
-        <Banner kind={msg.kind} className="mt-4">
-          {msg.text}
-        </Banner>
-      )}
+      {msg && <Banner kind={msg.kind === "ok" ? "ok" : msg.kind === "err" ? "err" : "info"}>{msg.text}</Banner>}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: RowStatus }) {
-  if (status === "registered") return <span className="text-[11px] rounded-full bg-green-100 text-green-700 px-2 py-0.5">✓ verified</span>;
-  if (status === "open") return <span className="text-[11px] rounded-full bg-slate-100 text-slate-600 px-2 py-0.5">invitable</span>;
-  if (status === "unknown") return <span className="text-[11px] text-slate-400">?</span>;
-  return <span className="text-[11px] text-slate-300">…</span>;
+  if (status === "registered")
+    return (
+      <Pill tone="success">
+        <Check className="h-3 w-3" /> verified
+      </Pill>
+    );
+  if (status === "open") return <Pill tone="muted">invitable</Pill>;
+  if (status === "unknown") return <span className="text-[11px] text-muted-foreground">?</span>;
+  return <span className="text-[11px] text-muted-foreground/60">…</span>;
 }

@@ -1,9 +1,36 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Design tokens — mirrors the Röbel admin "Münzen" dashboard (shadcn / navy).
+   Tailwind v4 turns every --color-* into a utility (bg-card, text-muted-foreground,
+   border-border, …) so the whole mini-app speaks the same visual language.
+   ────────────────────────────────────────────────────────────────────────── */
 @theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+
+  /* Brand */
   --color-navy: #194383;
   --color-navy-600: #1d4e99;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+
+  /* Surfaces */
+  --color-background: #f5f7fa;
+  --color-card: #ffffff;
+  --color-foreground: #0b1220;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e7ecf2;
+
+  /* Semantic */
+  --color-primary: #194383;
+  --color-primary-foreground: #ffffff;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-danger: #dc2626;
+  --color-info: #0ea5e9;
+  --color-violet: #8b5cf6;
+
+  --radius: 10px;
 }
 
 html,
@@ -11,9 +38,65 @@ body,
 #root {
   height: 100%;
 }
+
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: #f6f7f9;
-  color: #0f172a;
+  color: var(--color-foreground);
+  /* Soft atmosphere: a faint navy bloom at the top fading into the muted page. */
+  background:
+    radial-gradient(1100px 380px at 50% -12%, rgba(25, 67, 131, 0.07), transparent 70%),
+    var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(25, 67, 131, 0.16);
+}
+
+/* Tabular numerals everywhere they matter look crisper with Inter's feature. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Staggered entrance used on cards/sections (set animation-delay inline). */
+@keyframes rc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rc-rise {
+  animation: rc-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stroke draw-in for the graph edges. */
+@keyframes rc-draw {
+  from {
+    stroke-dashoffset: var(--rc-len, 200);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-rise,
+  .rc-draw {
+    animation: none !important;
+  }
+}
+
+/* Hide scrollbars on the horizontal tab strip while keeping it scrollable. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
