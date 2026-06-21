@@ -42,14 +42,24 @@ function extractPath(input: string): string {
 
   try {
     const url = new URL(input);
-    return url.pathname + url.search + url.hash;
+    // Custom-scheme deep links (e.g. roebel://e/<id>) carry the first route
+    // segment in the URL authority (host), which url.pathname omits — so a naive
+    // parse turns roebel://e/<id> into "/<id>" and lands on +not-found. For
+    // non-web schemes, re-attach the host as the leading path segment. Web links
+    // (https://roebel.app/e/<id>) keep their domain host out of the path.
+    const isWeb = url.protocol === 'http:' || url.protocol === 'https:';
+    const hostSegment = !isWeb && url.host ? `/${url.host}` : '';
+    return hostSegment + url.pathname + url.search + url.hash;
   } catch {
-    // Fallback: strip everything before the first "/" after "://"
-    const slashIndex = input.indexOf('/', input.indexOf('://') + 3);
-    if (slashIndex !== -1) {
-      return input.slice(slashIndex);
+    // Fallback for inputs URL() can't parse.
+    const schemeIdx = input.indexOf('://');
+    if (schemeIdx === -1) return '/';
+    const rest = input.slice(schemeIdx + 3); // host + path (+ query)
+    if (/^https?:\/\//i.test(input)) {
+      const slashIndex = rest.indexOf('/');
+      return slashIndex === -1 ? '/' : rest.slice(slashIndex); // drop the domain host
     }
-    return '/';
+    return '/' + rest; // custom scheme: the leading segment is a real route segment
   }
 }
 
