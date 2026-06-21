@@ -2,7 +2,7 @@
 // Ports the proven query shapes from the Expo app (lib/circles-profile.ts,
 // lib/roebel-taler.ts, hooks/useRoebelTalerHistory.ts) to the web side.
 import "server-only";
-import { ADDR } from "./constants";
+import { ADDR, GROUP_TOKEN_ID } from "./constants";
 
 const CIRCLES_RPC = process.env.CIRCLES_RPC_URL || "https://rpc.aboutcircles.com/";
 const PROFILE_GET = "https://rpc.aboutcircles.com/profiles/get?cid=";
@@ -66,10 +66,14 @@ export async function getGroupTransfers(limit = 1000): Promise<CirclesTransfer[]
     Columns: [],
     Filter: [
       {
+        // The Transfers view is NOT filterable by `tokenAddress` (computed
+        // output column) — the RPC rejects it with -32602 and the query then
+        // silently returns []. Filter by the ERC-1155 token id, which is
+        // uint256(groupAddress), passed as a decimal string.
         Type: "FilterPredicate",
         FilterType: "Equals",
-        Column: "tokenAddress",
-        Value: lower(ADDR.group),
+        Column: "id",
+        Value: GROUP_TOKEN_ID.toString(),
       },
     ],
     Order: [{ Column: "blockNumber", SortOrder: "Desc" }],
@@ -84,6 +88,55 @@ export async function getGroupTransfers(limit = 1000): Promise<CirclesTransfer[]
       txHash: String(r.transactionHash ?? ""),
     }))
     .filter((t) => t.value > 0n);
+}
+
+export interface GroupHolder {
+  holder: string;
+  atto: bigint; // demurraged group-token balance
+}
+
+/**
+ * Live RCRC holders from the dedicated `V_CrcV2.GroupTokenHoldersBalance` view
+ * (the source of truth — no dependency on the bounded transfer log). Each row is
+ * a holder with a positive demurraged group-token balance.
+ */
+export async function getGroupHolders(): Promise<GroupHolder[]> {
+  const rows = await circlesQuery({
+    Namespace: "V_CrcV2",
+    Table: "GroupTokenHoldersBalance",
+    Columns: [],
+    Filter: [
+      { Type: "FilterPredicate", FilterType: "Equals", Column: "group", Value: lower(ADDR.group) },
+    ],
+    Order: [],
+    Limit: 1000,
+  });
+  return rows
+    .map((r) => ({
+      holder: lower(String(r.holder ?? "")),
+      atto: safeBig(r.demurragedTotalBalance ?? r.totalBalance ?? "0"),
+    }))
+    .filter((h) => h.holder && h.atto > 0n);
+}
+
+/**
+ * Live RCRC circulation from `V_CrcV2.GroupTokenSupply.demurragedTotalSupply`
+ * (atto). This is the on-chain truth for UMLAUF — independent of the transfer
+ * log. Returns 0n if the view has no row for the group.
+ */
+export async function getGroupSupplyAtto(): Promise<bigint> {
+  const rows = await circlesQuery({
+    Namespace: "V_CrcV2",
+    Table: "GroupTokenSupply",
+    Columns: [],
+    Filter: [
+      { Type: "FilterPredicate", FilterType: "Equals", Column: "group", Value: lower(ADDR.group) },
+    ],
+    Order: [],
+    Limit: 1,
+  });
+  if (!rows.length) return 0n;
+  return safeBig(rows[0].demurragedTotalSupply ?? rows[0].totalSupply ?? "0");
 }
 
 export interface TrustEdge {
@@ -146,10 +199,18 @@ export async function getTokenBalances(address: string): Promise<TokenBalance[]>
   }));
 }
 
-/** Sum of all Circles balances on the vault = collateral backing the supply. */
+/**
+ * Sum of the personal-CRC balances locked in the group vault = collateral
+ * backing the RCRC supply. Excludes any group-token balance (that would be RCRC
+ * the vault happens to hold, not collateral). `GroupCollateralByToken` is empty
+ * for BaseGroups, so we read the vault directly (see project memory).
+ */
 export async function getVaultCollateralAtto(): Promise<bigint> {
+  const group = lower(ADDR.group);
   const balances = await getTokenBalances(ADDR.vault);
-  return balances.reduce((sum, b) => sum + b.atto, 0n);
+  return balances
+    .filter((b) => b.tokenAddress !== group)
+    .reduce((sum, b) => sum + b.atto, 0n);
 }
 
 export interface CirclesAvatar {

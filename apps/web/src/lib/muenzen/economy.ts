@@ -6,6 +6,8 @@ import { getAddress } from "viem";
 import { gnosisClient } from "./gnosis";
 import {
   getGroupTransfers,
+  getGroupHolders,
+  getGroupSupplyAtto,
   getVaultCollateralAtto,
   trusteesOf,
   type CirclesTransfer,
@@ -83,31 +85,31 @@ export interface HolderSet {
 }
 
 /**
- * Current RCRC holders (positive demurraged balance) derived from the transfer
- * log, with supply = sum of live balances (more accurate than a static total
- * under demurrage).
+ * Current RCRC holders + circulation, read from the dedicated on-chain Circles
+ * views (`GroupTokenHoldersBalance` + `GroupTokenSupply.demurragedTotalSupply`)
+ * — the source of truth, independent of the bounded transfer log. We refresh
+ * each holder's balance via a Hub multicall (matches the view's demurraged
+ * value) and fall back to the view balance if a read fails.
  */
 export const loadHolders = (fresh = false) =>
   cached<HolderSet>(
     "holders",
     TTL.chain,
     async () => {
-      const transfers = await loadTransfers(fresh);
-      const candidates = [
-        ...new Set(
-          transfers
-            .flatMap((t) => [t.from, t.to])
-            .filter((a) => a && a !== ZERO_ADDRESS),
-        ),
-      ].slice(0, 200);
+      const [holderRows, supplyAtto] = await Promise.all([
+        getGroupHolders(),
+        getGroupSupplyAtto(),
+      ]);
+      const candidates = holderRows
+        .map((h) => h.holder)
+        .filter((a) => a && a !== ZERO_ADDRESS)
+        .slice(0, 200);
       const balances = await rcrcBalancesMulti(candidates);
       const holders: Holder[] = [];
-      let supplyAtto = 0n;
-      for (const [address, bal] of balances) {
-        if (bal > 0n) {
-          holders.push({ address, rcrc: attoToNumber(bal) });
-          supplyAtto += bal;
-        }
+      for (const h of holderRows) {
+        const live = balances.get(h.holder);
+        const bal = live != null && live > 0n ? live : h.atto;
+        if (bal > 0n) holders.push({ address: h.holder, rcrc: attoToNumber(bal) });
       }
       holders.sort((a, b) => b.rcrc - a.rcrc);
       return { holders, supply: attoToNumber(supplyAtto) };
