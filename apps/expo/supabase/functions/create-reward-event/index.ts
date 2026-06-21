@@ -1,13 +1,15 @@
 // Edge Function: create-reward-event
 // A citizen registers a 'Smart Event' (reward_events row). The returned id is encoded in the
-// event QR. Gated to CitizenNFT holders. Service-role insert (reward_events is RLS-locked).
+// event QR. Gated to CitizenNFT holders — verify_jwt stays ON (anon key) AND the function
+// re-checks hasCitizenNFT, so ONLY citizens can create reward-bearing events. CORS allows the
+// apikey header so the mini-app's preflight succeeds from a normal browser. Service-role insert.
 import { createPublicClient, http, getAddress } from "https://esm.sh/viem@2.21.0";
 import { gnosis } from "https://esm.sh/viem@2.21.0/chains";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CITIZEN_NFT = "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4";
 const citizenAbi = [{ type: "function", name: "hasCitizenNFT", stateMutability: "view", inputs: [{ name: "a", type: "address" }], outputs: [{ type: "bool" }] }] as const;
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 Deno.serve(async (req: Request) => {
