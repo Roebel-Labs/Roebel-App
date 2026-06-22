@@ -1,10 +1,26 @@
-// Dependency-free radial graph in the apps/web "card node" idiom: a navy center
-// node with member cards on one or two rings, each card carrying the member's real
-// Circles avatar + name, and edges drawn behind. HTML cards (for avatars + text)
-// over an SVG edge layer — no heavy force-graph library, mobile-friendly, monochrome
-// (navy = in the group, neutral = not yet).
+// Draggable / zoomable trust graph on React Flow (same engine as apps/web /graph),
+// with the mini-app's monochrome card nodes: a navy group hub, member cards carrying
+// the real Circles avatar + name, and smooth animated arrow-edges. Hub → spoke radial
+// layout; pan, pinch-zoom and the zoom Controls keep it readable instead of condensed.
+import { useMemo } from "react";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  Handle,
+  Position,
+  MarkerType,
+  type Node,
+  type Edge,
+  type NodeProps,
+  type NodeTypes,
+  type EdgeTypes,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { Avatar } from "./ui";
 import { Globe, Check } from "./icons";
+import FloatingEdge from "./graph/FloatingEdge";
 
 export interface RadialNode {
   id: string;
@@ -25,23 +41,77 @@ const TONE: Record<RadialNode["tone"], ToneStyle> = {
   open: { card: "border-dashed border-neutral-300", ring: "ring-1 ring-neutral-200", badge: false, navy: false },
   placeholder: { card: "border-dashed border-neutral-300", ring: "ring-1 ring-neutral-200", badge: false, navy: false },
 };
-
 const TONE_RANK: Record<RadialNode["tone"], number> = { attester: 0, real: 0, verified: 1, open: 2, placeholder: 3 };
 
-// Polar position (units where 50 = the half-width of the square) per node index.
-function layout(n: number): { x: number; y: number; r: number }[] {
-  if (n <= 0) return [];
-  const place = (count: number, idx: number, radius: number, offset = 0) => {
-    const a = (idx / count) * 2 * Math.PI - Math.PI / 2 + offset;
-    return { x: 50 + radius * Math.cos(a), y: 50 + radius * Math.sin(a), r: radius };
-  };
-  if (n <= 7) return Array.from({ length: n }, (_, i) => place(n, i, 34));
-  const inner = Math.min(6, Math.round(n * 0.4));
-  const outer = n - inner;
-  return [
-    ...Array.from({ length: inner }, (_, i) => place(inner, i, 21)),
-    ...Array.from({ length: outer }, (_, i) => place(outer, i, 38, Math.PI / outer)),
-  ];
+const HIDDEN_HANDLE = "!h-1 !w-1 !min-w-0 !border-0 !bg-transparent";
+
+/* ── Custom nodes ────────────────────────────────────────────────────────────── */
+function MemberNode({ data }: NodeProps) {
+  const d = data as unknown as RadialNode;
+  const t = TONE[d.tone];
+  return (
+    <div className={`flex w-[132px] flex-col items-center gap-1 rounded-[12px] border bg-card px-3 py-2.5 shadow-sm transition-transform hover:scale-105 ${t.card}`}>
+      <Handle type="target" position={Position.Top} className={HIDDEN_HANDLE} isConnectable={false} />
+      <div className="relative">
+        <Avatar address={d.address ?? d.id} name={d.name ?? null} imageUrl={d.imageUrl ?? null} size={42} className={t.ring} />
+        {t.badge && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#194383] text-white ring-2 ring-card">
+            <Check className="h-2.5 w-2.5" />
+          </span>
+        )}
+      </div>
+      <span className="max-w-full truncate text-center text-xs font-semibold leading-tight text-foreground">{d.label}</span>
+      {d.sub && <span className="max-w-full truncate text-center text-[10px] leading-none text-muted-foreground">{d.sub}</span>}
+      <Handle type="source" position={Position.Bottom} className={HIDDEN_HANDLE} isConnectable={false} />
+    </div>
+  );
+}
+
+function GroupNode({ data }: NodeProps) {
+  const d = data as unknown as { label: string; sub?: string; imageUrl?: string | null };
+  return (
+    <div className="flex w-[150px] flex-col items-center gap-1 rounded-[14px] border-2 border-[#194383] bg-[#194383] px-3 py-3 text-center text-white shadow-md">
+      <Handle type="source" position={Position.Bottom} className={HIDDEN_HANDLE} isConnectable={false} />
+      <Handle type="target" position={Position.Top} className={HIDDEN_HANDLE} isConnectable={false} />
+      {d.imageUrl ? (
+        <img src={d.imageUrl} alt="" className="h-10 w-10 rounded-full border border-white/30 bg-white object-cover" />
+      ) : (
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
+          <Globe className="h-5 w-5" />
+        </span>
+      )}
+      <span className="max-w-[120px] truncate text-[13px] font-bold leading-tight">{d.label}</span>
+      {d.sub && <span className="text-[10px] font-medium text-white/70">{d.sub}</span>}
+    </div>
+  );
+}
+
+const nodeTypes: NodeTypes = { member: MemberNode, group: GroupNode };
+const edgeTypes: EdgeTypes = { floating: FloatingEdge };
+
+const CENTER_ID = "__center";
+
+/* ── Radial layout (positions = node centers; React Flow fitView frames it) ────── */
+function radialPositions(nodes: RadialNode[]): Record<string, { x: number; y: number }> {
+  const pos: Record<string, { x: number; y: number }> = {};
+  const ring = (arr: RadialNode[], radius: number, offset = 0) =>
+    arr.forEach((nd, i) => {
+      const a = (i / Math.max(arr.length, 1)) * 2 * Math.PI - Math.PI / 2 + offset;
+      pos[nd.id] = { x: Math.cos(a) * radius, y: Math.sin(a) * radius };
+    });
+
+  const inner = nodes.filter((n) => n.tone === "attester" || n.tone === "real");
+  const rest = nodes.filter((n) => !(n.tone === "attester" || n.tone === "real"));
+  if (inner.length) ring(inner, 240);
+  const outerBase = inner.length ? 470 : 320;
+  if (rest.length <= 9) {
+    ring(rest, outerBase);
+  } else {
+    const half = Math.ceil(rest.length / 2);
+    ring(rest.slice(0, half), outerBase - 60);
+    ring(rest.slice(half), outerBase + 200, Math.PI / half);
+  }
+  return pos;
 }
 
 export default function RadialGraph({
@@ -53,85 +123,73 @@ export default function RadialGraph({
   nodes: RadialNode[];
   emptyLabel?: string;
 }) {
-  // Attesters / live towns gravitate to the inner ring.
-  const ordered = [...nodes].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]);
-  const pts = layout(ordered.length);
+  const { rfNodes, rfEdges } = useMemo(() => {
+    const ordered = [...nodes].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]);
+    const pos = radialPositions(ordered);
+
+    const rfNodes: Node[] = [
+      { id: CENTER_ID, type: "group", position: { x: -75, y: -55 }, data: center as unknown as Record<string, unknown>, draggable: true },
+      ...ordered.map((nd) => ({
+        id: nd.id,
+        type: "member",
+        // anchor ≈ node centre on the computed ring
+        position: { x: (pos[nd.id]?.x ?? 0) - 66, y: (pos[nd.id]?.y ?? 0) - 46 },
+        data: nd as unknown as Record<string, unknown>,
+        draggable: true,
+      })),
+    ];
+
+    const rfEdges: Edge[] = ordered.map((nd) => {
+      const navy = TONE[nd.tone].navy;
+      const color = navy ? "#194383" : "#A3A3A3";
+      return {
+        id: `e-${nd.id}`,
+        source: CENTER_ID,
+        target: nd.id,
+        type: "floating",
+        animated: !nd.dashed,
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color },
+        style: { stroke: color, strokeWidth: 1.75, opacity: nd.dashed ? 0.4 : 0.6, strokeDasharray: nd.dashed ? "5 5" : undefined },
+      };
+    });
+
+    return { rfNodes, rfEdges };
+  }, [center, nodes]);
+
+  if (nodes.length === 0) {
+    return (
+      <div className="flex h-[280px] w-full items-center justify-center rounded-[10px] border border-dashed border-border text-[13px] text-muted-foreground">
+        {emptyLabel}
+      </div>
+    );
+  }
 
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[400px]">
-      {/* Edge layer (behind the cards) */}
-      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="absolute inset-0 h-full w-full" aria-hidden>
-        <circle cx="50" cy="50" r="38" fill="none" stroke="#ededed" strokeWidth="0.4" />
-        <circle cx="50" cy="50" r="21" fill="none" stroke="#f5f5f5" strokeWidth="0.4" />
-        {pts.map((p, i) => {
-          const nd = ordered[i];
-          const navy = TONE[nd.tone].navy;
-          return (
-            <line
-              key={`e-${nd.id}`}
-              x1="50"
-              y1="50"
-              x2={p.x}
-              y2={p.y}
-              stroke={navy ? "#194383" : "#D4D4D4"}
-              strokeWidth="0.5"
-              strokeLinecap="round"
-              strokeDasharray={nd.dashed ? "1.6 1.6" : `${p.r}`}
-              className={nd.dashed ? undefined : "rc-draw"}
-              style={
-                nd.dashed
-                  ? { opacity: 0.45 }
-                  : ({ ["--rc-len" as string]: `${p.r}`, animation: `rc-draw 0.9s ${0.15 + i * 0.03}s ease-out both`, opacity: 0.55 } as React.CSSProperties)
-              }
-            />
-          );
-        })}
-      </svg>
-
-      {/* Member cards */}
-      {pts.map((p, i) => {
-        const nd = ordered[i];
-        const t = TONE[nd.tone];
-        return (
-          <div
-            key={nd.id}
-            className="rc-rise absolute z-10 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${p.x}%`, top: `${p.y}%`, animationDelay: `${0.2 + i * 0.03}s` }}
-          >
-            <div
-              className={`flex w-[74px] flex-col items-center gap-1 rounded-[10px] border bg-card px-1.5 py-1.5 shadow-sm transition-transform duration-200 hover:scale-105 ${t.card}`}
-            >
-              <div className="relative">
-                <Avatar address={nd.address ?? nd.id} name={nd.name ?? null} imageUrl={nd.imageUrl ?? null} size={34} className={t.ring} />
-                {t.badge && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#194383] text-white ring-2 ring-card">
-                    <Check className="h-2.5 w-2.5" />
-                  </span>
-                )}
-              </div>
-              <span className="max-w-full truncate text-center text-[10px] font-medium leading-tight text-foreground">{nd.label}</span>
-              {nd.sub && <span className="max-w-full truncate text-center text-[9px] leading-none text-muted-foreground">{nd.sub}</span>}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Center (the group / meta-group) */}
-      <div className="rc-rise absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 rounded-[12px] border-2 border-[#194383] bg-[#194383] px-3 py-2 text-center text-white shadow-md">
-        {center.imageUrl ? (
-          <img src={center.imageUrl} alt="" className="h-9 w-9 rounded-full border border-white/30 bg-white object-cover" />
-        ) : (
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
-            <Globe className="h-5 w-5" />
-          </span>
-        )}
-        <span className="max-w-[96px] truncate text-[11px] font-bold leading-tight">{center.label}</span>
-        {center.sub && <span className="text-[9px] font-medium text-white/70">{center.sub}</span>}
-      </div>
-
-      {ordered.length === 0 && (
-        <div className="absolute inset-x-0 bottom-6 text-center text-[11px] text-muted-foreground">{emptyLabel}</div>
-      )}
+    <div className="h-[440px] w-full overflow-hidden rounded-[10px] border border-border bg-[#fafafa]">
+      <ReactFlow
+        nodes={rfNodes}
+        edges={rfEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.25 }}
+        minZoom={0.2}
+        maxZoom={2}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        preventScrolling={false}
+        defaultEdgeOptions={{ type: "floating" }}
+      >
+        <Background color="#e5e5e5" gap={18} size={1} />
+        <Controls showInteractive={false} className="!rounded-[8px] !border !border-border !shadow-sm" />
+        <MiniMap
+          pannable
+          zoomable
+          className="!rounded-[8px] !border !border-border"
+          maskColor="rgba(245,245,245,0.7)"
+          nodeColor={(n) => (n.type === "group" ? "#194383" : TONE[(n.data as unknown as RadialNode).tone]?.navy ? "#194383" : "#d4d4d4")}
+        />
+      </ReactFlow>
     </div>
   );
 }
