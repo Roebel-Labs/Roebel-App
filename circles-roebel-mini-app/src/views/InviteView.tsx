@@ -133,7 +133,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       <div className="grid grid-cols-2 gap-3">
         <KpiCard
           label="Inviting as"
-          value={inviter ? <span className="font-mono text-base">{shortAddr(inviter)}</span> : <span className="text-base text-amber-600">Connect</span>}
+          value={inviter ? <span className="font-mono text-base">{shortAddr(inviter)}</span> : <span className="text-base text-muted-foreground">Connect</span>}
           sub={inviter ? "connected wallet" : "open in the Circles app"}
           tone={inviter ? "primary" : "warning"}
           icon={<Wallet className="h-5 w-5" />}
@@ -210,7 +210,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
             spellCheck={false}
             className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2 font-mono text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
           />
-          {extra && !extraValid && <p className="mt-1 text-xs text-red-500">Not a valid address.</p>}
+          {extra && !extraValid && <p className="mt-1 text-xs font-medium text-foreground">Not a valid address.</p>}
         </div>
       </ChartCard>
 
@@ -222,15 +222,15 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         <button
           onClick={invite}
           disabled={busy || !inviter || inviteCount === 0 || !!overQuota || !!overFunded}
-          className="inline-flex items-center gap-2 rounded-[12px] bg-[#194383] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(25,67,131,0.9)] transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+          className="inline-flex items-center gap-2 rounded-[10px] bg-[#194383] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40"
         >
           <UserPlus className="h-4 w-4" />
           {busy ? "Inviting…" : `Invite (${inviteCount})`}
         </button>
       </div>
-      {overQuota && <p className="-mt-2 text-xs text-amber-600">More selected than your quota — please reduce the selection.</p>}
+      {overQuota && <p className="-mt-2 text-xs text-muted-foreground">More selected than your quota — please reduce the selection.</p>}
       {!overQuota && overFunded && (
-        <p className="-mt-2 text-xs text-amber-600">
+        <p className="-mt-2 text-xs text-muted-foreground">
           Only {fundable} of your quota {fundable === 0 ? "is" : "are"} funded on-chain — use Self-fund below{fundable! > 0 ? ", or reduce the selection" : ""}.
         </p>
       )}

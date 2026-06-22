@@ -2,8 +2,8 @@
 // rounded bar charts, a donut gauge and a split bar. Crisp at any width (viewBox + h-auto).
 import { useId } from "react";
 
-const AXIS = "#94a3b8";
-const GRID = "#e7ecf2";
+const AXIS = "#a3a3a3"; // neutral-400
+const GRID = "#e5e5e5"; // neutral-200
 
 /* ── Area chart (one or two series, gradient fill) ─────────────────────────── */
 export interface AreaSeries {
@@ -121,7 +121,7 @@ export function BarChart({
                   Z`}
               fill={d.color}
             />
-            <text x={cx} y={yTop - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#334155">
+            <text x={cx} y={yTop - 5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#525252">
               {d.value >= 1000 ? `${(d.value / 1000).toFixed(1)}k` : Math.round(d.value)}
             </text>
             <text x={cx} y={H - 8} textAnchor="middle" fontSize={11} fill={AXIS}>
@@ -138,14 +138,14 @@ export function BarChart({
 export function Donut({
   value,
   color = "#194383",
-  track = "#e7ecf2",
+  track = "#e5e5e5",
   label,
   sub,
   size = 132,
 }: {
   value: number; // 0..1 (clamped visually to 1)
   color?: string;
-  track?: string;
+  track?: string; // neutral-200 by default
   label?: string;
   sub?: string;
   size?: number;

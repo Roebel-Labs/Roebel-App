@@ -272,7 +272,7 @@ function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNo
           </button>
         </div>
         {toast ? (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#194383]">
             <Check className="h-3.5 w-3.5" />
             {toast}
           </p>

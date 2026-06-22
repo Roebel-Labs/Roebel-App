@@ -89,7 +89,7 @@ export default function App() {
           <img
             src={roebelLogo}
             alt="Röbel"
-            className="h-9 w-9 rounded-[11px] shadow-[0_6px_16px_-6px_rgba(25,67,131,0.7)]"
+            className="h-9 w-9 rounded-[10px] border border-border shadow-sm"
           />
           <div className="min-w-0 leading-tight">
             <h1 className="font-display text-[17px] font-extrabold tracking-tight text-foreground">Röbel</h1>
@@ -97,13 +97,13 @@ export default function App() {
           </div>
           {inviter && (
             <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 font-mono text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#194383]" />
               {inviter.slice(0, 6)}…{inviter.slice(-4)}
             </span>
           )}
         </div>
 
-        <nav className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto rounded-[12px] bg-muted p-1">
+        <nav className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto rounded-[10px] bg-muted p-1">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -111,7 +111,7 @@ export default function App() {
               <button
                 key={t.id}
                 onClick={() => selectTab(t.id)}
-                className={`flex flex-1 min-w-[60px] flex-col items-center gap-1 rounded-[9px] py-1.5 text-[11px] font-medium transition ${
+                className={`flex flex-1 min-w-[60px] flex-col items-center gap-1 rounded-[8px] py-1.5 text-[11px] font-medium transition ${
                   active ? "bg-card text-[#194383] shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >

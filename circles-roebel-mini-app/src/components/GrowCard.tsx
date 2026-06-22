@@ -52,8 +52,8 @@ export default function GrowCard({ wallet }: { wallet: Address | null }) {
         <EmptyHint>Connect your wallet to get your invite link.</EmptyHint>
       ) : (
         <div className="flex flex-col items-center gap-4 sm:flex-row">
-          <div className="shrink-0 rounded-[14px] border border-border bg-white p-3 shadow-sm">
-            <QRCodeSVG value={link} size={116} level="M" fgColor="#0b1220" />
+          <div className="shrink-0 rounded-[10px] border border-border bg-white p-3 shadow-sm">
+            <QRCodeSVG value={link} size={116} level="M" fgColor="#0a0a0a" />
           </div>
           <div className="w-full min-w-0 flex-1">
             <div className="truncate rounded-[10px] border border-border bg-muted px-3 py-2 font-mono text-[12px] text-muted-foreground">{link}</div>

@@ -26,13 +26,13 @@ const PRINT_CSS = `
   #event-print { display: block !important; position: absolute; inset: 0; }
 }
 .a4 { width: 210mm; min-height: 297mm; background: #fff; color: #194383; box-sizing: border-box;
-  padding: 28mm 24mm; text-align: center; font-family: 'Plus Jakarta Sans', Inter, system-ui, sans-serif; }
+  padding: 28mm 24mm; text-align: center; font-family: Inter, system-ui, sans-serif; }
 .a4-kicker { letter-spacing: .35em; font-size: 12pt; color: #194383; font-weight: 700; margin: 0 0 6mm; }
 .a4-title { font-size: 34pt; font-weight: 800; line-height: 1.05; margin: 0 0 4mm; }
-.a4-sub { font-size: 17pt; color: #475569; margin: 0 0 16mm; }
+.a4-sub { font-size: 17pt; color: #525252; margin: 0 0 16mm; }
 .a4-qr { display: flex; justify-content: center; margin: 0 0 14mm; }
 .a4-steps { font-size: 15pt; line-height: 1.5; color: #194383; margin: 0 0 18mm; }
-.a4-foot { font-size: 11pt; color: #94a3b8; }
+.a4-foot { font-size: 11pt; color: #a3a3a3; }
 `;
 
 export default function EventInviteView({ inviter }: { inviter: Address | null }) {
@@ -123,12 +123,12 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
             </select>
           </label>
 
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-2 text-sm font-medium text-foreground">{error}</p>}
 
           <button
             onClick={create}
             disabled={creating}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#194383] px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(25,67,131,0.9)] transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
           >
             <Plus className="h-4 w-4" />
             {creating ? "Creating…" : "Create event QR"}
@@ -137,14 +137,14 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
       ) : (
         <>
           <Card className="p-5 text-center">
-            <img src={coin3d} alt="" className="mx-auto mb-2 h-16 w-16 drop-shadow-[0_10px_18px_rgba(25,67,131,0.2)]" />
-            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+            <img src={coin3d} alt="" className="mx-auto mb-2 h-16 w-16 drop-shadow-[0_10px_18px_rgba(10,10,10,0.12)]" />
+            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#194383]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#194383]">
               <Sparkles className="h-3 w-3" /> Event live
             </div>
             <h3 className="font-display text-lg font-bold tracking-tight text-foreground">{event.label}</h3>
             <div className="my-4 flex justify-center">
-              <div className="rounded-[16px] border border-border bg-white p-4 shadow-sm">
-                <QRCodeSVG value={link} size={208} level="M" fgColor="#0b1220" />
+              <div className="rounded-[10px] border border-border bg-white p-4 shadow-sm">
+                <QRCodeSVG value={link} size={208} level="M" fgColor="#0a0a0a" />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">Valid until {new Date(event.expiresAt).toLocaleString("en-US")}</p>

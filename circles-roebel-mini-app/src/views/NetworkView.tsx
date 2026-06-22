@@ -46,7 +46,7 @@ export default function NetworkView() {
             <span className="h-2.5 w-2.5 rounded-full bg-[#194383]" /> Live town
           </span>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-300 bg-slate-50" /> Planned
+            <span className="h-2.5 w-2.5 rounded-full border border-dashed border-neutral-300 bg-neutral-50" /> Planned
           </span>
         </div>
       </ChartCard>

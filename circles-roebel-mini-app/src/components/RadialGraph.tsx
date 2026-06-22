@@ -10,12 +10,14 @@ export interface RadialNode {
   dashed?: boolean;
 }
 
+// Monochrome: navy (and a lighter navy fill) for nodes that are part of the
+// group; neutral gray for nodes that aren't yet. No other hues.
 const TONE: Record<string, { fill: string; stroke: string; glow?: string }> = {
-  verified: { fill: "#DCFCE7", stroke: "#16A34A", glow: "rgba(22,163,74,0.35)" },
-  attester: { fill: "#E5EDF9", stroke: "#194383", glow: "rgba(25,67,131,0.3)" },
-  open: { fill: "#F1F5F9", stroke: "#94A3B8" },
-  real: { fill: "#194383", stroke: "#194383", glow: "rgba(25,67,131,0.35)" },
-  placeholder: { fill: "#F8FAFC", stroke: "#CBD5E1" },
+  verified: { fill: "#E8EEF7", stroke: "#194383", glow: "rgba(25,67,131,0.28)" }, // navy outline
+  attester: { fill: "#194383", stroke: "#194383", glow: "rgba(25,67,131,0.32)" }, // solid navy
+  open: { fill: "#F5F5F5", stroke: "#A3A3A3" }, // neutral
+  real: { fill: "#194383", stroke: "#194383", glow: "rgba(25,67,131,0.32)" }, // solid navy
+  placeholder: { fill: "#FAFAFA", stroke: "#D4D4D4" }, // neutral
 };
 
 export default function RadialGraph({
@@ -55,8 +57,8 @@ export default function RadialGraph({
       </defs>
 
       {/* faint concentric rings for depth */}
-      <circle cx={cx} cy={cy} r={R} fill="none" stroke="#eef2f7" strokeWidth={1} />
-      <circle cx={cx} cy={cy} r={R * 0.62} fill="none" stroke="#f1f5f9" strokeWidth={1} />
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="#ededed" strokeWidth={1} />
+      <circle cx={cx} cy={cy} r={R * 0.62} fill="none" stroke="#f5f5f5" strokeWidth={1} />
 
       {/* edges */}
       {nodes.map((nd, i) => {
@@ -69,7 +71,7 @@ export default function RadialGraph({
             y1={cy}
             x2={p.x}
             y2={p.y}
-            stroke={TONE[nd.tone]?.stroke ?? "#CBD5E1"}
+            stroke={TONE[nd.tone]?.stroke ?? "#D4D4D4"}
             strokeWidth={1.25}
             strokeDasharray={nd.dashed ? "4 4" : `${len}`}
             strokeDashoffset={nd.dashed ? undefined : 0}
@@ -95,11 +97,11 @@ export default function RadialGraph({
               strokeWidth={2}
               strokeDasharray={nd.dashed ? "3 3" : undefined}
             />
-            <text x={p.x} y={p.y + 28} textAnchor="middle" fontSize={9.5} fill="#475569" fontFamily="ui-monospace, monospace">
+            <text x={p.x} y={p.y + 28} textAnchor="middle" fontSize={9.5} fill="#525252" fontFamily="ui-monospace, monospace">
               {nd.label}
             </text>
             {nd.sub && (
-              <text x={p.x} y={p.y + 39} textAnchor="middle" fontSize={8} fill="#94A3B8">
+              <text x={p.x} y={p.y + 39} textAnchor="middle" fontSize={8} fill="#A3A3A3">
                 {nd.sub}
               </text>
             )}
@@ -119,7 +121,7 @@ export default function RadialGraph({
         </text>
       )}
       {n === 0 && (
-        <text x={cx} y={cy + 58} textAnchor="middle" fontSize={11} fill="#94A3B8">
+        <text x={cx} y={cy + 58} textAnchor="middle" fontSize={11} fill="#A3A3A3">
           {emptyLabel}
         </text>
       )}

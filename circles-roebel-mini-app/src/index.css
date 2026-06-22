@@ -6,29 +6,25 @@
    border-border, …) so the whole mini-app speaks the same visual language.
    ────────────────────────────────────────────────────────────────────────── */
 @theme {
+  /* One typeface — Inter, everywhere (mirrors apps/web). */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
 
-  /* Brand */
+  /* Single accent — navy. The only colour on the page. */
   --color-navy: #194383;
   --color-navy-600: #1d4e99;
 
-  /* Surfaces */
-  --color-background: #f5f7fa;
-  --color-card: #ffffff;
-  --color-foreground: #0b1220;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e7ecf2;
+  /* Surfaces — a true-neutral gray scale (no hue), shadcn-style. */
+  --color-background: #f5f5f5; /* neutral page canvas */
+  --color-card: #ffffff; /* white cards float on the gray */
+  --color-foreground: #0a0a0a; /* near-black text */
+  --color-muted: #f0f0f0; /* subtle fills inside cards */
+  --color-muted-foreground: #737373; /* secondary text */
+  --color-border: #e5e5e5; /* hairline borders */
 
-  /* Semantic */
+  /* Accent — navy is the one and only non-neutral colour. */
   --color-primary: #194383;
   --color-primary-foreground: #ffffff;
-  --color-success: #16a34a;
-  --color-warning: #f59e0b;
-  --color-danger: #dc2626;
-  --color-info: #0ea5e9;
-  --color-violet: #8b5cf6;
 
   --radius: 10px;
 }
@@ -43,16 +39,14 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-foreground);
-  /* Soft atmosphere: a faint navy bloom at the top fading into the muted page. */
-  background:
-    radial-gradient(1100px 380px at 50% -12%, rgba(25, 67, 131, 0.07), transparent 70%),
-    var(--color-background);
+  /* Flat neutral gray — no colour, no gradient. */
+  background: var(--color-background);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(25, 67, 131, 0.16);
+  background: rgba(25, 67, 131, 0.14);
 }
 
 /* Tabular numerals everywhere they matter look crisper with Inter's feature. */
