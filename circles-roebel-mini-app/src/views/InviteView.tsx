@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { inviteFarm, getQuota, getQuotaFunding, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
-import { ROEBEL_CITIZENS, shortAddr, explorerAvatar } from "../lib/citizens";
-import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner } from "../components/ui";
-import { UserPlus, Wallet, Check, ExternalLink } from "../components/icons";
+import { ROEBEL_CITIZENS, shortAddr, explorerAvatar, type Citizen } from "../lib/citizens";
+import { getProfiles, type Profile } from "../lib/circlesData";
+import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner, Avatar } from "../components/ui";
+import { UserPlus, Wallet, Check, ExternalLink, ChevronRight } from "../components/icons";
 import { track } from "../lib/analytics";
 
 type RowStatus = "checking" | "registered" | "open" | "unknown";
@@ -21,8 +22,15 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const [extra, setExtra] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
+  const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
+  const [invitedOpen, setInvitedOpen] = useState(false);
 
   const citizens = ROEBEL_CITIZENS;
+
+  // Resolve each citizen's real Circles avatar name + picture once (static list).
+  useEffect(() => {
+    getProfiles(citizens.map((c) => c.address)).then(setProfiles).catch(() => {});
+  }, [citizens]);
 
   const loadQuota = useCallback(() => {
     if (!inviter) {
@@ -72,6 +80,10 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const overFunded = fundable != null && inviteCount > fundable;
   const quotaUnfunded = funding != null && quotaNum != null && quotaNum > 0 && funding.fundableInvites < quotaNum;
   const registeredCount = citizens.filter((c) => status[c.address.toLowerCase()] === "registered").length;
+  // Split into the actionable list (not yet in Circles) and the already-invited
+  // ones (registered humans) — the latter collapse into their own section.
+  const invitable = useMemo(() => citizens.filter((c) => status[c.address.toLowerCase()] !== "registered"), [citizens, status]);
+  const invited = useMemo(() => citizens.filter((c) => status[c.address.toLowerCase()] === "registered"), [citizens, status]);
 
   const invite = useCallback(async () => {
     if (!inviter) return setMsg({ kind: "err", text: "No wallet connected — open this app inside the Circles app." });
@@ -126,6 +138,45 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
     }
   }, [inviter, selfFund, selectedList, refreshStatus]);
 
+  const renderCitizen = (c: Citizen, selectable: boolean) => {
+    const key = c.address.toLowerCase();
+    const st = status[key] ?? "checking";
+    const p = profiles.get(key);
+    const name = p?.name || shortAddr(c.address);
+    return (
+      <li key={c.address}>
+        <label className={`flex items-center gap-3 px-1 py-2.5 ${selectable ? "cursor-pointer" : "opacity-70"}`}>
+          {selectable ? (
+            <input
+              type="checkbox"
+              className="h-[18px] w-[18px] shrink-0 accent-[#194383]"
+              checked={selected.has(key)}
+              onChange={() => toggle(c.address)}
+            />
+          ) : (
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#194383] text-white">
+              <Check className="h-2.5 w-2.5" />
+            </span>
+          )}
+          <Avatar address={c.address} name={p?.name ?? null} imageUrl={p?.imageUrl ?? null} size={28} />
+          <div className="min-w-0 flex-1">
+            <a
+              href={explorerAvatar(c.address)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-foreground hover:text-[#194383]"
+            >
+              <span className="truncate">{name}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+            </a>
+          </div>
+          {c.attester && <Pill tone="primary">Attester</Pill>}
+          <StatusBadge status={st} />
+        </label>
+      </li>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader title="Invite citizens" description="Bring verified Röbel citizens into Circles using your invitation quota." onRefresh={refreshStatus} />
@@ -169,37 +220,47 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
 
       <ChartCard
         title={`Citizens (${citizens.length})`}
-        subtitle={`${registeredCount} verified · ${citizens.length - registeredCount} invitable`}
+        subtitle={`${invitable.length} invitable · ${registeredCount} invited`}
       >
-        <ul className="-mx-1 divide-y divide-border">
-          {citizens.map((c) => {
-            const st = status[c.address.toLowerCase()] ?? "checking";
-            const checked = selected.has(c.address.toLowerCase());
-            const disabled = st === "registered";
-            return (
-              <li key={c.address}>
-                <label className={`flex items-center gap-3 px-1 py-2.5 ${disabled ? "opacity-60" : "cursor-pointer"}`}>
-                  <input
-                    type="checkbox"
-                    className="h-[18px] w-[18px] shrink-0 accent-[#194383]"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => toggle(c.address)}
-                  />
-                  <img src={explorerAvatar(c.address)} alt="" loading="lazy" className="h-7 w-7 shrink-0 rounded-full border border-border bg-muted object-cover" />
-                  <div className="min-w-0 flex-1">
-                    <a href={explorerAvatar(c.address)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-[13px] text-foreground hover:text-[#194383]">
-                      {shortAddr(c.address)}
-                      <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                    </a>
-                  </div>
-                  {c.attester && <Pill tone="primary">Attester</Pill>}
-                  <StatusBadge status={st} />
-                </label>
-              </li>
-            );
-          })}
-        </ul>
+        {invitable.length === 0 ? (
+          <p className="px-1 py-3 text-center text-[13px] text-muted-foreground">All citizens are already in Circles 🎉</p>
+        ) : (
+          <ul className="-mx-1 divide-y divide-border">{invitable.map((c) => renderCitizen(c, true))}</ul>
+        )}
+
+        {invited.length > 0 && (
+          <div className="mt-1 border-t border-border pt-1">
+            <button
+              type="button"
+              onClick={() => setInvitedOpen((o) => !o)}
+              aria-expanded={invitedOpen}
+              className="flex w-full items-center gap-2 px-1 py-2.5 text-left transition hover:opacity-80"
+            >
+              <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${invitedOpen ? "rotate-90" : ""}`} />
+              <span className="text-[13px] font-medium text-foreground">Invited</span>
+              <Pill tone="success">
+                <Check className="h-3 w-3" />
+                {invited.length}
+              </Pill>
+              {!invitedOpen && (
+                <span className="ml-auto flex -space-x-2 pr-0.5">
+                  {invited.slice(0, 5).map((c) => {
+                    const p = profiles.get(c.address.toLowerCase());
+                    return (
+                      <Avatar key={c.address} address={c.address} name={p?.name ?? null} imageUrl={p?.imageUrl ?? null} size={22} className="ring-2 ring-card" />
+                    );
+                  })}
+                  {invited.length > 5 && (
+                    <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9px] font-semibold text-muted-foreground ring-2 ring-card">
+                      +{invited.length - 5}
+                    </span>
+                  )}
+                </span>
+              )}
+            </button>
+            {invitedOpen && <ul className="-mx-1 divide-y divide-border">{invited.map((c) => renderCitizen(c, false))}</ul>}
+          </div>
+        )}
 
         <div className="mt-3 border-t border-border pt-3">
           <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Additional address (optional)</label>

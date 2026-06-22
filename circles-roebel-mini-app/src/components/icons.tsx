@@ -218,3 +218,9 @@ export const Download = (p: P) => (
     <line x1="12" x2="12" y1="15" y2="3" />
   </Svg>
 );
+
+export const ChevronRight = (p: P) => (
+  <Svg {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </Svg>
+);
