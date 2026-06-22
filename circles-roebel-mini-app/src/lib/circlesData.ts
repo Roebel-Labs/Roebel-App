@@ -6,6 +6,12 @@ import { ROEBEL_CITIZENS } from "./citizens";
 
 const RPC = "https://rpc.aboutcircles.com/";
 const GROUP = ROEBEL_GROUP.toLowerCase();
+// The Transfers view is NOT filterable by `tokenAddress` (it's a computed output
+// column → the RPC rejects it with -32602 and q() silently returns []). Filter by
+// the ERC-1155 token id instead = uint256(group address) as a decimal string. This
+// matches the proven query in the apps/web Münzen console (lib/muenzen/circles-rpc.ts)
+// and is what makes the Pulse flow data actually load.
+const GROUP_TOKEN_ID = BigInt(ROEBEL_GROUP).toString();
 
 type Row = Record<string, unknown>;
 async function q(Namespace: string, Table: string, Filter: unknown[] = [], Order: unknown[] = [], Limit?: number): Promise<Row[]> {
@@ -84,7 +90,7 @@ function classify(from: string, to: string): FlowKind {
 
 export interface Transfer { from: string; to: string; amount: number; time: number; tx: string; kind: FlowKind; }
 export async function getRecentTransfers(limit = 40): Promise<Transfer[]> {
-  const rows = await q("V_CrcV2", "Transfers", [eq("tokenAddress", GROUP)], [{ Column: "blockNumber", SortOrder: "Desc" }], limit);
+  const rows = await q("V_CrcV2", "Transfers", [eq("id", GROUP_TOKEN_ID)], [{ Column: "blockNumber", SortOrder: "Desc" }], limit);
   return rows.map((r) => {
     const from = String(r.from ?? ""), to = String(r.to ?? "");
     return { from, to, amount: toCrc(r.value), time: Number(r.timestamp ?? 0), tx: String(r.transactionHash ?? ""), kind: classify(from, to) };
@@ -117,11 +123,13 @@ export async function getReputation(verifiedSet: Set<string>): Promise<RepNode[]
 }
 
 // ── Derived analytics (pure — no extra RPC; computed from real transfers) ─────
+// Monochrome split: navy (the single accent) for minting — the headline flow —
+// then descending neutral grays. No green/amber/red/violet.
 export const FLOW_COLOR: Record<FlowKind, string> = {
-  mint: "#0ea5e9", // sky — new coins minted
-  reward: "#16a34a", // green — reward payouts from the town treasury
-  spend: "#dc2626", // red — paid into the treasury (e.g. lootbox)
-  transfer: "#8b5cf6", // violet — peer-to-peer
+  mint: "#194383", // navy — new coins minted
+  reward: "#525252", // neutral-600 — reward payouts from the town treasury
+  spend: "#a3a3a3", // neutral-400 — paid into the treasury (e.g. lootbox)
+  transfer: "#d4d4d4", // neutral-300 — peer-to-peer
 };
 
 export interface FlowSummary {
