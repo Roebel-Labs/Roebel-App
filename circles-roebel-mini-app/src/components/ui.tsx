@@ -1,47 +1,50 @@
 // Shadcn-flavoured UI primitives for the Röbel Circles mini-app — mirrors the admin
 // "Münzen" dashboard (navy, 10px radius, soft borders, KPI tiles, pills, identity cells).
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { explorerAvatar } from "../lib/citizens";
 import { shortAddr } from "../lib/format";
 import { Refresh, ArrowUpRight, Check } from "./icons";
 
+// The app keeps a `tone` API across its KPIs / pills / cells, but the palette is
+// reduced to two values: navy (the single accent, for the primary metric) and
+// neutral gray (everything else). No green/amber/red/sky/violet.
 export type Tone = "primary" | "success" | "warning" | "danger" | "info" | "violet" | "muted";
 
 const TONE_BAR: Record<Tone, string> = {
   primary: "bg-[#194383]",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
-  info: "bg-sky-500",
-  violet: "bg-violet-500",
-  muted: "bg-slate-300",
+  success: "bg-neutral-200",
+  warning: "bg-neutral-200",
+  danger: "bg-neutral-200",
+  info: "bg-neutral-200",
+  violet: "bg-neutral-200",
+  muted: "bg-neutral-200",
 };
 
 const TONE_TEXT: Record<Tone, string> = {
   primary: "text-[#194383]",
-  success: "text-emerald-600",
-  warning: "text-amber-600",
-  danger: "text-red-600",
-  info: "text-sky-600",
-  violet: "text-violet-600",
-  muted: "text-slate-500",
+  success: "text-muted-foreground",
+  warning: "text-muted-foreground",
+  danger: "text-muted-foreground",
+  info: "text-muted-foreground",
+  violet: "text-muted-foreground",
+  muted: "text-muted-foreground",
 };
 
 const TONE_PILL: Record<Tone, string> = {
   primary: "bg-[#194383]/10 text-[#194383]",
-  success: "bg-emerald-100 text-emerald-700",
-  warning: "bg-amber-100 text-amber-700",
-  danger: "bg-red-100 text-red-700",
-  info: "bg-sky-100 text-sky-700",
-  violet: "bg-violet-100 text-violet-700",
-  muted: "bg-slate-100 text-slate-600",
+  success: "bg-muted text-muted-foreground",
+  warning: "bg-muted text-muted-foreground",
+  danger: "bg-muted text-muted-foreground",
+  info: "bg-muted text-muted-foreground",
+  violet: "bg-muted text-muted-foreground",
+  muted: "bg-muted text-muted-foreground",
 };
 
 /* ── Card ──────────────────────────────────────────────────────────────────── */
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-[14px] border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-16px_rgba(15,23,42,0.12)] ${className}`}
+      className={`rounded-[10px] border border-border bg-card shadow-sm ${className}`}
     >
       {children}
     </div>
@@ -192,6 +195,68 @@ export function IdentityCell({
   );
 }
 
+/* ── Avatar (real Circles profile picture, with initials placeholder) ────────── */
+// Deterministic placeholder shades — keyed off the address so a wallet without an
+// uploaded picture always gets the same colour. Kept strictly within the app's
+// two families (navy accent + neutral gray) — no off-palette hues.
+const AVATAR_BG = ["#194383", "#27508c", "#355d95", "#1e3a5f", "#475569", "#334155"];
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_BG[h % AVATAR_BG.length];
+}
+function initials(name: string | null, address: string): string {
+  const n = name?.trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    const two = (parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[1]?.[0] ?? "" : "");
+    return (two || n.slice(0, 2)).toUpperCase();
+  }
+  return address.replace(/^0x/, "").slice(0, 2).toUpperCase();
+}
+
+/**
+ * Circles avatar: the on-chain profile picture when available, otherwise a
+ * deterministic initials placeholder (name initials, or the address head).
+ */
+export function Avatar({
+  address,
+  name = null,
+  imageUrl = null,
+  size = 28,
+  className = "",
+}: {
+  address: string;
+  name?: string | null;
+  imageUrl?: string | null;
+  size?: number;
+  className?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const px = `${size}px`;
+  if (imageUrl && !broken) {
+    return (
+      <img
+        src={imageUrl}
+        alt={name ?? ""}
+        loading="lazy"
+        onError={() => setBroken(true)}
+        style={{ width: px, height: px }}
+        className={`shrink-0 rounded-full border border-border bg-muted object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      style={{ width: px, height: px, backgroundColor: avatarColor(address.toLowerCase()), fontSize: Math.round(size * 0.4) }}
+      className={`flex shrink-0 items-center justify-center rounded-full font-semibold leading-none text-white ${className}`}
+    >
+      {initials(name, address)}
+    </span>
+  );
+}
+
 /* ── Banner / alert ────────────────────────────────────────────────────────── */
 export function Banner({
   kind,
@@ -202,23 +267,23 @@ export function Banner({
   children: ReactNode;
   className?: string;
 }) {
-  const tone =
-    kind === "ok"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : kind === "err"
-        ? "border-red-200 bg-red-50 text-red-700"
-        : kind === "warn"
-          ? "border-amber-200 bg-amber-50 text-amber-800"
-          : "border-sky-200 bg-sky-50 text-sky-800";
+  // One neutral treatment for every kind — errors stand out by a darker left
+  // rule and near-black text rather than by colour.
+  const emphatic = kind === "err" || kind === "warn";
+  const tone = emphatic
+    ? "border-border border-l-2 border-l-foreground bg-muted text-foreground"
+    : "border-border bg-muted text-muted-foreground";
   return <div className={`rounded-[10px] border px-3.5 py-2.5 text-[13px] leading-relaxed ${tone} ${className}`}>{children}</div>;
 }
 
 /* ── Score / progress bar ──────────────────────────────────────────────────── */
-export function ScoreBar({ value, tone = "primary" }: { value: number; tone?: Tone }) {
+/* Always navy fill — progress is the natural home for the single accent. The
+   `tone` arg is accepted for call-site compatibility but no longer varies hue. */
+export function ScoreBar({ value, tone: _tone = "primary" }: { value: number; tone?: Tone }) {
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className={`h-full rounded-full ${TONE_BAR[tone]} transition-[width] duration-700 ease-out`}
+        className="h-full rounded-full bg-[#194383] transition-[width] duration-700 ease-out"
         style={{ width: `${Math.max(3, Math.min(100, value))}%` }}
       />
     </div>

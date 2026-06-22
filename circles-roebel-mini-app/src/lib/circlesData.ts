@@ -36,6 +36,59 @@ const toCrc = (atto: unknown): number => {
   try { return atto ? Number(BigInt(atto as string)) / 1e18 : 0; } catch { return 0; }
 };
 
+// ── Circles profiles (real avatar name + picture) ─────────────────────────────
+// On-chain Avatars row (name + metadata digest) → optional IPFS profile for the
+// display name/picture. Mirrors the proven query in the apps/web Münzen console
+// (lib/muenzen/circles-rpc.ts getAvatarsBatch). Best-effort: every failure
+// resolves to nulls so the UI falls back to a placeholder.
+const PROFILE_GET = "https://rpc.aboutcircles.com/profiles/get?cid=";
+const ZERO_DIGEST = "0x" + "0".repeat(64);
+
+export interface Profile { name: string | null; imageUrl: string | null; }
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function digestToCidV0(hex: string): string {
+  const h = hex.replace(/^0x/, "");
+  const bytes = [0x12, 0x20];
+  for (let i = 0; i < h.length; i += 2) bytes.push(parseInt(h.slice(i, i + 2), 16));
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  let num = 0n;
+  for (const b of bytes) num = num * 256n + BigInt(b);
+  let out = "";
+  while (num > 0n) { out = B58[Number(num % 58n)] + out; num /= 58n; }
+  return "1".repeat(zeros) + out;
+}
+
+/** Real Circles avatar name + profile picture for a batch of addresses. Deduped, capped at 80. */
+export async function getProfiles(addresses: string[]): Promise<Map<string, Profile>> {
+  const uniq = [...new Set(addresses.map((a) => a.toLowerCase()).filter(Boolean))].slice(0, 80);
+  const map = new Map<string, Profile>();
+  await Promise.all(
+    uniq.map(async (a) => {
+      try {
+        const rows = await q("V_CrcV2", "Avatars", [eq("avatar", a)], [], 1);
+        if (!rows.length) { map.set(a, { name: null, imageUrl: null }); return; }
+        let name = (rows[0].name as string) || null;
+        let imageUrl: string | null = null;
+        const digest = rows[0].cidV0Digest as string | undefined;
+        if (digest && digest !== ZERO_DIGEST) {
+          try {
+            const cid = digestToCidV0(digest);
+            const p = await fetch(`${PROFILE_GET}${cid}`).then((r) => r.json());
+            name = p?.name || name;
+            imageUrl = p?.imageUrl || p?.previewImageUrl || null;
+          } catch { /* keep the on-chain name */ }
+        }
+        map.set(a, { name, imageUrl });
+      } catch {
+        map.set(a, { name: null, imageUrl: null });
+      }
+    }),
+  );
+  return map;
+}
+
 /** Citizens (lowercased) that are registered Circles humans. */
 export async function getVerifiedSet(): Promise<Set<string>> {
   const entries = await Promise.all(

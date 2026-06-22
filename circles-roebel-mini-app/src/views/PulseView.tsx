@@ -5,16 +5,18 @@ import {
   getVerifiedSet,
   getRecentTransfers,
   getReputation,
+  getProfiles,
   summarizeFlows,
   dailyVolume,
   flowLabel,
   type Transfer,
   type FlowKind,
   type RepNode,
+  type Profile,
 } from "../lib/circlesData";
 import { explorerTx } from "../lib/citizens";
 import { fmt, fmtInt, shortAddr, timeAgo } from "../lib/format";
-import { ChartCard, PageHeader, KpiCard, Pill, ScoreBar, Skeleton, SkeletonGrid, EmptyHint } from "../components/ui";
+import { ChartCard, PageHeader, KpiCard, Pill, ScoreBar, Skeleton, SkeletonGrid, EmptyHint, Avatar } from "../components/ui";
 import { AreaChart, SplitBar } from "../components/charts";
 import { Activity, Users, Flame, ArrowUpRight } from "../components/icons";
 import coinImg from "../assets/roebel-coin.png";
@@ -30,6 +32,7 @@ const KIND_TONE: Record<FlowKind, "info" | "success" | "danger" | "violet"> = {
 export default function PulseView() {
   const [transfers, setTransfers] = useState<Transfer[] | null>(null);
   const [rep, setRep] = useState<RepNode[] | null>(null);
+  const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
   const [filter, setFilter] = useState<FlowKind | "all">("all");
   const [loading, setLoading] = useState(true);
 
@@ -37,11 +40,16 @@ export default function PulseView() {
     setLoading(true);
     setTransfers(null);
     setRep(null);
+    setProfiles(new Map());
     const verified = await getVerifiedSet().catch(() => new Set<string>());
     const [tf, rp] = await Promise.all([getRecentTransfers(150), getReputation(verified)]);
     setTransfers(tf);
     setRep(rp);
     setLoading(false);
+    // Progressive enhancement: resolve real Circles names + pictures for everyone
+    // shown (leaderboard + flow feed), then re-render. Best-effort — never blocks.
+    const addrs = [...rp.slice(0, 12).map((n) => n.address), ...tf.flatMap((t) => [t.from, t.to])];
+    getProfiles(addrs).then(setProfiles).catch(() => {});
   };
   useEffect(() => {
     void load();
@@ -52,6 +60,7 @@ export default function PulseView() {
   const filtered = useMemo(() => (transfers ?? []).filter((t) => filter === "all" || t.kind === filter).slice(0, 40), [transfers, filter]);
   const maxScore = useMemo(() => Math.max(1, ...(rep ?? []).map((r) => r.score)), [rep]);
   const mintCount = summary.byKind.find((b) => b.kind === "mint")?.count ?? 0;
+  const nameOf = (addr: string) => profiles.get(addr.toLowerCase())?.name || shortAddr(addr);
 
   return (
     <div className="space-y-4">
@@ -102,30 +111,47 @@ export default function PulseView() {
       </ChartCard>
 
       {/* Reputation leaderboard */}
-      <ChartCard title="Reputation" subtitle="Coins held + flow activity · green = verified citizen">
+      <ChartCard title="Reputation" subtitle="Coins held + flow activity · navy = verified citizen">
         {rep === null ? (
           <Skeleton className="h-40" />
         ) : rep.length === 0 ? (
           <EmptyHint>No reputation data yet.</EmptyHint>
         ) : (
           <ol className="space-y-2.5">
-            {rep.slice(0, 12).map((n, i) => (
-              <li key={n.address}>
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="w-4 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${n.verified ? "bg-emerald-500" : "bg-slate-300"}`} />
-                  <a href={`https://explorer.aboutcircles.com/avatar/${n.address}`} target="_blank" rel="noreferrer" className="font-mono text-[13px] font-medium text-foreground hover:text-[#194383]">
-                    {shortAddr(n.address)}
-                  </a>
-                  <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">
-                    {fmt(n.held, 0)} · {n.inCount}↓ {n.outCount}↑
-                  </span>
-                </div>
-                <div className="pl-6">
-                  <ScoreBar value={(n.score / maxScore) * 100} tone={n.verified ? "success" : "primary"} />
-                </div>
-              </li>
-            ))}
+            {rep.slice(0, 12).map((n, i) => {
+              const p = profiles.get(n.address.toLowerCase());
+              return (
+                <li key={n.address}>
+                  <div className="mb-1 flex items-center gap-2.5">
+                    <span className="w-4 shrink-0 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                    <a
+                      href={`https://explorer.aboutcircles.com/avatar/${n.address}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="relative shrink-0"
+                      title={n.verified ? "Verified citizen" : undefined}
+                    >
+                      <Avatar address={n.address} name={p?.name ?? null} imageUrl={p?.imageUrl ?? null} size={28} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card ${n.verified ? "bg-[#194383]" : "bg-neutral-300"}`} />
+                    </a>
+                    <a
+                      href={`https://explorer.aboutcircles.com/avatar/${n.address}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-foreground hover:text-[#194383]"
+                    >
+                      {p?.name || shortAddr(n.address)}
+                    </a>
+                    <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                      {fmt(n.held, 0)} · {n.inCount}↓ {n.outCount}↑
+                    </span>
+                  </div>
+                  <div className="pl-[26px]">
+                    <ScoreBar value={(n.score / maxScore) * 100} tone={n.verified ? "success" : "primary"} />
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         )}
       </ChartCard>
@@ -156,8 +182,8 @@ export default function PulseView() {
                 <a href={explorerTx(t.tx)} target="_blank" rel="noreferrer" className="flex items-center gap-3 py-2.5 transition hover:opacity-80">
                   <Pill tone={KIND_TONE[t.kind]}>{flowLabel(t.kind)}</Pill>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-mono text-[12px] text-muted-foreground">
-                      {shortAddr(t.from)} → {shortAddr(t.to)}
+                    <div className="truncate text-[12px] text-muted-foreground">
+                      {nameOf(t.from)} → {nameOf(t.to)}
                     </div>
                     {t.time > 0 && <div className="text-[11px] text-muted-foreground/80">{timeAgo(t.time)}</div>}
                   </div>
