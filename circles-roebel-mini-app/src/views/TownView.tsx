@@ -9,12 +9,14 @@ import {
   getReputation,
   getMyImpact,
   getRecentTransfers,
+  getProfiles,
   type TownStats,
   type TrustGraph,
   type RepNode,
+  type Profile,
 } from "../lib/circlesData";
 import { ROEBEL_CITIZENS } from "../lib/citizens";
-import { fmt, fmtInt, pct } from "../lib/format";
+import { fmt, fmtInt, pct, shortAddr } from "../lib/format";
 import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
@@ -24,13 +26,20 @@ import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
 import CsvFallbackSheet from "../components/CsvFallbackSheet";
 import coinImg from "../assets/roebel-coin.png";
+import roebelLogo from "../assets/roebel-logo.png";
 
 export default function TownView({ connected }: { connected: Address | null }) {
   const [stats, setStats] = useState<TownStats | null>(null);
   const [graph, setGraph] = useState<TrustGraph | null>(null);
   const [rep, setRep] = useState<RepNode[] | null>(null);
   const [verifiedSet, setVerifiedSet] = useState<Set<string>>(new Set());
+  const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
   const [loading, setLoading] = useState(true);
+
+  // Resolve each citizen's real Circles avatar name + picture once (static list).
+  useEffect(() => {
+    getProfiles(ROEBEL_CITIZENS.map((c) => c.address)).then(setProfiles).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,7 +55,18 @@ export default function TownView({ connected }: { connected: Address | null }) {
     void load();
   }, [load]);
 
-  const nodes: RadialNode[] = (graph?.nodes ?? []).map((nd) => ({ id: nd.id, label: nd.label, tone: nd.tone, dashed: !nd.trusted }));
+  const nodes: RadialNode[] = (graph?.nodes ?? []).map((nd) => {
+    const p = profiles.get(nd.id.toLowerCase());
+    return {
+      id: nd.id,
+      address: nd.id,
+      label: p?.name || shortAddr(nd.id),
+      name: p?.name ?? null,
+      imageUrl: p?.imageUrl ?? null,
+      tone: nd.tone,
+      dashed: !nd.trusted,
+    };
+  });
   const backing = stats && stats.supply > 0 ? stats.collateral / stats.supply : 0;
   const verifiedPct = stats && stats.citizens > 0 ? (stats.verified / stats.citizens) * 100 : 0;
   const impact = useMemo(() => (connected && rep ? getMyImpact(connected, rep) : null), [connected, rep]);
@@ -127,7 +147,7 @@ export default function TownView({ connected }: { connected: Address | null }) {
         ) : (
           <>
             <RadialGraph
-              center={{ label: graph?.centerLabel ?? "Röbel Coins", sub: stats ? `${stats.verified} verified` : undefined }}
+              center={{ label: graph?.centerLabel ?? "Röbel Coins", sub: stats ? `${stats.verified} verified` : undefined, imageUrl: roebelLogo }}
               nodes={nodes}
               emptyLabel="no citizens yet"
             />

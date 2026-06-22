@@ -6,6 +6,7 @@ import { getVerifiedSet } from "../lib/circlesData";
 import { ChartCard, PageHeader, KpiCard, Banner } from "../components/ui";
 import { Globe, Sparkles, ShieldCheck } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
+import roebelLogo from "../assets/roebel-logo.png";
 
 export default function NetworkView() {
   const [verified, setVerified] = useState<number | null>(null);
@@ -20,7 +21,10 @@ export default function NetworkView() {
 
   const nodes: RadialNode[] = TOWNS.map((t) => ({
     id: t.id,
+    address: t.group,
     label: t.name,
+    name: t.name,
+    imageUrl: t.real ? roebelLogo : null,
     tone: t.real ? "real" : "placeholder",
     dashed: !t.real,
     sub: t.real ? (verified == null ? "" : `${verified} verified`) : "soon",
