@@ -15,13 +15,14 @@ import {
 } from "../lib/circlesData";
 import { ROEBEL_CITIZENS } from "../lib/citizens";
 import { fmt, fmtInt, pct } from "../lib/format";
-import { toCsv, downloadCsv, todayStamp } from "../lib/csv";
+import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { ShieldCheck, Users, Lock, Trophy, Activity, Download } from "../components/icons";
+import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
+import CsvFallbackSheet from "../components/CsvFallbackSheet";
 import coinImg from "../assets/roebel-coin.png";
 
 export default function TownView({ connected }: { connected: Address | null }) {
@@ -142,16 +143,18 @@ export default function TownView({ connected }: { connected: Address | null }) {
 }
 
 function Legend() {
+  // Navy = in the group (filled = attester, outlined = verified citizen),
+  // neutral = not yet trusted. No other colour.
   const items = [
-    { c: "#16A34A", l: "Verified human" },
-    { c: "#194383", l: "Attester" },
-    { c: "#94A3B8", l: "Not yet trusted" },
+    { l: "Verified citizen", style: { backgroundColor: "#E8EEF7", boxShadow: "inset 0 0 0 1.5px #194383" } },
+    { l: "Attester", style: { backgroundColor: "#194383" } },
+    { l: "Not yet trusted", style: { backgroundColor: "#A3A3A3" } },
   ];
   return (
     <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
       {items.map((i) => (
         <span key={i.l} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: i.c }} />
+          <span className="h-2.5 w-2.5 rounded-full" style={i.style} />
           {i.l}
         </span>
       ))}
@@ -162,36 +165,62 @@ function Legend() {
 function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNode[] | null }) {
   const [range, setRange] = useState<"7d" | "all">("7d");
   const [busy, setBusy] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<{ filename: string; csv: string } | null>(null);
 
-  const exportTransfers = async () => {
-    setBusy("transfers");
+  // Deliver a CSV the most reliable way the host allows; fall back to an in-app
+  // copy/preview sheet if downloads AND the share sheet are both blocked.
+  const deliver = async (kind: string, filename: string, csv: string, extra: Record<string, unknown> = {}) => {
+    if (!csv) {
+      setToast("Nothing to export");
+      setTimeout(() => setToast(null), 1800);
+      track("csv_export", { kind, rows: 0, empty: true, ...extra });
+      return;
+    }
+    const res = await exportCsv(filename, csv);
+    track("csv_export", { kind, method: res, ...extra });
+    if (res === "fallback") {
+      setFallback({ filename, csv });
+    } else if (res === "shared" || res === "downloaded") {
+      setToast(res === "shared" ? "Shared ✓" : "Downloaded ✓");
+      setTimeout(() => setToast(null), 1800);
+    }
+  };
+
+  const run = (kind: string, fn: () => Promise<void> | void) => async () => {
+    setBusy(kind);
     try {
-      const all = await getRecentTransfers(200);
-      const cutoff = Math.floor(Date.now() / 1000) - 7 * 86400;
-      const rows = all
-        .filter((t) => (range === "all" ? true : t.time >= cutoff))
-        .map((t) => ({
-          date: t.time ? new Date(t.time * 1000).toISOString() : "",
-          kind: t.kind,
-          from: t.from,
-          to: t.to,
-          amount: t.amount,
-          tx: t.tx,
-        }));
-      downloadCsv(`roebel-transfers-${todayStamp()}.csv`, toCsv(rows, ["date", "kind", "from", "to", "amount", "tx"]));
-      track("csv_export", { kind: "transfers", rows: rows.length, range });
+      await fn();
     } finally {
       setBusy(null);
     }
   };
 
-  const exportCitizens = () => {
-    const rows = ROEBEL_CITIZENS.map((c) => ({ address: c.address, attester: c.attester, verified: verifiedSet.has(c.address.toLowerCase()) }));
-    downloadCsv(`roebel-citizens-${todayStamp()}.csv`, toCsv(rows, ["address", "attester", "verified"]));
-    track("csv_export", { kind: "citizens", rows: rows.length });
-  };
+  const exportTransfers = run("transfers", async () => {
+    const all = await getRecentTransfers(200);
+    const cutoff = Math.floor(Date.now() / 1000) - 7 * 86400;
+    const rows = all
+      .filter((t) => (range === "all" ? true : t.time >= cutoff))
+      .map((t) => ({
+        date: t.time ? new Date(t.time * 1000).toISOString() : "",
+        kind: t.kind,
+        from: t.from,
+        to: t.to,
+        amount: t.amount,
+        tx: t.tx,
+      }));
+    await deliver("transfers", `roebel-transfers-${todayStamp()}.csv`, toCsv(rows, ["date", "kind", "from", "to", "amount", "tx"]), {
+      rows: rows.length,
+      range,
+    });
+  });
 
-  const exportReputation = () => {
+  const exportCitizens = run("citizens", async () => {
+    const rows = ROEBEL_CITIZENS.map((c) => ({ address: c.address, attester: c.attester, verified: verifiedSet.has(c.address.toLowerCase()) }));
+    await deliver("citizens", `roebel-citizens-${todayStamp()}.csv`, toCsv(rows, ["address", "attester", "verified"]), { rows: rows.length });
+  });
+
+  const exportReputation = run("reputation", async () => {
     const rows = (rep ?? []).map((r, i) => ({
       rank: i + 1,
       address: r.address,
@@ -201,45 +230,58 @@ function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNo
       score: r.score,
       verified: r.verified,
     }));
-    downloadCsv(`roebel-reputation-${todayStamp()}.csv`, toCsv(rows, ["rank", "address", "held", "inCount", "outCount", "score", "verified"]));
-    track("csv_export", { kind: "reputation", rows: rows.length });
-  };
+    await deliver("reputation", `roebel-reputation-${todayStamp()}.csv`, toCsv(rows, ["rank", "address", "held", "inCount", "outCount", "score", "verified"]), {
+      rows: rows.length,
+    });
+  });
 
-  const btn = "inline-flex items-center justify-center gap-2 rounded-[10px] border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground transition hover:bg-muted active:scale-[0.99] disabled:opacity-50";
+  const btn =
+    "inline-flex items-center justify-center gap-2 rounded-[10px] border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground transition hover:bg-muted active:scale-[0.99] disabled:opacity-50";
 
   return (
-    <ChartCard
-      title="Export data"
-      subtitle="Download the town's on-chain activity as CSV."
-      action={
-        <div className="flex rounded-[10px] border border-border p-0.5">
-          {(["7d", "all"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`rounded-[7px] px-2 py-1 text-[11px] font-medium transition ${range === r ? "bg-[#194383] text-white" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {r === "7d" ? "Last 7 days" : "All"}
-            </button>
-          ))}
+    <>
+      <ChartCard
+        title="Export data"
+        subtitle="Download the town's on-chain activity as CSV."
+        action={
+          <div className="flex rounded-[10px] border border-border p-0.5">
+            {(["7d", "all"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-[7px] px-2 py-1 text-[11px] font-medium transition ${range === r ? "bg-[#194383] text-white" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {r === "7d" ? "Last 7 days" : "All"}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={exportTransfers} disabled={!!busy} className={btn}>
+            <Download className="h-4 w-4" />
+            {busy === "transfers" ? "…" : "Transfers"}
+          </button>
+          <button onClick={exportCitizens} disabled={!!busy} className={btn}>
+            <Download className="h-4 w-4" />
+            {busy === "citizens" ? "…" : "Citizens"}
+          </button>
+          <button onClick={exportReputation} disabled={!!busy || !rep} className={btn}>
+            <Download className="h-4 w-4" />
+            {busy === "reputation" ? "…" : "Reputation"}
+          </button>
         </div>
-      }
-    >
-      <div className="grid grid-cols-3 gap-2">
-        <button onClick={exportTransfers} disabled={busy === "transfers"} className={btn}>
-          <Download className="h-4 w-4" />
-          {busy === "transfers" ? "…" : "Transfers"}
-        </button>
-        <button onClick={exportCitizens} className={btn}>
-          <Download className="h-4 w-4" />
-          Citizens
-        </button>
-        <button onClick={exportReputation} disabled={!rep} className={btn}>
-          <Download className="h-4 w-4" />
-          Reputation
-        </button>
-      </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">Transfers honour the range; citizens & reputation are a current snapshot.</p>
-    </ChartCard>
+        {toast ? (
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+            <Check className="h-3.5 w-3.5" />
+            {toast}
+          </p>
+        ) : (
+          <p className="mt-2 text-[11px] text-muted-foreground">Transfers honour the range; citizens & reputation are a current snapshot.</p>
+        )}
+      </ChartCard>
+
+      {fallback && <CsvFallbackSheet filename={fallback.filename} csv={fallback.csv} onClose={() => setFallback(null)} />}
+    </>
   );
 }
