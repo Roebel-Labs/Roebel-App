@@ -1,6 +1,8 @@
 # Gnosis Consolidation + Sybil-Resistance Hardening — Design & Migration Plan
 
-**Status:** APPROVED (thresholds frozen 2026-06-24) — building v2 contracts + tests. On-chain deploy gated on the burner key.
+**Status:** **DEPLOYED to Gnosis mainnet 2026-06-25** (contracts + governance live, fork-validated then real). Remaining: production app cutover (staged on `feat/gnosis-v2-sybil-hardening`).
+
+**Live Gnosis v2 addresses** (`deployments/gnosis-v2.json`): AttesterNFTv2 `0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82` · CitizenNFTv2 `0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5` · Gatekeeper `0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277` · MACI `0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D` (block 46867803) · Verifier `0xC95359cF5d7391cD239c9476393706a8132406dc` · VkRegistry `0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f` · Timelock `0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C` · Governor `0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65`. Owner = Safe `0x3A08…`. 20 citizens + 5 attesters; bands verified on-chain (attestation 30%/2/7, revocation 67%/3/no-cap). Tests: 49 green. Deploy gas total <0.05 xDAI.
 **Date:** 2026-06-24
 **Author:** Claude (design pass) + Max
 **Scope decisions locked with Max:**
