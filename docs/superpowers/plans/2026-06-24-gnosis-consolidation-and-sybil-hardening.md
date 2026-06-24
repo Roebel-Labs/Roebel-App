@@ -181,9 +181,9 @@ Purpose = **voter-roll hygiene** (keep quorum math honest, drop ghosts/burners/p
 
 ---
 
-## 5. Sybil hardening beyond thresholds **[research-pending]**
+## 5. Sybil hardening beyond thresholds
 
-A menu, roughly in order of value/effort. The deep-research pass is validating maturity/trust-assumptions for each; I'll annotate with citations when it lands.
+A menu, roughly in order of value/effort.
 
 1. **Harder, scaling attestation thresholds** — §3 (done in this plan; highest leverage, zero new trust).
 2. **Random attester assignment** — when a request opens, require sign-off from a *pseudo-randomly selected* subset of attesters (seeded by blockhash/request id) rather than any self-selected pair. Raises collusion cost (a colluder can't guarantee they're assigned). On-chain: assignment stored in the Request; no PII. Medium effort.
@@ -194,22 +194,24 @@ A menu, roughly in order of value/effort. The deep-research pass is validating m
 
 ---
 
-## 6. Phase 2 — Self.xyz proof-of-personhood nullifier **[research-pending]**
+## 6. Phase 2 — Self.xyz proof-of-personhood nullifier
 
-**Goal:** a *one-human-one-CitizenNFT* guarantee that does **not** depend on trusting attesters, with **no PII on-chain**.
+**Goal:** a *one-human-one-CitizenNFT* guarantee that does **not** depend on trusting attesters, with **no PII on-chain**. (eID provider = **Self protocol / self.xyz only**, per Max.)
 
-**Shape (subject to research confirmation of current Self APIs/contracts):**
-- User verifies their government document (passport / eID) in the Self app; Self produces a **zk proof** + a **scope-specific nullifier** (one stable value per person *per app scope*, revealing no identity).
-- On-chain, a Self verifier contract checks the proof and yields the nullifier. We store `usedNullifier[nullifier] = true` and bind it to the citizen address — a second human cannot reuse the same document to mint a second CitizenNFT.
-- **On-chain data = just the nullifier hash** (no name/DOB/nationality unless we explicitly request a disclosure like "age ≥ 18"). Fits the no-PII rule.
-- **Trust assumption shifts** from "attesters are honest" to "the document issuer + Self's proving system are sound." Attesters become a *fallback* path (for people without an eligible document), not the sole gate.
+**How Self works (privacy-preserving personhood, not full KYC):**
+- The user scans their government document's NFC chip (biometric passport / supported eID) in the **Self mobile app**. The chip is signed by the issuing state.
+- Self generates a **zero-knowledge proof** that the document is genuine and, *optionally*, one selective attribute (e.g. age ≥ 18, nationality = DE, not on a sanctions list) — **without revealing name, photo, document number, or DOB**.
+- It emits a **scope-specific nullifier**: a deterministic value tied to the document but scoped to *our* app, revealing nothing about identity. Same person → same nullifier → **one document can mint exactly one CitizenNFT.** That's the Sybil guarantee.
+- Trust shifts from "attesters are honest" → "the document issuer + Self's proving/verification system are sound." Attesters become a **fallback** (for people without an eligible document), not the sole gate.
 
-**Open questions for the research pass to close:**
-- Self's current production status on **Gnosis** (or whether we verify on Celo and bridge the nullifier / mirror the attestation).
-- German document coverage: **Reisepass (passport, ICAO/NFC) likely works**; **Personalausweis eID** has restricted NFC access (Berechtigungszertifikat) and may not be readable by Self — confirm. This affects how many citizens can use Self vs the attester fallback.
-- Exactly what lands on-chain and the nullifier's scope/rotation semantics.
+**On-chain shape:** a trusted Self verifier (or a backend relayer that verifies the Self proof via the Self SDK / Identity Hub) calls `selfAttest(citizen, nullifier, attestationData)` on CitizenNFTv2. The contract records `usedNullifier[nullifier] = true` (revert on reuse) and mints with `attestationSource = SelfPersonhood`. **On-chain data = just the nullifier hash** (+ any attribute we explicitly require). Fits the no-PII rule.
 
-**Integration with this plan:** Phase 2 is **additive** — design the fresh CitizenNFT's attestation path so a future "personhood-verified" flag/route can be added without another redeploy (e.g., reserve an `attestationSource` enum: `AttesterMultisig | SelfPersonhood`). I'll bake that extension point into the §3 contract now so Phase 2 is a setter + new verifier, not a migration.
+**Extension point already shipped in v2 (D6):** `attestationSource` enum (`AttesterMultisig | SelfPersonhood`) is recorded on every mint today. Phase 2 adds a `selfVerifier` address + `selfAttest` path — a setter + a function, **not another migration**.
+
+**Open validation items to confirm before the Phase-2 build (established-knowledge, verify against current Self docs):**
+- **Where verification runs:** Self's on-chain Identity Verification Hub has lived on **Celo**. Confirm a Gnosis deployment exists, else verify off-chain via the SDK in a relayer and gate `selfAttest` on a trusted verifier key (simplest; keeps Gnosis-only). 
+- **German document coverage:** the **Reisepass (passport, ICAO eMRTD/NFC)** is the reliable path. The **Personalausweis eID** function has restricted NFC access (Berechtigungszertifikat / terminal auth) and may not be readable by a third-party app like Self — so not every citizen can use Self. This is exactly why the attester path stays as the always-available fallback.
+- **Nullifier scope/rotation semantics** (per-app scope; behaviour on document renewal).
 
 ---
 
