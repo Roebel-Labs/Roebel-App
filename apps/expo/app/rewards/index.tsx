@@ -33,6 +33,7 @@ import { useRoebelTalerHistory, type TalerTx } from '@/hooks/useRoebelTalerHisto
 import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
+import MuenzenIntroSheet from '@/components/rewards/MuenzenIntroSheet';
 import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
@@ -52,6 +53,9 @@ const MIN_MINTABLE = 0.1;
 const MINT_COOLDOWN_MS = 3_600_000;
 const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
 const SCHATZTRUHE_IMG = require('../../assets/illustration/muenzen/schatztruhe.png');
+
+// One-time Röbel Münzen feature intro (per device).
+const MUENZEN_INTRO_KEY = '@rewards/muenzen_intro_seen';
 
 // Daily-claim cooldown helpers: "Heute abholen" resets at local midnight.
 const rtClaimKey = (addr: string) => `rt_lastclaim_${addr.toLowerCase()}`;
@@ -83,9 +87,8 @@ export default function RewardsIndexScreen() {
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
   const {
-    coins,
-    keyCount,
     lootboxes,
+    userRewards,
     streak,
     tasks,
     completions,
@@ -98,6 +101,13 @@ export default function RewardsIndexScreen() {
     refresh,
     isLoading,
   } = useRewards();
+
+  // Schatzkammer summary: how many distinct chests the user has opened, out of
+  // the total available chests. (Replaces the old "keys held / total".)
+  const openedCount = useMemo(
+    () => new Set(userRewards.map((r) => r.lootbox_id).filter(Boolean)).size,
+    [userRewards]
+  );
 
   // The real on-chain Röbel Münzen (Circles on Gnosis). This page IS the Röbel Münzen
   // home: the headline + daily mint are the real coin; off-chain points/streaks below
@@ -155,6 +165,30 @@ export default function RewardsIndexScreen() {
   const [rtStreak, setRtStreak] = useState(0);
   const [showMintSuccess, setShowMintSuccess] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+
+  // One-time Röbel Münzen intro: show the first time this device lands on the
+  // page, after a short beat so the screen paints first.
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(MUENZEN_INTRO_KEY)
+      .then((v) => {
+        if (active && v !== '1') {
+          setTimeout(() => { if (active) setShowIntro(true); }, 500);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const dismissIntro = useCallback(() => {
+    setShowIntro(false);
+    AsyncStorage.setItem(MUENZEN_INTRO_KEY, '1').catch(() => {});
+  }, []);
+  const onIntroLearnMore = useCallback(() => {
+    dismissIntro();
+    router.push('/roebel-taler-info' as any);
+  }, [dismissIntro, router]);
   useEffect(() => {
     const addr = talerAccount?.address;
     if (!addr) { setRtStreak(0); return; }
@@ -519,7 +553,7 @@ export default function RewardsIndexScreen() {
                 <Skeleton width={48} height={18} radius={6} style={{ marginTop: 6 }} />
               ) : (
                 <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {keyCount}/{lootboxes.length}
+                  {openedCount}/{lootboxes.length} geöffnet
                 </Text>
               )}
               <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
@@ -626,6 +660,12 @@ export default function RewardsIndexScreen() {
         name={user?.display_name ?? user?.username ?? null}
         username={user?.username ?? null}
         onClose={() => setShowReceive(false)}
+      />
+
+      <MuenzenIntroSheet
+        visible={showIntro}
+        onClose={dismissIntro}
+        onLearnMore={onIntroLearnMore}
       />
     </View>
   );
