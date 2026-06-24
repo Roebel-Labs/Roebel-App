@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
 import { VERIFICATION_CONTRACTS } from "@/lib/verification-contracts";
 
@@ -56,13 +56,13 @@ export function useSocialGraph(): SocialGraphData {
 
       const attesterContract = getContract({
         client,
-        chain: base,
+        chain: gnosis,
         address: VERIFICATION_CONTRACTS.attesterNFT,
       });
 
       const citizenContract = getContract({
         client,
-        chain: base,
+        chain: gnosis,
         address: VERIFICATION_CONTRACTS.citizenNFT,
       });
 
@@ -77,8 +77,9 @@ export function useSocialGraph(): SocialGraphData {
       });
 
       const citizenApprovedEvent = prepareEvent({
+        // v2 (Gnosis): dropped isAttester/isCitizen booleans, kept signedAsAttester
         signature:
-          "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
+          "event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)",
       });
 
       const attesterMintedEvent = prepareEvent({

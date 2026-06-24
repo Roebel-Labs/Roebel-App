@@ -5,13 +5,13 @@
 
 import { getContract } from "thirdweb";
 import { client } from "@/app/client";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 
-// Deployed contract addresses on Base Mainnet (rotated 2026-05-23)
+// Deployed contract addresses on Gnosis mainnet (v2 Sybil-hardened, 2026-06-25)
 export const VERIFICATION_CONTRACTS = {
-  attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb", // AttesterNFT (2-sig rule, mutable thresholds, Timelock-owned)
-  citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",  // CitizenNFT (1 Attester + 1 Citizen for BOTH attestation AND revocation)
-  governor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",    // MaciAttesterGovernor (clean-slate rotation 2026-06-08: fresh gatekeeper + MACI core)
+  attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82", // AttesterNFTv2 (per-request approval/rejection thresholds, Safe-owned)
+  citizenNFT: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",  // CitizenNFTv2 (per-request thresholds; RequestApproved/Rejected carry only signedAsAttester)
+  governor: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",    // MaciAttesterGovernor (Gnosis v2; MACI core 0x6663…, deploy block 46867803)
 };
 
 // Lowercase contract address for the active CitizenNFT/AttesterNFT, used to scope
@@ -27,19 +27,19 @@ export const currentContractAddress = (type: "citizen" | "attester"): string =>
 export const attesterNFTContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.attesterNFT,
-  chain: base,
+  chain: gnosis,
 });
 
 export const citizenNFTContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.citizenNFT,
-  chain: base,
+  chain: gnosis,
 });
 
 export const governorContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.governor,
-  chain: base,
+  chain: gnosis,
 });
 
 // Contract ABIs (minimal required functions)
@@ -54,8 +54,10 @@ export const ATTESTER_NFT_ABI = [
   "function hasRejectedRequest(uint256 requestId, address rejector) view returns (bool)",
   "function hasAttesterNFT(address account) view returns (bool)",
   "function requestCount() view returns (uint256)",
-  "function requiredSignatures() view returns (uint256)",
-  "function requiredRejections() view returns (uint256)",
+  // v2: per-request thresholds + member count (replaced requiredSignatures/requiredRejections)
+  "function requiredApprovalsFor(uint256 requestId) view returns (uint256)",
+  "function requiredRejectionsFor(uint256 requestId) view returns (uint256)",
+  "function attesterCount() view returns (uint256)",
   "event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RequestApproved(uint256 indexed requestId, address indexed approver)",
@@ -76,16 +78,19 @@ export const CITIZEN_NFT_ABI = [
   "function hasCitizenNFT(address account) view returns (bool)",
   "function requestCount() view returns (uint256)",
   "function getVotes(address account) view returns (uint256)",
-  "function requiredAttesterSignatures() view returns (uint256)",
-  "function requiredCitizenSignatures() view returns (uint256)",
-  "function requiredRevocationAttesterSignatures() view returns (uint256)",
-  "function requiredRevocationCitizenSignatures() view returns (uint256)",
-  "function requiredAttesterRejections() view returns (uint256)",
-  "function requiredCitizenRejections() view returns (uint256)",
+  // v2: per-request thresholds (replaced the 6 global required* getters)
+  "function requiredAttesterApprovalsFor(uint256 requestId) view returns (uint256)",
+  "function requiredCitizenApprovalsFor(uint256 requestId) view returns (uint256)",
+  "function requiredAttesterRejectionsFor(uint256 requestId) view returns (uint256)",
+  "function requiredCitizenRejectionsFor(uint256 requestId) view returns (uint256)",
+  // v2: Sybil-hardened identity views
+  "function isActive(address account) view returns (bool)",
+  "function citizenCount() view returns (uint256)",
+  "function validUntil(address account) view returns (uint256)",
   "event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
   "event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)",
-  "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
-  "event RequestRejected(uint256 indexed requestId, address indexed rejector, bool isAttester, bool isCitizen, bool signedAsAttester)",
+  "event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)",
+  "event RequestRejected(uint256 indexed requestId, address indexed rejector, bool signedAsAttester)",
   "event CitizenNFTMinted(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
   "event CitizenNFTRevoked(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
 ] as const;

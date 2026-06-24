@@ -23,7 +23,7 @@
 
 import { Contract, JsonRpcProvider, hashMessage, verifyMessage } from "ethers";
 import { readContract, getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
 
 // Mirrors apps/web/src/lib/verification-contracts.ts and
@@ -35,8 +35,9 @@ import { client } from "@/app/client";
 // IMPORTANT: bump this on every AttesterNFT rotation. It was previously
 // left at the pre-2026-05-23 address (0xa06F09Cb…), which silently
 // rejected attesters minted on the new contract with "is not an Attester"
-// even though they held a valid NFT (those NFTs live on 0x79B837…).
-const ATTESTER_NFT_ADDRESS = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
+// even though they held a valid NFT. Gnosis v2 Sybil-hardened rotation
+// (2026-06-25): AttesterNFTv2 now lives on 0xC587… on Gnosis (chainId 100).
+const ATTESTER_NFT_ADDRESS = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
 
 /**
  * Founder allowlist. Keep this list of human-readable comments so any
@@ -52,7 +53,7 @@ const FOUNDER_WALLETS = new Set<string>(
 const attesterNftContract = getContract({
   client,
   address: ATTESTER_NFT_ADDRESS,
-  chain: base,
+  chain: gnosis,
 });
 
 // ERC-1271 magic value returned by `isValidSignature(hash, sig)` when the
@@ -92,11 +93,17 @@ export async function verifyWalletSignature(
     // fall through to ERC-1271
   }
 
-  // ERC-1271 fallback for smart accounts.
-  const rpcUrl = process.env.BASE_RPC_URL;
+  // ERC-1271 fallback for smart accounts. Smart accounts now live on Gnosis
+  // (chainId 100), so the getCode/isValidSignature checks must hit a Gnosis
+  // RPC. Prefer GNOSIS_RPC_URL; fall back to the legacy BASE_RPC_URL env name
+  // and the public Gnosis RPC so the gate still works if only one is set.
+  const rpcUrl =
+    process.env.GNOSIS_RPC_URL ||
+    process.env.BASE_RPC_URL ||
+    "https://rpc.gnosischain.com";
   if (!rpcUrl) {
     console.warn(
-      "[signature-verification] BASE_RPC_URL not configured — cannot do ERC-1271 fallback"
+      "[signature-verification] no RPC URL configured — cannot do ERC-1271 fallback"
     );
     return false;
   }
