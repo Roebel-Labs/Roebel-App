@@ -57,7 +57,9 @@ function loadHolderSet() {
 
 async function main() {
   const { ethers, network } = hre;
-  if (network.name !== "gnosis") throw new Error(`Refusing to run on "${network.name}" — expected "gnosis".`);
+  const isFork = network.name === "hardhat"; // GNOSIS_FORK=1 fork dry-run
+  if (network.name !== "gnosis" && !isFork) throw new Error(`Refusing to run on "${network.name}" — expected "gnosis" (or "hardhat" fork dry-run).`);
+  if (isFork) console.log("*** FORK DRY-RUN (no real broadcast) ***");
 
   const { citizens: rawC, attesters: rawA, meta, enumeratedAt } = loadHolderSet();
   const citizens = rawC.map((a) => ethers.getAddress(a));
