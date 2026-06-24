@@ -87,6 +87,7 @@ export default function RewardsIndexScreen() {
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
   const {
+    keyCount,
     lootboxes,
     userRewards,
     streak,
@@ -101,13 +102,6 @@ export default function RewardsIndexScreen() {
     refresh,
     isLoading,
   } = useRewards();
-
-  // Schatzkammer summary: how many distinct chests the user has opened, out of
-  // the total available chests. (Replaces the old "keys held / total".)
-  const openedCount = useMemo(
-    () => new Set(userRewards.map((r) => r.lootbox_id).filter(Boolean)).size,
-    [userRewards]
-  );
 
   // The real on-chain Röbel Münzen (Circles on Gnosis). This page IS the Röbel Münzen
   // home: the headline + daily mint are the real coin; off-chain points/streaks below
@@ -552,9 +546,14 @@ export default function RewardsIndexScreen() {
               {isLoading && lootboxes.length === 0 ? (
                 <Skeleton width={48} height={18} radius={6} style={{ marginTop: 6 }} />
               ) : (
-                <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {openedCount}/{lootboxes.length} geöffnet
-                </Text>
+                <>
+                  <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {keyCount} Schlüssel
+                  </Text>
+                  <Text style={[styles.squareSub, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {userRewards.length}× geöffnet
+                  </Text>
+                </>
               )}
               <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
             </Pressable>
@@ -977,6 +976,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     fontSize: 16,
     marginTop: 4,
+  },
+  squareSub: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    marginTop: 1,
   },
   squareImg: {
     position: 'absolute',

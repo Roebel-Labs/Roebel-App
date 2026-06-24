@@ -19,7 +19,10 @@ export default function CoinsCard() {
   const { balanceRaw } = useRoebelTaler();
   const cardBg = colors.background;
   // Verified citizens see their real Röbel Münzen balance; others see gamification points.
-  const display = isCitizen ? formatTaler(balanceRaw) : coins.toLocaleString('de-DE');
+  // Show whole Münzen (no decimals) — e.g. 89.94 → 90.
+  const display = isCitizen
+    ? Math.round(Number(formatTaler(balanceRaw))).toLocaleString('de-DE')
+    : coins.toLocaleString('de-DE');
 
   return (
     <View
