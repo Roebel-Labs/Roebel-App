@@ -12,26 +12,29 @@
  *
  * IMPORTANT: bump these on every NFT rotation. Source of truth:
  * `apps/web/src/lib/verification-contracts.ts` and
- * `contracts/governor-contract/deployments/base.json`.
+ * `contracts/governor-contract/deployments/gnosis-v2.json`.
+ *
+ * Gnosis v2 Sybil-hardened rotation (2026-06-25): NFTs now live on Gnosis
+ * (chainId 100). hasCitizenNFT/hasAttesterNFT are unchanged in v2.
  */
 
 import { readContract, getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
 
-const CITIZEN_NFT_ADDRESS = "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
-const ATTESTER_NFT_ADDRESS = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
+const CITIZEN_NFT_ADDRESS = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+const ATTESTER_NFT_ADDRESS = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
 
 const citizenNftContract = getContract({
   client,
   address: CITIZEN_NFT_ADDRESS,
-  chain: base,
+  chain: gnosis,
 });
 
 const attesterNftContract = getContract({
   client,
   address: ATTESTER_NFT_ADDRESS,
-  chain: base,
+  chain: gnosis,
 });
 
 /**

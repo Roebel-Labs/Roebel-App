@@ -1,50 +1,61 @@
 /**
  * Central MACI/governance config used by the admin dashboard.
  *
- * Source of truth: contracts/governor-contract/deployments/base.json. Mirror
- * relevant fields here so the web app can render them without bundling the
- * deployment JSON. Update this file when a new rotation lands (the deploy
- * script archives old addresses with timestamps in base.json).
+ * Source of truth: contracts/governor-contract/deployments/gnosis-v2.json.
+ * Mirror relevant fields here so the web app can render them without bundling
+ * the deployment JSON. Update this file when a new rotation lands (the deploy
+ * script archives old addresses with timestamps in the deployment JSON).
  */
 
 import { getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
 
-// ----- live infrastructure on Base mainnet -----
+// ----- live infrastructure on Gnosis mainnet (v2 Sybil-hardened, 2026-06-25) -----
 
 export const MACI_INFRA = {
-  // Rotated 2026-05-23: governance-mutable thresholds, 1+1 CitizenNFT
-  // revocation, O(1) burn lookup, multi-sig rejection. Both NFTs owned by timelock.
+  // Sybil-hardened identity layer (Gnosis v2, 2026-06-25): scale-aware %-band
+  // approval/rejection thresholds (per-request getters), isActive/validUntil/
+  // citizenCount/attesterCount views. Owned by the Attester Safe 0x3A08…
+  attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
+  citizenNFT: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",
+
+  // MACI v2 core on Gnosis (deploy block 46867803).
+  maci: "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D",
+  verifier: "0xC95359cF5d7391cD239c9476393706a8132406dc",
+  voiceCreditProxy: "0x30C912fdc68d9c78882E1F118f1fD932Cd80eAbF",
+  pollFactory: "0xD16601A95E3b1D211B656E07f92327236E276015",
+  messageProcessorFactory: "0xCB1315369cE6b15a10C0D1394F76C5Bd294FFfd5",
+  tallyFactory: "0x5e07f9c5E309fA838Ae6035F0AC997A3f55e16d5",
+
+  gatekeeper: "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277",
+  vkRegistry: "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
+
+  // Active Governor + Timelock on Gnosis v2.
+  governor: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
+  timelock: "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
+
+  // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
+  // Pubkey UNCHANGED across the Gnosis v2 rotation.
+  coordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
+} as const;
+
+// ----- pre-Gnosis-v2 live infrastructure on Base mainnet (archived) -----
+// Preserved for historical proposal/tally lookups against the old chain.
+// This was the active set immediately before the 2026-06-25 Gnosis v2 cutover.
+export const LEGACY_BASE_MACI_INFRA = {
   attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
   citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
-
-  // MACI v2 core — rotated 2026-05-24 (NEW core binds to the new gatekeeper;
-  // prior MACI was permanently stuck on the old gatekeeper because
-  // MACI.signUpGatekeeper is `immutable`).
   maci: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
   verifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
   voiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
   pollFactory: "0x604B8b61488e02b2EEeeB4993825afD436D526fE",
   messageProcessorFactory: "0x34EDb8C26cc759D3e63C2580323eDcB0A136dAAb",
   tallyFactory: "0xC6351B4470CE0C1fab41b45a902554A8040Df463",
-
-  // Rotated 2026-05-23 alongside the NFT redeploy (gatekeeper binds to the new CitizenNFT).
-  // Re-pointed to the new MACI core via setMaciInstance() on 2026-05-24.
   gatekeeper: "0xc767fa3bbd9f0934Fb419137d7b6506E44105f74",
-
-  // Rotated 2026-05-08 to align VK keys with the production zKey signature.
   vkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
-
-  // Active Governor + Timelock — rotated 2026-05-24 alongside MACI core
-  // (Governor's `maci` is immutable; new MACI → new Governor → new Timelock).
-  // votingPeriod is now 1 h (was 7 days). NFTs still owned by the prior
-  // Timelock at 0xe8B8149F… — NFT threshold changes go through the prior
-  // Governor 0xb5333aFf… not this one.
   governor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
   timelock: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
-
-  // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
   coordinator: "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
 } as const;
 
@@ -83,6 +94,24 @@ export interface ArchivedAddress {
 }
 
 export const ROTATION_HISTORY: ArchivedAddress[] = [
+  {
+    kind: "governor",
+    address: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
+    archivedAt: "2026-06-25T00:00:00Z",
+    reason: "Final Base-mainnet MaciAttesterGovernor (clean-slate 2026-06-08 set). Retired in the Gnosis v2 Sybil-hardened cutover — the entire identity/MACI/governor stack was re-deployed natively on Gnosis (chainId 100). See LEGACY_BASE_MACI_INFRA for the full archived Base set.",
+  },
+  {
+    kind: "timelock",
+    address: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
+    archivedAt: "2026-06-25T00:00:00Z",
+    reason: "Bound to the final Base Governor; retired in the Gnosis v2 cutover.",
+  },
+  {
+    kind: "maci",
+    address: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
+    archivedAt: "2026-06-25T00:00:00Z",
+    reason: "Final Base MACI core (deploy block 47070186); retired in the Gnosis v2 cutover (new core 0x6663… on Gnosis, deploy block 46867803).",
+  },
   {
     kind: "gatekeeper",
     address: "0xcf12E8da5f7599dd9162e07388715bBa11739F2e",
@@ -210,19 +239,21 @@ export const ROTATION_HISTORY: ArchivedAddress[] = [
 export const maciCoreContract = getContract({
   client,
   address: MACI_INFRA.maci,
-  chain: base,
+  chain: gnosis,
 });
 
 export const maciGovernorContract = getContract({
   client,
   address: MACI_INFRA.governor,
-  chain: base,
+  chain: gnosis,
 });
 
+// Block-explorer link helpers. Names kept (`basescan*`) for import stability,
+// but they now point at Gnosisscan since the stack lives on Gnosis (v2).
 export function basescanAddress(addr: string) {
-  return `https://basescan.org/address/${addr}`;
+  return `https://gnosisscan.io/address/${addr}`;
 }
 
 export function basescanTx(hash: string) {
-  return `https://basescan.org/tx/${hash}`;
+  return `https://gnosisscan.io/tx/${hash}`;
 }

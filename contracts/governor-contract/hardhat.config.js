@@ -44,6 +44,10 @@ module.exports = {
   networks: {
     hardhat: {
       chainId: 31337,
+      // GNOSIS_FORK=1 → fork mainnet Gnosis for a deploy dry-run against real on-chain state.
+      ...(process.env.GNOSIS_FORK === "1"
+        ? { forking: { url: process.env.GNOSIS_RPC_URL || "https://rpc.gnosischain.com" } }
+        : {}),
     },
     base: {
       url: BASE_RPC_URL,

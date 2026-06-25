@@ -20,7 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { maciGovernorContract, basescanTx } from "@/lib/maci-config";
 
 const FOUNDER_ALLOWLIST = new Set(
@@ -265,7 +265,7 @@ export default function AdminProposalsPage() {
         const tallyContract = getContract({
           client,
           address: tallyAddress,
-          chain: base,
+          chain: gnosis,
         });
         const readTallyOrNull = async <T,>(method: string, params: unknown[] = []): Promise<T | null> => {
           try {

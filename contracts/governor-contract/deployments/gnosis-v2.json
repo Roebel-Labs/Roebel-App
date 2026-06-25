@@ -1,0 +1,124 @@
+{
+  "chain": "gnosis",
+  "chainId": 100,
+  "version": "v2-sybil-hardened",
+  "deployedAt": "2026-06-24T21:59:01.260Z",
+  "deployer": "0xd5028284017A32C672CbD73Fe35aCD897bA874cf",
+  "owner": "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa",
+  "note": "Sybil-hardened identity layer. Scale-aware %-band thresholds; revocation 67%/floor3 no-cap; citizen co-sign fixed 1; re-attestation expiry OFF at launch (validityPeriod=0). migrationMint finalized.",
+  "thresholds": {
+    "attesterApproval": [
+      5000,
+      3,
+      7
+    ],
+    "attesterRejection": [
+      5000,
+      3,
+      7
+    ],
+    "citizen": [
+      [
+        3000,
+        2,
+        7
+      ],
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        6700,
+        3,
+        65535
+      ],
+      [
+        0,
+        1,
+        1
+      ],
+      [
+        2500,
+        2,
+        5
+      ],
+      [
+        2500,
+        2,
+        5
+      ]
+    ],
+    "validityPeriod": 0
+  },
+  "addresses": {
+    "attesterNFT": "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
+    "citizenNFT": "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",
+    "ownerSafe": "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa",
+    "gatekeeper": "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277",
+    "voiceCreditProxy": "0x30C912fdc68d9c78882E1F118f1fD932Cd80eAbF",
+    "maci": "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D",
+    "verifier": "0xC95359cF5d7391cD239c9476393706a8132406dc",
+    "vkRegistry": "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
+    "PoseidonT3": "0x92A8108EAA2FdcB96dC8EC64ED4d3f75Ab9aEF0c",
+    "PoseidonT4": "0xFB340A9Af4A2F5f0c9C61050763ee8310db2f68c",
+    "PoseidonT5": "0xf25e5aB34579CF12A2c00CC2dEe408EA6ced08aa",
+    "PoseidonT6": "0x5757420ED82b5992B19d279a30F4b5aAaE14eD70",
+    "pollFactory": "0xD16601A95E3b1D211B656E07f92327236E276015",
+    "messageProcessorFactory": "0xCB1315369cE6b15a10C0D1394F76C5Bd294FFfd5",
+    "tallyFactory": "0x5e07f9c5E309fA838Ae6035F0AC997A3f55e16d5",
+    "timelock": "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
+    "maciAttesterGovernor": "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
+    "coordinator": "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C"
+  },
+  "holders": {
+    "citizens": [
+      "0xC49dE63CcfeE46C6C5c3E393293f66779799Fb28",
+      "0x90F677dC480e76a127Ec1dCE42263a370e396313",
+      "0xf468d87FCa0E15bC2c383eF482D38b9b77812b29",
+      "0xCa598EcD6541177897c7a30cE378e53F5557e951",
+      "0xD7cA07c0F152fC27F0E48d5326e07026e4fDD4bA",
+      "0x3B49287F15F5605036d135A296C2bAC2aFbFA24c",
+      "0xEbf3C1694FBD80b1a7ab8F82e19A1291Cd795227",
+      "0x466587C1102a99726b2751712c69338cf0401f43",
+      "0x5Ddf5ee5ac3b5DeB9eae2920E71997e2a07A406B",
+      "0xa6B3defbBe135f3fcE045e59b3e984c23d43E5a8",
+      "0x1a3cD237400b032DCfB3d45Ef694674f2dEcdee0",
+      "0x2645530306321e4758FF93559A4F44a826C6EfA6",
+      "0x1916bAC01118EE53A7F7eca0F312431b68011Ce4",
+      "0xd1A7d945fCCa08f67E30E526E34cf4Aaa2725D03",
+      "0x0e9C37cfc94E1BAFCd53450998Cc26d10A6b5D20",
+      "0x0C8963DDceC03DaDA390F097Ac1E4362e81B59c2",
+      "0x2e7aB171128EF2dE883043E0b06A6f275cD03914",
+      "0xdeF673b34D47e135968E875F13f5382055e216B1",
+      "0x4Aa85FD1d27e2efDF563Fb9831d00176b9E41131",
+      "0xce269787bf696D93f23cf5863ca63EaD942825D2"
+    ],
+    "attesters": [
+      "0xC49dE63CcfeE46C6C5c3E393293f66779799Fb28",
+      "0x90F677dC480e76a127Ec1dCE42263a370e396313",
+      "0xf468d87FCa0E15bC2c383eF482D38b9b77812b29",
+      "0xD7cA07c0F152fC27F0E48d5326e07026e4fDD4bA",
+      "0x3B49287F15F5605036d135A296C2bAC2aFbFA24c"
+    ]
+  },
+  "maciDeployBlock": 46867803,
+  "parameters": {
+    "stateTreeDepth": 14,
+    "intStateTreeDepth": 5,
+    "messageTreeDepth": 9,
+    "voteOptionTreeDepth": 3,
+    "messageBatchSize": 25,
+    "mode": "NON_QV",
+    "votingPeriod": 3600,
+    "quorumPercentage": 10,
+    "quorumAbsolute": 2,
+    "tallyGracePeriod": 604800,
+    "timelockMinDelay": 3600,
+    "coordinatorPubKey": {
+      "x": "17750760918337237068203925046126855078152981024548838042861633066128051663100",
+      "y": "8008521168745136880197848799504037322059936483887225034222289791088387810436"
+    }
+  },
+  "governanceDeployedAt": "2026-06-24T22:04:06.318Z"
+}

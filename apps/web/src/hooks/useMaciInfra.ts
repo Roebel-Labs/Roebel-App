@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { readContract, getRpcClient } from "thirdweb";
 import { eth_getBalance } from "thirdweb/rpc";
-import { base } from "thirdweb/chains";
+import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
 import {
   maciCoreContract,
@@ -16,8 +16,8 @@ import {
  *
  * - `numSignUps` — how many citizens have signed up to MACI globally
  * - `governorParams` — votingPeriod / votingDelay / quorum / tallyGracePeriod
- * - `coordinatorBalanceWei` — the off-chain coordinator EOA's Base balance.
- *   Surfaced so an admin can warn when the wallet is running low on gas.
+ * - `coordinatorBalanceWei` — the off-chain coordinator EOA's Gnosis (xDAI)
+ *   balance. Surfaced so an admin can warn when the wallet is running low on gas.
  */
 export interface MaciInfraSnapshot {
   numSignUps: bigint;
@@ -99,7 +99,7 @@ export function useMaciInfra(): UseMaciInfraResult {
       ]);
 
       // Coordinator EOA balance — separate RPC call.
-      const rpc = getRpcClient({ client, chain: base });
+      const rpc = getRpcClient({ client, chain: gnosis });
       const coordinatorBalanceWei = await eth_getBalance(rpc, {
         address: MACI_INFRA.coordinator as `0x${string}`,
       });

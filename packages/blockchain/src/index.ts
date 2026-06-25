@@ -1,40 +1,45 @@
 // Shared blockchain utilities for the Roebel monorepo
 
-// Contract addresses deployed on Base Mainnet.
+// Contract addresses deployed on Gnosis mainnet (v2 Sybil-hardened, 2026-06-25).
 //
 // Two governance regimes coexist:
 //   1. Legacy public-vote AttesterGovernor (kept on chain for proposal history)
 //   2. Current MACI v2 privacy-voting governor (apps target this for new proposals + votes)
 export const CONTRACTS = {
-  // Identity NFTs (rotated 2026-05-23: governance-mutable thresholds, 1+1
-  // revocation, O(1) burn lookup, multi-sig rejection — see commit 08bd7e7).
-  // Owned by maciTimelock.
-  attesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
-  citizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
+  // Identity NFTs (Gnosis v2 Sybil-hardened, 2026-06-25): per-request approval
+  // thresholds (requiredAttesterApprovalsFor etc.), isActive/validUntil/
+  // citizenCount/attesterCount views, RequestApproved/RequestRejected events
+  // now carry only `signedAsAttester`. Owned by the Attester Safe.
+  attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
+  citizenNFT: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",
 
   // Legacy public-vote governance (read-only — old proposals still resolve here)
   legacyAttesterGovernor: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
-  // Current MACI v2 privacy-voting governance (apps target this).
-  // Rotated 2026-05-24: NEW MACI core that actually binds to the new
-  // gatekeeper (MACI's signUpGatekeeper is immutable, so the prior rotation's
-  // gatekeeper swap was a no-op until MACI itself was redeployed). New
-  // Governor + Timelock pair binds to this MACI. Voting period is now 1 h
-  // (was 7 days).
-  maciAttesterGovernor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
-  maciTimelock: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
+  // Current MACI v2 privacy-voting governance on Gnosis (apps target this).
+  maciAttesterGovernor: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
+  maciTimelock: "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
 
-  // MACI v2 infrastructure. MACI core rotated 2026-05-24; Verifier + VkRegistry
-  // + Poseidon + factories + voice credit proxy + gatekeeper all reused (their
-  // state is independent of MACI core).
-  maci: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
-  maciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
-  maciVkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
-  maciGatekeeper: "0xc767fa3bbd9f0934Fb419137d7b6506E44105f74",
+  // MACI v2 infrastructure on Gnosis (deploy block 46867803).
+  maci: "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D",
+  maciVerifier: "0xC95359cF5d7391cD239c9476393706a8132406dc",
+  maciVkRegistry: "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
+  maciGatekeeper: "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277",
   maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
 
-  // Archived (kept for historical proposal/revocation lookups)
+  // Archived Base Mainnet stack (kept for historical proposal/revocation lookups)
+  // Pre-Gnosis-v2 active set (Base, clean-slate rotation 2026-06-08).
+  legacyBaseAttesterNFT: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
+  legacyBaseCitizenNFT: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
+  legacyBaseMaciAttesterGovernor: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
+  legacyBaseMaciTimelock: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
+  legacyBaseMaci: "0x76e0097D2F1e0D747B3dd58622c76b278e2f587a",
+  legacyBaseMaciVerifier: "0x6682A865C9e2cAAC89DAAAdf25e15bc90db482D8",
+  legacyBaseMaciVkRegistry: "0xd6EF1Ad8cCAFC41bf025efe620e27d8CF18B91ED",
+  legacyBaseMaciGatekeeper: "0xc767fa3bbd9f0934Fb419137d7b6506E44105f74",
+
+  // Older archived Base deployments (pre-2026-06-08 rotations)
   legacyAttesterNFT: "0xa06F09Cb406880512326318fbC09Cdb28631DA73",
   legacyCitizenNFT: "0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7",
   legacyMaciAttesterGovernor: "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
@@ -88,5 +93,5 @@ export const MACI_VOTE_OPTIONS = {
 
 export type MaciVoteOption = (typeof MACI_VOTE_OPTIONS)[keyof typeof MACI_VOTE_OPTIONS];
 
-// Base chain ID
-export const CHAIN_ID = 8453;
+// Gnosis chain ID
+export const CHAIN_ID = 100;

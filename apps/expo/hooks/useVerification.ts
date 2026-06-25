@@ -14,8 +14,9 @@ import {
   sendTransaction,
   waitForReceipt,
 } from 'thirdweb';
-import { base } from 'thirdweb/chains';
+import { gnosis } from '@/constants/gnosis';
 import { client } from '@/constants/thirdweb';
+import { useGnosisWallet } from '@/context/GnosisWalletContext';
 import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
 import { createEncryptedEvidenceV2 } from '@/lib/encryption'; // revocation only
 import { buildCitizenCommitment, loadCitizenPreimage } from '@/lib/citizen-commitment';
@@ -56,7 +57,11 @@ export const REQUEST_STAGE_LABEL: Record<RequestStage, string> = {
  * Hook to create a citizen attestation request
  */
 export function useCreateCitizenRequest() {
-  const account = useActiveAccount();
+  // CitizenNFTv2 lives on Gnosis — sign + send with the Gnosis smart account
+  // (same address as Base, gasless). gnosisAccount is null until the parallel
+  // Gnosis session auto-connects.
+  const { gnosisAccount } = useGnosisWallet();
+  const account = gnosisAccount;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [stage, setStage] = useState<RequestStage>('idle');
@@ -92,7 +97,7 @@ export function useCreateCitizenRequest() {
 
         // 3. Read the real requestId from the event log (avoids requestCount races).
         setStage('awaiting-receipt');
-        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
+        const receipt = await waitForReceipt({ client, chain: gnosis, transactionHash });
         const requestCreatedEvent = prepareEvent({
           signature:
             'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
@@ -132,7 +137,9 @@ export function useCreateCitizenRequest() {
  * (encrypting → submitting-tx → awaiting-receipt → uploading-evidence → saving).
  */
 export function useCreateAttesterRequest() {
-  const account = useActiveAccount();
+  // AttesterNFTv2 lives on Gnosis — sign + send with the Gnosis smart account.
+  const { gnosisAccount } = useGnosisWallet();
+  const account = gnosisAccount;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [stage, setStage] = useState<RequestStage>('idle');
@@ -165,7 +172,7 @@ export function useCreateAttesterRequest() {
         const { transactionHash } = await sendTransaction({ transaction, account });
 
         setStage('awaiting-receipt');
-        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
+        const receipt = await waitForReceipt({ client, chain: gnosis, transactionHash });
         const requestCreatedEvent = prepareEvent({
           signature:
             'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
@@ -205,7 +212,9 @@ export function useCreateAttesterRequest() {
  * decryption helpers.
  */
 export function useCreateRevocationRequest() {
-  const account = useActiveAccount();
+  // Revocations target the Gnosis v2 NFTs — sign + send with the Gnosis account.
+  const { gnosisAccount } = useGnosisWallet();
+  const account = gnosisAccount;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [stage, setStage] = useState<RequestStage>('idle');
@@ -256,7 +265,7 @@ export function useCreateRevocationRequest() {
         console.log('✅ Revocation transaction submitted:', transactionHash);
 
         setStage('awaiting-receipt');
-        const receipt = await waitForReceipt({ client, chain: base, transactionHash });
+        const receipt = await waitForReceipt({ client, chain: gnosis, transactionHash });
 
         const revocationEvent = prepareEvent({
           signature:
@@ -295,7 +304,9 @@ export function useCreateRevocationRequest() {
  * Hook to approve a request
  */
 export function useApproveRequest() {
-  const account = useActiveAccount();
+  // Approvals hit the Gnosis v2 NFTs — send with the Gnosis smart account.
+  const { gnosisAccount } = useGnosisWallet();
+  const account = gnosisAccount;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -358,7 +369,9 @@ export function useApproveRequest() {
  * Hook to reject a request
  */
 export function useRejectRequest() {
-  const account = useActiveAccount();
+  // Rejections hit the Gnosis v2 NFTs — send with the Gnosis smart account.
+  const { gnosisAccount } = useGnosisWallet();
+  const account = gnosisAccount;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 

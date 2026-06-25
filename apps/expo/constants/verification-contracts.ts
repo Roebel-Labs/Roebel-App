@@ -6,35 +6,46 @@
 
 import { getContract } from 'thirdweb';
 import { client } from '@/constants/thirdweb';
-import { base } from 'thirdweb/chains';
+import { gnosis } from '@/constants/gnosis';
 
-// Deployed contract addresses on Base Mainnet (rotated 2026-05-23)
+// Deployed contract addresses on Gnosis v2 Mainnet (chainId 100, Sybil-hardening
+// rotation 2026-06). CitizenNFTv2 / AttesterNFTv2 use dynamic percentage-band
+// approval/rejection thresholds rather than a fixed 1+1.
 export const VERIFICATION_CONTRACTS = {
-  attesterNFT: process.env.NEXT_PUBLIC_ATTESTER_NFT || '0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb',
-  citizenNFT: process.env.NEXT_PUBLIC_CITIZEN_NFT || '0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB',
-  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91',
+  attesterNFT: process.env.NEXT_PUBLIC_ATTESTER_NFT || '0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82',
+  citizenNFT: process.env.NEXT_PUBLIC_CITIZEN_NFT || '0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5',
+  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65',
 };
 
-// Contract instances
+// Contract instances (Gnosis v2)
 export const attesterNFTContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.attesterNFT,
-  chain: base,
+  chain: gnosis,
 });
 
 export const citizenNFTContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.citizenNFT,
-  chain: base,
+  chain: gnosis,
 });
 
 export const governorContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.governor,
-  chain: base,
+  chain: gnosis,
 });
 
-// Signature requirements
+// DEPRECATED on Gnosis v2: thresholds are now dynamic percentage-bands, not a
+// fixed 1+1. Do NOT use these constants to DISPLAY how many signatures a request
+// needs — read it per-request on-chain instead:
+//   CitizenNFTv2.requiredAttesterApprovalsFor(requestId)
+//   CitizenNFTv2.requiredCitizenApprovalsFor(requestId)
+//   CitizenNFTv2.requiredAttesterRejectionsFor(requestId)
+//   CitizenNFTv2.requiredCitizenRejectionsFor(requestId)
+//   AttesterNFTv2.requiredApprovalsFor(requestId) / requiredRejectionsFor(requestId)
+// Kept only so legacy references compile.
+// TODO(gnosis-v2): read requiredAttesterApprovalsFor / requiredCitizenApprovalsFor
 export const SIGNATURE_REQUIREMENTS = {
   citizen: {
     attesters: 1,
@@ -65,8 +76,10 @@ export const ATTESTER_NFT_ABI = [
   'function hasRejectedRequest(uint256 requestId, address rejector) view returns (bool)',
   'function hasAttesterNFT(address account) view returns (bool)',
   'function requestCount() view returns (uint256)',
-  'function requiredSignatures() view returns (uint256)',
-  'function requiredRejections() view returns (uint256)',
+  // AttesterNFTv2: dynamic percentage-band thresholds, read per-request.
+  'function requiredApprovalsFor(uint256 requestId) view returns (uint256)',
+  'function requiredRejectionsFor(uint256 requestId) view returns (uint256)',
+  'function attesterCount() view returns (uint256)',
   'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
   'event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
   'event RequestApproved(uint256 indexed requestId, address indexed approver)',
@@ -86,16 +99,19 @@ export const CITIZEN_NFT_ABI = [
   'function hasRejectedRequest(uint256 requestId, address rejector) view returns (bool)',
   'function hasCitizenNFT(address account) view returns (bool)',
   'function requestCount() view returns (uint256)',
-  'function requiredAttesterSignatures() view returns (uint256)',
-  'function requiredCitizenSignatures() view returns (uint256)',
-  'function requiredRevocationAttesterSignatures() view returns (uint256)',
-  'function requiredRevocationCitizenSignatures() view returns (uint256)',
-  'function requiredAttesterRejections() view returns (uint256)',
-  'function requiredCitizenRejections() view returns (uint256)',
+  // CitizenNFTv2: dynamic percentage-band thresholds, read per-request.
+  'function requiredAttesterApprovalsFor(uint256 requestId) view returns (uint256)',
+  'function requiredCitizenApprovalsFor(uint256 requestId) view returns (uint256)',
+  'function requiredAttesterRejectionsFor(uint256 requestId) view returns (uint256)',
+  'function requiredCitizenRejectionsFor(uint256 requestId) view returns (uint256)',
+  'function isActive(address account) view returns (bool)',
+  'function citizenCount() view returns (uint256)',
+  'function validUntil(address) view returns (uint64)',
   'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
   'event RevocationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
-  'event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)',
-  'event RequestRejected(uint256 indexed requestId, address indexed rejector, bool isAttester, bool isCitizen, bool signedAsAttester)',
+  // v2 dropped the isAttester/isCitizen booleans — only signedAsAttester remains.
+  'event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)',
+  'event RequestRejected(uint256 indexed requestId, address indexed rejector, bool signedAsAttester)',
   'event CitizenNFTMinted(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)',
   'event CitizenNFTRevoked(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)',
 ] as const;

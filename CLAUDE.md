@@ -94,6 +94,21 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 
 Source of truth: [`contracts/governor-contract/deployments/base.json`](contracts/governor-contract/deployments/base.json) and [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts).
 
+### Gnosis Mainnet — Sybil-hardened v2 consolidation (LIVE 2026-06-25)
+
+Full Base→Gnosis consolidation. **Fresh `AttesterNFTv2` + `CitizenNFTv2`** with **scale-aware percentage-band thresholds** (see [`docs/superpowers/plans/2026-06-24-gnosis-consolidation-and-sybil-hardening.md`](docs/superpowers/plans/2026-06-24-gnosis-consolidation-and-sybil-hardening.md)). 20 citizens (15 snapshot + 5 Base stragglers) + 5 attesters migration-minted + finalized. **Identity + governance + Circles currency now all on Gnosis.**
+
+- AttesterNFTv2: `0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82` (approval/rejection band 50%/floor3/cap7)
+- CitizenNFTv2: `0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5` (join = 30%/floor2/cap7 attesters + **fixed 1** citizen; revoke = **67%/floor3/no-cap** attesters + fixed 1 citizen; rejection 25%/floor2/cap5; `validUntil` re-attestation dormancy OFF at launch; `attestationSource` reserves the Self.xyz Phase-2 path)
+- SignUpTokenGatekeeper (→CitizenNFTv2): `0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277`
+- MACI core: `0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D` (deploy block 46867803)
+- Verifier: `0xC95359cF5d7391cD239c9476393706a8132406dc`; VkRegistry: `0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f`
+- Timelock: `0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C` (Governor=proposer; deployer renounced admin)
+- MaciAttesterGovernor: `0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65` (wired to v2 NFTs + new MACI; reuses the existing Shamir coordinator pubkey/EOA `0x5e6528D2…`)
+- NFT owner = Attester **Safe** `0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa` (threshold changes = Safe tx; D2 keeps Safe ownership for bootstrap — hand to Timelock later for full on-chain governance).
+- Source of truth: [`contracts/governor-contract/deployments/gnosis-v2.json`](contracts/governor-contract/deployments/gnosis-v2.json).
+- **App cutover NOT yet shipped** — production Expo/web still target Base. The chain flip (`base`→`gnosis`), v2-ABI changes, and a MACI re-signup for every citizen are staged on branch `feat/gnosis-v2-sybil-hardening` pending a coordinated production rollout. The earlier "Gnosis migration" was identity-only (the v1 `0x6FF3…`/`0x7bD6…` NFTs that gate Circles); those are **superseded** by the v2 contracts above.
+
 ## Coordinator privacy — Shamir 3-of-5 federation (fully active 2026-06-10)
 
 The MACI coordinator privkey is no longer a single env var on Fly. It

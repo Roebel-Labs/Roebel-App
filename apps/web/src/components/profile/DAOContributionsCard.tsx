@@ -84,8 +84,9 @@ export function DAOContributionsCard({ user }: DAOContributionsCardProps) {
 
         // Define Citizen RequestApproved event
         const citizenRequestApprovedEvent = prepareEvent({
+          // v2 (Gnosis): dropped isAttester/isCitizen booleans, kept signedAsAttester
           signature:
-            "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
+            "event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)",
         });
 
         // Fetch Citizen RequestApproved events
