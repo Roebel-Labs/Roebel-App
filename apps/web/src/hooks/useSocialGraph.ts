@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getContract } from "thirdweb";
 import { gnosis } from "@/lib/gnosis";
+import { base } from "thirdweb/chains";
 import { client } from "@/app/client";
 import { VERIFICATION_CONTRACTS } from "@/lib/verification-contracts";
 
@@ -41,6 +42,12 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 // fromBlock, thirdweb's default getContractEvents range misses the migration-mint block,
 // so the graph comes back empty ("Noch keine verifizierten Bürger"). toBlock = latest.
 const FROM_BLOCK = 46867000n;
+// The Gnosis migration bulk-minted citizens (no RequestApproved events), so the
+// "who verified whom" edges live only on the prior Base contracts. We overlay them
+// onto the current Gnosis nodes (the same wallet addresses across both chains).
+const BASE_CITIZEN_NFT = "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB";
+const BASE_ATTESTER_NFT = "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb";
+const BASE_FROM_BLOCK = 47000000n;
 
 export function useSocialGraph(): SocialGraphData {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -111,6 +118,18 @@ export function useSocialGraph(): SocialGraphData {
           "event CitizenNFTRevoked(address indexed citizen, uint256 indexed tokenId, uint256 indexed requestId)",
       });
 
+      // Prior Base contracts — source of the historical "who verified whom" edges.
+      const baseAttesterContract = getContract({ client, chain: base, address: BASE_ATTESTER_NFT });
+      const baseCitizenContract = getContract({ client, chain: base, address: BASE_CITIZEN_NFT });
+      const baseAttesterApprovedEvent = prepareEvent({
+        signature: "event RequestApproved(uint256 indexed requestId, address indexed approver)",
+      });
+      const baseCitizenApprovedEvent = prepareEvent({
+        // v1 (Base) CitizenNFT carried isAttester/isCitizen booleans on RequestApproved.
+        signature:
+          "event RequestApproved(uint256 indexed requestId, address indexed approver, bool isAttester, bool isCitizen, bool signedAsAttester)",
+      });
+
       const [
         attesterMints,
         citizenMints,
@@ -122,6 +141,10 @@ export function useSocialGraph(): SocialGraphData {
         citizenRequests,
         attesterRevocations,
         citizenRevocations,
+        baseAttesterApprovals,
+        baseCitizenApprovals,
+        baseAttesterMintEvents,
+        baseCitizenMintEvents,
       ] = await Promise.all([
         getContractEvents({ contract: attesterContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
         getContractEvents({ contract: citizenContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
@@ -133,6 +156,11 @@ export function useSocialGraph(): SocialGraphData {
         getContractEvents({ contract: citizenContract, events: [attestationRequestEvent], fromBlock: FROM_BLOCK }),
         getContractEvents({ contract: attesterContract, events: [attesterRevokedEvent], fromBlock: FROM_BLOCK }),
         getContractEvents({ contract: citizenContract, events: [citizenRevokedEvent], fromBlock: FROM_BLOCK }),
+        // Base (historical approval edges) — fail-soft so the graph still renders if Base RPC errors.
+        getContractEvents({ contract: baseAttesterContract, events: [baseAttesterApprovedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
+        getContractEvents({ contract: baseCitizenContract, events: [baseCitizenApprovedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
+        getContractEvents({ contract: baseAttesterContract, events: [attesterMintedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
+        getContractEvents({ contract: baseCitizenContract, events: [citizenMintedEvent], fromBlock: BASE_FROM_BLOCK }).catch(() => []),
       ]);
 
       const nodesMap = new Map<string, GraphNode>();
@@ -297,6 +325,46 @@ export function useSocialGraph(): SocialGraphData {
           }
         }
       });
+
+      // Overlay the ORIGINAL verification edges from the prior Base contracts (the
+      // Gnosis migration bulk-minted, so it has no approval events). Only connect
+      // addresses that are current Gnosis members (same wallet address across chains).
+      const baseAttesterReqToTarget = new Map<string, string>();
+      (baseAttesterMintEvents as any[]).forEach((e: any) => {
+        const rid = e.args?.requestId?.toString();
+        const t = e.args?.attester as string;
+        if (rid && t) baseAttesterReqToTarget.set(rid, t);
+      });
+      const baseCitizenReqToTarget = new Map<string, string>();
+      (baseCitizenMintEvents as any[]).forEach((e: any) => {
+        const rid = e.args?.requestId?.toString();
+        const t = e.args?.citizen as string;
+        if (rid && t) baseCitizenReqToTarget.set(rid, t);
+      });
+      const addHistoricalEdge = (
+        approver: string | undefined,
+        target: string | undefined,
+        type: "attester_approved" | "citizen_approved",
+      ) => {
+        if (!approver || !target || approver === target) return;
+        if (!nodesMap.has(approver) || !nodesMap.has(target)) return;
+        const edgeId = `${approver}->${target}`;
+        if (!edgeSet.has(edgeId)) {
+          edgesArray.push({ id: edgeId, source: approver, target, type, timestamp: 0 });
+          edgeSet.add(edgeId);
+        }
+        const tn = nodesMap.get(target);
+        if (tn) {
+          if (!tn.verifiedBy) tn.verifiedBy = [];
+          if (!tn.verifiedBy.includes(approver)) tn.verifiedBy.push(approver);
+        }
+      };
+      (baseAttesterApprovals as any[]).forEach((e: any) =>
+        addHistoricalEdge(e.args?.approver as string, baseAttesterReqToTarget.get(e.args?.requestId?.toString()), "attester_approved"),
+      );
+      (baseCitizenApprovals as any[]).forEach((e: any) =>
+        addHistoricalEdge(e.args?.approver as string, baseCitizenReqToTarget.get(e.args?.requestId?.toString()), "citizen_approved"),
+      );
 
       setNodes(Array.from(nodesMap.values()));
       setEdges(edgesArray);
