@@ -95,8 +95,10 @@ export async function deriveCommitmentSalt(account: Account): Promise<string> {
   return saltFromSignature(signature);
 }
 
+// expo-secure-store keys must match [A-Za-z0-9._-]; a ':' separator is rejected
+// ("Invalid key provided to SecureStore"). Use '.' — the 0x… address is alphanumeric.
 const preimageKey = (address: string) =>
-  `citizen-preimage:${address.toLowerCase()}`;
+  `citizen-preimage.${address.toLowerCase()}`;
 
 /** Persist the preimage on-device so the owner can re-display it / prefill later. */
 export async function storeCitizenPreimage(
