@@ -2,6 +2,7 @@
 // Circles name + avatar image (on-chain Avatar row → CIDv0 → profile service),
 // and lists the citizens that accepted the Röbel Münzen invite.
 import { roebeltalerGroupAddress } from "@/constants/gnosis";
+import { supabase } from "./supabase";
 
 const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
 const PROFILE_SVC = "https://rpc.aboutcircles.com/profiles/get?cid=";
@@ -157,11 +158,14 @@ export interface Recipient extends CirclesProfile {
 
 /**
  * Citizens that accepted the Röbel Münzen invite (registered Circles humans the
- * group trusts), with the user's own Metri wallet pinned first. Excludes `self`.
+ * group trusts), EXCLUDING the user's own wallet (no "Mein Wallet" entry). Display
+ * name + avatar come from the app's Supabase profiles, not the Circles avatar
+ * metadata.
  */
 export async function getRoebelRecipients(self?: string): Promise<Recipient[]> {
 	const ex = (self ?? "").toLowerCase();
 	const group = roebeltalerGroupAddress.toLowerCase();
+	const metri = METRI_WALLET.toLowerCase();
 	let trustees: string[] = [];
 	try {
 		const rows = await circlesQuery({
@@ -170,23 +174,44 @@ export async function getRoebelRecipients(self?: string): Promise<Recipient[]> {
 			Columns: ["trustee"],
 			Filter: [{ Type: "FilterPredicate", FilterType: "Equals", Column: "truster", Value: group }],
 			Order: [],
-			Limit: 50,
+			Limit: 100,
 		});
 		trustees = rows.map((r) => String(r.trustee ?? "").toLowerCase());
 	} catch {
 		/* ignore */
 	}
 	const seen = new Set<string>();
-	const candidates = [METRI_WALLET.toLowerCase(), ...trustees]
-		.filter((a) => {
-			if (!a || a === ex || a === group) return false;
-			if (seen.has(a)) return false;
-			seen.add(a);
-			return true;
-		})
-		.slice(0, 16);
-	const profiles = await Promise.all(candidates.map((a) => getCirclesProfile(a)));
-	return profiles
-		.filter((p) => p.registered)
-		.map((p) => ({ ...p, isMetri: p.address === METRI_WALLET.toLowerCase() }));
+	const candidates = trustees.filter((a) => {
+		// Drop empty, self, the group itself, and the user's own Metri wallet.
+		if (!a || a === ex || a === group || a === metri) return false;
+		if (seen.has(a)) return false;
+		seen.add(a);
+		return true;
+	});
+	if (!candidates.length) return [];
+
+	// Resolve display name + avatar from the app's Supabase profiles (NOT the
+	// Circles avatar metadata). `users.wallet_address` is stored lowercased.
+	const byWallet = new Map<string, { name: string | null; imageUrl: string | null }>();
+	try {
+		const { data } = await supabase
+			.from("users")
+			.select("wallet_address, username, display_name, profile_picture_url")
+			.in("wallet_address", candidates);
+		for (const u of (data ?? []) as any[]) {
+			const w = (u.wallet_address as string | null)?.toLowerCase();
+			if (!w) continue;
+			byWallet.set(w, {
+				name: (u.display_name as string) || (u.username as string) || null,
+				imageUrl: (u.profile_picture_url as string) || null,
+			});
+		}
+	} catch {
+		/* ignore — fall back to address-only rows */
+	}
+
+	return candidates.map((address) => {
+		const p = byWallet.get(address);
+		return { address, name: p?.name ?? null, imageUrl: p?.imageUrl ?? null, registered: true, isMetri: false };
+	});
 }
