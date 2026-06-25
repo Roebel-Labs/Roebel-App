@@ -15,7 +15,8 @@ import {
   type RepNode,
   type Profile,
 } from "../lib/circlesData";
-import { ROEBEL_CITIZENS } from "../lib/citizens";
+import { ROEBEL_CITIZENS, type Citizen } from "../lib/citizens";
+import { fetchRoebelCitizens } from "../lib/citizens-onchain";
 import { fmt, fmtInt, pct, shortAddr } from "../lib/format";
 import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
@@ -34,12 +35,20 @@ export default function TownView({ connected }: { connected: Address | null }) {
   const [rep, setRep] = useState<RepNode[] | null>(null);
   const [verifiedSet, setVerifiedSet] = useState<Set<string>>(new Set());
   const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
+  // Live citizen list from the on-chain CitizenNFTv2 contract; seeded with the static
+  // fallback so first render is instant and offline is correct. Auto-includes new citizens.
+  const [citizens, setCitizens] = useState<Citizen[]>(ROEBEL_CITIZENS);
   const [loading, setLoading] = useState(true);
 
-  // Resolve each citizen's real Circles avatar name + picture once (static list).
+  // Pull the dynamic list once (falls back to the static snapshot on RPC failure).
   useEffect(() => {
-    getProfiles(ROEBEL_CITIZENS.map((c) => c.address)).then(setProfiles).catch(() => {});
+    fetchRoebelCitizens().then(setCitizens).catch(() => {});
   }, []);
+
+  // Resolve each citizen's real Circles avatar name + picture (re-runs as the list loads).
+  useEffect(() => {
+    getProfiles(citizens.map((c) => c.address)).then(setProfiles).catch(() => {});
+  }, [citizens]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,7 +166,7 @@ export default function TownView({ connected }: { connected: Address | null }) {
       </ChartCard>
 
       {/* Weekly CSV export */}
-      <ExportCard verifiedSet={verifiedSet} rep={rep} />
+      <ExportCard verifiedSet={verifiedSet} rep={rep} citizens={citizens} />
     </div>
   );
 }
@@ -182,7 +191,7 @@ function Legend() {
   );
 }
 
-function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNode[] | null }) {
+function ExportCard({ verifiedSet, rep, citizens }: { verifiedSet: Set<string>; rep: RepNode[] | null; citizens: Citizen[] }) {
   const [range, setRange] = useState<"7d" | "all">("7d");
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -236,7 +245,7 @@ function ExportCard({ verifiedSet, rep }: { verifiedSet: Set<string>; rep: RepNo
   });
 
   const exportCitizens = run("citizens", async () => {
-    const rows = ROEBEL_CITIZENS.map((c) => ({ address: c.address, attester: c.attester, verified: verifiedSet.has(c.address.toLowerCase()) }));
+    const rows = citizens.map((c) => ({ address: c.address, attester: c.attester, verified: verifiedSet.has(c.address.toLowerCase()) }));
     await deliver("citizens", `roebel-citizens-${todayStamp()}.csv`, toCsv(rows, ["address", "attester", "verified"]), { rows: rows.length });
   });
 

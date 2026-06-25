@@ -3,6 +3,7 @@
 // Query shapes verified live against rpc.aboutcircles.com (circles_tables schema).
 import { isHuman, getCollateralLocked, ROEBEL_GROUP } from "./circles";
 import { ROEBEL_CITIZENS } from "./citizens";
+import { fetchRoebelCitizens } from "./citizens-onchain";
 
 const RPC = "https://rpc.aboutcircles.com/";
 const GROUP = ROEBEL_GROUP.toLowerCase();
@@ -91,23 +92,25 @@ export async function getProfiles(addresses: string[]): Promise<Map<string, Prof
 
 /** Citizens (lowercased) that are registered Circles humans. */
 export async function getVerifiedSet(): Promise<Set<string>> {
+  const citizens = await fetchRoebelCitizens().catch(() => ROEBEL_CITIZENS);
   const entries = await Promise.all(
-    ROEBEL_CITIZENS.map(async (c) => [c.address.toLowerCase(), await isHuman(c.address).catch(() => false)] as const),
+    citizens.map(async (c) => [c.address.toLowerCase(), await isHuman(c.address).catch(() => false)] as const),
   );
   return new Set(entries.filter(([, v]) => v).map(([a]) => a));
 }
 
 export interface TownStats { supply: number; collateral: number; holders: number; verified: number; citizens: number; }
 export async function getTownStats(verified: number): Promise<TownStats> {
-  const [supplyRows, collateral, holderRows] = await Promise.all([
+  const [supplyRows, collateral, holderRows, citizenList] = await Promise.all([
     q("V_CrcV2", "GroupTokenSupply", [eq("group", GROUP)]),
     // BaseGroup collateral lives in its own vault, not the legacy GroupCollateralByToken
     // view — read the vault's real personal-CRC holdings instead.
     getCollateralLocked(),
     q("V_CrcV2", "GroupTokenHoldersBalance", [eq("group", GROUP)]),
+    fetchRoebelCitizens().catch(() => ROEBEL_CITIZENS),
   ]);
   const supply = toCrc(supplyRows[0]?.demurragedTotalSupply ?? supplyRows[0]?.totalSupply);
-  return { supply, collateral, holders: holderRows.length, verified, citizens: ROEBEL_CITIZENS.length };
+  return { supply, collateral, holders: holderRows.length, verified, citizens: citizenList.length };
 }
 
 export type NodeTone = "verified" | "attester" | "open";
@@ -115,10 +118,13 @@ export interface GraphNode { id: string; label: string; tone: NodeTone; trusted:
 export interface TrustGraph { centerLabel: string; nodes: GraphNode[] }
 export async function getTrustGraph(verifiedSet: Set<string>): Promise<TrustGraph> {
   // The group trusts its citizens (truster = group) → group-centered star.
-  const rows = await q("V_Crc", "TrustRelations", [eq("version", 2), eq("truster", GROUP)]);
+  const [rows, citizens] = await Promise.all([
+    q("V_Crc", "TrustRelations", [eq("version", 2), eq("truster", GROUP)]),
+    fetchRoebelCitizens().catch(() => ROEBEL_CITIZENS),
+  ]);
   const trusted = new Set(rows.map((r) => String(r.trustee).toLowerCase()));
-  const attester = new Set(ROEBEL_CITIZENS.filter((c) => c.attester).map((c) => c.address.toLowerCase()));
-  const nodes: GraphNode[] = ROEBEL_CITIZENS.map((c) => {
+  const attester = new Set(citizens.filter((c) => c.attester).map((c) => c.address.toLowerCase()));
+  const nodes: GraphNode[] = citizens.map((c) => {
     const a = c.address.toLowerCase();
     const tone: NodeTone = verifiedSet.has(a) ? "verified" : attester.has(a) ? "attester" : "open";
     return { id: c.address, label: `${c.address.slice(0, 6)}…`, tone, trusted: trusted.has(a) };

@@ -1,6 +1,12 @@
-// The 15 migration-minted Röbel citizens on Gnosis (5 are Attesters). These are the
-// on-chain CitizenNFT holders (their thirdweb smart-account addresses) — the wallets
-// we invite into Circles. Source: contracts/governor-contract/deployments/gnosis.json.
+// The migration-minted Röbel citizens on Gnosis (5 are Attesters). These are the
+// on-chain CitizenNFTv2 holders (their thirdweb smart-account addresses) — the wallets
+// we invite into Circles.
+//
+// IMPORTANT: this is only a STATIC FALLBACK for first render / offline / RPC failure.
+// The live source of truth is the on-chain CitizenNFTv2 contract — see
+// `fetchRoebelCitizens()` in ./citizens-onchain. Every newly-verified citizen appears
+// automatically there with no code edit. Source of the fallback snapshot:
+// contracts/governor-contract/deployments/gnosis-v2.json (holders.citizens / .attesters).
 export interface Citizen {
   address: `0x${string}`;
   attester: boolean;
@@ -22,6 +28,11 @@ export const ROEBEL_CITIZENS: Citizen[] = [
   { address: "0x1916bAC01118EE53A7F7eca0F312431b68011Ce4", attester: false },
   { address: "0xd1A7d945fCCa08f67E30E526E34cf4Aaa2725D03", attester: false },
   { address: "0x0e9C37cfc94E1BAFCd53450998Cc26d10A6b5D20", attester: false },
+  { address: "0x0C8963DDceC03DaDA390F097Ac1E4362e81B59c2", attester: false },
+  { address: "0x2e7aB171128EF2dE883043E0b06A6f275cD03914", attester: false },
+  { address: "0xdeF673b34D47e135968E875F13f5382055e216B1", attester: false },
+  { address: "0x4Aa85FD1d27e2efDF563Fb9831d00176b9E41131", attester: false },
+  { address: "0xce269787bf696D93f23cf5863ca63EaD942825D2", attester: false },
 ];
 
 export const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
