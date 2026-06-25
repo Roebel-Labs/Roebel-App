@@ -18,6 +18,8 @@ import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
 import LastVoteCard from './LastVoteCard';
 import StoryProgress from './StoryProgress';
+import BirthdatePromptSheet from './rewards/BirthdatePromptSheet';
+import { loadCitizenPreimage, setCitizenBirthdate } from '@/lib/citizen-commitment';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
@@ -151,6 +153,12 @@ export default function VoteButtons({
     message: '',
     action: null as (() => void) | null,
   });
+  // Just-in-time birthdate gate. When a citizen votes without an on-device
+  // birthdate, we stash the chosen option here, open the sheet, and only run
+  // the actual vote once they've saved it (or cancel cleanly on close).
+  const [birthdateSheetVisible, setBirthdateSheetVisible] = useState(false);
+  const [savingBirthdate, setSavingBirthdate] = useState(false);
+  const [pendingVote, setPendingVote] = useState<VoteType | null>(null);
 
   // Resolve the per-proposal Poll address + deadline from the Governor.
   useEffect(() => {
@@ -406,7 +414,68 @@ export default function VoteButtons({
   };
 
   // ----- Step 3: cast (or change) vote -----
+  // Entry point for the 3 vote buttons. Gates on the on-device birthdate
+  // (part of the private citizen-commitment preimage) before the vote runs —
+  // a valid ballot needs it. If it's missing we stash the choice and open the
+  // birthdate sheet; `handleBirthdateSubmit` resumes the vote once saved.
   const handleVote = async (support: VoteType) => {
+    if (!canVote || !account || !pollAddress || pollId === null) return;
+    if (signUpState.status !== 'signed-up') return;
+    if (!gnosisAccount) {
+      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      return;
+    }
+
+    try {
+      const pre = await loadCitizenPreimage(account.address);
+      if (!pre?.birthdate) {
+        setPendingVote(support);
+        setBirthdateSheetVisible(true);
+        return;
+      }
+    } catch (err) {
+      // If the secure-store read fails, fall through to the prompt rather than
+      // casting a ballot that might be invalid for lack of a birthdate.
+      console.warn('[VoteButtons] birthdate preflight read failed:', err);
+      setPendingVote(support);
+      setBirthdateSheetVisible(true);
+      return;
+    }
+
+    await castVote(support);
+  };
+
+  // Persist the birthdate on-device, then resume the stashed vote.
+  const handleBirthdateSubmit = async (isoDate: string) => {
+    if (!account) return;
+    const support = pendingVote;
+    try {
+      setSavingBirthdate(true);
+      await setCitizenBirthdate(account, isoDate);
+      setBirthdateSheetVisible(false);
+      setPendingVote(null);
+      if (support !== null) await castVote(support);
+    } catch (err) {
+      console.error('[VoteButtons] save birthdate failed:', err);
+      setBirthdateSheetVisible(false);
+      setPendingVote(null);
+      setErrorDrawer({
+        visible: true,
+        message: extractErrorMessage(err, 'Geburtsdatum konnte nicht gespeichert werden.'),
+      });
+    } finally {
+      setSavingBirthdate(false);
+    }
+  };
+
+  // Close = cancel the vote cleanly (no error, no ballot).
+  const handleBirthdateClose = () => {
+    if (savingBirthdate) return;
+    setBirthdateSheetVisible(false);
+    setPendingVote(null);
+  };
+
+  const castVote = async (support: VoteType) => {
     if (!canVote || !account || !pollAddress || pollId === null) return;
     if (signUpState.status !== 'signed-up') return;
     if (!gnosisAccount) {
@@ -777,6 +846,12 @@ export default function VoteButtons({
             setSuccessDrawer({ visible: false, message: '', action: null });
             if (successDrawer.action) successDrawer.action();
           }}
+        />
+        <BirthdatePromptSheet
+          visible={birthdateSheetVisible}
+          onClose={handleBirthdateClose}
+          onSubmit={handleBirthdateSubmit}
+          saving={savingBirthdate}
         />
       </>
     );

@@ -152,6 +152,33 @@ export async function buildCitizenCommitment(
 }
 
 /**
+ * Persist the on-device birthdate just-in-time (e.g. right before a vote) for a
+ * citizen who never ran the full request form. If a preimage already exists, we
+ * patch only the `birthdate` field and REUSE the stored salt — no new wallet
+ * signature is needed. If none exists yet, we enroll a fresh preimage (which
+ * derives the wallet-bound salt via one signature) with only the birthdate set.
+ *
+ * Birthdate stays private and on-device — it's part of the citizen commitment
+ * preimage and is never written to Supabase.
+ */
+export async function setCitizenBirthdate(
+  account: Account,
+  isoDate: string
+): Promise<CitizenPreimage> {
+  const existing = await loadCitizenPreimage(account.address);
+  if (existing) {
+    const updated: CitizenPreimage = { ...existing, birthdate: isoDate };
+    await storeCitizenPreimage(account.address, updated);
+    return updated;
+  }
+  const { preimage } = await enrollExistingCitizen(
+    { firstName: '', lastName: '', birthdate: isoDate, address: '' },
+    account
+  );
+  return preimage;
+}
+
+/**
  * Backfill the commitment for an ALREADY-verified citizen (e.g. one bulk-minted
  * during the Gnosis migration, who never ran the request form). Derives the
  * wallet-bound salt and stores the preimage on-device only — NO on-chain tx and

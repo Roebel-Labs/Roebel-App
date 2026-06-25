@@ -31,6 +31,7 @@ import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostingGate from '@/components/feed/PostingGate';
 import { usePostingPermission } from '@/hooks/usePostingPermission';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import NamePromptSheet from '@/components/feed/NamePromptSheet';
 
 import ImageIcon from '@/assets/icons/image-01.svg';
 import VideoIcon from '@/assets/icons/video-01.svg';
@@ -87,7 +88,7 @@ export default function CreateScreen() {
     linkedListingMediaUrls?: string;
     linkedListingNeighborhood?: string;
   }>();
-  const { user, isCitizen } = useUser();
+  const { user, isCitizen, updateProfile } = useUser();
   const { activeAccount } = useAccount();
   const walletAddress = user?.wallet_address || '';
   const activeProfileImage = useActiveProfileImage();
@@ -106,6 +107,10 @@ export default function CreateScreen() {
   const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  // Just-in-time name gate. Posts show the author's public profile name; for a
+  // personal account with no name yet we prompt before letting the post through.
+  const [nameSheetVisible, setNameSheetVisible] = useState(false);
+  const [savingName, setSavingName] = useState(false);
 
   // Initialize linked event from route params (coming from event submission success)
   useEffect(() => {
@@ -187,9 +192,43 @@ export default function CreateScreen() {
     }
   };
 
+  // Personal accounts surface the post author as their profile username; an org
+  // account always posts under the org's name, so it skips the gate.
+  const needsName = !isOrgAccount(activeAccount) && !(user?.username && user.username.trim());
+
+  const proceedToReview = () => {
+    requireAuth(() => router.push('/create/review' as any));
+  };
+
   const handleWeiter = () => {
     if (!canProceed) return;
-    requireAuth(() => router.push('/create/review' as any));
+    if (needsName) {
+      setNameSheetVisible(true);
+      return;
+    }
+    proceedToReview();
+  };
+
+  // Save the public profile name, refresh the user context, then continue.
+  const handleNameSubmit = async (name: string) => {
+    try {
+      setSavingName(true);
+      await updateProfile({ username: name });
+      setNameSheetVisible(false);
+      proceedToReview();
+    } catch (err) {
+      console.error('Failed to save name:', err);
+      setNameSheetVisible(false);
+      Alert.alert('Fehler', 'Dein Name konnte nicht gespeichert werden. Bitte versuche es erneut.');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  // Close = cancel posting cleanly (no error).
+  const handleNameClose = () => {
+    if (savingName) return;
+    setNameSheetVisible(false);
   };
 
   const bottomOptions: BottomOption[] = [
@@ -566,6 +605,13 @@ export default function CreateScreen() {
         imageUrl={zoomImageUrl ?? ''}
         images={draft.images}
         onClose={() => setZoomImageUrl(null)}
+      />
+
+      <NamePromptSheet
+        visible={nameSheetVisible}
+        onClose={handleNameClose}
+        onSubmit={handleNameSubmit}
+        saving={savingName}
       />
     </SafeAreaView>
   );
