@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
 import { prepareContractCall, readContract, sendTransaction, waitForReceipt } from 'thirdweb';
-import { base } from 'thirdweb/chains';
+import { gnosis } from '@/constants/gnosis';
 import { keccak256, toHex } from 'thirdweb/utils';
+import { useGnosisWallet } from '@/context/GnosisWalletContext';
 import {
   client,
   governorContract,
@@ -103,6 +104,10 @@ export default function VoteButtons({
   onVoteSuccess,
 }: VoteButtonsProps) {
   const account = useActiveAccount();
+  // MACI signUp + publishMessage now live on Gnosis v2 — send those txns with
+  // the Gnosis smart account (same address as Base, gasless). `account` (Base)
+  // stays for UI guards + .address (Supabase mirror) since the address matches.
+  const { gnosisAccount } = useGnosisWallet();
   const { colors } = useTheme();
   const {
     serializedKeypair,
@@ -296,6 +301,10 @@ export default function VoteButtons({
       setErrorDrawer({ visible: true, message: 'Bitte erstelle zuerst deinen Abstimmungsschlüssel.' });
       return;
     }
+    if (!gnosisAccount) {
+      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      return;
+    }
     try {
       setPhase('signing-up');
       setTxSubstate('wallet-prompt');
@@ -327,9 +336,9 @@ export default function VoteButtons({
       // sendAndConfirmTransaction hides both stages behind one await and there's
       // no way to surface the wallet-popup state to the user — that's exactly
       // what made the previous spinner-only UX feel broken.
-      const { transactionHash } = await sendTransaction({ transaction: tx, account });
+      const { transactionHash } = await sendTransaction({ transaction: tx, account: gnosisAccount });
       setTxSubstate('tx-submitted');
-      const receipt = await waitForReceipt({ client, chain: base, transactionHash });
+      const receipt = await waitForReceipt({ client, chain: gnosis, transactionHash });
 
       // SignUp(uint256 _stateIndex, uint256 indexed _userPubKeyX,
       //         uint256 indexed _userPubKeyY, uint256 _voiceCreditBalance,
@@ -400,6 +409,10 @@ export default function VoteButtons({
   const handleVote = async (support: VoteType) => {
     if (!canVote || !account || !pollAddress || pollId === null) return;
     if (signUpState.status !== 'signed-up') return;
+    if (!gnosisAccount) {
+      setErrorDrawer({ visible: true, message: 'Dein Konto wird noch geladen. Bitte versuche es gleich erneut.' });
+      return;
+    }
     const kp = getKeypair();
     if (!kp) return;
 
@@ -456,7 +469,7 @@ export default function VoteButtons({
           'function publishMessage((uint256[10] data) _message, (uint256 x, uint256 y) _encPubKey)',
         params: [{ data: messageFixed }, encPubKey],
       });
-      const receipt = await sendTransaction({ transaction: tx, account });
+      const receipt = await sendTransaction({ transaction: tx, account: gnosisAccount });
       setTxSubstate('tx-submitted');
 
       track(Events.PROPOSAL_VOTED, {
@@ -549,13 +562,13 @@ export default function VoteButtons({
           </Text>
           <Pressable
             onPress={() =>
-              Linking.openURL(`https://basescan.org/address/${governorContract.address}#readContract`)
+              Linking.openURL(`https://gnosisscan.io/address/${governorContract.address}#readContract`)
             }
             hitSlop={6}
             style={styles.basescanRow}
           >
             <Text style={[styles.basescanLink, { color: colors.textSecondary }]}>
-              Aktuellen Governor auf Basescan prüfen ↗
+              Aktuellen Governor im Explorer prüfen ↗
             </Text>
           </Pressable>
         </View>

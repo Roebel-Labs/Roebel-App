@@ -29,7 +29,8 @@ import { getContractEvents, prepareEvent } from "thirdweb";
 import { keccak256 } from "thirdweb/utils";
 import { getRpcClient, eth_blockNumber } from "thirdweb/rpc";
 import { useActiveAccount } from "thirdweb/react";
-import { client, MACI_DEPLOY_BLOCK, maciReadContract, baseRead } from "@/constants/thirdweb";
+import { client, MACI_DEPLOY_BLOCK, maciReadContract } from "@/constants/thirdweb";
+import { gnosisRead } from "@/constants/gnosis";
 import {
   deserializeKeypair,
   deriveMaciKeypairFromSeed,
@@ -177,9 +178,9 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
     // we filter SignUp logs by the indexed pubX/pubY topics. Each pubkey can
     // appear at most once (the gatekeeper enforces uniqueness).
     //
-    // Base RPC caps eth_getLogs at a 10k-block range, and the live range
-    // (MACI_DEPLOY_BLOCK → latest) is hundreds of thousands of blocks. We split
-    // it into <10k windows and scan them with bounded concurrency against the
+    // The Gnosis read RPC caps eth_getLogs at a ~10k-block range, and the live
+    // range (MACI_DEPLOY_BLOCK → latest) is hundreds of thousands of blocks. We
+    // split it into <10k windows and scan them with bounded concurrency against the
     // reliable read RPC (maciReadContract), returning on the first window that
     // contains this pubkey's SignUp. Parallel + direction-agnostic, so an early
     // signup near the deploy block resolves in seconds instead of dozens of
@@ -197,7 +198,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
 
     let latest: bigint;
     try {
-      latest = await eth_blockNumber(getRpcClient({ client, chain: baseRead }));
+      latest = await eth_blockNumber(getRpcClient({ client, chain: gnosisRead }));
     } catch (err) {
       console.warn("[MaciContext] refreshSignUp: eth_blockNumber failed", err);
       const s: SignUpState = { status: "unknown" };
@@ -205,7 +206,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
       return s;
     }
 
-    const WINDOW = 9_000n; // under Base's 10k eth_getLogs cap
+    const WINDOW = 9_000n; // under Gnosis's ~10k eth_getLogs cap
     const CONCURRENCY = 6;
     const ranges: { from: bigint; to: bigint }[] = [];
     for (let to = latest; to >= MACI_DEPLOY_BLOCK; ) {
