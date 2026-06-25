@@ -327,7 +327,7 @@ export const de = {
     contractsTitle: "Verträge zur Verifizierung",
     contractsLead:
       "Alle Aktionen werden von diesen vier Smart Contracts ausgeführt. Klicke auf einen Eintrag, um den Quellcode und sämtliche Transaktionen einzusehen.",
-    openOnBasescan: "Auf Basescan öffnen",
+    openOnBasescan: "Auf Gnosisscan öffnen",
     verifyOnBasescan: "Auf Basescan verifizieren",
 
     eventCreated: "Vorschlag erstellt",

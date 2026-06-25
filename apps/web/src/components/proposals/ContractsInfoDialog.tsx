@@ -10,26 +10,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { getBaseScanAddressUrl } from "@/lib/blockscout";
 import { formatAddress } from "@/lib/proposal-types";
 import { de } from "@/lib/translations/de";
+
+// Gnosis v2 Sybil-hardened stack (chainId 100, 2026-06-25). Source of truth:
+// contracts/governor-contract/deployments/gnosis-v2.json.
+function gnosisscanAddress(address: string): string {
+  return `https://gnosisscan.io/address/${address}`;
+}
 
 const CONTRACT_ROWS = [
   {
     role: de.governance.roleGovernor,
-    address: "0xCd3b0feEE7C7dAEf7976A46627E5a6fE310A4F91",
+    address: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
   },
   {
     role: de.governance.roleTimelock,
-    address: "0xc93032B37Fb9409996a943978fFE26852B1c4368",
+    address: "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
   },
   {
     role: de.governance.roleCitizenNFT,
-    address: "0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB",
+    address: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",
   },
   {
     role: de.governance.roleAttesterNFT,
-    address: "0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb",
+    address: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
   },
 ] as const;
 
@@ -66,7 +71,7 @@ export function ContractsInfoDialog() {
                 </p>
               </div>
               <a
-                href={getBaseScanAddressUrl(address)}
+                href={gnosisscanAddress(address)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-medium text-primary hover:underline"
