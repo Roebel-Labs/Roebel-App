@@ -238,7 +238,9 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 				const to = (t?.to?.hash ?? "").toLowerCase();
 				let amount = 0;
 				try {
-					amount = Number(BigInt(t?.value ?? "0")) / 1e18;
+					// xDAI is USD-pegged → convert to € (×XDAI_EUR) so the history
+					// matches the total-balance calc (which also applies XDAI_EUR).
+					amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * XDAI_EUR;
 				} catch {
 					amount = 0;
 				}

@@ -16,6 +16,8 @@ export interface TxHistoryItem {
   amountText: string;
   avatarUrl?: string | null;
   txHash?: string;
+  /** 'eur' renders a € badge instead of the coin/avatar image (treasury list). */
+  iconKind?: 'coin' | 'eur';
 }
 
 /** Day-group header label: "Heute" / "Gestern" / a full de-DE date. */
@@ -86,7 +88,13 @@ export default function TxHistoryList({ items, loading, onPressTx, emptyText }: 
                 accessibilityLabel={`${tx.title} — Transaktionsdetails ansehen`}
               >
                 <View style={styles.txIconWrap}>
-                  <Image source={tx.avatarUrl ? { uri: tx.avatarUrl } : RECEIVE_IMG} style={styles.txAvatar} />
+                  {tx.iconKind === 'eur' ? (
+                    <View style={[styles.eurBadge, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.eurBadgeText, { color: colors.primary }]}>€</Text>
+                    </View>
+                  ) : (
+                    <Image source={tx.avatarUrl ? { uri: tx.avatarUrl } : RECEIVE_IMG} style={styles.txAvatar} />
+                  )}
                   <View
                     style={[
                       styles.txBadge,
@@ -142,6 +150,17 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: '#ECECEC',
+  },
+  eurBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eurBadgeText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 20,
   },
   txBadge: {
     position: 'absolute',
