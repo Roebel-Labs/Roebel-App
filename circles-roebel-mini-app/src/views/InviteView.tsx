@@ -3,6 +3,7 @@ import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { inviteFarm, getQuota, getQuotaFunding, isHuman, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar, type Citizen } from "../lib/citizens";
+import { fetchRoebelCitizens } from "../lib/citizens-onchain";
 import { getProfiles, type Profile } from "../lib/circlesData";
 import { Card, ChartCard, PageHeader, KpiCard, Pill, Banner, Avatar } from "../components/ui";
 import { UserPlus, Wallet, Check, ExternalLink, ChevronRight } from "../components/icons";
@@ -25,9 +26,16 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
   const [invitedOpen, setInvitedOpen] = useState(false);
 
-  const citizens = ROEBEL_CITIZENS;
+  // Live citizen list from the on-chain CitizenNFTv2 contract; seeded with the static
+  // fallback so first render is instant and offline is correct. Auto-includes new citizens.
+  const [citizens, setCitizens] = useState<Citizen[]>(ROEBEL_CITIZENS);
 
-  // Resolve each citizen's real Circles avatar name + picture once (static list).
+  // Pull the dynamic list once (falls back to the static snapshot on RPC failure).
+  useEffect(() => {
+    fetchRoebelCitizens().then(setCitizens).catch(() => {});
+  }, []);
+
+  // Resolve each citizen's real Circles avatar name + picture (re-runs as the list loads).
   useEffect(() => {
     getProfiles(citizens.map((c) => c.address)).then(setProfiles).catch(() => {});
   }, [citizens]);
