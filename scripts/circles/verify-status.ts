@@ -9,7 +9,8 @@ import { createPublicClient, http, getAddress, formatEther } from "viem";
 import { gnosis } from "viem/chains";
 
 const HUB = getAddress("0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8");
-const CITIZEN_NFT = getAddress("0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4");
+// CitizenNFTv2 (Sybil-hardened, 2026-06-25; supersedes v1 0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4).
+const CITIZEN_NFT = getAddress("0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5");
 const ROEBEL_GROUP = getAddress("0xAc2CeCdBead594F97358a0d3132454f24F3E470c");
 const CIRCLES_RPC = "https://rpc.aboutcircles.com/";
 const INVITATION_COST = 96n * 10n ** 18n;

@@ -10,7 +10,8 @@ const fs = require("fs");
 const path = require("path");
 const hre = require("hardhat");
 
-const CITIZEN_NFT_GNOSIS = "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4";
+// CitizenNFTv2 (Sybil-hardened, 2026-06-25; supersedes v1 0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4).
+const CITIZEN_NFT_GNOSIS = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
 
 async function main() {
   const { ethers, network } = hre;

@@ -15,9 +15,11 @@ import { loadEnv } from "./_env";
 
 const GROUP = getAddress("0xAc2CeCdBead594F97358a0d3132454f24F3E470c");
 const HUB = getAddress("0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8");
-const CITIZEN_NFT = getAddress("0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4");
+// CitizenNFTv2 (Sybil-hardened, 2026-06-25; supersedes v1 0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4).
+const CITIZEN_NFT = getAddress("0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5");
 const FAR_EXPIRY = 4102444800n; // ~year 2100 (uint96)
-// Bound the log scan (Gnosis CitizenNFT was deployed ~2026-06-17). Override via FROM_BLOCK.
+// Bound the log scan (v1 CitizenNFT deployed ~2026-06-17; CitizenNFTv2 ~2026-06-25, after
+// this floor, so the default still catches v2 mints). Override via FROM_BLOCK.
 const FROM_BLOCK = BigInt(process.env.FROM_BLOCK ?? "46700000");
 const BATCH = 30; // Circles convention: ≤30 members per trust tx
 

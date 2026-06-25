@@ -9,13 +9,14 @@ const GNOSIS_READ_RPC =
 	process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || "https://rpc.gnosischain.com";
 export const gnosisRead = defineChain({ ...gnosis, rpc: GNOSIS_READ_RPC });
 
-// CitizenNFT + AttesterNFT migrated to Gnosis (Phase 0, 2026-06-17). Soulbound,
-// owned by the 3-of-5 Attester Safe; migration finalized. Source of truth:
-// contracts/governor-contract/deployments/gnosis.json.
+// CitizenNFT + AttesterNFT on Gnosis (v2 Sybil-hardened, 2026-06-25). Soulbound,
+// owned by the 3-of-5 Attester Safe. Supersedes the v1 migration NFTs
+// (v1 Citizen 0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4 /
+// v1 Attester 0x7bD6Fd97385BCCf6000380ADd3BF19737c6063C4, 2026-06-17).
 export const citizenNFTGnosisAddress =
-	process.env.EXPO_PUBLIC_CITIZEN_NFT_GNOSIS || "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4";
+	process.env.EXPO_PUBLIC_CITIZEN_NFT_GNOSIS || "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
 export const attesterNFTGnosisAddress =
-	process.env.EXPO_PUBLIC_ATTESTER_NFT_GNOSIS || "0x7bD6Fd97385BCCf6000380ADd3BF19737c6063C4";
+	process.env.EXPO_PUBLIC_ATTESTER_NFT_GNOSIS || "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
 
 // 3-of-5 Attester Safe on Gnosis — owner of the NFTs and (eventually) the Röbeltaler group.
 export const attesterSafeGnosisAddress =
