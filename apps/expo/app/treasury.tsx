@@ -1,8 +1,9 @@
-// Stadtkasse (civic treasury) — REAL assets + transactions of the Attester Safe
-// (xDAI + EURe + Röbel Münzen). EUR figures are INDICATIVE only (Röbel Münzen are
-// not euro-redeemable). Counterparty addresses are never shown (no-wallet rule).
+// Stadtkasse (civic treasury) — mirrors the rewards screen: a € hero (no streak),
+// an assets section showing only a single EURO row, then a "Verlauf" history styled
+// exactly like the rewards page. EUR figures exclude Röbel Münzen (not redeemable).
+// Counterparty addresses are never shown (no-wallet rule).
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Image } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
@@ -15,12 +16,10 @@ import {
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import ChevronLeftIcon from "@/assets/icons/chevron-left.svg";
 import Skeleton from "@/components/ui/Skeleton";
-
-const COIN = require("../assets/illustration/taler/multiple.png");
+import CoinBalanceHero from "@/components/rewards/CoinBalanceHero";
+import TxHistoryList, { type TxHistoryItem } from "@/components/rewards/TxHistoryList";
 
 const fmtEur = (n: number) => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtNum = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 2 });
-const fmtDate = (ms: number) => (ms ? new Date(ms).toLocaleDateString("de-DE", { day: "numeric", month: "short" }) : "");
 
 export default function TreasuryScreen() {
 	const { colors } = useTheme();
@@ -41,13 +40,24 @@ export default function TreasuryScreen() {
 
 	const styles = makeStyles(colors);
 
-	const assetRows = assets
-		? [
-				{ key: "rt", name: "Röbel Münzen", sub: "Gemeinschaftswährung", value: Math.round(assets.roebel).toLocaleString("de-DE"), badge: "coin" as const },
-				{ key: "xdai", name: "xDAI", sub: "Gnosis-Guthaben", value: fmtNum(assets.xdai), badge: "x" as const },
-				{ key: "eure", name: "EURe", sub: "Euro-Guthaben", value: fmtNum(assets.eure), badge: "e" as const },
-			]
-		: [];
+	// € fiat value of the treasury (xDAI→€ + EURe) — excludes Röbel Münzen.
+	const euroFiat = assets ? assets.euroTotal - assets.roebel : 0;
+
+	// Treasury history mapped to the shared list: drop 0-value admin/Safe txs.
+	const historyItems: TxHistoryItem[] = (txs ?? [])
+		.filter((t) => t.direction !== "admin" && t.amount > 0)
+		.map((t, i): TxHistoryItem => {
+			const isIn = t.direction === "in";
+			return {
+				id: `${t.txHash || "tx"}-${i}`,
+				direction: isIn ? "in" : "out",
+				title: t.label,
+				timestamp: t.timestamp,
+				amountText: `${isIn ? "+ " : "− "}${fmtEur(t.amount)} €`,
+				avatarUrl: null,
+				txHash: t.txHash,
+			};
+		});
 
 	return (
 		<SafeAreaView style={styles.safe} edges={["top"]}>
@@ -65,124 +75,60 @@ export default function TreasuryScreen() {
 			</View>
 
 			<ScrollView contentContainerStyle={styles.content}>
-				<Image source={COIN} style={styles.heroCoin} resizeMode="contain" />
-				<Text style={styles.totalLabel}>Gesamtwert (ca.)</Text>
-				{assets === null ? (
-					<Skeleton width={180} height={42} radius={12} style={{ alignSelf: "center", marginTop: 6 }} />
-				) : (
-					<Text style={styles.total}>{fmtEur(assets.euroTotal)} €</Text>
-				)}
-				<Text style={styles.disclaimer}>Orientierungswert — Röbel Münzen sind nicht in Euro auszahlbar.</Text>
+				<CoinBalanceHero
+					verified={null}
+					label="Stadtkasse"
+					valueText={`${fmtEur(euroFiat)} €`}
+					loading={assets === null}
+					balance={0}
+				/>
 
-				<Text style={styles.section}>Vermögenswerte</Text>
+				<Text style={styles.section}>Guthaben</Text>
 				{assets === null ? (
-					<View style={{ gap: 10 }}>
-						{[0, 1, 2].map((i) => (
-							<View key={i} style={styles.assetRow}>
-								<View style={styles.assetLeft}>
-									<Skeleton width={40} height={40} radius={20} />
-									<View style={{ gap: 6 }}>
-										<Skeleton width={120} height={14} />
-										<Skeleton width={80} height={11} />
-									</View>
-								</View>
-								<Skeleton width={48} height={16} />
+					<View style={styles.assetRow}>
+						<View style={styles.assetLeft}>
+							<Skeleton width={40} height={40} radius={20} />
+							<View style={{ gap: 6 }}>
+								<Skeleton width={120} height={14} />
+								<Skeleton width={80} height={11} />
 							</View>
-						))}
+						</View>
+						<Skeleton width={64} height={16} />
 					</View>
 				) : (
-					<View style={{ gap: 10 }}>
-						{assetRows.map((a) => (
-							<View key={a.key} style={styles.assetRow}>
-								<View style={styles.assetLeft}>
-									{a.badge === "coin" ? (
-										<Image source={COIN} style={styles.coinImg} resizeMode="contain" />
-									) : (
-										<View style={styles.tokenBadge}>
-											<Text style={styles.tokenBadgeText}>{a.badge === "x" ? "x" : "€"}</Text>
-										</View>
-									)}
-									<View>
-										<Text style={styles.assetName}>{a.name}</Text>
-										<Text style={styles.assetSub}>{a.sub}</Text>
-									</View>
-								</View>
-								<Text style={styles.assetVal}>{a.value}</Text>
+					<View style={styles.assetRow}>
+						<View style={styles.assetLeft}>
+							<View style={styles.tokenBadge}>
+								<Text style={styles.tokenBadgeText}>€</Text>
 							</View>
-						))}
+							<View>
+								<Text style={styles.assetName}>EURO</Text>
+								<Text style={styles.assetSub}>Euro-Guthaben</Text>
+							</View>
+						</View>
+						<Text style={styles.assetVal}>{fmtEur(euroFiat)} €</Text>
 					</View>
 				)}
 
-				<Text style={styles.section}>Transaktionen</Text>
-				{txs === null ? (
-					<View style={{ gap: 10 }}>
-						{[0, 1, 2].map((i) => (
-							<View key={i} style={styles.txRow}>
-								<View style={styles.txLeft}>
-									<Skeleton width={36} height={36} radius={18} />
-									<View style={{ gap: 6 }}>
-										<Skeleton width={90} height={14} />
-										<Skeleton width={56} height={11} />
-									</View>
-								</View>
-								<Skeleton width={72} height={15} />
-							</View>
-						))}
-					</View>
-				) : txs.length === 0 ? (
-					<View style={styles.empty}>
-						<Text style={styles.emptyText}>Noch keine Transaktionen.</Text>
-						<Text style={styles.emptySub}>Ein- und Ausgaben der Stadtkasse erscheinen hier.</Text>
-					</View>
-				) : (
-					<View style={{ gap: 10 }}>
-						{txs.map((t, i) => (
-							<View key={i} style={styles.txRow}>
-								<View style={styles.txLeft}>
-									<View
-										style={[
-											styles.txIcon,
-											{
-												backgroundColor:
-													t.direction === "in"
-														? "rgba(34,197,94,0.14)"
-														: t.direction === "out"
-															? "rgba(239,68,68,0.14)"
-															: colors.surface,
-											},
-										]}
-									>
-										<Text
-											style={[
-												styles.txArrow,
-												{
-													color:
-														t.direction === "in"
-															? "#16A34A"
-															: t.direction === "out"
-																? "#DC2626"
-																: colors.textSecondary,
-												},
-											]}
-										>
-											{t.direction === "in" ? "↓" : t.direction === "out" ? "↑" : "•"}
-										</Text>
-									</View>
-									<View>
-										<Text style={styles.txLabel}>{t.label}</Text>
-										<Text style={styles.txDate}>{fmtDate(t.timestamp)}</Text>
-									</View>
-								</View>
-								{t.xdai > 0 && (
-									<Text style={[styles.txVal, { color: t.direction === "in" ? "#16A34A" : colors.textPrimary }]}>
-										{t.direction === "in" ? "+" : "−"}
-										{fmtNum(t.xdai)} xDAI
-									</Text>
-								)}
-							</View>
-						))}
-					</View>
-				)}
+				<Text style={styles.section}>Verlauf</Text>
+				<TxHistoryList
+					items={historyItems}
+					loading={txs === null}
+					emptyText="Noch keine Transaktionen."
+					onPressTx={(item) =>
+						router.push({
+							pathname: "/transaction",
+							params: {
+								direction: item.direction,
+								title: item.title,
+								amountText: item.amountText,
+								currency: "eur",
+								timestamp: String(item.timestamp),
+								...(item.txHash ? { txHash: item.txHash } : {}),
+							},
+						} as any)
+					}
+				/>
 			</ScrollView>
 		</SafeAreaView>
 	);
@@ -194,12 +140,7 @@ function makeStyles(colors: any) {
 		header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
 		backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
 		headerTitle: { fontFamily: "Inter-SemiBold", fontSize: 18, color: colors.textPrimary },
-		content: { padding: 20 },
-		heroCoin: { width: 120, height: 120, alignSelf: "center", marginBottom: 4 },
-		coinImg: { width: 40, height: 40 },
-		totalLabel: { fontFamily: "Inter-Medium", fontSize: 14, color: colors.textSecondary, textAlign: "center", marginTop: 8 },
-		total: { fontFamily: "Inter-Bold", fontSize: 40, color: colors.textPrimary, textAlign: "center", marginTop: 2 },
-		disclaimer: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textTertiary, textAlign: "center", marginTop: 6 },
+		content: { padding: 20, paddingBottom: 40 },
 		section: { fontFamily: "Inter-SemiBold", fontSize: 16, color: colors.textPrimary, marginTop: 28, marginBottom: 12 },
 		assetRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },
 		assetLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -208,15 +149,5 @@ function makeStyles(colors: any) {
 		assetName: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.textPrimary },
 		assetSub: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textSecondary },
 		assetVal: { fontFamily: "Inter-Bold", fontSize: 16, color: colors.textPrimary },
-		txRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border },
-		txLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-		txIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-		txArrow: { fontFamily: "Inter-Bold", fontSize: 18 },
-		txLabel: { fontFamily: "Inter-SemiBold", fontSize: 14, color: colors.textPrimary },
-		txDate: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textSecondary },
-		txVal: { fontFamily: "Inter-SemiBold", fontSize: 15 },
-		empty: { backgroundColor: colors.card, borderRadius: 16, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border },
-		emptyText: { fontFamily: "Inter-SemiBold", fontSize: 14, color: colors.textPrimary },
-		emptySub: { fontFamily: "Inter-Regular", fontSize: 12, color: colors.textSecondary, marginTop: 4, textAlign: "center" },
 	});
 }

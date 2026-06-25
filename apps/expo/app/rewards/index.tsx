@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -29,7 +28,8 @@ import InfoIcon from '@/assets/icons/info.svg';
 import CoinBalanceHero from '@/components/rewards/CoinBalanceHero';
 import Skeleton from '@/components/ui/Skeleton';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
-import { useRoebelTalerHistory, type TalerTx } from '@/hooks/useRoebelTalerHistory';
+import { useRoebelTalerHistory } from '@/hooks/useRoebelTalerHistory';
+import TxHistoryList, { type TxHistoryItem } from '@/components/rewards/TxHistoryList';
 import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
@@ -38,14 +38,11 @@ import NotInvitedSheet from '@/components/rewards/NotInvitedSheet';
 import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
-import CircleArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
-import CircleArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
 import { softShadow } from '@/lib/shadow';
 import { getTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
-const RECEIVE_IMG = require('../../assets/illustration/gamification/receive.png');
 
 // Min claimable Röbel Münzen before the mint button activates (≈6 min of accrual at
 // ~1/hour) — avoids dust-sized mints while still letting citizens collect hourly.
@@ -642,7 +639,35 @@ export default function RewardsIndexScreen() {
             </Pressable>
           </>
         ) : (
-          <TxHistoryList items={history.items} loading={history.loading} colors={colors} isDark={isDark} />
+          <TxHistoryList
+            items={history.items.map((tx): TxHistoryItem => ({
+              id: tx.id,
+              direction: tx.direction,
+              title: tx.name || (tx.direction === 'in' ? 'Erhalten' : 'Gesendet'),
+              timestamp: tx.timestamp,
+              amountText: `${tx.direction === 'in' ? '+ ' : '− '}${Math.round(tx.value).toLocaleString('de-DE')}`,
+              avatarUrl: tx.avatarUrl,
+              txHash: tx.txHash,
+            }))}
+            loading={history.loading}
+            onPressTx={(item) =>
+              router.push({
+                pathname: '/transaction',
+                params: {
+                  direction: item.direction,
+                  title: item.title,
+                  amountText: item.amountText,
+                  currency: 'muenzen',
+                  timestamp: String(item.timestamp),
+                  ...(item.txHash ? { txHash: item.txHash } : {}),
+                  ...(item.avatarUrl ? {} : {}),
+                  ...(item.title && item.title !== 'Erhalten' && item.title !== 'Gesendet'
+                    ? { name: item.title }
+                    : {}),
+                },
+              } as any)
+            }
+          />
         )}
         </View>
       </ScrollView>
@@ -701,99 +726,6 @@ function EmptyState({
   );
 }
 
-function txDayLabel(ts: number): string {
-  const start = (t: number) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const diff = Math.round((start(Date.now()) - start(ts)) / 86_400_000);
-  if (diff === 0) return 'Heute';
-  if (diff === 1) return 'Gestern';
-  return new Date(ts).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-function TxHistoryList({
-  items,
-  loading,
-  colors,
-  isDark,
-}: {
-  items: TalerTx[];
-  loading: boolean;
-  colors: ReturnType<typeof useTheme>['colors'];
-  isDark: boolean;
-}) {
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />;
-  }
-  if (items.length === 0) {
-    return (
-      <EmptyState colors={colors} isDark={isDark}>
-        Noch keine Transaktionen.
-      </EmptyState>
-    );
-  }
-
-  // Group by day (items are already newest-first).
-  const groups: { label: string; rows: TalerTx[] }[] = [];
-  for (const tx of items) {
-    const label = txDayLabel(tx.timestamp);
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.rows.push(tx);
-    else groups.push({ label, rows: [tx] });
-  }
-
-  return (
-    <View style={{ gap: 18 }}>
-      {groups.map((g) => (
-        <View key={g.label} style={{ gap: 2 }}>
-          <Text style={[styles.txDayHeader, { color: colors.textTertiary }]}>{g.label.toUpperCase()}</Text>
-          {g.rows.map((tx) => {
-            const isIn = tx.direction === 'in';
-            const label = isIn ? 'Erhalten' : 'Gesendet';
-            return (
-              <Pressable
-                key={tx.id}
-                onPress={() => {
-                  if (tx.txHash) Linking.openURL(`https://gnosisscan.io/tx/${tx.txHash}`).catch(() => {});
-                }}
-                style={({ pressed }) => [styles.txRow, { opacity: pressed ? 0.6 : 1 }]}
-                accessibilityRole="button"
-                accessibilityLabel={`${tx.name || label} — Transaktion onchain ansehen`}
-              >
-                <View style={styles.txIconWrap}>
-                  <Image source={tx.avatarUrl ? { uri: tx.avatarUrl } : RECEIVE_IMG} style={styles.txAvatar} />
-                  <View
-                    style={[
-                      styles.txBadge,
-                      { backgroundColor: isIn ? '#22C55E' : '#2563EB', borderColor: isDark ? colors.background : '#FFFFFF' },
-                    ]}
-                  >
-                    {isIn ? (
-                      <CircleArrowDownIcon width={12} height={12} />
-                    ) : (
-                      <CircleArrowUpIcon width={12} height={12} />
-                    )}
-                  </View>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.txTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {tx.name || label}
-                  </Text>
-                  <Text style={[styles.txTime, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {new Date(tx.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </View>
-                <Text style={[styles.txAmount, { color: isIn ? '#16A34A' : colors.textPrimary }]}>
-                  {isIn ? '+ ' : '− '}
-                  {Math.round(tx.value).toLocaleString('de-DE')}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   sheet: {
@@ -829,52 +761,6 @@ const styles = StyleSheet.create({
   tabText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
-  },
-  txDayHeader: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 12,
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  txRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 9,
-  },
-  txIconWrap: {
-    width: 44,
-    height: 44,
-  },
-  txAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ECECEC',
-  },
-  txBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  txTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-  },
-  txTime: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  txAmount: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
   },
   scroll: { flex: 1 },
   scrollGradient: {

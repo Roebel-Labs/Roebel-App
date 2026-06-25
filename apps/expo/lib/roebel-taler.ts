@@ -206,38 +206,83 @@ export async function getTreasuryAssets(address: string): Promise<TreasuryAssets
 
 export interface TreasuryTx {
 	direction: "in" | "out" | "admin";
-	/** xDAI amount moved (0 for admin/Safe txs). */
-	xdai: number;
+	/** Euro value moved (0 for admin/Safe txs). For native xDAI rows this is the
+	 *  xDAI value treated 1:1 as €; for EURe transfers it's the token value. */
+	amount: number;
+	/** Currency of `amount`. Always euro-denominated in the UI. */
+	currency: "eur";
 	/** Epoch ms, 0 if unknown. */
 	timestamp: number;
 	/** Human label (Eingang / Ausgang / method). */
 	label: string;
+	/** On-chain transaction hash (for the detail screen / explorer link). */
+	txHash: string;
 }
 
 /**
  * Recent on-chain transactions of a treasury address, via the Gnosis Blockscout
- * API. Addresses are deliberately NOT surfaced (per the no-wallet rule) — only
- * direction, amount and time.
+ * API. Includes BOTH native xDAI transactions AND EURe token transfers, so euro
+ * outflows (e.g. a 50 € ad payment) show up. Addresses are deliberately NOT
+ * surfaced (per the no-wallet rule) — only direction, amount and time.
  */
 export async function getTreasuryTransactions(address: string): Promise<TreasuryTx[]> {
+	const self = address.toLowerCase();
+	const eureToken = EURE_ADDRESS.toLowerCase();
+
+	const native = (async (): Promise<TreasuryTx[]> => {
+		try {
+			const res = await fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`);
+			const j = await res.json();
+			const items: any[] = Array.isArray(j?.items) ? j.items : [];
+			return items.map((t) => {
+				const to = (t?.to?.hash ?? "").toLowerCase();
+				let amount = 0;
+				try {
+					amount = Number(BigInt(t?.value ?? "0")) / 1e18;
+				} catch {
+					amount = 0;
+				}
+				const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
+				const direction: "in" | "out" | "admin" = amount === 0 ? "admin" : to === self ? "in" : "out";
+				const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
+				return { direction, amount, currency: "eur" as const, timestamp, label, txHash: String(t?.hash ?? "") };
+			});
+		} catch {
+			return [];
+		}
+	})();
+
+	const tokens = (async (): Promise<TreasuryTx[]> => {
+		try {
+			const res = await fetch(
+				`https://gnosis.blockscout.com/api/v2/addresses/${address}/token-transfers?type=ERC-20`
+			);
+			const j = await res.json();
+			const items: any[] = Array.isArray(j?.items) ? j.items : [];
+			return items
+				.filter((t) => (t?.token?.address ?? "").toLowerCase() === eureToken)
+				.map((t) => {
+					const to = (t?.to?.hash ?? "").toLowerCase();
+					const decimals = Number(t?.token?.decimals ?? 18) || 18;
+					let amount = 0;
+					try {
+						amount = Number(BigInt(t?.total?.value ?? "0")) / 10 ** decimals;
+					} catch {
+						amount = 0;
+					}
+					const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
+					const direction: "in" | "out" = to === self ? "in" : "out";
+					const label = direction === "in" ? "Eingang" : "Ausgang";
+					return { direction, amount, currency: "eur" as const, timestamp, label, txHash: String(t?.tx_hash ?? t?.transaction_hash ?? "") };
+				});
+		} catch {
+			return [];
+		}
+	})();
+
 	try {
-		const res = await fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`);
-		const j = await res.json();
-		const items: any[] = Array.isArray(j?.items) ? j.items : [];
-		const self = address.toLowerCase();
-		return items.slice(0, 12).map((t) => {
-			const to = (t?.to?.hash ?? "").toLowerCase();
-			let xdai = 0;
-			try {
-				xdai = Number(BigInt(t?.value ?? "0")) / 1e18;
-			} catch {
-				xdai = 0;
-			}
-			const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
-			const direction: "in" | "out" | "admin" = xdai === 0 ? "admin" : to === self ? "in" : "out";
-			const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
-			return { direction, xdai, timestamp, label };
-		});
+		const [n, t] = await Promise.all([native, tokens]);
+		return [...n, ...t].sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
 	} catch {
 		return [];
 	}
