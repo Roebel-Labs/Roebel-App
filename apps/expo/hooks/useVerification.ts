@@ -465,7 +465,7 @@ export function useRequestDetails(requestId: number, nftType: 'citizen' | 'attes
       });
 
       // Parse request data
-      const parsedRequest = {
+      const parsedRequest: any = {
         id: requestId,
         requester: requestData[0],
         target: requestData[1],
@@ -475,7 +475,27 @@ export function useRequestDetails(requestId: number, nftType: 'citizen' | 'attes
         attesterSignatures: nftType === 'citizen' ? Number(requestData[5]) : Number(requestData[5]),
         citizenSignatures: nftType === 'citizen' ? Number(requestData[6]) : 0,
         createdAt: Number(requestData[nftType === 'citizen' ? 7 : 6]),
+        requiredAttesters: 1,
+        requiredCitizens: nftType === 'citizen' ? 1 : 0,
       };
+
+      // v2: read the per-request required approval thresholds (percentage bands,
+      // snapshotted at creation) so the UI shows the real X/Y instead of 1/1.
+      try {
+        if (nftType === 'citizen') {
+          const [ra, rc] = await Promise.all([
+            readContract({ contract, method: 'function requiredAttesterApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] }),
+            readContract({ contract, method: 'function requiredCitizenApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] }),
+          ]);
+          parsedRequest.requiredAttesters = Number(ra);
+          parsedRequest.requiredCitizens = Number(rc);
+        } else {
+          const ra = await readContract({ contract, method: 'function requiredApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] });
+          parsedRequest.requiredAttesters = Number(ra);
+        }
+      } catch (e) {
+        console.log('required-approvals read failed (older contract?)', e);
+      }
 
       setRequest(parsedRequest);
 

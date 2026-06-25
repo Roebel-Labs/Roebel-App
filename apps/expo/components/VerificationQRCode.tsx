@@ -16,6 +16,8 @@ interface VerificationQRCodeProps {
   nftType: 'citizen' | 'attester';
   attesterCount: number;
   citizenCount: number;
+  requiredAttesters?: number;
+  requiredCitizens?: number;
   size?: number;
 }
 
@@ -24,6 +26,8 @@ export default function VerificationQRCode({
   nftType,
   attesterCount,
   citizenCount,
+  requiredAttesters = 1,
+  requiredCitizens = 1,
   size = 210,
 }: VerificationQRCodeProps) {
   const { colors, isDark } = useTheme();
@@ -57,7 +61,7 @@ export default function VerificationQRCode({
 
         <View style={styles.progressRow}>
           <Text style={[styles.progressLabel, { color: rowTextColor }]}>Bescheiniger</Text>
-          <Text style={[styles.progressValue, { color: rowTextColor }]}>{attesterCount} / 1</Text>
+          <Text style={[styles.progressValue, { color: rowTextColor }]}>{attesterCount} / {requiredAttesters}</Text>
         </View>
 
         {nftType === 'citizen' && (
@@ -65,7 +69,7 @@ export default function VerificationQRCode({
             <View style={[styles.rowDivider, { backgroundColor: dividerColor }]} />
             <View style={styles.progressRow}>
               <Text style={[styles.progressLabel, { color: rowTextColor }]}>Bürger</Text>
-              <Text style={[styles.progressValue, { color: rowTextColor }]}>{citizenCount} / 1</Text>
+              <Text style={[styles.progressValue, { color: rowTextColor }]}>{citizenCount} / {requiredCitizens}</Text>
             </View>
           </>
         )}

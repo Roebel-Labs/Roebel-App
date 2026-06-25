@@ -25,6 +25,10 @@ export function useAttesters() {
         const events = await getContractEvents({
           contract: attesterNFTContract,
           events: [ATTESTER_MINTED_EVENT],
+          // AttesterNFTv2 deployed on Gnosis ~block 46867700 (2026-06-25). Without a
+          // fromBlock the default range misses the migration-mint block, so the
+          // attester list comes back empty. toBlock defaults to latest → auto-extends.
+          fromBlock: 46867000n,
         });
 
         const wallets = Array.from(

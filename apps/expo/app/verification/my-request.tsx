@@ -28,7 +28,7 @@ export default function MyRequestScreen() {
   const requestId = activePendingRequest?.request_id;
   const nftType = activePendingRequest?.nft_type || activePendingRequest?.contract_type || 'citizen';
 
-  const { decryptedData, isLoading, fetchRequest } = useRequestDetails(
+  const { request, decryptedData, isLoading, fetchRequest } = useRequestDetails(
     requestId || 0,
     nftType
   );
@@ -40,6 +40,21 @@ export default function MyRequestScreen() {
       fetchRequest();
     }
   }, [requestId]);
+
+  // Poll on-chain so signatures made elsewhere (e.g. via the web app) appear live.
+  useEffect(() => {
+    if (!requestId) return;
+    const id = setInterval(() => { fetchRequest(); }, 12000);
+    return () => clearInterval(id);
+  }, [requestId, fetchRequest]);
+
+  // When the on-chain request executes (NFT minted), refresh context so the
+  // screen transitions to the verified state.
+  useEffect(() => {
+    if (request?.status === 3) {
+      refresh();
+    }
+  }, [request?.status]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -131,8 +146,10 @@ export default function MyRequestScreen() {
                 <VerificationQRCode
                   requestId={requestId as number}
                   nftType={nftType}
-                  attesterCount={activePendingRequest.attester_signatures || 0}
-                  citizenCount={activePendingRequest.citizen_signatures || 0}
+                  attesterCount={request?.attesterSignatures ?? activePendingRequest.attester_signatures ?? 0}
+                  citizenCount={request?.citizenSignatures ?? activePendingRequest.citizen_signatures ?? 0}
+                  requiredAttesters={request?.requiredAttesters ?? 2}
+                  requiredCitizens={request?.requiredCitizens ?? 1}
                 />
               </View>
 
