@@ -17,6 +17,7 @@ import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
 import { fetchRoebelPointsCard } from '@/lib/supabase-roebel-points';
 import type { RoebelPointsCardRecord } from '@/lib/supabase-roebel-points';
+import { getRoebelTalerBalance, formatTaler } from '@/lib/roebel-taler';
 import { countUserVotes } from '@/lib/supabase-votes';
 import TierBadge from '@/components/RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
@@ -54,6 +55,7 @@ export default function PublicUserProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
   const [pointsCard, setPointsCard] = useState<RoebelPointsCardRecord | null>(null);
+  const [muenzenBalance, setMuenzenBalance] = useState<number>(0);
   const [voteCount, setVoteCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
@@ -75,18 +77,21 @@ export default function PublicUserProfileScreen() {
           setEquipped([]);
           setPointsCard(null);
           setVoteCount(0);
+          setMuenzenBalance(0);
         } else {
           const userRow = data as UserRecord;
           setProfile(userRow);
-          const [rewards, card, votes] = await Promise.all([
+          const [rewards, card, votes, muenzen] = await Promise.all([
             fetchEquippedRewards(userRow.wallet_address),
             fetchRoebelPointsCard(userRow.wallet_address),
             countUserVotes(userRow.wallet_address),
+            getRoebelTalerBalance(userRow.wallet_address).catch(() => 0n),
           ]);
           if (!signal.cancelled) {
             setEquipped(rewards);
             setPointsCard(card);
             setVoteCount(votes);
+            setMuenzenBalance(Number(formatTaler(muenzen)));
           }
         }
         if (!signal.cancelled) setLoading(false);
@@ -241,7 +246,7 @@ export default function PublicUserProfileScreen() {
             <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
               <View style={styles.stat}>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {pointsCard?.points_balance ?? 0}
+                  {Math.floor(muenzenBalance).toLocaleString('de-DE')}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Münzen</Text>
               </View>

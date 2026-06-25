@@ -34,6 +34,7 @@ import TaskCard from '@/components/rewards/TaskCard';
 import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
 import MuenzenIntroSheet from '@/components/rewards/MuenzenIntroSheet';
+import NotInvitedSheet from '@/components/rewards/NotInvitedSheet';
 import NavigationIcon from '@/assets/icons/navigation-03.svg';
 import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
@@ -87,7 +88,6 @@ export default function RewardsIndexScreen() {
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
   const {
-    keyCount,
     lootboxes,
     userRewards,
     streak,
@@ -160,6 +160,7 @@ export default function RewardsIndexScreen() {
   const [showMintSuccess, setShowMintSuccess] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  const [showNotInvited, setShowNotInvited] = useState(false);
 
   // One-time Röbel Münzen intro: show the first time this device lands on the
   // page, after a short beat so the screen paints first.
@@ -243,6 +244,10 @@ export default function RewardsIndexScreen() {
       await onboard();
       showSnackbar({ message: 'Willkommen bei Röbel Münzen!' });
     } catch (e: any) {
+      if (e?.code === 'NOT_INVITED') {
+        setShowNotInvited(true);
+        return;
+      }
       const msg = e?.message ?? String(e);
       console.error('[Röbel Münzen] onboarding failed:', msg);
       Alert.alert('Anmeldung fehlgeschlagen', msg);
@@ -439,7 +444,7 @@ export default function RewardsIndexScreen() {
                   <Text style={styles.talerCtaText}>Verifiziere dich…</Text>
                 </View>
               ) : (
-                <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Bei Röbel Münzen mitmachen'}</Text>
+                <Text style={styles.talerCtaText}>{talerLoading ? 'Wird geladen…' : 'Belohnungen erhalten'}</Text>
               )}
             </Pressable>
           ) : talerMinting ? (
@@ -546,14 +551,9 @@ export default function RewardsIndexScreen() {
               {isLoading && lootboxes.length === 0 ? (
                 <Skeleton width={48} height={18} radius={6} style={{ marginTop: 6 }} />
               ) : (
-                <>
-                  <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {keyCount} Schlüssel
-                  </Text>
-                  <Text style={[styles.squareSub, { color: colors.textTertiary }]} numberOfLines={1}>
-                    {userRewards.length}× geöffnet
-                  </Text>
-                </>
+                <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {userRewards.length}/{lootboxes.length}
+                </Text>
               )}
               <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
             </Pressable>
@@ -665,6 +665,12 @@ export default function RewardsIndexScreen() {
         visible={showIntro}
         onClose={dismissIntro}
         onLearnMore={onIntroLearnMore}
+      />
+
+      <NotInvitedSheet
+        visible={showNotInvited}
+        onClose={() => setShowNotInvited(false)}
+        address={talerAccount?.address}
       />
     </View>
   );

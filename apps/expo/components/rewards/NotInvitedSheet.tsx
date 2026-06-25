@@ -1,55 +1,62 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import BottomDrawer from '@/components/BottomDrawer';
 
-// Same coin illustration as the Belohnungen hero (CoinBalanceHero).
 const HERO_COIN = require('../../assets/illustration/muenzen/top_hero_coin.png');
 
-interface MuenzenIntroSheetProps {
+interface NotInvitedSheetProps {
   visible: boolean;
-  /** Dismiss (backdrop, drag, or the "Schließen" text button). */
   onClose: () => void;
-  /** "Mehr erfahren" — open the Röbel Münzen info screen. */
-  onLearnMore: () => void;
+  /** The user's own address — shared so a citizen can invite them. */
+  address?: string;
 }
 
 /**
- * One-time introduction to the Röbel Münzen feature, shown the first time a user
- * lands on the Belohnungen page. Centered coin, headline, short body, a primary
- * "learn more" CTA and a close text button.
+ * Shown when a not-yet-invited user taps "Belohnungen erhalten". To receive
+ * Röbel Münzen rewards a citizen must invite (trust) them first; this explains
+ * that and lets them share their address.
  */
-export default function MuenzenIntroSheet({
-  visible,
-  onClose,
-  onLearnMore,
-}: MuenzenIntroSheetProps) {
+export default function NotInvitedSheet({ visible, onClose, address }: NotInvitedSheetProps) {
   const { colors } = useTheme();
+
+  const onShare = async () => {
+    if (!address) return;
+    try {
+      await Share.share({
+        message: `Bitte lade mich zu Röbel ein, damit ich Belohnungen erhalten kann — meine Adresse: ${address}`,
+      });
+    } catch {
+      /* user dismissed the share sheet */
+    }
+  };
 
   return (
     <BottomDrawer visible={visible} onClose={onClose}>
       <View style={styles.container}>
         <Image source={HERO_COIN} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.headline, { color: colors.textPrimary }]}>
-          Deine Belohnung für Röbel
+          Lass dich einladen
         </Text>
         <Text style={[styles.body, { color: colors.textSecondary }]}>
-          Röbel Münzen sind deine Belohnung fürs Mitmachen — für alles, was du für
-          Röbel und die Gemeinschaft tust. Sammle sie und öffne damit Truhen in der
-          Schatzkammer.
+          Um Belohnungen zu erhalten, muss dich zuerst ein Bürger aus Röbel einladen.
+          Teile deine Adresse mit einem Bürger — sobald du eingeladen bist, tippe hier
+          erneut.
         </Text>
 
-        <Pressable
-          onPress={onLearnMore}
-          style={({ pressed }) => [
-            styles.cta,
-            { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Mehr über Röbel Münzen erfahren"
-        >
-          <Text style={styles.ctaText}>Mehr erfahren</Text>
-        </Pressable>
+        {address ? (
+          <Pressable
+            onPress={onShare}
+            style={({ pressed }) => [
+              styles.cta,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Meine Adresse teilen"
+          >
+            <Text style={styles.ctaText}>Adresse teilen</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable onPress={onClose} style={styles.closeBtn} accessibilityRole="button">
           <Text style={[styles.closeText, { color: colors.textSecondary }]}>Schließen</Text>

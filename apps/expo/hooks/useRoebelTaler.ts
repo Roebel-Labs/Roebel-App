@@ -97,8 +97,11 @@ export function useRoebelTaler() {
 			// via Metri), then register directly — gasless, no backend operator.
 			const inviter = await findInviter(gnosisAccount.address);
 			if (!inviter) {
-				throw new Error(
-					"Du wurdest noch nicht eingeladen. Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann hier erneut tippen.",
+				throw Object.assign(
+					new Error(
+						"Du wurdest noch nicht eingeladen. Lass dich von einem Bürger einladen (z. B. in Metri deine Adresse einladen), dann hier erneut tippen.",
+					),
+					{ code: "NOT_INVITED" as const },
 				);
 			}
 			await sendTransaction({ account: gnosisAccount, transaction: prepareOnboard(inviter) });
