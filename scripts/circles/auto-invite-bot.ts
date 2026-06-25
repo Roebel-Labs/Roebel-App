@@ -42,14 +42,24 @@ async function main() {
   console.log("Signing as (must be group owner or service):", account.address);
 
   // 1) Discover all CitizenNFT holders via mint events (Transfer from 0x0).
+  // Chunk the scan — the public Gnosis RPC rejects wide eth_getLogs ranges.
   const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)");
-  const logs = await pub.getLogs({
-    address: CITIZEN_NFT,
-    event: transfer,
-    args: { from: "0x0000000000000000000000000000000000000000" },
-    fromBlock: FROM_BLOCK,
-    toBlock: "latest",
-  });
+  const latest = await pub.getBlockNumber();
+  const WINDOW = 100_000n;
+  const logs: Awaited<ReturnType<typeof pub.getLogs>> = [];
+  for (let from = FROM_BLOCK; from <= latest; from += WINDOW) {
+    const to = from + WINDOW - 1n > latest ? latest : from + WINDOW - 1n;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const part = await pub.getLogs({ address: CITIZEN_NFT, event: transfer, args: { from: "0x0000000000000000000000000000000000000000" }, fromBlock: from, toBlock: to });
+        logs.push(...part);
+        break;
+      } catch (e) {
+        if (attempt >= 4) throw e;
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
+  }
   const candidates = [...new Set(logs.map((l) => getAddress(l.args.to as `0x${string}`)))];
   console.log(`CitizenNFT mints found: ${candidates.length}`);
 
