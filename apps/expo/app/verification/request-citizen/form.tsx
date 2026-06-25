@@ -1,43 +1,76 @@
 /**
- * Citizen Request Screen
+ * Citizen Request Form Screen
  *
- * One-tap citizen attestation request — NO PII form. The app derives a
- * wallet-bound, non-reversible commitment and submits the on-chain request in
- * the background. Attesters verify the person socially (out-of-band); real
- * uniqueness is handled by the v2 thresholds + (Phase 2) Self.xyz.
+ * Form for users to create a citizen attestation request
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useActiveAccount } from 'thirdweb/react';
 import { useCreateCitizenRequest, REQUEST_STAGE_LABEL } from '@/hooks/useVerification';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
-
 const DEFAULT_REASON = 'Bürger von Röbel';
-// No personal data is collected. The commitment is derived purely from the
-// wallet (deterministic salt over empty fields) → a unique, device-bound,
-// non-reversible Nachweis per wallet. The preimage never leaves the device.
-const DEFAULT_IDENTITY = { firstName: '', lastName: '', birthdate: '', address: '' };
+const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
+const MIN_BIRTHDATE = new Date(1900, 0, 1);
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const formatGerman = (d: Date) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 export default function RequestCitizenScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const account = useActiveAccount();
   const { hasCitizenNFT, activePendingRequest, refresh } = useVerificationContext();
   const { createRequest, isLoading, stage } = useCreateCitizenRequest();
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
 
   const lockIcon = require('@/assets/illustration/small/encryption.png');
 
   const handleSubmit = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Vor- und Nachnamen ein.' });
+      return;
+    }
+
+    if (!birthDate) {
+      setErrorDrawer({ visible: true, message: 'Bitte wählen Sie Ihr Geburtsdatum.' });
+      return;
+    }
+    const iso = toIsoDate(birthDate);
+
+    if (!address.trim()) {
+      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihre Adresse ein.' });
+      return;
+    }
+
+    if (!account) {
+      setErrorDrawer({ visible: true, message: 'Bitte verbinden Sie Ihre Wallet.' });
+      return;
+    }
+
     try {
-      const result = await createRequest(DEFAULT_IDENTITY, DEFAULT_REASON);
+      const result = await createRequest(
+        { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
+        DEFAULT_REASON
+      );
+
       await refresh();
+
       router.replace({
         pathname: '/verification/request-citizen/success' as any,
         params: { requestId: String(result.requestId) },
@@ -46,10 +79,7 @@ export default function RequestCitizenScreen() {
       console.error('Failed to create request:', error);
       setErrorDrawer({
         visible: true,
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Der Antrag konnte nicht erstellt werden. Bitte versuchen Sie es erneut.',
+        message: error instanceof Error ? error.message : 'Der Antrag konnte nicht erstellt werden. Bitte versuchen Sie es erneut.'
       });
     }
   };
@@ -99,12 +129,120 @@ export default function RequestCitizenScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.body}>
-        <Image source={lockIcon} style={styles.lockIcon} resizeMode="contain" accessibilityIgnoresInvertColors />
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Bürger werden</Text>
-        <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
-          Kein Formular nötig. Mit einem Tap erstellen wir einen anonymen, nur auf Ihrem Gerät gebundenen Nachweis und senden Ihren Antrag automatisch. Es werden keine persönlichen Daten erfasst — die Bestätiger aus Röbel verifizieren Sie persönlich.
-        </Text>
+      <KeyboardAwareScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        enableAutomaticScroll={true}
+        extraScrollHeight={100}
+        extraHeight={150}
+      >
+        <View style={styles.privacyHeader}>
+          <Image source={lockIcon} style={styles.lockIcon} resizeMode="contain" accessibilityIgnoresInvertColors />
+          <Text style={[styles.privacyTitle, { color: colors.textPrimary }]}>Antrag stellen</Text>
+          <Text style={[styles.privacyBody, { color: colors.textSecondary }]}>
+            Ihre Angaben bleiben auf Ihrem Gerät. Gespeichert wird nur ein nicht umkehrbarer Fingerabdruck — niemand kann daraus Ihren Namen lesen.
+          </Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Vorname *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Anna"
+            placeholderTextColor={colors.textTertiary}
+            value={firstName}
+            onChangeText={setFirstName}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Teil Ihres persönlichen Fingerabdrucks.</Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Nachname *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Müller"
+            placeholderTextColor={colors.textTertiary}
+            value={lastName}
+            onChangeText={setLastName}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Teil Ihres persönlichen Fingerabdrucks.</Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Geburtsdatum *</Text>
+          <Pressable
+            onPress={() => { if (!isLoading) setShowDatePicker(true); }}
+            style={[
+              styles.input,
+              styles.dateField,
+              { backgroundColor: colors.background, borderColor: colors.borderSecondary },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Geburtsdatum auswählen"
+          >
+            <Text style={[styles.dateText, { color: birthDate ? colors.textPrimary : colors.textTertiary }]}>
+              {birthDate ? formatGerman(birthDate) : 'TT.MM.JJJJ'}
+            </Text>
+            <Ionicons name="calendar-outline" size={20} color={colors.textTertiary} />
+          </Pressable>
+          {showDatePicker && (
+            <DateTimePicker
+              value={birthDate ?? DEFAULT_PICKER_DATE}
+              mode="date"
+              display="default"
+              maximumDate={new Date()}
+              minimumDate={MIN_BIRTHDATE}
+              onChange={(event, date) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (date) setBirthDate(date);
+                if (Platform.OS === 'android') setShowDatePicker(false);
+              }}
+            />
+          )}
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Sichert: eine Person, eine Stimme.</Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Adresse in Röbel/Müritz *</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.borderSecondary,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="Musterstraße 123, 17207 Röbel"
+            placeholderTextColor={colors.textTertiary}
+            value={address}
+            onChangeText={setAddress}
+            editable={!isLoading}
+            autoCapitalize="words"
+          />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Belegt Ihren Wohnsitz in Röbel/Müritz.</Text>
+        </View>
 
         <View style={styles.infoBanner}>
           <View style={[styles.infoIconCircle, { backgroundColor: colors.surface }]}>
@@ -114,7 +252,7 @@ export default function RequestCitizenScreen() {
             Nach dem Antrag erhalten Sie einen QR-Code um Signaturen einzusammeln.
           </Text>
         </View>
-      </View>
+      </KeyboardAwareScrollView>
 
       <View style={styles.footer}>
         <Pressable
@@ -162,31 +300,68 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  body: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  privacyHeader: {
+    marginTop: 8,
+    marginBottom: 28,
   },
   lockIcon: {
     width: 56,
     height: 56,
     marginBottom: 16,
   },
-  title: {
+  privacyTitle: {
     fontFamily: 'Inter-Medium',
     fontSize: 26,
     marginBottom: 10,
   },
-  bodyText: {
+  privacyBody: {
     fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
-    lineHeight: 22,
+    fontFamily: 'Inter-Regular',
+  },
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+  },
+  fieldHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
   },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 24,
+    marginTop: 12,
     paddingVertical: 12,
   },
   infoIconCircle: {
