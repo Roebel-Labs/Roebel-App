@@ -5,8 +5,9 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,9 +17,12 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
-import { germanDateToIso } from '@/lib/citizen-commitment';
-
 const DEFAULT_REASON = 'Bürger in Röbel';
+const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
+const MIN_BIRTHDATE = new Date(1900, 0, 1);
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const formatGerman = (d: Date) => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 export default function RequestCitizenScreen() {
   const router = useRouter();
@@ -29,7 +33,8 @@ export default function RequestCitizenScreen() {
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [birthdate, setBirthdate] = useState('');
+  const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
@@ -42,11 +47,11 @@ export default function RequestCitizenScreen() {
       return;
     }
 
-    const iso = germanDateToIso(birthdate);
-    if (!iso) {
-      setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihr Geburtsdatum als TT.MM.JJJJ ein.' });
+    if (!birthDate) {
+      setErrorDrawer({ visible: true, message: 'Bitte wählen Sie Ihr Geburtsdatum.' });
       return;
     }
+    const iso = toIsoDate(birthDate);
 
     if (!address.trim()) {
       setErrorDrawer({ visible: true, message: 'Bitte geben Sie Ihre Adresse ein.' });
@@ -160,6 +165,7 @@ export default function RequestCitizenScreen() {
             editable={!isLoading}
             autoCapitalize="words"
           />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Teil Ihres persönlichen Fingerabdrucks.</Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -180,26 +186,41 @@ export default function RequestCitizenScreen() {
             editable={!isLoading}
             autoCapitalize="words"
           />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Teil Ihres persönlichen Fingerabdrucks.</Text>
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.textPrimary }]}>Geburtsdatum (TT.MM.JJJJ) *</Text>
-          <TextInput
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Geburtsdatum *</Text>
+          <Pressable
+            onPress={() => { if (!isLoading) setShowDatePicker(true); }}
             style={[
               styles.input,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.borderSecondary,
-                color: colors.textPrimary,
-              },
+              styles.dateField,
+              { backgroundColor: colors.background, borderColor: colors.borderSecondary },
             ]}
-            placeholder="05.03.1990"
-            placeholderTextColor={colors.textTertiary}
-            value={birthdate}
-            onChangeText={setBirthdate}
-            editable={!isLoading}
-            keyboardType="numbers-and-punctuation"
-          />
+            accessibilityRole="button"
+            accessibilityLabel="Geburtsdatum auswählen"
+          >
+            <Text style={[styles.dateText, { color: birthDate ? colors.textPrimary : colors.textTertiary }]}>
+              {birthDate ? formatGerman(birthDate) : 'TT.MM.JJJJ'}
+            </Text>
+            <Ionicons name="calendar-outline" size={20} color={colors.textTertiary} />
+          </Pressable>
+          {showDatePicker && (
+            <DateTimePicker
+              value={birthDate ?? DEFAULT_PICKER_DATE}
+              mode="date"
+              display="default"
+              maximumDate={new Date()}
+              minimumDate={MIN_BIRTHDATE}
+              onChange={(event, date) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (date) setBirthDate(date);
+                if (Platform.OS === 'android') setShowDatePicker(false);
+              }}
+            />
+          )}
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Sichert: eine Person, eine Stimme.</Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -220,6 +241,7 @@ export default function RequestCitizenScreen() {
             editable={!isLoading}
             autoCapitalize="words"
           />
+          <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>Belegt Ihren Wohnsitz in Röbel/Müritz.</Text>
         </View>
 
         <View style={styles.infoBanner}>
@@ -319,6 +341,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
+  },
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+  },
+  fieldHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
   },
   infoBanner: {
     flexDirection: 'row',
