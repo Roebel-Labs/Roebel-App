@@ -4,11 +4,13 @@
  * Displays a verification request in a list
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
+import { readContract } from 'thirdweb';
 import { RequestStatus } from '@/lib/verification-types';
 import { useTheme } from '@/context/ThemeContext';
+import { citizenNFTContract, attesterNFTContract } from '@/constants/verification-contracts';
 
 interface RequestCardProps {
   requestId: number;
@@ -34,6 +36,33 @@ export default function RequestCard({
   const router = useRouter();
   const { colors } = useTheme();
 
+  // v2: read the per-request required approval thresholds (percentage bands) so
+  // the card shows the real X/Y instead of a hardcoded 1/1 (citizen) or 2 (attester).
+  const [required, setRequired] = useState({
+    attesters: nftType === 'citizen' ? 2 : 3,
+    citizens: 1,
+  });
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (nftType === 'citizen') {
+          const [a, c] = await Promise.all([
+            readContract({ contract: citizenNFTContract, method: 'function requiredAttesterApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] }),
+            readContract({ contract: citizenNFTContract, method: 'function requiredCitizenApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] }),
+          ]);
+          if (active) setRequired({ attesters: Number(a), citizens: Number(c) });
+        } else {
+          const a = await readContract({ contract: attesterNFTContract, method: 'function requiredApprovalsFor(uint256) view returns (uint256)', params: [BigInt(requestId)] });
+          if (active) setRequired((r) => ({ ...r, attesters: Number(a) }));
+        }
+      } catch {
+        // keep sensible defaults on read failure
+      }
+    })();
+    return () => { active = false; };
+  }, [requestId, nftType]);
+
   const shortenAddress = (addr: string) => {
     if (!addr) return '';
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -56,9 +85,9 @@ export default function RequestCard({
 
   const getProgress = () => {
     if (nftType === 'citizen') {
-      return `${attesterSignatures}/1 Bescheiniger, ${citizenSignatures}/1 Bürger`;
+      return `${attesterSignatures}/${required.attesters} Bescheiniger, ${citizenSignatures}/${required.citizens} Bürger`;
     } else {
-      return `${attesterSignatures}/2 Bescheiniger`;
+      return `${attesterSignatures}/${required.attesters} Bescheiniger`;
     }
   };
 
