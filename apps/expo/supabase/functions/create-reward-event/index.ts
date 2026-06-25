@@ -7,7 +7,7 @@ import { createPublicClient, http, getAddress } from "https://esm.sh/viem@2.21.0
 import { gnosis } from "https://esm.sh/viem@2.21.0/chains";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CITIZEN_NFT = "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4";
+const CITIZEN_NFT = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5"; // Gnosis CitizenNFTv2 (Sybil-hardened, 2026-06-25; superset of the old 0x6FF3… set)
 const citizenAbi = [{ type: "function", name: "hasCitizenNFT", stateMutability: "view", inputs: [{ name: "a", type: "address" }], outputs: [{ type: "bool" }] }] as const;
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);

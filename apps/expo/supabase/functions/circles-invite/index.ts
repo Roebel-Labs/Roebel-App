@@ -13,7 +13,7 @@ import { privateKeyToAccount } from "https://esm.sh/viem@2.21.0/accounts";
 import { gnosis } from "https://esm.sh/viem@2.21.0/chains";
 
 const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8";
-const CITIZEN_NFT = "0x6FF3dC7974a990425DE79F4B21FB0a39F3B04DD4"; // Gnosis CitizenNFT
+const CITIZEN_NFT = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5"; // Gnosis CitizenNFTv2 (Sybil-hardened, 2026-06-25; superset of the old 0x6FF3… set)
 const FAR_EXPIRY = 4102444800n; // year 2100 (uint96)
 
 const hubAbi = [
