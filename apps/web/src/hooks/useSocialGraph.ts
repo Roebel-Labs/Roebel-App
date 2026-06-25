@@ -37,6 +37,10 @@ export interface SocialGraphData {
 }
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+// CitizenNFTv2/AttesterNFTv2 deployed on Gnosis ~block 46867700 (2026-06-25). Without a
+// fromBlock, thirdweb's default getContractEvents range misses the migration-mint block,
+// so the graph comes back empty ("Noch keine verifizierten Bürger"). toBlock = latest.
+const FROM_BLOCK = 46867000n;
 
 export function useSocialGraph(): SocialGraphData {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -119,16 +123,16 @@ export function useSocialGraph(): SocialGraphData {
         attesterRevocations,
         citizenRevocations,
       ] = await Promise.all([
-        getContractEvents({ contract: attesterContract, events: [transferEvent] }),
-        getContractEvents({ contract: citizenContract, events: [transferEvent] }),
-        getContractEvents({ contract: attesterContract, events: [attesterApprovedEvent] }),
-        getContractEvents({ contract: citizenContract, events: [citizenApprovedEvent] }),
-        getContractEvents({ contract: attesterContract, events: [attesterMintedEvent] }),
-        getContractEvents({ contract: citizenContract, events: [citizenMintedEvent] }),
-        getContractEvents({ contract: attesterContract, events: [attestationRequestEvent] }),
-        getContractEvents({ contract: citizenContract, events: [attestationRequestEvent] }),
-        getContractEvents({ contract: attesterContract, events: [attesterRevokedEvent] }),
-        getContractEvents({ contract: citizenContract, events: [citizenRevokedEvent] }),
+        getContractEvents({ contract: attesterContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: citizenContract, events: [transferEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: attesterContract, events: [attesterApprovedEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: citizenContract, events: [citizenApprovedEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: attesterContract, events: [attesterMintedEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: citizenContract, events: [citizenMintedEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: attesterContract, events: [attestationRequestEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: citizenContract, events: [attestationRequestEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: attesterContract, events: [attesterRevokedEvent], fromBlock: FROM_BLOCK }),
+        getContractEvents({ contract: citizenContract, events: [citizenRevokedEvent], fromBlock: FROM_BLOCK }),
       ]);
 
       const nodesMap = new Map<string, GraphNode>();
