@@ -69,7 +69,10 @@
     "tallyFactory": "0x5e07f9c5E309fA838Ae6035F0AC997A3f55e16d5",
     "timelock": "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
     "maciAttesterGovernor": "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
-    "coordinator": "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C"
+    "coordinator": "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
+    "circlesGroup": "0xAc2CeCdBead594F97358a0d3132454f24F3E470c",
+    "circlesMembershipConditionV1": "0x10644F137cDBE9Af5651C8607A6FBa8AfA5276f6",
+    "circlesMembershipConditionV2": "0x5850A04544c1882d5958872bdbfC591E94abE67b"
   },
   "holders": {
     "citizens": [
@@ -120,5 +123,8 @@
       "y": "8008521168745136880197848799504037322059936483887225034222289791088387810436"
     }
   },
-  "governanceDeployedAt": "2026-06-24T22:04:06.318Z"
+  "governanceDeployedAt": "2026-06-24T22:04:06.318Z",
+  "notes": {
+    "circlesGateSwap": "Röbel Circles group 0xAc2C gated membership on the v1 CitizenNFT (0x6FF3) via condition 0x10644F13, so v2-only citizens could not be group-trusted. Deployed a fresh CitizenMembershipCondition gating on CitizenNFTv2 (0x59aA) at 0x5850A045. Swap pending: Safe 0x3A08 calls group.setMembershipCondition(0x5850A045,true) + setMembershipCondition(0x10644F13,false)."
+  }
 }

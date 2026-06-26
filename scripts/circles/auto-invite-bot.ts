@@ -71,15 +71,33 @@ async function main() {
     const trusted = await pub.readContract({ address: HUB, abi: hubAbi, functionName: "isTrusted", args: [GROUP, a] }).catch(() => false);
     if (!trusted) toTrust.push(a);
   }
-  console.log(`citizens to trust: ${toTrust.length}`, toTrust);
   if (!toTrust.length) {
     console.log("nothing to do ✓");
     return;
   }
 
-  // 3) Trust them in batches.
-  for (let i = 0; i < toTrust.length; i += BATCH) {
-    const chunk = toTrust.slice(i, i + BATCH);
+  // 3) Pre-filter by the group's LIVE membership gate: simulate a single-member trust
+  // per candidate, so a gated member (one not yet passing the condition) can never
+  // revert the whole batch. API-agnostic — mirrors exactly what the real tx will do.
+  const eligible: `0x${string}`[] = [];
+  const skipped: `0x${string}`[] = [];
+  for (const a of toTrust) {
+    try {
+      await pub.simulateContract({ address: GROUP, abi: groupAbi, functionName: "trustBatchWithConditions", args: [[a], FAR_EXPIRY], account: account.address });
+      eligible.push(a);
+    } catch {
+      skipped.push(a);
+    }
+  }
+  console.log(`to trust: ${toTrust.length} | eligible: ${eligible.length} | skipped (fail gate): ${skipped.length}`, skipped);
+  if (!eligible.length) {
+    console.log("nothing eligible ✓");
+    return;
+  }
+
+  // 4) Trust the eligible members in batches.
+  for (let i = 0; i < eligible.length; i += BATCH) {
+    const chunk = eligible.slice(i, i + BATCH);
     const hash = await wallet.writeContract({ address: GROUP, abi: groupAbi, functionName: "trustBatchWithConditions", args: [chunk, FAR_EXPIRY] });
     console.log(`trustBatchWithConditions (${chunk.length}) tx: ${hash}`);
     await pub.waitForTransactionReceipt({ hash });
