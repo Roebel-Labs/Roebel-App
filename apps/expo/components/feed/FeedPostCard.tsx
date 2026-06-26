@@ -12,6 +12,7 @@ import PostYouTubePreview from './PostYouTubePreview';
 import PostPollView from './PostPollView';
 import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
+import StadtkasseSnapshotCard from './StadtkasseSnapshotCard';
 import PostActions from './PostActions';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
@@ -110,6 +111,13 @@ export default function FeedPostCard({
 
         {post.linked_marketplace && (
           <PostLinkedMarketplaceCard listing={post.linked_marketplace} />
+        )}
+
+        {post.stadtkasse_snapshot && (
+          <StadtkasseSnapshotCard
+            euro={post.stadtkasse_snapshot.euro}
+            onPress={() => router.push('/treasury' as any)}
+          />
         )}
 
         {mediaUrls.length > 0 && (

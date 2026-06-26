@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaFile } from '@/lib/upload-media';
-import type { PostCategory, FeedType, PostType } from '@/lib/types/feed';
+import type { PostCategory, FeedType, PostType, StadtkasseSnapshot } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
@@ -27,6 +27,7 @@ type CreatePostState = {
   linkedMarketplaceId: string | null;
   linkedMarketplaceData: LinkedMarketplaceData | null;
   sticker: LootboxReward | null;
+  stadtkasseSnapshot: StadtkasseSnapshot | null;
 };
 
 type CreatePostActions = {
@@ -44,6 +45,7 @@ type CreatePostActions = {
   setLinkedMarketplace: (id: string, data: LinkedMarketplaceData) => void;
   clearLinkedItem: () => void;
   setSticker: (reward: LootboxReward | null) => void;
+  setStadtkasseSnapshot: (snapshot: StadtkasseSnapshot | null) => void;
   reset: () => void;
 };
 
@@ -68,6 +70,7 @@ const initialState: CreatePostState = {
   linkedMarketplaceId: null,
   linkedMarketplaceData: null,
   sticker: null,
+  stadtkasseSnapshot: null,
 };
 
 export function CreatePostProvider({ children }: { children: React.ReactNode }) {
@@ -200,6 +203,10 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     setState((prev) => ({ ...prev, sticker: reward }));
   }, []);
 
+  const setStadtkasseSnapshot = useCallback((snapshot: StadtkasseSnapshot | null) => {
+    setState((prev) => ({ ...prev, stadtkasseSnapshot: snapshot }));
+  }, []);
+
   const reset = useCallback(() => {
     setState(initialState);
   }, []);
@@ -222,6 +229,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
         setLinkedMarketplace,
         clearLinkedItem,
         setSticker,
+        setStadtkasseSnapshot,
         reset,
       }}
     >

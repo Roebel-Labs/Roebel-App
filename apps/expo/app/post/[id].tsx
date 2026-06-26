@@ -42,6 +42,7 @@ import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
 import PostPollView from '@/components/feed/PostPollView';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
 import CommentItem from '@/components/feed/CommentItem';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
@@ -327,6 +328,12 @@ export default function PostDetailScreen() {
 
       {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
       {post.linked_marketplace && <PostLinkedMarketplaceCard listing={post.linked_marketplace} />}
+      {post.stadtkasse_snapshot && (
+        <StadtkasseSnapshotCard
+          euro={post.stadtkasse_snapshot.euro}
+          onPress={() => router.push('/treasury' as any)}
+        />
+      )}
 
       {mediaUrls.length > 0 && (
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />

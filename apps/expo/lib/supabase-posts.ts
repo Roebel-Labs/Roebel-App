@@ -267,6 +267,9 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       linked_marketplace_id: input.linked_marketplace_id || null,
       linked_mecky_draft_id: input.linked_mecky_draft_id || null,
       sticker_reward_id: input.sticker_reward_id || null,
+      // Only reference the column when a snapshot is attached, so normal posting
+      // keeps working even before the stadtkasse_snapshot migration is applied.
+      ...(input.stadtkasse_snapshot ? { stadtkasse_snapshot: input.stadtkasse_snapshot } : {}),
       status: 'published',
     })
     .select(`

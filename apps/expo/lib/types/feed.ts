@@ -56,6 +56,15 @@ export type PollVoteRecord = {
   created_at: string;
 };
 
+/**
+ * A frozen Stadtkasse (civic treasury) snapshot embedded on a post. Captured at
+ * compose time from on-chain reads; `captured_at` is metadata (never displayed).
+ */
+export type StadtkasseSnapshot = {
+  euro: number;
+  captured_at: string;
+};
+
 export type PostRecord = {
   id: string;
   wallet_address: string;
@@ -72,6 +81,7 @@ export type PostRecord = {
   linked_mecky_draft_id: string | null;
   linked_experience_id: string | null;
   sticker_reward_id: string | null;
+  stadtkasse_snapshot: StadtkasseSnapshot | null;
   likes_count: number;
   comments_count: number;
   created_at: string;
@@ -146,6 +156,7 @@ export type CreatePostInput = {
   linked_mecky_draft_id?: string;
   linked_experience_id?: string;
   sticker_reward_id?: string | null;
+  stadtkasse_snapshot?: StadtkasseSnapshot | null;
 };
 
 export type CreateCommentInput = {

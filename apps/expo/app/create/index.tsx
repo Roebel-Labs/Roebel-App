@@ -27,7 +27,11 @@ import type { PostCategory, FeedType } from '@/lib/types/feed';
 import { isOrgAccount } from '@/lib/types';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
+import AtMentionSheet from '@/components/feed/AtMentionSheet';
 import PostImageGrid from '@/components/feed/PostImageGrid';
+import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 import PostingGate from '@/components/feed/PostingGate';
 import { usePostingPermission } from '@/hooks/usePostingPermission';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -39,6 +43,7 @@ import MarketsIcon from '@/assets/icons/markets.svg';
 import CalendarIcon from '@/assets/icons/calendar.svg';
 import CommunityIcon from '@/assets/icons/community.svg';
 import EmojiIcon from '@/assets/icons/emoji.svg';
+import AtIcon from '@/assets/icons/at-sign.svg';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
@@ -106,6 +111,8 @@ export default function CreateScreen() {
   const [showMore, setShowMore] = useState(false);
   const [feedDropdownOpen, setFeedDropdownOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [atMenuVisible, setAtMenuVisible] = useState(false);
+  const [loadingStadtkasse, setLoadingStadtkasse] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   // Just-in-time name gate. Posts show the author's public profile name; for a
   // personal account with no name yet we prompt before letting the post through.
@@ -172,10 +179,33 @@ export default function CreateScreen() {
 
   const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
 
-  const canProceed = postingAllowed && (draft.content.trim().length > 0 || hasLinkedItem);
+  const canProceed =
+    postingAllowed &&
+    (draft.content.trim().length > 0 || hasLinkedItem || !!draft.stadtkasseSnapshot);
+
+  // "@" menu → attach a frozen snapshot of the Stadtkasse (or remove it if one is
+  // already attached). The euro figure is read on-chain once, here, then frozen.
+  const handleSelectStadtkasse = async () => {
+    if (draft.stadtkasseSnapshot) {
+      draft.setStadtkasseSnapshot(null);
+      setAtMenuVisible(false);
+      return;
+    }
+    try {
+      setLoadingStadtkasse(true);
+      const euro = await getTreasuryEuro(attesterSafeGnosisAddress);
+      draft.setStadtkasseSnapshot({ euro, captured_at: new Date().toISOString() });
+      setAtMenuVisible(false);
+    } catch (err) {
+      console.error('Failed to load Stadtkasse:', err);
+      Alert.alert('Fehler', 'Stadtkasse konnte nicht geladen werden. Bitte versuche es erneut.');
+    } finally {
+      setLoadingStadtkasse(false);
+    }
+  };
 
   const handleClose = () => {
-    if (draft.content.trim() || draft.images.length > 0 || draft.videoUrl) {
+    if (draft.content.trim() || draft.images.length > 0 || draft.videoUrl || draft.stadtkasseSnapshot) {
       Alert.alert('Verwerfen?', 'Dein Beitrag wird nicht gespeichert.', [
         { text: 'Abbrechen', style: 'cancel' },
         {
@@ -385,6 +415,16 @@ export default function CreateScreen() {
             {draft.content.length}/{MAX_CONTENT_LENGTH}
           </Text>
 
+          {/* Stadtkasse snapshot preview — directly under the body text */}
+          {draft.stadtkasseSnapshot && (
+            <View style={styles.stadtkasseWrapper}>
+              <StadtkasseSnapshotCard
+                euro={draft.stadtkasseSnapshot.euro}
+                onRemove={() => draft.setStadtkasseSnapshot(null)}
+              />
+            </View>
+          )}
+
           {/* Linked event/marketplace preview */}
           {draft.linkedEventData && (
             <View style={styles.linkedItemWrapper}>
@@ -551,6 +591,20 @@ export default function CreateScreen() {
             >
               <EmojiIcon width={22} height={22} color={colors.textSecondary} />
             </Pressable>
+            <Pressable
+              style={styles.toolbarBtn}
+              onPress={() => {
+                Keyboard.dismiss();
+                setAtMenuVisible(true);
+              }}
+              accessibilityLabel="Stadtkasse anhängen"
+            >
+              <AtIcon
+                width={22}
+                height={22}
+                color={draft.stadtkasseSnapshot ? colors.primary : colors.textSecondary}
+              />
+            </Pressable>
           </View>
 
           {keyboardVisible && (
@@ -598,6 +652,14 @@ export default function CreateScreen() {
             onClose={() => setShowPicker(false)}
           />
         )}
+
+        <AtMentionSheet
+          visible={atMenuVisible}
+          attached={!!draft.stadtkasseSnapshot}
+          loading={loadingStadtkasse}
+          onSelectStadtkasse={handleSelectStadtkasse}
+          onClose={() => setAtMenuVisible(false)}
+        />
       </KeyboardAvoidingView>
 
       <ImageZoomModal
@@ -729,6 +791,10 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   imagePreviewWrapper: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  stadtkasseWrapper: {
     paddingHorizontal: 16,
     marginTop: 12,
   },

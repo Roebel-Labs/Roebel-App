@@ -21,6 +21,7 @@ import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { createPost, createPoll, PostingDeniedError } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import ImageZoomModal from '@/components/ImageZoomModal';
@@ -51,7 +52,8 @@ export default function ReviewScreen() {
   const handlePost = async () => {
     const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
     const hasSticker = !!draft.sticker;
-    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem && !hasSticker)) return;
+    const hasStadtkasse = !!draft.stadtkasseSnapshot;
+    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem && !hasSticker && !hasStadtkasse)) return;
     setIsSubmitting(true);
 
     try {
@@ -68,6 +70,7 @@ export default function ReviewScreen() {
         linked_event_id: draft.linkedEventId || undefined,
         linked_marketplace_id: draft.linkedMarketplaceId || undefined,
         sticker_reward_id: draft.sticker?.id ?? null,
+        stadtkasse_snapshot: draft.stadtkasseSnapshot ?? undefined,
       });
 
       if (!post) {
@@ -170,6 +173,10 @@ export default function ReviewScreen() {
 
           {draft.linkedMarketplaceData && (
             <PostLinkedMarketplaceCard listing={draft.linkedMarketplaceData} />
+          )}
+
+          {draft.stadtkasseSnapshot && (
+            <StadtkasseSnapshotCard euro={draft.stadtkasseSnapshot.euro} />
           )}
 
           {draft.images.length > 0 && (
