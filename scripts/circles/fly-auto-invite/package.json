@@ -1,0 +1,13 @@
+{
+  "name": "roebel-auto-invite",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Fly worker: auto-trusts new CitizenNFTv2 holders into the Röbel Münzen group.",
+  "scripts": {
+    "start": "node bot.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}

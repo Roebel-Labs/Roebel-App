@@ -1,0 +1,15 @@
+# Röbel auto-invite worker. No HTTP service — it's a background worker that loops
+# internally, so it stays running on one always-on machine.
+app = "roebel-auto-invite"
+primary_region = "fra"
+
+[build]
+
+[env]
+  INTERVAL_SECONDS = "600"
+  # FROM_BLOCK = "46867000"   # event-scan lower bound (Gnosis v2 deploy); override if needed
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
