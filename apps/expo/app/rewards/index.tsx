@@ -31,7 +31,7 @@ import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import { useRoebelTalerHistory } from '@/hooks/useRoebelTalerHistory';
 import TxHistoryList, { type TxHistoryItem } from '@/components/rewards/TxHistoryList';
 import TaskCard from '@/components/rewards/TaskCard';
-import MintSuccessOverlay from '@/components/rewards/MintSuccessOverlay';
+import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
 import MuenzenIntroSheet from '@/components/rewards/MuenzenIntroSheet';
 import NotInvitedSheet from '@/components/rewards/NotInvitedSheet';
@@ -84,6 +84,7 @@ export default function RewardsIndexScreen() {
   const { colors, isDark } = useTheme();
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
+  const { celebrate } = useRewardCelebration();
   const {
     lootboxes,
     userRewards,
@@ -154,7 +155,6 @@ export default function RewardsIndexScreen() {
   // Röbel-Münzen streak (consecutive collected days), local per wallet. Starts
   // fresh, so it reflects the real new streak with Röbel Münzen.
   const [rtStreak, setRtStreak] = useState(0);
-  const [showMintSuccess, setShowMintSuccess] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [showNotInvited, setShowNotInvited] = useState(false);
@@ -203,6 +203,8 @@ export default function RewardsIndexScreen() {
 
   const onDailyMint = useCallback(async () => {
     try {
+      // Capture what's accruing now — that's the amount the mint lands.
+      const received = Math.max(1, Math.round(talerMintable));
       await dailyMint();
       const ts = Date.now();
       setLastClaim(ts);
@@ -228,13 +230,13 @@ export default function RewardsIndexScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
-      setShowMintSuccess(true);
+      celebrate(received);
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       console.error('[Röbel Münzen] daily mint failed:', msg);
       Alert.alert('Heute abholen fehlgeschlagen', msg);
     }
-  }, [dailyMint, talerAccount]);
+  }, [dailyMint, talerAccount, talerMintable, celebrate]);
 
   const onJoin = useCallback(async () => {
     try {
@@ -297,7 +299,7 @@ export default function RewardsIndexScreen() {
                 () => {}
               );
             }
-            showSnackbar({ message: `+${res.coins_awarded} Münzen erhalten` });
+            celebrate(res.coins_awarded ?? 0);
           } else if (res.error === 'already_completed') {
             showSnackbar({ message: 'Bereits erhalten' });
           } else if (res.error === 'user_not_ready') {
@@ -316,7 +318,7 @@ export default function RewardsIndexScreen() {
         router.push(ctaRoute as any);
       }
     },
-    [completeTask, isConnected, isTaskEligible, router, showSnackbar]
+    [completeTask, isConnected, isTaskEligible, router, showSnackbar, celebrate]
   );
 
   return (
@@ -671,12 +673,6 @@ export default function RewardsIndexScreen() {
         )}
         </View>
       </ScrollView>
-
-      <MintSuccessOverlay
-        visible={showMintSuccess}
-        balance={Math.round(talerBalance)}
-        onClose={() => setShowMintSuccess(false)}
-      />
 
       <ReceiveSheet
         visible={showReceive}

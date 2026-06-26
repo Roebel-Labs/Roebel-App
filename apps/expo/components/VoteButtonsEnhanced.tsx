@@ -4,7 +4,7 @@
  * Handles all voting scenarios with comprehensive UX explanations
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useActiveAccount, useReadContract } from 'thirdweb/react';
 import { prepareContractCall, sendTransaction, readContract } from 'thirdweb';
@@ -13,7 +13,8 @@ import { balanceOf } from 'thirdweb/extensions/erc721';
 import { VoteType, ProposalState } from '@/lib/governance-types';
 import { isProposalActive } from '@/lib/governance-utils';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
-import { claimReward } from '@/lib/rewards-claim';
+import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
+import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import VoteConfirmationDrawer from './VoteConfirmationDrawer';
 import ErrorDrawer from './ErrorDrawer';
 import SuccessDrawer from './SuccessDrawer';
@@ -38,6 +39,10 @@ export default function VoteButtonsEnhanced({
   const router = useRouter();
   const account = useActiveAccount();
   const { colors } = useTheme();
+  const { celebrate } = useRewardCelebration();
+  // Münzen amount from the (idempotent) vote reward, shown after the privacy
+  // success drawer is dismissed so the two screens don't fight for attention.
+  const pendingRewardMuenzen = useRef<number | null>(null);
   const [voting, setVoting] = useState(false);
   const [selectedVote, setSelectedVote] = useState<'for' | 'against' | 'abstain' | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -92,14 +97,25 @@ export default function VoteButtonsEnhanced({
       });
 
       // Reward participation in Röbel Münzen (once per proposal, never the choice).
-      // Fire-and-forget: pays once the funder is live, no-op until then.
-      void claimReward(account.address, 'proposal_vote', proposalId.toString());
+      // Fire-and-forget: pays once the funder is live, no-op until then. When it
+      // pays, we stash the amount and celebrate after the privacy drawer closes.
+      pendingRewardMuenzen.current = null;
+      void claimReward(account.address, 'proposal_vote', proposalId.toString())
+        .then((r) => {
+          if (r.status === 'paid') pendingRewardMuenzen.current = rewardAmountToMuenzen(r.amountAtto);
+        })
+        .catch(() => {});
 
       setShowConfirmation(false);
       setSuccessDrawer({
         visible: true,
         message: 'Deine Stimme wurde erfolgreich abgegeben!',
-        action: () => onVoteSuccess()
+        action: () => {
+          onVoteSuccess();
+          const muenzen = pendingRewardMuenzen.current;
+          pendingRewardMuenzen.current = null;
+          if (muenzen) celebrate(muenzen);
+        }
       });
     } catch (error) {
       console.error('Error voting:', error);

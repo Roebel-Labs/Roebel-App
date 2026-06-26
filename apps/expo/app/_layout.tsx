@@ -26,6 +26,7 @@ import { MessagingProvider } from '@/context/MessagingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
+import { RewardCelebrationProvider } from '@/context/RewardCelebrationContext';
 import { MaciProvider } from '@/context/MaciContext';
 import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
@@ -311,6 +312,7 @@ function Layout() {
                       <BookmarksProvider>
                         <LocationProvider>
                           <SnackbarProvider>
+                            <RewardCelebrationProvider>
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
                                 <ConsentGate />
@@ -319,6 +321,7 @@ function Layout() {
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>
+                            </RewardCelebrationProvider>
                           </SnackbarProvider>
                         </LocationProvider>
                       </BookmarksProvider>

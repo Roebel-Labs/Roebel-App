@@ -34,7 +34,8 @@ import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
-import { claimReward } from '@/lib/rewards-claim';
+import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
+import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import type { ColorTokens } from '@/constants/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -118,6 +119,7 @@ export default function SubmitEventScreen() {
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const { user } = useUser();
+  const { celebrate } = useRewardCelebration();
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -629,8 +631,14 @@ export default function SubmitEventScreen() {
         category: eventData.category,
       });
       setIsSuccess(true);
-      // Reward submitting an event in Röbel Münzen (fire-and-forget; pays once funder is live).
-      if (user?.wallet_address) void claimReward(user.wallet_address, 'event_submit', eventData.id);
+      // Reward submitting an event in Röbel Münzen. Celebrate once the funder
+      // actually pays (idempotent; a quiet no-op until it's live).
+      if (user?.wallet_address)
+        void claimReward(user.wallet_address, 'event_submit', eventData.id)
+          .then((r) => {
+            if (r.status === 'paid') celebrate(rewardAmountToMuenzen(r.amountAtto));
+          })
+          .catch(() => {});
       logEventSubmission(true, 'manual');
       track(Events.EVENT_SUBMITTED, {
         event_id: eventData.id,

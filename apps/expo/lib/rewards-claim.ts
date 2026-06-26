@@ -20,6 +20,18 @@ export type ClaimResult =
  * @param action      a configured reward action
  * @param referenceId the thing being rewarded (proposalId, event id, …); required for per-reference actions
  */
+/**
+ * Convert a paid reward's atto amount (1e18 = 1 Röbel Münze) into a whole-Münzen
+ * count for the celebration screen. Always at least 1 for a paid reward.
+ */
+export function rewardAmountToMuenzen(amountAtto: string): number {
+  try {
+    return Math.max(1, Math.round(Number(amountAtto) / 1e18));
+  } catch {
+    return 1;
+  }
+}
+
 export async function claimReward(
   wallet: string,
   action: RewardAction,
