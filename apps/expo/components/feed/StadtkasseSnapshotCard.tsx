@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
-const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
+const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse-2.png');
 
 type Props = {
   /** Frozen treasury figure in euro (full precision; formatted here). */
@@ -82,7 +82,6 @@ const styles = StyleSheet.create({
   },
   info: {
     flex: 1,
-    gap: 2,
   },
   value: {
     fontSize: 22,
@@ -91,6 +90,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
+    marginTop: -2,
   },
   removeBtn: {
     width: 24,
