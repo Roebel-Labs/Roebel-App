@@ -41,7 +41,7 @@
   --color-foreground: #0a0a0a; /* near-black text */
   --color-muted: #f0f0f0; /* subtle fills inside cards */
   --color-muted-foreground: #6B7280; /* secondary text */
-  --color-border: #B4B8C1; /* hairline borders */
+  --color-border: #E5E7EB; /* hairline borders */
 
   /* Accent — navy is the one and only non-neutral colour. */
   --color-primary: #00498B;

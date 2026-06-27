@@ -92,9 +92,9 @@ export const lightColors = {
   onPrimary: '#ffffff',
 
   // Borders
-  border: '#B4B8C1',
-  borderSecondary: '#E5E7EB',
-  borderTertiary: '#ECEDEE',
+  border: '#E5E7EB',
+  borderSecondary: '#ECEDEE',
+  borderTertiary: '#F1F2F4',
 
   // Semantic
   error: '#DC2626',
