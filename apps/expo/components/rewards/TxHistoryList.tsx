@@ -116,7 +116,7 @@ export default function TxHistoryList({ items, loading, onPressTx, emptyText }: 
                     {new Date(tx.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>
-                <Text style={[styles.txAmount, { color: isIn ? '#16A34A' : colors.textPrimary }]}>
+                <Text style={[styles.txAmount, { color: colors.textPrimary }]}>
                   {tx.amountText}
                 </Text>
               </Pressable>

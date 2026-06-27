@@ -534,9 +534,9 @@ export default function RewardsIndexScreen() {
                 softShadow(2, isDark),
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Stadtkasse ansehen"
+              accessibilityLabel="Gemeinschaftskasse ansehen"
             >
-              <Text style={[styles.squareTitle, { color: colors.textPrimary }]}>Stadtkasse</Text>
+              <Text style={[styles.squareTitle, { color: colors.textPrimary }]} numberOfLines={2}>Gemeinschaftskasse</Text>
               {stadtkasseEuro == null ? (
                 <Skeleton width={72} height={18} radius={6} style={{ marginTop: 6 }} />
               ) : (

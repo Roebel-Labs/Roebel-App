@@ -34,7 +34,7 @@ export default function StadtkasseSnapshotCard({ euro, onPress, onRemove }: Prop
       disabled={!onPress}
       style={[styles.container, { borderColor: colors.border, backgroundColor: colors.background }]}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={`Stadtkasse ${value}`}
+      accessibilityLabel={`Gemeinschaftskasse ${value}`}
     >
       <Image
         source={STADTKASSE_IMG}
@@ -47,7 +47,7 @@ export default function StadtkasseSnapshotCard({ euro, onPress, onRemove }: Prop
           {value}
         </Text>
         <Text style={[styles.label, { color: colors.textSecondary }]} numberOfLines={1}>
-          Stadtkasse
+          Gemeinschaftskasse
         </Text>
       </View>
       {onRemove ? (
@@ -55,7 +55,7 @@ export default function StadtkasseSnapshotCard({ euro, onPress, onRemove }: Prop
           onPress={onRemove}
           hitSlop={8}
           style={[styles.removeBtn, { backgroundColor: colors.error }]}
-          accessibilityLabel="Stadtkasse entfernen"
+          accessibilityLabel="Gemeinschaftskasse entfernen"
         >
           <Ionicons name="close" size={14} color="#fff" />
         </Pressable>

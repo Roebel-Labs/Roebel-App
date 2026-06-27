@@ -30,7 +30,7 @@ export default function TreasuryCard() {
 		<Pressable style={styles.card} onPress={() => router.push("/treasury" as any)}>
 			<View style={styles.row}>
 				<View>
-					<Text style={styles.label}>Stadtkasse</Text>
+					<Text style={styles.label}>Gemeinschaftskasse</Text>
 					{euro === null ? (
 						<Skeleton width={130} height={28} radius={8} style={{ marginTop: 6 }} />
 					) : (

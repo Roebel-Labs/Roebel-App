@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 
-const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
+const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse-2.png');
 
 type Props = {
   visible: boolean;
@@ -48,11 +48,11 @@ export default function AtMentionSheet({
             onPress={onSelectStadtkasse}
             disabled={loading}
             accessibilityRole="button"
-            accessibilityLabel="Stadtkasse anhängen"
+            accessibilityLabel="Gemeinschaftskasse anhängen"
           >
             <Image source={STADTKASSE_IMG} style={styles.rowIcon} contentFit="contain" />
             <View style={styles.rowText}>
-              <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>Stadtkasse</Text>
+              <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>Gemeinschaftskasse</Text>
               <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={1}>
                 Aktuellen Kontostand anhängen
               </Text>
