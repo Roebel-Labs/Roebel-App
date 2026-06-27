@@ -284,15 +284,9 @@ export default function ProposalTimeline({
         </View>
       ) : null}
 
-      {/* Timeline card */}
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-        ]}
-      >
+      {/* Timeline ("Verlauf") — flat: no card background, border, padding, or icon. */}
+      <View>
         <View style={styles.timelineHeader}>
-          <Text style={[styles.timelineHeaderEmoji, { color: colors.textSecondary }]}>🕐</Text>
           <Text style={[styles.timelineHeaderText, { color: colors.textSecondary }]}>VERLAUF</Text>
         </View>
 
