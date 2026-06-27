@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
 import { prepareContractCall, readContract, sendTransaction, waitForReceipt } from 'thirdweb';
@@ -23,6 +23,8 @@ import { loadCitizenPreimage, setCitizenBirthdate } from '@/lib/citizen-commitme
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
+import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
+import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import { Events, track } from '@/lib/analytics';
 import {
   buildVoteMessage,
@@ -111,6 +113,13 @@ export default function VoteButtons({
   // stays for UI guards + .address (Supabase mirror) since the address matches.
   const { gnosisAccount } = useGnosisWallet();
   const { colors } = useTheme();
+  const { celebrate } = useRewardCelebration();
+  // Vote reward (Röbel Münzen). The full-screen celebration appears AFTER the
+  // privacy success drawer is dismissed — it never replaces that drawer. We
+  // stash the paid amount and handle both orderings (claim resolves before or
+  // after the user closes the drawer).
+  const pendingRewardMuenzen = useRef<number | null>(null);
+  const voteDrawerDismissed = useRef(false);
   const {
     serializedKeypair,
     keypairLoading,
@@ -555,20 +564,47 @@ export default function VoteButtons({
       await recordVote(pollAddress, support, nonce, receipt.transactionHash);
       setChanging(false);
 
-      // Best-effort mirror to Supabase so the voter's profile "Abstimmungen"
-      // count reflects this vote. Fire-and-forget; never blocks the success UX.
+      // Mirror to Supabase so the voter's profile "Abstimmungen" count reflects
+      // this vote — and so the claim-reward verifier (which checks vote_history)
+      // finds the vote. Chain the reward claim AFTER the mirror lands to avoid
+      // that race. Rewards participation only, never the choice; idempotent +
+      // once per proposal, so re-voting won't pay twice. A quiet no-op until the
+      // funder is live. We celebrate only after the privacy drawer is dismissed.
+      pendingRewardMuenzen.current = null;
+      voteDrawerDismissed.current = false;
       void recordVoteToSupabase({
         walletAddress: account.address,
         proposalId: proposalId.toString(),
         voteType: support,
         transactionHash: receipt.transactionHash,
-      });
+      })
+        .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
+        .then((r) => {
+          if (r.status !== 'paid') return;
+          const muenzen = rewardAmountToMuenzen(r.amountAtto);
+          if (voteDrawerDismissed.current) {
+            // Drawer already closed — celebrate now.
+            celebrate(muenzen);
+          } else {
+            // Still reading the privacy message — celebrate on dismiss.
+            pendingRewardMuenzen.current = muenzen;
+          }
+        })
+        .catch(() => {});
 
       setSuccessDrawer({
         visible: true,
         message:
           'Versiegelt und eingeworfen. Deine Stimme ist ab jetzt für niemanden sichtbar — nicht für die Stadt, nicht für uns. Erst nach Ablauf der Frist öffnen mehrere Schlüsselhalter:innen die digitale Wahlurne gemeinsam. Bis dahin kannst du deine Wahl jederzeit ändern.',
-        action: () => onVoteSuccess(),
+        action: () => {
+          onVoteSuccess();
+          voteDrawerDismissed.current = true;
+          const muenzen = pendingRewardMuenzen.current;
+          pendingRewardMuenzen.current = null;
+          // Let the bottom drawer finish closing before the full-screen modal
+          // opens (avoids an iOS modal-on-modal presentation conflict).
+          if (muenzen) setTimeout(() => celebrate(muenzen), 350);
+        },
       });
     } catch (err) {
       console.error('[VoteButtons] vote failed:', err);
