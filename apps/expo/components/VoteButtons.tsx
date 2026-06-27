@@ -33,6 +33,10 @@ import {
   PubKey,
 } from '@/lib/maci';
 
+// Reward screen body copy for casting a vote (governance participation).
+const VOTE_REWARD_SUBTITLE =
+  'Danke fürs Mitbestimmen! Für deine Teilnahme an der Abstimmung gibt es Röbel Münzen.';
+
 interface VoteButtonsProps {
   proposalId: bigint;
   proposalState: ProposalState;
@@ -584,7 +588,7 @@ export default function VoteButtons({
           const muenzen = rewardAmountToMuenzen(r.amountAtto);
           if (voteDrawerDismissed.current) {
             // Drawer already closed — celebrate now.
-            celebrate(muenzen);
+            celebrate(muenzen, { subtitle: VOTE_REWARD_SUBTITLE });
           } else {
             // Still reading the privacy message — celebrate on dismiss.
             pendingRewardMuenzen.current = muenzen;
@@ -603,7 +607,7 @@ export default function VoteButtons({
           pendingRewardMuenzen.current = null;
           // Let the bottom drawer finish closing before the full-screen modal
           // opens (avoids an iOS modal-on-modal presentation conflict).
-          if (muenzen) setTimeout(() => celebrate(muenzen), 350);
+          if (muenzen) setTimeout(() => celebrate(muenzen, { subtitle: VOTE_REWARD_SUBTITLE }), 350);
         },
       });
     } catch (err) {

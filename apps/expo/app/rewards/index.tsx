@@ -207,6 +207,7 @@ export default function RewardsIndexScreen() {
     // Show the reward screen instantly; the on-chain mint runs in the button.
     const reward = celebratePending({
       coin: received === 1 ? 'single' : 'many',
+      subtitle: 'Deine Röbel Münzen für diese Stunde sind da. Komm regelmäßig vorbei und sammle weiter.',
       loadingLabel: [
         'Münzen werden abgeholt…',
         'Einen Moment noch…',
@@ -310,7 +311,9 @@ export default function RewardsIndexScreen() {
                 () => {}
               );
             }
-            celebrate(res.coins_awarded ?? 0);
+            celebrate(res.coins_awarded ?? 0, {
+              subtitle: 'Mission erledigt! Deine Belohnung ist da — auf zur nächsten.',
+            });
           } else if (res.error === 'already_completed') {
             showSnackbar({ message: 'Bereits erhalten' });
           } else if (res.error === 'user_not_ready') {

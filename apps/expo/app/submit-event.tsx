@@ -636,7 +636,10 @@ export default function SubmitEventScreen() {
       if (user?.wallet_address)
         void claimReward(user.wallet_address, 'event_submit', eventData.id)
           .then((r) => {
-            if (r.status === 'paid') celebrate(rewardAmountToMuenzen(r.amountAtto));
+            if (r.status === 'paid')
+              celebrate(rewardAmountToMuenzen(r.amountAtto), {
+                subtitle: 'Danke, dass du Röbel belebst! Für deinen Event gibt es Röbel Münzen.',
+              });
           })
           .catch(() => {});
       logEventSubmission(true, 'manual');

@@ -114,7 +114,11 @@ export default function VoteButtonsEnhanced({
           onVoteSuccess();
           const muenzen = pendingRewardMuenzen.current;
           pendingRewardMuenzen.current = null;
-          if (muenzen) celebrate(muenzen);
+          if (muenzen)
+            celebrate(muenzen, {
+              subtitle:
+                'Danke fürs Mitbestimmen! Für deine Teilnahme an der Abstimmung gibt es Röbel Münzen.',
+            });
         }
       });
     } catch (error) {

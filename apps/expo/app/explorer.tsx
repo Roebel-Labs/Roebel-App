@@ -75,7 +75,10 @@ function ExplorerScreen() {
       // until it's live this is a quiet no-op (idempotent, safe to retry).
       void claimReward(user.wallet_address, 'checkpoint', checkpoint.id)
         .then((r) => {
-          if (r.status === 'paid') celebrate(rewardAmountToMuenzen(r.amountAtto));
+          if (r.status === 'paid')
+            celebrate(rewardAmountToMuenzen(r.amountAtto), {
+              subtitle: 'Checkpoint entdeckt! Fürs Erkunden von Röbel gibt es Röbel Münzen.',
+            });
         })
         .catch(() => {});
       setCompletedIds(prev => new Set([...prev, checkpoint.id]));
