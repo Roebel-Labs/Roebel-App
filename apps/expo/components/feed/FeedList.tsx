@@ -91,8 +91,9 @@ type Props = {
    */
   onNewestContent?: (feedType: FeedType, newestIso: string | null) => void;
   /**
-   * When true, injects the animated proposal hero card just after the first
-   * feed item. The card self-gates (renders nothing when no eligible proposal).
+   * When true, pins the animated proposal hero ("Bürgerumfrage") at the very top
+   * of the feed, above all posts. The card self-gates (renders nothing when no
+   * eligible proposal).
    */
   showProposalHero?: boolean;
 };
@@ -320,17 +321,14 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
-  // Inject the animated proposal hero a little down the feed (after the first
-  // item) rather than pinning it at the very top. The card self-gates, so an
-  // injected sentinel renders nothing when there's no eligible proposal.
+  // Pin the animated proposal hero ("Bürgerumfrage") at the very top of the
+  // feed, above all posts (the story bar lives in ListHeaderComponent and stays
+  // above this). The card self-gates, so the injected sentinel renders nothing
+  // when there's no eligible proposal.
   const displayData = React.useMemo(() => {
-    // TEMPORARILY DISABLED FOR TESTING — proposal hero card hidden on the home
-    // feed. Re-enable by restoring the injection logic below.
-    return items;
-    // if (!showProposalHero) return items;
-    // const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
-    // const at = Math.min(1, items.length);
-    // return [...items.slice(0, at), hero, ...items.slice(at)];
+    if (!showProposalHero) return items;
+    const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
+    return [hero, ...items];
   }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.
