@@ -84,7 +84,7 @@ export default function RewardsIndexScreen() {
   const { colors, isDark } = useTheme();
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
-  const { celebrate } = useRewardCelebration();
+  const { celebrate, celebratePending } = useRewardCelebration();
   const {
     lootboxes,
     userRewards,
@@ -202,9 +202,14 @@ export default function RewardsIndexScreen() {
   }, [talerAccount?.address]);
 
   const onDailyMint = useCallback(async () => {
+    // Capture what's accruing now — that's the amount the mint lands.
+    const received = Math.max(1, Math.round(talerMintable));
+    // Show the reward screen instantly; the on-chain mint runs in the button.
+    const reward = celebratePending({
+      coin: received === 1 ? 'single' : 'many',
+      loadingLabel: ['Münzen werden abgeholt…', 'Einen Moment noch…', 'Fast geschafft…'],
+    });
     try {
-      // Capture what's accruing now — that's the amount the mint lands.
-      const received = Math.max(1, Math.round(talerMintable));
       await dailyMint();
       const ts = Date.now();
       setLastClaim(ts);
@@ -230,13 +235,14 @@ export default function RewardsIndexScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
-      celebrate(received);
+      reward.resolve(received);
     } catch (e: any) {
+      reward.fail();
       const msg = e?.message ?? String(e);
       console.error('[Röbel Münzen] daily mint failed:', msg);
       Alert.alert('Heute abholen fehlgeschlagen', msg);
     }
-  }, [dailyMint, talerAccount, talerMintable, celebrate]);
+  }, [dailyMint, talerAccount, talerMintable, celebratePending]);
 
   const onJoin = useCallback(async () => {
     try {

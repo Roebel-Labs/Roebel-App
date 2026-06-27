@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +24,9 @@ const GRADIENT_LOCATIONS = [0.1534, 0.3726, 0.8057] as const;
 const NAVY = '#0A2540';
 const SUBTITLE = '#23405E';
 
+// Pixel-block glyphs the loading label decodes out of, character by character.
+const PIXEL_GLYPHS = '░▒▓█▚▞▙▟▛▜'.split('');
+
 export const DEFAULT_REWARD_SUBTITLE =
   'Du hast Röbel Münzen erhalten, nun finde heraus wofür du sie benutzen kannst.';
 
@@ -33,8 +37,11 @@ interface MuenzenRewardViewProps {
   message?: string;
   /** Supporting line under the headline. */
   subtitle?: string;
-  /** While true the button shows a spinner and can't be pressed. */
+  /** While true the button shows a spinner + label and can't be pressed. */
   loading?: boolean;
+  /** Label(s) next to the spinner while loading. A list cycles every ~2.2s
+   *  ("Münzen werden abgeholt…" → "Einen Moment noch…" → "Fast geschafft…"). */
+  loadingLabel?: string | string[];
   /** Button label once ready. Defaults to "Weiter". */
   buttonLabel?: string;
   /** Force a coin variant; otherwise derived from amount (defaults to the trio). */
@@ -45,14 +52,17 @@ interface MuenzenRewardViewProps {
 /**
  * Presentational Röbel Münzen reward screen on the brand gradient: a coin
  * illustration, a headline (the amount or a message), a supporting line, and a
- * bottom button that doubles as the loading indicator. Shared by the global
- * celebration overlay and the event-attendance landing.
+ * bottom button that doubles as the loading indicator. The coin springs in on
+ * mount; the headline + body slide up and fade in once they're ready (i.e. when
+ * loading finishes). Shared by the global celebration overlay and the
+ * event-attendance landing.
  */
 export default function MuenzenRewardView({
   amount = null,
   message,
   subtitle,
   loading = false,
+  loadingLabel = 'Wird geladen…',
   buttonLabel = 'Weiter',
   coin,
   onContinue,
@@ -61,34 +71,74 @@ export default function MuenzenRewardView({
   const isSingle = coin ? coin === 'single' : hasAmount && amount === 1;
   const coinSrc = isSingle ? SINGLE : MANY;
   const label = isSingle ? 'MÜNZE' : 'MÜNZEN';
+  const contentReady = !loading && (hasAmount || !!message);
 
-  // One orchestrated entrance: the coin springs in while the text settles.
+  // Loading label(s): a list cycles every ~2.2s and holds on the last one.
+  const loadingLabels = (Array.isArray(loadingLabel) ? loadingLabel : [loadingLabel]).filter(
+    Boolean,
+  ) as string[];
+  const safeLabels = loadingLabels.length ? loadingLabels : ['Wird geladen…'];
+  const [labelIdx, setLabelIdx] = useState(0);
+  useEffect(() => {
+    if (!loading) {
+      setLabelIdx(0);
+      return;
+    }
+    if (safeLabels.length <= 1) return;
+    const t = setInterval(() => setLabelIdx((i) => Math.min(i + 1, safeLabels.length - 1)), 2200);
+    return () => clearInterval(t);
+  }, [loading, safeLabels.length]);
+  const currentLabel = safeLabels[Math.min(labelIdx, safeLabels.length - 1)];
+
+  const reduceMotion = useRef(false);
   const coinScale = useRef(new Animated.Value(0.7)).current;
-  const contentOpacity = useRef(new Animated.Value(0)).current;
+  // Headline + body animate independently for a short, professional stagger.
+  const headOpacity = useRef(new Animated.Value(0)).current;
+  const headY = useRef(new Animated.Value(16)).current;
+  const bodyOpacity = useRef(new Animated.Value(0)).current;
+  const bodyY = useRef(new Animated.Value(16)).current;
 
+  // Coin entrance on mount (the screen appears instantly).
   useEffect(() => {
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled()
       .then((reduce) => {
         if (cancelled) return;
-        if (reduce) {
-          coinScale.setValue(1);
-          contentOpacity.setValue(1);
-          return;
-        }
-        Animated.parallel([
-          Animated.spring(coinScale, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }),
-          Animated.timing(contentOpacity, { toValue: 1, duration: 320, delay: 90, useNativeDriver: true }),
-        ]).start();
+        reduceMotion.current = reduce;
+        if (reduce) coinScale.setValue(1);
+        else Animated.spring(coinScale, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }).start();
       })
-      .catch(() => {
-        coinScale.setValue(1);
-        contentOpacity.setValue(1);
-      });
+      .catch(() => coinScale.setValue(1));
     return () => {
       cancelled = true;
     };
-  }, [coinScale, contentOpacity]);
+  }, [coinScale]);
+
+  // Headline + body slide in the moment the content is ready — on mount for an
+  // already-resolved reward, or on the loading→done transition.
+  useEffect(() => {
+    if (!contentReady) {
+      headOpacity.setValue(0);
+      headY.setValue(16);
+      bodyOpacity.setValue(0);
+      bodyY.setValue(16);
+      return;
+    }
+    if (reduceMotion.current) {
+      headOpacity.setValue(1);
+      headY.setValue(0);
+      bodyOpacity.setValue(1);
+      bodyY.setValue(0);
+      return;
+    }
+    const ease = Easing.out(Easing.cubic);
+    Animated.parallel([
+      Animated.timing(headOpacity, { toValue: 1, duration: 380, delay: 60, easing: ease, useNativeDriver: true }),
+      Animated.timing(headY, { toValue: 0, duration: 440, delay: 60, easing: ease, useNativeDriver: true }),
+      Animated.timing(bodyOpacity, { toValue: 1, duration: 380, delay: 170, easing: ease, useNativeDriver: true }),
+      Animated.timing(bodyY, { toValue: 0, duration: 440, delay: 170, easing: ease, useNativeDriver: true }),
+    ]).start();
+  }, [contentReady, headOpacity, headY, bodyOpacity, bodyY]);
 
   return (
     <View style={styles.fill}>
@@ -110,22 +160,32 @@ export default function MuenzenRewardView({
               { transform: [{ scale: coinScale }] },
             ]}
           />
-          <Animated.View style={[styles.copy, { opacity: contentOpacity }]}>
+          <View style={styles.copy}>
             {hasAmount ? (
-              <Text
-                style={styles.amount}
+              <Animated.Text
+                style={[styles.amount, { opacity: headOpacity, transform: [{ translateY: headY }] }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 allowFontScaling={false}
                 accessibilityLabel={`${amount} ${isSingle ? 'Münze' : 'Münzen'} erhalten`}
               >
                 {amount} {label}
-              </Text>
+              </Animated.Text>
             ) : message ? (
-              <Text style={styles.message}>{message}</Text>
+              <Animated.Text
+                style={[styles.message, { opacity: headOpacity, transform: [{ translateY: headY }] }]}
+              >
+                {message}
+              </Animated.Text>
             ) : null}
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          </Animated.View>
+            {subtitle ? (
+              <Animated.Text
+                style={[styles.subtitle, { opacity: bodyOpacity, transform: [{ translateY: bodyY }] }]}
+              >
+                {subtitle}
+              </Animated.Text>
+            ) : null}
+          </View>
         </View>
 
         <Pressable
@@ -134,10 +194,13 @@ export default function MuenzenRewardView({
           style={({ pressed }) => [styles.cta, pressed && !loading && styles.ctaPressed]}
           accessibilityRole="button"
           accessibilityState={{ disabled: loading, busy: loading }}
-          accessibilityLabel={loading ? 'Wird geladen' : buttonLabel}
+          accessibilityLabel={loading ? currentLabel : buttonLabel}
         >
           {loading ? (
-            <ActivityIndicator color={NAVY} />
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={NAVY} />
+              <ScrambleText text={currentLabel} style={styles.loadingLabel} reduceMotion={reduceMotion} />
+            </View>
           ) : (
             <Text style={styles.ctaText}>{buttonLabel}</Text>
           )}
@@ -153,7 +216,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   coinSingle: { width: 156, height: 156, marginBottom: 56 },
   coinMany: { width: 224, height: 286, marginBottom: 44 },
-  copy: { alignItems: 'center' },
+  copy: { alignItems: 'center', minHeight: 96, justifyContent: 'flex-start' },
   amount: {
     fontFamily: 'Inter-Bold',
     fontSize: 60,
@@ -193,4 +256,58 @@ const styles = StyleSheet.create({
   },
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   ctaText: { color: NAVY, fontFamily: 'Inter-SemiBold', fontSize: 17 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  // Monospace so the pixel-decode doesn't shift width as glyphs resolve.
+  loadingLabel: { color: NAVY, fontFamily: 'GeistMono-Medium', fontSize: 14.5, letterSpacing: 0.3 },
 });
+
+/**
+ * Loading label that "decodes" out of pixel-block glyphs whenever the text
+ * changes — a short, monospace pixelate transition between loading states.
+ */
+function ScrambleText({
+  text,
+  style,
+  reduceMotion,
+}: {
+  text: string;
+  style: any;
+  reduceMotion: React.MutableRefObject<boolean>;
+}) {
+  const [display, setDisplay] = useState(text);
+  const prev = useRef(text);
+
+  useEffect(() => {
+    if (prev.current === text) return;
+    prev.current = text;
+    if (reduceMotion.current) {
+      setDisplay(text);
+      return;
+    }
+    const total = text.length;
+    const framesToReveal = Math.max(8, Math.ceil(total * 1.1));
+    let frame = 0;
+    const id = setInterval(() => {
+      frame += 1;
+      const revealed = Math.floor((frame / framesToReveal) * total);
+      if (revealed >= total) {
+        setDisplay(text);
+        clearInterval(id);
+        return;
+      }
+      let out = '';
+      for (let i = 0; i < total; i += 1) {
+        const ch = text[i];
+        out += i < revealed || ch === ' ' ? ch : PIXEL_GLYPHS[Math.floor(Math.random() * PIXEL_GLYPHS.length)];
+      }
+      setDisplay(out);
+    }, 32);
+    return () => clearInterval(id);
+  }, [text, reduceMotion]);
+
+  return (
+    <Text style={style} numberOfLines={1} allowFontScaling={false}>
+      {display}
+    </Text>
+  );
+}

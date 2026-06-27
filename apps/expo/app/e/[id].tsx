@@ -25,6 +25,8 @@ export default function EventScanScreen() {
   const [phase, setPhase] = useState<Phase>('working');
   const [amount, setAmount] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
+  // Label shown next to the spinner inside the button while we work.
+  const [workLabel, setWorkLabel] = useState('Beleg wird abgeholt…');
   const ran = useRef(false);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function EventScanScreen() {
       try {
         const human = await isOnboarded(addr).catch(() => false);
         if (!human) {
+          setWorkLabel('Konto wird eingerichtet…');
           const inv = await supabase.functions.invoke('event-onboard', { body: { wallet: addr, eventId: id } });
           if (inv.error) throw new Error(inv.error.message);
           await onboard(); // registerHuman with the operator as inviter
@@ -85,12 +88,18 @@ export default function EventScanScreen() {
   let viewAmount: number | null = null;
   let viewMessage: string | undefined;
   let viewSubtitle: string | undefined;
+  let loadingLabel: string[] | undefined;
 
   if (waitingForWallet) {
-    if (ready) viewMessage = 'Bitte zuerst anmelden.';
-    else loading = true;
+    if (ready) {
+      viewMessage = 'Bitte zuerst anmelden.';
+    } else {
+      loading = true;
+      loadingLabel = ['Wallet wird geladen…', 'Einen Moment noch…', 'Fast geschafft…'];
+    }
   } else if (phase === 'working') {
     loading = true;
+    loadingLabel = [workLabel, 'Einen Moment noch…', 'Fast geschafft…'];
   } else if (hasAmount) {
     viewAmount = amount;
     viewSubtitle = msg;
@@ -101,6 +110,7 @@ export default function EventScanScreen() {
   return (
     <MuenzenRewardView
       loading={loading}
+      loadingLabel={loadingLabel}
       amount={viewAmount}
       message={viewMessage}
       subtitle={viewSubtitle}

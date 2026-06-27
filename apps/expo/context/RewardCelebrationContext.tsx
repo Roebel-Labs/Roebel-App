@@ -6,19 +6,44 @@ interface CelebrateOptions {
   subtitle?: string;
 }
 
+interface PendingOptions {
+  /** Label shown next to the spinner while the reward is being fetched. */
+  loadingLabel?: string;
+  /** Coin variant to show during loading (before the amount is known). */
+  coin?: 'single' | 'many';
+  /** Subtitle to show once resolved (can also be passed to resolve()). */
+  subtitle?: string;
+}
+
+interface PendingHandle {
+  /** Reveal the amount with the slide-in animation. */
+  resolve: (amount: number, opts?: CelebrateOptions) => void;
+  /** Abort: close the reward screen without showing an amount. */
+  fail: () => void;
+}
+
 interface RewardCelebrationContextValue {
   /**
-   * Show the full-screen Röbel Münzen reward celebration. Call this whenever a
-   * citizen receives Münzen (daily mint, task, checkpoint scan, vote, …). The
-   * amount picks the single vs. trio coin illustration. Amounts <= 0 are ignored.
+   * Show the full-screen Röbel Münzen reward celebration immediately with a
+   * known amount. The amount picks the single vs. trio coin. <= 0 is ignored.
    */
   celebrate: (amount: number, opts?: CelebrateOptions) => void;
+  /**
+   * Show the reward screen NOW in a loading state (button spins) and return a
+   * handle to resolve it with the amount, or fail() to dismiss it. Use when the
+   * payout is in flight (daily mint, on-chain claim) so the screen appears
+   * instantly and the headline/body slide in once it's done.
+   */
+  celebratePending: (opts?: PendingOptions) => PendingHandle;
 }
 
 interface QueueItem {
   id: number;
   amount: number;
   subtitle?: string;
+  loading: boolean;
+  loadingLabel?: string;
+  coin?: 'single' | 'many';
 }
 
 const RewardCelebrationContext = createContext<RewardCelebrationContextValue | undefined>(
@@ -34,7 +59,38 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
   const celebrate = useCallback((amount: number, opts?: CelebrateOptions) => {
     const amt = Math.round(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    setQueue((q) => [...q, { id: nextId.current++, amount: amt, subtitle: opts?.subtitle }]);
+    setQueue((q) => [
+      ...q,
+      { id: nextId.current++, amount: amt, subtitle: opts?.subtitle, loading: false },
+    ]);
+  }, []);
+
+  const celebratePending = useCallback((opts?: PendingOptions): PendingHandle => {
+    const id = nextId.current++;
+    setQueue((q) => [
+      ...q,
+      {
+        id,
+        amount: 0,
+        subtitle: opts?.subtitle,
+        loading: true,
+        loadingLabel: opts?.loadingLabel,
+        coin: opts?.coin,
+      },
+    ]);
+    return {
+      resolve: (amount, o) => {
+        const amt = Math.round(amount);
+        setQueue((q) =>
+          q.map((it) =>
+            it.id === id
+              ? { ...it, loading: false, amount: Math.max(0, amt), subtitle: o?.subtitle ?? it.subtitle }
+              : it,
+          ),
+        );
+      },
+      fail: () => setQueue((q) => q.filter((it) => it.id !== id)),
+    };
   }, []);
 
   const handleClose = useCallback(() => {
@@ -43,7 +99,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
 
   const current = queue[0];
 
-  const value = useMemo(() => ({ celebrate }), [celebrate]);
+  const value = useMemo(() => ({ celebrate, celebratePending }), [celebrate, celebratePending]);
 
   return (
     <RewardCelebrationContext.Provider value={value}>
@@ -53,6 +109,9 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
         replayKey={current?.id ?? 0}
         amount={current?.amount ?? 0}
         subtitle={current?.subtitle}
+        loading={current?.loading ?? false}
+        loadingLabel={current?.loadingLabel}
+        coin={current?.coin}
         onClose={handleClose}
       />
     </RewardCelebrationContext.Provider>

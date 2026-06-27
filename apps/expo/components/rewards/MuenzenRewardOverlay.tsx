@@ -8,6 +8,11 @@ interface MuenzenRewardOverlayProps {
   amount: number;
   /** Optional copy override; defaults to the standard reward line. */
   subtitle?: string;
+  /** Show the screen in a loading state (spinner + label) until resolved. */
+  loading?: boolean;
+  loadingLabel?: string;
+  /** Coin variant to show while loading (before the amount is known). */
+  coin?: 'single' | 'many';
   /** Changes per celebration so the entrance animation replays each time. */
   replayKey?: number;
   onClose: () => void;
@@ -21,6 +26,9 @@ export default function MuenzenRewardOverlay({
   visible,
   amount,
   subtitle,
+  loading = false,
+  loadingLabel,
+  coin,
   replayKey = 0,
   onClose,
 }: MuenzenRewardOverlayProps) {
@@ -31,6 +39,9 @@ export default function MuenzenRewardOverlay({
           key={replayKey}
           amount={amount}
           subtitle={subtitle ?? DEFAULT_REWARD_SUBTITLE}
+          loading={loading}
+          loadingLabel={loadingLabel}
+          coin={coin}
           onContinue={onClose}
         />
       ) : null}
