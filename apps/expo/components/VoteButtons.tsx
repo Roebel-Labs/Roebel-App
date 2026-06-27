@@ -503,6 +503,39 @@ export default function VoteButtons({
     const kp = getKeypair();
     if (!kp) return;
 
+    // Was this proposal already voted on? Changing an existing vote earns no
+    // new reward. Computed up front so we can open the reward screen instantly.
+    const isChangingVote = !!getLastVote(pollAddress);
+    let voteSucceeded = false;
+
+    // Instant feedback: open the coin reward screen NOW (loading) so it covers
+    // the whole cast latency. When it's dismissed (success only) the privacy
+    // bottom sheet appears over the new voted state. Changing a vote skips it.
+    const reward = isChangingVote
+      ? null
+      : celebratePending({
+          coin: 'single',
+          subtitle: VOTE_REWARD_SUBTITLE,
+          loadingLabel: [
+            'Stimme wird versiegelt…',
+            'Belohnung wird vorbereitet…',
+            'Fast geschafft…',
+            'Gleich ist es soweit…',
+          ],
+          onClose: () => {
+            if (!voteSucceeded) return;
+            setTimeout(
+              () =>
+                setSuccessDrawer({
+                  visible: true,
+                  message: VOTE_PRIVACY_MESSAGE,
+                  action: () => onVoteSuccess(),
+                }),
+              350,
+            );
+          },
+        });
+
     try {
       setVotingFor(support);
       setPhase('encrypting-vote');
@@ -568,10 +601,6 @@ export default function VoteButtons({
         encrypted: true,
       });
 
-      // Was this proposal already voted on? If so the reward was granted the
-      // first time — re-voting (changing the choice) shows no new reward screen.
-      const isChangingVote = !!getLastVote(pollAddress);
-
       // Persist the choice locally so the LastVoteCard can show it. The vote
       // itself stays encrypted on chain — this cache is purely UX.
       await recordVote(pollAddress, support, nonce, receipt.transactionHash);
@@ -588,49 +617,30 @@ export default function VoteButtons({
       });
 
       if (isChangingVote) {
-        // Reward already received → no new reward screen. Claim idempotently in
-        // the background and just show the privacy bottom sheet.
+        // No reward screen was opened. Claim idempotently in the background and
+        // show the privacy bottom sheet directly over the updated vote.
         void mirror
           .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
           .catch(() => {});
         setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() });
       } else {
-        // First vote → ORDER: the privacy bottom sheet appears FIRST; the coin
-        // reward screen opens only AFTER that sheet is closed (the two never
-        // stack — iOS drops a modal opened over a closing one). Kick the ~10s
-        // payout off NOW so the amount is usually ready by the time the sheet
-        // is dismissed.
-        const claimPromise = mirror.then(() =>
-          claimReward(account.address, 'proposal_vote', proposalId.toString()),
-        );
-        setSuccessDrawer({
-          visible: true,
-          message: VOTE_PRIVACY_MESSAGE,
-          action: () => {
-            onVoteSuccess();
-            // Open the reward a beat after the sheet finishes closing.
-            setTimeout(() => {
-              const reward = celebratePending({
-                coin: 'single',
-                subtitle: VOTE_REWARD_SUBTITLE,
-                loadingLabel: [
-                  'Belohnung wird vorbereitet…',
-                  'Einen Moment noch…',
-                  'Fast geschafft…',
-                  'Gleich ist es soweit…',
-                ],
-              });
-              claimPromise
-                .then((r) => {
-                  if (r.status === 'paid') reward.resolve(rewardAmountToMuenzen(r.amountAtto));
-                  else reward.fail();
-                })
-                .catch(() => reward.fail());
-            }, 450);
-          },
-        });
+        // First vote: the reward screen is already open (loading). Resolve it
+        // with the payout; its onClose then surfaces the privacy bottom sheet
+        // over the new voted state. A failed payout still closes the reward and
+        // shows the bottom sheet (the vote itself succeeded).
+        voteSucceeded = true;
+        void mirror
+          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
+          .then((r) => {
+            if (r.status === 'paid') reward?.resolve(rewardAmountToMuenzen(r.amountAtto));
+            else reward?.fail();
+          })
+          .catch(() => reward?.fail());
       }
     } catch (err) {
+      // Vote failed → drop the (loading) reward screen. voteSucceeded is still
+      // false, so its onClose shows no bottom sheet; surface the error instead.
+      reward?.fail();
       console.error('[VoteButtons] vote failed:', err);
       setErrorDrawer({
         visible: true,
