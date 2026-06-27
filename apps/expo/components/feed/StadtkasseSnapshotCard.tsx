@@ -84,11 +84,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   value: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
   },
   label: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
     marginTop: -2,
   },
