@@ -22,6 +22,11 @@ import BirthdatePromptSheet from './rewards/BirthdatePromptSheet';
 import { loadCitizenPreimage, setCitizenBirthdate } from '@/lib/citizen-commitment';
 import { useTheme } from '@/context/ThemeContext';
 import { useMaci } from '@/context/MaciContext';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useVerificationContext } from '@/context/VerificationContext';
+import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
+import { SUPPORT_ACCOUNT_ID } from '@/lib/support-contact';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
@@ -117,6 +122,8 @@ export default function VoteButtons({
   // stays for UI guards + .address (Supabase mirror) since the address matches.
   const { gnosisAccount } = useGnosisWallet();
   const { colors } = useTheme();
+  const router = useRouter();
+  const { activePendingRequest } = useVerificationContext();
   const { celebrate } = useRewardCelebration();
   // Vote reward (Röbel Münzen). The full-screen celebration appears AFTER the
   // privacy success drawer is dismissed — it never replaces that drawer. We
@@ -637,11 +644,36 @@ export default function VoteButtons({
 
   if (!isCitizen) {
     return (
-      <Container colors={colors}>
-        <Text style={[styles.messageText, { color: colors.textSecondary }]}>
-          Bürgerschaft erforderlich, um abzustimmen.
+      <View style={styles.gateWrap}>
+        <Text style={[styles.gateIntro, { color: colors.textSecondary }]}>
+          Nur verifizierte Bürger:innen können bei Bürgerumfragen abstimmen.
         </Text>
-      </Container>
+
+        {/* Reuse the profile aspiring-citizen banner: "Jetzt beantragen" when no
+            request exists, "Status ansehen" while a request is pending. */}
+        <CitizenVerificationBanner pending={!!activePendingRequest} />
+
+        <Pressable
+          onPress={() =>
+            router.push(
+              (SUPPORT_ACCOUNT_ID
+                ? `/messages/new?accountId=${SUPPORT_ACCOUNT_ID}`
+                : '/help') as any,
+            )
+          }
+          style={({ pressed }) => [
+            styles.gateHelpButton,
+            { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Weitere Hilfe"
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
+          <Text style={[styles.gateHelpButtonText, { color: colors.primary }]}>
+            Weitere Hilfe
+          </Text>
+        </Pressable>
+      </View>
     );
   }
 
@@ -1091,6 +1123,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  gateWrap: {
+    marginVertical: 16,
+  },
+  gateIntro: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    marginHorizontal: 16,
+    lineHeight: 20,
+  },
+  gateHelpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  gateHelpButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
   },
   basescanRow: {
     marginTop: 12,
