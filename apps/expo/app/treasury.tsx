@@ -101,7 +101,6 @@ export default function TreasuryScreen() {
 
 					{/* White sheet — balance + history */}
 					<View style={styles.sheet}>
-						<Text style={styles.section}>Guthaben</Text>
 						{assets === null ? (
 							<View style={styles.assetRow}>
 								<View style={styles.assetLeft}>
@@ -155,7 +154,7 @@ export default function TreasuryScreen() {
 }
 
 function makeStyles(colors: any, isDark: boolean) {
-	const backdrop = isDark ? "#1B2230" : "#E4F2FF";
+	const backdrop = isDark ? colors.background : "#E4F2FF";
 	const sheetBg = isDark ? colors.surface : "#FFFFFF";
 	return StyleSheet.create({
 		root: { flex: 1, backgroundColor: backdrop },
