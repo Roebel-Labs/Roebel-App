@@ -423,7 +423,7 @@ export default function RewardsIndexScreen() {
               accessibilityLabel="Röbel Münzen senden"
             >
               <NavigationIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
-              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#001A42' }]}>Senden</Text>
+              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#000000' }]}>Senden</Text>
             </Pressable>
             <Pressable
               onPress={() => setShowReceive(true)}
@@ -435,7 +435,7 @@ export default function RewardsIndexScreen() {
               accessibilityLabel="Röbel Münzen empfangen"
             >
               <QrIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
-              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#001A42' }]}>Empfangen</Text>
+              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#000000' }]}>Empfangen</Text>
             </Pressable>
           </View>
         )}
@@ -562,7 +562,7 @@ export default function RewardsIndexScreen() {
                 <Skeleton width={48} height={18} radius={6} style={{ marginTop: 6 }} />
               ) : (
                 <Text style={[styles.squareValue, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {userRewards.length}/{lootboxes.length}
+                  {userRewards.length}/{userRewards.length + lootboxes.length}
                 </Text>
               )}
               <Image source={SCHATZTRUHE_IMG} style={styles.squareImg} resizeMode="contain" />
