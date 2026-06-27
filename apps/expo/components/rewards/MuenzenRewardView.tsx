@@ -39,8 +39,9 @@ interface MuenzenRewardViewProps {
   subtitle?: string;
   /** While true the button shows a spinner + label and can't be pressed. */
   loading?: boolean;
-  /** Label(s) next to the spinner while loading. A list cycles every ~2.2s
-   *  ("Münzen werden abgeholt…" → "Einen Moment noch…" → "Fast geschafft…"). */
+  /** Label(s) next to the spinner while loading. A list advances every ~3s and
+   *  then loops the reassurance tail — long loads never get stuck on one line
+   *  ("Münzen werden abgeholt…" → "Einen Moment noch…" → "Fast geschafft…" → …). */
   loadingLabel?: string | string[];
   /** Button label once ready. Defaults to "Weiter". */
   buttonLabel?: string;
@@ -73,7 +74,9 @@ export default function MuenzenRewardView({
   const label = isSingle ? 'MÜNZE' : 'MÜNZEN';
   const contentReady = !loading && (hasAmount || !!message);
 
-  // Loading label(s): a list cycles every ~2.2s and holds on the last one.
+  // Loading label(s): advance every ~3s; once we reach the end, loop the
+  // reassurance tail (index 1+) so a long load keeps moving but never resets to
+  // the opening "…werden abgeholt" line.
   const loadingLabels = (Array.isArray(loadingLabel) ? loadingLabel : [loadingLabel]).filter(
     Boolean,
   ) as string[];
@@ -85,7 +88,13 @@ export default function MuenzenRewardView({
       return;
     }
     if (safeLabels.length <= 1) return;
-    const t = setInterval(() => setLabelIdx((i) => Math.min(i + 1, safeLabels.length - 1)), 2200);
+    const t = setInterval(() => {
+      setLabelIdx((i) => {
+        const next = i + 1;
+        if (next < safeLabels.length) return next;
+        return safeLabels.length > 2 ? 1 : 0;
+      });
+    }, 3000);
     return () => clearInterval(t);
   }, [loading, safeLabels.length]);
   const currentLabel = safeLabels[Math.min(labelIdx, safeLabels.length - 1)];

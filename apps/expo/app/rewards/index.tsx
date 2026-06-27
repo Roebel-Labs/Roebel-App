@@ -207,7 +207,12 @@ export default function RewardsIndexScreen() {
     // Show the reward screen instantly; the on-chain mint runs in the button.
     const reward = celebratePending({
       coin: received === 1 ? 'single' : 'many',
-      loadingLabel: ['Münzen werden abgeholt…', 'Einen Moment noch…', 'Fast geschafft…'],
+      loadingLabel: [
+        'Münzen werden abgeholt…',
+        'Einen Moment noch…',
+        'Fast geschafft…',
+        'Gleich ist es soweit…',
+      ],
     });
     try {
       await dailyMint();

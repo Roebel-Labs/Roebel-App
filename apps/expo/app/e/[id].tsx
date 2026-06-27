@@ -95,11 +95,11 @@ export default function EventScanScreen() {
       viewMessage = 'Bitte zuerst anmelden.';
     } else {
       loading = true;
-      loadingLabel = ['Wallet wird geladen…', 'Einen Moment noch…', 'Fast geschafft…'];
+      loadingLabel = ['Wallet wird geladen…', 'Einen Moment noch…', 'Fast geschafft…', 'Gleich ist es soweit…'];
     }
   } else if (phase === 'working') {
     loading = true;
-    loadingLabel = [workLabel, 'Einen Moment noch…', 'Fast geschafft…'];
+    loadingLabel = [workLabel, 'Einen Moment noch…', 'Fast geschafft…', 'Gleich ist es soweit…'];
   } else if (hasAmount) {
     viewAmount = amount;
     viewSubtitle = msg;
