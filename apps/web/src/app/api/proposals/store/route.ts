@@ -144,17 +144,54 @@ export async function POST(request: NextRequest) {
     console.log("✅ [API] Proposal stored successfully!");
     console.log("🔗 [API] Proposal URL: /proposals/" + proposalId);
 
-    // TEMPORARILY DISABLED FOR TESTING — re-enable later.
-    // New-proposal notifications are turned off while testing. Restore by
-    // uncommenting the createAppNotification call below.
-    // createAppNotification({
-    //   type: "proposal_new",
-    //   title: `Neuer Vorschlag: ${title}`,
-    //   body: summary?.substring(0, 120) || null,
-    //   link: `/app/proposals/${proposalId}`,
-    //   reference_id: proposalId,
-    // }).catch(console.error);
-    // Note: no image_url for proposals - uses default icon
+    // Notify everyone about the new proposal:
+    //   (1) a BROADCAST push to all devices via the send-notification edge fn, and
+    //   (2) an in-app notification row.
+    // Both are best-effort — the proposal is already on-chain + stored, so a
+    // notification failure must never fail the request.
+
+    // (1) Broadcast push. Omitting `walletAddresses` makes send-notification fan
+    // out to every active push token; its preference switch defaults to "send"
+    // for unknown types, so no edge-function change is needed for `proposal_new`.
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const excerpt = (summary || "").replace(/\s+/g, " ").trim();
+        const pushBody = excerpt
+          ? excerpt.length > 140
+            ? excerpt.slice(0, 140) + "…"
+            : excerpt
+          : "Jetzt abstimmen in der Röbel App";
+        await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            type: "proposal_new",
+            title: `Neue Bürgerumfrage: ${title}`,
+            body: pushBody,
+            data: { type: "proposal", proposalId },
+          }),
+        });
+        console.log("📣 [API] Broadcast push sent for new proposal");
+      } else {
+        console.warn("⚠️ [API] Missing Supabase env — skipped proposal push");
+      }
+    } catch (pushErr) {
+      console.error("⚠️ [API] Proposal push failed (non-fatal):", pushErr);
+    }
+
+    // (2) In-app notification (web notification hub).
+    createAppNotification({
+      type: "proposal_new",
+      title: `Neue Bürgerumfrage: ${title}`,
+      body: summary?.substring(0, 120) || null,
+      link: `/app/proposals/${proposalId}`,
+      reference_id: proposalId,
+    }).catch(console.error);
 
     return NextResponse.json({
       success: true,
