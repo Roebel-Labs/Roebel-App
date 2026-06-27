@@ -70,14 +70,14 @@ export function ReferralOpenCTA({ code }: { code: string }) {
           <a
             href={APP_STORE_URL}
             onClick={copyReferralToClipboard}
-            className="px-5 py-3 rounded-full bg-white text-[#194383] font-semibold text-sm hover:opacity-90 transition"
+            className="px-5 py-3 rounded-full bg-white text-[#00498B] font-semibold text-sm hover:opacity-90 transition"
           >
             App Store
           </a>
           <a
             href={PLAY_STORE_URL}
             onClick={copyReferralToClipboard}
-            className="px-5 py-3 rounded-full bg-white text-[#194383] font-semibold text-sm hover:opacity-90 transition"
+            className="px-5 py-3 rounded-full bg-white text-[#00498B] font-semibold text-sm hover:opacity-90 transition"
           >
             Play Store
           </a>
@@ -96,7 +96,7 @@ export function ReferralOpenCTA({ code }: { code: string }) {
     <div className="flex flex-col gap-3">
       <button
         onClick={handleOpenApp}
-        className="px-6 py-4 rounded-full bg-white text-[#194383] font-semibold text-base hover:opacity-90 transition"
+        className="px-6 py-4 rounded-full bg-white text-[#00498B] font-semibold text-base hover:opacity-90 transition"
       >
         App öffnen / installieren
       </button>

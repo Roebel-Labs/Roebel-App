@@ -25,9 +25,9 @@ export default function CitizenPassportCard({
         <Svg width="100%" height="100%" viewBox="0 0 400 200" preserveAspectRatio="none">
           <Defs>
             <LinearGradient id="passportGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#194383" />
+              <Stop offset="0" stopColor="#00498B" />
               <Stop offset="0.4" stopColor="#0f2b55" />
-              <Stop offset="0.7" stopColor="#194383" />
+              <Stop offset="0.7" stopColor="#00498B" />
               <Stop offset="1" stopColor="#2563eb" />
             </LinearGradient>
           </Defs>
@@ -78,7 +78,7 @@ export default function CitizenPassportCard({
                 value={`roebel://verification/request/${verificationRequestId}?type=citizen`}
                 size={76}
                 backgroundColor="white"
-                color="#194383"
+                color="#00498B"
               />
             ) : (
               <Text style={styles.qrPlaceholder}>QR</Text>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
   },
   content: {
     flex: 1,
@@ -147,6 +147,6 @@ const styles = StyleSheet.create({
   qrPlaceholder: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#194383',
+    color: '#00498B',
   },
 });

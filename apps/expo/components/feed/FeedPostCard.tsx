@@ -188,14 +188,14 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   content: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   moreToggle: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   sticker: {
     width: 200,

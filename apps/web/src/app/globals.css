@@ -48,19 +48,19 @@
   --card-foreground: 0 0% 4%;
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 4%;
-  --primary: 217 68% 31%;
+  --primary: 208 100% 27%;
   --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96.1%;
   --secondary-foreground: 0 0% 9%;
   --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
+  --muted-foreground: 220 9% 46%;
   --accent: 0 0% 96.1%;
   --accent-foreground: 0 0% 9%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 89.8%;
-  --input: 0 0% 89.8%;
-  --ring: 217 68% 31%;
+  --border: 222 9% 73%;
+  --input: 222 9% 73%;
+  --ring: 208 100% 27%;
   --radius: 10px;
 
   /* Semantic status colors */
@@ -80,7 +80,7 @@
   --chart-5: 27 87% 67%;
 }
 
-/* Dark mode color variables — #202124 bg, #8AB4F8 primary */
+/* Dark mode color variables — #202124 bg, #7ABBF2 primary */
 .dark {
   --background: 220 3% 13%;
   --foreground: 210 8% 92%;
@@ -88,7 +88,7 @@
   --card-foreground: 210 8% 92%;
   --popover: 220 3% 13%;
   --popover-foreground: 210 8% 92%;
-  --primary: 217 91% 76%;
+  --primary: 208 82% 71%;
   --primary-foreground: 220 3% 13%;
   --secondary: 210 3% 20%;
   --secondary-foreground: 210 8% 92%;
@@ -100,7 +100,7 @@
   --destructive-foreground: 210 8% 92%;
   --border: 210 3% 27%;
   --input: 210 3% 27%;
-  --ring: 217 91% 76%;
+  --ring: 208 82% 71%;
 
   /* Semantic status colors (dark mode) */
   --success: 142 70% 45%;
@@ -133,6 +133,8 @@
     letter-spacing: normal;
   }
   h3, h4, h5, h6 {
+    font-family: var(--font-mona-sans), sans-serif;
+    font-stretch: 87.5%;
     letter-spacing: -0.02em;
   }
 }
@@ -173,6 +175,8 @@
   margin-top: 1em;
   margin-bottom: 1em;
   color: hsl(var(--foreground));
+  font-family: var(--font-mona-sans), sans-serif;
+  font-stretch: 87.5%;
   letter-spacing: -0.02em;
 }
 
@@ -183,7 +187,7 @@
 }
 
 .ProseMirror blockquote {
-  border-left: 4px solid #194383;
+  border-left: 4px solid #00498B;
   padding-left: 1.5em;
   margin: 1.5em 0;
   font-style: italic;
@@ -242,7 +246,7 @@
 }
 
 .ProseMirror a {
-  color: #194383;
+  color: #00498B;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -328,6 +332,8 @@
   margin-top: 1em;
   margin-bottom: 1em;
   color: hsl(var(--foreground));
+  font-family: var(--font-mona-sans), sans-serif;
+  font-stretch: 87.5%;
   letter-spacing: -0.02em;
 }
 
@@ -339,7 +345,7 @@
 }
 
 .article-content blockquote {
-  border-left: 4px solid #194383;
+  border-left: 4px solid #00498B;
   padding-left: 1.5em;
   margin: 1.5em 0;
   font-style: italic;
@@ -399,7 +405,7 @@
 }
 
 .article-content a {
-  color: #194383;
+  color: #00498B;
   text-decoration: underline;
   cursor: pointer;
 }

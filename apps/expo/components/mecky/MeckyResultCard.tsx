@@ -25,7 +25,7 @@ const POI_COLORS: Record<string, string> = {
   bike_rental: '#F4A261',
   swim_spot: '#00A6FB',
   indoor_alternative: '#9B5DE5',
-  tourist_info: '#194383',
+  tourist_info: '#00498B',
   pharmacy: '#D62828',
   observation_stand: '#2B9348',
   viewpoint: '#FFB703',
@@ -41,7 +41,7 @@ const TRANSIT_MODE_EMOJIS: Record<string, string> = {
 };
 
 const TRANSIT_MODE_COLORS: Record<string, string> = {
-  bus_regio: '#194383',
+  bus_regio: '#00498B',
   bus_city: '#0077B6',
   bus_park: '#2B9348',
   buergerbus: '#FFB703',
@@ -146,9 +146,9 @@ function getEmoji(type: RichCardData['type'], item: any): string | null {
 function getEmojiColor(type: RichCardData['type'], item: any): string {
   switch (type) {
     case 'pois':
-      return POI_COLORS[item.type] || '#194383';
+      return POI_COLORS[item.type] || '#00498B';
     case 'transit':
-      return TRANSIT_MODE_COLORS[item.mode] || '#194383';
+      return TRANSIT_MODE_COLORS[item.mode] || '#00498B';
     case 'tours':
       if (item.difficulty === 'sportlich') return '#D62828';
       if (item.difficulty === 'mittel') return '#FFB703';
@@ -156,14 +156,14 @@ function getEmojiColor(type: RichCardData['type'], item: any): string {
     case 'wildlife':
       return '#2B9348';
     case 'wildlife_calendar':
-      return '#194383';
+      return '#00498B';
     case 'advisories':
       if (item.level === 'sehr_hoch') return '#D62828';
       if (item.level === 'hoch') return '#E85D04';
       if (item.level === 'mittel') return '#FFB703';
       return '#2B9348';
     default:
-      return '#194383';
+      return '#00498B';
   }
 }
 

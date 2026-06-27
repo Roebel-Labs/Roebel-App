@@ -107,7 +107,7 @@ export function EventManager({ rows, onChanged }: { rows: EventRow[]; onChanged:
                 type="button"
                 disabled={busy || !label.trim()}
                 onClick={create}
-                className="rounded-md bg-[#194383] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-md bg-[#00498B] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
               >
                 {busy ? "…" : "Anlegen"}
               </button>

@@ -25,13 +25,13 @@ const PRINT_CSS = `
   #event-print, #event-print * { visibility: visible !important; }
   #event-print { display: block !important; position: absolute; inset: 0; }
 }
-.a4 { width: 210mm; min-height: 297mm; background: #fff; color: #194383; box-sizing: border-box;
+.a4 { width: 210mm; min-height: 297mm; background: #fff; color: #00498B; box-sizing: border-box;
   padding: 28mm 24mm; text-align: center; font-family: Inter, system-ui, sans-serif; }
-.a4-kicker { letter-spacing: .35em; font-size: 12pt; color: #194383; font-weight: 700; margin: 0 0 6mm; }
+.a4-kicker { letter-spacing: .35em; font-size: 12pt; color: #00498B; font-weight: 700; margin: 0 0 6mm; }
 .a4-title { font-size: 34pt; font-weight: 800; line-height: 1.05; margin: 0 0 4mm; }
 .a4-sub { font-size: 17pt; color: #525252; margin: 0 0 16mm; }
 .a4-qr { display: flex; justify-content: center; margin: 0 0 14mm; }
-.a4-steps { font-size: 15pt; line-height: 1.5; color: #194383; margin: 0 0 18mm; }
+.a4-steps { font-size: 15pt; line-height: 1.5; color: #00498B; margin: 0 0 18mm; }
 .a4-foot { font-size: 11pt; color: #a3a3a3; }
 `;
 
@@ -88,7 +88,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
       {!event ? (
         <ChartCard>
           <div className="mb-4 flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#194383]/10 text-[#194383]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#00498B]/10 text-[#00498B]">
               <Ticket className="h-5 w-5" />
             </div>
             <div>
@@ -104,7 +104,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Röbel weekly market"
               maxLength={80}
-              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
+              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/15"
             />
           </label>
 
@@ -113,7 +113,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
             <select
               value={hours}
               onChange={(e) => setHours(Number(e.target.value))}
-              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
+              className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/15"
             >
               {DURATIONS.map((d) => (
                 <option key={d.hours} value={d.hours}>
@@ -128,7 +128,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
           <button
             onClick={create}
             disabled={creating}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
           >
             <Plus className="h-4 w-4" />
             {creating ? "Creating…" : "Create event QR"}
@@ -138,7 +138,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
         <>
           <Card className="p-5 text-center">
             <img src={coin3d} alt="" className="mx-auto mb-2 h-16 w-16 drop-shadow-[0_10px_18px_rgba(10,10,10,0.12)]" />
-            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#194383]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#194383]">
+            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#00498B]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#00498B]">
               <Sparkles className="h-3 w-3" /> Event live
             </div>
             <h3 className="font-display text-lg font-bold tracking-tight text-foreground">{event.label}</h3>
@@ -151,7 +151,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => window.print()}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
               >
                 <Printer className="h-4 w-4" />
                 Print A4 poster
@@ -172,7 +172,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               <h1 className="a4-title">Become part of Röbel</h1>
               <p className="a4-sub">{event.label}</p>
               <div className="a4-qr">
-                <QRCodeSVG value={link} size={340} level="M" fgColor="#194383" />
+                <QRCodeSVG value={link} size={340} level="M" fgColor="#00498B" />
               </div>
               <p className="a4-steps">
                 Scan the code with the Röbel app

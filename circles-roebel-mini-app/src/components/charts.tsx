@@ -137,7 +137,7 @@ export function BarChart({
 /* ── Donut gauge (ratio) ───────────────────────────────────────────────────── */
 export function Donut({
   value,
-  color = "#194383",
+  color = "#00498B",
   track = "#e5e5e5",
   label,
   sub,
@@ -193,7 +193,7 @@ export function SplitBar({ parts }: { parts: { value: number; color: string }[] 
 }
 
 /* ── Sparkline ─────────────────────────────────────────────────────────────── */
-export function Sparkline({ points, color = "#194383", height = 36 }: { points: number[]; color?: string; height?: number }) {
+export function Sparkline({ points, color = "#00498B", height = 36 }: { points: number[]; color?: string; height?: number }) {
   const W = 120;
   const H = height;
   const max = Math.max(1, ...points);

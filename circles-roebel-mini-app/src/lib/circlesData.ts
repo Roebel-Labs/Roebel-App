@@ -185,7 +185,7 @@ export async function getReputation(verifiedSet: Set<string>): Promise<RepNode[]
 // Monochrome split: navy (the single accent) for minting — the headline flow —
 // then descending neutral grays. No green/amber/red/violet.
 export const FLOW_COLOR: Record<FlowKind, string> = {
-  mint: "#194383", // navy — new coins minted
+  mint: "#00498B", // navy — new coins minted
   reward: "#525252", // neutral-600 — reward payouts from the town treasury
   spend: "#a3a3a3", // neutral-400 — paid into the treasury (e.g. lootbox)
   transfer: "#d4d4d4", // neutral-300 — peer-to-peer

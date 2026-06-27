@@ -26,7 +26,7 @@ export const DEFAULT_MARKER_COLOR = '#374453';
 
 // Entity type marker colors
 export const ENTITY_TYPE_COLORS: Record<string, string> = {
-  event: '#194383',
+  event: '#00498B',
   restaurant: '#E85D04',
   business: '#2B9348',
 };

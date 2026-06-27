@@ -135,7 +135,7 @@ export const ArrowRight02Icon: React.FC<{ size?: number; color?: string; strokeW
 // Heart icons (inline SVG for dynamic color support)
 export const HeartIcon: React.FC<{ size?: number; color?: string; strokeWidth?: number }> = ({
   size = 24,
-  color = '#194383',
+  color = '#00498B',
   strokeWidth = 1.8,
 }) => {
   const xml = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

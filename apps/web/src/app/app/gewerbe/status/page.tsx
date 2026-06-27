@@ -130,7 +130,7 @@ export default function BusinessStatusPage() {
       {business.status === "published" && business.slug && (
         <Link
           href={`/app/gewerbe/${business.slug}`}
-          className="block text-center bg-[#194383] hover:bg-[#143a72] text-white py-3 rounded-xl font-semibold transition-colors"
+          className="block text-center bg-[#00498B] hover:bg-[#143a72] text-white py-3 rounded-xl font-semibold transition-colors"
         >
           Zum Profil →
         </Link>

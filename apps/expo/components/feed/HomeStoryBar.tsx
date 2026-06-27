@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#ffffff',
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',

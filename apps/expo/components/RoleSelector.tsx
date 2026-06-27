@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   },
   optionSelected: {
     backgroundColor: '#E3F2FD',
-    borderColor: '#194383',
+    borderColor: '#00498B',
   },
   optionDisabled: {
     opacity: 0.5,
@@ -133,13 +133,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioSelected: {
-    borderColor: '#194383',
+    borderColor: '#00498B',
   },
   radioDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
   },
   optionTitle: {
     fontSize: 15,

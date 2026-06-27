@@ -71,7 +71,7 @@ export default function RevealKeyPage() {
             connectButton={{
               label: "Mit Röbel-Konto anmelden",
               style: {
-                backgroundColor: "#194383",
+                backgroundColor: "#00498B",
                 color: "#ffffff",
                 minWidth: 240,
               },

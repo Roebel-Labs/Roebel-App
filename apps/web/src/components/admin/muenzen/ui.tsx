@@ -60,7 +60,7 @@ export function PageHeader({
 }
 
 const TONE_BAR: Record<string, string> = {
-  primary: "bg-[#194383]",
+  primary: "bg-[#00498B]",
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   danger: "bg-red-500",
@@ -191,7 +191,7 @@ export function IdentityCell({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
       ) : (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#194383]/10 text-xs font-semibold text-[#194383]">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#00498B]/10 text-xs font-semibold text-[#00498B]">
           {initial}
         </span>
       )}

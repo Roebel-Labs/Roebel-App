@@ -333,7 +333,7 @@ const STATUS_TITLE: Record<PartnerStatus, string> = {
 };
 
 const STATUS_BG: Record<PartnerStatus, string> = {
-  pending: '#194383',
+  pending: '#00498B',
   approved: '#16a34a',
   rejected: '#DC2626',
   suspended: '#D97706',

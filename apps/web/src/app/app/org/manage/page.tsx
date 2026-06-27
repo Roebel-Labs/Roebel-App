@@ -49,8 +49,8 @@ const ROLE_LABELS: Record<OrgRole, string> = {
 }
 
 const ROLE_STYLES: Record<OrgRole, string> = {
-  owner: "bg-[#194383] text-white",
-  admin: "bg-blue-100 text-[#194383] dark:bg-blue-900/30 dark:text-blue-300",
+  owner: "bg-[#00498B] text-white",
+  admin: "bg-blue-100 text-[#00498B] dark:bg-blue-900/30 dark:text-blue-300",
   member: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
 }
 
@@ -191,7 +191,7 @@ export default function OrgManagePage() {
         {canManage && (
           <button
             onClick={() => { setShowInvite(true); setGeneratedLink(null); setInviteTab("app") }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#194383] text-white rounded-lg text-sm font-medium hover:bg-[#143a72] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-[#00498B] text-white rounded-lg text-sm font-medium hover:bg-[#143a72] transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Einladen
@@ -350,7 +350,7 @@ export default function OrgManagePage() {
                   <div className="flex gap-2">
                     {(["admin", "member"] as const).map((r) => (
                       <button key={r} onClick={() => setInviteRole(r)}
-                        className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${inviteRole === r ? "border-[#194383] bg-blue-50 text-[#194383] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
+                        className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${inviteRole === r ? "border-[#00498B] bg-blue-50 text-[#00498B] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
                         {ROLE_LABELS[r]}
                       </button>
                     ))}
@@ -358,7 +358,7 @@ export default function OrgManagePage() {
                 </div>
 
                 <button onClick={handleSendInvite} disabled={!selectedUser || isSending}
-                  className="w-full py-3 bg-[#194383] text-white rounded-lg font-medium disabled:opacity-50 hover:bg-[#143a72] transition-colors">
+                  className="w-full py-3 bg-[#00498B] text-white rounded-lg font-medium disabled:opacity-50 hover:bg-[#143a72] transition-colors">
                   {isSending ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Einladung senden"}
                 </button>
               </>
@@ -372,7 +372,7 @@ export default function OrgManagePage() {
                       <div className="flex gap-2">
                         {(["admin", "member"] as const).map((r) => (
                           <button key={r} onClick={() => setInviteRole(r)}
-                            className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${inviteRole === r ? "border-[#194383] bg-blue-50 text-[#194383] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
+                            className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${inviteRole === r ? "border-[#00498B] bg-blue-50 text-[#00498B] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
                             {ROLE_LABELS[r]}
                           </button>
                         ))}
@@ -385,7 +385,7 @@ export default function OrgManagePage() {
                       <div className="flex gap-2">
                         {[{ label: "24 Std.", days: 1 }, { label: "7 Tage", days: 7 }, { label: "30 Tage", days: 30 }].map((opt) => (
                           <button key={opt.days} onClick={() => setExpiryDays(opt.days)}
-                            className={`flex-1 py-2 rounded-lg border text-sm transition-colors ${expiryDays === opt.days ? "border-[#194383] bg-blue-50 text-[#194383] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
+                            className={`flex-1 py-2 rounded-lg border text-sm transition-colors ${expiryDays === opt.days ? "border-[#00498B] bg-blue-50 text-[#00498B] dark:bg-blue-900/20 dark:border-blue-400 dark:text-blue-300" : "border-border text-muted-foreground"}`}>
                             {opt.label}
                           </button>
                         ))}
@@ -393,7 +393,7 @@ export default function OrgManagePage() {
                     </div>
 
                     <button onClick={handleCreateLink} disabled={isSending}
-                      className="w-full py-3 bg-[#194383] text-white rounded-lg font-medium disabled:opacity-50 hover:bg-[#143a72] transition-colors">
+                      className="w-full py-3 bg-[#00498B] text-white rounded-lg font-medium disabled:opacity-50 hover:bg-[#143a72] transition-colors">
                       {isSending ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Link erstellen"}
                     </button>
                     <p className="text-xs text-center text-muted-foreground">Link kann nur einmal verwendet werden</p>
@@ -407,7 +407,7 @@ export default function OrgManagePage() {
                         <Copy className="h-4 w-4" /> Kopieren
                       </button>
                       <button onClick={() => navigator.share?.({ url: generatedLink }).catch(() => {})}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#194383] text-white rounded-lg text-sm font-medium hover:bg-[#143a72] transition-colors">
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#00498B] text-white rounded-lg text-sm font-medium hover:bg-[#143a72] transition-colors">
                         <Share2 className="h-4 w-4" /> Teilen
                       </button>
                     </div>

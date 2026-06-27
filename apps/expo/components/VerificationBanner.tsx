@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   registerBanner: {
     backgroundColor: '#E3F2FD',
     borderWidth: 1,
-    borderColor: '#194383',
+    borderColor: '#00498B',
   },
   content: {
     flexDirection: 'row',

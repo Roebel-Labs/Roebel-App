@@ -8,8 +8,8 @@ export const colors = {
     200: "#B0C5DF",
     300: "#8AA9CF",
     400: "#5483B5",
-    500: "#1E4D8C", // Primary brand color
-    600: "#194383",
+    500: "#00498B", // Primary brand color
+    600: "#00498B",
     700: "#143670",
     800: "#0F295D",
     900: "#0A1A30",
@@ -61,11 +61,11 @@ export const darkTheme = {
   textPrimary: "#e8eaed",
   textSecondary: "#9aa0a6",
   textInverted: "#202124",
-  primary: "#8AB4F8",
+  primary: "#7ABBF2",
   primaryHover: "#AECBFA",
   accent: colors.amber[400],
   border: "#5f6368",
-  borderFocus: "#8AB4F8",
+  borderFocus: "#7ABBF2",
 } as const;
 
 export const spacing = {

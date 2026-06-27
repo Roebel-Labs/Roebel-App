@@ -64,7 +64,7 @@ export function StoreDownloadsChart({ daily }: { daily: StoreDailyPoint[] }) {
             type="monotone"
             dataKey="ios"
             name="App Store (iOS)"
-            stroke="#194383"
+            stroke="#00498B"
             strokeWidth={2}
             dot={false}
           />

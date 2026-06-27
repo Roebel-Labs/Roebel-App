@@ -97,7 +97,7 @@ export default function App() {
           </div>
           {inviter && (
             <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 font-mono text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#194383]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00498B]" />
               {inviter.slice(0, 6)}…{inviter.slice(-4)}
             </span>
           )}
@@ -112,7 +112,7 @@ export default function App() {
                 key={t.id}
                 onClick={() => selectTab(t.id)}
                 className={`flex flex-1 min-w-[60px] flex-col items-center gap-1 rounded-[8px] py-1.5 text-[11px] font-medium transition ${
-                  active ? "bg-card text-[#194383] shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  active ? "bg-card text-[#00498B] shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="h-[18px] w-[18px]" />
@@ -138,7 +138,7 @@ export default function App() {
             href={explorerAvatar(ROEBEL_GROUP)}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-[#194383] hover:underline"
+            className="inline-flex items-center gap-1 font-medium text-[#00498B] hover:underline"
           >
             On-chain proof
             <ArrowUpRight className="h-3 w-3" />

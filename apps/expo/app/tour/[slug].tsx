@@ -109,7 +109,7 @@ export default function TourDetailScreen() {
               lat: tour.start_lat,
               lon: tour.start_lon,
               emoji: '🚩',
-              color: '#194383',
+              color: '#00498B',
               size: 'lg',
             });
           }
@@ -122,7 +122,7 @@ export default function TourDetailScreen() {
               lat: s.lat,
               lon: s.lon,
               emoji: STOP_EMOJIS[s.stop_type || ''] || '📍',
-              color: isFinish ? '#D62828' : isStart ? '#194383' : diffColor,
+              color: isFinish ? '#D62828' : isStart ? '#00498B' : diffColor,
               size: isStart || isFinish ? 'lg' : 'sm',
             });
           });
@@ -182,7 +182,7 @@ export default function TourDetailScreen() {
         ) : null}
         {tour.highlights_de.map((h, i) => (
           <View key={i} style={styles.bullet}>
-            <Text style={[styles.bulletDot, { color: '#194383' }]}>•</Text>
+            <Text style={[styles.bulletDot, { color: '#00498B' }]}>•</Text>
             <Text style={[styles.bulletText, { color: colors.textPrimary }]}>{h}</Text>
           </View>
         ))}

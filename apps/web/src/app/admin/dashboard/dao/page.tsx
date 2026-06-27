@@ -471,7 +471,7 @@ export default function DaoDashboardPage() {
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary transition-all"
-                style={{ width: `${turnoutPct}%`, backgroundColor: "#194383" }}
+                style={{ width: `${turnoutPct}%`, backgroundColor: "#00498B" }}
               />
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2 text-sm">

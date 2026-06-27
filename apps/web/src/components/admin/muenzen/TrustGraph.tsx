@@ -23,7 +23,7 @@ const W = 820;
 const H = 540;
 
 const KIND_COLOR: Record<string, string> = {
-  group: "#194383",
+  group: "#00498B",
   citizen: "#16a34a",
   operator: "#8b5cf6",
   holder: "#64748b",
@@ -191,7 +191,7 @@ export function TrustGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphE
                 y1={pos[a].y}
                 x2={pos[b].x}
                 y2={pos[b].y}
-                stroke={active ? "#194383" : "#94a3b8"}
+                stroke={active ? "#00498B" : "#94a3b8"}
                 strokeWidth={active ? 1.6 : 0.8}
                 strokeOpacity={neighbors && !active ? 0.08 : 0.3}
               />

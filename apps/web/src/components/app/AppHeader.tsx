@@ -130,7 +130,7 @@ export function AppHeader({ onToggleMobileSidebar }: AppHeaderProps) {
                 label: "Anmelden",
                 style: {
                   backgroundColor:
-                    resolvedTheme === "dark" ? "#8AB4F8" : "#194383",
+                    resolvedTheme === "dark" ? "#7ABBF2" : "#00498B",
                   color: resolvedTheme === "dark" ? "#202124" : "#ffffff",
                   borderRadius: "9999px",
                   fontWeight: 600,

@@ -106,7 +106,7 @@ export function UsersByVerification({ rows }: { rows: AdminUserRow[] }) {
         label: "Verifizierte Bürger",
         description: "Halten das Bürger-NFT (on-chain verifiziert).",
         icon: ShieldCheck,
-        accent: "text-[#194383]",
+        accent: "text-[#00498B]",
         rows: verified,
         emptyLabel: "Noch keine verifizierten Bürger.",
       },

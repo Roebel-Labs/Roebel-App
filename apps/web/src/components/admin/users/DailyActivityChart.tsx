@@ -100,7 +100,7 @@ export function DailyActivityChart({
             type="monotone"
             dataKey="dau"
             name="DAU (echt)"
-            stroke="#194383"
+            stroke="#00498B"
             strokeWidth={2}
             dot={false}
           />

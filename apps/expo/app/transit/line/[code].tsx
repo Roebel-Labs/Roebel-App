@@ -206,7 +206,7 @@ export default function TransitLineDetail() {
             ) : null}
             {line.call_email ? (
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: '#194383' }]}
+                style={[styles.actionBtn, { backgroundColor: '#00498B' }]}
                 onPress={() => Linking.openURL(`mailto:${line.call_email}`)}
               >
                 <Text style={styles.actionText}>✉️ E-Mail</Text>
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
   stopDot: { width: 12, height: 12, borderRadius: 6 },
   stopName: { fontSize: 14, fontFamily: 'Inter-Medium' },
   stopNotes: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 2 },
-  stopBadge: { fontSize: 11, fontFamily: 'Inter-Medium', color: '#194383' },
+  stopBadge: { fontSize: 11, fontFamily: 'Inter-Medium', color: '#00498B' },
   depRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -87,7 +87,7 @@ function RequestRow({
             href={req.evidenceURI}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-0.5 inline-flex items-center gap-1 text-[#194383] hover:underline"
+            className="mt-0.5 inline-flex items-center gap-1 text-[#00498B] hover:underline"
           >
             <FileText className="h-3 w-3" /> Nachweis
           </a>

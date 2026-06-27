@@ -254,7 +254,7 @@ export function useNotifications(): UseNotificationsReturn {
           name: 'Default',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#194383',
+          lightColor: '#00498B',
         });
       }
 

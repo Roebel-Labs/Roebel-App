@@ -117,8 +117,8 @@ export default function PoiDetailScreen() {
               </Text>
             </View>
             {poi.is_24h ? (
-              <View style={[styles.typePill, { backgroundColor: '#194383' + '22' }]}>
-                <Text style={[styles.typePillText, { color: '#194383' }]}>24h</Text>
+              <View style={[styles.typePill, { backgroundColor: '#00498B' + '22' }]}>
+                <Text style={[styles.typePillText, { color: '#00498B' }]}>24h</Text>
               </View>
             ) : null}
             {poi.is_pannendienst ? (
@@ -176,7 +176,7 @@ export default function PoiDetailScreen() {
             ) : null}
             {poi.website ? (
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: '#194383' }]}
+                style={[styles.actionBtn, { backgroundColor: '#00498B' }]}
                 onPress={() => Linking.openURL(poi.website!)}
               >
                 <Text style={styles.actionText}>🌐 Website</Text>

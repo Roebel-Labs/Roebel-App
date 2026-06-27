@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   rcrcBadgeText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 15,
-    color: '#194383',
+    color: '#00498B',
   },
   balanceInline: {
     flexDirection: 'row',

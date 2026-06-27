@@ -77,7 +77,7 @@ export function TopUsersBars({
               fontSize: 12,
             }}
           />
-          <Bar dataKey="value" fill="#194383" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="value" fill="#00498B" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

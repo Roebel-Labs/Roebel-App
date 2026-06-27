@@ -35,9 +35,9 @@ export interface RadialNode {
 
 type ToneStyle = { card: string; ring: string; badge: boolean; navy: boolean };
 const TONE: Record<RadialNode["tone"], ToneStyle> = {
-  attester: { card: "border-[#194383]", ring: "ring-2 ring-[#194383]", badge: true, navy: true },
-  real: { card: "border-[#194383]", ring: "ring-2 ring-[#194383]", badge: true, navy: true },
-  verified: { card: "border-[#194383]/30", ring: "ring-2 ring-[#194383]/40", badge: false, navy: true },
+  attester: { card: "border-[#00498B]", ring: "ring-2 ring-[#00498B]", badge: true, navy: true },
+  real: { card: "border-[#00498B]", ring: "ring-2 ring-[#00498B]", badge: true, navy: true },
+  verified: { card: "border-[#00498B]/30", ring: "ring-2 ring-[#00498B]/40", badge: false, navy: true },
   open: { card: "border-dashed border-neutral-300", ring: "ring-1 ring-neutral-200", badge: false, navy: false },
   placeholder: { card: "border-dashed border-neutral-300", ring: "ring-1 ring-neutral-200", badge: false, navy: false },
 };
@@ -55,7 +55,7 @@ function MemberNode({ data }: NodeProps) {
       <div className="relative">
         <Avatar address={d.address ?? d.id} name={d.name ?? null} imageUrl={d.imageUrl ?? null} size={42} className={t.ring} />
         {t.badge && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#194383] text-white ring-2 ring-card">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00498B] text-white ring-2 ring-card">
             <Check className="h-2.5 w-2.5" />
           </span>
         )}
@@ -70,7 +70,7 @@ function MemberNode({ data }: NodeProps) {
 function GroupNode({ data }: NodeProps) {
   const d = data as unknown as { label: string; sub?: string; imageUrl?: string | null };
   return (
-    <div className="flex w-[150px] flex-col items-center gap-1 rounded-[14px] border-2 border-[#194383] bg-[#194383] px-3 py-3 text-center text-white shadow-md">
+    <div className="flex w-[150px] flex-col items-center gap-1 rounded-[14px] border-2 border-[#00498B] bg-[#00498B] px-3 py-3 text-center text-white shadow-md">
       <Handle type="source" position={Position.Bottom} className={HIDDEN_HANDLE} isConnectable={false} />
       <Handle type="target" position={Position.Top} className={HIDDEN_HANDLE} isConnectable={false} />
       {d.imageUrl ? (
@@ -141,7 +141,7 @@ export default function RadialGraph({
 
     const rfEdges: Edge[] = ordered.map((nd) => {
       const navy = TONE[nd.tone].navy;
-      const color = navy ? "#194383" : "#A3A3A3";
+      const color = navy ? "#00498B" : "#A3A3A3";
       return {
         id: `e-${nd.id}`,
         source: CENTER_ID,
@@ -187,7 +187,7 @@ export default function RadialGraph({
           zoomable
           className="!rounded-[8px] !border !border-border"
           maskColor="rgba(245,245,245,0.7)"
-          nodeColor={(n) => (n.type === "group" ? "#194383" : TONE[(n.data as unknown as RadialNode).tone]?.navy ? "#194383" : "#d4d4d4")}
+          nodeColor={(n) => (n.type === "group" ? "#00498B" : TONE[(n.data as unknown as RadialNode).tone]?.navy ? "#00498B" : "#d4d4d4")}
         />
       </ReactFlow>
     </div>

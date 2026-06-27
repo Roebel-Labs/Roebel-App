@@ -85,7 +85,7 @@ export default function PulseView() {
         ) : summary.totalAmount === 0 ? (
           <EmptyHint>No transfers yet — invite citizens to get the economy moving.</EmptyHint>
         ) : (
-          <AreaChart series={[{ color: "#194383", points: series.map((d) => d.total) }]} labels={series.map((d) => d.label)} height={190} />
+          <AreaChart series={[{ color: "#00498B", points: series.map((d) => d.total) }]} labels={series.map((d) => d.label)} height={190} />
         )}
       </ChartCard>
 
@@ -132,13 +132,13 @@ export default function PulseView() {
                       title={n.verified ? "Verified citizen" : undefined}
                     >
                       <Avatar address={n.address} name={p?.name ?? null} imageUrl={p?.imageUrl ?? null} size={28} />
-                      <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card ${n.verified ? "bg-[#194383]" : "bg-neutral-300"}`} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card ${n.verified ? "bg-[#00498B]" : "bg-neutral-300"}`} />
                     </a>
                     <a
                       href={`https://explorer.aboutcircles.com/avatar/${n.address}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-foreground hover:text-[#194383]"
+                      className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-foreground hover:text-[#00498B]"
                     >
                       {p?.name || shortAddr(n.address)}
                     </a>
@@ -164,7 +164,7 @@ export default function PulseView() {
               key={k}
               onClick={() => setFilter(k)}
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
-                filter === k ? "bg-[#194383] text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                filter === k ? "bg-[#00498B] text-white" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >
               {k === "all" ? "All" : flowLabel(k as FlowKind)}

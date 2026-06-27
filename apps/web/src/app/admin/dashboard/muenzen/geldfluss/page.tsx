@@ -89,7 +89,7 @@ export default function GeldflussPage() {
               onClick={() => setRange(r.key)}
               className={cn(
                 "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                range === r.key ? "bg-[#194383] text-white" : "text-muted-foreground hover:text-foreground",
+                range === r.key ? "bg-[#00498B] text-white" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {r.label}

@@ -31,7 +31,7 @@ export function MuenzenTabs() {
               )}
             >
               {tab.label}
-              {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#194383]" />}
+              {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#00498B]" />}
             </Link>
           );
         })}

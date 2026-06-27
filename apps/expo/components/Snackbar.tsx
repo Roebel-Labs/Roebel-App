@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#194383',
+    color: '#00498B',
   },
   closeButton: {
     padding: 4,

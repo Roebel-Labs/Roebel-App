@@ -233,8 +233,8 @@ export default function DesignSystemPage() {
                       <span className="text-muted-foreground">Background: #ffffff</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded" style={{background: "#194383"}} />
-                      <span className="text-muted-foreground">Primary: #194383</span>
+                      <div className="w-6 h-6 rounded" style={{background: "#00498B"}} />
+                      <span className="text-muted-foreground">Primary: #00498B</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded bg-black" />
@@ -254,8 +254,8 @@ export default function DesignSystemPage() {
                       <span className="text-muted-foreground">Background: #202124</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded" style={{background: "#8AB4F8"}} />
-                      <span className="text-muted-foreground">Primary: #8AB4F8</span>
+                      <div className="w-6 h-6 rounded" style={{background: "#7ABBF2"}} />
+                      <span className="text-muted-foreground">Primary: #7ABBF2</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded" style={{background: "#e8eaed"}} />

@@ -120,7 +120,7 @@ export default function SpeciesDetailScreen() {
               {species.name_scientific}
             </Text>
           ) : null}
-          <Text style={[styles.category, { color: '#194383' }]}>
+          <Text style={[styles.category, { color: '#00498B' }]}>
             {WILDLIFE_CATEGORY_LABELS_DE[species.category]}
           </Text>
 
@@ -299,6 +299,6 @@ const styles = StyleSheet.create({
   eventDesc: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 19, marginBottom: 4 },
   eventMeta: { fontSize: 12, fontFamily: 'Inter-Regular' },
   sightingRow: { padding: 12, borderRadius: 10, marginBottom: 6 },
-  sightingMeta: { fontSize: 12, fontFamily: 'Inter-Medium', color: '#194383' },
+  sightingMeta: { fontSize: 12, fontFamily: 'Inter-Medium', color: '#00498B' },
   sightingNotes: { fontSize: 13, fontFamily: 'Inter-Regular', fontStyle: 'italic', marginTop: 4 },
 });

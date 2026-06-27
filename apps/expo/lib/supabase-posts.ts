@@ -429,6 +429,76 @@ export async function getUserLikedPostIds(
   return new Set(data.map((d) => d.post_id));
 }
 
+/** A person who liked a post (display name resolved — never a raw wallet). */
+export type PostLiker = {
+  wallet_address: string;
+  username: string | null;
+  display_name: string | null;
+  profile_picture_url: string | null;
+};
+
+async function fetchPostLikers(postId: string, limit: number): Promise<PostLiker[]> {
+  // Newest likers first. post_likes may predate the created_at column, so fall
+  // back to an unordered query if the ordered one errors out.
+  let likes:
+    | { wallet_address: string }[]
+    | null = null;
+
+  const ordered = await supabase
+    .from('post_likes')
+    .select('wallet_address')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (ordered.error) {
+    const fallback = await supabase
+      .from('post_likes')
+      .select('wallet_address')
+      .eq('post_id', postId)
+      .limit(limit);
+    likes = fallback.data;
+  } else {
+    likes = ordered.data;
+  }
+
+  if (!likes || likes.length === 0) return [];
+
+  const wallets = likes.map((l) => l.wallet_address.toLowerCase());
+
+  const { data: users } = await supabase
+    .from('users')
+    .select('wallet_address, username, display_name, profile_picture_url')
+    .in('wallet_address', wallets);
+
+  const userMap = new Map(
+    (users ?? []).map((u) => [u.wallet_address.toLowerCase(), u])
+  );
+
+  return likes.map((l) => {
+    const user = userMap.get(l.wallet_address.toLowerCase());
+    // display_name → username, mirroring the like-notification fallback.
+    const resolved =
+      user?.display_name?.trim() || user?.username?.trim() || null;
+    return {
+      wallet_address: l.wallet_address,
+      username: user?.username ?? null,
+      display_name: resolved,
+      profile_picture_url: user?.profile_picture_url ?? null,
+    };
+  });
+}
+
+/** Top likers for the avatar facepile on the post detail screen. */
+export async function getPostLikers(postId: string, limit = 5): Promise<PostLiker[]> {
+  return fetchPostLikers(postId, limit);
+}
+
+/** All likers for the dedicated "who liked this" list screen. */
+export async function listPostLikers(postId: string): Promise<PostLiker[]> {
+  return fetchPostLikers(postId, 500);
+}
+
 // ─── Comments ───────────────────────────────────────────────
 
 /**

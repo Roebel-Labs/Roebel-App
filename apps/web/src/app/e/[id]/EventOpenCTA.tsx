@@ -59,7 +59,7 @@ export function EventOpenCTA({ id }: { id: string }) {
       <div className="flex flex-col gap-3">
         <a
           href={universalLink(id)}
-          className="px-6 py-4 rounded-full bg-white text-[#194383] font-semibold text-base hover:opacity-90 transition"
+          className="px-6 py-4 rounded-full bg-white text-[#00498B] font-semibold text-base hover:opacity-90 transition"
         >
           In der App öffnen
         </a>
@@ -89,7 +89,7 @@ export function EventOpenCTA({ id }: { id: string }) {
     <div className="flex flex-col gap-3">
       <button
         onClick={handleOpenApp}
-        className="px-6 py-4 rounded-full bg-white text-[#194383] font-semibold text-base hover:opacity-90 transition"
+        className="px-6 py-4 rounded-full bg-white text-[#00498B] font-semibold text-base hover:opacity-90 transition"
       >
         In der App öffnen
       </button>

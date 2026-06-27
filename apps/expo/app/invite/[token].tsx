@@ -93,7 +93,7 @@ export default function InviteTokenScreen() {
           <Text style={[styles.orgName, { color: colors.textPrimary }]}>{account?.name}</Text>
           <Text style={[styles.orgType, { color: colors.textSecondary }]}>{orgTypeLabel}</Text>
           {account?.is_verified && (
-            <Text style={[styles.verified, { color: isDark ? '#8AB4F8' : '#194383' }]}>Verifiziert ✓</Text>
+            <Text style={[styles.verified, { color: isDark ? '#7ABBF2' : '#00498B' }]}>Verifiziert ✓</Text>
           )}
         </View>
 
@@ -147,7 +147,7 @@ export default function InviteTokenScreen() {
             </Text>
             <Pressable
               onPress={() => setShowLoginDrawer(true)}
-              style={[styles.acceptButton, { backgroundColor: isDark ? '#8AB4F8' : '#194383' }]}
+              style={[styles.acceptButton, { backgroundColor: isDark ? '#7ABBF2' : '#00498B' }]}
             >
               <Text style={[styles.acceptText, { color: isDark ? '#1a1a2e' : '#FFFFFF' }]}>Anmelden</Text>
             </Pressable>
@@ -159,7 +159,7 @@ export default function InviteTokenScreen() {
               disabled={isAccepting || isDeclining}
               style={[
                 styles.acceptButton,
-                { backgroundColor: isDark ? '#8AB4F8' : '#194383' },
+                { backgroundColor: isDark ? '#7ABBF2' : '#00498B' },
                 (isAccepting || isDeclining) && styles.disabledButton,
               ]}
             >

@@ -74,7 +74,7 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
         styles.card,
         { backgroundColor: colors.surface },
         !isResolved && styles.unreadBorder,
-        !isResolved && { borderLeftColor: isDark ? '#8AB4F8' : '#194383' },
+        !isResolved && { borderLeftColor: isDark ? '#7ABBF2' : '#00498B' },
       ]}
     >
       <View style={styles.header}>
@@ -92,7 +92,7 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
           <Text style={[styles.time, { color: colors.textTertiary }]}>{timeAgo}</Text>
         </View>
         {!isResolved && (
-          <View style={[styles.unreadDot, { backgroundColor: isDark ? '#8AB4F8' : '#194383' }]} />
+          <View style={[styles.unreadDot, { backgroundColor: isDark ? '#7ABBF2' : '#00498B' }]} />
         )}
       </View>
 
@@ -111,7 +111,7 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
             disabled={isAccepting || isDeclining}
             style={[
               styles.acceptButton,
-              { backgroundColor: isDark ? '#8AB4F8' : '#194383' },
+              { backgroundColor: isDark ? '#7ABBF2' : '#00498B' },
               (isAccepting || isDeclining) && styles.disabledButton,
             ]}
           >
@@ -143,7 +143,7 @@ export default function InviteNotificationCard({ notification, onAccept, onDecli
             styles.resolvedText,
             {
               color: effective === 'accepted'
-                ? isDark ? '#8AB4F8' : '#194383'
+                ? isDark ? '#7ABBF2' : '#00498B'
                 : colors.textTertiary,
             },
           ]}

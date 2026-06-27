@@ -26,7 +26,7 @@ async function getDefaultCalendarId(): Promise<string> {
   // Fallback: create a local calendar
   const newCalendarId = await Calendar.createCalendarAsync({
     title: 'Röbel Events',
-    color: '#194383',
+    color: '#00498B',
     entityType: Calendar.EntityTypes.EVENT,
     source: {
       isLocalAccount: true,

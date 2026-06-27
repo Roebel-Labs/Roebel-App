@@ -177,7 +177,7 @@ export default function SightingDetailScreen() {
             </Pressable>
             {species ? (
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: '#194383' }]}
+                style={[styles.actionBtn, { backgroundColor: '#00498B' }]}
                 onPress={() =>
                   router.push({
                     pathname: '/wildlife/species/[slug]',

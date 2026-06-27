@@ -22,7 +22,7 @@ export function SuccessRedirect({ returnTo }: Props) {
   return (
     <a
       href={returnTo}
-      className="inline-flex items-center justify-center rounded-full bg-[#194383] text-white px-5 py-3 text-sm font-semibold"
+      className="inline-flex items-center justify-center rounded-full bg-[#00498B] text-white px-5 py-3 text-sm font-semibold"
     >
       Zurück zur App
     </a>

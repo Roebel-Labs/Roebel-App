@@ -121,7 +121,7 @@ export default function TownView({ connected }: { connected: Address | null }) {
             <Skeleton className="h-[132px]" />
           ) : (
             <div className="flex flex-col items-center">
-              <Donut value={backing} label={backing >= 1 ? "100%" : pct(backing, 0)} sub="backed" color="#194383" />
+              <Donut value={backing} label={backing >= 1 ? "100%" : pct(backing, 0)} sub="backed" color="#00498B" />
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 {backing >= 0.999 ? "Every coin is fully backed 1:1." : "Each coin is backed by locked personal CRC."}
               </p>
@@ -175,8 +175,8 @@ function Legend() {
   // Navy = in the group (filled = attester, outlined = verified citizen),
   // neutral = not yet trusted. No other colour.
   const items = [
-    { l: "Verified citizen", style: { backgroundColor: "#E8EEF7", boxShadow: "inset 0 0 0 1.5px #194383" } },
-    { l: "Attester", style: { backgroundColor: "#194383" } },
+    { l: "Verified citizen", style: { backgroundColor: "#E8EEF7", boxShadow: "inset 0 0 0 1.5px #00498B" } },
+    { l: "Attester", style: { backgroundColor: "#00498B" } },
     { l: "Not yet trusted", style: { backgroundColor: "#A3A3A3" } },
   ];
   return (
@@ -278,7 +278,7 @@ function ExportCard({ verifiedSet, rep, citizens }: { verifiedSet: Set<string>; 
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`rounded-[7px] px-2 py-1 text-[11px] font-medium transition ${range === r ? "bg-[#194383] text-white" : "text-muted-foreground hover:text-foreground"}`}
+                className={`rounded-[7px] px-2 py-1 text-[11px] font-medium transition ${range === r ? "bg-[#00498B] text-white" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {r === "7d" ? "Last 7 days" : "All"}
               </button>
@@ -301,7 +301,7 @@ function ExportCard({ verifiedSet, rep, citizens }: { verifiedSet: Set<string>; 
           </button>
         </div>
         {toast ? (
-          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#194383]">
+          <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#00498B]">
             <Check className="h-3.5 w-3.5" />
             {toast}
           </p>

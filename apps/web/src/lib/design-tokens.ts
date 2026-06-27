@@ -12,13 +12,13 @@
  * Light mode palette:
  *   Background: #ffffff (white)
  *   Card:       #ffffff
- *   Primary:    #194383 (dark blue)
+ *   Primary:    #00498B (dark blue)
  *   Text:       #0a0a0a / #737373 (foreground / muted)
  *
  * Dark mode palette:
  *   Background: #202124 (near-black)
  *   Card:       #3c4043 (medium-dark gray)
- *   Primary:    #8AB4F8 (light blue)
+ *   Primary:    #7ABBF2 (light blue)
  *   Text:       #e8eaed / #9aa0a6 (foreground / muted)
  *
  * NEVER use hardcoded colors (bg-card, text-foreground, border-border).
@@ -72,11 +72,11 @@ export const colors = {
 // =============================================================================
 
 export const typography = {
-  // Headings - Mona Sans SemiCondensed Bold for h1/h2, regular font for h3/h4
+  // Headings - all levels use Mona Sans SemiCondensed (h1/h2 bold, h3/h4 semibold)
   h1: "text-3xl font-bold tracking-tight font-heading",
   h2: "text-2xl font-bold tracking-tight font-heading",
-  h3: "text-xl font-medium tracking-tight",
-  h4: "text-lg font-medium",
+  h3: "text-xl font-semibold tracking-tight font-heading",
+  h4: "text-lg font-semibold font-heading",
 
   // Body text
   bodyLarge: "text-base text-foreground leading-relaxed",

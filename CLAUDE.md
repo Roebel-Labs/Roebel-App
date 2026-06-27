@@ -177,7 +177,7 @@ chore(deps): upgrade Expo SDK
 ## Development Notes
 
 - All UI text in German (primary), English (secondary)
-- Primary color: `#194383` (Navy, from Roebel coat of arms)
+- Primary color: `#00498B` (Navy, from Roebel coat of arms; rebranded 2026-06-27 from `#194383`). Secondary text `#6B7280`, borders `#B4B8C1`.
 - Font: Inter family (body), Plus Jakarta Sans (headings)
 - Mecky = AI chatbot mascot (Claude-powered, German language)
 

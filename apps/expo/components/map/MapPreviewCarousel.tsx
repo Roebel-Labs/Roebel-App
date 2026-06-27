@@ -383,8 +383,8 @@ function renderInfo(item: CarouselItem, colors: any) {
               <Text style={[styles.categoryChipText, { color: '#374453' }]}>{typeLabel}</Text>
             </View>
             {p.is_24h ? (
-              <View style={[styles.categoryChip, { backgroundColor: '#194383' + '1A', marginLeft: 6 }]}>
-                <Text style={[styles.categoryChipText, { color: '#194383' }]}>24h</Text>
+              <View style={[styles.categoryChip, { backgroundColor: '#00498B' + '1A', marginLeft: 6 }]}>
+                <Text style={[styles.categoryChipText, { color: '#00498B' }]}>24h</Text>
               </View>
             ) : null}
             {p.is_pannendienst ? (

@@ -60,7 +60,7 @@ export default function GrowCard({ wallet }: { wallet: Address | null }) {
             <div className="mt-2.5 flex gap-2">
               <button
                 onClick={copy}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied" : "Copy link"}

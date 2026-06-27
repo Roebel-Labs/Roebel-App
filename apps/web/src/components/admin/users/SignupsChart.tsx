@@ -91,8 +91,8 @@ export function SignupsChart({ rows }: { rows: SignupRow[] }) {
             >
               <defs>
                 <linearGradient id="signupsFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#194383" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#194383" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="#00498B" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#00498B" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid
@@ -135,7 +135,7 @@ export function SignupsChart({ rows }: { rows: SignupRow[] }) {
               <Area
                 type="monotone"
                 dataKey="cumulative"
-                stroke="#194383"
+                stroke="#00498B"
                 strokeWidth={2}
                 fill="url(#signupsFill)"
               />

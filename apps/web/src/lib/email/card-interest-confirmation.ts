@@ -51,7 +51,7 @@ function buildCitizenHtml({ greeting, plz }: { greeting: string; plz: string }):
       <td align="center" style="padding:40px 20px;">
         <table role="presentation" style="width:100%;max-width:520px;border-collapse:collapse;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
           <tr>
-            <td style="background:#194383;padding:24px;text-align:center;">
+            <td style="background:#00498B;padding:24px;text-align:center;">
               <p style="margin:0;color:#ffffff;font-size:14px;letter-spacing:0.04em;text-transform:uppercase;">Röbel Card</p>
             </td>
           </tr>
@@ -80,7 +80,7 @@ function buildCitizenHtml({ greeting, plz }: { greeting: string; plz: string }):
               <div style="border-top:1px solid #eaeaea;padding-top:20px;">
                 <p style="margin:0;color:#7a7a7a;font-size:13px;line-height:1.5;">
                   Fragen? Antworten Sie einfach auf diese E-Mail oder schreiben Sie uns
-                  unter <a href="mailto:support@roebel.app" style="color:#194383;text-decoration:underline;">support@roebel.app</a>.
+                  unter <a href="mailto:support@roebel.app" style="color:#00498B;text-decoration:underline;">support@roebel.app</a>.
                 </p>
               </div>
             </td>

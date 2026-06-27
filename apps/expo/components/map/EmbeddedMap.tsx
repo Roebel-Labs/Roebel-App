@@ -68,7 +68,7 @@ function pointsToGeoJSON(
       properties: {
         id: p.id,
         emoji: p.emoji ?? '',
-        color: p.color ?? '#194383',
+        color: p.color ?? '#00498B',
         label: p.label ?? '',
         size: p.size ?? 'md',
       },

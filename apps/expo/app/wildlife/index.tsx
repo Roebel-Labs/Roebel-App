@@ -325,7 +325,7 @@ function EventCard({
         ) : null}
       </View>
       {species ? (
-        <Text style={[styles.eventSpecies, { color: '#194383' }]}>{species.name_de}</Text>
+        <Text style={[styles.eventSpecies, { color: '#00498B' }]}>{species.name_de}</Text>
       ) : null}
       {event.description_de ? (
         <Text style={[styles.eventDesc, { color: colors.textPrimary }]}>

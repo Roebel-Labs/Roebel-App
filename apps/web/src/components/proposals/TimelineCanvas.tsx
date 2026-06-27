@@ -64,7 +64,7 @@ export function TimelineCanvas({ groups }: TimelineCanvasProps) {
         type: "smoothstep",
         animated: true,
         style: {
-          stroke: "#8AB4F8",
+          stroke: "#7ABBF2",
           strokeWidth: 2,
           strokeDasharray: "6 6",
         },
@@ -72,7 +72,7 @@ export function TimelineCanvas({ groups }: TimelineCanvasProps) {
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          color: "#8AB4F8",
+          color: "#7ABBF2",
         },
       });
     }
@@ -115,7 +115,7 @@ export function TimelineCanvas({ groups }: TimelineCanvasProps) {
         <MiniMap
           pannable
           zoomable
-          nodeColor="#194383"
+          nodeColor="#00498B"
           maskColor="rgb(0,0,0,0.05)"
           className="!border !border-border !bg-card !shadow-md"
         />

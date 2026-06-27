@@ -48,7 +48,7 @@ export function InviteTool() {
           type="button"
           disabled={!valid || busy}
           onClick={invite}
-          className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#194383] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#00498B] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           <UserPlus className="h-4 w-4" />
           {busy ? "Lädt ein…" : "Einladen"}

@@ -9,7 +9,7 @@ import { CreditCard, Star, ArrowRight, TrendingUp } from "lucide-react";
 
 const tierColors: Record<RoebelTier, string> = {
   besucher: "from-slate-500 to-slate-600",
-  burger: "from-[#194383] to-blue-700",
+  burger: "from-[#00498B] to-blue-700",
   supporter: "from-amber-500 to-orange-600",
 };
 

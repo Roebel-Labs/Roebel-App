@@ -383,7 +383,7 @@ const Card = React.memo(function Card({
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               {isBookmarked ? (
-                <BookmarkActiveSvg size={24} color="#194383" />
+                <BookmarkActiveSvg size={24} color="#00498B" />
               ) : (
                 <BookmarkIcon 
                   size={24}

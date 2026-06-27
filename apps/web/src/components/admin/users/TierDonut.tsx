@@ -16,7 +16,7 @@ export interface TierSlice {
 }
 
 const TIER_COLORS: Record<string, string> = {
-  citizen: "#194383",
+  citizen: "#00498B",
   tourist: "#16a34a",
   guest: "#94a3b8",
 };

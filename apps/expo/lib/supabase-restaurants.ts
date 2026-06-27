@@ -192,7 +192,7 @@ export async function createRestaurant(input: {
       ...input,
       slug: `${slug}-${Date.now().toString(36)}`,
       status: 'pending',
-      background_color: '#194383',
+      background_color: '#00498B',
     })
     .select()
     .single();

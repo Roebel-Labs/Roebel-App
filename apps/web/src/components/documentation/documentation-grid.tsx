@@ -32,7 +32,7 @@ export function DocumentationGrid({ chapters }: DocumentationGridProps) {
             <span className="text-sm font-medium text-muted-foreground">
               Kapitel {index + 1}
             </span>
-            <h2 className="mt-1 text-lg font-medium text-foreground group-hover:text-[#194383]">
+            <h2 className="mt-1 text-lg font-medium text-foreground group-hover:text-[#00498B]">
               {chapter.title}
             </h2>
           </div>

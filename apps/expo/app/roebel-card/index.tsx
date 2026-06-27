@@ -161,7 +161,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
               styles.primaryButton,
               interest.isSubmitted
                 ? styles.primaryButtonSubmitted
-                : { backgroundColor: '#194383' },
+                : { backgroundColor: '#00498B' },
             ]}
             accessibilityRole="button"
             accessibilityLabel={
@@ -177,7 +177,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
               <Text
                 style={[
                   styles.primaryButtonText,
-                  { color: interest.isSubmitted ? '#194383' : '#ffffff' },
+                  { color: interest.isSubmitted ? '#00498B' : '#ffffff' },
                 ]}
               >
                 {interest.isSubmitted ? 'Interessiert ✓' : 'Interessiert'}
@@ -249,7 +249,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
               styles.primaryButtonCompact,
               interest.isSubmitted
                 ? styles.primaryButtonCompactSubmitted
-                : { backgroundColor: '#194383' },
+                : { backgroundColor: '#00498B' },
             ]}
             accessibilityRole="button"
             accessibilityLabel={
@@ -265,7 +265,7 @@ function BuyerLanding({ card }: BuyerLandingProps) {
               <Text
                 style={[
                   styles.primaryButtonText,
-                  { color: interest.isSubmitted ? '#194383' : '#ffffff' },
+                  { color: interest.isSubmitted ? '#00498B' : '#ffffff' },
                 ]}
               >
                 {interest.isSubmitted ? 'Interessiert ✓' : 'Interessiert'}
@@ -377,7 +377,7 @@ function OrgLanding() {
         <View style={styles.ctaWrapper}>
           <Pressable
             onPress={handlePartnerPress}
-            style={[styles.primaryButton, { backgroundColor: '#194383' }]}
+            style={[styles.primaryButton, { backgroundColor: '#00498B' }]}
             accessibilityRole="button"
             accessibilityLabel={'Partner werden'}
           >
@@ -418,7 +418,7 @@ function OrgLanding() {
           </Pressable>
           <Pressable
             onPress={handlePartnerPress}
-            style={[styles.primaryButtonCompact, { backgroundColor: '#194383' }]}
+            style={[styles.primaryButtonCompact, { backgroundColor: '#00498B' }]}
             accessibilityRole="button"
             accessibilityLabel={'Partner werden'}
           >
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   primaryButtonSubmitted: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: '#194383',
+    borderColor: '#00498B',
   },
   primaryButtonCompact: {
     borderRadius: 24,
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   primaryButtonCompactSubmitted: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: '#194383',
+    borderColor: '#00498B',
   },
   primaryButtonText: {
     fontSize: 15,

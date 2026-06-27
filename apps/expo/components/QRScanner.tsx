@@ -81,8 +81,9 @@ function parseQRCode(data: string): QRScanResult {
     };
   }
 
-  // Smart Event QR: https://www.roebel.app/e/<eventId>
-  const eventMatch = data.match(/roebel\.app\/e\/([0-9a-f-]{36})/i);
+  // Smart Event QR: https://www.roebel.app/e/<eventId> OR the custom-scheme
+  // deep-link form roebel://e/<eventId> (e.g. when a web landing hands off).
+  const eventMatch = data.match(/(?:roebel\.app\/e\/|roebel:\/\/e\/)([0-9a-f-]{36})/i);
   if (eventMatch) {
     return { type: 'event', data, id: eventMatch[1] };
   }
@@ -138,6 +139,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         stamp: 'Stempelkarte',
         order: 'Bestellung',
         roebel_card: 'Röbel Card',
+        event: 'Event',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
@@ -366,7 +368,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   scanAgainButton: {
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -384,7 +386,7 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   button: {
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,

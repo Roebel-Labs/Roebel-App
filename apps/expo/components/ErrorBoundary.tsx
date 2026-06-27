@@ -9,7 +9,7 @@ const fallbackColors = {
   textSecondary: '#6b7280',
   surface: '#f3f4f6',
   error: '#dc2626',
-  primary: '#194383',
+  primary: '#00498B',
   onPrimary: '#ffffff',
 };
 

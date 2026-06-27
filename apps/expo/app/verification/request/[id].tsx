@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   fallbackButton: {
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 32,

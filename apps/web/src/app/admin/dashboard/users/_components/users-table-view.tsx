@@ -115,7 +115,7 @@ export function UsersTableView({
                               formatWalletAddress(r.wallet_address)}
                           </span>
                           {r.is_verified_citizen && (
-                            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#194383]" />
+                            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#00498B]" />
                           )}
                         </div>
                         <span className="font-mono text-xs text-muted-foreground">

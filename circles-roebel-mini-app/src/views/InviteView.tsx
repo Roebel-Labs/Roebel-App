@@ -157,12 +157,12 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
           {selectable ? (
             <input
               type="checkbox"
-              className="h-[18px] w-[18px] shrink-0 accent-[#194383]"
+              className="h-[18px] w-[18px] shrink-0 accent-[#00498B]"
               checked={selected.has(key)}
               onChange={() => toggle(c.address)}
             />
           ) : (
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#194383] text-white">
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#00498B] text-white">
               <Check className="h-2.5 w-2.5" />
             </span>
           )}
@@ -172,7 +172,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
               href={explorerAvatar(c.address)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-foreground hover:text-[#194383]"
+              className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-foreground hover:text-[#00498B]"
             >
               <span className="truncate">{name}</span>
               <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -277,7 +277,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
             onChange={(e) => setExtra(e.target.value.trim())}
             placeholder="0x…"
             spellCheck={false}
-            className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2 font-mono text-sm outline-none transition focus:border-[#194383] focus:ring-2 focus:ring-[#194383]/15"
+            className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2 font-mono text-sm outline-none transition focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/15"
           />
           {extra && !extraValid && <p className="mt-1 text-xs font-medium text-foreground">Not a valid address.</p>}
         </div>
@@ -291,7 +291,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         <button
           onClick={invite}
           disabled={busy || !inviter || inviteCount === 0 || !!overQuota || !!overFunded}
-          className="inline-flex items-center gap-2 rounded-[10px] bg-[#194383] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-[10px] bg-[#00498B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40"
         >
           <UserPlus className="h-4 w-4" />
           {busy ? "Inviting…" : `Invite (${inviteCount})`}
@@ -307,7 +307,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       {inviter && selfFund && (
         <Card className="p-3.5">
           <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-[#194383]" />
+            <Wallet className="h-4 w-4 text-[#00498B]" />
             <span className="text-[13px] font-semibold text-foreground">Self-fund — no quota needed</span>
           </div>
           <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
@@ -317,7 +317,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
           <button
             onClick={selfFundInvite}
             disabled={busy || selfFund.affordable === 0 || selectedList.length === 0}
-            className="mt-2.5 w-full rounded-[10px] border border-[#194383] bg-card px-4 py-2.5 text-sm font-semibold text-[#194383] transition hover:bg-[#194383]/5 active:scale-[0.99] disabled:opacity-40"
+            className="mt-2.5 w-full rounded-[10px] border border-[#00498B] bg-card px-4 py-2.5 text-sm font-semibold text-[#00498B] transition hover:bg-[#00498B]/5 active:scale-[0.99] disabled:opacity-40"
           >
             {busy ? "Working…" : `Self-fund invite (${Math.min(selectedList.length, selfFund.affordable)})`}
           </button>

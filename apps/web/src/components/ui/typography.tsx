@@ -12,8 +12,8 @@ const headingVariants = cva("text-foreground", {
     level: {
       h1: "text-3xl font-bold tracking-tight font-heading",
       h2: "text-2xl font-bold tracking-tight font-heading",
-      h3: "text-xl font-medium tracking-tight",
-      h4: "text-lg font-medium",
+      h3: "text-xl font-semibold tracking-tight font-heading",
+      h4: "text-lg font-semibold font-heading",
     },
   },
   defaultVariants: {

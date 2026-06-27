@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   primaryButton: {
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,

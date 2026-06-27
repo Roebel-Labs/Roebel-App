@@ -52,7 +52,7 @@ interface TrustData {
 }
 
 const PART_COLORS = {
-  trust: "#194383",
+  trust: "#00498B",
   attendance: "#f59e0b",
   civic: "#16a34a",
   economic: "#8b5cf6",
@@ -173,7 +173,7 @@ export default function VertrauenPage() {
                       <XAxis dataKey="bucket" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} />
                       <YAxis allowDecimals={false} tick={axisTick} tickLine={false} axisLine={false} width={32} />
                       <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
-                      <Bar dataKey="count" name="Halter" fill="#194383" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" name="Halter" fill="#00498B" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

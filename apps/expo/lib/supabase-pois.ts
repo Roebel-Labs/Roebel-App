@@ -95,7 +95,7 @@ export const POI_TYPE_COLORS: Record<PoiType, string> = {
   bike_rental: '#F4A261',
   swim_spot: '#00A6FB',
   indoor_alternative: '#9B5DE5',
-  tourist_info: '#194383',
+  tourist_info: '#00498B',
   pharmacy: '#D62828',
   observation_stand: '#2B9348',
   viewpoint: '#FFB703',

@@ -63,7 +63,7 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
             name: 'Default',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#194383',
+            lightColor: '#00498B',
           });
         }
       }
@@ -192,7 +192,7 @@ const toggleStyles = StyleSheet.create({
     elevation: 2,
   },
   check: {
-    color: '#194383',
+    color: '#00498B',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },

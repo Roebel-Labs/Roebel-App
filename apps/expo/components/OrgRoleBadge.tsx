@@ -11,8 +11,8 @@ type Props = {
 const ROLE_CONFIG: Record<OrgRole, { label: string; bgLight: string; bgDark: string; textLight: string; textDark: string }> = {
   owner: {
     label: 'Inhaber',
-    bgLight: '#194383',
-    bgDark: '#194383',
+    bgLight: '#00498B',
+    bgDark: '#00498B',
     textLight: '#FFFFFF',
     textDark: '#FFFFFF',
   },
@@ -20,8 +20,8 @@ const ROLE_CONFIG: Record<OrgRole, { label: string; bgLight: string; bgDark: str
     label: 'Admin',
     bgLight: '#DBEAFE',
     bgDark: '#1E3A5F',
-    textLight: '#194383',
-    textDark: '#8AB4F8',
+    textLight: '#00498B',
+    textDark: '#7ABBF2',
   },
   member: {
     label: 'Mitglied',

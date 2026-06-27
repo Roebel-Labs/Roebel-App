@@ -54,7 +54,7 @@ const KIND_ICON: Record<string, ReactNode> = {
   holder: <WalletIcon className="h-5 w-5" />,
 };
 const KIND_TONE: Record<string, string> = {
-  reserve: "text-[#194383] bg-[#194383]/10",
+  reserve: "text-[#00498B] bg-[#00498B]/10",
   hot: "text-amber-600 bg-amber-100 dark:bg-amber-950",
   vault: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950",
   service: "text-sky-600 bg-sky-100 dark:bg-sky-950",

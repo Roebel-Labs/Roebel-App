@@ -118,7 +118,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
       <div className="fixed inset-0 z-50 bg-white flex flex-col">
         {/* Minimal header */}
         <div className="flex justify-between items-center px-6 md:px-10 py-5 border-b border-gray-100">
-          <span className="text-xl font-bold text-[#194383]">Röbel</span>
+          <span className="text-xl font-bold text-[#00498B]">Röbel</span>
           <Link
             href="/app/gewerbe"
             className="border border-gray-300 rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -187,7 +187,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
         <div className="border-t border-gray-200 px-6 md:px-10 py-5 flex justify-end">
           <button
             onClick={() => setStep(2)}
-            className="bg-[#194383] hover:bg-[#143a72] text-white px-7 py-3.5 rounded-lg font-semibold text-base transition-colors"
+            className="bg-[#00498B] hover:bg-[#143a72] text-white px-7 py-3.5 rounded-lg font-semibold text-base transition-colors"
           >
             Loslegen
           </button>
@@ -217,7 +217,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               onClick={() => update({ orgType: type.value })}
               className={`flex items-center gap-4 p-5 rounded-xl border-2 text-left transition-all ${
                 state.orgType === type.value
-                  ? "border-[#194383] bg-blue-50/50"
+                  ? "border-[#00498B] bg-blue-50/50"
                   : "border-gray-200 hover:border-gray-300"
               }`}
             >
@@ -254,7 +254,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               value={state.name}
               onChange={(e) => update({ name: e.target.value.slice(0, 100) })}
               placeholder="z.B. Bäckerei Müller"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent"
             />
             <div className="text-xs text-gray-400 mt-1 text-right">
               {state.name.length}/100
@@ -269,7 +269,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               <select
                 value={state.category || ""}
                 onChange={(e) => update({ category: e.target.value as BusinessCategory })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent"
               >
                 <option value="">Kategorie wählen...</option>
                 {BUSINESS_CATEGORIES.map((cat) => (
@@ -290,7 +290,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               onChange={(e) => update({ description: e.target.value.slice(0, 500) })}
               placeholder="Beschreibe dein Gewerbe in ein paar Sätzen..."
               rows={4}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent resize-none"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent resize-none"
             />
             <div className="text-xs text-gray-400 mt-1 text-right">
               {state.description.length}/500
@@ -329,7 +329,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
                   })
                 }
                 placeholder="Marktplatz 1, 17207 Röbel/Müritz"
-                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent ${
+                className={`w-full pl-11 pr-4 py-3 border rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent ${
                   state.formattedAddress
                     ? "border-green-400 bg-green-50/30"
                     : "border-gray-300"
@@ -372,7 +372,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
                 value={state.phone}
                 onChange={(e) => update({ phone: e.target.value })}
                 placeholder="+49 ..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent"
               />
             </div>
             <div>
@@ -382,7 +382,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
                 value={state.email}
                 onChange={(e) => update({ email: e.target.value })}
                 placeholder="info@example.de"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent"
               />
             </div>
           </div>
@@ -394,7 +394,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               value={state.website}
               onChange={(e) => update({ website: e.target.value })}
               placeholder="https://www.example.de"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#194383] focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#00498B] focus:border-transparent"
             />
           </div>
 
@@ -519,7 +519,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
               </div>
               <button
                 onClick={() => setStep(section.step)}
-                className="text-sm font-medium text-[#194383] hover:underline flex-shrink-0 ml-4"
+                className="text-sm font-medium text-[#00498B] hover:underline flex-shrink-0 ml-4"
               >
                 Bearbeiten
               </button>
@@ -555,7 +555,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
             </div>
             <button
               onClick={() => setStep(6)}
-              className="text-sm font-medium text-[#194383] hover:underline flex-shrink-0 ml-4"
+              className="text-sm font-medium text-[#00498B] hover:underline flex-shrink-0 ml-4"
             >
               Bearbeiten
             </button>
@@ -571,7 +571,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
       <div className="fixed inset-0 z-50 bg-white flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center px-6 md:px-10 py-3 border-b border-gray-100">
-          <span className="text-xl font-bold text-[#194383]">Röbel</span>
+          <span className="text-xl font-bold text-[#00498B]">Röbel</span>
           <Link
             href="/app/gewerbe"
             className="border border-gray-300 rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -582,7 +582,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
 
         {/* Progress bar — 100% */}
         <div className="h-1 bg-gray-100">
-          <div className="h-1 bg-[#194383] w-full" />
+          <div className="h-1 bg-[#00498B] w-full" />
         </div>
 
         {/* Main content */}
@@ -608,7 +608,7 @@ export function OrgRegistrationWizard({ walletAddress }: OrgRegistrationWizardPr
             <div className="flex flex-col gap-3 items-start">
               <button
                 onClick={() => router.push("/dashboard/ads")}
-                className="bg-[#194383] hover:bg-[#143a72] text-white px-8 py-3.5 rounded-lg font-semibold text-base transition-colors"
+                className="bg-[#00498B] hover:bg-[#143a72] text-white px-8 py-3.5 rounded-lg font-semibold text-base transition-colors"
               >
                 Jetzt erste Anzeige erstellen
               </button>
@@ -663,7 +663,7 @@ function WizardShell({
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
       {/* Header */}
       <div className="flex justify-between items-center px-6 md:px-10 py-3 border-b border-gray-100">
-        <span className="text-xl font-bold text-[#194383]">Röbel</span>
+        <span className="text-xl font-bold text-[#00498B]">Röbel</span>
         <Link
           href="/app/gewerbe"
           className="border border-gray-300 rounded-full px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -675,7 +675,7 @@ function WizardShell({
       {/* Progress bar */}
       <div className="h-1 bg-gray-100">
         <div
-          className="h-1 bg-[#194383] transition-all duration-500"
+          className="h-1 bg-[#00498B] transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -701,7 +701,7 @@ function WizardShell({
         <button
           onClick={onNext}
           disabled={!canAdvance || isLoading}
-          className="bg-[#194383] hover:bg-[#143a72] disabled:bg-gray-200 disabled:text-gray-400 text-white px-7 py-3 rounded-lg font-semibold text-sm transition-colors flex items-center gap-2"
+          className="bg-[#00498B] hover:bg-[#143a72] disabled:bg-gray-200 disabled:text-gray-400 text-white px-7 py-3 rounded-lg font-semibold text-sm transition-colors flex items-center gap-2"
         >
           {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
           {nextLabel}

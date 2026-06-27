@@ -88,7 +88,7 @@ export default function InviteTokenPage() {
 
   const ROLE_LABELS: Record<string, string> = { admin: "Admin", member: "Mitglied" }
   const ROLE_STYLES: Record<string, string> = {
-    admin: "bg-blue-100 text-[#194383]",
+    admin: "bg-blue-100 text-[#00498B]",
     member: "bg-gray-100 text-gray-600",
   }
 
@@ -107,7 +107,7 @@ export default function InviteTokenPage() {
           <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
           <h1 className="text-xl font-semibold">Einladung ungültig</h1>
           <p className="text-muted-foreground">{error}</p>
-          <button onClick={() => router.push("/")} className="text-sm text-[#194383] font-medium hover:underline">
+          <button onClick={() => router.push("/")} className="text-sm text-[#00498B] font-medium hover:underline">
             Zur Startseite
           </button>
         </div>
@@ -134,7 +134,7 @@ export default function InviteTokenPage() {
           <h1 className="text-2xl font-bold">{account?.name}</h1>
           <p className="text-muted-foreground text-sm">{orgTypeLabel}</p>
           {account?.is_verified && (
-            <p className="text-sm text-[#194383] font-medium">Verifiziert ✓</p>
+            <p className="text-sm text-[#00498B] font-medium">Verifiziert ✓</p>
           )}
         </div>
 
@@ -178,7 +178,7 @@ export default function InviteTokenPage() {
               {resolved === "accepted" ? "Einladung angenommen" : "Einladung abgelehnt"}
             </p>
             {resolved === "accepted" && (
-              <button onClick={() => router.push("/app")} className="text-sm text-[#194383] font-medium hover:underline">
+              <button onClick={() => router.push("/app")} className="text-sm text-[#00498B] font-medium hover:underline">
                 Zur App →
               </button>
             )}
@@ -186,7 +186,7 @@ export default function InviteTokenPage() {
         ) : !walletAddress ? (
           <div className="text-center space-y-3 py-4">
             <p className="text-sm text-muted-foreground">Melde dich an, um diese Einladung anzunehmen</p>
-            <button onClick={() => router.push("/app")} className="w-full py-3 bg-[#194383] text-white rounded-xl font-medium hover:bg-[#143a72] transition-colors">
+            <button onClick={() => router.push("/app")} className="w-full py-3 bg-[#00498B] text-white rounded-xl font-medium hover:bg-[#143a72] transition-colors">
               Anmelden
             </button>
           </div>
@@ -195,7 +195,7 @@ export default function InviteTokenPage() {
             <button
               onClick={handleAccept}
               disabled={isAccepting || isDeclining}
-              className="w-full py-3 bg-[#194383] text-white rounded-xl font-medium hover:bg-[#143a72] transition-colors disabled:opacity-50"
+              className="w-full py-3 bg-[#00498B] text-white rounded-xl font-medium hover:bg-[#143a72] transition-colors disabled:opacity-50"
             >
               {isAccepting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Annehmen"}
             </button>

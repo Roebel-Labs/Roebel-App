@@ -17,7 +17,7 @@ const TIER_LABELS: Record<string, string> = {
 
 const TIER_COLORS: Record<string, string> = {
   besucher: '#6b7280',
-  burger: '#194383',
+  burger: '#00498B',
   supporter: '#7c3aed',
 };
 

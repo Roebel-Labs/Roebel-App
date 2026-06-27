@@ -11,7 +11,7 @@ import { Refresh, ArrowUpRight, Check } from "./icons";
 export type Tone = "primary" | "success" | "warning" | "danger" | "info" | "violet" | "muted";
 
 const TONE_BAR: Record<Tone, string> = {
-  primary: "bg-[#194383]",
+  primary: "bg-[#00498B]",
   success: "bg-neutral-200",
   warning: "bg-neutral-200",
   danger: "bg-neutral-200",
@@ -21,7 +21,7 @@ const TONE_BAR: Record<Tone, string> = {
 };
 
 const TONE_TEXT: Record<Tone, string> = {
-  primary: "text-[#194383]",
+  primary: "text-[#00498B]",
   success: "text-muted-foreground",
   warning: "text-muted-foreground",
   danger: "text-muted-foreground",
@@ -31,7 +31,7 @@ const TONE_TEXT: Record<Tone, string> = {
 };
 
 const TONE_PILL: Record<Tone, string> = {
-  primary: "bg-[#194383]/10 text-[#194383]",
+  primary: "bg-[#00498B]/10 text-[#00498B]",
   success: "bg-muted text-muted-foreground",
   warning: "bg-muted text-muted-foreground",
   danger: "bg-muted text-muted-foreground",
@@ -199,7 +199,7 @@ export function IdentityCell({
 // Deterministic placeholder shades — keyed off the address so a wallet without an
 // uploaded picture always gets the same colour. Kept strictly within the app's
 // two families (navy accent + neutral gray) — no off-palette hues.
-const AVATAR_BG = ["#194383", "#27508c", "#355d95", "#1e3a5f", "#475569", "#334155"];
+const AVATAR_BG = ["#00498B", "#27508c", "#355d95", "#1e3a5f", "#475569", "#334155"];
 function avatarColor(seed: string): string {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
@@ -283,7 +283,7 @@ export function ScoreBar({ value, tone: _tone = "primary" }: { value: number; to
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-[#194383] transition-[width] duration-700 ease-out"
+        className="h-full rounded-full bg-[#00498B] transition-[width] duration-700 ease-out"
         style={{ width: `${Math.max(3, Math.min(100, value))}%` }}
       />
     </div>
@@ -330,7 +330,7 @@ export function LinkChip({ href, children }: { href: string; children: ReactNode
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 text-xs font-medium text-[#194383] transition hover:underline"
+      className="inline-flex items-center gap-1 text-xs font-medium text-[#00498B] transition hover:underline"
     >
       {children}
       <ArrowUpRight className="h-3 w-3" />

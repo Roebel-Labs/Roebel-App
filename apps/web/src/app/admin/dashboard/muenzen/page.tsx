@@ -153,15 +153,15 @@ export default function MuenzenOverviewPage() {
                     <AreaChart data={data.series} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
                       <defs>
                         <linearGradient id="supplyFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#194383" stopOpacity={0.4} />
-                          <stop offset="100%" stopColor="#194383" stopOpacity={0.04} />
+                          <stop offset="0%" stopColor="#00498B" stopOpacity={0.4} />
+                          <stop offset="100%" stopColor="#00498B" stopOpacity={0.04} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="date" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} />
                       <YAxis tick={axisTick} tickLine={false} axisLine={false} width={40} />
                       <Tooltip contentStyle={tooltipStyle} />
-                      <Area type="monotone" dataKey="supply" name="Umlauf (RCRC)" stroke="#194383" strokeWidth={2} fill="url(#supplyFill)" />
+                      <Area type="monotone" dataKey="supply" name="Umlauf (RCRC)" stroke="#00498B" strokeWidth={2} fill="url(#supplyFill)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

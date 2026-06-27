@@ -47,7 +47,7 @@ export default function RoebelCardLandingPage() {
           </p>
           <Link
             href="/"
-            className="mt-8 inline-flex items-center justify-center rounded-full bg-[#194383] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#194383]/90"
+            className="mt-8 inline-flex items-center justify-center rounded-full bg-[#00498B] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#00498B]/90"
           >
             Zurück zur Startseite
           </Link>

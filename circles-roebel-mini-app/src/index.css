@@ -1,17 +1,38 @@
 @import "tailwindcss";
 
+/* Mona Sans — self-hosted variable fonts (GitHub, SIL OFL 1.1), mirrors apps/web.
+   One file spans weight 200–900 + width 75–125%, so "Mona Sans" doubles as
+   "Mona Sans SemiCondensed" via font-stretch 87.5% (used for all headings). */
+@font-face {
+  font-family: "Mona Sans";
+  src: url("./fonts/mona-sans/MonaSansVF.woff2") format("woff2");
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mona Sans Mono";
+  src: url("./fonts/mona-sans/MonaSansMonoVF.woff2") format("woff2");
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    Design tokens — mirrors the Röbel admin "Münzen" dashboard (shadcn / navy).
    Tailwind v4 turns every --color-* into a utility (bg-card, text-muted-foreground,
    border-border, …) so the whole mini-app speaks the same visual language.
    ────────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* One typeface — Inter, everywhere (mirrors apps/web). */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  /* Mona Sans for body/UI; headings use the same face at SemiCondensed width. */
+  --font-sans: "Mona Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Mona Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Mona Sans Mono", ui-monospace, monospace;
 
   /* Single accent — navy. The only colour on the page. */
-  --color-navy: #194383;
+  --color-navy: #00498B;
   --color-navy-600: #1d4e99;
 
   /* Surfaces — a true-neutral gray scale (no hue), shadcn-style. */
@@ -19,11 +40,11 @@
   --color-card: #ffffff; /* white cards float on the gray */
   --color-foreground: #0a0a0a; /* near-black text */
   --color-muted: #f0f0f0; /* subtle fills inside cards */
-  --color-muted-foreground: #737373; /* secondary text */
-  --color-border: #e5e5e5; /* hairline borders */
+  --color-muted-foreground: #6B7280; /* secondary text */
+  --color-border: #B4B8C1; /* hairline borders */
 
   /* Accent — navy is the one and only non-neutral colour. */
-  --color-primary: #194383;
+  --color-primary: #00498B;
   --color-primary-foreground: #ffffff;
 
   --radius: 10px;
@@ -45,11 +66,24 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-::selection {
-  background: rgba(25, 67, 131, 0.14);
+/* All headings (and any .font-display element) use Mona Sans SemiCondensed.
+   Weight is left to the component's Tailwind class (font-semibold / font-bold). */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-display {
+  font-family: var(--font-display);
+  font-stretch: 87.5%;
 }
 
-/* Tabular numerals everywhere they matter look crisper with Inter's feature. */
+::selection {
+  background: rgba(0, 73, 139, 0.14);
+}
+
+/* Tabular numerals everywhere they matter — crisper for amounts/counts. */
 .tnum {
   font-variant-numeric: tabular-nums;
 }

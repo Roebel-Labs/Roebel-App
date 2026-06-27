@@ -151,7 +151,7 @@ export default function ToursScreen() {
               style={[
                 styles.filterChip,
                 {
-                  backgroundColor: active ? '#194383' : colors.surface,
+                  backgroundColor: active ? '#00498B' : colors.surface,
                   borderColor: active ? 'transparent' : colors.border,
                 },
               ]}
@@ -177,7 +177,7 @@ export default function ToursScreen() {
           style={[
             styles.toggle,
             {
-              backgroundColor: sternfahrtOnly ? '#194383' : colors.surface,
+              backgroundColor: sternfahrtOnly ? '#00498B' : colors.surface,
             },
           ]}
         >
@@ -208,7 +208,7 @@ export default function ToursScreen() {
             onPress={() => router.push(`/tour/${meckysTipp.slug}` as any)}
           >
             <Text style={styles.tippLabel}>★ Mecky-Tipp heute</Text>
-            <Text style={[styles.tippTitle, { color: '#194383' }]}>{meckysTipp.title_de}</Text>
+            <Text style={[styles.tippTitle, { color: '#00498B' }]}>{meckysTipp.title_de}</Text>
             {meckysTipp.subtitle_de ? (
               <Text style={[styles.tippSub, { color: '#374453' }]}>{meckysTipp.subtitle_de}</Text>
             ) : null}
@@ -287,7 +287,7 @@ function TourCard({ tour, colors }: { tour: TourRecord; colors: any }) {
         {tour.start_label_de ? ` · ab ${tour.start_label_de}` : ''}
       </Text>
       <View style={styles.tagRow}>
-        {tour.is_sternfahrt ? <FlagPill label="Sternfahrt" color="#194383" /> : null}
+        {tour.is_sternfahrt ? <FlagPill label="Sternfahrt" color="#00498B" /> : null}
         {tour.ferry_combo ? <FlagPill label="⛴️ Schiff" color="#00A6FB" /> : null}
         {tour.bus_combo ? <FlagPill label="🚌 Bus" color="#0077B6" /> : null}
         {tour.has_swim_stop ? <FlagPill label="🏊 Bad" color="#00B7C2" /> : null}

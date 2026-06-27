@@ -29,10 +29,13 @@ import {
   deleteComment,
   updateComment,
   getUserLikedPostIds,
+  getPostLikers,
+  type PostLiker,
   DuplicateReportError,
 } from '@/lib/supabase-posts';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import AvatarStack from '@/components/AvatarStack';
 import { Image } from 'expo-image';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
@@ -84,6 +87,7 @@ export default function PostDetailScreen() {
   const [deleteCommentConfirmVisible, setDeleteCommentConfirmVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [commentFocused, setCommentFocused] = useState(false);
+  const [likers, setLikers] = useState<PostLiker[]>([]);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
@@ -100,9 +104,10 @@ export default function PostDetailScreen() {
 
   const loadPost = async () => {
     setIsLoading(true);
-    const [postData, commentsData] = await Promise.all([
+    const [postData, commentsData, likersData] = await Promise.all([
       fetchPostById(id!),
       fetchPostComments(id!, 0),
+      getPostLikers(id!, 5),
     ]);
 
     if (postData) {
@@ -115,10 +120,17 @@ export default function PostDetailScreen() {
       }
     }
 
+    setLikers(likersData);
     setComments(commentsData.data);
     setHasMoreComments(commentsData.hasMore);
     setIsLoading(false);
   };
+
+  // Refresh the like facepile after the viewer likes/unlikes the post.
+  const refreshLikers = useCallback(() => {
+    if (!id) return;
+    getPostLikers(id, 5).then(setLikers);
+  }, [id]);
 
   const loadMoreComments = useCallback(async () => {
     if (isLoadingMoreComments || !hasMoreComments) return;
@@ -313,7 +325,11 @@ export default function PostDetailScreen() {
   const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
   const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
 
-  const renderHeader = () => (
+  const renderHeader = () => {
+    const likeCount = getLikeCount(post.id, post.likes_count);
+    const likersCountText =
+      likeCount === 1 ? '1 Person gefällt das' : `${likeCount} Personen gefällt das`;
+    return (
     <View style={[styles.postSection, { borderBottomColor: colors.border }]}>
       <PostAuthorRow
         author={post.author}
@@ -361,13 +377,44 @@ export default function PostDetailScreen() {
       {post.poll && <PostPollView poll={post.poll} walletAddress={walletAddress} />}
 
       <PostActions
-        likesCount={getLikeCount(post.id, post.likes_count)}
+        likesCount={likeCount}
         commentsCount={post.comments_count}
         isLiked={isLiked(post.id)}
-        onLike={() => toggleLike(post.id, post.likes_count)}
+        onLike={async () => {
+          await toggleLike(post.id, post.likes_count);
+          refreshLikers();
+        }}
         onComment={() => {}}
         onShare={() => sharePost(post.id, post.content)}
       />
+
+      {/* Who liked this — stacked avatars, tappable for the full list */}
+      {likeCount > 0 && (
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: '/post/[id]/likes' as any, params: { id: post.id } })
+          }
+          hitSlop={8}
+          style={({ pressed }) => [styles.likersRow, pressed && styles.likersRowPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Likes anzeigen"
+        >
+          {likers.length > 0 && (
+            <AvatarStack
+              users={likers.map((u) => ({
+                avatar_url: u.profile_picture_url,
+                username: u.display_name,
+              }))}
+              maxVisible={4}
+              size="large"
+              totalCount={likeCount}
+            />
+          )}
+          <Text style={[styles.likersText, { color: colors.textSecondary }]}>
+            {likersCountText}
+          </Text>
+        </Pressable>
+      )}
 
       {/* Comments header */}
       <View style={styles.commentsHeader}>
@@ -376,7 +423,8 @@ export default function PostDetailScreen() {
         </Text>
       </View>
     </View>
-  );
+    );
+  };
 
   const renderComment = ({ item }: { item: PostCommentRecord }) => (
     <CommentItem
@@ -570,6 +618,19 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     alignSelf: 'flex-start',
+  },
+  likersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 2,
+  },
+  likersRowPressed: {
+    opacity: 0.6,
+  },
+  likersText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
   },
   commentsHeader: {
     paddingTop: 14,

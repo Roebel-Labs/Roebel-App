@@ -77,7 +77,7 @@ export default function MapPreviewCard({ data, onClose }: Props) {
   const placeholderEmoji = getPlaceholderEmoji(data);
   const entityColor =
     data.entityType === 'poi'
-      ? POI_TYPE_COLORS[data.poi.type] || '#194383'
+      ? POI_TYPE_COLORS[data.poi.type] || '#00498B'
       : ENTITY_TYPE_COLORS[data.entityType];
 
   return (
@@ -330,8 +330,8 @@ function renderContent(
               <Text style={[styles.categoryChipText, { color: entityColor }]}>{typeLabel}</Text>
             </View>
             {poi.is_24h && (
-              <View style={[styles.categoryChip, { backgroundColor: '#194383' + '1A', marginLeft: 6 }]}>
-                <Text style={[styles.categoryChipText, { color: '#194383' }]}>24h</Text>
+              <View style={[styles.categoryChip, { backgroundColor: '#00498B' + '1A', marginLeft: 6 }]}>
+                <Text style={[styles.categoryChipText, { color: '#00498B' }]}>24h</Text>
               </View>
             )}
             {poi.is_pannendienst && (

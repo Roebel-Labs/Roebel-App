@@ -125,7 +125,7 @@ export const ACTION_LABELS: Record<string, string> = {
 
 /** Stable per-action colors (charts + legends). */
 export const ACTION_COLORS: Record<string, string> = {
-  proposal_vote: "#194383",
+  proposal_vote: "#00498B",
   checkpoint: "#3a6cb8",
   event_submit: "#16a34a",
   referral: "#8b5cf6",
@@ -136,7 +136,7 @@ export const FLOW_COLORS = {
   mint: "#0ea5e9",
   earn: "#16a34a",
   spend: "#dc2626",
-  reserve: "#194383",
+  reserve: "#00498B",
   net: "#8b5cf6",
 } as const;
 

@@ -112,7 +112,7 @@ export default function BelohnungenPage() {
                       <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
                       <Bar dataKey="rcrc" name="RCRC" radius={[4, 4, 0, 0]}>
                         {data.earn.byAction.map((d) => (
-                          <Cell key={d.action} fill={ACTION_COLORS[d.action] ?? "#194383"} />
+                          <Cell key={d.action} fill={ACTION_COLORS[d.action] ?? "#00498B"} />
                         ))}
                       </Bar>
                     </BarChart>

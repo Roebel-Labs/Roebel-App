@@ -277,7 +277,7 @@ export function vehiclesToGeoJSON(
     train: '🚆',
   };
   const TRANSIT_COLORS: Record<string, string> = {
-    bus_regio: '#194383',
+    bus_regio: '#00498B',
     bus_city: '#0077B6',
     bus_park: '#2B9348',
     buergerbus: '#FFB703',
@@ -295,7 +295,7 @@ export function vehiclesToGeoJSON(
         line_name_de: v.line_name_de,
         mode: v.mode,
         emoji: TRANSIT_EMOJIS[v.mode] || '🚌',
-        color: TRANSIT_COLORS[v.mode] || '#194383',
+        color: TRANSIT_COLORS[v.mode] || '#00498B',
         next_stop_name: v.next_stop_name ?? '',
         arrives_in_minutes: v.arrives_in_minutes ?? -1,
         progress: v.progress,

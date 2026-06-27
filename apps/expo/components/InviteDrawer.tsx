@@ -251,7 +251,7 @@ export default function InviteDrawer({ visible, onClose, accountId, existingMemb
                   onPress={() => setSelectedRole(role)}
                   style={[
                     styles.roleOption,
-                    { borderColor: selectedRole === role ? (isDark ? '#8AB4F8' : '#194383') : colors.border },
+                    { borderColor: selectedRole === role ? (isDark ? '#7ABBF2' : '#00498B') : colors.border },
                     selectedRole === role && { backgroundColor: isDark ? '#1E3A5F' : '#DBEAFE' },
                   ]}
                 >
@@ -291,7 +291,7 @@ export default function InviteDrawer({ visible, onClose, accountId, existingMemb
                       onPress={() => setSelectedRole(role)}
                       style={[
                         styles.roleOption,
-                        { borderColor: selectedRole === role ? (isDark ? '#8AB4F8' : '#194383') : colors.border },
+                        { borderColor: selectedRole === role ? (isDark ? '#7ABBF2' : '#00498B') : colors.border },
                         selectedRole === role && { backgroundColor: isDark ? '#1E3A5F' : '#DBEAFE' },
                       ]}
                     >
@@ -309,14 +309,14 @@ export default function InviteDrawer({ visible, onClose, accountId, existingMemb
                       onPress={() => setSelectedExpiry(idx)}
                       style={[
                         styles.expiryOption,
-                        { borderColor: selectedExpiry === idx ? (isDark ? '#8AB4F8' : '#194383') : colors.border },
+                        { borderColor: selectedExpiry === idx ? (isDark ? '#7ABBF2' : '#00498B') : colors.border },
                         selectedExpiry === idx && { backgroundColor: isDark ? '#1E3A5F' : '#DBEAFE' },
                       ]}
                     >
                       <Text
                         style={[
                           styles.expiryText,
-                          { color: selectedExpiry === idx ? (isDark ? '#8AB4F8' : '#194383') : colors.textTertiary },
+                          { color: selectedExpiry === idx ? (isDark ? '#7ABBF2' : '#00498B') : colors.textTertiary },
                         ]}
                       >
                         {opt.label}

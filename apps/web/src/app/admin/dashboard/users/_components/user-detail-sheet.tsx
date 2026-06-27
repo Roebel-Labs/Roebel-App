@@ -128,7 +128,7 @@ export function UserDetailSheet({
                         formatWalletAddress(user.wallet_address)}
                     </span>
                     {user.is_verified_citizen && (
-                      <ShieldCheck className="h-4 w-4 shrink-0 text-[#194383]" />
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-[#00498B]" />
                     )}
                   </SheetTitle>
                   <SheetDescription className="font-mono text-xs">

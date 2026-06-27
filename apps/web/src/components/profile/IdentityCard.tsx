@@ -76,7 +76,7 @@ export function IdentityCard({
     isOrg
       ? "from-gray-800 to-gray-900"
       : activeMode === "citizen"
-        ? "from-[#194383] to-blue-700"
+        ? "from-[#00498B] to-blue-700"
         : "from-slate-500 to-slate-600";
 
   const cardLabel =

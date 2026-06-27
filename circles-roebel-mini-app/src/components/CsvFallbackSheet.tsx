@@ -59,7 +59,7 @@ export default function CsvFallbackSheet({
 
         <button
           onClick={copy}
-          className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#194383] px-3 py-2.5 text-[13px] font-semibold text-white transition active:scale-[0.99]"
+          className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-3 py-2.5 text-[13px] font-semibold text-white transition active:scale-[0.99]"
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           {copied ? "Copied to clipboard" : "Copy CSV"}
@@ -70,7 +70,7 @@ export default function CsvFallbackSheet({
           value={csv}
           spellCheck={false}
           onFocus={(e) => e.currentTarget.select()}
-          className="h-44 w-full resize-none rounded-[10px] border border-border bg-muted/40 p-2.5 font-mono text-[11px] leading-relaxed text-foreground outline-none focus:border-[#194383]"
+          className="h-44 w-full resize-none rounded-[10px] border border-border bg-muted/40 p-2.5 font-mono text-[11px] leading-relaxed text-foreground outline-none focus:border-[#00498B]"
         />
       </div>
     </div>

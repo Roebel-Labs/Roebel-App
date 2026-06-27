@@ -87,12 +87,12 @@ export const lightColors = {
   textInverted: '#ffffff',
 
   // Brand
-  primary: '#194383',
+  primary: '#00498B',
   primaryLight: '#E4F2FF',
   onPrimary: '#ffffff',
 
   // Borders
-  border: '#f0f0f0',
+  border: '#B4B8C1',
   borderSecondary: '#E5E7EB',
   borderTertiary: '#ECEDEE',
 
@@ -126,13 +126,13 @@ export const lightColors = {
   secondary: '#F5F5F5',
   secondaryForeground: '#171717',
   muted: '#F5F5F5',
-  mutedForeground: '#737373',
+  mutedForeground: '#6b7280',
   accent: '#F5F5F5',
   accentForeground: '#171717',
   destructive: '#EF4444',
   destructiveForeground: '#FAFAFA',
   input: '#E5E5E5',
-  ring: '#194383',
+  ring: '#00498B',
   info: '#3B82F6',
   infoBackground: '#DBEAFE',
   infoForeground: '#FFFFFF',
@@ -159,7 +159,7 @@ export const darkColors = {
   textInverted: '#202124',
 
   // Brand
-  primary: '#8AB4F8',
+  primary: '#7ABBF2',
   primaryLight: '#1a3a5c',
   onPrimary: '#3c4043',
 
@@ -204,7 +204,7 @@ export const darkColors = {
   destructive: '#7F1D1D',
   destructiveForeground: '#E8EAED',
   input: '#43464A',
-  ring: '#8AB4F8',
+  ring: '#7ABBF2',
   info: '#5C9AF8',
   infoBackground: '#1E3A8A',
   infoForeground: '#E8EAED',

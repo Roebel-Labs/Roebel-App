@@ -52,7 +52,7 @@ export default async function ReferralLandingPage({ params }: Props) {
   const displayName = data.referrer?.username || "Jemand aus Röbel"
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#194383] via-[#264e8e] to-[#E4F2FF] text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#00498B] via-[#264e8e] to-[#E4F2FF] text-white">
       <header className="max-w-4xl mx-auto px-6 pt-8 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -92,8 +92,8 @@ export default async function ReferralLandingPage({ params }: Props) {
           Bonus, wenn du die App installierst.
         </p>
 
-        <div className="bg-white text-[#194383] rounded-2xl p-5 mb-6 shadow-xl">
-          <p className="text-xs uppercase tracking-widest text-[#194383]/60 mb-1">
+        <div className="bg-white text-[#00498B] rounded-2xl p-5 mb-6 shadow-xl">
+          <p className="text-xs uppercase tracking-widest text-[#00498B]/60 mb-1">
             Dein Einladungscode
           </p>
           <p className="text-3xl font-semibold tracking-widest">{upper}</p>

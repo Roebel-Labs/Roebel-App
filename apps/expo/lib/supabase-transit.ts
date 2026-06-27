@@ -76,7 +76,7 @@ export const TRANSIT_MODE_EMOJIS: Record<TransitMode, string> = {
 };
 
 export const TRANSIT_MODE_COLORS: Record<TransitMode, string> = {
-  bus_regio: '#194383',
+  bus_regio: '#00498B',
   bus_city: '#0077B6',
   bus_park: '#2B9348',
   buergerbus: '#FFB703',

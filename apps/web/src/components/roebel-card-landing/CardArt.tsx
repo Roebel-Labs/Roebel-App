@@ -19,13 +19,13 @@ export function CardArt({ className, variant = "primary" }: CardArtProps) {
         "bg-gradient-to-br",
         isGhost
           ? "from-white via-white to-blue-50 ring-1 ring-blue-100/80"
-          : "from-[#1c4a91] via-[#194383] to-[#0d2242]",
+          : "from-[#1c4a91] via-[#00498B] to-[#0d2242]",
         className,
       )}
       style={{
         boxShadow: isGhost
-          ? "0 30px 60px -20px rgba(25,67,131,0.18)"
-          : "0 30px 60px -20px rgba(25,67,131,0.55)",
+          ? "0 30px 60px -20px rgba(0,73,139,0.18)"
+          : "0 30px 60px -20px rgba(0,73,139,0.55)",
       }}
     >
       <div className="absolute inset-0 overflow-hidden rounded-3xl">

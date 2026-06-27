@@ -29,7 +29,7 @@ export default async function EventLandingPage({ params }: Props) {
   const { id } = await params
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#194383] via-[#264e8e] to-[#E4F2FF] text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#00498B] via-[#264e8e] to-[#E4F2FF] text-white">
       <header className="max-w-4xl mx-auto px-6 pt-8 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}

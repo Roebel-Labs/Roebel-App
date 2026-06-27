@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   viewMapButton: {
-    backgroundColor: '#194383',
+    backgroundColor: '#00498B',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
