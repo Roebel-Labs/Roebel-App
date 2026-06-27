@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#00498B"
     },
     "ios": {
       "supportsTablet": true,
@@ -37,7 +37,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#00498B"
       },
       "package": "com.maxbrych.roebelonchain",
       "versionCode": 34,
@@ -50,6 +50,11 @@
               "scheme": "https",
               "host": "www.roebel.app",
               "pathPrefix": "/r/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.roebel.app",
+              "pathPrefix": "/e/"
             }
           ],
           "category": [
