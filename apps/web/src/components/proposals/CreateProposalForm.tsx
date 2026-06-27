@@ -1,10 +1,11 @@
 "use client";
 
-import { useActiveAccount, useReadContract, useSendTransaction } from "thirdweb/react";
+import { useActiveAccount, useActiveWallet, useReadContract, useSendTransaction } from "thirdweb/react";
 import { governorContract, nftContract } from "@/lib/contracts";
 import { balanceOf } from "thirdweb/extensions/erc721";
 import { prepareContractCall, toWei, waitForReceipt } from "thirdweb";
 import { ethers } from "ethers";
+import { hasHighGasBundler, sendViaHighGasBundler } from "@/lib/highgas-bundler";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,6 +37,7 @@ export function CreateProposalForm({
   cancelHref = "/proposals",
 }: CreateProposalFormProps) {
   const account = useActiveAccount();
+  const activeWallet = useActiveWallet();
   const router = useRouter();
   const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [error, setError] = useState<string>("");
@@ -58,6 +60,114 @@ export function CreateProposalForm({
   const [value, setValue] = useState("");
   const [calldata, setCalldata] = useState("");
   const [attachTreasurySnapshot, setAttachTreasurySnapshot] = useState(false);
+
+  // Runs after the propose() tx is on-chain (via either the default sponsored
+  // bundler or the high-gas self-pay bundler): parse the events, store the
+  // proposal in Supabase, then redirect.
+  const handleProposalConfirmed = async (
+    transactionHash: `0x${string}`,
+    irysReceipt: { id: string; url: string },
+  ) => {
+    console.log("✅ Step 2 complete: Proposal created on-chain", transactionHash);
+    try {
+      const receipt = await waitForReceipt({
+        client,
+        chain: governorContract.chain,
+        transactionHash,
+      });
+
+      // ProposalCreated(uint256,address,address[],uint256[],string[],bytes[],uint256,uint256,string)
+      const PROPOSAL_CREATED_TOPIC = "0x7d84a6263ae0d98d3329bd7b46bb4e8d6f98cd35a7adb45c274c8b7fd5ebd5e0";
+      const proposalCreatedLog = receipt.logs.find((log) =>
+        log.address.toLowerCase() === governorContract.address.toLowerCase() &&
+        log.topics[0] === PROPOSAL_CREATED_TOPIC
+      );
+      if (!proposalCreatedLog) {
+        console.error("❌ No ProposalCreated event found in receipt logs:", receipt.logs);
+        throw new Error("No ProposalCreated event found in transaction receipt");
+      }
+
+      const iface = new ethers.Interface([
+        "event ProposalCreated(uint256 proposalId, address proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint256 voteStart, uint256 voteEnd, string description)"
+      ]);
+      const decodedEvent = iface.parseLog({
+        topics: proposalCreatedLog.topics,
+        data: proposalCreatedLog.data,
+      });
+      if (!decodedEvent) throw new Error("Failed to decode ProposalCreated event");
+
+      const numericProposalId = decodedEvent.args.proposalId.toString();
+      const voteStart = decodedEvent.args.voteStart.toString();
+      const voteEnd = decodedEvent.args.voteEnd.toString();
+
+      // MACI-specific: decode PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)
+      try {
+        const POLL_LINKED_TOPIC = ethers.id("PollLinked(uint256,address,address,uint256)");
+        const pollLinkedLog = receipt.logs.find((log) =>
+          log.address.toLowerCase() === governorContract.address.toLowerCase() &&
+          log.topics[0] === POLL_LINKED_TOPIC
+        );
+        if (pollLinkedLog) {
+          const pollIface = new ethers.Interface([
+            "event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)"
+          ]);
+          const decodedPoll = pollIface.parseLog({
+            topics: pollLinkedLog.topics,
+            data: pollLinkedLog.data,
+          });
+          if (decodedPoll) {
+            setPollInfo({
+              proposalId: numericProposalId,
+              pollId: decodedPoll.args.pollId.toString(),
+              pollAddress: decodedPoll.args.poll,
+              tallyAddress: decodedPoll.args.tally,
+            });
+          }
+        } else {
+          console.warn("PollLinked event not found — is the MACI Governor wired correctly?");
+        }
+      } catch (pollErr) {
+        console.warn("PollLinked decode failed (proposal still on-chain):", pollErr);
+      }
+
+      // Store in Supabase for fast retrieval (non-fatal if it fails).
+      try {
+        const storeResponse = await fetch("/api/proposals/store", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            proposalId: transactionHash, // Transaction hash for URL routing
+            blockchainProposalId: numericProposalId, // Numeric ID for blockchain calls
+            title,
+            markdown: description,
+            irysContentId: irysReceipt.id,
+            irysUrl: irysReceipt.url,
+            transactionHash,
+            proposerAddress: account?.address,
+            blockNumber: Number(receipt.blockNumber),
+            snapshotBlock: Number(voteStart),
+            deadlineBlock: Number(voteEnd),
+            category: "general",
+            attachTreasurySnapshot,
+          }),
+        });
+        if (!storeResponse.ok) {
+          console.warn("⚠️ Failed to store in Supabase, but proposal is on-chain");
+        }
+      } catch (supabaseError) {
+        console.error("❌ Supabase storage error:", supabaseError);
+      }
+
+      setUploadStage("success");
+      setTimeout(() => router.push(redirectTo), 2000);
+    } catch (eventError) {
+      console.error("❌ Failed to extract proposalId from event:", eventError);
+      setError(
+        "Proposal created on-chain, but failed to extract proposal ID. Check the block explorer for transaction: " + transactionHash
+      );
+      setUploadStage("error");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,151 +214,30 @@ export function CreateProposalForm({
 
       setUploadStage("confirming");
 
-      sendTransaction(transaction, {
-        onSuccess: async (result) => {
-          console.log("✅ Step 2 complete: Proposal created on-chain");
-          console.log("📝 Transaction result:", result);
-
-          // Step 2.5: Wait for receipt and extract numeric proposalId from event
-          try {
-            console.log("⏳ Waiting for transaction receipt...");
-            const receipt = await waitForReceipt({
-              client,
-              chain: governorContract.chain,
-              transactionHash: result.transactionHash,
-            });
-            console.log("📄 Receipt received:", receipt);
-
-            // Parse ProposalCreated event from receipt logs
-            // ProposalCreated event signature: keccak256("ProposalCreated(uint256,address,address[],uint256[],string[],bytes[],uint256,uint256,string)")
-            const PROPOSAL_CREATED_TOPIC = "0x7d84a6263ae0d98d3329bd7b46bb4e8d6f98cd35a7adb45c274c8b7fd5ebd5e0";
-
-            const proposalCreatedLog = receipt.logs.find((log) =>
-              log.address.toLowerCase() === governorContract.address.toLowerCase() &&
-              log.topics[0] === PROPOSAL_CREATED_TOPIC
-            );
-
-            if (!proposalCreatedLog) {
-              console.error("❌ No ProposalCreated event found in receipt logs:", receipt.logs);
-              throw new Error("No ProposalCreated event found in transaction receipt");
-            }
-
-            console.log("📋 Found ProposalCreated log:", proposalCreatedLog);
-
-            // Decode the event using ethers
-            const iface = new ethers.Interface([
-              "event ProposalCreated(uint256 proposalId, address proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint256 voteStart, uint256 voteEnd, string description)"
-            ]);
-
-            const decodedEvent = iface.parseLog({
-              topics: proposalCreatedLog.topics,
-              data: proposalCreatedLog.data
-            });
-
-            if (!decodedEvent) {
-              throw new Error("Failed to decode ProposalCreated event");
-            }
-
-            const numericProposalId = decodedEvent.args.proposalId.toString();
-            const voteStart = decodedEvent.args.voteStart.toString();
-            const voteEnd = decodedEvent.args.voteEnd.toString();
-
-            console.log("🔢 Extracted numeric proposalId:", numericProposalId);
-            console.log("📊 Vote period:", voteStart, "to", voteEnd);
-
-            // MACI-specific: decode PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)
-            try {
-              const POLL_LINKED_TOPIC = ethers.id("PollLinked(uint256,address,address,uint256)");
-              const pollLinkedLog = receipt.logs.find((log) =>
-                log.address.toLowerCase() === governorContract.address.toLowerCase() &&
-                log.topics[0] === POLL_LINKED_TOPIC
-              );
-              if (pollLinkedLog) {
-                const pollIface = new ethers.Interface([
-                  "event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId)"
-                ]);
-                const decodedPoll = pollIface.parseLog({
-                  topics: pollLinkedLog.topics,
-                  data: pollLinkedLog.data,
-                });
-                if (decodedPoll) {
-                  const info: PollInfo = {
-                    proposalId: numericProposalId,
-                    pollId: decodedPoll.args.pollId.toString(),
-                    pollAddress: decodedPoll.args.poll,
-                    tallyAddress: decodedPoll.args.tally,
-                  };
-                  console.log("🔐 MACI PollLinked:", info);
-                  setPollInfo(info);
-                }
-              } else {
-                console.warn("PollLinked event not found — is the new MACI Governor wired correctly?");
-              }
-            } catch (pollErr) {
-              console.warn("PollLinked decode failed (proposal still on-chain):", pollErr);
-            }
-
-            // Step 3: Store in Supabase for fast retrieval
-            try {
-              console.log("💾 Step 3: Storing proposal in Supabase...");
-
-              const storeResponse = await fetch("/api/proposals/store", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  proposalId: result.transactionHash, // Transaction hash for URL routing
-                  blockchainProposalId: numericProposalId, // Numeric ID for blockchain calls
-                  title,
-                  markdown: description,
-                  irysContentId: irysReceipt.id,
-                  irysUrl: irysReceipt.url,
-                  transactionHash: result.transactionHash,
-                  proposerAddress: account.address,
-                  blockNumber: Number(receipt.blockNumber),
-                  snapshotBlock: Number(voteStart),
-                  deadlineBlock: Number(voteEnd),
-                  category: "general",
-                  attachTreasurySnapshot,
-                }),
-              });
-
-              if (!storeResponse.ok) {
-                console.warn("⚠️ Failed to store in Supabase, but proposal is on-chain");
-                // Don't fail the whole flow, proposal is already on-chain
-              } else {
-                console.log("✅ Step 3 complete: Stored in Supabase");
-              }
-            } catch (supabaseError) {
-              console.error("❌ Supabase storage error:", supabaseError);
-              // Don't fail the whole flow
-            }
-
-            setUploadStage("success");
-
-            setTimeout(() => {
-              console.log("🔄 Redirecting...");
-              router.push(redirectTo);
-            }, 2000);
-          } catch (eventError) {
-            console.error("❌ Failed to extract proposalId from event:", eventError);
+      if (hasHighGasBundler()) {
+        // Proposal creation deploys a MACI Poll (~15.7M gas) — over thirdweb's
+        // 12M sponsored-bundler cap. Route THIS tx through the higher-cap
+        // bundler, self-paying from the (funded) attester smart account. Same
+        // account address ⇒ OnlyAttestersCanPropose still passes.
+        if (!activeWallet) throw new Error("Wallet ist nicht verbunden.");
+        const { transactionHash } = await sendViaHighGasBundler(activeWallet, transaction);
+        await handleProposalConfirmed(transactionHash, irysReceipt);
+      } else {
+        sendTransaction(transaction, {
+          onSuccess: (result) => {
+            void handleProposalConfirmed(result.transactionHash, irysReceipt);
+          },
+          onError: (txError) => {
+            console.error("❌ Transaction failed:", txError);
             setError(
-              "Proposal created on-chain, but failed to extract proposal ID. Check blockchain explorer for transaction: " + result.transactionHash
+              txError instanceof Error
+                ? txError.message
+                : "Transaction failed. Your content is saved on Irys at: " + irysReceipt.url
             );
             setUploadStage("error");
-          }
-        },
-        onError: (txError) => {
-          console.error("❌ Transaction failed:", txError);
-          setError(
-            txError instanceof Error
-              ? txError.message
-              : "Transaction failed. Your content is saved on Irys at: " + irysReceipt.url
-          );
-          setUploadStage("error");
-        },
-      });
+          },
+        });
+      }
     } catch (uploadError) {
       console.error("❌ Upload to Irys failed:", uploadError);
       setError(
@@ -319,7 +308,7 @@ export function CreateProposalForm({
             </p>
             <p className="text-sm text-blue-800">
               Vorschläge laufen ab jetzt mit privater, kollusionsresistenter Abstimmung
-              auf Base Mainnet. Sobald du diesen Vorschlag einreichst, wird automatisch
+              auf Gnosis Chain. Sobald du diesen Vorschlag einreichst, wird automatisch
               eine eigene MACI-Abstimmung erzeugt — Bürger:innen stimmen verschlüsselt ab
               und nur das aggregierte Endergebnis erscheint öffentlich auf der Blockchain.
             </p>
@@ -353,7 +342,7 @@ export function CreateProposalForm({
                     <div className="flex gap-2">
                       <dt className="opacity-70 w-24">Poll:</dt>
                       <dd className="break-all">
-                        <a href={`https://basescan.org/address/${pollInfo.pollAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                        <a href={`https://gnosisscan.io/address/${pollInfo.pollAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
                           {pollInfo.pollAddress}
                         </a>
                       </dd>
@@ -361,7 +350,7 @@ export function CreateProposalForm({
                     <div className="flex gap-2">
                       <dt className="opacity-70 w-24">Tally:</dt>
                       <dd className="break-all">
-                        <a href={`https://basescan.org/address/${pollInfo.tallyAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                        <a href={`https://gnosisscan.io/address/${pollInfo.tallyAddress}`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
                           {pollInfo.tallyAddress}
                         </a>
                       </dd>
