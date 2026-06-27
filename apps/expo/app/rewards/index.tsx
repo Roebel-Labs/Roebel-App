@@ -472,7 +472,7 @@ export default function RewardsIndexScreen() {
               style={[
                 styles.talerCta,
                 styles.talerCtaCountdown,
-                { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border },
+                { backgroundColor: isDark ? colors.card : '#FFFFFF', borderColor: colors.border },
               ]}
               accessibilityRole="button"
               accessibilityState={{ disabled: true }}
@@ -500,7 +500,7 @@ export default function RewardsIndexScreen() {
               style={[
                 styles.talerCta,
                 styles.talerCtaCountdown,
-                { backgroundColor: isDark ? colors.surface : '#FFFFFF', borderColor: colors.border },
+                { backgroundColor: isDark ? colors.card : '#FFFFFF', borderColor: colors.border },
               ]}
               accessibilityRole="button"
               accessibilityState={{ disabled: true }}
