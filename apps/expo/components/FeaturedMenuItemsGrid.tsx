@@ -74,7 +74,7 @@ const CARD_W = 160;
 
 const styles = StyleSheet.create({
   section: { paddingTop: 16, paddingBottom: 8 },
-  heading: { paddingHorizontal: 16, fontSize: 22, fontFamily: 'Inter-Medium', marginBottom: 12 },
+  heading: { paddingHorizontal: 16, fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 12 },
   row: { paddingHorizontal: 16, gap: 12 },
   card: { width: CARD_W },
   imgWrap: { width: CARD_W, height: CARD_W, borderRadius: 12, overflow: 'hidden', justifyContent: 'flex-start' },

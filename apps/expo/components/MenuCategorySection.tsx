@@ -30,5 +30,5 @@ export default function MenuCategorySection({ category, items }: Props) {
 
 const styles = StyleSheet.create({
   container: { marginBottom: 24 },
-  title: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 8 },
+  title: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 8 },
 });

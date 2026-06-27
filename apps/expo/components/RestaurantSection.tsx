@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   showAllButton: {
     width: 36,
