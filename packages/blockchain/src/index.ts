@@ -18,8 +18,8 @@ export const CONTRACTS = {
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",
 
   // Current MACI v2 privacy-voting governance on Gnosis (apps target this).
-  maciAttesterGovernor: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
-  maciTimelock: "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
+  maciAttesterGovernor: "0xDC2503152068FBE2a848df65f5b671c1e84A4159",
+  maciTimelock: "0x24a72Df1510AaA500B3047FdED7cf6Ec3B94bef4",
 
   // MACI v2 infrastructure on Gnosis (deploy block 46867803).
   maci: "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D",

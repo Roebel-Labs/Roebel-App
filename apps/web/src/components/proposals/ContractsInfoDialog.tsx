@@ -22,11 +22,11 @@ function gnosisscanAddress(address: string): string {
 const CONTRACT_ROWS = [
   {
     role: de.governance.roleGovernor,
-    address: "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
+    address: "0xDC2503152068FBE2a848df65f5b671c1e84A4159",
   },
   {
     role: de.governance.roleTimelock,
-    address: "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
+    address: "0x24a72Df1510AaA500B3047FdED7cf6Ec3B94bef4",
   },
   {
     role: de.governance.roleCitizenNFT,

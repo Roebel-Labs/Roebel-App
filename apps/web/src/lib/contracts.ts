@@ -19,7 +19,7 @@ export const ATTESTER_NFT_ADDRESS = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82"
 export const LEGACY_ATTESTER_GOVERNOR_ADDRESS = "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 
 // Current MACI v2 privacy-voting governor on Gnosis — proposal creation + voting target.
-export const MACI_GOVERNOR_ADDRESS = "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65";
+export const MACI_GOVERNOR_ADDRESS = "0xDC2503152068FBE2a848df65f5b671c1e84A4159";
 export const MACI_ADDRESS = "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D";
 
 // Pre-Gnosis-v2 active Base addresses (archived for historical lookups; preserved

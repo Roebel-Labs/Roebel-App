@@ -60,7 +60,7 @@ export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0x59aA2
 // Legacy public-vote AttesterGovernor remains on BASE (read-only, historical).
 export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 // MaciAttesterGovernor on Gnosis v2 — binds to the fresh MACI core + gatekeeper.
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65";
+export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0xDC2503152068FBE2a848df65f5b671c1e84A4159";
 
 // MACI v2 infrastructure on Gnosis (Sybil-hardening rotation 2026-06).
 export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D";

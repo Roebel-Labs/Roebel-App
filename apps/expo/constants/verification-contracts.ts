@@ -14,7 +14,7 @@ import { gnosis } from '@/constants/gnosis';
 export const VERIFICATION_CONTRACTS = {
   attesterNFT: process.env.NEXT_PUBLIC_ATTESTER_NFT || '0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82',
   citizenNFT: process.env.NEXT_PUBLIC_CITIZEN_NFT || '0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5',
-  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65',
+  governor: process.env.NEXT_PUBLIC_GOVERNOR || '0xDC2503152068FBE2a848df65f5b671c1e84A4159',
 };
 
 // Contract instances (Gnosis v2)
