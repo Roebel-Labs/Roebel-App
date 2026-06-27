@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useTheme } from '@/context/ThemeContext';
 import BottomDrawer from '@/components/BottomDrawer';
 
@@ -41,6 +41,28 @@ export default function BirthdatePromptSheet({
     onSubmit(toIsoDate(birthDate));
   };
 
+  // Android re-initialises a declaratively-rendered picker to its `value` on
+  // every parent re-render (here, inside a BottomDrawer) — so flipping through
+  // the calendar snaps back to the default date. Use the imperative API on
+  // Android (a self-managed native dialog); keep the inline picker for iOS.
+  const openPicker = () => {
+    if (saving) return;
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: birthDate ?? DEFAULT_PICKER_DATE,
+        mode: 'date',
+        display: 'default',
+        maximumDate: new Date(),
+        minimumDate: MIN_BIRTHDATE,
+        onChange: (event, date) => {
+          if (event.type === 'set' && date) setBirthDate(date);
+        },
+      });
+    } else {
+      setShowDatePicker(true);
+    }
+  };
+
   return (
     <BottomDrawer visible={visible} onClose={onClose}>
       <View style={styles.container}>
@@ -54,7 +76,7 @@ export default function BirthdatePromptSheet({
         </Text>
 
         <Pressable
-          onPress={() => { if (!saving) setShowDatePicker(true); }}
+          onPress={openPicker}
           style={[
             styles.dateField,
             { backgroundColor: colors.background, borderColor: colors.borderSecondary },
@@ -68,17 +90,15 @@ export default function BirthdatePromptSheet({
           <Ionicons name="calendar-outline" size={20} color={colors.textTertiary} />
         </Pressable>
 
-        {showDatePicker && (
+        {showDatePicker && Platform.OS === 'ios' && (
           <DateTimePicker
             value={birthDate ?? DEFAULT_PICKER_DATE}
             mode="date"
-            display="default"
+            display="spinner"
             maximumDate={new Date()}
             minimumDate={MIN_BIRTHDATE}
-            onChange={(event, date) => {
-              setShowDatePicker(Platform.OS === 'ios');
+            onChange={(_event, date) => {
               if (date) setBirthDate(date);
-              if (Platform.OS === 'android') setShowDatePicker(false);
             }}
           />
         )}
