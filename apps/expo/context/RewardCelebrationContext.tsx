@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 
 interface CelebrateOptions {
@@ -16,6 +16,7 @@ interface RewardCelebrationContextValue {
 }
 
 interface QueueItem {
+  id: number;
   amount: number;
   subtitle?: string;
 }
@@ -28,11 +29,12 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
   // A queue so two quick rewards (e.g. task + checkpoint) each get their moment
   // instead of clobbering one another.
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const nextId = useRef(0);
 
   const celebrate = useCallback((amount: number, opts?: CelebrateOptions) => {
     const amt = Math.round(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    setQueue((q) => [...q, { amount: amt, subtitle: opts?.subtitle }]);
+    setQueue((q) => [...q, { id: nextId.current++, amount: amt, subtitle: opts?.subtitle }]);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -48,6 +50,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
       {children}
       <MuenzenRewardOverlay
         visible={!!current}
+        replayKey={current?.id ?? 0}
         amount={current?.amount ?? 0}
         subtitle={current?.subtitle}
         onClose={handleClose}
