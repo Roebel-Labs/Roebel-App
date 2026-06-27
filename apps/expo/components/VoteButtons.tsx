@@ -577,11 +577,6 @@ export default function VoteButtons({
       await recordVote(pollAddress, support, nonce, receipt.transactionHash);
       setChanging(false);
 
-      // The privacy confirmation — shown AFTER the reward screen is dismissed so
-      // the two never stack (iOS drops a modal opened over a closing one).
-      const showPrivacyDrawer = () =>
-        setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() });
-
       // Mirror to Supabase so the voter's profile count reflects this vote — and
       // so the claim-reward verifier (which reads vote_history) finds it. The
       // claim is chained AFTER the mirror to avoid that race.
@@ -593,34 +588,47 @@ export default function VoteButtons({
       });
 
       if (isChangingVote) {
-        // Reward already received → no new reward. Still claim idempotently (in
-        // case the first payout never landed), then show the privacy drawer.
+        // Reward already received → no new reward screen. Claim idempotently in
+        // the background and just show the privacy bottom sheet.
         void mirror
           .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
           .catch(() => {});
-        showPrivacyDrawer();
+        setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() });
       } else {
-        // First vote → REWARD FIRST: the coin screen opens immediately (loading
-        // while the ~10s payout runs), then the privacy drawer once dismissed.
-        const reward = celebratePending({
-          coin: 'single',
-          subtitle: VOTE_REWARD_SUBTITLE,
-          loadingLabel: [
-            'Belohnung wird vorbereitet…',
-            'Einen Moment noch…',
-            'Fast geschafft…',
-            'Gleich ist es soweit…',
-          ],
-          // Open the privacy sheet a beat after the reward modal closes.
-          onClose: () => setTimeout(showPrivacyDrawer, 450),
+        // First vote → ORDER: the privacy bottom sheet appears FIRST; the coin
+        // reward screen opens only AFTER that sheet is closed (the two never
+        // stack — iOS drops a modal opened over a closing one). Kick the ~10s
+        // payout off NOW so the amount is usually ready by the time the sheet
+        // is dismissed.
+        const claimPromise = mirror.then(() =>
+          claimReward(account.address, 'proposal_vote', proposalId.toString()),
+        );
+        setSuccessDrawer({
+          visible: true,
+          message: VOTE_PRIVACY_MESSAGE,
+          action: () => {
+            onVoteSuccess();
+            // Open the reward a beat after the sheet finishes closing.
+            setTimeout(() => {
+              const reward = celebratePending({
+                coin: 'single',
+                subtitle: VOTE_REWARD_SUBTITLE,
+                loadingLabel: [
+                  'Belohnung wird vorbereitet…',
+                  'Einen Moment noch…',
+                  'Fast geschafft…',
+                  'Gleich ist es soweit…',
+                ],
+              });
+              claimPromise
+                .then((r) => {
+                  if (r.status === 'paid') reward.resolve(rewardAmountToMuenzen(r.amountAtto));
+                  else reward.fail();
+                })
+                .catch(() => reward.fail());
+            }, 450);
+          },
         });
-        void mirror
-          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
-          .then((r) => {
-            if (r.status === 'paid') reward.resolve(rewardAmountToMuenzen(r.amountAtto));
-            else reward.fail();
-          })
-          .catch(() => reward.fail());
       }
     } catch (err) {
       console.error('[VoteButtons] vote failed:', err);

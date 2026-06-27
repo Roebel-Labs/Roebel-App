@@ -99,6 +99,9 @@ type Props = {
 };
 
 const PROPOSAL_HERO_ID = '__proposal_hero';
+// How far the proposal hero may drift down as new posts arrive before it stops
+// sinking (so it always stays reachable near the top of the feed).
+const PROPOSAL_HERO_MAX_SINK = 5;
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   {
@@ -321,14 +324,28 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
-  // Pin the animated proposal hero ("Bürgerumfrage") at the very top of the
-  // feed, above all posts (the story bar lives in ListHeaderComponent and stays
-  // above this). The card self-gates, so the injected sentinel renders nothing
+  // The animated proposal hero ("Bürgerumfrage") starts at the top of the feed
+  // but is NOT sticky: posts that arrive after the feed first loaded stack above
+  // it, so it drifts down as fresh content comes in (capped so it stays
+  // reachable). The card self-gates, so the injected sentinel renders nothing
   // when there's no eligible proposal.
+  const heroAnchorIds = useRef<Set<string> | null>(null);
   const displayData = React.useMemo(() => {
     if (!showProposalHero) return items;
+    // Snapshot the posts present when the hero first has a feed to anchor to.
+    if (heroAnchorIds.current === null && items.length > 0) {
+      heroAnchorIds.current = new Set(items.map((it) => it.id));
+    }
     const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
-    return [hero, ...items];
+    // Insert after the freshly-arrived posts — the leading items that weren't in
+    // the initial snapshot — capped so the card never sinks out of view.
+    const seen = heroAnchorIds.current;
+    let at = 0;
+    if (seen) {
+      while (at < items.length && !seen.has(items[at].id)) at++;
+      at = Math.min(at, PROPOSAL_HERO_MAX_SINK);
+    }
+    return [...items.slice(0, at), hero, ...items.slice(at)];
   }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.
