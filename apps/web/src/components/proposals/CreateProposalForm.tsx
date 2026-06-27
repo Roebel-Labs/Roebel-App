@@ -238,12 +238,14 @@ export function CreateProposalForm({
           },
         });
       }
-    } catch (uploadError) {
-      console.error("❌ Upload to Irys failed:", uploadError);
+    } catch (submitError) {
+      // Wraps BOTH the Irys upload and the on-chain submission — don't mislabel
+      // an on-chain/bundler failure as an Irys failure.
+      console.error("❌ Proposal creation failed:", submitError);
       setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Failed to upload to Irys. Please try again."
+        submitError instanceof Error
+          ? submitError.message
+          : "Vorschlag konnte nicht erstellt werden. Bitte versuche es erneut."
       );
       setUploadStage("error");
     }
