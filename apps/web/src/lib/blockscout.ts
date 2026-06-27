@@ -15,7 +15,7 @@
  * Shows UserOperation details for smart account transactions
  */
 export function getBlockscoutTxUrl(txHash: string): string {
-  return `https://base.blockscout.com/tx/${txHash}`;
+  return `https://gnosis.blockscout.com/tx/${txHash}`;
 }
 
 /**
@@ -23,7 +23,7 @@ export function getBlockscoutTxUrl(txHash: string): string {
  * Shows smart account details including user operations
  */
 export function getBlockscoutAddressUrl(address: string): string {
-  return `https://base.blockscout.com/address/${address}`;
+  return `https://gnosis.blockscout.com/address/${address}`;
 }
 
 /**
@@ -31,7 +31,7 @@ export function getBlockscoutAddressUrl(address: string): string {
  * Direct link to the Logs/Events tab for a contract
  */
 export function getBlockscoutContractEventsUrl(address: string): string {
-  return `https://base.blockscout.com/address/${address}?tab=logs`;
+  return `https://gnosis.blockscout.com/address/${address}?tab=logs`;
 }
 
 /**
@@ -39,7 +39,7 @@ export function getBlockscoutContractEventsUrl(address: string): string {
  * Alternative explorer for viewing contract events
  */
 export function getBaseScanContractEventsUrl(address: string): string {
-  return `https://basescan.org/address/${address}#events`;
+  return `https://gnosisscan.io/address/${address}#events`;
 }
 
 /**
@@ -47,7 +47,7 @@ export function getBaseScanContractEventsUrl(address: string): string {
  * Traditional explorer link (may not show all smart account details)
  */
 export function getBaseScanTxUrl(txHash: string): string {
-  return `https://basescan.org/tx/${txHash}`;
+  return `https://gnosisscan.io/tx/${txHash}`;
 }
 
 /**
@@ -55,5 +55,5 @@ export function getBaseScanTxUrl(txHash: string): string {
  * Traditional explorer link to a contract / address page
  */
 export function getBaseScanAddressUrl(address: string): string {
-  return `https://basescan.org/address/${address}`;
+  return `https://gnosisscan.io/address/${address}`;
 }

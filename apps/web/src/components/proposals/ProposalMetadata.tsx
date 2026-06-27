@@ -17,12 +17,12 @@ export function ProposalMetadata({ proposal }: ProposalMetadataProps) {
           {formatAddress(proposal.proposer_address, 8, 6)}
         </div>
         <a
-          href={`https://basescan.org/address/${proposal.proposer_address}`}
+          href={`https://gnosisscan.io/address/${proposal.proposer_address}`}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-primary hover:text-primary/80 transition-colors"
         >
-          View on BaseScan →
+          View on Gnosisscan →
         </a>
       </div>
 

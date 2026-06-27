@@ -69,7 +69,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
             </View>
             {tally.tallyAddress ? (
               <Pressable
-                onPress={() => Linking.openURL(`https://basescan.org/address/${tally.tallyAddress}`)}
+                onPress={() => Linking.openURL(`https://gnosisscan.io/address/${tally.tallyAddress}`)}
                 hitSlop={6}
               >
                 <Text style={[styles.basescanLink, { color: colors.textSecondary }]}>

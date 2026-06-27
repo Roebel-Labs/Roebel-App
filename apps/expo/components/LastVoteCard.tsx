@@ -38,7 +38,7 @@ export default function LastVoteCard({ vote, canChange, onChangeVote }: LastVote
   const { colors } = useTheme();
   const label = OPTION_LABEL[vote.optionIndex] ?? 'unbekannt';
   const ago = relativeTime(Math.max(0, Math.floor(Date.now() / 1000) - vote.votedAt));
-  const txUrl = `https://basescan.org/tx/${vote.txHash}`;
+  const txUrl = `https://gnosisscan.io/tx/${vote.txHash}`;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surfaceSecondary }]}>
