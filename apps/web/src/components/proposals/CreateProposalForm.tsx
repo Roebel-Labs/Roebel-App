@@ -57,6 +57,7 @@ export function CreateProposalForm({
   const [targetAddress, setTargetAddress] = useState("");
   const [value, setValue] = useState("");
   const [calldata, setCalldata] = useState("");
+  const [attachTreasurySnapshot, setAttachTreasurySnapshot] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +210,7 @@ export function CreateProposalForm({
                   snapshotBlock: Number(voteStart),
                   deadlineBlock: Number(voteEnd),
                   category: "general",
+                  attachTreasurySnapshot,
                 }),
               });
 
@@ -425,6 +427,31 @@ export function CreateProposalForm({
               Nutze die Toolbar für Überschriften, Listen, Bilder und mehr
             </p>
           </div>
+
+          {/* Opt-in: freeze the current Gemeinschaftskasse balance onto the proposal */}
+          <label
+            htmlFor="attachTreasurySnapshot"
+            className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 cursor-pointer hover:bg-accent/40 transition-colors"
+          >
+            <input
+              id="attachTreasurySnapshot"
+              type="checkbox"
+              checked={attachTreasurySnapshot}
+              onChange={(e) => setAttachTreasurySnapshot(e.target.checked)}
+              disabled={isProcessing}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-black disabled:opacity-50"
+            />
+            <span className="text-sm">
+              <span className="block font-medium text-foreground">
+                Gemeinschaftskasse-Stand anhängen
+              </span>
+              <span className="block text-muted-foreground mt-0.5">
+                Hängt den aktuellen Kontostand der Gemeinschaftskasse an diesen Vorschlag.
+                Bürger:innen sehen beim Abstimmen, wie viel gerade im Topf ist — der Stand
+                wird beim Einreichen festgehalten.
+              </span>
+            </span>
+          </label>
 
           <div className="border-t border-border pt-6">
             <h3 className="text-lg font-medium mb-2 text-foreground">

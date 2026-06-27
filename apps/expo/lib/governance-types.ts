@@ -53,6 +53,10 @@ export type Proposal = {
   blockchainProposalId?: string; // The numeric ID used for blockchain calls
   transactionHash?: string; // Tx hash of the proposal-creation transaction
 
+  // Frozen Gemeinschaftskasse balance captured when the proposal was created
+  // (from content.metadata.gemeinschaftskasse_snapshot). Absent → no card.
+  gemeinschaftskasseSnapshot?: { euro: number; captured_at: string };
+
   // Flags
   blockchainUnavailable?: boolean; // True if blockchain data fetch failed
 };
@@ -104,6 +108,13 @@ export type ProposalContent = {
 import type { SupabaseProposal } from './supabase-proposals';
 
 export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Proposal {
+  // Frozen Gemeinschaftskasse snapshot rides in content.metadata (jsonb, untyped).
+  const snap = supabaseProposal.content?.metadata?.gemeinschaftskasse_snapshot;
+  const gemeinschaftskasseSnapshot =
+    snap && typeof snap.euro === 'number'
+      ? { euro: snap.euro, captured_at: String(snap.captured_at ?? '') }
+      : undefined;
+
   return {
     // Core blockchain fields (converted from string to BigInt)
     proposalId: BigInt(supabaseProposal.blockchain_proposal_id),
@@ -127,6 +138,7 @@ export function mapSupabaseToProposal(supabaseProposal: SupabaseProposal): Propo
     createdAt: supabaseProposal.created_at,
     blockchainProposalId: supabaseProposal.blockchain_proposal_id,
     transactionHash: supabaseProposal.transaction_hash,
+    gemeinschaftskasseSnapshot,
 
     // Flags
     blockchainUnavailable: false, // Will be set to true if blockchain fetch fails

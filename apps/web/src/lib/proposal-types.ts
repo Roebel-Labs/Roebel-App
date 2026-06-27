@@ -76,6 +76,11 @@ export interface ProposalContent {
     wordCount?: number;
     estimatedReadTime?: number; // In minutes
     tags?: string[];
+    /** Frozen Gemeinschaftskasse balance captured at proposal-store time. */
+    gemeinschaftskasse_snapshot?: {
+      euro: number;
+      captured_at: string; // ISO; metadata only, never displayed
+    };
   };
 }
 

@@ -3,6 +3,7 @@ import { createProposal, getLatestProposalNumber } from "@/lib/supabase";
 import type { CreateProposalInput, ProposalContent } from "@/lib/proposal-types";
 import { calculateReadingTime, extractSummary } from "@/lib/proposal-types";
 import { createAppNotification } from "@/app/actions/app-notifications";
+import { treasuryEuro } from "@/lib/muenzen/gnosis";
 
 /**
  * POST /api/proposals/store
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
       snapshotBlock,
       deadlineBlock,
       category,
+      attachTreasurySnapshot,
     } = body;
 
     console.log("🔍 [API] Proposal details:");
@@ -74,13 +76,31 @@ export async function POST(request: NextRequest) {
     const readingTime = calculateReadingTime(markdown);
     const summary = extractSummary(markdown);
 
+    const metadata: NonNullable<ProposalContent["metadata"]> = {
+      wordCount,
+      estimatedReadTime: readingTime,
+    };
+
+    // Opt-in: freeze the current Gemeinschaftskasse balance onto the proposal.
+    // Captured server-side (tamper-proof). A read failure never blocks the
+    // store — the proposal is already on-chain; it just lands without a snapshot.
+    if (attachTreasurySnapshot) {
+      try {
+        const euro = await treasuryEuro();
+        metadata.gemeinschaftskasse_snapshot = {
+          euro,
+          captured_at: new Date().toISOString(),
+        };
+        console.log("🐷 [API] Gemeinschaftskasse snapshot captured:", euro);
+      } catch (snapErr) {
+        console.warn("⚠️ [API] treasuryEuro failed; storing without snapshot", snapErr);
+      }
+    }
+
     const content: ProposalContent = {
       markdown,
       version: "1.0",
-      metadata: {
-        wordCount,
-        estimatedReadTime: readingTime,
-      },
+      metadata,
     };
 
     console.log("📄 [API] Content metadata:");

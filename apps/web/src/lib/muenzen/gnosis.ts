@@ -123,6 +123,23 @@ export async function hasAttesterNFT(account: string): Promise<boolean> {
   }
 }
 
+// xDAI is USD-pegged; ~USD→EUR. Indicative only — matches the Expo
+// Gemeinschaftskasse hero (xDAI→€ + EURe, excludes Röbel Münzen).
+const XDAI_EUR = 0.92;
+
+/**
+ * Indicative € value of the Gemeinschaftskasse (civic treasury) Safe:
+ * native xDAI (→€) + EURe. Excludes Röbel Münzen (not euro-redeemable).
+ * Used to freeze a balance snapshot onto a proposal at creation time.
+ */
+export async function treasuryEuro(): Promise<number> {
+  const [xdai, eure] = await Promise.all([
+    nativeBalance(ADDR.safe),
+    eureBalance(ADDR.safe),
+  ]);
+  return (Number(xdai) / 1e18) * XDAI_EUR + Number(eure) / 1e18;
+}
+
 export interface WalletAssets {
   rcrc: bigint;
   personalCrc: bigint;

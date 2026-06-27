@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { useActiveAccount } from 'thirdweb/react';
 import { balanceOf } from 'thirdweb/extensions/erc721';
@@ -13,6 +13,7 @@ import { shortenAddress, calculateReadingTime } from '@/lib/governance-utils';
 import { useTheme } from '@/context/ThemeContext';
 import ProposalStateBadge from '@/components/ProposalStateBadge';
 import ProposalContent from '@/components/ProposalContent';
+import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import VotingStats from '@/components/VotingStats';
 import VoteButtons from '@/components/VoteButtons';
 import ProposalTimeline from '@/components/ProposalTimeline';
@@ -25,6 +26,7 @@ import { governorContractAddress } from '@/constants/thirdweb';
 
 export default function ProposalDetailScreen() {
   const goBack = useGoBack();
+  const router = useRouter();
   const { colors } = useTheme();
   const params = useLocalSearchParams();
   const account = useActiveAccount();
@@ -220,6 +222,17 @@ export default function ProposalDetailScreen() {
           isLoading={proposalContent.loading}
         />
 
+        {/* Frozen Gemeinschaftskasse balance at proposal time (opt-in by the
+            proposer) — taps through to the treasury. */}
+        {proposal.gemeinschaftskasseSnapshot && (
+          <View style={styles.snapshotWrap}>
+            <StadtkasseSnapshotCard
+              euro={proposal.gemeinschaftskasseSnapshot.euro}
+              onPress={() => router.push('/treasury' as any)}
+            />
+          </View>
+        )}
+
         {/* Voting Statistics — self-fetching from on-chain Tally. */}
         <InlineErrorBoundary label="VotingStats">
           <VotingStats proposalId={parseProposalIdSafe(proposal)} />
@@ -317,6 +330,11 @@ const styles = StyleSheet.create({
   statusContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
+  },
+  snapshotWrap: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
   },
   title: {
     fontSize: 24,
