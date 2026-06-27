@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   container: { paddingTop: 20 },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     paddingHorizontal: 16,
     marginBottom: 12,
   },

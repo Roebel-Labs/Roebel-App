@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, alignItems: 'center' },
   filterChip: {

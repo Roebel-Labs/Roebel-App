@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: 17,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     textAlign: 'center',
   },
   headerSpacer: {

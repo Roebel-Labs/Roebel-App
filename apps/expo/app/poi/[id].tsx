@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scrollContent: {},
   body: { padding: 16 },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },

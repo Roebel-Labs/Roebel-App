@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginBottom: 12,
   },
   sectionTitlePadded: {

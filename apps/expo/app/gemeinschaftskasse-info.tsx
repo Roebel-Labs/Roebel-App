@@ -121,7 +121,7 @@ function makeStyles(colors: any) {
       paddingVertical: 8,
     },
     backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-    headerTitle: { fontFamily: "Inter-SemiBold", fontSize: 17, color: colors.textPrimary },
+    headerTitle: { fontFamily: 'MonaSansSemiCondensed-SemiBold', fontSize: 17, color: colors.textPrimary },
     content: { paddingHorizontal: 16, paddingBottom: 24 },
     lead: { fontFamily: "Inter-Regular", fontSize: 15, lineHeight: 22, color: colors.textSecondary, marginBottom: 16 },
     card: {

@@ -117,7 +117,7 @@ function makeStyles(colors: any, isDark: boolean) {
       paddingVertical: 12,
     },
     backBtn: { width: 40, height: 40, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: 'Inter-SemiBold', fontSize: 18, color: colors.textPrimary },
+    headerTitle: { fontFamily: 'MonaSansSemiCondensed-SemiBold', fontSize: 18, color: colors.textPrimary },
     content: { flexGrow: 1, padding: 20, paddingBottom: 32 },
     summary: { alignItems: 'center', marginTop: 16, marginBottom: 28, gap: 12 },
     badge: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },

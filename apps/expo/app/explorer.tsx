@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 8 },
   scanButton: { padding: 8 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scannerContainer: { flex: 1, backgroundColor: '#000' },
   scannerHeader: {
     flexDirection: 'row',
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginTop: 8,
   },
   checkpointCard: {

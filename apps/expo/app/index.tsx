@@ -726,7 +726,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     marginBottom: 12,
     paddingHorizontal: 16,
   },

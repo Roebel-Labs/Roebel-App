@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   reportButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
   reportButtonText: { color: '#fff', fontFamily: 'Inter-Medium', fontSize: 13 },
   tabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   sightingObserver: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 4 },
   sectionTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginBottom: 8,
     marginTop: 4,
   },

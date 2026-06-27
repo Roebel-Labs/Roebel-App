@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerSpacer: { width: 40 },
   content: { flex: 1 },
   accountInfo: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 4 },

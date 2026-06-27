@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   submitButton: {
     paddingHorizontal: 16,

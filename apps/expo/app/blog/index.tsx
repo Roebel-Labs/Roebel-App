@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 22, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerSpacer: { width: 40 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },

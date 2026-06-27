@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   weiterBtn: {
     paddingHorizontal: 20,

@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: {
     paddingHorizontal: 16,

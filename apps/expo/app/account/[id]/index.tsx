@@ -1087,7 +1087,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   centered: {
     flex: 1,
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginBottom: 8,
   },
   sectionCount: {

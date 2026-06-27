@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
   addButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   banner: {
     margin: 16,
     padding: 12,

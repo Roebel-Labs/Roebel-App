@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerSpacer: { width: 44, height: 44, flex: 1 },
   scrollContent: { paddingBottom: 32 },
   coverImage: { width: '100%', aspectRatio: 16 / 9 },

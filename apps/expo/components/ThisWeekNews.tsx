@@ -40,6 +40,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,

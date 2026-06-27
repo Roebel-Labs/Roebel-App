@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   headerSpacer: { width: 40 },
   content: { flex: 1 },
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     paddingHorizontal: 16,
     marginBottom: 12,
   },

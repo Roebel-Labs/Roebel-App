@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   headerSpacer: { width: 32 },
   content: { flex: 1 },
   contentInner: { padding: 16, gap: 16 },
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  sectionTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold' },
+  sectionTitle: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   sectionBody: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
   dangerButton: {
     height: 48,

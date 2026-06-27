@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: fontSize['2xl'],
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   headerSpacer: {
     width: 40,

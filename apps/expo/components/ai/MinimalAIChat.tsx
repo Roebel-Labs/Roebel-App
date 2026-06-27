@@ -412,7 +412,7 @@ const previewStyles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   headerSpacer: {
     width: 44,

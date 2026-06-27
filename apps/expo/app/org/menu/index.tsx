@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-Medium'},
   backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 40 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

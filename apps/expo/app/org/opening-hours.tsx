@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   content: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },

@@ -1067,7 +1067,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   headerSubtitle: {
     color: 'rgba(255,255,255,0.75)',

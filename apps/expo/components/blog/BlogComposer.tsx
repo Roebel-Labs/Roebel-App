@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-Medium'},
   scroll: { padding: 16, paddingBottom: 80 },
   fieldLabel: {
     fontSize: 12,

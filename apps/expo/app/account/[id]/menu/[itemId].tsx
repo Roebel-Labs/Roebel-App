@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   thumbsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 16 },
   hint: { fontSize: 12, fontFamily: 'Inter-Regular', marginTop: 8 },
   section: { paddingHorizontal: 16, paddingTop: 28 },
-  sectionTitle: { fontSize: 18, fontFamily: 'Inter-Medium', marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 12 },
   noteInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80, fontFamily: 'Inter-Regular', fontSize: 14, textAlignVertical: 'top' },
   relCard: { width: 140 },
   relImg: { width: 140, height: 140, borderRadius: 12 },

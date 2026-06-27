@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   headerSpacer: {
     width: 24,

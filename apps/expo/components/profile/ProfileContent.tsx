@@ -362,7 +362,7 @@ export default function ProfileContent() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
-  headerTitle: { fontSize: 22, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Medium'},
   content: { flex: 1 },
   notConnectedContainer: { flex: 1 },
   emptyStateContainer: { borderWidth: 1, borderRadius: 12, padding: 20, marginHorizontal: 16, marginTop: 24, marginBottom: 32 },
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   logoutIconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   bookmarkedSection: { marginBottom: 32 },
   bookmarkedContainer: { paddingHorizontal: 16 },
-  sectionTitle: { fontSize: 18, fontFamily: 'Inter-Medium', marginBottom: 16, paddingHorizontal: 16 },
+  sectionTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium', marginBottom: 16, paddingHorizontal: 16 },
   menuSection: { paddingHorizontal: 16 },
   menuGroup: { gap: 8 },
   menuDivider: { height: 1, marginVertical: 16 },

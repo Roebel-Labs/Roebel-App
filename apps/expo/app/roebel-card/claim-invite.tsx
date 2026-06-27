@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scroll: { flex: 1 },
   scrollContent: {
     padding: 24,

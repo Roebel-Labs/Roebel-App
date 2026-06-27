@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scrollContent: {},
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   title: { fontSize: 26, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   tagText: { fontSize: 12, fontFamily: 'Inter-Medium' },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginTop: 16,
     marginBottom: 8,
   },

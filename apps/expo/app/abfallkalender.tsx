@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scrollContent: { paddingBottom: 48, paddingHorizontal: 20, paddingTop: 4 },
   heroCard: {
     flexDirection: 'row',
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   rowDate: { fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 2 },
   rowRelative: { fontSize: 12, fontFamily: 'Inter-Regular' },
   remindersSection: { marginTop: 16 },
-  sectionTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
+  sectionTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold', marginBottom: 4 },
   sectionDesc: { fontSize: 13, fontFamily: 'Inter-Regular', marginBottom: 12, lineHeight: 18 },
   toggleRow: {
     flexDirection: 'row',

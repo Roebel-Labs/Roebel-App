@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     textAlign: 'center',
   },
   headerSpacer: {

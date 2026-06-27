@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     maxWidth: 240,
   },
   headerSpacer: { width: 40 },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,

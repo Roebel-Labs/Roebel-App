@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     textAlign: 'center',
     marginHorizontal: 12,
   },

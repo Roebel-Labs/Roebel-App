@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerSpacer: { width: 40 },
   warning: {
     flexDirection: 'row',
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   sectionContainer: { paddingHorizontal: 16, paddingTop: 24 },
   sectionTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,

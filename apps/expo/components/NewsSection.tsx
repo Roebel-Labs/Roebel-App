@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   viewAllButton: {
     width: 36,

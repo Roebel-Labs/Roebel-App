@@ -174,7 +174,7 @@ function makeStyles(colors: any, isDark: boolean) {
 			justifyContent: "center",
 			backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.7)",
 		},
-		headerTitle: { fontFamily: "Inter-SemiBold", fontSize: 18, color: colors.textPrimary },
+		headerTitle: { fontFamily: 'MonaSansSemiCondensed-SemiBold', fontSize: 18, color: colors.textPrimary },
 		scroll: { flex: 1 },
 		content: { flexGrow: 1 },
 		hero: { alignItems: "center", paddingTop: 28, paddingBottom: 36, paddingHorizontal: 24 },

@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     fontSize: 17,
   },
   content: {
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sectionTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     fontSize: 17,
     marginBottom: 4,
   },

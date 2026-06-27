@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   headerSpacer: {
     width: 40,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     marginBottom: 4,
     marginTop: 8,
   },

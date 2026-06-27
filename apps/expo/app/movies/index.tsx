@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     flex: 1,
     textAlign: 'center',
   },
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
     marginBottom: 16,
     paddingHorizontal: 16,
   },

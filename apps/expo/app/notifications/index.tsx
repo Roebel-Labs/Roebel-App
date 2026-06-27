@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   settingsButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: 80 },
   emptyTitle: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 8 },

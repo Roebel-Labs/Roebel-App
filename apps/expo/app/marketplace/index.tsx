@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   filterList: {
     flexGrow: 0,

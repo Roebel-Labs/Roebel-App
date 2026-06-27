@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   sectionTitle: {
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     marginBottom: 12,
   },
   hourlyRow: {

@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { padding: 8 },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   content: { padding: 16, gap: 20 },
   heroCard: {
     borderRadius: 20,
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
   },
   options: {
     gap: 10,

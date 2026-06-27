@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold' },
+  headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   scrollContent: {},
   cover: { width: '100%', height: 240 },
   coverPlaceholder: { width: '100%', height: 200, justifyContent: 'center', alignItems: 'center' },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: { width: 110, fontSize: 13, fontFamily: 'Inter-Medium' },
   rowValue: { flex: 1, fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20 },
-  sectionTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold', marginTop: 16, marginBottom: 8 },
+  sectionTitle: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-SemiBold', marginTop: 16, marginBottom: 8 },
   eventCard: {
     padding: 14,
     borderRadius: 12,

@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 6,

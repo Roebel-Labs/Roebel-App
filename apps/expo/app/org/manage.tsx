@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerRight: { width: 80 },
   inviteButton: {
     paddingHorizontal: 14,

@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   content: {
     flex: 1,

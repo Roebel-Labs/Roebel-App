@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     marginTop: -6,
   },
   sectionTitle: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-SemiBold',
     fontSize: 18,
     marginTop: 16,
     marginBottom: 10,

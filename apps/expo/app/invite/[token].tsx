@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 18, fontFamily: 'Inter-Medium' },
+  headerTitle: { fontSize: 18, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerRight: { width: 40 },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
   orgSection: { alignItems: 'center', marginBottom: 24 },

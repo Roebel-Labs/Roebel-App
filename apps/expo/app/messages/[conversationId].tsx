@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Medium',
   },
   headerRight: {
     width: 40,
