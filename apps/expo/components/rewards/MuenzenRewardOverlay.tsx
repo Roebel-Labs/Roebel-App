@@ -10,7 +10,7 @@ interface MuenzenRewardOverlayProps {
   subtitle?: string;
   /** Show the screen in a loading state (spinner + label) until resolved. */
   loading?: boolean;
-  loadingLabel?: string;
+  loadingLabel?: string | string[];
   /** Coin variant to show while loading (before the amount is known). */
   coin?: 'single' | 'many';
   /** Changes per celebration so the entrance animation replays each time. */

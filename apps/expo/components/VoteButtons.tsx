@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { useActiveAccount } from 'thirdweb/react';
 import { prepareContractCall, readContract, sendTransaction, waitForReceipt } from 'thirdweb';
@@ -41,6 +41,10 @@ import {
 // Reward screen body copy for casting a vote (governance participation).
 const VOTE_REWARD_SUBTITLE =
   'Danke fürs Mitbestimmen! Für deine Teilnahme an der Abstimmung gibt es Röbel Münzen.';
+
+// Privacy confirmation shown after the reward screen is dismissed.
+const VOTE_PRIVACY_MESSAGE =
+  'Versiegelt und eingeworfen. Deine Stimme ist ab jetzt für niemanden sichtbar — nicht für die Stadt, nicht für uns. Erst nach Ablauf der Frist öffnen mehrere Schlüsselhalter:innen die digitale Wahlurne gemeinsam. Bis dahin kannst du deine Wahl jederzeit ändern.';
 
 interface VoteButtonsProps {
   proposalId: bigint;
@@ -124,13 +128,7 @@ export default function VoteButtons({
   const { colors } = useTheme();
   const router = useRouter();
   const { activePendingRequest } = useVerificationContext();
-  const { celebrate } = useRewardCelebration();
-  // Vote reward (Röbel Münzen). The full-screen celebration appears AFTER the
-  // privacy success drawer is dismissed — it never replaces that drawer. We
-  // stash the paid amount and handle both orderings (claim resolves before or
-  // after the user closes the drawer).
-  const pendingRewardMuenzen = useRef<number | null>(null);
-  const voteDrawerDismissed = useRef(false);
+  const { celebratePending } = useRewardCelebration();
   const {
     serializedKeypair,
     keypairLoading,
@@ -570,53 +568,60 @@ export default function VoteButtons({
         encrypted: true,
       });
 
+      // Was this proposal already voted on? If so the reward was granted the
+      // first time — re-voting (changing the choice) shows no new reward screen.
+      const isChangingVote = !!getLastVote(pollAddress);
+
       // Persist the choice locally so the LastVoteCard can show it. The vote
       // itself stays encrypted on chain — this cache is purely UX.
       await recordVote(pollAddress, support, nonce, receipt.transactionHash);
       setChanging(false);
 
-      // Mirror to Supabase so the voter's profile "Abstimmungen" count reflects
-      // this vote — and so the claim-reward verifier (which checks vote_history)
-      // finds the vote. Chain the reward claim AFTER the mirror lands to avoid
-      // that race. Rewards participation only, never the choice; idempotent +
-      // once per proposal, so re-voting won't pay twice. A quiet no-op until the
-      // funder is live. We celebrate only after the privacy drawer is dismissed.
-      pendingRewardMuenzen.current = null;
-      voteDrawerDismissed.current = false;
-      void recordVoteToSupabase({
+      // The privacy confirmation — shown AFTER the reward screen is dismissed so
+      // the two never stack (iOS drops a modal opened over a closing one).
+      const showPrivacyDrawer = () =>
+        setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() });
+
+      // Mirror to Supabase so the voter's profile count reflects this vote — and
+      // so the claim-reward verifier (which reads vote_history) finds it. The
+      // claim is chained AFTER the mirror to avoid that race.
+      const mirror = recordVoteToSupabase({
         walletAddress: account.address,
         proposalId: proposalId.toString(),
         voteType: support,
         transactionHash: receipt.transactionHash,
-      })
-        .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
-        .then((r) => {
-          if (r.status !== 'paid') return;
-          const muenzen = rewardAmountToMuenzen(r.amountAtto);
-          if (voteDrawerDismissed.current) {
-            // Drawer already closed — celebrate now.
-            celebrate(muenzen, { subtitle: VOTE_REWARD_SUBTITLE });
-          } else {
-            // Still reading the privacy message — celebrate on dismiss.
-            pendingRewardMuenzen.current = muenzen;
-          }
-        })
-        .catch(() => {});
-
-      setSuccessDrawer({
-        visible: true,
-        message:
-          'Versiegelt und eingeworfen. Deine Stimme ist ab jetzt für niemanden sichtbar — nicht für die Stadt, nicht für uns. Erst nach Ablauf der Frist öffnen mehrere Schlüsselhalter:innen die digitale Wahlurne gemeinsam. Bis dahin kannst du deine Wahl jederzeit ändern.',
-        action: () => {
-          onVoteSuccess();
-          voteDrawerDismissed.current = true;
-          const muenzen = pendingRewardMuenzen.current;
-          pendingRewardMuenzen.current = null;
-          // Let the bottom drawer finish closing before the full-screen modal
-          // opens (avoids an iOS modal-on-modal presentation conflict).
-          if (muenzen) setTimeout(() => celebrate(muenzen, { subtitle: VOTE_REWARD_SUBTITLE }), 350);
-        },
       });
+
+      if (isChangingVote) {
+        // Reward already received → no new reward. Still claim idempotently (in
+        // case the first payout never landed), then show the privacy drawer.
+        void mirror
+          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
+          .catch(() => {});
+        showPrivacyDrawer();
+      } else {
+        // First vote → REWARD FIRST: the coin screen opens immediately (loading
+        // while the ~10s payout runs), then the privacy drawer once dismissed.
+        const reward = celebratePending({
+          coin: 'single',
+          subtitle: VOTE_REWARD_SUBTITLE,
+          loadingLabel: [
+            'Belohnung wird vorbereitet…',
+            'Einen Moment noch…',
+            'Fast geschafft…',
+            'Gleich ist es soweit…',
+          ],
+          // Open the privacy sheet a beat after the reward modal closes.
+          onClose: () => setTimeout(showPrivacyDrawer, 450),
+        });
+        void mirror
+          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
+          .then((r) => {
+            if (r.status === 'paid') reward.resolve(rewardAmountToMuenzen(r.amountAtto));
+            else reward.fail();
+          })
+          .catch(() => reward.fail());
+      }
     } catch (err) {
       console.error('[VoteButtons] vote failed:', err);
       setErrorDrawer({

@@ -7,12 +7,14 @@ interface CelebrateOptions {
 }
 
 interface PendingOptions {
-  /** Label shown next to the spinner while the reward is being fetched. */
-  loadingLabel?: string;
+  /** Label(s) shown next to the spinner while the reward is being fetched. */
+  loadingLabel?: string | string[];
   /** Coin variant to show during loading (before the amount is known). */
   coin?: 'single' | 'many';
   /** Subtitle to show once resolved (can also be passed to resolve()). */
   subtitle?: string;
+  /** Fired once when the reward screen is dismissed (Weiter) or aborted (fail). */
+  onClose?: () => void;
 }
 
 interface PendingHandle {
@@ -42,8 +44,9 @@ interface QueueItem {
   amount: number;
   subtitle?: string;
   loading: boolean;
-  loadingLabel?: string;
+  loadingLabel?: string | string[];
   coin?: 'single' | 'many';
+  onClose?: () => void;
 }
 
 const RewardCelebrationContext = createContext<RewardCelebrationContextValue | undefined>(
@@ -67,6 +70,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
 
   const celebratePending = useCallback((opts?: PendingOptions): PendingHandle => {
     const id = nextId.current++;
+    const onClose = opts?.onClose;
     setQueue((q) => [
       ...q,
       {
@@ -76,6 +80,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
         loading: true,
         loadingLabel: opts?.loadingLabel,
         coin: opts?.coin,
+        onClose,
       },
     ]);
     return {
@@ -89,15 +94,22 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
           ),
         );
       },
-      fail: () => setQueue((q) => q.filter((it) => it.id !== id)),
+      fail: () => {
+        setQueue((q) => q.filter((it) => it.id !== id));
+        if (onClose) setTimeout(onClose, 0);
+      },
     };
   }, []);
 
-  const handleClose = useCallback(() => {
-    setQueue((q) => q.slice(1));
-  }, []);
-
   const current = queue[0];
+
+  // Dismiss the visible reward (Weiter). Fire its onClose AFTER it leaves the
+  // queue so any follow-up (e.g. a bottom sheet) opens once this modal is gone.
+  const handleClose = () => {
+    const cb = current?.onClose;
+    setQueue((q) => q.slice(1));
+    if (cb) setTimeout(cb, 0);
+  };
 
   const value = useMemo(() => ({ celebrate, celebratePending }), [celebrate, celebratePending]);
 
