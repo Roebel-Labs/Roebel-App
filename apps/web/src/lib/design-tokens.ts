@@ -72,9 +72,9 @@ export const colors = {
 // =============================================================================
 
 export const typography = {
-  // Headings - use font-nineties for h1/h2, regular font for h3/h4
-  h1: "text-3xl font-medium tracking-tight font-nineties",
-  h2: "text-2xl font-medium tracking-tight font-nineties",
+  // Headings - Mona Sans SemiCondensed Bold for h1/h2, regular font for h3/h4
+  h1: "text-3xl font-bold tracking-tight font-heading",
+  h2: "text-2xl font-bold tracking-tight font-heading",
   h3: "text-xl font-medium tracking-tight",
   h4: "text-lg font-medium",
 

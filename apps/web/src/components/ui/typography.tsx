@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 const headingVariants = cva("text-foreground", {
   variants: {
     level: {
-      h1: "text-3xl font-medium tracking-tight font-nineties",
-      h2: "text-2xl font-medium tracking-tight font-nineties",
+      h1: "text-3xl font-bold tracking-tight font-heading",
+      h2: "text-2xl font-bold tracking-tight font-heading",
       h3: "text-xl font-medium tracking-tight",
       h4: "text-lg font-medium",
     },

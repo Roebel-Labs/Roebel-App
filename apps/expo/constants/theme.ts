@@ -9,10 +9,28 @@
 
 // ─── Typography ──────────────────────────────────────────────
 
+/**
+ * Typography — Mona Sans (GitHub, SIL OFL 1.1).
+ *   - body / UI .... Mona Sans
+ *   - headlines .... Mona Sans SemiCondensed (Bold)
+ *   - mono ......... Mona Sans Mono
+ *
+ * NOTE: legacy `Inter-*` family keys are aliased to the Mona Sans files in
+ * `hooks/useFonts.ts`, so existing components keep working. Use these tokens
+ * (e.g. `fontFamily.heading`) in new code.
+ */
 export const fontFamily = {
-  regular: 'Inter-Regular',
-  medium: 'Inter-Medium',
-  semiBold: 'Inter-SemiBold',
+  // Body / UI
+  regular: 'MonaSans-Regular',
+  medium: 'MonaSans-Medium',
+  semiBold: 'MonaSans-SemiBold',
+  bold: 'MonaSans-Bold',
+  // Headlines — Mona Sans SemiCondensed
+  heading: 'MonaSansSemiCondensed-Bold',
+  headingSemiBold: 'MonaSansSemiCondensed-SemiBold',
+  // Monospace — code, addresses, tabular numbers
+  mono: 'MonaSansMono-Regular',
+  monoMedium: 'MonaSansMono-Medium',
 } as const;
 
 export const fontSize = {

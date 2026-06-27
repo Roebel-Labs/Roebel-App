@@ -26,8 +26,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        heading: ["Plus Jakarta Sans", "sans-serif"],
-        body: ["Inter", "sans-serif"],
+        heading: ["Mona Sans SemiCondensed", "Mona Sans", "sans-serif"],
+        body: ["Mona Sans", "sans-serif"],
+        mono: ["Mona Sans Mono", "monospace"],
       },
       borderRadius: {
         sm: "4px",

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { Inter } from "next/font/google";
+import { monaSans, monaSansMono } from "./fonts";
 import "./globals.css";
 import { ThirdwebProvider } from "thirdweb/react";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,11 +10,6 @@ import { GlobalAutoConnect } from "@/components/app/GlobalAutoConnect";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccountProvider } from "@/lib/context/AccountContext";
 import { Analytics } from "@vercel/analytics/react";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "Röbel App",
@@ -44,8 +38,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistMono.variable} ${inter.variable}`} suppressHydrationWarning>
-      <body className={`${inter.className} flex flex-col min-h-screen overflow-x-hidden`}>
+    <html lang="en" className={`${monaSans.variable} ${monaSansMono.variable}`} suppressHydrationWarning>
+      <body className={`${monaSans.className} flex flex-col min-h-screen overflow-x-hidden`}>
         <ThemeProvider>
           <ThirdwebProvider>
             <GlobalAutoConnect />

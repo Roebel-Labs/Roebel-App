@@ -31,7 +31,7 @@ import { MaciProvider } from '@/context/MaciContext';
 import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
 import '@/lib/patch-text';
-import useInterFonts from '@/hooks/useFonts';
+import useAppFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ThirdwebProvider } from 'thirdweb/react';
@@ -261,7 +261,7 @@ function ThemedLayout() {
 }
 
 function Layout() {
-  const { fontsLoaded, fontError } = useInterFonts();
+  const { fontsLoaded, fontError } = useAppFonts();
 
   React.useEffect(() => {
     if (fontsLoaded) {

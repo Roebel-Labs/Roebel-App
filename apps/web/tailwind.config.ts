@@ -11,15 +11,20 @@ const config: Config = {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'var(--font-inter)',
+  				'var(--font-mona-sans)',
   				'sans-serif'
   			],
   			mono: [
-  				'var(--font-geist-mono)',
+  				'var(--font-mona-sans-mono)',
   				'monospace'
   			],
+  			heading: [
+  				'var(--font-mona-sans)',
+  				'sans-serif'
+  			],
+  			// Legacy alias kept for back-compat; resolves to Mona Sans.
   			nineties: [
-  				'var(--font-perfectly-nineties)',
+  				'var(--font-mona-sans)',
   				'sans-serif'
   			]
   		},

@@ -6,7 +6,11 @@
 - **Token source of truth:** `constants/theme.ts` (lightColors / darkColors)
 - **Theme context:** `context/ThemeContext.tsx`
 - **Dark mode:** ThemeContext provides `colors` object that auto-switches between light/dark palettes
-- **Font families:** `Inter-Regular`, `Inter-Medium`, `Inter-SemiBold`, `Inter-Bold`
+- **Font families:** Mona Sans (SIL OFL 1.1). Use the `fontFamily` tokens from `constants/theme.ts`:
+  - Body/UI: `MonaSans-Regular` / `-Medium` / `-SemiBold` / `-Bold` (tokens `regular`/`medium`/`semiBold`/`bold`)
+  - Headlines: `MonaSansSemiCondensed-Bold` (token `heading`)
+  - Mono: `MonaSansMono-Regular` (token `mono`)
+  - Legacy `Inter-*` / `GeistMono-*` keys still work — they are aliased to the Mona Sans files in `hooks/useFonts.ts`, so existing hardcoded `fontFamily: 'Inter-Regular'` renders Mona Sans. Prefer the tokens in new code.
 - A previous NativeWind migration attempt broke the app and was reverted. Do NOT attempt NativeWind migration.
 
 ## Figma

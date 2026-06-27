@@ -93,8 +93,9 @@ export const radius = {
 } as const;
 
 export const fontFamily = {
-  heading: "Plus Jakarta Sans",
-  body: "Inter",
+  heading: "Mona Sans SemiCondensed",
+  body: "Mona Sans",
+  mono: "Mona Sans Mono",
 } as const;
 
 export const fontSize = {
