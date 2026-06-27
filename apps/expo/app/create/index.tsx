@@ -901,7 +901,7 @@ const styles = StyleSheet.create({
   },
   moreBtnText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   bottomOptions: {
     paddingHorizontal: 16,

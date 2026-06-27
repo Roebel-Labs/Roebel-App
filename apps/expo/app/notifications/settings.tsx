@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   },
   settingsButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   errorBanner: {
     marginHorizontal: 16,
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   },
   selectAllText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   categoryItem: {
     flexDirection: 'row',

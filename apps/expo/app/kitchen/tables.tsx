@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   },
   addInputBtnText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   sectionLabel: {
     fontSize: 14,

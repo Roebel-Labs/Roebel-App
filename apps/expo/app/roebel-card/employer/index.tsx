@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   complianceLink: {
     paddingVertical: 16,

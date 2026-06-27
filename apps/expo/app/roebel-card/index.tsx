@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   thanksText: {
     marginTop: 12,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
   },
   myCardButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   claimInviteLink: {
     marginTop: 32,

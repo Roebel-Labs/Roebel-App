@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   ctaText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 14,
   },
   illustration: {

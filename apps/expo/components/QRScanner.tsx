@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
   },
   scanAgainButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   message: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
     textAlign: 'center',
   },

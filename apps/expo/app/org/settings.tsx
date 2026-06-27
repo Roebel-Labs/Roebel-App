@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dangerButtonText: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  dangerButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   confirmBody: { gap: 12, paddingTop: 4 },
   confirmTitle: { fontSize: 18, fontFamily: 'Inter-Bold' },
   confirmText: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, marginBottom: 4 },

@@ -464,14 +464,14 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: fontSize.lg,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   secondaryButton: {
     paddingVertical: 8,
   },
   secondaryButtonText: {
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: 'rgba(255,255,255,0.7)',
   },
   pauseCard: {

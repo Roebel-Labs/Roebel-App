@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   },
   contactButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   feedbackButton: {
     flexDirection: 'row',
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   feedbackButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   relatedSection: {
     marginTop: 32,
@@ -467,6 +467,6 @@ const styles = StyleSheet.create({
   },
   shareButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

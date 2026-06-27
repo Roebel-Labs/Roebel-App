@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
   },
   closeBtn: {

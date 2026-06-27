@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 4, textAlign: 'left' },
   emptySubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 12, textAlign: 'left' },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  primaryButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   connectedContainer: { paddingTop: 24 },
   userInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, paddingHorizontal: 16, gap: 12 },
   profileImage: { width: 48, height: 48, borderRadius: 24 },

@@ -79,6 +79,16 @@ h6,
   font-stretch: 87.5%;
 }
 
+/* All button labels: Mona Sans SemiCondensed Bold. Unlayered so it overrides
+   Tailwind's font-weight utilities (font-semibold/-medium) on buttons. Any
+   mono content inside a button (e.g. a .font-mono address child) keeps its own
+   font-family/weight set on that child. */
+button {
+  font-family: var(--font-display);
+  font-stretch: 87.5%;
+  font-weight: 700;
+}
+
 ::selection {
   background: rgba(0, 73, 139, 0.14);
 }

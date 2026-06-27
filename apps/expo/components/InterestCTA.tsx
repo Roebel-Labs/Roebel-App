@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   buttonTextActive: {
     // Color set dynamically via inline style using colors.primary

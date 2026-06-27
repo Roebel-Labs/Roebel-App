@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   },
   dismissButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   activateButton: {
     flex: 1,
@@ -125,6 +125,6 @@ const styles = StyleSheet.create({
   },
   activateButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButtonText: {
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: fontSize.md,
   },
   unlockCard: {

@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backBtnText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   header: {
     flexDirection: 'row',
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   },
   tablesBtnText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   scrollContent: {
     flex: 1,
@@ -320,6 +320,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   tableButtonText: {
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 14,
   },
   orderBtn: {
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
   },
   orderBtnText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   closeSessionBtn: {
     borderRadius: 12,

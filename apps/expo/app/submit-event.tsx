@@ -1447,7 +1447,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   cancelButton: {
     backgroundColor: 'transparent',
@@ -1458,7 +1458,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   hint: {
     fontSize: 12,
@@ -1497,7 +1497,7 @@ const styles = StyleSheet.create({
   },
   primarySuccessButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   secondarySuccessButton: {
     paddingVertical: 14,
@@ -1508,7 +1508,7 @@ const styles = StyleSheet.create({
   },
   secondarySuccessButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     textAlign: 'center',
   },
   // Category Modal Styles
@@ -1558,7 +1558,7 @@ const styles = StyleSheet.create({
   },
   modalCloseButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Error Styles
   errorContainer: {
@@ -1659,7 +1659,7 @@ const styles = StyleSheet.create({
   },
   aiButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Location Hint
   locationHint: {

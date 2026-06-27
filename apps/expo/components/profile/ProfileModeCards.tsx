@@ -238,11 +238,11 @@ const styles = StyleSheet.create({
   },
   ctaTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   ctaSubtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 2,
   },
 });

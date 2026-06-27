@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   cancelButton: {
     backgroundColor: 'transparent',
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   hint: {
     fontSize: 12,
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
   },
   successButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Modal Styles
   modalOverlay: {
@@ -546,6 +546,6 @@ const styles = StyleSheet.create({
   },
   modalCloseButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

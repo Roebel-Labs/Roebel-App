@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   boostButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   boostExpiry: {
     fontSize: 12,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   statusButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   deleteButton: {
     marginHorizontal: 16,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#EF4444',
   },
   bottomPadding: {

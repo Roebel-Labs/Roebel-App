@@ -820,10 +820,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   talerCtaCountdownText: {
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 13,
   },
   talerCtaText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
     color: '#fff',
   },
@@ -899,7 +900,7 @@ const styles = StyleSheet.create({
   },
   primaryCTAText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 15,
   },
   missionHeader: {

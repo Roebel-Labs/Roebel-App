@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   },
   navButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   time: {
     fontSize: 11,

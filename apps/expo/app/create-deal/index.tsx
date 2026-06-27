@@ -127,5 +127,5 @@ const styles = StyleSheet.create({
   stepIllustration: { width: 80, height: 80 },
   footer: { paddingHorizontal: 24, paddingBottom: 24 },
   button: { borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  buttonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  buttonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
 });

@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   },
   primaryCTAText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 15,
   },
   footerHint: {

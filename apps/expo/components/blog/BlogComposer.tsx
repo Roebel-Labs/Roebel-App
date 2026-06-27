@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
   },
-  btnSecondaryText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  btnSecondaryText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   btnPrimary: {
     flex: 1,
     borderRadius: 12,
@@ -401,5 +401,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
   },
-  btnPrimaryText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  btnPrimaryText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
 });

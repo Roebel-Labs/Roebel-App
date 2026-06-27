@@ -149,6 +149,6 @@ const styles = StyleSheet.create({
   },
   statusBtnText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

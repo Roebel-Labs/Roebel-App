@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   closeBtnText: {
     color: '#ffffff',
     fontSize: 18,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   content: {
     flex: 1,
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
   dismissButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   ctaButton: {
     paddingVertical: 14,
@@ -157,6 +157,6 @@ const styles = StyleSheet.create({
   ctaButtonText: {
     color: '#ffffff',
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

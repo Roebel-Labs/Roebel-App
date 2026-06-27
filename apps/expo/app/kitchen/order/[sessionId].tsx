@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   },
   emptyStateBtnText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   menuCategory: {
     marginBottom: 20,
@@ -396,6 +396,6 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

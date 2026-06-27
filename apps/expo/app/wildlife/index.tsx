@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 17, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   reportButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
-  reportButtonText: { color: '#fff', fontFamily: 'Inter-Medium', fontSize: 13 },
+  reportButtonText: { color: '#fff', fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 13 },
   tabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
   tabPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   tabPillText: { fontSize: 13, fontFamily: 'Inter-Medium' },

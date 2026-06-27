@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
-  ctaLabel: { fontSize: 15, fontFamily: 'Inter-Medium' },
+  ctaLabel: { fontSize: 15, fontFamily: 'MonaSansSemiCondensed-Bold'},
   footerNote: { paddingHorizontal: 16, paddingTop: 24 },
   footerNoteText: {
     fontSize: 13,

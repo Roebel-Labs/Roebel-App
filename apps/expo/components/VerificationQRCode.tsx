@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   },
   shareButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   shareIcon: {
     marginLeft: 8,

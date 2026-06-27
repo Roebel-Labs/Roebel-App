@@ -368,6 +368,6 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

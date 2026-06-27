@@ -127,6 +127,6 @@ const styles = StyleSheet.create({
   backToAppButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

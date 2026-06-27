@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   pickerList: {
     borderRadius: 16,

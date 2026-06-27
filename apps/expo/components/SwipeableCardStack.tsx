@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   moreButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   // Pagination

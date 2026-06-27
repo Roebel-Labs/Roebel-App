@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   // Receive drawer
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
   copyButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   bottomSpacer: {

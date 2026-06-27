@@ -1059,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   payButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   legal: {
     fontSize: 11,

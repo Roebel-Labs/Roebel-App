@@ -213,6 +213,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   closeButtonText: {
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 20,
     lineHeight: 20,
   },
@@ -224,6 +225,6 @@ const styles = StyleSheet.create({
   },
   detailsButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

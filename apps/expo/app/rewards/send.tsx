@@ -220,6 +220,6 @@ function makeStyles(colors: any) {
     amountInput: { fontFamily: 'Inter-Bold', fontSize: 52, color: colors.textPrimary, textAlign: 'center', minWidth: 120 },
     amountUnit: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.primary, marginTop: 4 },
     sendBtn: { marginTop: 40, height: 52, borderRadius: 999, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
-    sendBtnText: { color: '#fff', fontFamily: 'Inter-SemiBold', fontSize: 16 },
+    sendBtnText: { color: '#fff', fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 16 },
   });
 }

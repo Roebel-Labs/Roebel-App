@@ -1266,7 +1266,7 @@ const styles = StyleSheet.create({
   },
   homeButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   myEventsButton: {
     borderWidth: 1,
@@ -1276,7 +1276,7 @@ const styles = StyleSheet.create({
   },
   myEventsButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Submit button (at bottom, replacing input bar)
   submitButtonContainer: {
@@ -1287,12 +1287,12 @@ const styles = StyleSheet.create({
   },
   submitButtonTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 12,
   },
   submitButtonSubtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 4,
   },
   // Action buttons
@@ -1310,12 +1310,12 @@ const styles = StyleSheet.create({
   },
   actionButtonTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 8,
   },
   actionButtonSubtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 4,
   },
   // Typing indicator styles

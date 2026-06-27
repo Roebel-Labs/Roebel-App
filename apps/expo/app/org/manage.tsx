@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   },
   inviteButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   list: { padding: 16, gap: 8 },
   memberRow: {

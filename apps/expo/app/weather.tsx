@@ -160,6 +160,6 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

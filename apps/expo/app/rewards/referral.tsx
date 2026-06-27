@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
   },
   redeemBtnText: {
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 14,
     color: '#FFFFFF',
   },

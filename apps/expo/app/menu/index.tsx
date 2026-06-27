@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   categoryRow: {
     borderRadius: 12,

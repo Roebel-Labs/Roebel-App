@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
-  ctaText: { color: NAVY, fontFamily: 'Inter-SemiBold', fontSize: 17 },
+  ctaText: { color: NAVY, fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 17 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   // Monospace so the pixel-decode doesn't shift width as glyphs resolve.
   loadingLabel: { color: NAVY, fontFamily: 'GeistMono-Medium', fontSize: 14.5, letterSpacing: 0.3 },

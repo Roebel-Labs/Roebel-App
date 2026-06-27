@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   },
   qrCtaText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 15,
   },
   list: {

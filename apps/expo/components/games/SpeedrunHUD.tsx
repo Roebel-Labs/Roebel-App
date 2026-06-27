@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#ffffff',
     fontSize: 18,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   meckyLarge: {
     width: 120,
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
   levelSelectButtonText: {
     color: '#ffffff',
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Level Select
   levelSelectContainer: {
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: fontSize.lg,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   backButton: {
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: 'rgba(255,255,255,0.7)',
   },
 });

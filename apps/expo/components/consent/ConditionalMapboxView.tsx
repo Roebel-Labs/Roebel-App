@@ -88,6 +88,6 @@ const styles = StyleSheet.create({
   },
   ctaLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   logoutButton: {
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   bottomPadding: {
     height: 40,

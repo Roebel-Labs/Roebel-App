@@ -6,6 +6,7 @@ import {
 	ActivityIndicator,
 } from "react-native";
 import { ThemedText } from "./ThemedText";
+import { fontFamily } from "@/constants/theme";
 
 export type ThemedButtonProps = {
 	lightColor?: string;
@@ -51,7 +52,10 @@ export function ThemedButton(props: ThemedButtonProps) {
 			{props.loading && (
 				<ActivityIndicator animating={props.loading} color={textColor} />
 			)}
-			<ThemedText type="defaultSemiBold" style={{ color: textColor }}>
+			<ThemedText
+				type="defaultSemiBold"
+				style={{ color: textColor, fontFamily: fontFamily.heading }}
+			>
 				{props.loading ? props.loadingTitle : props.title}
 			</ThemedText>
 		</TouchableOpacity>

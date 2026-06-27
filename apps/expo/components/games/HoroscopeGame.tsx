@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
   closeBtnText: {
     color: '#fff',
     fontSize: 18,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   // ─── Selecting Phase ────────────────────────────────────
@@ -1020,7 +1020,7 @@ const styles = StyleSheet.create({
   resetBtnText: {
     color: '#fff',
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   backBtn: {
     flex: 1,
@@ -1032,6 +1032,6 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: '#0f0c29',
     fontSize: fontSize.base,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

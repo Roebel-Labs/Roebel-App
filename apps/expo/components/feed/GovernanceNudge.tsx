@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
 });

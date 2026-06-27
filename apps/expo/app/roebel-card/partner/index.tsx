@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
   },
   chargeButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   emptyCard: {
     borderRadius: 16,

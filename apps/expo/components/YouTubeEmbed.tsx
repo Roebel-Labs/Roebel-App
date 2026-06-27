@@ -79,6 +79,6 @@ const styles = StyleSheet.create({
   fallbackButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

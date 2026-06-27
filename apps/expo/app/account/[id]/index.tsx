@@ -1317,7 +1317,7 @@ const styles = StyleSheet.create({
   },
   ctaButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   gastroCategorySection: {
     paddingHorizontal: 16,

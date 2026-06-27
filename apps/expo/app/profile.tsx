@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   connectedContainer: {
     paddingTop: 0,
@@ -683,7 +683,7 @@ const styles = StyleSheet.create({
   },
   switchButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });
 

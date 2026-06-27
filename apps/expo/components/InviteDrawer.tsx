@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
-  primaryButtonText: { fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   secondaryButton: {
     flex: 1,
     paddingVertical: 14,
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryButtonText: { fontSize: 14, fontFamily: 'Inter-Medium' },
+  secondaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold'},
   disabledButton: { opacity: 0.5 },
   linkBox: {
     borderWidth: 1,

@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   patternButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#0c4a6e',
   },
   patternHint: {

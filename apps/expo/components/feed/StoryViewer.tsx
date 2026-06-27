@@ -1180,6 +1180,6 @@ const styles = StyleSheet.create({
   ctaText: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

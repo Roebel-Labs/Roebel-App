@@ -526,12 +526,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
   },
-  closeButtonText: { fontSize: 18, lineHeight: 18 },
+  closeButtonText: {
+    fontFamily: 'MonaSansSemiCondensed-Bold', fontSize: 18, lineHeight: 18 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailsButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
   detailsButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   routeButton: {
@@ -542,7 +543,7 @@ const styles = StyleSheet.create({
   },
   routeButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   callButton: {
     width: 32,

@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   trailerButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   infoCards: {
     marginBottom: 24,

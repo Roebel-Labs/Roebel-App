@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: '#fff',
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   deleteBtn: {
     paddingVertical: 14,
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: '#E53935',
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   btnPressed: {
     opacity: 0.8,

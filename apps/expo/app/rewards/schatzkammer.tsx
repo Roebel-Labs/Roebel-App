@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   },
   buyCTAText: {
     color: '#fff',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 15,
   },
   buyCancel: {

@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   loginButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   emptyContainer: {
     flex: 1,

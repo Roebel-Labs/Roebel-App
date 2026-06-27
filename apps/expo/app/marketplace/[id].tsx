@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   contactButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Action Buttons
   actionRow: {
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   deleteButton: {
     marginBottom: 16,
@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#EF4444',
   },
   // More Listings

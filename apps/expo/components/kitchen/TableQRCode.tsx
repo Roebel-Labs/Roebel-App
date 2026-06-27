@@ -69,6 +69,6 @@ const styles = StyleSheet.create({
   },
   shareBtnText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

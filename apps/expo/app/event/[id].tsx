@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
   },
   livestreamCtaText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   categoryBadge: {
     backgroundColor: 'rgba(24, 140, 252, 0.2)',
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Compact Event Card Styles
   compactCard: {

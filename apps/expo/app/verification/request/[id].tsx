@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   },
   fallbackButtonText: {
     color: '#FFFFFF',
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 15,
   },
   revocationBanner: {

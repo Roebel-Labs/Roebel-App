@@ -279,6 +279,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

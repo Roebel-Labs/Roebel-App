@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#ffffff',
     fontSize: 18,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   meckyLarge: {
     width: 120,
@@ -328,13 +328,13 @@ const styles = StyleSheet.create({
   },
   restartButtonText: {
     fontSize: fontSize.lg,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   backButton: {
     paddingVertical: 8,
   },
   backButtonText: {
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

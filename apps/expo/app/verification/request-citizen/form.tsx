@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   submitButtonText: {
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
   },
   messageContainer: {
@@ -425,6 +425,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });

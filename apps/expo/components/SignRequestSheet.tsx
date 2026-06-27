@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   },
   approveButtonText: {
     color: '#FFFFFF',
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
   },
   rejectButton: {
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   },
   rejectButtonText: {
     color: '#DC2626',
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 16,
   },
   actionIcon: {

@@ -1082,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   infoCard: {
@@ -1117,7 +1117,7 @@ const styles = StyleSheet.create({
   },
   voteButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
   statusLine: {
@@ -1170,7 +1170,7 @@ const styles = StyleSheet.create({
   },
   gateHelpButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   basescanRow: {
     marginTop: 12,

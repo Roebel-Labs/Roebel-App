@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   section: {
     paddingTop: 20,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   actionBtnText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   emptyState: {
     marginHorizontal: 16,

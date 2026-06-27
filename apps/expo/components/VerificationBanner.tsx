@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   },
   smallButtonText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     color: '#ffffff',
   },
 });

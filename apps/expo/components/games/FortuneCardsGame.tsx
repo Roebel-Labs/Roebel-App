@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   closeBtnText: {
     color: '#fff',
     fontSize: 18,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   meckySection: {
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   ctaText: {
     color: 'rgba(255,255,255,0.5)',
     fontSize: fontSize.sm,
-    fontFamily: fontFamily.regular,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     textAlign: 'center',
   },
 
@@ -831,7 +831,7 @@ const styles = StyleSheet.create({
   resetBtnText: {
     color: '#fff',
     fontSize: fontSize.base,
-    fontFamily: fontFamily.medium,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   backBtn: {
     backgroundColor: '#fff',
@@ -842,6 +842,6 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: '#1a1a2e',
     fontSize: fontSize.base,
-    fontFamily: fontFamily.semiBold,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });
