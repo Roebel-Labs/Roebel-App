@@ -67,14 +67,16 @@
     "pollFactory": "0xD16601A95E3b1D211B656E07f92327236E276015",
     "messageProcessorFactory": "0xCB1315369cE6b15a10C0D1394F76C5Bd294FFfd5",
     "tallyFactory": "0x5e07f9c5E309fA838Ae6035F0AC997A3f55e16d5",
-    "timelock": "0x24a72Df1510AaA500B3047FdED7cf6Ec3B94bef4",
-    "maciAttesterGovernor": "0xDC2503152068FBE2a848df65f5b671c1e84A4159",
+    "timelock": "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
+    "maciAttesterGovernor": "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3",
     "coordinator": "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C",
     "circlesGroup": "0xAc2CeCdBead594F97358a0d3132454f24F3E470c",
     "circlesMembershipConditionV1": "0x10644F137cDBE9Af5651C8607A6FBa8AfA5276f6",
     "circlesMembershipConditionV2": "0x5850A04544c1882d5958872bdbfC591E94abE67b",
     "maciAttesterGovernor_archived_2026-06-27T15-22-01-371Z": "0x140F0eC647E9eBF9AbD293A7976edBc7d8C2dB65",
-    "timelock_archived_2026-06-27T15-22-01-371Z": "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C"
+    "timelock_archived_2026-06-27T15-22-01-371Z": "0xB5605f9F137BCe6f3e86dFa887982aE0fF9bd78C",
+    "maciAttesterGovernor_archived_2026-06-27T18-40-31-905Z": "0xDC2503152068FBE2a848df65f5b671c1e84A4159",
+    "timelock_archived_2026-06-27T18-40-31-905Z": "0x24a72Df1510AaA500B3047FdED7cf6Ec3B94bef4"
   },
   "holders": {
     "citizens": [
@@ -125,7 +127,7 @@
       "y": "8008521168745136880197848799504037322059936483887225034222289791088387810436"
     }
   },
-  "governanceDeployedAt": "2026-06-27T15:22:01.371Z",
+  "governanceDeployedAt": "2026-06-27T18:40:31.905Z",
   "notes": {
     "circlesGateSwap": "Röbel Circles group 0xAc2C gated membership on the v1 CitizenNFT (0x6FF3) via condition 0x10644F13, so v2-only citizens could not be group-trusted. Deployed a fresh CitizenMembershipCondition gating on CitizenNFTv2 (0x59aA) at 0x5850A045. Swap pending: Safe 0x3A08 calls group.setMembershipCondition(0x5850A045,true) + setMembershipCondition(0x10644F13,false)."
   }

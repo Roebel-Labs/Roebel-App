@@ -60,6 +60,9 @@ export function CreateProposalForm({
   const [value, setValue] = useState("");
   const [calldata, setCalldata] = useState("");
   const [attachTreasurySnapshot, setAttachTreasurySnapshot] = useState(false);
+  // Voting duration in DAYS (presets 3/5/7 or a custom 1–30). Converted to
+  // seconds for proposeWithPeriod; the contract enforces a 1h–30d range.
+  const [periodDays, setPeriodDays] = useState(7);
 
   // Runs after the propose() tx is on-chain (via either the default sponsored
   // bundler or the high-gas self-pay bundler): parse the events, store the
@@ -206,10 +209,17 @@ export function CreateProposalForm({
 
       console.log("📋 On-chain description:", fullDescription);
 
+      // Caller-chosen voting period (seconds), clamped to the contract's 1h–30d.
+      const votingPeriodSeconds = Math.min(
+        Math.max(Math.round(periodDays * 86400), 3600),
+        2592000,
+      );
+
       const transaction = prepareContractCall({
         contract: governorContract,
-        method: "function propose(address[] memory targets, uint256[] memory values, bytes[] memory calldatas, string memory description) public returns (uint256)",
-        params: [targets, values, calldatas, fullDescription],
+        method:
+          "function proposeWithPeriod(address[] targets, uint256[] values, bytes[] calldatas, string description, uint32 votingPeriodSeconds) returns (uint256)",
+        params: [targets, values, calldatas, fullDescription, votingPeriodSeconds],
       });
 
       setUploadStage("confirming");
@@ -443,6 +453,49 @@ export function CreateProposalForm({
               </span>
             </span>
           </label>
+
+          {/* Voting duration: 3/5/7-day presets or a custom 1–30 days. */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <span className="block font-medium text-foreground mb-1">
+              Abstimmungsdauer
+            </span>
+            <p className="text-sm text-muted-foreground mb-3">
+              Wie lange können Bürger:innen über diesen Vorschlag abstimmen?
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {[3, 5, 7].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setPeriodDays(d)}
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 ${
+                    periodDays === d
+                      ? "bg-black text-white border-black"
+                      : "bg-card text-foreground border-border hover:bg-accent"
+                  }`}
+                >
+                  {d} Tage
+                </button>
+              ))}
+              <div className="flex items-center gap-2 ml-1">
+                <span className="text-sm text-muted-foreground">oder</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={periodDays}
+                  disabled={isProcessing}
+                  onChange={(e) => {
+                    const n = Math.round(Number(e.target.value));
+                    if (Number.isFinite(n)) setPeriodDays(Math.min(30, Math.max(1, n)));
+                  }}
+                  className="w-20 bg-card border border-border rounded-lg px-3 py-2 text-foreground text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black disabled:opacity-50"
+                />
+                <span className="text-sm text-muted-foreground">Tage (1–30)</span>
+              </div>
+            </div>
+          </div>
 
           <div className="border-t border-border pt-6">
             <h3 className="text-lg font-medium mb-2 text-foreground">

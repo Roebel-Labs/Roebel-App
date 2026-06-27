@@ -11,7 +11,7 @@ import { gnosis } from "@/lib/gnosis";
 export const VERIFICATION_CONTRACTS = {
   attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82", // AttesterNFTv2 (per-request approval/rejection thresholds, Safe-owned)
   citizenNFT: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",  // CitizenNFTv2 (per-request thresholds; RequestApproved/Rejected carry only signedAsAttester)
-  governor: "0xDC2503152068FBE2a848df65f5b671c1e84A4159",    // MaciAttesterGovernor (Gnosis v2; MACI core 0x6663…, deploy block 46867803)
+  governor: "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3",    // MaciAttesterGovernor (Gnosis v2; MACI core 0x6663…, deploy block 46867803)
 };
 
 // Lowercase contract address for the active CitizenNFT/AttesterNFT, used to scope

@@ -32,8 +32,8 @@ export const MACI_INFRA = {
   vkRegistry: "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
 
   // Active Governor + Timelock on Gnosis v2.
-  governor: "0xDC2503152068FBE2a848df65f5b671c1e84A4159",
-  timelock: "0x24a72Df1510AaA500B3047FdED7cf6Ec3B94bef4",
+  governor: "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3",
+  timelock: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
 
   // Off-chain coordinator EOA (Fly.io). Holds the Babyjubjub privkey + ETH key.
   // Pubkey UNCHANGED across the Gnosis v2 rotation.

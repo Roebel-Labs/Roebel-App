@@ -104,6 +104,17 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     uint256 public constant VOTE_OPTION_FOR = 1;
     uint256 public constant VOTE_OPTION_ABSTAIN = 2;
 
+    /// @notice Bounds for the caller-chosen voting period in {proposeWithPeriod}.
+    /// Presets (3/5/7 days) sit inside this range; the floor prevents degenerate
+    /// near-zero polls. The GovernorSettings default still applies to {propose}.
+    uint32 public constant MIN_VOTING_PERIOD = 1 hours;
+    uint32 public constant MAX_VOTING_PERIOD = 30 days;
+
+    /// @dev Set only for the duration of a {proposeWithPeriod} call so that
+    /// {votingPeriod} returns the caller-chosen value while OZ stores the
+    /// proposal deadline, then cleared back to 0. Zero at all other times.
+    uint32 private _pendingVotingPeriod;
+
     struct ProposalPoll {
         uint256 pollId;
         address poll;
@@ -116,6 +127,7 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
 
     error OnlyAttestersCanPropose(address proposer);
     error VotingHappensOnMaciPoll(address poll);
+    error VotingPeriodOutOfRange(uint32 votingPeriodSeconds);
 
     event PollLinked(uint256 indexed proposalId, address poll, address tally, uint256 pollId);
     event ProposalCreatedByAttester(uint256 indexed proposalId, address indexed attester, string description);
@@ -176,6 +188,28 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
         _deployPollFor(proposalId);
 
         emit ProposalCreatedByAttester(proposalId, msg.sender, description);
+        return proposalId;
+    }
+
+    /// @notice Create a proposal with a caller-chosen voting period (within
+    /// [MIN_VOTING_PERIOD, MAX_VOTING_PERIOD]). Use this for the 3/5/7-day
+    /// presets or any custom duration; plain {propose} keeps the default.
+    /// @dev Sets a pending period that {votingPeriod} returns for the duration
+    /// of this call, so OZ stores the proposal deadline with it and the MACI
+    /// poll inherits the same length (votingDelay = 0 keeps both timers aligned).
+    function proposeWithPeriod(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        string memory description,
+        uint32 votingPeriodSeconds
+    ) public returns (uint256) {
+        if (votingPeriodSeconds < MIN_VOTING_PERIOD || votingPeriodSeconds > MAX_VOTING_PERIOD) {
+            revert VotingPeriodOutOfRange(votingPeriodSeconds);
+        }
+        _pendingVotingPeriod = votingPeriodSeconds;
+        uint256 proposalId = propose(targets, values, calldatas, description);
+        _pendingVotingPeriod = 0;
         return proposalId;
     }
 
@@ -366,7 +400,8 @@ contract MaciAttesterGovernor is Governor, GovernorSettings, GovernorTimelockCon
     }
 
     function votingPeriod() public view override(Governor, GovernorSettings) returns (uint256) {
-        return super.votingPeriod();
+        uint32 pending = _pendingVotingPeriod;
+        return pending != 0 ? uint256(pending) : super.votingPeriod();
     }
 
     function proposalThreshold() public view override(Governor, GovernorSettings) returns (uint256) {
