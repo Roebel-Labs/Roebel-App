@@ -277,20 +277,31 @@ export function calculateReadingTime(markdown: string): number {
  * Helper function to extract summary from markdown
  */
 export function extractSummary(markdown: string, maxLength = 200): string {
-  // Remove markdown formatting
-  let text = markdown
-    .replace(/^#+\s+/gm, "") // Remove headers
-    .replace(/\*\*(.+?)\*\*/g, "$1") // Remove bold
-    .replace(/\*(.+?)\*/g, "$1") // Remove italic
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1") // Remove links
-    .replace(/`(.+?)`/g, "$1") // Remove inline code
-    .replace(/```[\s\S]*?```/g, "") // Remove code blocks
+  // Proposal content comes from a rich-text (HTML) editor and may also contain
+  // markdown remnants. Strip BOTH so the summary is clean plain text (used for
+  // list previews, the in-app notification, and the broadcast push body).
+  const text = markdown
+    // HTML: turn block boundaries into spaces, then drop all tags.
+    .replace(/<\/(p|div|h[1-6]|li|tr|blockquote)>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    // Common HTML entities.
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    // Markdown remnants.
+    .replace(/^#+\s+/gm, "") // headers
+    .replace(/\*\*(.+?)\*\*/g, "$1") // bold
+    .replace(/\*(.+?)\*/g, "$1") // italic
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
+    .replace(/`(.+?)`/g, "$1") // inline code
+    .replace(/```[\s\S]*?```/g, "") // code blocks
+    .replace(/\s+/g, " ") // collapse whitespace
     .trim();
 
-  // Get first paragraph or truncate
-  const firstParagraph = text.split("\n\n")[0];
-  if (firstParagraph.length <= maxLength) {
-    return firstParagraph;
-  }
-  return firstParagraph.slice(0, maxLength).trim() + "...";
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trim() + "...";
 }
