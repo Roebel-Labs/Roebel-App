@@ -63,7 +63,14 @@ function VotingBars({
  * gradient ring (`.proposal-animated-border`); otherwise it shows a static ring
  * with the vote outcome. The whole card links to the proposal detail page.
  */
-export function FeedProposalHero({ proposal }: { proposal: Proposal }) {
+export function FeedProposalHero({
+  proposal,
+  basePath = "/proposals",
+}: {
+  proposal: Proposal;
+  /** Detail-route base. Marketing site uses "/proposals"; the app uses "/app/proposals". */
+  basePath?: string;
+}) {
   const isActive = proposal.state === ProposalState.Active;
   const isPending = proposal.state === ProposalState.Pending;
   const ended = !isActive && !isPending;
@@ -87,7 +94,7 @@ export function FeedProposalHero({ proposal }: { proposal: Proposal }) {
       ? "Ergebnis ansehen"
       : "Vorschlag ansehen";
 
-  const href = `/proposals/${proposal.proposal_id}`;
+  const href = `${basePath}/${proposal.proposal_id}`;
 
   return (
     <div

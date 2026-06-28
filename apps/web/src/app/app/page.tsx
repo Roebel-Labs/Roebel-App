@@ -16,6 +16,10 @@ import { AlertCard } from "@/components/app/AlertCard";
 import { ContextBar } from "@/components/app/ContextBar";
 import { StadtFeed } from "@/components/app/StadtFeed";
 import { AppFeed } from "@/components/app/AppFeed";
+import { FeedProposalHero } from "@/components/proposals/FeedProposalHero";
+import { getProposals } from "@/lib/supabase";
+import { ProposalState, type Proposal } from "@/lib/proposal-types";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import type { ServiceAlert } from "@/app/actions/alerts";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { BusinessCard } from "@/components/business/BusinessCard";
@@ -242,6 +246,33 @@ export default function AppHomePage() {
   const [alerts, setAlerts] = useState<ServiceAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Open-proposal hero — citizen-gated, mirrors the Expo home feed.
+  const { user } = useUserProfile();
+  const isCitizen =
+    user?.tier === "citizen" || Boolean(user?.is_verified_citizen);
+  const [featuredProposal, setFeaturedProposal] = useState<Proposal | null>(null);
+
+  useEffect(() => {
+    if (!isCitizen) {
+      setFeaturedProposal(null);
+      return;
+    }
+    let cancelled = false;
+    getProposals({ orderBy: "created_at", orderDirection: "desc", limit: 10 })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.proposals ?? [];
+        const active = list.find((p) => p.state === ProposalState.Active);
+        setFeaturedProposal(active ?? list[0] ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setFeaturedProposal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCitizen, refreshKey]);
 
   const handleFilterChange = useCallback((filter: string) => {
     setActiveFilter(filter);
@@ -645,6 +676,10 @@ export default function AppHomePage() {
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
       />
+
+      {isCitizen && featuredProposal && (
+        <FeedProposalHero proposal={featuredProposal} basePath="/app/proposals" />
+      )}
 
       {loading ? (
         <div className="space-y-4">
