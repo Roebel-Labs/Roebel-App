@@ -2,12 +2,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useActiveAccount, useActiveWallet } from "thirdweb/react";
 import {
-  initProtocolKit,
-  resolveSigner,
-  executeFromService,
-  type RawTxFromService,
+  confirmTx,
+  executeTx,
 } from "@/lib/gemeinschaftskasse/safe-client";
-import { EthSafeSignature } from "@safe-global/protocol-kit";
 import { approvalLabel } from "@/lib/gemeinschaftskasse/format";
 import type { TxView } from "@/lib/gemeinschaftskasse/constants";
 import { useIsOwner } from "./useIsOwner";
@@ -49,51 +46,19 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
     setActionErr((prev) => ({ ...prev, [hash]: msg }));
   }
 
-  async function fetchRaw(safeTxHash: string): Promise<RawTxFromService> {
-    const r = await fetch(`/api/gemeinschaftskasse/tx?safeTxHash=${encodeURIComponent(safeTxHash)}`);
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
-    return d as RawTxFromService;
-  }
-
   async function handleFreigeben(item: TxView) {
     if (!account || !wallet) {
       setItemErr(item.safeTxHash, "Bitte zuerst anmelden.");
       return;
     }
     setBusy(item.safeTxHash);
-    setActionErr((prev) => { const n = { ...prev }; delete n[item.safeTxHash]; return n; });
+    setActionErr((prev) => {
+      const n = { ...prev };
+      delete n[item.safeTxHash];
+      return n;
+    });
     try {
-      const protocolKit = await initProtocolKit(wallet);
-      const signer = await resolveSigner(protocolKit, account, wallet);
-      if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
-
-      // Sign the existing safeTxHash with the account that owns the Safe owner slot
-      // (smart account for smart-account owners; admin EOA for EOA owners).
-      const inner = await signer.signingAccount.signMessage({
-        message: { raw: item.safeTxHash as `0x${string}` },
-      });
-
-      let signature: string;
-      if (signer.isSmart) {
-        const { buildSignatureBytes, buildContractSignature } = await import("@safe-global/protocol-kit");
-        const contractSig = await buildContractSignature(
-          [new EthSafeSignature(signer.ownerAddress, inner, true)],
-          signer.ownerAddress,
-        );
-        signature = buildSignatureBytes([contractSig]);
-      } else {
-        const { buildSignatureBytes } = await import("@safe-global/protocol-kit");
-        signature = buildSignatureBytes([new EthSafeSignature(signer.ownerAddress, inner)]);
-      }
-
-      const res = await fetch("/api/gemeinschaftskasse/confirm", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ safeTxHash: item.safeTxHash, signature }),
-      }).then((r) => r.json());
-
-      if (res.error) throw new Error(res.error);
+      await confirmTx({ safeTxHash: item.safeTxHash, account, wallet });
       load();
     } catch (e) {
       setItemErr(item.safeTxHash, (e as Error).message);
@@ -103,18 +68,18 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
   }
 
   async function handleAusfuehren(item: TxView) {
-    if (!account || !wallet) {
+    if (!account) {
       setItemErr(item.safeTxHash, "Bitte zuerst anmelden.");
       return;
     }
     setBusy(item.safeTxHash);
-    setActionErr((prev) => { const n = { ...prev }; delete n[item.safeTxHash]; return n; });
+    setActionErr((prev) => {
+      const n = { ...prev };
+      delete n[item.safeTxHash];
+      return n;
+    });
     try {
-      const [raw, protocolKit] = await Promise.all([
-        fetchRaw(item.safeTxHash),
-        initProtocolKit(wallet),
-      ]);
-      const txHash = await executeFromService(protocolKit, account, raw);
+      const txHash = await executeTx({ safeTxHash: item.safeTxHash, account });
       setItemErr(item.safeTxHash, `Ausgeführt: ${txHash.slice(0, 10)}…`);
       // Reload after a brief moment to let the service register execution.
       setTimeout(() => load(), 2000);

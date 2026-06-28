@@ -1,34 +1,28 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, jsonError } from "@/lib/muenzen/api";
 import { getApiKit } from "@/lib/gemeinschaftskasse/api-kit";
+import { assembleSenderSignature } from "@/lib/gemeinschaftskasse/safe-server";
 import { GK_SAFE } from "@/lib/gemeinschaftskasse/constants";
 
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/gemeinschaftskasse/propose
- *
- * Relays a signed Safe transaction to the Safe Transaction Service so that
- * other owners can confirm it. Requires admin (attester) credentials.
- *
- * Body:
- *   safeTransactionData  – SafeTransactionData (to/value/data/operation/nonce/gas fields)
- *   safeTxHash           – the keccak256 Safe tx hash
- *   senderAddress        – the owner address that produced senderSignature
- *   senderSignature      – encoded signature bytes (ERC-1271 or EOA)
- */
 export async function POST(req: Request) {
   const denied = await requireAdmin();
   if (denied) return denied;
   try {
-    const { safeTransactionData, safeTxHash, senderAddress, senderSignature } =
+    const { safeTransactionData, safeTxHash, inner, ownerAddress, isSmart } =
       await req.json();
+    const senderSignature = await assembleSenderSignature({
+      inner,
+      ownerAddress,
+      isSmart,
+    });
     const kit = getApiKit();
     await kit.proposeTransaction({
       safeAddress: GK_SAFE,
       safeTransactionData,
       safeTxHash,
-      senderAddress,
+      senderAddress: ownerAddress,
       senderSignature,
     });
     return NextResponse.json({ ok: true, safeTxHash });

@@ -1,14 +1,11 @@
 "use client";
 /**
- * Shared hook: sign a Safe MetaTransaction and relay it via POST /propose.
+ * Shared hook: propose a Safe MetaTransaction via the server-side pipeline.
  * Used by CreatePayout and Mitglieder to stay DRY.
+ * No @safe-global imports — all crypto runs server-side.
  */
 import { useActiveAccount, useActiveWallet } from "thirdweb/react";
-import {
-  initProtocolKit,
-  resolveSigner,
-  signSafeTx,
-} from "@/lib/gemeinschaftskasse/safe-client";
+import { proposeMetaTx } from "@/lib/gemeinschaftskasse/safe-client";
 
 export function useProposeMetaTx() {
   const account = useActiveAccount();
@@ -26,32 +23,7 @@ export function useProposeMetaTx() {
     if (!account || !wallet) {
       throw new Error("Bitte zuerst anmelden.");
     }
-
-    const protocolKit = await initProtocolKit(wallet);
-    const signer = await resolveSigner(protocolKit, account, wallet);
-    if (!signer) {
-      throw new Error("Du bist kein Mitsignierer dieser Kasse.");
-    }
-
-    const { safeTxHash, senderSignature, safeTx } = await signSafeTx(
-      protocolKit,
-      signer,
-      metaTx,
-    );
-
-    const res = await fetch("/api/gemeinschaftskasse/propose", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        safeTransactionData: safeTx.data,
-        safeTxHash,
-        senderAddress: signer.ownerAddress,
-        senderSignature,
-      }),
-    }).then((r) => r.json());
-
-    if (res.error) throw new Error(res.error);
-    return { safeTxHash };
+    return proposeMetaTx({ metaTx, account, wallet });
   }
 
   return propose;

@@ -16,7 +16,19 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": [
+        "STRIPE_SECRET_KEY_CARD",
+        "STRIPE_WEBHOOK_SECRET_CARD",
+        "SEED_TOKEN",
+        "SUPABASE_SEED_TOKEN",
+        "ADMIN_PASSWORD",
+        "ADMIN_USERNAME",
+        "SESSION_SECRET",
+        "GNOSIS_BUNDLER_RPC_URL",
+        "SAFE_API_KEY",
+        "GNOSIS_RPC_URL"
+      ]
     },
     "dev": {
       "cache": false,

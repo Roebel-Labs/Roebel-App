@@ -1,28 +1,20 @@
 "use client";
 /**
- * GK Safe client helpers — build, sign, and execute Safe multisig transactions
- * via Protocol Kit v8 bridged through the thirdweb EIP-1193 provider (gasless).
+ * GK Safe client helpers — build meta-transactions and orchestrate propose/confirm/execute
+ * via server-side API routes (NO @safe-global imports in this file).
  *
- * IMPORTANT: signing + execution require a connected thirdweb wallet and are
- * exercised in the browser only. The Node verification scripts cover the pure
- * calldata-encoding helpers.
- *
- * Execution path chosen: protocolKit.getEncodedTransaction(safeTx) → thirdweb
- * sendTransaction (gasless ERC-4337). NOT protocolKit.executeTransaction because
- * that routes through the viem provider embedded in Protocol Kit and bypasses the
- * thirdweb smart-account relay.
+ * All protocol-kit crypto runs server-side in safe-server.ts.
+ * The client keeps only:
+ *   - thirdweb wallet interaction (signMessage, sendTransaction)
+ *   - viem calldata encoding (buildTransfer, buildAddOwner, etc.)
+ *   - signer resolution via on-chain getOwners() read
  */
-import Safe, {
-  buildSignatureBytes,
-  buildContractSignature,
-  EthSafeSignature,
-  EthSafeTransaction,
-} from "@safe-global/protocol-kit";
-import { EIP1193 } from "thirdweb/wallets";
 import {
   sendTransaction,
   waitForReceipt,
   prepareTransaction,
+  getContract,
+  readContract,
 } from "thirdweb";
 import { getRpcClient, eth_getCode } from "thirdweb/rpc";
 import { encodeFunctionData } from "viem";
@@ -33,22 +25,25 @@ import { matchOwner, prevOwner } from "./owners";
 import type { Account, Wallet } from "thirdweb/wallets";
 
 // ---------------------------------------------------------------------------
-// Init
+// Internal helper
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a Protocol Kit v8 Safe instance connected through the thirdweb
- * EIP-1193 provider. `signer` is deliberately omitted so the SDK operates
- * in provider-only mode (no private key inside Protocol Kit); all signing
- * is done externally via thirdweb account.signMessage.
- */
-export async function initProtocolKit(wallet: Wallet): Promise<Safe> {
-  const provider = EIP1193.toProvider({ wallet, chain: activeChain, client });
-  return Safe.init({ provider, safeAddress: GK_SAFE });
+async function postJson<T = unknown>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data as T;
 }
 
 // ---------------------------------------------------------------------------
-// Signer resolution
+// Signer resolution (no protocol-kit — reads owners via thirdweb readContract)
 // ---------------------------------------------------------------------------
 
 /**
@@ -62,25 +57,34 @@ export async function initProtocolKit(wallet: Wallet): Promise<Safe> {
  * EOA-owner slot produces a wrong-key signature that the Safe will reject.
  */
 export async function resolveSigner(
-  protocolKit: Safe,
   account: Account,
   wallet: Wallet,
 ): Promise<{ ownerAddress: string; isSmart: boolean; signingAccount: Account } | null> {
-  const owners = await protocolKit.getOwners();
+  // Fetch owners directly via thirdweb readContract (avoids protocol-kit).
+  const safe = getContract({ client, chain: activeChain, address: GK_SAFE });
+  const owners = [...(await readContract({
+    contract: safe,
+    method: "function getOwners() view returns (address[])",
+    params: [],
+  }))] as string[];
+
   // getAdminAccount is thirdweb v5 smart-wallet API; may not exist for EOA wallets.
-  const adminAccount: Account | undefined = await (wallet as any).getAdminAccount?.().catch(
-    () => undefined,
-  );
+  const adminAccount: Account | undefined = await (wallet as any)
+    .getAdminAccount?.()
+    .catch(() => undefined);
+
   const ownerAddress = matchOwner(
     [account.address, adminAccount?.address],
     owners,
   );
   if (!ownerAddress) return null;
+
   // isSmart = ownerAddress has on-chain bytecode → smart-contract account (ERC-1271 path).
   // EOAs always return "0x"; contracts return non-empty bytecode.
   const rpcRequest = getRpcClient({ client, chain: activeChain });
   const code = await eth_getCode(rpcRequest, { address: ownerAddress as `0x${string}` });
   const isSmart = code != null && code !== "0x";
+
   // signingAccount: smart-account path uses the thirdweb smart account; EOA path uses
   // the admin EOA so the private key actually matches the registered Safe owner address.
   if (!isSmart && !adminAccount) return null;
@@ -177,7 +181,7 @@ export function buildTransfer({
 }
 
 // ---------------------------------------------------------------------------
-// Transaction builders — owner management (Task 3.1)
+// Transaction builders — owner management
 // ---------------------------------------------------------------------------
 
 /**
@@ -241,174 +245,104 @@ export function buildChangeThreshold(
 }
 
 // ---------------------------------------------------------------------------
-// Sign
+// Client-side propose / confirm / execute — delegate crypto to server routes
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a Safe transaction for the given MetaTransactionData, computes the
- * safeTxHash, and produces an ERC-1271 (smart-account) or plain-signature
- * (EOA) over the hash using the thirdweb account.
- *
- * CRITICAL (Protocol Kit v8): buildContractSignature is ASYNC — must be awaited.
- *
- * Returns:
- *   safeTxHash      — the typed-data Safe transaction hash
- *   senderSignature — the encoded signature bytes to send to proposeTransaction
- *   safeTx          — the SafeTransaction object (needed for propose + execute)
+ * Proposes a new Safe MetaTransaction:
+ * 1. Resolve the signer (owner check via on-chain read).
+ * 2. POST /prepare to create the tx + get safeTxHash server-side.
+ * 3. Sign safeTxHash with signingAccount.
+ * 4. POST /propose with the raw inner signature (server assembles the envelope).
  */
-export async function signSafeTx(
-  protocolKit: Safe,
-  signer: { ownerAddress: string; isSmart: boolean; signingAccount: Account },
-  metaTx: { to: string; value: string; data: string },
-): Promise<{
-  safeTxHash: string;
-  senderSignature: string;
-  safeTx: EthSafeTransaction;
-}> {
-  const safeTx = await protocolKit.createTransaction({
-    transactions: [metaTx],
-  });
-  const safeTxHash = await protocolKit.getTransactionHash(safeTx);
+export async function proposeMetaTx({
+  metaTx,
+  account,
+  wallet,
+}: {
+  metaTx: { to: string; value: string; data: string };
+  account: Account;
+  wallet: Wallet;
+}): Promise<{ safeTxHash: string }> {
+  const signer = await resolveSigner(account, wallet);
+  if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
 
-  // Sign the raw hash bytes with the account that owns the Safe owner slot.
-  // For smart-account owners this is the thirdweb smart account; for EOA owners
-  // this is the admin EOA whose private key matches the registered owner address.
+  const { safeTxHash, safeTransactionData } = await postJson<{
+    safeTxHash: string;
+    safeTransactionData: unknown;
+  }>("/api/gemeinschaftskasse/prepare", { metaTx });
+
   const inner = await signer.signingAccount.signMessage({
     message: { raw: safeTxHash as `0x${string}` },
   });
 
-  let senderSignature: string;
-  if (signer.isSmart) {
-    // ERC-1271 path: wrap inner signature in a contract signature envelope.
-    // buildContractSignature is ASYNC in Protocol Kit v8.
-    const contractSig = await buildContractSignature(
-      [new EthSafeSignature(signer.ownerAddress, inner, true)],
-      signer.ownerAddress,
-    );
-    senderSignature = buildSignatureBytes([contractSig]);
-  } else {
-    // EOA path: plain signature bytes (Safe adjusts v internally).
-    senderSignature = buildSignatureBytes([
-      new EthSafeSignature(signer.ownerAddress, inner),
-    ]);
-  }
+  await postJson("/api/gemeinschaftskasse/propose", {
+    safeTransactionData,
+    safeTxHash,
+    inner,
+    ownerAddress: signer.ownerAddress,
+    isSmart: signer.isSmart,
+  });
 
-  return { safeTxHash, senderSignature, safeTx: safeTx as EthSafeTransaction };
+  return { safeTxHash };
 }
 
-// ---------------------------------------------------------------------------
-// Execute
-// ---------------------------------------------------------------------------
+/**
+ * Adds a confirmation signature to an existing pending Safe tx.
+ */
+export async function confirmTx({
+  safeTxHash,
+  account,
+  wallet,
+}: {
+  safeTxHash: string;
+  account: Account;
+  wallet: Wallet;
+}): Promise<void> {
+  const signer = await resolveSigner(account, wallet);
+  if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
+
+  const inner = await signer.signingAccount.signMessage({
+    message: { raw: safeTxHash as `0x${string}` },
+  });
+
+  await postJson("/api/gemeinschaftskasse/confirm", {
+    safeTxHash,
+    inner,
+    ownerAddress: signer.ownerAddress,
+    isSmart: signer.isSmart,
+  });
+}
 
 /**
- * Executes a fully-confirmed Safe transaction by encoding `execTransaction`
- * calldata and sending via thirdweb (gasless smart-account path).
- *
- * Execution path: `protocolKit.getEncodedTransaction(safeTx)` returns the
- * ABI-encoded `execTransaction(...)` call; we then dispatch it via thirdweb
- * `sendTransaction` so the meta-tx goes through the gasless ERC-4337 stack.
- *
- * Note: `protocolKit.executeTransaction` routes through the viem-based
- * provider embedded in Protocol Kit and does NOT use the thirdweb smart-account
- * relay. We use `getEncodedTransaction` + manual dispatch instead.
- *
- * @param account     — The thirdweb Account that holds the execution key.
- * @param protocolKit — Initialised Safe instance (used for encoding).
- * @param safeTx      — The fully-signed SafeTransaction to execute.
- * @returns tx hash string
+ * Executes a fully-confirmed Safe tx via thirdweb (gasless ERC-4337 path).
+ * The server encodes execTransaction calldata; the client dispatches it.
  */
-export async function executeSafeTx(
-  account: Account,
-  protocolKit: Safe,
-  safeTx: EthSafeTransaction,
-): Promise<string> {
-  const encodedData = await protocolKit.getEncodedTransaction(safeTx);
+export async function executeTx({
+  safeTxHash,
+  account,
+}: {
+  safeTxHash: string;
+  account: Account;
+}): Promise<string> {
+  const { to, data } = await postJson<{ to: string; data: string }>(
+    "/api/gemeinschaftskasse/execute-encode",
+    { safeTxHash },
+  );
 
-  const tx = prepareTransaction({
-    to: GK_SAFE as `0x${string}`,
-    data: encodedData as `0x${string}`,
+  const transaction = prepareTransaction({
+    to: to as `0x${string}`,
+    data: data as `0x${string}`,
     value: 0n,
     chain: activeChain,
     client,
   });
 
-  const receipt = await sendTransaction({ account, transaction: tx });
+  const receipt = await sendTransaction({ account, transaction });
   await waitForReceipt({
     client,
     chain: activeChain,
     transactionHash: receipt.transactionHash,
   });
   return receipt.transactionHash;
-}
-
-// ---------------------------------------------------------------------------
-// Execute from service raw tx (Task 2.3)
-// ---------------------------------------------------------------------------
-
-/**
- * Raw transaction shape as returned by GET /api/gemeinschaftskasse/tx.
- * Mirrors the fields from SafeMultisigTransactionResponse needed for reassembly.
- */
-export interface RawTxFromService {
-  to: string;
-  value: string;
-  data: string;
-  operation: number;
-  safeTxGas: string;
-  baseGas: string;
-  gasPrice: string;
-  gasToken: string;
-  refundReceiver: string;
-  nonce: number;
-  confirmations: { owner: string; signature: string; signatureType: string }[];
-  confirmationsRequired: number;
-  isExecuted: boolean;
-}
-
-/**
- * Reassembles a fully-confirmed Safe transaction from the raw service response
- * and executes it via thirdweb (gasless smart-account path).
- *
- * Protocol Kit v8: SafeTransaction.addSignature(SafeSignature) where
- * SafeSignature is EthSafeSignature(signer, data, isContractSignature).
- * isContractSignature = (signatureType === "CONTRACT_SIGNATURE").
- *
- * @param protocolKit  - Initialised Safe instance
- * @param account      - thirdweb Account used for execution
- * @param raw          - Raw tx fields from the /tx route
- * @returns tx hash string
- */
-export async function executeFromService(
-  protocolKit: Safe,
-  account: Account,
-  raw: RawTxFromService,
-): Promise<string> {
-  const safeTx = await protocolKit.createTransaction({
-    transactions: [
-      {
-        to: raw.to,
-        value: raw.value,
-        data: raw.data,
-        operation: raw.operation as 0 | 1,
-      },
-    ],
-    options: {
-      nonce: Number(raw.nonce),
-      safeTxGas: raw.safeTxGas,
-      baseGas: raw.baseGas,
-      gasPrice: raw.gasPrice,
-      gasToken: raw.gasToken,
-      refundReceiver: raw.refundReceiver,
-    },
-  });
-
-  // Attach each stored confirmation signature.
-  for (const c of raw.confirmations) {
-    const isContract = c.signatureType === "CONTRACT_SIGNATURE";
-    (safeTx as EthSafeTransaction).addSignature(
-      new EthSafeSignature(c.owner, c.signature, isContract),
-    );
-  }
-
-  return executeSafeTx(account, protocolKit, safeTx as EthSafeTransaction);
 }
