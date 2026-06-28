@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { Tabs } from "./_components/Tabs";
 import { Uebersicht } from "./_components/Uebersicht";
+import { Auszahlungen } from "./_components/Auszahlungen";
+import { Mitglieder } from "./_components/Mitglieder";
 import { Verlauf } from "./_components/Verlauf";
 
 const TABS = ["Übersicht", "Auszahlungen", "Mitglieder", "Verlauf"] as const;
@@ -17,8 +19,8 @@ export default function GemeinschaftskassePage() {
       </div>
       <Tabs tabs={TABS as unknown as string[]} active={tab} onChange={(t) => setTab(t as Tab)} />
       {tab === "Übersicht" && <Uebersicht />}
-      {tab === "Auszahlungen" && <div className="text-sm text-muted-foreground">Auszahlungen folgen…</div>}
-      {tab === "Mitglieder" && <div className="text-sm text-muted-foreground">Mitglieder folgt…</div>}
+      {tab === "Auszahlungen" && <Auszahlungen />}
+      {tab === "Mitglieder" && <Mitglieder />}
       {tab === "Verlauf" && <Verlauf />}
     </div>
   );

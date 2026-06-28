@@ -329,3 +329,75 @@ export async function executeSafeTx(
   });
   return receipt.transactionHash;
 }
+
+// ---------------------------------------------------------------------------
+// Execute from service raw tx (Task 2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Raw transaction shape as returned by GET /api/gemeinschaftskasse/tx.
+ * Mirrors the fields from SafeMultisigTransactionResponse needed for reassembly.
+ */
+export interface RawTxFromService {
+  to: string;
+  value: string;
+  data: string;
+  operation: number;
+  safeTxGas: string;
+  baseGas: string;
+  gasPrice: string;
+  gasToken: string;
+  refundReceiver: string;
+  nonce: number;
+  confirmations: { owner: string; signature: string; signatureType: string }[];
+  confirmationsRequired: number;
+  isExecuted: boolean;
+}
+
+/**
+ * Reassembles a fully-confirmed Safe transaction from the raw service response
+ * and executes it via thirdweb (gasless smart-account path).
+ *
+ * Protocol Kit v8: SafeTransaction.addSignature(SafeSignature) where
+ * SafeSignature is EthSafeSignature(signer, data, isContractSignature).
+ * isContractSignature = (signatureType === "CONTRACT_SIGNATURE").
+ *
+ * @param protocolKit  - Initialised Safe instance
+ * @param account      - thirdweb Account used for execution
+ * @param raw          - Raw tx fields from the /tx route
+ * @returns tx hash string
+ */
+export async function executeFromService(
+  protocolKit: Safe,
+  account: Account,
+  raw: RawTxFromService,
+): Promise<string> {
+  const safeTx = await protocolKit.createTransaction({
+    transactions: [
+      {
+        to: raw.to,
+        value: raw.value,
+        data: raw.data,
+        operation: raw.operation as 0 | 1,
+      },
+    ],
+    options: {
+      nonce: raw.nonce,
+      safeTxGas: raw.safeTxGas,
+      baseGas: raw.baseGas,
+      gasPrice: raw.gasPrice,
+      gasToken: raw.gasToken,
+      refundReceiver: raw.refundReceiver,
+    },
+  });
+
+  // Attach each stored confirmation signature.
+  for (const c of raw.confirmations) {
+    const isContract = c.signatureType === "CONTRACT_SIGNATURE";
+    (safeTx as EthSafeTransaction).addSignature(
+      new EthSafeSignature(c.owner, c.signature, isContract),
+    );
+  }
+
+  return executeSafeTx(account, protocolKit, safeTx as EthSafeTransaction);
+}
