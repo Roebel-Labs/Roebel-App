@@ -106,9 +106,18 @@ export type PostCommentRecord = {
   sticker_reward_id: string | null;
   status: 'published' | 'deleted';
   created_at: string;
+  // Single-level threading: a reply points at its top-level comment.
+  parent_comment_id: string | null;
+  likes_count: number;
+  reply_count: number;
+  edited_at: string | null;
   // Joined data
   author?: PostAuthor;
   sticker?: StickerRewardRef | null;
+  // Hydrated client-side: whether the viewer liked this comment.
+  liked_by_me?: boolean;
+  // Lazily loaded replies for an expanded thread.
+  replies?: PostCommentRecord[];
 };
 
 // ─── Event Experience Types ─────────────────────────────────
@@ -167,6 +176,8 @@ export type CreateCommentInput = {
   media_urls?: string[];
   video_url?: string;
   sticker_reward_id?: string | null;
+  // Set to a TOP-LEVEL comment id to post this as a reply (single-level threads).
+  parent_comment_id?: string | null;
 };
 
 export type CreatePollInput = {

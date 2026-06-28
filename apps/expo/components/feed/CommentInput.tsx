@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,6 +13,9 @@ import EmojiIcon from '@/assets/icons/emoji.svg';
 import ImageIcon from '@/assets/icons/image-01.svg';
 
 const MAX_COMMENT_LENGTH = 500;
+// Grow with content from one line up to this height, then scroll inside.
+const INPUT_MIN_HEIGHT = 20;
+const INPUT_MAX_HEIGHT = 100;
 
 type Props = {
   onSubmit: (content: string, stickerRewardId: string | null, imageUrl: string | null) => Promise<void>;
@@ -21,6 +24,9 @@ type Props = {
   onCancel?: () => void;
   onFocusChange?: (focused: boolean) => void;
   walletAddress?: string;
+  /** When set, the input is composing a reply to this person (shows a chip). */
+  replyingToName?: string | null;
+  onCancelReply?: () => void;
 };
 
 export default function CommentInput({
@@ -30,20 +36,33 @@ export default function CommentInput({
   onCancel,
   onFocusChange,
   walletAddress,
+  replyingToName,
+  onCancelReply,
 }: Props) {
   const { colors } = useTheme();
+  const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(initialValue || '');
   const [showPicker, setShowPicker] = useState(false);
   const [pendingSticker, setPendingSticker] = useState<LootboxReward | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
     if (initialValue !== undefined) {
       setText(initialValue);
     }
   }, [initialValue]);
+
+  // Focus the field when a reply is started.
+  useEffect(() => {
+    if (replyingToName) {
+      inputRef.current?.focus();
+    }
+  }, [replyingToName]);
+
+  const inputHeight = Math.min(Math.max(INPUT_MIN_HEIGHT, contentHeight), INPUT_MAX_HEIGHT);
 
   const canSubmit =
     (text.trim().length > 0 || !!pendingSticker || !!imageUrl) && !isSubmitting && !isUploading;
@@ -54,6 +73,7 @@ export default function CommentInput({
     const stickerId = pendingSticker?.id ?? null;
     const submittedImage = imageUrl;
     setText('');
+    setContentHeight(0);
     setPendingSticker(null);
     setImageUrl(null);
     setShowPicker(false);
@@ -93,6 +113,11 @@ export default function CommentInput({
 
   const isEditMode = !!onCancel;
   const showImageIcon = (isFocused || !!imageUrl) && !isEditMode && !!walletAddress;
+  const placeholder = isEditMode
+    ? 'Kommentar bearbeiten...'
+    : replyingToName
+      ? `Antwort an ${replyingToName}...`
+      : 'Kommentar schreiben...';
 
   return (
     <View>
@@ -108,6 +133,16 @@ export default function CommentInput({
           }}
           onClose={() => setShowPicker(false)}
         />
+      )}
+      {replyingToName && (
+        <View style={[styles.replyChip, { backgroundColor: colors.surfaceSecondary }]}>
+          <Text style={[styles.replyChipText, { color: colors.textSecondary }]} numberOfLines={1}>
+            Antwort an <Text style={{ color: colors.textPrimary }}>{replyingToName}</Text>
+          </Text>
+          <Pressable onPress={onCancelReply} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+          </Pressable>
+        </View>
       )}
       {pendingSticker && (
         <View style={[styles.stickerChip, { backgroundColor: colors.surfaceSecondary }]}>
@@ -147,16 +182,18 @@ export default function CommentInput({
         )}
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceSecondary }]}>
           <TextInput
-            style={[styles.input, { color: colors.textPrimary }]}
-            placeholder={isEditMode ? 'Kommentar bearbeiten...' : 'Kommentar schreiben...'}
+            ref={inputRef}
+            style={[styles.input, { color: colors.textPrimary, height: inputHeight }]}
+            placeholder={placeholder}
             placeholderTextColor={colors.textTertiary}
             value={text}
             onChangeText={setText}
             onFocus={handleFocus}
             onBlur={handleBlur}
+            onContentSizeChange={(e) => setContentHeight(e.nativeEvent.contentSize.height)}
             maxLength={MAX_COMMENT_LENGTH}
             multiline
-            numberOfLines={1}
+            scrollEnabled
             autoFocus={isEditMode}
           />
           {showImageIcon && (
@@ -193,7 +230,7 @@ export default function CommentInput({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 8,
   },
   emojiButton: {
@@ -214,10 +251,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    minHeight: 30,
   },
   imageButton: {
     width: 32,
@@ -238,6 +275,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  replyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    marginBottom: 6,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  replyChipText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
   },
   stickerChip: {
     flexDirection: 'row',

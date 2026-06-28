@@ -333,7 +333,7 @@ export async function updatePost(
 ): Promise<PostRecord | null> {
   const { data, error } = await supabase
     .from('posts')
-    .update(updates)
+    .update({ ...updates, edited_at: new Date().toISOString() })
     .eq('id', postId)
     .select(`
       *,
@@ -507,7 +507,8 @@ export async function listPostLikers(postId: string): Promise<PostLiker[]> {
 export async function fetchPostComments(
   postId: string,
   page: number,
-  pageSize: number = 20
+  pageSize: number = 20,
+  walletAddress?: string
 ): Promise<{ data: PostCommentRecord[]; hasMore: boolean }> {
   const from = page * pageSize;
   const to = from + pageSize - 1;
@@ -524,6 +525,7 @@ export async function fetchPostComments(
     `)
     .eq('post_id', postId)
     .eq('status', 'published')
+    .is('parent_comment_id', null) // top-level only — replies load on demand
     .order('created_at', { ascending: true })
     .range(from, to);
 
@@ -532,10 +534,60 @@ export async function fetchPostComments(
     return { data: [], hasMore: false };
   }
 
+  const comments = await hydrateCommentLikes(
+    (data as PostCommentRecord[]).map(mergeAccountIntoAuthor),
+    walletAddress
+  );
+
   return {
-    data: (data as PostCommentRecord[]).map(mergeAccountIntoAuthor),
+    data: comments,
     hasMore: data.length === pageSize,
   };
+}
+
+/**
+ * Fetch the replies of a single top-level comment (single-level threads).
+ */
+export async function fetchCommentReplies(
+  parentCommentId: string,
+  walletAddress?: string
+): Promise<PostCommentRecord[]> {
+  const { data, error } = await supabase
+    .from('post_comments')
+    .select(`
+      *,
+      author:users!post_comments_wallet_address_fkey(
+        wallet_address, username, profile_picture_url, is_verified_citizen, equipped_frame_asset_url
+      ),
+      account:accounts(id, account_type, name, avatar_url),
+      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
+    `)
+    .eq('parent_comment_id', parentCommentId)
+    .eq('status', 'published')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching replies:', error);
+    return [];
+  }
+
+  return hydrateCommentLikes(
+    (data as PostCommentRecord[]).map(mergeAccountIntoAuthor),
+    walletAddress
+  );
+}
+
+/** Set `liked_by_me` on a batch of comments for the given viewer. */
+async function hydrateCommentLikes(
+  comments: PostCommentRecord[],
+  walletAddress?: string
+): Promise<PostCommentRecord[]> {
+  if (!walletAddress || comments.length === 0) return comments;
+  const likedIds = await getUserLikedCommentIds(
+    comments.map((c) => c.id),
+    walletAddress
+  );
+  return comments.map((c) => ({ ...c, liked_by_me: likedIds.has(c.id) }));
 }
 
 /**
@@ -552,6 +604,7 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
       media_urls: input.media_urls || [],
       video_url: input.video_url || null,
       sticker_reward_id: input.sticker_reward_id || null,
+      parent_comment_id: input.parent_comment_id || null,
     })
     .select(`
       *,
@@ -568,20 +621,8 @@ export async function createComment(input: CreateCommentInput): Promise<PostComm
     return null;
   }
 
-  // Increment comment count
-  const { data: post } = await supabase
-    .from('posts')
-    .select('comments_count')
-    .eq('id', input.post_id)
-    .single();
-
-  if (post) {
-    await supabase
-      .from('posts')
-      .update({ comments_count: (post.comments_count || 0) + 1 })
-      .eq('id', input.post_id);
-  }
-
+  // posts.comments_count / parent reply_count are maintained by the
+  // trg_post_comment_counts DB trigger — no client-side increment needed.
   return mergeAccountIntoAuthor(data as PostCommentRecord);
 }
 
@@ -618,7 +659,7 @@ export async function updateComment(
 ): Promise<PostCommentRecord | null> {
   const { data, error } = await supabase
     .from('post_comments')
-    .update({ content })
+    .update({ content, edited_at: new Date().toISOString() })
     .eq('id', commentId)
     .select(`
       *,
@@ -636,6 +677,57 @@ export async function updateComment(
   }
 
   return mergeAccountIntoAuthor(data as PostCommentRecord);
+}
+
+// ─── Comment likes ──────────────────────────────────────────
+
+/**
+ * Toggle like on a comment. Returns true if now liked, false if unliked.
+ * The denormalized post_comments.likes_count is maintained by a DB trigger.
+ */
+export async function toggleCommentLike(
+  commentId: string,
+  walletAddress: string
+): Promise<boolean> {
+  const { data: existing } = await supabase
+    .from('post_comment_likes')
+    .select('id')
+    .eq('comment_id', commentId)
+    .eq('wallet_address', walletAddress)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('post_comment_likes').delete().eq('id', existing.id);
+    return false;
+  }
+
+  await supabase
+    .from('post_comment_likes')
+    .insert({ comment_id: commentId, wallet_address: walletAddress });
+  return true;
+}
+
+/**
+ * Batch check which of the given comments the user has liked.
+ */
+export async function getUserLikedCommentIds(
+  commentIds: string[],
+  walletAddress: string
+): Promise<Set<string>> {
+  if (commentIds.length === 0 || !walletAddress) return new Set();
+
+  const { data, error } = await supabase
+    .from('post_comment_likes')
+    .select('comment_id')
+    .in('comment_id', commentIds)
+    .eq('wallet_address', walletAddress);
+
+  if (error) {
+    console.error('Error checking liked comments:', error);
+    return new Set();
+  }
+
+  return new Set(data.map((d) => d.comment_id));
 }
 
 // ─── Polls ──────────────────────────────────────────────────

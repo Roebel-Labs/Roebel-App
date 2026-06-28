@@ -24,6 +24,8 @@ interface NotificationPayload {
     | 'direct_message'
     | 'post_like'
     | 'post_comment'
+    | 'post_reply'
+    | 'comment_like'
     | 'org_invite';
   title: string;
   body: string;
@@ -199,8 +201,14 @@ serve(async (req: Request) => {
           return pref.likes_enabled !== false;
 
         case 'post_comment':
-          // Someone commented on your post — opt-out per device (defaults to on)
+        case 'post_reply':
+          // Someone commented on your post or replied to your comment —
+          // opt-out per device via the comments toggle (defaults to on)
           return pref.comments_enabled !== false;
+
+        case 'comment_like':
+          // Someone liked your comment — shares the likes toggle (defaults to on)
+          return pref.likes_enabled !== false;
 
         case 'org_invite':
           // Organisation invitation — opt-out per device (defaults to on)

@@ -11,14 +11,29 @@ import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
+import HeartIcon from '@/assets/icons/heart-02.svg';
+import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
+
 type Props = {
   comment: PostCommentRecord;
   isOwner?: boolean;
   onEdit?: (comment: PostCommentRecord) => void;
   onDelete?: (comment: PostCommentRecord) => void;
+  onReply?: (comment: PostCommentRecord) => void;
+  onToggleLike?: (comment: PostCommentRecord) => void;
+  /** Compact, inset rendering for a reply inside a thread. */
+  isReply?: boolean;
 };
 
-export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Props) {
+export default function CommentItem({
+  comment,
+  isOwner,
+  onEdit,
+  onDelete,
+  onReply,
+  onToggleLike,
+  isReply = false,
+}: Props) {
   const { colors } = useTheme();
   const router = useRouter();
   const [showActions, setShowActions] = useState(false);
@@ -29,14 +44,18 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
   const avatarUri = isOrgComment ? comment.author!.account!.avatar_url : comment.author?.profile_picture_url;
   const isVerified = comment.author?.is_verified_citizen ?? false;
   const initial = displayName.charAt(0).toUpperCase();
+  const avatarSize = isReply ? 28 : 32;
 
   const isInteractive = canOpenProfile({ author: comment.author, account: comment.author?.account });
   const openProfile = isInteractive
     ? () => openAuthorProfile(router, { author: comment.author, account: comment.author?.account })
     : undefined;
 
+  const liked = comment.liked_by_me ?? false;
+  const likesCount = comment.likes_count ?? 0;
+
   return (
-    <View style={[styles.container, { borderBottomColor: colors.border }]}>
+    <View style={[styles.container, { borderBottomColor: colors.border }, isReply && styles.replyContainer]}>
       {/* Avatar */}
       <Pressable
         onPress={openProfile}
@@ -46,7 +65,7 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
         accessibilityLabel={isInteractive ? `Profil von ${displayName} öffnen` : undefined}
       >
         <UserAvatarWithFrame
-          size={32}
+          size={avatarSize}
           uri={avatarUri ?? null}
           fallbackInitial={initial}
           frameAssetUrl={isOrgComment ? null : comment.author?.equipped_frame_asset_url ?? null}
@@ -64,6 +83,9 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
           <Text style={[styles.time, { color: colors.textTertiary }]}>
             · {formatRelativeTimestamp(comment.created_at)}
           </Text>
+          {comment.edited_at && (
+            <Text style={[styles.time, { color: colors.textTertiary }]}>· bearbeitet</Text>
+          )}
           {isOwner && (
             <Pressable
               onPress={() => setShowActions((v) => !v)}
@@ -87,17 +109,6 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
           />
         ) : null}
 
-        {showActions && (
-          <View style={styles.actionsRow}>
-            <Pressable onPress={() => { setShowActions(false); onEdit?.(comment); }}>
-              <Text style={[styles.actionText, { color: colors.primary }]}>Bearbeiten</Text>
-            </Pressable>
-            <Pressable onPress={() => { setShowActions(false); onDelete?.(comment); }}>
-              <Text style={[styles.actionText, { color: colors.error }]}>Löschen</Text>
-            </Pressable>
-          </View>
-        )}
-
         {/* Comment images */}
         {comment.media_urls && comment.media_urls.length > 0 && (
           <View style={styles.imageRow}>
@@ -111,6 +122,46 @@ export default function CommentItem({ comment, isOwner, onEdit, onDelete }: Prop
                 />
               </Pressable>
             ))}
+          </View>
+        )}
+
+        {/* Like + reply actions */}
+        <View style={styles.metaRow}>
+          {onReply && (
+            <Pressable onPress={() => onReply(comment)} hitSlop={6}>
+              <Text style={[styles.replyText, { color: colors.textSecondary }]}>Antworten</Text>
+            </Pressable>
+          )}
+          {onToggleLike && (
+            <Pressable
+              onPress={() => onToggleLike(comment)}
+              style={styles.likeButton}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={liked ? 'Like entfernen' : 'Kommentar liken'}
+            >
+              {liked ? (
+                <HeartFilledIcon width={16} height={16} color={colors.error} />
+              ) : (
+                <HeartIcon width={16} height={16} color={colors.textTertiary} />
+              )}
+              {likesCount > 0 && (
+                <Text style={[styles.likeCount, { color: liked ? colors.error : colors.textTertiary }]}>
+                  {likesCount}
+                </Text>
+              )}
+            </Pressable>
+          )}
+        </View>
+
+        {showActions && (
+          <View style={styles.editActionsRow}>
+            <Pressable onPress={() => { setShowActions(false); onEdit?.(comment); }}>
+              <Text style={[styles.actionText, { color: colors.primary }]}>Bearbeiten</Text>
+            </Pressable>
+            <Pressable onPress={() => { setShowActions(false); onDelete?.(comment); }}>
+              <Text style={[styles.actionText, { color: colors.error }]}>Löschen</Text>
+            </Pressable>
           </View>
         )}
 
@@ -133,21 +184,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 10,
   },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  avatarFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInitial: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
+  replyContainer: {
+    paddingLeft: 24,
+    borderBottomWidth: 0,
+    paddingVertical: 8,
   },
   content: {
     flex: 1,
@@ -190,7 +230,26 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     padding: 4,
   },
-  actionsRow: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  replyText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  likeCount: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  editActionsRow: {
     flexDirection: 'row',
     gap: 16,
     marginTop: 4,

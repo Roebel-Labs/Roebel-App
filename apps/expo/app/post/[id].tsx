@@ -24,10 +24,12 @@ import { usePostActions } from '@/hooks/usePostActions';
 import {
   fetchPostById,
   fetchPostComments,
+  fetchCommentReplies,
   createComment,
   deletePost,
   deleteComment,
   updateComment,
+  toggleCommentLike,
   getUserLikedPostIds,
   getPostLikers,
   type PostLiker,
@@ -35,6 +37,7 @@ import {
 } from '@/lib/supabase-posts';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import CommentThread from '@/components/feed/CommentThread';
 import AvatarStack from '@/components/AvatarStack';
 import { Image } from 'expo-image';
 import PostImageGrid from '@/components/feed/PostImageGrid';
@@ -47,7 +50,6 @@ import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
-import CommentItem from '@/components/feed/CommentItem';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentScrim from '@/components/feed/CommentScrim';
@@ -83,6 +85,9 @@ export default function PostDetailScreen() {
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [editComposerVisible, setEditComposerVisible] = useState(false);
   const [editingComment, setEditingComment] = useState<PostCommentRecord | null>(null);
+  const [replyingTo, setReplyingTo] = useState<PostCommentRecord | null>(null);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+  const [loadingReplies, setLoadingReplies] = useState<Set<string>>(new Set());
   const [deletingComment, setDeletingComment] = useState<PostCommentRecord | null>(null);
   const [deleteCommentConfirmVisible, setDeleteCommentConfirmVisible] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
@@ -106,7 +111,7 @@ export default function PostDetailScreen() {
     setIsLoading(true);
     const [postData, commentsData, likersData] = await Promise.all([
       fetchPostById(id!),
-      fetchPostComments(id!, 0),
+      fetchPostComments(id!, 0, 20, walletAddress),
       getPostLikers(id!, 5),
     ]);
 
@@ -137,12 +142,12 @@ export default function PostDetailScreen() {
     setIsLoadingMoreComments(true);
 
     const nextPage = commentPage + 1;
-    const result = await fetchPostComments(id!, nextPage);
+    const result = await fetchPostComments(id!, nextPage, 20, walletAddress);
     setCommentPage(nextPage);
     setComments((prev) => [...prev, ...result.data]);
     setHasMoreComments(result.hasMore);
     setIsLoadingMoreComments(false);
-  }, [id, commentPage, isLoadingMoreComments, hasMoreComments]);
+  }, [id, commentPage, isLoadingMoreComments, hasMoreComments, walletAddress]);
 
   const handleSubmitComment = async (
     content: string,
@@ -185,7 +190,8 @@ export default function PostDetailScreen() {
   const refreshComments = async () => {
     setIsRefreshingComments(true);
     setCommentPage(0);
-    const result = await fetchPostComments(id!, 0);
+    setExpandedThreads(new Set());
+    const result = await fetchPostComments(id!, 0, 20, walletAddress);
     setComments(result.data);
     setHasMoreComments(result.hasMore);
     setIsRefreshingComments(false);
@@ -236,8 +242,127 @@ export default function PostDetailScreen() {
     showSnackbar({ message: 'Beitrag aktualisiert' });
   };
 
+  // Update a single comment (top-level or nested reply) by id.
+  const updateCommentInState = (
+    commentId: string,
+    updater: (c: PostCommentRecord) => PostCommentRecord,
+  ) => {
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id === commentId) return updater(c);
+        if (c.replies?.some((r) => r.id === commentId)) {
+          return { ...c, replies: c.replies.map((r) => (r.id === commentId ? updater(r) : r)) };
+        }
+        return c;
+      }),
+    );
+  };
+
+  const handleToggleCommentLike = async (comment: PostCommentRecord) => {
+    if (!walletAddress) {
+      requireAuth(() => {});
+      return;
+    }
+    const nowLiked = !(comment.liked_by_me ?? false);
+    updateCommentInState(comment.id, (c) => ({
+      ...c,
+      liked_by_me: nowLiked,
+      likes_count: Math.max(0, (c.likes_count ?? 0) + (nowLiked ? 1 : -1)),
+    }));
+    try {
+      await toggleCommentLike(comment.id, walletAddress);
+    } catch (err) {
+      console.error('Error toggling comment like:', err);
+      // Revert on failure.
+      updateCommentInState(comment.id, (c) => ({
+        ...c,
+        liked_by_me: !nowLiked,
+        likes_count: Math.max(0, (c.likes_count ?? 0) + (nowLiked ? -1 : 1)),
+      }));
+    }
+  };
+
+  const handleToggleReplies = async (comment: PostCommentRecord) => {
+    const cid = comment.id;
+    if (expandedThreads.has(cid)) {
+      setExpandedThreads((prev) => {
+        const next = new Set(prev);
+        next.delete(cid);
+        return next;
+      });
+      return;
+    }
+    setExpandedThreads((prev) => new Set(prev).add(cid));
+    if (!comment.replies) {
+      setLoadingReplies((prev) => new Set(prev).add(cid));
+      const replies = await fetchCommentReplies(cid, walletAddress);
+      updateCommentInState(cid, (c) => ({ ...c, replies, reply_count: replies.length }));
+      setLoadingReplies((prev) => {
+        const next = new Set(prev);
+        next.delete(cid);
+        return next;
+      });
+    }
+  };
+
+  const handleReply = (comment: PostCommentRecord) => {
+    setEditingComment(null);
+    setReplyingTo(comment);
+  };
+
+  const handleSubmitReply = async (
+    content: string,
+    stickerRewardId: string | null,
+    imageUrl: string | null,
+  ) => {
+    if (!id || !replyingTo) return;
+    if (!walletAddress) {
+      requireAuth(() => {});
+      return;
+    }
+    // Always thread under the TOP-LEVEL ancestor (single-level threads).
+    const parentId = replyingTo.parent_comment_id ?? replyingTo.id;
+    setIsSubmittingComment(true);
+    try {
+      const newReply = await createComment({
+        post_id: id,
+        wallet_address: walletAddress,
+        account_id: activeAccount?.id,
+        content,
+        sticker_reward_id: stickerRewardId,
+        media_urls: imageUrl ? [imageUrl] : undefined,
+        parent_comment_id: parentId,
+      });
+      if (newReply) {
+        // Re-fetch the thread so the list and reply_count stay authoritative.
+        const replies = await fetchCommentReplies(parentId, walletAddress);
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === parentId ? { ...c, replies, reply_count: replies.length } : c,
+          ),
+        );
+        setExpandedThreads((prev) => new Set(prev).add(parentId));
+        setReplyingTo(null);
+        Keyboard.dismiss();
+        setCommentFocused(false);
+      }
+    } catch (err) {
+      console.error('Error submitting reply:', err);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
   const handleEditComment = (comment: PostCommentRecord) => {
+    setReplyingTo(null);
     setEditingComment(comment);
+  };
+
+  // Display name of a comment's author (never a wallet) — used for the reply chip.
+  const commentDisplayName = (c: PostCommentRecord) => {
+    const isOrg = c.author?.account?.account_type === 'organisation';
+    const raw = (isOrg ? c.author?.account?.name : c.author?.username) || '';
+    return raw && !/^0x[a-fA-F0-9]{40}$/.test(raw) ? raw : 'Jemand';
   };
 
   const handleDeleteComment = (comment: PostCommentRecord) => {
@@ -252,12 +377,30 @@ export default function PostDetailScreen() {
       setDeleteCommentConfirmVisible(false);
       return;
     }
+    const removed = deletingComment;
+    const parentId = removed.parent_comment_id;
     try {
-      await deleteComment(deletingComment.id, id, walletAddress);
-      setComments((prev) => prev.filter((c) => c.id !== deletingComment.id));
-      setPost((prev) =>
-        prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : prev
-      );
+      await deleteComment(removed.id, id, walletAddress);
+      if (parentId) {
+        // A reply: drop it from its thread and decrement that thread's count.
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === parentId
+              ? {
+                  ...c,
+                  replies: (c.replies ?? []).filter((r) => r.id !== removed.id),
+                  reply_count: Math.max(0, (c.reply_count ?? 0) - 1),
+                }
+              : c,
+          ),
+        );
+      } else {
+        // A top-level comment: drop the whole thread (replies cascade in DB).
+        setComments((prev) => prev.filter((c) => c.id !== removed.id));
+        setPost((prev) =>
+          prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : prev
+        );
+      }
       showSnackbar({ message: 'Kommentar gelöscht' });
     } catch (e) {
       console.error('[post/[id].confirmDeleteComment]', e);
@@ -277,9 +420,14 @@ export default function PostDetailScreen() {
     try {
       const updated = await updateComment(editingComment.id, content);
       if (updated) {
-        setComments((prev) =>
-          prev.map((c) => (c.id === editingComment.id ? updated : c))
-        );
+        // Merge only the changed fields so loaded replies / like state survive,
+        // and so a nested reply is updated in place too.
+        updateCommentInState(editingComment.id, (c) => ({
+          ...c,
+          content: updated.content,
+          media_urls: updated.media_urls,
+          edited_at: updated.edited_at,
+        }));
         showSnackbar({ message: 'Kommentar aktualisiert' });
       }
     } catch {
@@ -427,11 +575,16 @@ export default function PostDetailScreen() {
   };
 
   const renderComment = ({ item }: { item: PostCommentRecord }) => (
-    <CommentItem
+    <CommentThread
       comment={item}
-      isOwner={!!walletAddress && item.wallet_address === walletAddress}
+      viewerWallet={walletAddress}
+      expanded={expandedThreads.has(item.id)}
+      loadingReplies={loadingReplies.has(item.id)}
+      onToggleReplies={handleToggleReplies}
+      onReply={handleReply}
       onEdit={handleEditComment}
       onDelete={handleDeleteComment}
+      onToggleLike={handleToggleCommentLike}
     />
   );
 
@@ -498,10 +651,12 @@ export default function PostDetailScreen() {
               />
             ) : (
               <CommentInput
-                onSubmit={handleSubmitComment}
+                onSubmit={replyingTo ? handleSubmitReply : handleSubmitComment}
                 isSubmitting={isSubmittingComment}
                 onFocusChange={setCommentFocused}
                 walletAddress={walletAddress}
+                replyingToName={replyingTo ? commentDisplayName(replyingTo) : null}
+                onCancelReply={() => setReplyingTo(null)}
               />
             )}
           </View>
