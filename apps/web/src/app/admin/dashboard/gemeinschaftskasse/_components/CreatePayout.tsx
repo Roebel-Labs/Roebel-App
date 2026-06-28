@@ -3,6 +3,7 @@ import { useState } from "react";
 import { isAddress, parseEther } from "viem";
 import { buildTransfer } from "@/lib/gemeinschaftskasse/safe-client";
 import { useProposeMetaTx } from "./useProposeMetaTx";
+import { useIsOwner } from "./useIsOwner";
 import type { AssetId } from "@/lib/gemeinschaftskasse/constants";
 
 const ASSET_OPTIONS: { id: AssetId; label: string }[] = [
@@ -13,6 +14,7 @@ const ASSET_OPTIONS: { id: AssetId; label: string }[] = [
 
 export function CreatePayout({ onCreated }: { onCreated: () => void }) {
   const propose = useProposeMetaTx();
+  const { isOwner, loading: ownerLoading } = useIsOwner();
 
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -49,6 +51,17 @@ export function CreatePayout({ onCreated }: { onCreated: () => void }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!ownerLoading && !isOwner) {
+    return (
+      <div className="rounded-lg border border-border p-5">
+        <h3 className="text-base font-semibold mb-2">Neue Auszahlung vorschlagen</h3>
+        <p className="text-sm text-muted-foreground">
+          Nur Mitsignierer können Auszahlungen erstellen.
+        </p>
+      </div>
+    );
   }
 
   return (

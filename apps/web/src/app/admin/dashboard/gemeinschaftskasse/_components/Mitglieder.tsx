@@ -7,6 +7,7 @@ import {
   buildChangeThreshold,
 } from "@/lib/gemeinschaftskasse/safe-client";
 import { useProposeMetaTx } from "./useProposeMetaTx";
+import { useIsOwner } from "./useIsOwner";
 import type { OwnerView } from "@/lib/gemeinschaftskasse/constants";
 
 interface OverviewData {
@@ -16,6 +17,7 @@ interface OverviewData {
 
 export function Mitglieder() {
   const propose = useProposeMetaTx();
+  const { isOwner } = useIsOwner();
 
   const [data, setData] = useState<OverviewData | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -123,6 +125,12 @@ export function Mitglieder() {
         </div>
       )}
 
+      {!isOwner && (
+        <p className="text-sm text-muted-foreground">
+          Nur Mitsignierer können Mitglieder verwalten.
+        </p>
+      )}
+
       {/* Current members list */}
       <div className="rounded-lg border border-border p-5">
         <div className="flex items-center justify-between mb-4">
@@ -145,72 +153,78 @@ export function Mitglieder() {
                   {owner.short}
                 </p>
               </div>
-              <button
-                onClick={() => handleRemoveOwner(owner)}
-                disabled={removingAddr === owner.address || busy}
-                className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors flex-shrink-0"
-              >
-                {removingAddr === owner.address ? "…" : "Entfernen"}
-              </button>
+              {isOwner && (
+                <button
+                  onClick={() => handleRemoveOwner(owner)}
+                  disabled={removingAddr === owner.address || busy}
+                  className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors flex-shrink-0"
+                >
+                  {removingAddr === owner.address ? "…" : "Entfernen"}
+                </button>
+              )}
             </li>
           ))}
         </ul>
       </div>
 
-      {/* Add owner */}
-      <div className="rounded-lg border border-border p-5">
-        <h3 className="text-base font-semibold mb-4">Mitglied hinzufügen</h3>
-        <form onSubmit={handleAddOwner} className="flex gap-3">
-          <input
-            type="text"
-            value={newOwner}
-            onChange={(e) => setNewOwner(e.target.value)}
-            placeholder="0x… Adresse des neuen Mitglieds"
-            disabled={busy}
-            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors flex-shrink-0"
-          >
-            {busy ? "…" : "Hinzufügen"}
-          </button>
-        </form>
-        <p className="text-xs text-muted-foreground mt-2">
-          Der Vorschlag muss anschließend unter „Auszahlungen" freigegeben werden.
-        </p>
-      </div>
+      {/* Add owner — owners only */}
+      {isOwner && (
+        <div className="rounded-lg border border-border p-5">
+          <h3 className="text-base font-semibold mb-4">Mitglied hinzufügen</h3>
+          <form onSubmit={handleAddOwner} className="flex gap-3">
+            <input
+              type="text"
+              value={newOwner}
+              onChange={(e) => setNewOwner(e.target.value)}
+              placeholder="0x… Adresse des neuen Mitglieds"
+              disabled={busy}
+              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors flex-shrink-0"
+            >
+              {busy ? "…" : "Hinzufügen"}
+            </button>
+          </form>
+          <p className="text-xs text-muted-foreground mt-2">
+            Der Vorschlag muss anschließend unter „Auszahlungen" freigegeben werden.
+          </p>
+        </div>
+      )}
 
-      {/* Change threshold */}
-      <div className="rounded-lg border border-border p-5">
-        <h3 className="text-base font-semibold mb-1">Freigabe-Schwelle ändern</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Aktuell: {data.threshold} von {data.owners.length} Unterschriften erforderlich.
-        </p>
-        <form onSubmit={handleChangeThreshold} className="flex gap-3">
-          <input
-            type="number"
-            min={1}
-            max={data.owners.length}
-            value={newThreshold}
-            onChange={(e) => setNewThreshold(e.target.value)}
-            placeholder={`1–${data.owners.length}`}
-            disabled={busy}
-            className="w-32 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors"
-          >
-            {busy ? "…" : "Schwelle ändern"}
-          </button>
-        </form>
-        <p className="text-xs text-muted-foreground mt-2">
-          Wir empfehlen mindestens 2 von {data.owners.length} für höhere Sicherheit.
-        </p>
-      </div>
+      {/* Change threshold — owners only */}
+      {isOwner && (
+        <div className="rounded-lg border border-border p-5">
+          <h3 className="text-base font-semibold mb-1">Freigabe-Schwelle ändern</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Aktuell: {data.threshold} von {data.owners.length} Unterschriften erforderlich.
+          </p>
+          <form onSubmit={handleChangeThreshold} className="flex gap-3">
+            <input
+              type="number"
+              min={1}
+              max={data.owners.length}
+              value={newThreshold}
+              onChange={(e) => setNewThreshold(e.target.value)}
+              placeholder={`1–${data.owners.length}`}
+              disabled={busy}
+              className="w-32 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors"
+            >
+              {busy ? "…" : "Schwelle ändern"}
+            </button>
+          </form>
+          <p className="text-xs text-muted-foreground mt-2">
+            Wir empfehlen mindestens 2 von {data.owners.length} für höhere Sicherheit.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

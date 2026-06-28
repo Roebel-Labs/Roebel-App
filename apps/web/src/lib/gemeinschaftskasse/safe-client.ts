@@ -382,7 +382,7 @@ export async function executeFromService(
       },
     ],
     options: {
-      nonce: raw.nonce,
+      nonce: Number(raw.nonce),
       safeTxGas: raw.safeTxGas,
       baseGas: raw.baseGas,
       gasPrice: raw.gasPrice,

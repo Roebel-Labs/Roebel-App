@@ -10,6 +10,7 @@ import {
 import { EthSafeSignature } from "@safe-global/protocol-kit";
 import { approvalLabel } from "@/lib/gemeinschaftskasse/format";
 import type { TxView } from "@/lib/gemeinschaftskasse/constants";
+import { useIsOwner } from "./useIsOwner";
 
 interface PendingQueueProps {
   /** Bump this value to trigger a refetch from outside (e.g. after CreatePayout). */
@@ -19,6 +20,7 @@ interface PendingQueueProps {
 export function PendingQueue({ refreshKey }: PendingQueueProps) {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
+  const { isOwner } = useIsOwner();
 
   const [items, setItems] = useState<TxView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +141,11 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
   return (
     <div className="space-y-3">
       <h3 className="text-base font-semibold">Ausstehende Transaktionen</h3>
+      {!isOwner && (
+        <p className="text-sm text-muted-foreground">
+          Nur Mitsignierer können Transaktionen freigeben oder ausführen.
+        </p>
+      )}
       {items.map((item) => {
         const ready = item.confirmations >= item.threshold;
         const isBusy = busy === item.safeTxHash;
@@ -165,7 +172,7 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
                 )}
               </div>
               <div className="flex gap-2 flex-shrink-0">
-                {!userSigned && !ready && (
+                {isOwner && !userSigned && !ready && (
                   <button
                     onClick={() => handleFreigeben(item)}
                     disabled={isBusy}
@@ -174,7 +181,7 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
                     {isBusy ? "…" : "Freigeben"}
                   </button>
                 )}
-                {ready && !item.executed && (
+                {isOwner && ready && !item.executed && (
                   <button
                     onClick={() => handleAusfuehren(item)}
                     disabled={isBusy}
