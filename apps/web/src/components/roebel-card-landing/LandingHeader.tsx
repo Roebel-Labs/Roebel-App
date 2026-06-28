@@ -9,19 +9,16 @@ export function LandingHeader() {
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
         <Link href="/" className="flex items-center gap-2.5">
           <Image
-            src="/logo.png"
-            alt="Röbel App Logo"
-            width={32}
-            height={32}
-            className="h-8 w-8 object-contain"
+            src="/Logo-new.png"
+            alt="Röbel App"
+            width={122}
+            height={28}
+            className="h-7 w-auto object-contain"
             priority
           />
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-foreground">Röbel Card</span>
-            <span className="hidden text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground sm:block">
-              Powered by Röbel App
-            </span>
-          </div>
+          <span className="border-l border-border pl-2.5 text-sm font-semibold text-foreground">
+            Card
+          </span>
         </Link>
 
         <InterestCTAButtons citizenOnly layout="row-compact" />

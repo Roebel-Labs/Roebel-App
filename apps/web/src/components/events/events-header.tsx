@@ -26,17 +26,14 @@ export function EventsHeader() {
     <header className="bg-card border-b border-border">
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity flex-shrink-0">
-            <div className="relative h-7 w-7 md:h-8 md:w-8">
-              <Image
-                src="/logo.png"
-                alt="Wappen Röbel/Müritz"
-                fill
-                className="object-contain"
-                sizes="32px"
-              />
-            </div>
-            <h1 className="text-xl md:text-xl font-medium tracking-tight text-foreground">Röbel App</h1>
+          <Link href="/" className="flex items-center hover:opacity-80 transition-opacity flex-shrink-0">
+            <Image
+              src="/Logo-new.png"
+              alt="Röbel App"
+              width={140}
+              height={32}
+              className="h-7 w-auto object-contain md:h-8"
+            />
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">

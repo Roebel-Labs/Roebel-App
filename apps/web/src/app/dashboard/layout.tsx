@@ -100,13 +100,12 @@ function DashboardTopBar() {
     <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 md:px-6 sticky top-0 z-30">
       <Link href="/app" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
         <Image
-          src="/logo.png"
+          src="/Logo-new.png"
           alt="Röbel App"
-          width={24}
+          width={105}
           height={24}
-          className="object-contain"
+          className="h-6 w-auto object-contain"
         />
-        <span className="font-medium tracking-tight">Röbel App</span>
         <span className="text-xs text-muted-foreground hidden sm:inline">· Dashboard</span>
       </Link>
       <Link

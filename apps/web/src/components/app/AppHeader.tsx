@@ -51,17 +51,14 @@ export function AppHeader({ onToggleMobileSidebar }: AppHeaderProps) {
         </button>
 
         {/* Mobile logo (visible only on mobile where sidebar is hidden) */}
-        <Link href="/app" className="flex items-center gap-2 flex-shrink-0 md:hidden">
+        <Link href="/app" className="flex items-center flex-shrink-0 md:hidden">
           <Image
-            src="/logo.png"
-            alt="Röbel App Logo"
-            width={28}
+            src="/Logo-new.png"
+            alt="Röbel App"
+            width={122}
             height={28}
-            className="object-contain"
+            className="h-7 w-auto object-contain"
           />
-          <span className="text-lg font-medium text-foreground hidden sm:block">
-            Röbel App
-          </span>
         </Link>
 
         {/* Search trigger — desktop */}

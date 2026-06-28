@@ -34,17 +34,15 @@ export function Header() {
       <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3">
         <div className="flex items-center justify-between gap-2">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <Link href="/" className="flex items-center flex-shrink-0">
             <Image
-              src="/logo.png"
-              alt="Bürger für Röbel Logo"
-              width={40}
+              src="/Logo-new.png"
+              alt="Röbel App"
+              width={175}
               height={40}
-              className="object-contain"
+              priority
+              className="h-9 w-auto object-contain sm:h-10"
             />
-            <div className="text-base sm:text-lg font-medium text-foreground">
-              Bürger für Röbel
-            </div>
           </Link>
 
           {/* Desktop Navigation */}

@@ -31,10 +31,11 @@ export default async function RoebelCardSuccessPage({
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-8 text-center shadow-sm">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo.png"
+          src="/Logo-new.png"
           alt="Röbel App"
-          className="w-16 h-16 mx-auto mb-6 object-contain"
+          className="h-11 w-auto mx-auto mb-6 object-contain"
         />
         {isCancelled ? (
           <>

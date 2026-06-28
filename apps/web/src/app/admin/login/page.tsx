@@ -21,11 +21,12 @@ export default function DashboardLoginPage() {
           <div className="text-center mb-8">
             <div className="flex items-center justify-center mb-4">
               <Image
-                src="/logo.png"
-                alt="Röbel App Logo"
-                width={80}
-                height={80}
-                className="object-contain"
+                src="/Logo-new.png"
+                alt="Röbel App"
+                width={245}
+                height={56}
+                priority
+                className="h-12 w-auto object-contain"
               />
             </div>
             <h1 className="text-2xl font-medium text-gray-900">

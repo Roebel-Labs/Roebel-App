@@ -342,14 +342,22 @@ export function AdminSidebar() {
       >
       {/* Header */}
       <div className="h-16 border-b border-border flex items-center px-4 bg-card">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <img
-            src="/logo.png"
-            alt="Wappen Röbel/Müritz"
-            className="w-8 h-8 object-contain"
-          />
-          {!isCollapsed && <span className="font-medium tracking-tight text-lg">Röbel App</span>}
-          
+        <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+          {isCollapsed ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/logo.png"
+              alt="Röbel App"
+              className="w-8 h-8 object-contain"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/Logo-new.png"
+              alt="Röbel App"
+              className="h-8 w-auto object-contain"
+            />
+          )}
         </Link>
       </div>
 

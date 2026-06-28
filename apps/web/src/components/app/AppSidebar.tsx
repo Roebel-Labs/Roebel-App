@@ -114,15 +114,23 @@ export function AppSidebar() {
   return (
     <div className="flex flex-col h-full bg-card">
       {/* Logo */}
-      <div className="h-16 flex items-center gap-2 px-5 flex-shrink-0 lg:justify-start justify-center">
+      <div className="h-16 flex items-center px-5 flex-shrink-0 lg:justify-start justify-center">
+        {/* Collapsed (icon-only) rail: square windmill */}
         <Image
           src="/logo.png"
-          alt="Röbel App Logo"
+          alt="Röbel App"
           width={28}
           height={28}
-          className="object-contain"
+          className="object-contain lg:hidden"
         />
-        <span className="text-lg font-medium text-foreground hidden lg:inline">Röbel App</span>
+        {/* Expanded rail: full wordmark lockup */}
+        <Image
+          src="/Logo-new.png"
+          alt="Röbel App"
+          width={122}
+          height={28}
+          className="hidden h-7 w-auto object-contain lg:block"
+        />
       </div>
 
       {/* Main navigation */}

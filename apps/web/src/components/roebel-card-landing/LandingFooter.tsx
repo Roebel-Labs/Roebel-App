@@ -28,17 +28,14 @@ export function LandingFooter() {
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
-            <Link href="/" className="mb-4 flex items-center gap-2">
+            <Link href="/" className="mb-4 flex items-center">
               <Image
-                src="/logo.png"
-                alt="Röbel App Logo"
-                width={36}
-                height={36}
-                className="object-contain"
+                src="/Logo-new.png"
+                alt="Röbel App"
+                width={140}
+                height={32}
+                className="h-8 w-auto object-contain"
               />
-              <span className="text-base font-semibold tracking-tight text-foreground">
-                Röbel App
-              </span>
             </Link>
             <p className="mb-5 text-sm text-muted-foreground">
               Lokale Veranstaltungen, Nachrichten, Bürgerbus und jetzt: die Röbel

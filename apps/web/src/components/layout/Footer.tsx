@@ -25,15 +25,14 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
           {/* Brand Section */}
           <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center gap-2 mb-4">
+            <Link href="/" className="flex items-center mb-4">
               <Image
-                src="/logo.png"
-                alt="Röbel App Logo"
-                width={40}
-                height={40}
-                className="object-contain"
+                src="/Logo-new.png"
+                alt="Röbel App"
+                width={157}
+                height={36}
+                className="h-9 w-auto object-contain"
               />
-              <span className="text-lg font-medium tracking-tight text-foreground">Röbel App</span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">
               Veranstaltungen, Neuigkeiten und Gemeinschaft aus Röbel/Müritz.

@@ -79,8 +79,8 @@ export default async function PublicKartePage() {
       {/* Header */}
       <header className="h-14 border-b border-gray-100 bg-white flex items-center px-4 gap-3 flex-shrink-0">
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <Image src="/logo.png" alt="Röbel App" width={28} height={28} className="object-contain" />
-          <span className="text-lg font-medium text-gray-900">Röbel Karte</span>
+          <Image src="/Logo-new.png" alt="Röbel App" width={105} height={24} className="h-6 w-auto object-contain" />
+          <span className="text-lg font-medium text-gray-900">· Karte</span>
         </Link>
         <div className="flex-1" />
         <Link
