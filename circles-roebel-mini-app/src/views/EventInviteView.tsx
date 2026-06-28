@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { useCallback, useRef, useState } from "react";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
+import { PDFDocument } from "pdf-lib";
 import type { Address } from "viem";
 import { Card, ChartCard, PageHeader } from "../components/ui";
-import { Ticket, Printer, Plus, Sparkles } from "../components/icons";
-import coin3d from "../assets/roebel-coin-3d.png";
+import { Ticket, Printer, Plus, Sparkles, Download } from "../components/icons";
+import posterPdfUrl from "../assets/event-poster.pdf";
+import posterPreview from "../assets/event-poster-preview.jpg";
 import { SUPABASE_URL, SUPABASE_ANON as ANON } from "../lib/supabase";
 import { track } from "../lib/analytics";
 
@@ -17,30 +19,45 @@ const DURATIONS = [
   { label: "1 week", hours: 168 },
 ];
 
-const PRINT_CSS = `
-.print-only { display: none; }
-@media print {
-  @page { size: A4; margin: 0; }
-  body * { visibility: hidden !important; }
-  #event-print, #event-print * { visibility: visible !important; }
-  #event-print { display: block !important; position: absolute; inset: 0; }
+// The poster (src/assets/event-poster.pdf) has a white rounded square in the
+// lower-center. These fractions describe that square relative to the A4 page —
+// measured from a render of the PDF — and drive BOTH the on-screen preview
+// overlay and where pdf-lib stamps the QR. Keep them in sync with the PDF.
+const SQUARE = { left: 0.2761, top: 0.5863, width: 0.4478, height: 0.315 };
+// Padding inside the square, as a fraction of the square (a bit of breathing room).
+const QR_PAD = 0.12;
+// QR fill fraction of the square (1 − 2·pad), reused for the preview overlay.
+const QR_FILL = `${(1 - 2 * QR_PAD) * 100}%`;
+// Dark module color — navy to match the brand, dark enough to scan reliably on white.
+const QR_DARK = "#00498B";
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
-.a4 { width: 210mm; min-height: 297mm; background: #fff; color: #00498B; box-sizing: border-box;
-  padding: 28mm 24mm; text-align: center; font-family: Inter, system-ui, sans-serif; }
-.a4-kicker { letter-spacing: .35em; font-size: 12pt; color: #00498B; font-weight: 700; margin: 0 0 6mm; }
-.a4-title { font-size: 34pt; font-weight: 800; line-height: 1.05; margin: 0 0 4mm; }
-.a4-sub { font-size: 17pt; color: #525252; margin: 0 0 16mm; }
-.a4-qr { display: flex; justify-content: center; margin: 0 0 14mm; }
-.a4-steps { font-size: 15pt; line-height: 1.5; color: #00498B; margin: 0 0 18mm; }
-.a4-foot { font-size: 11pt; color: #a3a3a3; }
-`;
 
 export default function EventInviteView({ inviter }: { inviter: Address | null }) {
   const [label, setLabel] = useState("");
   const [hours, setHours] = useState(24);
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<{ id: string; label: string; expiresAt: string } | null>(null);
+
+  // Hidden high-res QR canvas → PNG bytes for the stamped PDF.
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Cached blob URL of the stamped PDF (built once per event).
+  const pdfUrlRef = useRef<string | null>(null);
+
+  const clearPdfCache = () => {
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = null;
+    }
+  };
 
   if (!inviter) {
     return (
@@ -69,6 +86,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
       });
       const j = await res.json();
       if (!res.ok || !j.id) throw new Error(j.error || "Could not create event");
+      clearPdfCache();
       setEvent({ id: j.id, label: label.trim(), expiresAt });
       track("event_created", { hours });
     } catch (e: any) {
@@ -80,9 +98,85 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
 
   const link = event ? `${EVENT_BASE}${event.id}` : "";
 
+  // Stamp the QR into the real event-poster.pdf white square (with padding) and
+  // return a blob URL for the resulting PDF. Built once, then reused.
+  const buildPdf = useCallback(async (): Promise<string> => {
+    if (pdfUrlRef.current) return pdfUrlRef.current;
+    const canvas = qrCanvasRef.current;
+    if (!canvas) throw new Error("QR code is not ready yet.");
+
+    const qrBytes = dataUrlToBytes(canvas.toDataURL("image/png"));
+    const posterBytes = await fetch(posterPdfUrl).then((r) => r.arrayBuffer());
+    const doc = await PDFDocument.load(posterBytes);
+    const page = doc.getPages()[0];
+    const { width: pw, height: ph } = page.getSize();
+    const qrImage = await doc.embedPng(qrBytes);
+
+    const sqX = SQUARE.left * pw;
+    const sqW = SQUARE.width * pw;
+    const sqH = SQUARE.height * ph;
+    // pdf-lib origin is bottom-left; the fraction is measured from the top.
+    const sqY = ph - (SQUARE.top + SQUARE.height) * ph;
+    const pad = QR_PAD * sqW;
+    const side = Math.min(sqW, sqH) - 2 * pad;
+    page.drawImage(qrImage, {
+      x: sqX + (sqW - side) / 2,
+      y: sqY + (sqH - side) / 2,
+      width: side,
+      height: side,
+    });
+
+    const bytes = await doc.save();
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    pdfUrlRef.current = url;
+    return url;
+  }, []);
+
+  const downloadPdf = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roebel-event-${event?.id ?? "poster"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handlePrint = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await buildPdf();
+      // Open the stamped PDF so the user can print it; fall back to a download
+      // if the mini-app's iframe blocks the pop-up.
+      const win = window.open(url, "_blank");
+      if (!win) downloadPdf(url);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      downloadPdf(await buildPdf());
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const newEvent = () => {
+    clearPdfCache();
+    setEvent(null);
+    setError(null);
+  };
+
   return (
     <div className="space-y-4">
-      <style>{PRINT_CSS}</style>
       <PageHeader title="Event invite" description="A QR code for a local event: guests join Circles and everyone collects a few Röbel Coins as a 'was-in-Röbel' proof — paid from the town treasury, not from you." />
 
       {!event ? (
@@ -135,54 +229,79 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
           </button>
         </ChartCard>
       ) : (
-        <>
-          <Card className="p-5 text-center">
-            <img src={coin3d} alt="" className="mx-auto mb-2 h-16 w-16 drop-shadow-[0_10px_18px_rgba(10,10,10,0.12)]" />
+        <Card className="p-4">
+          <div className="mb-3 text-center">
             <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#00498B]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#00498B]">
               <Sparkles className="h-3 w-3" /> Event live
             </div>
             <h3 className="font-display text-lg font-bold tracking-tight text-foreground">{event.label}</h3>
-            <div className="my-4 flex justify-center">
-              <div className="rounded-[10px] border border-border bg-white p-4 shadow-sm">
-                <QRCodeSVG value={link} size={208} level="M" fgColor="#0a0a0a" />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Valid until {new Date(event.expiresAt).toLocaleString("en-US")}</p>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => window.print()}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99]"
-              >
-                <Printer className="h-4 w-4" />
-                Print A4 poster
-              </button>
-              <button
-                onClick={() => setEvent(null)}
-                className="rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99]"
-              >
-                New
-              </button>
-            </div>
-          </Card>
+          </div>
 
-          {/* A4 print layout — hidden on screen, shown only when printing/saving as PDF */}
-          <div id="event-print" className="print-only">
-            <div className="a4">
-              <p className="a4-kicker">RÖBEL · CIRCLES</p>
-              <h1 className="a4-title">Become part of Röbel</h1>
-              <p className="a4-sub">{event.label}</p>
-              <div className="a4-qr">
-                <QRCodeSVG value={link} size={340} level="M" fgColor="#00498B" />
-              </div>
-              <p className="a4-steps">
-                Scan the code with the Röbel app
-                <br />
-                → join Circles → collect your coins
-              </p>
-              <p className="a4-foot">Valid until {new Date(event.expiresAt).toLocaleString("en-US")} · roebel.app</p>
+          {/* Live preview of the printed poster: the QR sits in the white square. */}
+          <div className="relative mx-auto w-full max-w-[320px] overflow-hidden rounded-xl border border-border shadow-sm">
+            <img src={posterPreview} alt="Röbel event poster" className="block w-full" />
+            <div
+              className="absolute flex items-center justify-center"
+              style={{
+                left: `${SQUARE.left * 100}%`,
+                top: `${SQUARE.top * 100}%`,
+                width: `${SQUARE.width * 100}%`,
+                height: `${SQUARE.height * 100}%`,
+              }}
+            >
+              <QRCodeSVG
+                value={link}
+                level="M"
+                fgColor={QR_DARK}
+                bgColor="#ffffff"
+                style={{ width: QR_FILL, height: QR_FILL }}
+              />
             </div>
           </div>
-        </>
+
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Valid until {new Date(event.expiresAt).toLocaleString("en-US")}
+          </p>
+
+          {error && <p className="mt-2 text-center text-sm font-medium text-foreground">{error}</p>}
+
+          <button
+            onClick={handlePrint}
+            disabled={busy}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
+          >
+            <Printer className="h-4 w-4" />
+            {busy ? "Preparing…" : "Print poster (PDF)"}
+          </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={busy}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99] disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              Save PDF
+            </button>
+            <button
+              onClick={newEvent}
+              className="rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99]"
+            >
+              New
+            </button>
+          </div>
+
+          {/* Hidden high-res QR rendered to a canvas → PNG bytes stamped into the PDF. */}
+          <QRCodeCanvas
+            ref={qrCanvasRef}
+            value={link}
+            size={600}
+            level="M"
+            fgColor={QR_DARK}
+            bgColor="#ffffff"
+            marginSize={2}
+            style={{ display: "none" }}
+          />
+        </Card>
       )}
     </div>
   );
