@@ -10,12 +10,13 @@ import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import GovernanceView from "./views/GovernanceView";
 import EventInviteView from "./views/EventInviteView";
+import DocumentaryView from "./views/DocumentaryView";
 import PulseView from "./views/PulseView";
 
 type Tab = "town" | "economy" | "governance";
-// Invite + Event are no longer top-level tabs — they live inside the Town tab as
-// openable pages (see TownView's "Citizen tools" cards).
-type SubPage = "invite" | "event";
+// Invite + Event + Documentary are not top-level tabs — they live inside the Town
+// tab as openable pages (see TownView's "Citizen tools" cards + the Documentary card).
+type SubPage = "invite" | "event" | "documentary";
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "town", label: "Town", icon: Home },
   { id: "economy", label: "Economy", icon: Coins },
@@ -144,8 +145,17 @@ export default function App() {
               <SubPage onBack={closeSub}>
                 <EventInviteView inviter={inviter} />
               </SubPage>
+            ) : subPage === "documentary" ? (
+              // Documentary owns its own header/back (nested list ↔ detail nav),
+              // so it is rendered outside the generic SubPage chrome.
+              <DocumentaryView onBack={closeSub} />
             ) : (
-              <TownView connected={connected} onOpenInvite={() => openSub("invite")} onOpenEvent={() => openSub("event")} />
+              <TownView
+                connected={connected}
+                onOpenInvite={() => openSub("invite")}
+                onOpenEvent={() => openSub("event")}
+                onOpenDocumentary={() => openSub("documentary")}
+              />
             ))}
           {tab === "economy" && <PulseView />}
           {tab === "governance" && <GovernanceView initialProposalId={urlProposal} />}

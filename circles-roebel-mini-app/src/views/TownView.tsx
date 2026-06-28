@@ -22,10 +22,11 @@ import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check, UserPlus, Ticket, ChevronRight } from "../components/icons";
+import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check, UserPlus, Ticket, ChevronRight, Play, Film } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
 import CsvFallbackSheet from "../components/CsvFallbackSheet";
+import { DOCUMENTARY_VIDEOS } from "../lib/documentary";
 import coinImg from "../assets/roebel-coin.png";
 import roebelLogo from "../assets/roebel-logo.png";
 
@@ -33,10 +34,12 @@ export default function TownView({
   connected,
   onOpenInvite,
   onOpenEvent,
+  onOpenDocumentary,
 }: {
   connected: Address | null;
   onOpenInvite: () => void;
   onOpenEvent: () => void;
+  onOpenDocumentary: () => void;
 }) {
   const [stats, setStats] = useState<TownStats | null>(null);
   const [graph, setGraph] = useState<TrustGraph | null>(null);
@@ -190,9 +193,52 @@ export default function TownView({
         />
       </div>
 
+      {/* Video Documentary — featured, visual entry near the bottom of the page */}
+      <DocumentaryCard onClick={onOpenDocumentary} />
+
       {/* Grow Röbel — referral share with QR (moved to the bottom of the page) */}
       <GrowCard wallet={connected} />
     </div>
+  );
+}
+
+// Large, cinematic entry into the "Build in Public" video documentary series.
+function DocumentaryCard({ onClick }: { onClick: () => void }) {
+  const latest = DOCUMENTARY_VIDEOS[DOCUMENTARY_VIDEOS.length - 1];
+  const count = DOCUMENTARY_VIDEOS.length;
+  return (
+    <button
+      onClick={onClick}
+      className="group relative block w-full overflow-hidden rounded-[14px] border border-border bg-card text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+    >
+      <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
+        {latest && (
+          <img
+            src={latest.poster}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-[#00498B] shadow-lg ring-1 ring-black/5 transition group-hover:scale-110">
+            <Play className="h-6 w-6 translate-x-[1px]" />
+          </span>
+        </span>
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+              <Film className="h-3.5 w-3.5" />
+              Documentary
+            </div>
+            <div className="mt-0.5 font-display text-lg font-bold leading-tight text-white">Video Documentary</div>
+            <div className="mt-0.5 text-[12px] text-white/75">Follow the build · {count} episodes</div>
+          </div>
+          <ChevronRight className="mb-0.5 h-5 w-5 shrink-0 text-white/80" />
+        </div>
+      </div>
+    </button>
   );
 }
 

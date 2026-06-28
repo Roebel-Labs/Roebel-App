@@ -247,3 +247,19 @@ export const BallotBox = (p: P) => (
     <path d="M22 19H2" />
   </Svg>
 );
+
+// Filled play triangle — the video play affordance (overrides the stroke-only
+// Svg helper so it reads as a solid button glyph).
+export const Play = ({ className = "h-5 w-5" }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M8 5.14v13.72a1 1 0 0 0 1.52.86l10.5-6.86a1 1 0 0 0 0-1.72L9.52 4.28A1 1 0 0 0 8 5.14Z" />
+  </svg>
+);
+
+// Film strip — the documentary section glyph.
+export const Film = (p: P) => (
+  <Svg {...p}>
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M7 3v18M17 3v18M3 7.5h4M3 12h18M3 16.5h4M17 7.5h4M17 16.5h4" />
+  </Svg>
+);
