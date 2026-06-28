@@ -36,7 +36,7 @@
   --color-navy-600: #1d4e99;
 
   /* Surfaces — a true-neutral gray scale (no hue), shadcn-style. */
-  --color-background: #f5f5f5; /* neutral page canvas */
+  --color-background: #ffffff; /* white page canvas */
   --color-card: #ffffff; /* white cards float on the gray */
   --color-foreground: #0a0a0a; /* near-black text */
   --color-muted: #f0f0f0; /* subtle fills inside cards */

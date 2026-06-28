@@ -1,24 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { onWalletChange } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
 import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
-import { Coins, Activity, Globe, UserPlus, Ticket, ArrowUpRight } from "./components/icons";
-import roebelLogo from "./assets/roebel-logo.png";
+import { Coins, Globe, Home, ChevronLeft, ArrowUpRight } from "./components/icons";
+import logoNew from "./assets/Logo-new.png";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import NetworkView from "./views/NetworkView";
 import EventInviteView from "./views/EventInviteView";
 import PulseView from "./views/PulseView";
 
-type Tab = "town" | "pulse" | "network" | "invite" | "event";
+type Tab = "town" | "economy" | "network";
+// Invite + Event are no longer top-level tabs — they live inside the Town tab as
+// openable pages (see TownView's "Citizen tools" cards).
+type SubPage = "invite" | "event";
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
-  { id: "town", label: "Town", icon: Coins },
-  { id: "pulse", label: "Pulse", icon: Activity },
+  { id: "town", label: "Town", icon: Home },
+  { id: "economy", label: "Economy", icon: Coins },
   { id: "network", label: "Network", icon: Globe },
-  { id: "invite", label: "Invite", icon: UserPlus },
-  { id: "event", label: "Event", icon: Ticket },
 ];
 
 const urlParam = (k: string) => {
@@ -29,7 +30,7 @@ const urlParam = (k: string) => {
   }
 };
 // The Röbel app links here as `?inviter=<citizen address>` — use it as the initial inviter
-// (and jump straight to the Event tab) even before the Circles host injects the wallet.
+// (and open the Event page inside the Town tab) even before the Circles host injects the wallet.
 const urlInviter = (() => {
   const p = urlParam("inviter");
   return p && isAddress(p) ? getAddress(p) : null;
@@ -41,7 +42,9 @@ const urlRef = (() => {
 })();
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>(urlInviter ? "event" : "town");
+  const [tab, setTab] = useState<Tab>("town");
+  // A deep-link with ?inviter opens straight onto the Event page within the Town tab.
+  const [subPage, setSubPage] = useState<SubPage | null>(urlInviter ? "event" : null);
   const [inviter, setInviter] = useState<Address | null>(urlInviter);
   const [connected, setConnected] = useState<Address | null>(null);
   const connectedOnce = useRef(false);
@@ -50,7 +53,7 @@ export default function App() {
   // Analytics: app_open + visibility-aware heartbeat (time spent).
   useEffect(() => {
     initAnalytics({ ref: urlRef });
-    track("app_open", { tab: urlInviter ? "event" : "town", hasInviter: !!urlInviter, hasRef: !!urlRef });
+    track("app_open", { tab: "town", subPage: urlInviter ? "event" : null, hasInviter: !!urlInviter, hasRef: !!urlRef });
     return startHeartbeat(25);
   }, []);
 
@@ -78,23 +81,22 @@ export default function App() {
 
   const selectTab = (id: Tab) => {
     setTab(id);
+    setSubPage(null);
     track("tab_view", { tab: id });
   };
+
+  const openSub = (p: SubPage) => {
+    setSubPage(p);
+    track("tab_view", { tab: p });
+  };
+  const closeSub = () => setSubPage(null);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col">
       {/* Sticky brand + tab bar */}
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 px-4 pb-2.5 pt-3 backdrop-blur-md">
         <div className="mb-2.5 flex items-center gap-2.5">
-          <img
-            src={roebelLogo}
-            alt="Röbel"
-            className="h-9 w-9 rounded-[10px] border border-border shadow-sm"
-          />
-          <div className="min-w-0 leading-tight">
-            <h1 className="font-display text-[17px] font-extrabold tracking-tight text-foreground">Röbel</h1>
-            <p className="truncate text-[11px] text-muted-foreground">A town's money on Circles · Gnosis</p>
-          </div>
+          <img src={logoNew} alt="Röbel App" className="h-7 w-auto" />
           {inviter && (
             <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 font-mono text-[11px] text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00498B]" />
@@ -124,11 +126,20 @@ export default function App() {
       </header>
 
       <main className="flex-1 px-4 pb-12 pt-4">
-        <div key={tab} className="rc-rise">
-          {tab === "invite" && <InviteView inviter={inviter} />}
-          {tab === "event" && <EventInviteView inviter={inviter} />}
-          {tab === "town" && <TownView connected={connected} />}
-          {tab === "pulse" && <PulseView />}
+        <div key={`${tab}:${subPage ?? ""}`} className="rc-rise">
+          {tab === "town" &&
+            (subPage === "invite" ? (
+              <SubPage onBack={closeSub}>
+                <InviteView inviter={inviter} />
+              </SubPage>
+            ) : subPage === "event" ? (
+              <SubPage onBack={closeSub}>
+                <EventInviteView inviter={inviter} />
+              </SubPage>
+            ) : (
+              <TownView connected={connected} onOpenInvite={() => openSub("invite")} onOpenEvent={() => openSub("event")} />
+            ))}
+          {tab === "economy" && <PulseView />}
           {tab === "network" && <NetworkView />}
         </div>
 
@@ -145,6 +156,22 @@ export default function App() {
           </a>
         </footer>
       </main>
+    </div>
+  );
+}
+
+// Wraps a page opened from within the Town tab (Invite / Event) with a back affordance.
+function SubPage({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="-ml-1.5 inline-flex items-center gap-1 rounded-[10px] px-1.5 py-1 text-[13px] font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.98]"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Town
+      </button>
+      {children}
     </div>
   );
 }

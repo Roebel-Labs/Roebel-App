@@ -73,7 +73,7 @@ export function ChartCard({
         {(title || action) && (
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              {title && <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>}
+              {title && <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">{title}</h3>}
               {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
             </div>
             {action}
@@ -100,7 +100,7 @@ export function PageHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="font-display text-xl font-bold tracking-tight text-foreground">{title}</h2>
+        <h2 className="font-display text-xl font-bold uppercase tracking-wide text-foreground">{title}</h2>
         {description && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>}
       </div>
       {onRefresh && (
@@ -317,7 +317,7 @@ export function EmptyHint({ children }: { children: ReactNode }) {
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-2 flex items-center justify-between">
-      <h3 className="text-sm font-semibold tracking-tight text-foreground">{children}</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">{children}</h3>
       {right}
     </div>
   );

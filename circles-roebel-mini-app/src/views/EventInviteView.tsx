@@ -92,7 +92,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               <Ticket className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">Create event QR</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">Create event QR</h3>
               <p className="text-xs text-muted-foreground">Guests scan → join Circles → collect coins</p>
             </div>
           </div>

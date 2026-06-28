@@ -1,6 +1,6 @@
 // Town overview — referral share, personal impact, KPIs, collateral backing,
 // verification, the trust graph, and a weekly CSV export of the on-chain economy.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Address } from "viem";
 import {
   getVerifiedSet,
@@ -22,14 +22,22 @@ import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check } from "../components/icons";
+import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check, UserPlus, Ticket, ChevronRight } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
 import CsvFallbackSheet from "../components/CsvFallbackSheet";
 import coinImg from "../assets/roebel-coin.png";
 import roebelLogo from "../assets/roebel-logo.png";
 
-export default function TownView({ connected }: { connected: Address | null }) {
+export default function TownView({
+  connected,
+  onOpenInvite,
+  onOpenEvent,
+}: {
+  connected: Address | null;
+  onOpenInvite: () => void;
+  onOpenEvent: () => void;
+}) {
   const [stats, setStats] = useState<TownStats | null>(null);
   const [graph, setGraph] = useState<TrustGraph | null>(null);
   const [rep, setRep] = useState<RepNode[] | null>(null);
@@ -83,9 +91,6 @@ export default function TownView({ connected }: { connected: Address | null }) {
   return (
     <div className="space-y-4">
       <PageHeader title="Town overview" description="The town's on-chain economy, live from Circles v2 on Gnosis." onRefresh={load} refreshing={loading} />
-
-      {/* Referral share — bring a new wallet into the app */}
-      <GrowCard wallet={connected} />
 
       {/* Your impact (connected) */}
       {connected && (
@@ -167,7 +172,53 @@ export default function TownView({ connected }: { connected: Address | null }) {
 
       {/* Weekly CSV export */}
       <ExportCard verifiedSet={verifiedSet} rep={rep} citizens={citizens} />
+
+      {/* Citizen tools — open as full pages */}
+      <div className="space-y-2.5">
+        <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Citizen tools</h3>
+        <NavCard
+          icon={<UserPlus className="h-5 w-5" />}
+          title="Invite citizens"
+          description="Bring verified citizens into Circles"
+          onClick={onOpenInvite}
+        />
+        <NavCard
+          icon={<Ticket className="h-5 w-5" />}
+          title="Event invite"
+          description="Create a QR code for a local event"
+          onClick={onOpenEvent}
+        />
+      </div>
+
+      {/* Grow Röbel — referral share with QR (moved to the bottom of the page) */}
+      <GrowCard wallet={connected} />
     </div>
+  );
+}
+
+function NavCard({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-[10px] border border-border bg-card p-4 text-left shadow-sm transition hover:bg-muted active:scale-[0.99]"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#00498B]/10 text-[#00498B]">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="block text-xs font-normal text-muted-foreground">{description}</span>
+      </span>
+      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+    </button>
   );
 }
 
