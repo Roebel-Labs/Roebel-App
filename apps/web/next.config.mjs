@@ -6,7 +6,19 @@ const nextConfig = {
   // out of the production build — run `turbo run typecheck` / `lint` in CI instead.
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
-  serverExternalPackages: ["pino-pretty", "got"],
+  // Keep heavy server-only packages OUT of the webpack bundle (loaded from
+  // node_modules at runtime instead). @safe-global/protocol-kit pulls in
+  // @safe-global/safe-deployments — multi-MB of all-chain Safe contract JSON —
+  // which, when bundled, blew the 8GB build container's memory (exit 137 / OOM).
+  // These are imported server-side only (safe-server.ts / api-kit.ts).
+  serverExternalPackages: [
+    "pino-pretty",
+    "got",
+    "@safe-global/protocol-kit",
+    "@safe-global/api-kit",
+    "@safe-global/safe-deployments",
+    "@safe-global/safe-modules-deployments",
+  ],
   images: {
     remotePatterns: [
       {
