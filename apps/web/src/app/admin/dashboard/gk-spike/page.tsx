@@ -79,8 +79,24 @@ export default function GkSpike() {
         });
         add("✅ Safe.checkSignatures accepted the assembled signature");
       } else {
-        const sig = await account.signMessage({ message: { raw: txHash as `0x${string}` } });
-        add(`✅ EOA signed, sig len=${sig.length}`);
+        // EOA branch: sign with the admin EOA (whose address matches the Safe owner slot),
+        // build a plain EthSafeSignature, then verify via Safe.checkSignatures.
+        if (!adminAccount) {
+          add("❌ EOA owner matched but adminAccount is undefined — cannot sign");
+        } else {
+          const eoaSig = await adminAccount.signMessage({ message: { raw: txHash as `0x${string}` } });
+          add(`✅ admin EOA signed, sig len=${eoaSig.length}`);
+          const plainSig = new EthSafeSignature(ownerAddr, eoaSig);
+          const sigBytes = buildSignatureBytes([plainSig]) as `0x${string}`;
+          // Verify Safe accepts this EOA signature (read-only checkSignatures).
+          const safeC = getContract({ client, chain: activeChain, address: SAFE });
+          await readContract({
+            contract: safeC,
+            method: "function checkSignatures(bytes32 dataHash, bytes data, bytes signatures) view",
+            params: [txHash as `0x${string}`, "0x", sigBytes],
+          });
+          add("✅ Safe.checkSignatures accepted the EOA signature");
+        }
       }
       add("DONE — signing path validated (no funds moved)");
     } catch (e) {

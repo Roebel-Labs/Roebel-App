@@ -53,17 +53,22 @@ export async function initProtocolKit(wallet: Wallet): Promise<Safe> {
 
 /**
  * Checks whether the connected thirdweb account (or its admin EOA) is an
- * owner of the Safe. Returns the owner address (checksummed) + a flag
- * indicating whether it is a smart-account owner (ERC-1271 required).
+ * owner of the Safe. Returns the owner address (checksummed), a flag
+ * indicating whether it is a smart-account owner (ERC-1271 required), and
+ * the correct Account object to sign with.
+ *
+ * CRITICAL: when the matched owner is the admin EOA (not the smart account),
+ * signing MUST be done with adminAccount — using the smart account for an
+ * EOA-owner slot produces a wrong-key signature that the Safe will reject.
  */
 export async function resolveSigner(
   protocolKit: Safe,
   account: Account,
   wallet: Wallet,
-): Promise<{ ownerAddress: string; isSmart: boolean } | null> {
+): Promise<{ ownerAddress: string; isSmart: boolean; signingAccount: Account } | null> {
   const owners = await protocolKit.getOwners();
   // getAdminAccount is thirdweb v5 smart-wallet API; may not exist for EOA wallets.
-  const adminAccount = await (wallet as any).getAdminAccount?.().catch(
+  const adminAccount: Account | undefined = await (wallet as any).getAdminAccount?.().catch(
     () => undefined,
   );
   const ownerAddress = matchOwner(
@@ -75,9 +80,14 @@ export async function resolveSigner(
   // EOAs always return "0x"; contracts return non-empty bytecode.
   const rpcRequest = getRpcClient({ client, chain: activeChain });
   const code = await eth_getCode(rpcRequest, { address: ownerAddress as `0x${string}` });
+  const isSmart = code != null && code !== "0x";
+  // signingAccount: smart-account path uses the thirdweb smart account; EOA path uses
+  // the admin EOA so the private key actually matches the registered Safe owner address.
+  if (!isSmart && !adminAccount) return null;
   return {
     ownerAddress,
-    isSmart: code != null && code !== "0x",
+    isSmart,
+    signingAccount: isSmart ? account : adminAccount!,
   };
 }
 
@@ -248,8 +258,7 @@ export function buildChangeThreshold(
  */
 export async function signSafeTx(
   protocolKit: Safe,
-  account: Account,
-  signer: { ownerAddress: string; isSmart: boolean },
+  signer: { ownerAddress: string; isSmart: boolean; signingAccount: Account },
   metaTx: { to: string; value: string; data: string },
 ): Promise<{
   safeTxHash: string;
@@ -261,8 +270,10 @@ export async function signSafeTx(
   });
   const safeTxHash = await protocolKit.getTransactionHash(safeTx);
 
-  // Sign the raw hash bytes with the thirdweb account.
-  const inner = await account.signMessage({
+  // Sign the raw hash bytes with the account that owns the Safe owner slot.
+  // For smart-account owners this is the thirdweb smart account; for EOA owners
+  // this is the admin EOA whose private key matches the registered owner address.
+  const inner = await signer.signingAccount.signMessage({
     message: { raw: safeTxHash as `0x${string}` },
   });
 

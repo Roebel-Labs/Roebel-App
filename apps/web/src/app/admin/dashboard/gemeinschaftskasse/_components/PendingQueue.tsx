@@ -68,8 +68,9 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
       const signer = await resolveSigner(protocolKit, account, wallet);
       if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
 
-      // Sign the existing safeTxHash directly.
-      const inner = await account.signMessage({
+      // Sign the existing safeTxHash with the account that owns the Safe owner slot
+      // (smart account for smart-account owners; admin EOA for EOA owners).
+      const inner = await signer.signingAccount.signMessage({
         message: { raw: item.safeTxHash as `0x${string}` },
       });
 

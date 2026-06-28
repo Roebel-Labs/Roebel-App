@@ -1,6 +1,7 @@
 import "server-only";
 import { decodeFunctionData, getAddress } from "viem";
 import { resolveIdentities } from "@/lib/muenzen/identity";
+import { XDAI_EUR } from "@/lib/muenzen/constants";
 import { SAFE_ABI, GK_SAFE, TOKENS, type TxView } from "./constants";
 import { eur } from "./format";
 
@@ -55,7 +56,7 @@ export async function describeTx(raw: RawSafeTx[]): Promise<TxView[]> {
     } else if (!t.data || t.data === "0x") {
       // Native xDAI transfer.
       kind = "auszahlung";
-      title = `Auszahlung ${eur((Number(t.value ?? 0) / 1e18) * 0.92)} an ${nm(t.to)}`;
+      title = `Auszahlung ${eur((Number(t.value ?? 0) / 1e18) * XDAI_EUR)} an ${nm(t.to)}`;
     } else {
       // ERC-20/1155 transfer (EURe / Röbel-Münzen) — recipient/amount from calldata.
       kind = "auszahlung";

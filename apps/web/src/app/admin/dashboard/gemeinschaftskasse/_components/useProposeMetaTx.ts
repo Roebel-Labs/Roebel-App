@@ -35,7 +35,6 @@ export function useProposeMetaTx() {
 
     const { safeTxHash, senderSignature, safeTx } = await signSafeTx(
       protocolKit,
-      account,
       signer,
       metaTx,
     );
