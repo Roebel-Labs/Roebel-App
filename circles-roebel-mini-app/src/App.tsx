@@ -5,7 +5,7 @@ import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
 import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
 import { Coins, BallotBox, Home, ChevronLeft, ArrowUpRight } from "./components/icons";
-import logoNew from "./assets/Logo-new.png";
+import logoData from "./assets/Logo-data.png";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
 import GovernanceView from "./views/GovernanceView";
@@ -105,7 +105,7 @@ export default function App() {
       {/* Sticky brand + tab bar */}
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 px-4 pb-2.5 pt-3 backdrop-blur-md">
         <div className="mb-2.5 flex items-center gap-2.5">
-          <img src={logoNew} alt="Röbel App" className="h-7 w-auto" />
+          <img src={logoData} alt="Röbel Data" className="h-7 w-auto" />
           {inviter && (
             <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 font-mono text-[11px] text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00498B]" />
