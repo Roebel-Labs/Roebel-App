@@ -5,7 +5,10 @@
 // directly with the publishable anon key — same source the apps/web proposal LIST page
 // uses. Voting is MACI-private and happens only in the Röbel app; here everything is
 // read-only. Every fetch is best-effort so the UI never throws.
+import { createPublicClient, http } from "viem";
+import { gnosis } from "viem/chains";
 import { SUPABASE_URL, SUPABASE_ANON } from "./supabase";
+import { GNOSIS_RPC } from "./circles";
 
 export interface ProposalContent {
   markdown?: string;
@@ -121,4 +124,25 @@ export function tally(p: Proposal): VoteTally {
   const against = toNum(p.against_votes);
   const abstain = toNum(p.abstain_votes);
   return { forV, against, abstain, total: forV + against + abstain };
+}
+
+// ── MACI sign-ups (the DAO electorate) ───────────────────────────────────────
+// `numSignUps` = how many citizens have registered a MACI voting key. This is the
+// "who can vote" number the apps/web admin "DAO & Bürger" page shows — NOT votes
+// cast (ballots are encrypted and only countable after the coordinator tally) and
+// NOT Circles-verified humans. Read on-chain from the MACI core on Gnosis.
+const MACI_CORE = "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D" as const;
+const maciAbi = [
+  { type: "function", name: "numSignUps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
+const chainClient = createPublicClient({ chain: gnosis, transport: http(GNOSIS_RPC) });
+
+/** Total MACI sign-ups — citizens registered to vote in the DAO. Best-effort → 0. */
+export async function getMaciSignups(): Promise<number> {
+  try {
+    const n = (await chainClient.readContract({ address: MACI_CORE, abi: maciAbi, functionName: "numSignUps" })) as bigint;
+    return Number(n);
+  } catch {
+    return 0;
+  }
 }

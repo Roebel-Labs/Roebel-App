@@ -5,8 +5,7 @@
 // Voting stays private in the Röbel app. Best-effort fetches → never throws.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTreasury, type Treasury } from "../lib/treasury";
-import { getProposals, isActiveState, stateLabel, tally, type Proposal } from "../lib/proposals";
-import { getVerifiedSet } from "../lib/circlesData";
+import { getProposals, getMaciSignups, isActiveState, stateLabel, tally, type Proposal } from "../lib/proposals";
 import { ChartCard, PageHeader, KpiCard, Pill, Skeleton, EmptyHint, SectionTitle } from "../components/ui";
 import { SplitBar } from "../components/charts";
 import { BallotBox, Vault, Users, Lock, ChevronRight } from "../components/icons";
@@ -19,7 +18,7 @@ const VOTE_COLORS = { for: "#00498B", against: "#94a3b8", abstain: "#cbd5e1" } a
 export default function GovernanceView({ initialProposalId = null }: { initialProposalId?: string | null }) {
   const [treasury, setTreasury] = useState<Treasury | null>(null);
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
-  const [voters, setVoters] = useState<number | null>(null);
+  const [signups, setSignups] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialProposalId);
   const [loading, setLoading] = useState(true);
   const deepLinked = useRef(false);
@@ -30,8 +29,9 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
     setTreasury(tre);
     setProposals(props);
     setLoading(false);
-    // The electorate (verified citizens) — slower, fill in after the core view.
-    getVerifiedSet().then((s) => setVoters(s.size)).catch(() => {});
+    // The electorate = MACI sign-ups (registered voting keys), the same number the
+    // apps/web admin "DAO & Bürger" page shows. Fill in after the core view.
+    getMaciSignups().then(setSignups).catch(() => {});
   }, []);
   useEffect(() => {
     void load();
@@ -107,9 +107,9 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
           icon={<Vault className="h-5 w-5" />}
         />
         <KpiCard
-          label="Voters"
-          value={voters ?? "—"}
-          sub="verified"
+          label="Registered"
+          value={signups ?? "—"}
+          sub="to vote"
           tone="success"
           icon={<Users className="h-5 w-5" />}
         />
