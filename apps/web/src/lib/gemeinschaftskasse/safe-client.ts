@@ -24,6 +24,7 @@ import {
   waitForReceipt,
   prepareTransaction,
 } from "thirdweb";
+import { getRpcClient, eth_getCode } from "thirdweb/rpc";
 import { encodeFunctionData } from "viem";
 import { client } from "@/app/client";
 import { activeChain } from "@/lib/chains";
@@ -70,12 +71,13 @@ export async function resolveSigner(
     owners,
   );
   if (!ownerAddress) return null;
-  // isSmart = the smart-account address is an owner (ERC-1271 path needed).
+  // isSmart = ownerAddress has on-chain bytecode → smart-contract account (ERC-1271 path).
+  // EOAs always return "0x"; contracts return non-empty bytecode.
+  const rpcRequest = getRpcClient({ client, chain: activeChain });
+  const code = await eth_getCode(rpcRequest, { address: ownerAddress as `0x${string}` });
   return {
     ownerAddress,
-    isSmart:
-      ownerAddress.toLowerCase() === account.address.toLowerCase() &&
-      !!(wallet as any).getAdminAccount,
+    isSmart: code != null && code !== "0x",
   };
 }
 
