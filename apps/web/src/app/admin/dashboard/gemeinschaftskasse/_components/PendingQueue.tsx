@@ -7,6 +7,9 @@ import {
 } from "@/lib/gemeinschaftskasse/safe-client";
 import { approvalLabel } from "@/lib/gemeinschaftskasse/format";
 import type { TxView } from "@/lib/gemeinschaftskasse/constants";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { HistorySkeleton } from "./skeletons";
+import { initials } from "./MemberRow";
 import { useIsOwner } from "./useIsOwner";
 
 interface PendingQueueProps {
@@ -91,7 +94,7 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Lade ausstehende Transaktionen…</p>;
+    return <HistorySkeleton />;
   }
   if (err) {
     return <p className="text-sm text-red-600">Fehler: {err}</p>;
@@ -118,7 +121,7 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
         const itemErr = actionErr[item.safeTxHash];
         // Whether the current user has already signed.
         const userSigned = account
-          ? item.signers.some((s) => s.toLowerCase() === account.address.toLowerCase())
+          ? item.signers.some((s) => s.address.toLowerCase() === account.address.toLowerCase())
           : false;
 
         return (
@@ -131,11 +134,23 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
                 >
                   {approvalLabel(item.confirmations, item.threshold)}
                 </p>
-                {item.submissionDate && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Erstellt: {new Date(item.submissionDate).toLocaleDateString("de-DE")}
-                  </p>
-                )}
+                <div className="flex items-center gap-2 mt-1">
+                  {item.date && (
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(item.date).toLocaleString("de-DE")}
+                    </span>
+                  )}
+                  {item.signers.length > 0 && (
+                    <span className="flex -space-x-1.5">
+                      {item.signers.slice(0, 4).map((s) => (
+                        <Avatar key={s.address} className="h-5 w-5 border border-background">
+                          {s.avatarUrl && <AvatarImage src={s.avatarUrl} alt={s.name} />}
+                          <AvatarFallback className="text-[9px]">{initials(s.name)}</AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 {isOwner && !userSigned && !ready && (
