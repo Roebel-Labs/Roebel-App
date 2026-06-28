@@ -209,7 +209,7 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-[16px] border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+      className="group relative flex aspect-[3/2] flex-col justify-between overflow-hidden rounded-[16px] border border-border bg-card p-3.5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
     >
       <img
         src={image}
@@ -239,7 +239,7 @@ function VideoDocCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group relative block w-full overflow-hidden rounded-[18px] bg-[#00498B] p-5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+      className="group relative block w-full overflow-hidden rounded-[18px] bg-[#00498B] p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
     >
       <div className="flex items-center gap-4">
         <div className="relative z-10 min-w-0 flex-1">
@@ -247,7 +247,7 @@ function VideoDocCard({ onClick }: { onClick: () => void }) {
             <span className="block">Video</span>
             <span className="block">Documentation</span>
           </h3>
-          <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/80 px-4 py-2 text-[13px] font-semibold text-white transition group-hover:bg-white/10">
+          <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/80 px-4 py-2 text-[13px] font-semibold text-white transition group-hover:bg-white/10">
             Jetzt ansehen
             <ChevronRight className="h-4 w-4" />
           </span>
