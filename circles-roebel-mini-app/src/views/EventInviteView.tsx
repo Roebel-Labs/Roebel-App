@@ -127,7 +127,9 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
     });
 
     const bytes = await doc.save();
-    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    // Copy into a fresh ArrayBuffer-backed view so the Blob part type is concrete
+    // (avoids the Uint8Array<ArrayBufferLike> → BlobPart mismatch on TS 5.7 lib.dom).
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
     pdfUrlRef.current = url;
     return url;
   }, []);

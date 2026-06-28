@@ -75,6 +75,36 @@ export const Activity = (p: P) => (
   </Svg>
 );
 
+export const TrendingDown = (p: P) => (
+  <Svg {...p}>
+    <polyline points="22 17 13.5 8.5 8.5 13.5 2 7" />
+    <polyline points="16 17 22 17 22 11" />
+  </Svg>
+);
+
+export const Layers = (p: P) => (
+  <Svg {...p}>
+    <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+    <path d="m22 12.5-9.17 4.17a2 2 0 0 1-1.66 0L2 12.5" />
+    <path d="m22 17.5-9.17 4.17a2 2 0 0 1-1.66 0L2 17.5" />
+  </Svg>
+);
+
+export const Scale = (p: P) => (
+  <Svg {...p}>
+    <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+    <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+    <path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
+  </Svg>
+);
+
+export const Gauge = (p: P) => (
+  <Svg {...p}>
+    <path d="m12 14 4-4" />
+    <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+  </Svg>
+);
+
 export const Share = (p: P) => (
   <Svg {...p}>
     <circle cx="18" cy="5" r="3" />
