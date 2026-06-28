@@ -443,3 +443,40 @@
 .article-content s {
   text-decoration: line-through;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Open-proposal feed hero — rotating gradient border.
+   Web counterpart of the Expo `AnimatedGradientBorder` (Reanimated spinning
+   gradient). CSS has a real conic gradient, so we just spin its angle via a
+   registered custom property. The cubic-bezier mirrors the app's fast →
+   near-stop → fast cadence; it loops seamlessly because 360° ≡ 0°.
+   ────────────────────────────────────────────────────────────────────── */
+@property --proposal-border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes proposal-border-spin {
+  to {
+    --proposal-border-angle: 360deg;
+  }
+}
+
+.proposal-animated-border {
+  background: conic-gradient(
+    from var(--proposal-border-angle),
+    #00498b,
+    #7abbf2,
+    #00498b,
+    #7abbf2,
+    #00498b
+  );
+  animation: proposal-border-spin 3.5s cubic-bezier(0.2, 0.85, 0.8, 0.15) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proposal-animated-border {
+    animation: none;
+  }
+}
