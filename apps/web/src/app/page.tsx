@@ -57,12 +57,12 @@ export default async function HomePage({
   return (
     <div className="min-h-screen bg-background">
         <EventsHeader />
-        <EventsHero />
         {featuredProposal && (
           <section className="container mx-auto px-4 pt-6 md:px-6">
             <FeedProposalHero proposal={featuredProposal} />
           </section>
         )}
+        <EventsHero />
         <EventsPage
           initialEvents={events || []}
           initialCategory={resolvedSearchParams.category || "All Events"}
