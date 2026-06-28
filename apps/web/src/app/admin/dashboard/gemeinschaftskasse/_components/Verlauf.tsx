@@ -18,9 +18,11 @@ export function Verlauf() {
       {items.map((t) => (
         <li key={t.safeTxHash} className="py-3 flex items-center justify-between">
           <span className="text-sm">{t.title}</span>
-          <a className="text-xs text-muted-foreground hover:underline" href={`https://gnosisscan.io/tx/`} target="_blank" rel="noreferrer">
-            {t.submissionDate ? new Date(t.submissionDate).toLocaleDateString("de-DE") : ""}
-          </a>
+          {t.submissionDate && (
+            <span className="text-xs text-muted-foreground">
+              {new Date(t.submissionDate).toLocaleDateString("de-DE")}
+            </span>
+          )}
         </li>
       ))}
     </ul>
