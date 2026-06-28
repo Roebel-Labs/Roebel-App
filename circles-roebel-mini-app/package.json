@@ -17,6 +17,9 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10",
+    "rehype-raw": "^7",
+    "remark-gfm": "^4",
     "viem": "^2.46.3"
   },
   "devDependencies": {

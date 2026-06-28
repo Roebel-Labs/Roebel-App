@@ -4,22 +4,22 @@ import { getAddress, isAddress, type Address } from "viem";
 import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
 import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
-import { Coins, Globe, Home, ChevronLeft, ArrowUpRight } from "./components/icons";
+import { Coins, BallotBox, Home, ChevronLeft, ArrowUpRight } from "./components/icons";
 import logoNew from "./assets/Logo-new.png";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
-import NetworkView from "./views/NetworkView";
+import GovernanceView from "./views/GovernanceView";
 import EventInviteView from "./views/EventInviteView";
 import PulseView from "./views/PulseView";
 
-type Tab = "town" | "economy" | "network";
+type Tab = "town" | "economy" | "governance";
 // Invite + Event are no longer top-level tabs — they live inside the Town tab as
 // openable pages (see TownView's "Citizen tools" cards).
 type SubPage = "invite" | "event";
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "town", label: "Town", icon: Home },
   { id: "economy", label: "Economy", icon: Coins },
-  { id: "network", label: "Network", icon: Globe },
+  { id: "governance", label: "Governance", icon: BallotBox },
 ];
 
 const urlParam = (k: string) => {
@@ -40,9 +40,11 @@ const urlRef = (() => {
   const p = urlParam("ref");
   return p && isAddress(p) ? getAddress(p) : null;
 })();
+// `?proposal=<proposal_id|tx hash>` — deep-link straight into a proposal's detail.
+const urlProposal = urlParam("proposal");
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("town");
+  const [tab, setTab] = useState<Tab>(urlProposal ? "governance" : "town");
   // A deep-link with ?inviter opens straight onto the Event page within the Town tab.
   const [subPage, setSubPage] = useState<SubPage | null>(urlInviter ? "event" : null);
   const [inviter, setInviter] = useState<Address | null>(urlInviter);
@@ -53,7 +55,13 @@ export default function App() {
   // Analytics: app_open + visibility-aware heartbeat (time spent).
   useEffect(() => {
     initAnalytics({ ref: urlRef });
-    track("app_open", { tab: "town", subPage: urlInviter ? "event" : null, hasInviter: !!urlInviter, hasRef: !!urlRef });
+    track("app_open", {
+      tab: urlProposal ? "governance" : "town",
+      subPage: urlInviter ? "event" : null,
+      hasInviter: !!urlInviter,
+      hasRef: !!urlRef,
+      hasProposal: !!urlProposal,
+    });
     return startHeartbeat(25);
   }, []);
 
@@ -140,7 +148,7 @@ export default function App() {
               <TownView connected={connected} onOpenInvite={() => openSub("invite")} onOpenEvent={() => openSub("event")} />
             ))}
           {tab === "economy" && <PulseView />}
-          {tab === "network" && <NetworkView />}
+          {tab === "governance" && <GovernanceView initialProposalId={urlProposal} />}
         </div>
 
         <footer className="mt-8 flex items-center justify-between border-t border-border/70 pt-4 text-[11px] text-muted-foreground">

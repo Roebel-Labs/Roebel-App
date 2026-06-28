@@ -1,0 +1,124 @@
+// Read-only governance proposals for the Governance tab.
+//
+// Proposals are created on-chain (MaciAttesterGovernor on Gnosis) and indexed into the
+// public Supabase `proposals` table (RLS: "viewable by everyone"). We read that table
+// directly with the publishable anon key — same source the apps/web proposal LIST page
+// uses. Voting is MACI-private and happens only in the Röbel app; here everything is
+// read-only. Every fetch is best-effort so the UI never throws.
+import { SUPABASE_URL, SUPABASE_ANON } from "./supabase";
+
+export interface ProposalContent {
+  markdown?: string;
+  version?: string;
+  metadata?: {
+    wordCount?: number;
+    estimatedReadTime?: number;
+    tags?: string[];
+    gemeinschaftskasse_snapshot?: { euro: number; captured_at: string };
+  };
+}
+
+export interface Proposal {
+  proposal_id: string; // tx hash — the route key
+  blockchain_proposal_id: string | null;
+  proposal_number: number | null;
+  title: string;
+  summary: string | null;
+  content: ProposalContent | null;
+  category: string | null;
+  irys_content_id: string | null;
+  irys_url: string | null;
+  transaction_hash: string | null;
+  proposer_address: string | null;
+  state: number; // OZ Governor enum 0..7
+  for_votes: string | null;
+  against_votes: string | null;
+  abstain_votes: string | null;
+  created_at: string;
+  deadline_block: string | null;
+}
+
+const COLUMNS =
+  "proposal_id,blockchain_proposal_id,proposal_number,title,summary,content,category,irys_content_id,irys_url,transaction_hash,proposer_address,state,for_votes,against_votes,abstain_votes,created_at,deadline_block";
+
+const headers = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
+
+async function rest(path: string): Promise<Proposal[]> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/proposals?${path}`, { headers });
+    if (!res.ok) return [];
+    return (await res.json()) as Proposal[];
+  } catch {
+    return [];
+  }
+}
+
+/** All proposals, newest first. */
+export async function getProposals(): Promise<Proposal[]> {
+  return rest(`select=${COLUMNS}&order=created_at.desc`);
+}
+
+/** A single proposal by its `proposal_id` (tx hash) or `transaction_hash`. */
+export async function getProposalById(id: string): Promise<Proposal | null> {
+  const enc = encodeURIComponent(id);
+  const rows = await rest(`select=${COLUMNS}&or=(proposal_id.eq.${enc},transaction_hash.eq.${enc})&limit=1`);
+  return rows[0] ?? null;
+}
+
+/** The full proposal body: prefer the permanent Irys copy, fall back to the Supabase markdown. */
+export async function fetchProposalBody(p: Proposal): Promise<string> {
+  const url = p.irys_url || (p.irys_content_id ? `https://gateway.irys.xyz/${p.irys_content_id}` : null);
+  if (url) {
+    try {
+      const res = await fetch(url, { headers: { Accept: "text/html, text/markdown, text/plain, */*" } });
+      if (res.ok) {
+        const body = (await res.text()).trim();
+        if (body) return body;
+      }
+    } catch {
+      /* fall through to Supabase copy */
+    }
+  }
+  return p.content?.markdown?.trim() || "";
+}
+
+// ── Governor state helpers ───────────────────────────────────────────────────
+// OpenZeppelin Governor proposal-state enum.
+export const STATE_LABEL: Record<number, string> = {
+  0: "Pending",
+  1: "Active",
+  2: "Canceled",
+  3: "Defeated",
+  4: "Succeeded",
+  5: "Queued",
+  6: "Expired",
+  7: "Executed",
+};
+
+export const stateLabel = (s: number) => STATE_LABEL[s] ?? "Unknown";
+/** Pending or Active — the still-votable window. */
+export const isActiveState = (s: number) => s === 0 || s === 1;
+
+/** Sort key so Active/Pending float above closed proposals (then newest-first by caller). */
+export const proposalGroupRank = (s: number) => (isActiveState(s) ? 0 : 1);
+
+const toNum = (v: string | null) => {
+  try {
+    return v ? Number(BigInt(v)) / 1e18 : 0;
+  } catch {
+    return Number(v) || 0;
+  }
+};
+
+export interface VoteTally {
+  forV: number;
+  against: number;
+  abstain: number;
+  total: number;
+}
+export function tally(p: Proposal): VoteTally {
+  const forV = toNum(p.for_votes);
+  const against = toNum(p.against_votes);
+  const abstain = toNum(p.abstain_votes);
+  return { forV, against, abstain, total: forV + against + abstain };
+}

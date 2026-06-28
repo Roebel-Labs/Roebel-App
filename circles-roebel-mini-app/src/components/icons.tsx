@@ -237,3 +237,13 @@ export const Home = (p: P) => (
     <polyline points="9 22 9 12 15 12 15 22" />
   </Svg>
 );
+
+// Ballot / vote box — the Governance tab glyph (lucide "vote": a ballot with a
+// check mark sitting on a base line).
+export const BallotBox = (p: P) => (
+  <Svg {...p}>
+    <path d="m9 12 2 2 4-4" />
+    <path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12H5V7Z" />
+    <path d="M22 19H2" />
+  </Svg>
+);
