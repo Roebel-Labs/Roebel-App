@@ -1,6 +1,6 @@
 // Town overview — referral share, personal impact, KPIs, collateral backing,
 // verification, the trust graph, and a weekly CSV export of the on-chain economy.
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Address } from "viem";
 import {
   getVerifiedSet,
@@ -22,13 +22,15 @@ import { toCsv, exportCsv, todayStamp } from "../lib/csv";
 import { track } from "../lib/analytics";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton, ScoreBar } from "../components/ui";
 import { Donut } from "../components/charts";
-import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check, UserPlus, Ticket, ChevronRight, Play, Film } from "../components/icons";
+import { ShieldCheck, Users, Lock, Trophy, Activity, Download, Check, ChevronRight } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
 import GrowCard from "../components/GrowCard";
 import CsvFallbackSheet from "../components/CsvFallbackSheet";
 import { DOCUMENTARY_VIDEOS } from "../lib/documentary";
 import coinImg from "../assets/roebel-coin.png";
 import roebelLogo from "../assets/roebel-logo.png";
+import inviteImg from "../assets/invite-citizen.png";
+import eventImg from "../assets/event-creation.png";
 
 export default function TownView({
   connected,
@@ -95,21 +97,6 @@ export default function TownView({
     <div className="space-y-4">
       <PageHeader title="Town overview" description="The town's on-chain economy, live from Circles v2 on Gnosis." onRefresh={load} refreshing={loading} />
 
-      {/* Your impact (connected) */}
-      {connected && (
-        <ChartCard title="Your impact" subtitle="Your standing in the town economy">
-          {!impact ? (
-            <Skeleton className="h-[74px]" />
-          ) : (
-            <div className="grid grid-cols-3 gap-3">
-              <KpiCard label="Your coins" value={fmt(impact.balance, 0)} sub="Röbel Coins" tone="primary" icon={<img src={coinImg} alt="" className="h-6 w-6" />} />
-              <KpiCard label="Your rank" value={impact.rank ? `#${impact.rank}` : "—"} sub={`of ${impact.total}`} tone="success" icon={<Trophy className="h-5 w-5" />} />
-              <KpiCard label="Flows" value={`${impact.inCount}↓ ${impact.outCount}↑`} sub="in / out" tone="info" icon={<Activity className="h-5 w-5" />} />
-            </div>
-          )}
-        </ChartCard>
-      )}
-
       {/* KPI grid */}
       {!stats ? (
         <SkeletonGrid count={4} />
@@ -173,98 +160,148 @@ export default function TownView({
         )}
       </ChartCard>
 
-      {/* Weekly CSV export */}
-      <ExportCard verifiedSet={verifiedSet} rep={rep} citizens={citizens} />
-
-      {/* Citizen tools — open as full pages */}
-      <div className="space-y-2.5">
-        <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Citizen tools</h3>
-        <NavCard
-          icon={<UserPlus className="h-5 w-5" />}
-          title="Invite citizens"
-          description="Bring verified citizens into Circles"
-          onClick={onOpenInvite}
-        />
-        <NavCard
-          icon={<Ticket className="h-5 w-5" />}
-          title="Event invite"
-          description="Create a QR code for a local event"
-          onClick={onOpenEvent}
-        />
+      {/* Citizen tools — bold, image-forward action cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <ToolCard title="Invite Citizens" image={inviteImg} imgClassName="right-0 top-1/2 h-[122%] -translate-y-1/2 translate-x-[10%]" onClick={onOpenInvite} />
+        <ToolCard title="Event Rewards" image={eventImg} imgClassName="right-0 top-1/2 h-[122%] -translate-y-1/2 translate-x-[7%]" onClick={onOpenEvent} />
       </div>
 
-      {/* Video Documentary — featured, visual entry near the bottom of the page */}
-      <DocumentaryCard onClick={onOpenDocumentary} />
+      {/* Video documentation — navy card with an animated stacked-thumbnail loop */}
+      <VideoDocCard onClick={onOpenDocumentary} />
 
-      {/* Grow Röbel — referral share with QR (moved to the bottom of the page) */}
+      {/* Your impact (connected) — sits directly above Grow Röbel */}
+      {connected && (
+        <ChartCard title="Your impact" subtitle="Your standing in the town economy">
+          {!impact ? (
+            <Skeleton className="h-[74px]" />
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <KpiCard label="Your coins" value={fmt(impact.balance, 0)} sub="Röbel Coins" tone="primary" icon={<img src={coinImg} alt="" className="h-6 w-6" />} />
+              <KpiCard label="Your rank" value={impact.rank ? `#${impact.rank}` : "—"} sub={`of ${impact.total}`} tone="success" icon={<Trophy className="h-5 w-5" />} />
+              <KpiCard label="Flows" value={`${impact.inCount}↓ ${impact.outCount}↑`} sub="in / out" tone="info" icon={<Activity className="h-5 w-5" />} />
+            </div>
+          )}
+        </ChartCard>
+      )}
+
+      {/* Grow Röbel — referral share with QR */}
       <GrowCard wallet={connected} />
+
+      {/* Weekly CSV export — absolute bottom of the page */}
+      <ExportCard verifiedSet={verifiedSet} rep={rep} citizens={citizens} />
     </div>
   );
 }
 
-// Large, cinematic entry into the "Build in Public" video documentary series.
-function DocumentaryCard({ onClick }: { onClick: () => void }) {
-  const latest = DOCUMENTARY_VIDEOS[DOCUMENTARY_VIDEOS.length - 1];
-  const count = DOCUMENTARY_VIDEOS.length;
+// Bold, image-forward action card (Invite / Event). Big stacked headline top-left,
+// a navy circular arrow bottom-left, and the artwork bleeding off the right edge.
+function ToolCard({
+  title,
+  image,
+  imgClassName = "",
+  onClick,
+}: {
+  title: string;
+  image: string;
+  imgClassName?: string;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
-      className="group relative block w-full overflow-hidden rounded-[14px] border border-border bg-card text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+      className="group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-[16px] border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
     >
-      <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
-        {latest && (
-          <img
-            src={latest.poster}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-[#00498B] shadow-lg ring-1 ring-black/5 transition group-hover:scale-110">
-            <Play className="h-6 w-6 translate-x-[1px]" />
+      <img
+        src={image}
+        alt=""
+        aria-hidden
+        className={`pointer-events-none absolute max-w-none select-none object-contain transition duration-300 group-hover:scale-105 ${imgClassName}`}
+      />
+      <h3 className="relative z-10 font-display text-xl font-extrabold uppercase leading-[1.04] tracking-tight text-foreground">
+        {title.split(" ").map((w) => (
+          <span key={w} className="block">
+            {w}
           </span>
-        </span>
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
-              <Film className="h-3.5 w-3.5" />
-              Documentary
-            </div>
-            <div className="mt-0.5 font-display text-lg font-bold leading-tight text-white">Video Documentary</div>
-            <div className="mt-0.5 text-[12px] text-white/75">Follow the build · {count} episodes</div>
-          </div>
-          <ChevronRight className="mb-0.5 h-5 w-5 shrink-0 text-white/80" />
+        ))}
+      </h3>
+      <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full bg-[#00498B] text-white shadow-md transition group-hover:scale-105">
+        <ChevronRight className="h-5 w-5" />
+      </span>
+    </button>
+  );
+}
+
+// Navy "Video Documentation" card: stacked headline + outlined pill button on the
+// left, an animated 3-thumbnail loop on the right.
+function VideoDocCard({ onClick }: { onClick: () => void }) {
+  // The three most recent episodes, front-most first.
+  const thumbs = DOCUMENTARY_VIDEOS.slice(-3).reverse().map((v) => v.thumb);
+  return (
+    <button
+      onClick={onClick}
+      className="group relative block w-full overflow-hidden rounded-[18px] bg-[#00498B] p-5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+    >
+      <div className="flex items-center gap-4">
+        <div className="relative z-10 min-w-0 flex-1">
+          <h3 className="font-display text-xl font-extrabold uppercase leading-[1.04] tracking-tight text-white">
+            <span className="block">Video</span>
+            <span className="block">Documentation</span>
+          </h3>
+          <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/80 px-4 py-2 text-[13px] font-semibold text-white transition group-hover:bg-white/10">
+            Jetzt ansehen
+            <ChevronRight className="h-4 w-4" />
+          </span>
+        </div>
+        <div className="relative aspect-[5/4] w-[42%] shrink-0">
+          <ThumbStack thumbs={thumbs} />
         </div>
       </div>
     </button>
   );
 }
 
-function NavCard({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
+// Three fixed positions for the looping stack — front, middle, back. The back
+// cards fan up and to the right so their edges peek out behind the front one.
+const STACK_SLOTS = [
+  { x: 0, y: 0, scale: 1, rot: 0, z: 30, o: 1 }, // front
+  { x: 18, y: -16, scale: 0.9, rot: 4, z: 20, o: 0.92 }, // middle
+  { x: 36, y: -32, scale: 0.8, rot: 8, z: 10, o: 0.8 }, // back
+];
+
+// Continuously rotates three thumbnails: the front card recedes all the way to the
+// back while the next one rises to the front and scales up — a smooth, looping
+// stack. Driven by a tick counter so CSS transitions (and instant z-index changes)
+// animate each card between its fixed slots. Honours prefers-reduced-motion.
+function ThumbStack({ thumbs }: { thumbs: string[] }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setTick((t) => t + 1), 2200);
+    return () => clearInterval(id);
+  }, []);
   return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-[10px] border border-border bg-card p-4 text-left shadow-sm transition hover:bg-muted active:scale-[0.99]"
-    >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#00498B]/10 text-[#00498B]">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">{title}</span>
-        <span className="block text-xs font-normal text-muted-foreground">{description}</span>
-      </span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-    </button>
+    <div className="absolute inset-0" style={{ perspective: 900 }}>
+      {thumbs.map((src, i) => {
+        const slot = STACK_SLOTS[(((i - tick) % 3) + 3) % 3];
+        return (
+          <div
+            key={i}
+            className="absolute left-1/2 top-1/2 w-[88%]"
+            style={{
+              transform: `translate(calc(-50% + ${slot.x}px), calc(-50% + ${slot.y}px)) scale(${slot.scale}) rotate(${slot.rot}deg)`,
+              zIndex: slot.z,
+              opacity: slot.o,
+              transition: "transform 900ms cubic-bezier(0.22, 1, 0.36, 1), opacity 900ms ease",
+              willChange: "transform, opacity",
+            }}
+          >
+            <div className="overflow-hidden rounded-[9px] border border-white/20 bg-black shadow-xl ring-1 ring-black/30">
+              <img src={src} alt="" loading="lazy" className="aspect-video w-full object-cover" />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
