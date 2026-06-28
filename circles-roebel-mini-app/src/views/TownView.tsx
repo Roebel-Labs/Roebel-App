@@ -209,7 +209,7 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group relative flex aspect-[3/2] flex-col justify-between overflow-hidden rounded-[16px] border border-border bg-card p-3.5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+      className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-[12px] border border-border bg-card p-3.5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
     >
       <img
         src={image}
@@ -239,9 +239,9 @@ function VideoDocCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group relative block w-full overflow-hidden rounded-[18px] bg-[#00498B] p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
+      className="group relative block h-32 w-full overflow-hidden rounded-[14px] bg-[#00498B] p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.99]"
     >
-      <div className="flex items-center gap-4">
+      <div className="flex h-full items-center gap-4">
         <div className="relative z-10 min-w-0 flex-1">
           <h3 className="font-display text-xl font-extrabold uppercase leading-[1.04] tracking-tight text-white">
             <span className="block">Video</span>
@@ -252,7 +252,7 @@ function VideoDocCard({ onClick }: { onClick: () => void }) {
             <ChevronRight className="h-4 w-4" />
           </span>
         </div>
-        <div className="relative aspect-[5/4] w-[42%] shrink-0">
+        <div className="relative h-full w-[150px] shrink-0">
           <ThumbStack thumbs={thumbs} />
         </div>
       </div>
@@ -286,7 +286,7 @@ function ThumbStack({ thumbs }: { thumbs: string[] }) {
         return (
           <div
             key={i}
-            className="absolute left-1/2 top-1/2 w-[88%]"
+            className="absolute left-1/2 top-1/2 w-[130px]"
             style={{
               transform: `translate(calc(-50% + ${slot.x}px), calc(-50% + ${slot.y}px)) scale(${slot.scale}) rotate(${slot.rot}deg)`,
               zIndex: slot.z,
