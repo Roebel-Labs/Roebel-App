@@ -21,14 +21,40 @@ export const TOKENS: { id: AssetId; label: string; decimals: number; address?: s
   { id: "muenzen", label: "Röbel-Münzen", decimals: 18, address: ADDR.group },
 ];
 
-export interface OwnerView { address: string; name: string; short: string; isYou?: boolean }
+export interface OwnerView {
+  address: string;
+  name: string;
+  short: string;
+  isYou?: boolean;
+  avatarUrl: string | null;
+  username: string | null;
+  verified: boolean;
+  source: string;
+}
+
+export interface AssetHolding {
+  id: AssetId;
+  label: string;
+  amount: number;       // human units
+  atto: string;         // raw 18-dec string
+  eur: number | null;   // null = not euro-redeemable (Röbel-Münzen)
+  sharePct: number | null; // share of euro reserve; null for non-redeemable
+  redeemable: boolean;
+}
+
+export interface TxSigner { address: string; name: string; avatarUrl: string | null }
+
 export interface TxView {
   safeTxHash: string;
   kind: "auszahlung" | "mitglied_hinzu" | "mitglied_entfernt" | "schwelle" | "sonstige";
-  title: string;          // de-jargoned German line
+  title: string;
   confirmations: number;
   threshold: number;
   executed: boolean;
-  signers: string[];      // owner addresses that have confirmed
-  submissionDate?: string;
+  signers: TxSigner[];
+  date: string | null;            // executionDate || submissionDate
+  transactionHash: string | null; // on-chain hash for Gnosisscan
+  amount: string | null;          // formatted amount for transfers
+  assetLabel: string | null;      // "xDAI" | "EURe" | "Röbel-Münzen"
+  counterparty: { name: string; avatarUrl: string | null } | null;
 }
