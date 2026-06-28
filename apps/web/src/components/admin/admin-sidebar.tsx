@@ -167,6 +167,12 @@ export function AdminSidebar() {
       icon: <Bot className="h-5 w-5" />,
       badgeKey: "meckyDrafts",
     },
+    {
+      name: "Gemeinschaftskasse",
+      href: "/admin/dashboard/gemeinschaftskasse",
+      icon: <Landmark className="h-5 w-5" />,
+      badgeKey: null,
+    },
   ]
 
   const extraLinks: NavLink[] = [
@@ -222,12 +228,6 @@ export function AdminSidebar() {
       name: "Röbel Münzen",
       href: "/admin/dashboard/muenzen",
       icon: <Coins className="h-5 w-5" />,
-      badgeKey: null,
-    },
-    {
-      name: "Gemeinschaftskasse",
-      href: "/admin/dashboard/gemeinschaftskasse",
-      icon: <Landmark className="h-5 w-5" />,
       badgeKey: null,
     },
     {
