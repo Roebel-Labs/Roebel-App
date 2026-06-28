@@ -8,6 +8,8 @@ import {
 } from "@/lib/gemeinschaftskasse/safe-client";
 import { useProposeMetaTx } from "./useProposeMetaTx";
 import { useIsOwner } from "./useIsOwner";
+import { MemberRow } from "./MemberRow";
+import { OwnerListSkeleton } from "./skeletons";
 import type { OwnerView } from "@/lib/gemeinschaftskasse/constants";
 
 interface OverviewData {
@@ -113,7 +115,7 @@ export function Mitglieder() {
   }
 
   if (err) return <p className="text-sm text-red-600">Fehler: {err}</p>;
-  if (!data) return <p className="text-sm text-muted-foreground">Lädt…</p>;
+  if (!data) return <OwnerListSkeleton />;
 
   return (
     <div className="space-y-6">
@@ -147,12 +149,7 @@ export function Mitglieder() {
               key={owner.address}
               className="flex items-center justify-between gap-4"
             >
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{owner.name}</p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {owner.short}
-                </p>
-              </div>
+              <MemberRow m={owner} />
               {isOwner && (
                 <button
                   onClick={() => handleRemoveOwner(owner)}
