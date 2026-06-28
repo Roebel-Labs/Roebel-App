@@ -12,13 +12,13 @@ export async function GET(req: Request) {
     const data = await getSafeOverview(you);
     return NextResponse.json({
       owners: data.owners,
+      assets: data.assets,
+      euroTotal: data.euroTotal,
       threshold: data.threshold,
-      euro: data.euro,
-      balances: {
-        xdai: data.balances.xdai.toString(),
-        eure: data.balances.eure.toString(),
-        muenzen: data.balances.muenzen.toString(),
-      },
+      ownerCount: data.ownerCount,
+      nonce: data.nonce,
+      safeAddress: data.safeAddress,
+      safeVersion: data.safeVersion,
     });
   } catch (e) {
     return jsonError(e);
