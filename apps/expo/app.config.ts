@@ -13,7 +13,7 @@ const config: ExpoConfig = {
   splash: {
     image: './assets/images/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#00498B'
   },
   extra: {
     eas: {
@@ -162,7 +162,7 @@ const config: ExpoConfig = {
     versionCode: 35,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
-      backgroundColor: '#ffffff'
+      backgroundColor: '#00498B'
     },
     permissions: [
       'android.permission.POST_NOTIFICATIONS',
