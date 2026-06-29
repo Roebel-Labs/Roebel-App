@@ -32,6 +32,7 @@ import { useRoebelTalerHistory } from '@/hooks/useRoebelTalerHistory';
 import TxHistoryList, { type TxHistoryItem } from '@/components/rewards/TxHistoryList';
 import TaskCard from '@/components/rewards/TaskCard';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
+import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
 import ReceiveSheet from '@/components/rewards/ReceiveSheet';
 import MuenzenIntroSheet from '@/components/rewards/MuenzenIntroSheet';
 import NotInvitedSheet from '@/components/rewards/NotInvitedSheet';
@@ -84,7 +85,8 @@ export default function RewardsIndexScreen() {
   const { colors, isDark } = useTheme();
   const { isConnected, user } = useUser();
   const { showSnackbar } = useSnackbar();
-  const { celebrate, celebratePending } = useRewardCelebration();
+  const { celebrate } = useRewardCelebration();
+  const celebrateSettling = useCelebrateSettling();
   const {
     lootboxes,
     userRewards,
@@ -201,54 +203,60 @@ export default function RewardsIndexScreen() {
     })();
   }, [talerAccount?.address]);
 
-  const onDailyMint = useCallback(async () => {
+  const onDailyMint = useCallback(() => {
+    if (!talerAccount) {
+      Alert.alert('Heute abholen', 'Dein Konto wird noch geladen. Bitte gleich erneut versuchen.');
+      return;
+    }
     // Capture what's accruing now — that's the amount the mint lands.
     const received = Math.max(1, Math.round(talerMintable));
-    // Show the reward screen instantly; the on-chain mint runs in the button.
-    const reward = celebratePending({
+    const addr = talerAccount.address;
+    const ts = Date.now();
+    const today = dayStart(ts);
+
+    // Snapshot for rollback if the background mint ultimately fails.
+    const prevLastClaim = lastClaim;
+    const prevStreak = rtStreak;
+
+    // Optimistic cooldown + streak so the "Heute abholen" button flips at once.
+    let nextStreak = 1;
+    try {
+      const lastDay = prevLastClaim != null ? dayStart(prevLastClaim) : 0;
+      if (lastDay === today) nextStreak = prevStreak;
+      else if (lastDay === today - 86_400_000) nextStreak = prevStreak + 1;
+    } catch { /* fresh streak */ }
+    setLastClaim(ts);
+    setNowTs(Date.now());
+    setRtStreak(nextStreak);
+    AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
+    AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: nextStreak, lastDay: today })).catch(() => {});
+
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+
+    // Reveal the amount after a short beat; the two-tx mint settles detached.
+    celebrateSettling({
+      amount: received,
       coin: received === 1 ? 'single' : 'many',
       subtitle: 'Deine Röbel Münzen für diese Stunde sind da. Komm regelmäßig vorbei und sammle weiter.',
+      label: 'Münzen',
       loadingLabel: [
         'Münzen werden abgeholt…',
         'Einen Moment noch…',
         'Fast geschafft…',
-        'Gleich ist es soweit…',
       ],
+      settle: dailyMint,
+      onFailed: () => {
+        // Roll back the optimistic cooldown/streak so the user can retry; the
+        // mintable accrual is still on-chain and reappears on the next refresh.
+        setLastClaim(prevLastClaim);
+        setRtStreak(prevStreak);
+        if (prevLastClaim != null) AsyncStorage.setItem(rtClaimKey(addr), String(prevLastClaim)).catch(() => {});
+        else AsyncStorage.removeItem(rtClaimKey(addr)).catch(() => {});
+      },
     });
-    try {
-      await dailyMint();
-      const ts = Date.now();
-      setLastClaim(ts);
-      setNowTs(Date.now());
-      const addr = talerAccount?.address;
-      if (addr) AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
-      // Advance the local Röbel-Münzen streak (consecutive collected days).
-      const today = dayStart(ts);
-      let nextStreak = 1;
-      try {
-        const raw = addr ? await AsyncStorage.getItem(rtStreakKey(addr)) : null;
-        if (raw) {
-          const { count = 0, lastDay = 0 } = JSON.parse(raw);
-          if (lastDay === today) nextStreak = count;
-          else if (lastDay === today - 86_400_000) nextStreak = count + 1;
-          else nextStreak = 1;
-        }
-      } catch { /* fresh streak */ }
-      setRtStreak(nextStreak);
-      if (addr) {
-        AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: nextStreak, lastDay: today })).catch(() => {});
-      }
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      }
-      reward.resolve(received);
-    } catch (e: any) {
-      reward.fail();
-      const msg = e?.message ?? String(e);
-      console.error('[Röbel Münzen] daily mint failed:', msg);
-      Alert.alert('Heute abholen fehlgeschlagen', msg);
-    }
-  }, [dailyMint, talerAccount, talerMintable, celebratePending]);
+  }, [dailyMint, talerAccount, talerMintable, lastClaim, rtStreak, celebrateSettling]);
 
   const onJoin = useCallback(async () => {
     try {
