@@ -42,9 +42,18 @@ export function useIsOwner(): { isOwner: boolean; loading: boolean } {
 
     (async () => {
       try {
-        const adminAccount = wallet
-          ? await (wallet as any).getAdminAccount?.().catch(() => undefined)
-          : undefined;
+        // getAdminAccount() can return the Account SYNCHRONOUSLY (not a Promise),
+        // so calling .catch() on its result throws "catch is not a function" — the
+        // exception that was failing the whole owner check. `await` handles both
+        // sync and async returns; try/catch covers a throw or a missing method.
+        let adminAccount: { address?: string } | undefined;
+        try {
+          adminAccount = wallet
+            ? await (wallet as any).getAdminAccount?.()
+            : undefined;
+        } catch {
+          adminAccount = undefined;
+        }
 
         const safe = getContract({
           client,

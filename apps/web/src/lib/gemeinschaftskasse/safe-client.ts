@@ -68,12 +68,19 @@ export async function resolveSigner(
     params: [],
   }))] as string[];
 
-  // getAdminAccount is thirdweb v5 smart-wallet API; may not exist for EOA wallets,
-  // and useActiveWallet() can be null even when an account is connected — so wallet
-  // is optional. A smart-account owner signs with `account` directly (no admin EOA).
-  const adminAccount: Account | undefined = wallet
-    ? await (wallet as any).getAdminAccount?.().catch(() => undefined)
-    : undefined;
+  // getAdminAccount() can return the Account SYNCHRONOUSLY (not a Promise), so
+  // calling .catch() on its result throws "catch is not a function" — the exception
+  // that was failing the owner check and every signature. `await` handles sync and
+  // async returns; try/catch covers a throw or a missing method. wallet is optional;
+  // a smart-account owner signs with `account` directly (no admin EOA needed).
+  let adminAccount: Account | undefined;
+  try {
+    adminAccount = wallet
+      ? ((await (wallet as any).getAdminAccount?.()) as Account | undefined)
+      : undefined;
+  } catch {
+    adminAccount = undefined;
+  }
 
   const ownerAddress = matchOwner(
     [account.address, adminAccount?.address],
