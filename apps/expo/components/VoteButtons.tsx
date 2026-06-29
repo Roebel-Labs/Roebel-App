@@ -28,8 +28,9 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import CitizenVerificationBanner from '@/components/profile/CitizenVerificationBanner';
 import { SUPPORT_ACCOUNT_ID } from '@/lib/support-contact';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
-import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
-import { useRewardCelebration } from '@/context/RewardCelebrationContext';
+import { claimReward } from '@/lib/rewards-claim';
+import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { Events, track } from '@/lib/analytics';
 import {
   buildVoteMessage,
@@ -128,7 +129,8 @@ export default function VoteButtons({
   const { colors } = useTheme();
   const router = useRouter();
   const { activePendingRequest } = useVerificationContext();
-  const { celebratePending } = useRewardCelebration();
+  const celebrateSettling = useCelebrateSettling();
+  const { enqueueSettlement } = useRoebelTaler();
   const {
     serializedKeypair,
     keypairLoading,
@@ -503,145 +505,112 @@ export default function VoteButtons({
     const kp = getKeypair();
     if (!kp) return;
 
-    // Was this proposal already voted on? Changing an existing vote earns no
-    // new reward. Computed up front so we can open the reward screen instantly.
-    const isChangingVote = !!getLastVote(pollAddress);
-    let voteSucceeded = false;
+    // Narrow the guarded state into locals so the detached settle closure keeps
+    // their non-null types (TS widens captured state back to nullable otherwise).
+    const voterAddress = account.address;
+    const gAccount = gnosisAccount;
+    const pollAddr = pollAddress;
+    const pid = pollId;
 
-    // Instant feedback: open the coin reward screen NOW (loading) so it covers
-    // the whole cast latency. When it's dismissed (success only) the privacy
-    // bottom sheet appears over the new voted state. Changing a vote skips it.
-    const reward = isChangingVote
-      ? null
-      : celebratePending({
-          coin: 'single',
-          subtitle: VOTE_REWARD_SUBTITLE,
-          loadingLabel: [
-            'Stimme wird versiegelt…',
-            'Belohnung wird vorbereitet…',
-            'Fast geschafft…',
-            'Gleich ist es soweit…',
-          ],
-          onClose: () => {
-            if (!voteSucceeded) return;
-            setTimeout(
-              () =>
-                setSuccessDrawer({
-                  visible: true,
-                  message: VOTE_PRIVACY_MESSAGE,
-                  action: () => onVoteSuccess(),
-                }),
-              350,
-            );
-          },
-        });
+    // Was this proposal already voted on? Changing an existing vote earns no reward.
+    const isChangingVote = !!getLastVote(pollAddr);
+
+    // The vote is committed once we've signed it, so the privacy sheet now shows
+    // unconditionally (the ballot settles on chain in the background).
+    const showPrivacySheet = () => {
+      setChanging(false);
+      setTimeout(
+        () => setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() }),
+        350,
+      );
+    };
 
     try {
       setVotingFor(support);
       setPhase('encrypting-vote');
 
-      // VoteType.For = 1, VoteType.Against = 0, VoteType.Abstain = 2 — matches
-      // MACI option indices on the Poll's vote-option tree. `toBigInt` routes
-      // via String to dodge Hermes' refusal of BigInt(<Number>).
+      // ---- PREPARE (fast, gated): a failure here is a real error, no celebration ----
+      // VoteType.For = 1, VoteType.Against = 0, VoteType.Abstain = 2 — matches the
+      // MACI option indices on the Poll's vote-option tree.
       const optionIndex = toBigInt(support);
-      // Pull next nonce from the persistent vote cache so cold-starts after
-      // re-installation still bump monotonically. Process circuit picks the
-      // highest-nonce signed command per voter, so a stale local nonce would
-      // get its publishMessage silently shadowed by an older vote.
-      const nonce = getNextNonce(pollAddress);
-
-      // Read the coordinator pubkey from the Poll itself. A poll is
-      // permanently bound to the key it was deployed with — a hardcoded
-      // constant goes stale on every key rotation, and the MACI circuit
-      // silently discards ballots encrypted to the wrong key (this voided
-      // every vote on polls 3 + 4 after the 2026-06-09 Shamir rotation).
-      // If the read fails we ABORT instead of falling back: a loud error
-      // beats a silently-lost ballot.
-      const poll = getPollContract(pollAddress);
+      // Next nonce from the persistent cache so cold-starts still bump monotonically.
+      const nonce = getNextNonce(pollAddr);
+      // Read the coordinator pubkey from the Poll itself — a poll is permanently
+      // bound to the key it was deployed with, and the MACI circuit silently
+      // discards ballots encrypted to the wrong key. A read failure ABORTS (no
+      // celebration): a loud error beats a silently-lost ballot.
+      const poll = getPollContract(pollAddr);
       const pollCoordinatorPub = (await readContract({
         contract: poll,
-        method:
-          'function coordinatorPubKey() view returns (uint256 x, uint256 y)',
+        method: 'function coordinatorPubKey() view returns (uint256 x, uint256 y)',
         params: [],
       })) as readonly [bigint, bigint];
       const coordinatorPubKey = new PubKey([
         toBigInt(pollCoordinatorPub[0]),
         toBigInt(pollCoordinatorPub[1]),
       ]);
-
       const { message, encPubKey } = buildVoteMessage({
         voterKeypair: kp,
         voterStateIndex: signUpState.stateIndex,
-        pollId,
+        pollId: pid,
         voteOptionIndex: optionIndex,
         voiceCredits: 1n, // 1 NFT = 1 credit, all-in
         nonce,
         coordinatorPubKey,
       });
-
-      setPhase('submitting-vote');
-      setTxSubstate('wallet-prompt');
       // ABI requires uint256[10] (fixed length); coerce from bigint[] for TS.
       const messageFixed = message as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
       const tx = prepareContractCall({
         contract: poll,
-        method:
-          'function publishMessage((uint256[10] data) _message, (uint256 x, uint256 y) _encPubKey)',
+        method: 'function publishMessage((uint256[10] data) _message, (uint256 x, uint256 y) _encPubKey)',
         params: [{ data: messageFixed }, encPubKey],
       });
-      const receipt = await sendTransaction({ transaction: tx, account: gnosisAccount });
-      setTxSubstate('tx-submitted');
 
-      track(Events.PROPOSAL_VOTED, {
-        proposal_id: proposalId.toString(),
-        poll_id: pollId.toString(),
-        vote_type: VoteType[support] ?? String(support),
-        nonce: nonce.toString(),
-        tx_hash: receipt.transactionHash,
-        encrypted: true,
-      });
-
-      // Persist the choice locally so the LastVoteCard can show it. The vote
-      // itself stays encrypted on chain — this cache is purely UX.
-      await recordVote(pollAddress, support, nonce, receipt.transactionHash);
-      setChanging(false);
-
-      // Mirror to Supabase so the voter's profile count reflects this vote — and
-      // so the claim-reward verifier (which reads vote_history) finds it. The
-      // claim is chained AFTER the mirror to avoid that race.
-      const mirror = recordVoteToSupabase({
-        walletAddress: account.address,
-        proposalId: proposalId.toString(),
-        voteType: support,
-        transactionHash: receipt.transactionHash,
-      });
+      // ---- Committed. The slow publish + mirror + claim run detached, with retry. ----
+      const settle = async () => {
+        const receipt = await sendTransaction({ transaction: tx, account: gAccount });
+        track(Events.PROPOSAL_VOTED, {
+          proposal_id: proposalId.toString(),
+          poll_id: pid.toString(),
+          vote_type: VoteType[support] ?? String(support),
+          nonce: nonce.toString(),
+          tx_hash: receipt.transactionHash,
+          encrypted: true,
+        });
+        // Persist the choice locally so the LastVoteCard can show it.
+        await recordVote(pollAddr, support, nonce, receipt.transactionHash);
+        // Mirror to Supabase first so the claim-reward verifier finds the vote,
+        // then claim the payout (it lands in the balance via the reconcile).
+        await recordVoteToSupabase({
+          walletAddress: voterAddress,
+          proposalId: proposalId.toString(),
+          voteType: support,
+          transactionHash: receipt.transactionHash,
+        });
+        await claimReward(voterAddress, 'proposal_vote', proposalId.toString()).catch(() => {});
+      };
 
       if (isChangingVote) {
-        // No reward screen was opened. Claim idempotently in the background and
-        // show the privacy bottom sheet directly over the updated vote.
-        void mirror
-          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
-          .catch(() => {});
-        setSuccessDrawer({ visible: true, message: VOTE_PRIVACY_MESSAGE, action: () => onVoteSuccess() });
+        // A changed vote earns no reward — settle quietly, show the privacy sheet.
+        enqueueSettlement({ label: 'Stimme', amount: 0, settle });
+        showPrivacySheet();
       } else {
-        // First vote: the reward screen is already open (loading). Resolve it
-        // with the payout; its onClose then surfaces the privacy bottom sheet
-        // over the new voted state. A failed payout still closes the reward and
-        // shows the bottom sheet (the vote itself succeeded).
-        voteSucceeded = true;
-        void mirror
-          .then(() => claimReward(account.address, 'proposal_vote', proposalId.toString()))
-          .then((r) => {
-            if (r.status === 'paid') reward?.resolve(rewardAmountToMuenzen(r.amountAtto));
-            else reward?.fail();
-          })
-          .catch(() => reward?.fail());
+        celebrateSettling({
+          message: 'Stimme abgegeben',
+          coin: 'single',
+          subtitle: VOTE_REWARD_SUBTITLE,
+          label: 'Stimme',
+          loadingLabel: [
+            'Stimme wird versiegelt…',
+            'Belohnung wird vorbereitet…',
+            'Fast geschafft…',
+          ],
+          settle,
+          onClose: showPrivacySheet,
+        });
       }
     } catch (err) {
-      // Vote failed → drop the (loading) reward screen. voteSucceeded is still
-      // false, so its onClose shows no bottom sheet; surface the error instead.
-      reward?.fail();
-      console.error('[VoteButtons] vote failed:', err);
+      console.error('[VoteButtons] vote prepare failed:', err);
       setErrorDrawer({
         visible: true,
         message: extractErrorMessage(err, 'Stimme konnte nicht abgegeben werden.'),
