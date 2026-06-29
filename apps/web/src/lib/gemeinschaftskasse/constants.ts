@@ -47,17 +47,55 @@ export interface AssetHolding {
 
 export interface TxSigner { address: string; name: string; avatarUrl: string | null }
 
+export type TxCategory =
+  | "auszahlung"
+  | "mitglied_hinzu"
+  | "mitglied_entfernt"
+  | "schwelle"
+  | "circles"
+  | "sonstige";
+
+/** Lifecycle state derived server-side; the client adds a transient
+ *  "wird_ausgefuehrt" while an execution is in flight. */
+export type TxStatus = "wartet" | "bereit" | "ausgefuehrt" | "fehlgeschlagen";
+
+/** One Safe owner's relationship to a specific transaction. */
+export interface TxOwnerState {
+  address: string;
+  name: string;
+  avatarUrl: string | null;
+  signed: boolean;
+  via: "signatur" | "onchain" | null; // how they approved; null = still pending
+}
+
 export interface TxView {
   safeTxHash: string;
-  kind: "auszahlung" | "mitglied_hinzu" | "mitglied_entfernt" | "schwelle" | "sonstige";
-  title: string;
+  category: TxCategory;
+  icon: string;                   // emoji glyph for the category
+  title: string;                  // "Auszahlung — 12,50 € an Guido"
+  description: string;            // one plain-language line on what it does
+  status: TxStatus;
   confirmations: number;
   threshold: number;
   executed: boolean;
-  signers: TxSigner[];
+  signers: TxSigner[];            // owners who have signed/approved
+  owners: TxOwnerState[];         // full owner set with signed flags
   date: string | null;            // executionDate || submissionDate
   transactionHash: string | null; // on-chain hash for Gnosisscan
   amount: string | null;          // formatted amount for transfers
   assetLabel: string | null;      // "xDAI" | "EURe" | "Röbel-Münzen"
   counterparty: { name: string; avatarUrl: string | null } | null;
+  to: string;                     // raw target contract/recipient
+  rawData: string | null;         // raw calldata, for the detail view
 }
+
+/** Minimal Circles BaseGroup ABI — enough to name the group-admin calls that
+ *  otherwise look like a "Röbel-Münzen" payout (same contract address). */
+export const BASEGROUP_ABI = parseAbi([
+  "function updateMetadataDigest(bytes32 _metadataDigest)",
+  "function trust(address _trustReceiver, uint96 _expiry)",
+  "function setService(address _service)",
+  "function setMintHandler(address _mintHandler)",
+  "function setRedemptionHandler(address _redemptionHandler)",
+  "function registerShortName()",
+]);

@@ -343,13 +343,13 @@ export async function confirmTx({
   safeTxHash: string;
   account: Account;
   wallet?: Wallet;
-}): Promise<void> {
+}): Promise<string | undefined> {
   const signer = await resolveSigner(account, wallet);
   if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
 
   if (signer.isSmart) {
-    await approveHashOnChain({ safeTxHash, account: signer.signingAccount });
-    return;
+    // Returns the on-chain approveHash tx hash → surfaced as a Gnosisscan link.
+    return await approveHashOnChain({ safeTxHash, account: signer.signingAccount });
   }
 
   const inner = await signer.signingAccount.signMessage({
@@ -362,6 +362,7 @@ export async function confirmTx({
     ownerAddress: signer.ownerAddress,
     isSmart: signer.isSmart,
   });
+  return undefined;
 }
 
 /**
