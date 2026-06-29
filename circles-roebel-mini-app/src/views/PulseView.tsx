@@ -81,7 +81,6 @@ export default function PulseView() {
         </>
       ) : (
         <>
-          <AnatomySection verified={snap.verified} />
           <KpiStrip kpis={kpis} />
           <SupplyBackingSection series={supplySeries} supply={snap.supply} collateral={snap.collateral} />
           <MoneyFlowsSection buckets={flows} />
@@ -89,6 +88,7 @@ export default function PulseView() {
           <HolderDistributionSection holders={snap.holders} />
           {vel && <VelocitySection vel={vel} />}
           <ReputationSection rep={rep} profiles={profiles} />
+          <AnatomySection />
           <FlowFeedSection transfers={snap.transfers} profiles={profiles} />
         </>
       )}
