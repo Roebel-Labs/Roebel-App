@@ -19,6 +19,14 @@ export const ROEBEL_GROUP = "0xAc2CeCdBead594F97358a0d3132454f24F3E470c" as cons
 // full group redeploy could change it (in which case bump ROEBEL_GROUP too). Holds members'
 // personal CRC 1:1 behind the supply. Verified: group.BASE_TREASURY() === this address.
 export const ROEBEL_VAULT = "0x0476fd3bD5EbCE0Af18C70dE221eC47F508e8763" as const;
+// The group's mint policy — Hub.mintPolicies(group). Governs who may mint the group
+// token. Group-specific (NOT the shared BaseGroup policy). Verified on-chain.
+export const MINT_POLICY = "0xCDFc5135AEC0aFbf102C108e7f5C8A88C6112842" as const;
+// The group owner — 3-of-5 Attester Safe (group.owner()). Threshold/profile changes
+// route through this Safe.
+export const GROUP_OWNER = "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa" as const;
+// The group service wallet — group.service() — auto-invite (trusts new citizens in).
+export const GROUP_SERVICE = "0xd5028284017A32C672CbD73Fe35aCD897bA874cf" as const;
 export const GNOSIS_RPC = "https://rpc.gnosischain.com";
 
 // CirclesConfig (sdk-types). Cast keeps us decoupled from the exact exported type.

@@ -19,6 +19,7 @@ import {
 } from "../lib/circlesData";
 import { fmtInt } from "../lib/format";
 import { PageHeader, SkeletonGrid, Skeleton } from "../components/ui";
+import { AnatomySection } from "./economy/AnatomySection";
 import { RangeSelector } from "./economy/RangeSelector";
 import { KpiStrip } from "./economy/KpiStrip";
 import { SupplyBackingSection } from "./economy/SupplyBackingSection";
@@ -80,6 +81,7 @@ export default function PulseView() {
         </>
       ) : (
         <>
+          <AnatomySection verified={snap.verified} />
           <KpiStrip kpis={kpis} />
           <SupplyBackingSection series={supplySeries} supply={snap.supply} collateral={snap.collateral} />
           <MoneyFlowsSection buckets={flows} />
