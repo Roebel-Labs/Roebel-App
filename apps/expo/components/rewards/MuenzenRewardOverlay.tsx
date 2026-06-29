@@ -8,6 +8,8 @@ interface MuenzenRewardOverlayProps {
   amount: number;
   /** Optional copy override; defaults to the standard reward line. */
   subtitle?: string;
+  /** Headline text to reveal instead of a number (e.g. a vote thank-you). */
+  message?: string;
   /** Show the screen in a loading state (spinner + label) until resolved. */
   loading?: boolean;
   loadingLabel?: string | string[];
@@ -26,6 +28,7 @@ export default function MuenzenRewardOverlay({
   visible,
   amount,
   subtitle,
+  message,
   loading = false,
   loadingLabel,
   coin,
@@ -39,6 +42,7 @@ export default function MuenzenRewardOverlay({
           key={replayKey}
           amount={amount}
           subtitle={subtitle ?? DEFAULT_REWARD_SUBTITLE}
+          message={message}
           loading={loading}
           loadingLabel={loadingLabel}
           coin={coin}

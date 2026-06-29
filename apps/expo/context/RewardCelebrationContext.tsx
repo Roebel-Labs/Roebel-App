@@ -13,6 +13,8 @@ interface PendingOptions {
   coin?: 'single' | 'many';
   /** Subtitle to show once resolved (can also be passed to resolve()). */
   subtitle?: string;
+  /** Headline text to reveal instead of a number (e.g. a vote thank-you). */
+  message?: string;
   /** Fired once when the reward screen is dismissed (Weiter) or aborted (fail). */
   onClose?: () => void;
 }
@@ -43,6 +45,7 @@ interface QueueItem {
   id: number;
   amount: number;
   subtitle?: string;
+  message?: string;
   loading: boolean;
   loadingLabel?: string | string[];
   coin?: 'single' | 'many';
@@ -77,6 +80,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
         id,
         amount: 0,
         subtitle: opts?.subtitle,
+        message: opts?.message,
         loading: true,
         loadingLabel: opts?.loadingLabel,
         coin: opts?.coin,
@@ -121,6 +125,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
         replayKey={current?.id ?? 0}
         amount={current?.amount ?? 0}
         subtitle={current?.subtitle}
+        message={current?.message}
         loading={current?.loading ?? false}
         loadingLabel={current?.loadingLabel}
         coin={current?.coin}
