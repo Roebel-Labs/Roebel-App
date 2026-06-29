@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   coinMany: { width: 224, height: 286, marginBottom: 44 },
   copy: { alignItems: 'center', minHeight: 96, justifyContent: 'flex-start' },
   amount: {
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'MonaSansSemiCondensed-Bold',
     fontSize: 60,
     lineHeight: 64,
     letterSpacing: -1.5,
