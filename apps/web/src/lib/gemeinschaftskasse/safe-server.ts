@@ -14,8 +14,22 @@ import Safe, {
   buildContractSignature,
   EthSafeSignature,
 } from "@safe-global/protocol-kit";
+import { encodeFunctionData, getAddress } from "viem";
 import { getApiKit } from "./api-kit";
-import { GK_SAFE } from "./constants";
+import { GK_SAFE, SAFE_ABI } from "./constants";
+import { gnosisClient } from "@/lib/muenzen/gnosis";
+
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Safe "approved hash" (pre-validated) signature for an owner who approved the
+ * tx hash on-chain via approveHash(): r = owner left-padded to 32 bytes, s = 0,
+ * v = 1. buildSignatureBytes appends it verbatim in sorted position.
+ */
+function preValidatedSignature(owner: string): EthSafeSignature {
+  const r = owner.toLowerCase().replace("0x", "").padStart(64, "0");
+  return new EthSafeSignature(getAddress(owner), "0x" + r + "0".repeat(64) + "01");
+}
 
 function rpcUrl(): string {
   return process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com";
@@ -98,38 +112,70 @@ export async function encodeExecution(
 ): Promise<{ to: string; data: string }> {
   const raw = await getApiKit().getTransaction(safeTxHash);
 
-  const safe = await initSafe();
-
-  const safeTx = await safe.createTransaction({
-    transactions: [
-      {
-        to: raw.to,
-        value: raw.value,
-        data: raw.data ?? "0x",
-        operation: Number(raw.operation) as 0 | 1,
-      },
-    ],
-    options: {
-      nonce: Number(raw.nonce),
-      safeTxGas: raw.safeTxGas,
-      baseGas: raw.baseGas,
-      gasPrice: raw.gasPrice,
-      gasToken: raw.gasToken,
-      refundReceiver:
-        raw.refundReceiver ?? "0x0000000000000000000000000000000000000000",
-    },
-  });
-
+  // Collect signatures from two sources:
+  //  1. Off-chain confirmations stored in the Safe Transaction Service (EOA owners).
+  //  2. On-chain approvals via approveHash (smart-account owners) — these never
+  //     appear in the service, so we read Safe.approvedHashes and synthesise a
+  //     pre-validated signature for each approver.
+  const sigs: EthSafeSignature[] = [];
+  const signed = new Set<string>();
   for (const c of raw.confirmations ?? []) {
-    safeTx.addSignature(
+    sigs.push(
       new EthSafeSignature(
         c.owner,
         c.signature,
         c.signatureType === "CONTRACT_SIGNATURE",
       ),
     );
+    signed.add(c.owner.toLowerCase());
   }
 
-  const encoded = await safe.getEncodedTransaction(safeTx);
-  return { to: GK_SAFE, data: encoded };
+  try {
+    const owners = [
+      ...(await gnosisClient.readContract({
+        address: getAddress(GK_SAFE),
+        abi: SAFE_ABI,
+        functionName: "getOwners",
+      })),
+    ] as string[];
+    await Promise.all(
+      owners.map(async (o) => {
+        if (signed.has(o.toLowerCase())) return;
+        const approved = (await gnosisClient.readContract({
+          address: getAddress(GK_SAFE),
+          abi: SAFE_ABI,
+          functionName: "approvedHashes",
+          args: [getAddress(o), safeTxHash as `0x${string}`],
+        })) as bigint;
+        if (approved > 0n) {
+          sigs.push(preValidatedSignature(o));
+          signed.add(o.toLowerCase());
+        }
+      }),
+    );
+  } catch {
+    /* if the RPC reads fail, fall back to the service confirmations only */
+  }
+
+  // buildSignatureBytes sorts ascending by signer and concatenates — required by
+  // Safe.checkNSignatures.
+  const signatures = buildSignatureBytes(sigs);
+
+  const data = encodeFunctionData({
+    abi: SAFE_ABI,
+    functionName: "execTransaction",
+    args: [
+      getAddress(raw.to),
+      BigInt(raw.value),
+      (raw.data ?? "0x") as `0x${string}`,
+      Number(raw.operation),
+      BigInt(raw.safeTxGas),
+      BigInt(raw.baseGas),
+      BigInt(raw.gasPrice),
+      getAddress(raw.gasToken),
+      getAddress(raw.refundReceiver ?? ZERO),
+      signatures as `0x${string}`,
+    ],
+  });
+  return { to: GK_SAFE, data };
 }

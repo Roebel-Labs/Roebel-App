@@ -297,7 +297,43 @@ export async function proposeMetaTx({
 }
 
 /**
- * Adds a confirmation signature to an existing pending Safe tx.
+ * Records an on-chain approval of a Safe tx hash from a smart-account owner via
+ * Safe.approveHash(). Used instead of an off-chain ERC-1271 signature: thirdweb
+ * smart wallets sign in a format this Safe version rejects ("... is not valid"),
+ * so on-chain approval is the robust, format-free path for a contract owner.
+ * Gasless — paid from the smart account via the thirdweb bundler.
+ */
+export async function approveHashOnChain({
+  safeTxHash,
+  account,
+}: {
+  safeTxHash: string;
+  account: Account;
+}): Promise<string> {
+  const transaction = prepareTransaction({
+    to: GK_SAFE as `0x${string}`,
+    data: encodeFunctionData({
+      abi: SAFE_ABI,
+      functionName: "approveHash",
+      args: [safeTxHash as `0x${string}`],
+    }),
+    value: 0n,
+    chain: activeChain,
+    client,
+  });
+  const receipt = await sendTransaction({ account, transaction });
+  await waitForReceipt({
+    client,
+    chain: activeChain,
+    transactionHash: receipt.transactionHash,
+  });
+  return receipt.transactionHash;
+}
+
+/**
+ * Approves a pending Safe tx for the connected owner.
+ *  - Smart-account owner → on-chain approveHash (robust; no off-chain signature).
+ *  - EOA owner           → off-chain ECDSA confirmation via the Safe service.
  */
 export async function confirmTx({
   safeTxHash,
@@ -310,6 +346,11 @@ export async function confirmTx({
 }): Promise<void> {
   const signer = await resolveSigner(account, wallet);
   if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
+
+  if (signer.isSmart) {
+    await approveHashOnChain({ safeTxHash, account: signer.signingAccount });
+    return;
+  }
 
   const inner = await signer.signingAccount.signMessage({
     message: { raw: safeTxHash as `0x${string}` },
