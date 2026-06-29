@@ -67,8 +67,13 @@ export async function assembleSenderSignature({
   isSmart: boolean;
 }): Promise<string> {
   if (isSmart) {
+    // `inner` is the smart account's raw ECDSA signature, validated by its own
+    // ERC-1271 isValidSignature — it is NOT itself a contract signature. Marking
+    // the inner EthSafeSignature isContractSignature=true double-wrapped it
+    // (259 bytes of nested owner/offset/length) so the Safe Transaction Service
+    // rejected it as "... is not valid". Plain inner → correct 162-byte layout.
     const contractSig = await buildContractSignature(
-      [new EthSafeSignature(ownerAddress, inner, true)],
+      [new EthSafeSignature(ownerAddress, inner)],
       ownerAddress,
     );
     return buildSignatureBytes([contractSig]);
