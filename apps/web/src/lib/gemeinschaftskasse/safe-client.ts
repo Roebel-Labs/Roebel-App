@@ -58,7 +58,7 @@ async function postJson<T = unknown>(
  */
 export async function resolveSigner(
   account: Account,
-  wallet: Wallet,
+  wallet?: Wallet,
 ): Promise<{ ownerAddress: string; isSmart: boolean; signingAccount: Account } | null> {
   // Fetch owners directly via thirdweb readContract (avoids protocol-kit).
   const safe = getContract({ client, chain: activeChain, address: GK_SAFE });
@@ -68,10 +68,12 @@ export async function resolveSigner(
     params: [],
   }))] as string[];
 
-  // getAdminAccount is thirdweb v5 smart-wallet API; may not exist for EOA wallets.
-  const adminAccount: Account | undefined = await (wallet as any)
-    .getAdminAccount?.()
-    .catch(() => undefined);
+  // getAdminAccount is thirdweb v5 smart-wallet API; may not exist for EOA wallets,
+  // and useActiveWallet() can be null even when an account is connected — so wallet
+  // is optional. A smart-account owner signs with `account` directly (no admin EOA).
+  const adminAccount: Account | undefined = wallet
+    ? await (wallet as any).getAdminAccount?.().catch(() => undefined)
+    : undefined;
 
   const ownerAddress = matchOwner(
     [account.address, adminAccount?.address],
@@ -262,7 +264,7 @@ export async function proposeMetaTx({
 }: {
   metaTx: { to: string; value: string; data: string };
   account: Account;
-  wallet: Wallet;
+  wallet?: Wallet;
 }): Promise<{ safeTxHash: string }> {
   const signer = await resolveSigner(account, wallet);
   if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
@@ -297,7 +299,7 @@ export async function confirmTx({
 }: {
   safeTxHash: string;
   account: Account;
-  wallet: Wallet;
+  wallet?: Wallet;
 }): Promise<void> {
   const signer = await resolveSigner(account, wallet);
   if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");

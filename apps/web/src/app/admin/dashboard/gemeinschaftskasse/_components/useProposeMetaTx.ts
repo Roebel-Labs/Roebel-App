@@ -20,7 +20,7 @@ export function useProposeMetaTx() {
     value: string;
     data: string;
   }): Promise<{ safeTxHash: string }> {
-    if (!account || !wallet) {
+    if (!account) {
       throw new Error("Bitte zuerst anmelden.");
     }
     return proposeMetaTx({ metaTx, account, wallet });

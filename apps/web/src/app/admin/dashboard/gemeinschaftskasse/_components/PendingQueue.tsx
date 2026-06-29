@@ -50,7 +50,7 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
   }
 
   async function handleFreigeben(item: TxView) {
-    if (!account || !wallet) {
+    if (!account) {
       setItemErr(item.safeTxHash, "Bitte zuerst anmelden.");
       return;
     }

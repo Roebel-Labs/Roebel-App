@@ -26,7 +26,12 @@ export function useIsOwner(): { isOwner: boolean; loading: boolean } {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!account || !wallet) {
+    // NOTE: require only `account`. useActiveWallet() can return null even when
+    // an account is connected (observed in the admin session), and `wallet` is
+    // only needed to derive an admin EOA for the EOA-owner case — a smart-account
+    // owner (e.g. 0xC49d…) matches on account.address alone. Gating on `wallet`
+    // here is what hid the Freigeben/Ausführen buttons for a real owner.
+    if (!account) {
       setIsOwner(false);
       setLoading(false);
       return;
@@ -37,9 +42,9 @@ export function useIsOwner(): { isOwner: boolean; loading: boolean } {
 
     (async () => {
       try {
-        const adminAccount = await (wallet as any)
-          .getAdminAccount?.()
-          .catch(() => undefined);
+        const adminAccount = wallet
+          ? await (wallet as any).getAdminAccount?.().catch(() => undefined)
+          : undefined;
 
         const safe = getContract({
           client,
