@@ -27,6 +27,7 @@ import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
 import { RewardCelebrationProvider } from '@/context/RewardCelebrationContext';
+import { RoebelTalerProvider } from '@/context/RoebelTalerProvider';
 import { MaciProvider } from '@/context/MaciContext';
 import { useDeferredTaskTriggers } from '@/hooks/useDeferredTaskTriggers';
 import { StatusBar, View, StyleSheet, Text, Platform } from 'react-native';
@@ -312,6 +313,7 @@ function Layout() {
                       <BookmarksProvider>
                         <LocationProvider>
                           <SnackbarProvider>
+                            <RoebelTalerProvider>
                             <RewardCelebrationProvider>
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
@@ -322,6 +324,7 @@ function Layout() {
                               </ExploreDotProvider>
                             </PendingPostFeedbackProvider>
                             </RewardCelebrationProvider>
+                            </RoebelTalerProvider>
                           </SnackbarProvider>
                         </LocationProvider>
                       </BookmarksProvider>
