@@ -165,9 +165,13 @@ abstract settlement away. The soft notice is the only failure surface.
   *committed* once enqueued (today it gates on `voteSucceeded`, which is no
   longer known at close time). Changing an existing vote stays reward-free and
   skips the celebration, as today.
-- `settle`: the `publishMessage` `sendTransaction` only.
-- `amount` = 0 (the vote reward is a celebration coin, not a balance mint), so no
-  optimistic balance delta — the queue is still used for retry + soft notice.
+- `settle`: the `publishMessage` send, then the Supabase mirror, then
+  `claimReward` (chained in that order, as today).
+- The vote's Münzen payout is **unknown up front** (it comes from `claimReward`
+  after the tx), so there is **no optimistic delta** (`amount = 0`) and the
+  reward screen reveals a number-less thank-you headline ("Stimme abgegeben")
+  instead of a count. The payout, if any, lands in the balance via the
+  post-settle reconcile — not an optimistic bump.
 
 ### Checkpoint / QR — Phase 2
 Already detached. Migrate `claimReward` through `enqueueSettlement` in a
