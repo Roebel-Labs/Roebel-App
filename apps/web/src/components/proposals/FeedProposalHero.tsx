@@ -104,7 +104,7 @@ export function FeedProposalHero({
     >
       <Link
         href={href}
-        className="flex gap-3 rounded-[12px] bg-card p-4 transition-colors hover:bg-muted/50"
+        className="flex gap-3 rounded-[12px] bg-card p-4 transition-shadow hover:shadow-md"
       >
         <Image
           src={ILLUSTRATION}
