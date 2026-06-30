@@ -10,12 +10,13 @@ export async function POST(req: Request) {
   const denied = await requireAdmin();
   if (denied) return denied;
   try {
-    const { safeTransactionData, safeTxHash, inner, ownerAddress, isSmart } =
+    const { safeTransactionData, safeTxHash, inner, ownerAddress, isSmart, mode } =
       await req.json();
     const senderSignature = await assembleSenderSignature({
       inner,
       ownerAddress,
       isSmart,
+      prevalidated: mode === "prevalidated",
     });
     const kit = getApiKit();
     await kit.proposeTransaction({
