@@ -17,13 +17,19 @@ export async function getSafeOverview(you?: string) {
   ]);
   const ownerAddrs = (ownersRaw as readonly string[]).map((a) => getAddress(a));
   const profiles = await resolveCitizenProfiles(ownerAddrs);
-  const owners: OwnerView[] = ownerAddrs.map((a) => {
+  // Determine wallet type per owner (Smart-Wallet = has bytecode, EOA = "0x").
+  const codeFn = (gnosisClient as any).getCode ?? (gnosisClient as any).getBytecode;
+  const codes = await Promise.all(
+    ownerAddrs.map((a) => codeFn.call(gnosisClient, { address: a }).catch(() => undefined)),
+  );
+  const owners: OwnerView[] = ownerAddrs.map((a, i) => {
     const p = profiles.get(a.toLowerCase());
     return {
       address: a,
       name: p?.name ?? "Externe Wallet",
       short: shortAddr(a),
       isYou: you ? a.toLowerCase() === you.toLowerCase() : false,
+      isSmart: !!(codes[i] && codes[i] !== "0x"),
       avatarUrl: p?.avatarUrl ?? null,
       username: p?.username ?? null,
       verified: p?.verified ?? false,

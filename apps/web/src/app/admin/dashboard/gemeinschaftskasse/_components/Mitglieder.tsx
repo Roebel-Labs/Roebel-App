@@ -1,13 +1,18 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
+import { useActiveAccount, useActiveWallet } from "thirdweb/react";
+import { Sparkles, KeyRound, UserPlus, ShieldCheck } from "lucide-react";
 import {
   buildAddOwner,
   buildRemoveOwner,
   buildChangeThreshold,
+  proposeMetaTx,
 } from "@/lib/gemeinschaftskasse/safe-client";
-import { useProposeMetaTx } from "./useProposeMetaTx";
 import { useIsOwner } from "./useIsOwner";
+import { useTxAction } from "./useTxAction";
+import { ActionFeedback } from "./ui/ActionFeedback";
+import { Explainer } from "./ui/Explainer";
 import { MemberRow } from "./MemberRow";
 import { OwnerListSkeleton } from "./skeletons";
 import type { OwnerView } from "@/lib/gemeinschaftskasse/constants";
@@ -18,20 +23,17 @@ interface OverviewData {
 }
 
 export function Mitglieder() {
-  const propose = useProposeMetaTx();
+  const account = useActiveAccount();
+  const wallet = useActiveWallet();
   const { isOwner } = useIsOwner();
+  const { state, run, busy, reset } = useTxAction();
 
   const [data, setData] = useState<OverviewData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-
-  // Add-owner form
+  const [formErr, setFormErr] = useState<string | null>(null);
   const [newOwner, setNewOwner] = useState("");
-  // Change-threshold form
   const [newThreshold, setNewThreshold] = useState("");
-  // Which remove action is in progress (by address)
-  const [removingAddr, setRemovingAddr] = useState<string | null>(null);
+  const [runningAddr, setRunningAddr] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setErr(null);
@@ -43,75 +45,70 @@ export function Mitglieder() {
       })
       .catch((e) => setErr(String(e)));
   }, []);
-
   useEffect(() => {
     load();
   }, [load]);
 
-  function showMsg(text: string, ok = true) {
-    setMsg({ text, ok });
-    setTimeout(() => setMsg(null), 8000);
+  async function runPropose(metaTx: { to: string; value: string; data: string }, successMsg: string) {
+    if (!account) {
+      setFormErr("Bitte zuerst anmelden.");
+      return false;
+    }
+    setFormErr(null);
+    reset();
+    const ok = await run(["Vorschlag wird erstellt und freigegeben …"], async (step) => {
+      step(0);
+      const { approvalTxHash } = await proposeMetaTx({ metaTx, account, wallet });
+      return { message: successMsg, txHash: approvalTxHash };
+    });
+    if (ok) load();
+    return ok;
   }
 
-  async function handleAddOwner(e: React.FormEvent) {
+  async function addOwner(e: React.FormEvent) {
     e.preventDefault();
+    setFormErr(null);
     if (!data) return;
     if (!isAddress(newOwner)) {
-      showMsg("Ungültige Adresse.", false);
+      setFormErr("Bitte eine gültige Adresse (0x…) eingeben.");
       return;
     }
-    setBusy(true);
-    try {
-      const metaTx = buildAddOwner(newOwner, data.threshold);
-      await propose(metaTx);
-      setNewOwner("");
-      showMsg('Vorschlag erstellt. Bitte freigeben unter "Auszahlungen".');
-    } catch (e) {
-      showMsg((e as Error).message, false);
-    } finally {
-      setBusy(false);
-    }
+    const ok = await runPropose(
+      buildAddOwner(newOwner, data.threshold),
+      "Neues Mitglied vorgeschlagen. Bitte unter „Auszahlungen“ freigeben.",
+    );
+    if (ok) setNewOwner("");
   }
 
-  async function handleRemoveOwner(owner: OwnerView) {
+  async function removeOwner(owner: OwnerView) {
     if (!data) return;
-    const ownerAddresses = data.owners.map((o) => o.address);
-    const newThresholdValue = Math.min(data.threshold, data.owners.length - 1);
-    if (newThresholdValue < 1) {
-      showMsg("Mindestens ein Mitsignierer muss verbleiben.", false);
+    const newT = Math.min(data.threshold, data.owners.length - 1);
+    if (newT < 1) {
+      setFormErr("Mindestens ein Mitsignierer muss verbleiben.");
       return;
     }
-    setRemovingAddr(owner.address);
-    try {
-      const metaTx = buildRemoveOwner(ownerAddresses, owner.address, newThresholdValue);
-      await propose(metaTx);
-      showMsg(`Entfernung von „${owner.name}" vorgeschlagen. Bitte freigeben unter „Auszahlungen".`);
-    } catch (e) {
-      showMsg((e as Error).message, false);
-    } finally {
-      setRemovingAddr(null);
-    }
+    setRunningAddr(owner.address);
+    await runPropose(
+      buildRemoveOwner(data.owners.map((o) => o.address), owner.address, newT),
+      `Entfernung von „${owner.name}“ vorgeschlagen. Bitte unter „Auszahlungen“ freigeben.`,
+    );
+    setRunningAddr(null);
   }
 
-  async function handleChangeThreshold(e: React.FormEvent) {
+  async function changeThreshold(e: React.FormEvent) {
     e.preventDefault();
+    setFormErr(null);
     if (!data) return;
     const t = parseInt(newThreshold, 10);
     if (isNaN(t) || t < 1 || t > data.owners.length) {
-      showMsg(`Schwelle muss zwischen 1 und ${data.owners.length} liegen.`, false);
+      setFormErr(`Schwelle muss zwischen 1 und ${data.owners.length} liegen.`);
       return;
     }
-    setBusy(true);
-    try {
-      const metaTx = buildChangeThreshold(t);
-      await propose(metaTx);
-      setNewThreshold("");
-      showMsg(`Schwellenänderung auf ${t} vorgeschlagen. Bitte freigeben unter „Auszahlungen".`);
-    } catch (e) {
-      showMsg((e as Error).message, false);
-    } finally {
-      setBusy(false);
-    }
+    const ok = await runPropose(
+      buildChangeThreshold(t),
+      `Schwellenänderung auf ${t} vorgeschlagen. Bitte unter „Auszahlungen“ freigeben.`,
+    );
+    if (ok) setNewThreshold("");
   }
 
   if (err) return <p className="text-sm text-red-600">Fehler: {err}</p>;
@@ -119,44 +116,48 @@ export function Mitglieder() {
 
   return (
     <div className="space-y-6">
-      {msg && (
-        <div
-          className={`rounded-md p-3 text-sm ${msg.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}
-        >
-          {msg.text}
-        </div>
-      )}
+      <Explainer title="Mitsignierer & Freigaben verstehen">
+        <p>
+          Jeder <strong>Mitsignierer</strong> kann Auszahlungen vorschlagen und freigeben. Ausgeführt wird erst, wenn die{" "}
+          <strong>Schwelle</strong> erreicht ist ({data.threshold} von {data.owners.length}).
+        </p>
+        <p>
+          Eine <strong>Smart-Wallet</strong> (z. B. die Röbel-App) gibt direkt auf der Blockchain frei. Eine{" "}
+          <strong>normale Wallet</strong> (z. B. MetaMask) gibt per Unterschrift frei. Beides zählt gleich.
+        </p>
+        <p>Mitglieder hinzufügen/entfernen oder die Schwelle ändern ist selbst eine Transaktion, die freigegeben werden muss.</p>
+      </Explainer>
 
       {!isOwner && (
         <p className="text-sm text-muted-foreground">
-          Nur Mitsignierer können Mitglieder verwalten.
+          Nur Mitsignierer können Mitglieder verwalten — du siehst hier den aktuellen Stand.
         </p>
       )}
 
-      {/* Current members list */}
-      <div className="rounded-lg border border-border p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold">
-            Mitsignierer ({data.owners.length})
-          </h3>
+      {state.phase !== "idle" && <ActionFeedback state={state} />}
+      {formErr && <p className="text-sm text-red-600">{formErr}</p>}
+
+      <div className="rounded-xl border border-border p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Mitsignierer ({data.owners.length})</h3>
           <span className="text-sm text-muted-foreground">
             Schwelle: {data.threshold} von {data.owners.length}
           </span>
         </div>
         <ul className="space-y-3">
-          {data.owners.map((owner) => (
-            <li
-              key={owner.address}
-              className="flex items-center justify-between gap-4"
-            >
-              <MemberRow m={owner} />
+          {data.owners.map((o) => (
+            <li key={o.address} className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <MemberRow m={o} />
+                <WalletTag isSmart={o.isSmart} />
+              </div>
               {isOwner && (
                 <button
-                  onClick={() => handleRemoveOwner(owner)}
-                  disabled={removingAddr === owner.address || busy}
-                  className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors flex-shrink-0"
+                  onClick={() => removeOwner(o)}
+                  disabled={busy}
+                  className="shrink-0 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
                 >
-                  {removingAddr === owner.address ? "…" : "Entfernen"}
+                  {runningAddr === o.address ? "…" : "Entfernen"}
                 </button>
               )}
             </li>
@@ -164,64 +165,73 @@ export function Mitglieder() {
         </ul>
       </div>
 
-      {/* Add owner — owners only */}
       {isOwner && (
-        <div className="rounded-lg border border-border p-5">
-          <h3 className="text-base font-semibold mb-4">Mitglied hinzufügen</h3>
-          <form onSubmit={handleAddOwner} className="flex gap-3">
-            <input
-              type="text"
-              value={newOwner}
-              onChange={(e) => setNewOwner(e.target.value)}
-              placeholder="0x… Adresse des neuen Mitglieds"
-              disabled={busy}
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors flex-shrink-0"
-            >
-              {busy ? "…" : "Hinzufügen"}
-            </button>
-          </form>
-          <p className="text-xs text-muted-foreground mt-2">
-            Der Vorschlag muss anschließend unter „Auszahlungen" freigegeben werden.
-          </p>
-        </div>
-      )}
+        <>
+          <div className="rounded-xl border border-border p-5">
+            <h3 className="mb-1 flex items-center gap-2 text-base font-semibold">
+              <UserPlus className="h-4 w-4 text-[#00498B]" /> Mitglied hinzufügen
+            </h3>
+            <p className="mb-4 text-sm text-muted-foreground">Die Adresse wird als neuer Mitsignierer vorgeschlagen.</p>
+            <form onSubmit={addOwner} className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={newOwner}
+                onChange={(e) => setNewOwner(e.target.value)}
+                placeholder="0x… Adresse"
+                disabled={busy}
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="shrink-0 rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00366a] disabled:opacity-60"
+              >
+                {busy ? "…" : "Vorschlagen"}
+              </button>
+            </form>
+          </div>
 
-      {/* Change threshold — owners only */}
-      {isOwner && (
-        <div className="rounded-lg border border-border p-5">
-          <h3 className="text-base font-semibold mb-1">Freigabe-Schwelle ändern</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Aktuell: {data.threshold} von {data.owners.length} Unterschriften erforderlich.
-          </p>
-          <form onSubmit={handleChangeThreshold} className="flex gap-3">
-            <input
-              type="number"
-              min={1}
-              max={data.owners.length}
-              value={newThreshold}
-              onChange={(e) => setNewThreshold(e.target.value)}
-              placeholder={`1–${data.owners.length}`}
-              disabled={busy}
-              className="w-32 rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00366a] disabled:opacity-60 transition-colors"
-            >
-              {busy ? "…" : "Schwelle ändern"}
-            </button>
-          </form>
-          <p className="text-xs text-muted-foreground mt-2">
-            Wir empfehlen mindestens 2 von {data.owners.length} für höhere Sicherheit.
-          </p>
-        </div>
+          <div className="rounded-xl border border-border p-5">
+            <h3 className="mb-1 flex items-center gap-2 text-base font-semibold">
+              <ShieldCheck className="h-4 w-4 text-[#00498B]" /> Freigabe-Schwelle ändern
+            </h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Aktuell: {data.threshold} von {data.owners.length} Freigaben. Wir empfehlen mindestens 2.
+            </p>
+            <form onSubmit={changeThreshold} className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                max={data.owners.length}
+                value={newThreshold}
+                onChange={(e) => setNewThreshold(e.target.value)}
+                placeholder={`1–${data.owners.length}`}
+                disabled={busy}
+                className="w-28 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00498B] disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-md bg-[#00498B] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#00366a] disabled:opacity-60"
+              >
+                {busy ? "…" : "Schwelle ändern"}
+              </button>
+            </form>
+          </div>
+        </>
       )}
     </div>
+  );
+}
+
+function WalletTag({ isSmart }: { isSmart?: boolean }) {
+  if (isSmart === undefined) return null;
+  return isSmart ? (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#00498B]/20 bg-[#00498B]/5 px-2 py-0.5 text-[11px] font-medium text-[#00498B]">
+      <Sparkles className="h-3 w-3" /> Smart-Wallet
+    </span>
+  ) : (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+      <KeyRound className="h-3 w-3" /> Normale Wallet
+    </span>
   );
 }
