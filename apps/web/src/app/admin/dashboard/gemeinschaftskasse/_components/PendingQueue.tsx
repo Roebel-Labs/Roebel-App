@@ -40,6 +40,8 @@ export function PendingQueue({ refreshKey }: PendingQueueProps) {
 
   useEffect(() => {
     load();
+    const id = setInterval(load, 15000);
+    return () => clearInterval(id);
   }, [load, refreshKey]);
 
   if (loading) return <HistorySkeleton />;

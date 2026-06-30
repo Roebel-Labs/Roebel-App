@@ -272,7 +272,7 @@ export async function proposeMetaTx({
   metaTx: { to: string; value: string; data: string };
   account: Account;
   wallet?: Wallet;
-}): Promise<{ safeTxHash: string }> {
+}): Promise<{ safeTxHash: string; approvalTxHash?: string }> {
   const signer = await resolveSigner(account, wallet);
   if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
 
@@ -281,10 +281,25 @@ export async function proposeMetaTx({
     safeTransactionData: unknown;
   }>("/api/gemeinschaftskasse/prepare", { metaTx });
 
+  // Smart-account proposer: approve the hash on-chain, then propose with a
+  // pre-validated signature (off-chain ERC-1271 is rejected by this Safe).
+  if (signer.isSmart) {
+    const approvalTxHash = await approveHashOnChain({
+      safeTxHash,
+      account: signer.signingAccount,
+    });
+    await postJson("/api/gemeinschaftskasse/propose", {
+      safeTransactionData,
+      safeTxHash,
+      ownerAddress: signer.ownerAddress,
+      mode: "prevalidated",
+    });
+    return { safeTxHash, approvalTxHash };
+  }
+
   const inner = await signer.signingAccount.signMessage({
     message: { raw: safeTxHash as `0x${string}` },
   });
-
   await postJson("/api/gemeinschaftskasse/propose", {
     safeTransactionData,
     safeTxHash,
@@ -292,7 +307,6 @@ export async function proposeMetaTx({
     ownerAddress: signer.ownerAddress,
     isSmart: signer.isSmart,
   });
-
   return { safeTxHash };
 }
 
@@ -361,6 +375,47 @@ export async function confirmTx({
     inner,
     ownerAddress: signer.ownerAddress,
     isSmart: signer.isSmart,
+  });
+  return undefined;
+}
+
+/**
+ * Co-signs a pending Safe message (app signature-request).
+ *  - Smart-account owner → on-chain approveHash(messageHash) (same robust path as txs).
+ *  - EOA owner           → off-chain ECDSA signature.
+ * Returns the on-chain approveHash tx hash for smart accounts, else undefined.
+ */
+export async function confirmMessage({
+  messageHash,
+  account,
+  wallet,
+}: {
+  messageHash: string;
+  account: Account;
+  wallet?: Wallet;
+}): Promise<string | undefined> {
+  const signer = await resolveSigner(account, wallet);
+  if (!signer) throw new Error("Du bist kein Mitsignierer dieser Kasse.");
+  if (signer.isSmart) {
+    const approvalTxHash = await approveHashOnChain({
+      safeTxHash: messageHash,
+      account: signer.signingAccount,
+    });
+    await postJson("/api/gemeinschaftskasse/confirm-message", {
+      messageHash,
+      ownerAddress: signer.ownerAddress,
+      mode: "prevalidated",
+    });
+    return approvalTxHash;
+  }
+  const inner = await signer.signingAccount.signMessage({
+    message: { raw: messageHash as `0x${string}` },
+  });
+  await postJson("/api/gemeinschaftskasse/confirm-message", {
+    messageHash,
+    inner,
+    ownerAddress: signer.ownerAddress,
+    isSmart: false,
   });
   return undefined;
 }

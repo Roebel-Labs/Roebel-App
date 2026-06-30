@@ -277,18 +277,21 @@ export async function getPendingMessages(): Promise<MessageView[]> {
 /**
  * Signs a pending Safe message and submits the signature to the
  * Safe Transaction Service via addMessageSignature(messageHash, signature).
+ * Accepts the prevalidated path for smart-account owners who approved on-chain.
  */
 export async function addMessageConfirmation({
   messageHash,
   inner,
   ownerAddress,
   isSmart,
+  prevalidated,
 }: {
   messageHash: string;
-  inner: string;
+  inner?: string;
   ownerAddress: string;
-  isSmart: boolean;
+  isSmart?: boolean;
+  prevalidated?: boolean;
 }): Promise<void> {
-  const signature = await assembleSenderSignature({ inner, ownerAddress, isSmart });
+  const signature = await assembleSenderSignature({ inner, ownerAddress, isSmart, prevalidated });
   await getApiKit().addMessageSignature(messageHash, signature);
 }

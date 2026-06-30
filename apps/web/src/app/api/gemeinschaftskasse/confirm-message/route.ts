@@ -8,11 +8,14 @@ export async function POST(req: Request) {
   const denied = await requireAdmin();
   if (denied) return denied;
   try {
-    const { messageHash, inner, ownerAddress, isSmart } = await req.json();
-    if (!messageHash || !inner || !ownerAddress) {
+    const { messageHash, inner, ownerAddress, isSmart, mode } = await req.json();
+    if (!messageHash || !ownerAddress) {
       return NextResponse.json({ error: "Ungültige Anfrage" }, { status: 400 });
     }
-    await addMessageConfirmation({ messageHash, inner, ownerAddress, isSmart });
+    if (!inner && mode !== "prevalidated") {
+      return NextResponse.json({ error: "Ungültige Anfrage: inner oder mode=prevalidated erforderlich" }, { status: 400 });
+    }
+    await addMessageConfirmation({ messageHash, inner, ownerAddress, isSmart, prevalidated: mode === "prevalidated" });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return jsonError(e);
