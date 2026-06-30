@@ -29,6 +29,7 @@ export interface OwnerView {
   name: string;
   short: string;
   isYou?: boolean;
+  isSmart?: boolean; // contract account (Smart-Wallet) vs. EOA (normale Wallet)
   avatarUrl: string | null;
   username: string | null;
   verified: boolean;
@@ -46,6 +47,17 @@ export interface AssetHolding {
 }
 
 export interface TxSigner { address: string; name: string; avatarUrl: string | null }
+
+export interface MessageView {
+  messageHash: string;
+  app: string;
+  text: string;
+  confirmations: number;
+  required: number;
+  signers: TxSigner[];
+  date: string | null;
+  fullySigned: boolean;
+}
 
 export type TxCategory =
   | "auszahlung"

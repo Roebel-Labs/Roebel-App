@@ -17,6 +17,8 @@ import Safe, {
 import { encodeFunctionData, getAddress } from "viem";
 import { getApiKit } from "./api-kit";
 import { GK_SAFE, SAFE_ABI } from "./constants";
+import type { MessageView, TxSigner } from "./constants";
+import { resolveCitizenProfiles } from "./citizens";
 import { gnosisClient } from "@/lib/muenzen/gnosis";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -75,11 +77,19 @@ export async function assembleSenderSignature({
   inner,
   ownerAddress,
   isSmart,
+  prevalidated,
 }: {
-  inner: string;
+  inner?: string;
   ownerAddress: string;
-  isSmart: boolean;
+  isSmart?: boolean;
+  prevalidated?: boolean;
 }): Promise<string> {
+  // Smart-account owners approve the hash on-chain (approveHash) and submit a
+  // pre-validated signature; the off-chain ERC-1271 path is rejected by this
+  // Safe version, so this is the working path for a contract owner.
+  if (prevalidated) {
+    return buildSignatureBytes([preValidatedSignature(ownerAddress)]);
+  }
   if (isSmart) {
     // `inner` is the smart account's raw ECDSA signature, validated by its own
     // ERC-1271 isValidSignature — it is NOT itself a contract signature. Marking
@@ -87,12 +97,12 @@ export async function assembleSenderSignature({
     // (259 bytes of nested owner/offset/length) so the Safe Transaction Service
     // rejected it as "... is not valid". Plain inner → correct 162-byte layout.
     const contractSig = await buildContractSignature(
-      [new EthSafeSignature(ownerAddress, inner)],
+      [new EthSafeSignature(ownerAddress, inner ?? "0x")],
       ownerAddress,
     );
     return buildSignatureBytes([contractSig]);
   }
-  return buildSignatureBytes([new EthSafeSignature(ownerAddress, inner)]);
+  return buildSignatureBytes([new EthSafeSignature(ownerAddress, inner ?? "0x")]);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,4 +188,107 @@ export async function encodeExecution(
     ],
   });
   return { to: GK_SAFE, data };
+}
+
+// ---------------------------------------------------------------------------
+// appNameFromOrigin
+// ---------------------------------------------------------------------------
+
+/** Derives a friendly app name from a Safe message `origin` field (URL string or JSON). */
+function appNameFromOrigin(origin: unknown): string {
+  if (!origin || typeof origin !== "string") return "App";
+  try {
+    if (origin.startsWith("{")) {
+      const o = JSON.parse(origin);
+      if (o?.name) return String(o.name);
+      if (o?.url) origin = String(o.url);
+    }
+    const host = new URL(origin as string).hostname.replace(/^www\./, "");
+    const label = host.split(".")[0] || host;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  } catch {
+    return "App";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// getPendingMessages
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches pending Safe off-chain messages (EIP-191/EIP-712 signature requests)
+ * from the Safe Transaction Service and resolves signer profiles.
+ *
+ * Note: `getMessages` returns ALL messages (confirmed + pending). Only the
+ * caller/UI decides whether to filter by `fullySigned`.
+ *
+ * Confirmed api-kit v5 shapes:
+ *   - getMessages(safeAddress) → { count, next, previous, results: SafeMessage[] }
+ *   - SafeMessage: { messageHash, message (string | EIP712TypedData), origin?, created, confirmations: SafeMessageConfirmation[] }
+ *   - SafeMessageConfirmation: { created, modified, owner, signature, signatureType }
+ *   - getSafeInfo(safeAddress) → { threshold: number, ... }
+ *   - addMessageSignature(messageHash, signature) → Promise<void>
+ */
+export async function getPendingMessages(): Promise<MessageView[]> {
+  const kit = getApiKit();
+  const [res, info] = await Promise.all([
+    kit.getMessages(GK_SAFE),
+    kit.getSafeInfo(GK_SAFE),
+  ]);
+  const required = Number(info.threshold);
+  const list = (res.results ?? []) as any[];
+
+  // Resolve all confirmation owners to citizen profiles in one batch.
+  const owners = new Set<string>();
+  for (const m of list) {
+    for (const c of m.confirmations ?? []) {
+      if (c.owner) owners.add(c.owner);
+    }
+  }
+  const profiles = await resolveCitizenProfiles([...owners]);
+
+  return list.map((m): MessageView => {
+    const confirmationCount = m.confirmations?.length ?? 0;
+    const signers: TxSigner[] = (m.confirmations ?? []).map((c: any) => {
+      const p = profiles.get((c.owner ?? "").toLowerCase());
+      return {
+        address: c.owner,
+        name: p?.name ?? "Mitsignierer",
+        avatarUrl: p?.avatarUrl ?? null,
+      };
+    });
+    return {
+      messageHash: m.messageHash,
+      app: appNameFromOrigin(m.origin),
+      text: typeof m.message === "string" ? m.message : "Strukturierte Signatur-Anfrage",
+      confirmations: confirmationCount,
+      required,
+      signers,
+      date: m.created ?? null,
+      fullySigned: confirmationCount >= required,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// addMessageConfirmation
+// ---------------------------------------------------------------------------
+
+/**
+ * Signs a pending Safe message and submits the signature to the
+ * Safe Transaction Service via addMessageSignature(messageHash, signature).
+ */
+export async function addMessageConfirmation({
+  messageHash,
+  inner,
+  ownerAddress,
+  isSmart,
+}: {
+  messageHash: string;
+  inner: string;
+  ownerAddress: string;
+  isSmart: boolean;
+}): Promise<void> {
+  const signature = await assembleSenderSignature({ inner, ownerAddress, isSmart });
+  await getApiKit().addMessageSignature(messageHash, signature);
 }
