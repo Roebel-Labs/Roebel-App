@@ -25,6 +25,7 @@ import { decode } from 'base64-arraybuffer';
 import Markdown from 'react-native-markdown-display';
 import { supabase } from '@/lib/supabase';
 import { geocodeLocation } from '@/lib/utils/geocoding';
+import { formatDate } from '@/lib/utils';
 import PencilIcon from '@/assets/icons/pencil.svg';
 import FlyerIcon from '@/assets/icons/flyer.svg';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
@@ -33,6 +34,25 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 
+// Structured event data used to render the pre-submit recap card.
+interface EventRecapData {
+  title?: string;
+  date?: string;
+  dates?: string[];
+  is_recurring?: boolean;
+  time?: string;
+  end_time?: string;
+  location?: string;
+  category?: string;
+  ticket_price?: number;
+  max_attendees?: number;
+  website_url?: string;
+  organizer_name?: string;
+  organizer_email?: string;
+  organizer_phone?: string;
+  image_url?: string | null;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -40,6 +60,7 @@ interface Message {
   imageUrl?: string;
   localUri?: string;
   isLoading?: boolean;
+  eventRecap?: EventRecapData;
 }
 
 function buildSystemPrompt(params: {
@@ -91,10 +112,13 @@ Verwende diese Daten direkt beim Aufruf des prepare_event_submission Tools.
 
 Stelle die Fragen einzeln und natürlich. Bestätige die Eingaben des Nutzers.
 
-**WICHTIG:** Wenn ALLE Pflichtfelder gesammelt wurden:
-1. Rufe SOFORT das prepare_event_submission Tool auf mit allen gesammelten Daten - dies zeigt dem Nutzer automatisch den Einreichen-Button
-2. Fasse dann die gesammelten Informationen übersichtlich zusammen (inkl. Hinweis auf hochgeladenes Bild falls vorhanden)
-3. Sage dem Nutzer: "Wische nach oben um dein Event einzureichen!"
+**WICHTIG – Ablauf zum Abschluss:**
+1. Wenn ALLE Pflichtfelder gesammelt wurden, rufe das prepare_event_submission Tool mit allen gesammelten Daten auf. Dies zeigt dem Nutzer AUTOMATISCH eine übersichtliche Zusammenfassung ("Recap-Karte") mit allen Angaben.
+2. Frage danach nur kurz: "Passt alles so? Antworte mit 'Ja' zum Einsenden – oder sag mir, was ich ändern soll." Fasse die Daten NICHT zusätzlich als Text zusammen – die Recap-Karte übernimmt das.
+3. Wenn der Nutzer eine Änderung wünscht, übernimm die neuen Werte und rufe prepare_event_submission ERNEUT mit den aktualisierten Daten auf (die Recap-Karte aktualisiert sich).
+4. Wenn der Nutzer bestätigt (z. B. "Ja", "passt", "senden", "einsenden", "sieht gut aus"), rufe das confirm_event_submission Tool auf. Danach erscheint für den Nutzer die Wisch-Geste zum finalen Einsenden.
+
+Rufe confirm_event_submission NIEMALS auf, bevor die Recap-Karte gezeigt und vom Nutzer bestätigt wurde.
 
 Antworte immer auf Deutsch und sei freundlich und hilfsbereit.`;
 }
@@ -103,7 +127,7 @@ Antworte immer auf Deutsch und sei freundlich und hilfsbereit.`;
 const TOOLS = [
   {
     name: 'prepare_event_submission',
-    description: 'Call this when you have collected ALL required fields (title, date, location, organizer_name, organizer_email). This will show the submit button to the user so they can swipe up to submit. Call this BEFORE showing the summary.',
+    description: 'Call this when you have collected ALL required fields (title, date, location, organizer_name, organizer_email), and again whenever the user requests a change. This renders a structured recap card of the event for the user to review. It does NOT submit — after calling it, ask the user to confirm.',
     input_schema: {
       type: 'object',
       properties: {
@@ -135,6 +159,14 @@ const TOOLS = [
         max_attendees: { type: 'number', description: 'Maximum number of attendees (optional)' },
       },
       required: ['title', 'location', 'organizer_name', 'organizer_email'],
+    },
+  },
+  {
+    name: 'confirm_event_submission',
+    description: 'Call this ONLY after prepare_event_submission has been called AND the user has confirmed the recap is correct (e.g. "Ja", "passt", "senden", "einsenden"). This reveals the final swipe-to-submit control to the user. Never call it before the recap has been shown and confirmed.',
+    input_schema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];
@@ -266,6 +298,92 @@ function MessageBubbleInner({
     </View>
   );
 }
+
+// Structured, highlighted recap of the collected event data, shown before
+// the user confirms and the swipe-to-submit control appears.
+function EventRecapCard({ data }: { data: EventRecapData }) {
+  const { colors } = useTheme();
+
+  const stripSeconds = (t?: string) => (t ? t.slice(0, 5) : '');
+
+  const rows: { label: string; value: string }[] = [];
+  if (data.title) rows.push({ label: 'Titel', value: data.title });
+
+  const isRecurring = data.is_recurring || (data.dates && data.dates.length > 1);
+  if (isRecurring && data.dates && data.dates.length > 0) {
+    rows.push({ label: 'Termine', value: data.dates.map((d) => formatDate(d)).join(', ') });
+  } else if (data.date) {
+    rows.push({ label: 'Datum', value: formatDate(data.date) });
+  }
+
+  if (data.time) {
+    rows.push({
+      label: 'Zeit',
+      value: data.end_time
+        ? `${stripSeconds(data.time)}–${stripSeconds(data.end_time)}`
+        : stripSeconds(data.time),
+    });
+  }
+  if (data.location) rows.push({ label: 'Ort', value: data.location });
+  if (data.category) rows.push({ label: 'Kategorie', value: data.category });
+  if (typeof data.ticket_price === 'number') {
+    rows.push({ label: 'Preis', value: data.ticket_price > 0 ? `${data.ticket_price} €` : 'kostenlos' });
+  }
+  if (typeof data.max_attendees === 'number') {
+    rows.push({ label: 'Max. Teilnehmer', value: String(data.max_attendees) });
+  }
+  if (data.website_url) rows.push({ label: 'Webseite', value: data.website_url });
+  if (data.organizer_name) rows.push({ label: 'Veranstalter', value: data.organizer_name });
+  if (data.organizer_email) rows.push({ label: 'E-Mail', value: data.organizer_email });
+  if (data.organizer_phone) rows.push({ label: 'Telefon', value: data.organizer_phone });
+  if (data.image_url) rows.push({ label: 'Bild', value: 'angehängt' });
+
+  return (
+    <View style={[recapStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Text style={[recapStyles.header, { color: colors.primary }]}>Deine Veranstaltung</Text>
+      <View style={[recapStyles.divider, { backgroundColor: colors.border }]} />
+      {rows.map((row) => (
+        <View key={row.label} style={recapStyles.row}>
+          <Text style={[recapStyles.label, { color: colors.textSecondary }]}>{row.label}</Text>
+          <Text style={[recapStyles.value, { color: colors.textPrimary }]}>{row.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const recapStyles = StyleSheet.create({
+  card: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  header: {
+    fontSize: 15,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
+  },
+  divider: {
+    height: 1,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    marginTop: 8,
+    alignItems: 'flex-start',
+  },
+  label: {
+    width: 104,
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+  },
+  value: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+  },
+});
 
 // Typing indicator component with animated dots
 function TypingIndicator() {
@@ -851,37 +969,59 @@ export function MinimalAIChat() {
       // Check if Claude wants to use a tool
       const toolUseBlock = response.content.find((block: any) => block.type === 'tool_use');
 
+      // The AI's text (summary / question) accompanying this response.
+      const assistantContent = response.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => ('text' in block ? block.text : ''))
+        .join('\n');
+
       if (toolUseBlock && toolUseBlock.name === 'prepare_event_submission') {
         const eventData = toolUseBlock.input;
         console.log('Event data extracted via tool:', eventData);
 
-        // Store event data and show ready-to-submit state
+        // Store event data and render the recap card. Do NOT enable the
+        // swipe-to-submit yet — the user must confirm the recap first.
         const imageUrlToSubmit = uploadedImageUrl || lastUploadedImageUrl;
-        setPendingEventData({ ...eventData, image_url: imageUrlToSubmit });
-        setIsReadyToSubmit(true);
-        startIconBounceAnimation();
+        const recap: EventRecapData = { ...eventData, image_url: imageUrlToSubmit };
+        setPendingEventData(recap);
+        // Re-preparing after a correction: hide any previously shown swipe control.
+        setIsReadyToSubmit(false);
+        stopIconBounceAnimation();
 
-        // Get the text content from the response (AI's summary)
-        const assistantContent = response.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => ('text' in block ? block.text : ''))
-          .join('\n');
-
-        const summaryMessage: Message = {
-          id: `summary-${Date.now()}`,
+        const recapMessage: Message = {
+          id: `recap-${Date.now()}`,
           role: 'assistant',
-          content: assistantContent || 'Alle Daten wurden erfasst. Wische nach oben, um dein Event einzureichen!',
+          content:
+            assistantContent ||
+            'Passt alles so? Antworte mit "Ja" zum Einsenden – oder sag mir, was ich ändern soll.',
+          eventRecap: recap,
         };
 
         setMessages((prev) => prev.map(msg =>
           msg.id === userMessageId ? { ...msg, isLoading: false } : msg
-        ).concat([summaryMessage]));
-      } else {
-        const assistantContent = response.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => ('text' in block ? block.text : ''))
-          .join('\n');
+        ).concat([recapMessage]));
+      } else if (toolUseBlock && toolUseBlock.name === 'confirm_event_submission') {
+        // Only reveal the swipe-to-submit if we actually have prepared data.
+        const hasPreparedData = !!pendingEventDataRef.current;
+        if (hasPreparedData) {
+          setIsReadyToSubmit(true);
+          startIconBounceAnimation();
+        }
 
+        const confirmMessage: Message = {
+          id: `confirm-${Date.now()}`,
+          role: 'assistant',
+          content:
+            assistantContent ||
+            (hasPreparedData
+              ? 'Super! Wische nach oben, um dein Event einzureichen.'
+              : 'Mir fehlen noch ein paar Angaben, bevor wir einsenden können.'),
+        };
+
+        setMessages((prev) => prev.map(msg =>
+          msg.id === userMessageId ? { ...msg, isLoading: false } : msg
+        ).concat([confirmMessage]));
+      } else {
         const assistantMessage: Message = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
@@ -947,16 +1087,25 @@ export function MinimalAIChat() {
                 contentContainerStyle={styles.messagesContent}
                 showsVerticalScrollIndicator={false}
               >
-                {messages.map((message) => (
-                  <MessageBubbleInner
-                    key={message.id}
-                    role={message.role}
-                    content={message.content}
-                    imageUrl={message.imageUrl}
-                    localUri={message.localUri}
-                    isLoading={message.isLoading}
-                  />
-                ))}
+                {messages.map((message) =>
+                  message.eventRecap ? (
+                    <View key={message.id}>
+                      <EventRecapCard data={message.eventRecap} />
+                      {message.content ? (
+                        <MessageBubbleInner role="assistant" content={message.content} />
+                      ) : null}
+                    </View>
+                  ) : (
+                    <MessageBubbleInner
+                      key={message.id}
+                      role={message.role}
+                      content={message.content}
+                      imageUrl={message.imageUrl}
+                      localUri={message.localUri}
+                      isLoading={message.isLoading}
+                    />
+                  )
+                )}
 
                 {isSubmittingEvent && (
                   <View style={styles.loadingContainer}>

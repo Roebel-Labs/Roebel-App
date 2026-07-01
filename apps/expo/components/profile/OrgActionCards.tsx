@@ -7,6 +7,7 @@ import { softShadow } from '@/lib/shadow';
 
 const ANZEIGE = require('../../assets/illustration/profile/05.png');
 const DIENSTLEISTUNG = require('../../assets/illustration/profile/06.png');
+const VERANSTALTUNG = require('../../assets/illustration/profile/04.png');
 const ADS_ILLUSTRATION = require('../../assets/illustration/profile/ads.png');
 const DASHBOARD_ILLUSTRATION = require('../../assets/illustration/profile/dashboard.png');
 
@@ -44,6 +45,11 @@ export default function OrgActionCards() {
         requireAuth(() =>
           router.push({ pathname: '/create-listing', params: { listingType: 'service' } } as any)
         ),
+    },
+    {
+      label: 'Veranstaltung\nerstellen',
+      icon: VERANSTALTUNG,
+      onPress: () => requireAuth(() => router.push('/submit-event' as any)),
     },
   ];
 
