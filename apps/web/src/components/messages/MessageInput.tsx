@@ -119,7 +119,7 @@ export function MessageInput({ onSend, disabled, initialValue }: MessageInputPro
         <button
           onClick={handleSend}
           disabled={!text.trim() || disabled || isSending}
-          className="flex-shrink-0 w-10 h-10 bg-foreground hover:bg-foreground disabled:bg-muted text-white rounded-full flex items-center justify-center transition-colors"
+          className="flex-shrink-0 w-10 h-10 bg-primary hover:bg-primary/90 disabled:bg-muted text-primary-foreground rounded-full flex items-center justify-center transition-colors"
         >
           {isSending ? (
             <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">

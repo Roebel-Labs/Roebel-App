@@ -72,13 +72,13 @@ export function ChatSheetPanel({ open }: ChatSheetPanelProps) {
             onClick={() => setActiveTab(tab.key)}
             className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${
               activeTab === tab.key
-                ? "text-foreground"
+                ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.label}
             {activeTab === tab.key && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
           </button>
         ))}

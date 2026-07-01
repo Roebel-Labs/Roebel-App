@@ -1,5 +1,7 @@
 "use client";
 
+import { isWalletLike } from "@/lib/messaging/display";
+
 interface ContactCardProps {
   name: string;
   profilePictureUrl: string | null;
@@ -23,7 +25,10 @@ export function ContactCard({
   onClick,
   isSelected,
 }: ContactCardProps) {
-  const displayName = name || fallbackLabel || "Unbekannt";
+  // Final safety net: never render a wallet address as a name, even if a
+  // caller passed one through.
+  const safeName = name && !isWalletLike(name) ? name : null;
+  const displayName = safeName || fallbackLabel || "Unbekannt";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   const timeLabel = lastMessageTime
@@ -78,7 +83,7 @@ export function ContactCard({
             </span>
           ) : null}
           {unreadCount && unreadCount > 0 ? (
-            <span className="flex-shrink-0 bg-foreground text-white text-[10px] font-medium rounded-full w-5 h-5 flex items-center justify-center">
+            <span className="flex-shrink-0 bg-primary text-primary-foreground text-[10px] font-medium rounded-full w-5 h-5 flex items-center justify-center">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           ) : null}

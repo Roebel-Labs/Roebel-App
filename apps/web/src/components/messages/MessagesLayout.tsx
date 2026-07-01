@@ -143,7 +143,7 @@ export function MessagesLayout({
             </p>
             <Link
               href="/"
-              className="inline-block bg-foreground hover:bg-foreground text-white px-5 py-2 rounded-md font-medium transition-colors text-sm"
+              className="inline-block bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2 rounded-md font-medium transition-colors text-sm"
             >
               Zur Startseite
             </Link>
@@ -188,13 +188,13 @@ export function MessagesLayout({
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${
                   activeTab === tab.key
-                    ? "text-foreground"
+                    ? "text-primary"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {tab.label}
                 {activeTab === tab.key && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
             ))}

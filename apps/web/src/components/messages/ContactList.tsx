@@ -5,6 +5,7 @@ import { useMessagingContext } from "./MessagingProvider";
 import { ContactCard } from "./ContactCard";
 import { EmptyState } from "./EmptyState";
 import { getOrCreateConversation } from "@/lib/messaging/api";
+import { safeDisplayName } from "@/lib/messaging/display";
 import { useState, useEffect, useRef } from "react";
 
 interface ContactListProps {
@@ -82,7 +83,7 @@ export function ContactList({ onSelectConversation }: ContactListProps) {
         {contacts.map((contact) => (
           <div key={contact.accountId} className="relative">
             <ContactCard
-              name={contact.name}
+              name={safeDisplayName(contact.name, contact.username)}
               profilePictureUrl={contact.profilePictureUrl}
               fallbackLabel={contact.isCitizen ? "Bürger" : "Mitglied"}
               isCitizen={contact.isCitizen}
@@ -90,7 +91,7 @@ export function ContactList({ onSelectConversation }: ContactListProps) {
             />
             {startingChat === contact.accountId && (
               <div className="absolute inset-0 bg-card/80 flex items-center justify-center rounded-lg">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900" />
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
               </div>
             )}
           </div>

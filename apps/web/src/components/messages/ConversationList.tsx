@@ -3,6 +3,7 @@
 import { ContactCard } from "./ContactCard";
 import { EmptyState } from "./EmptyState";
 import type { ConversationWithMeta } from "@/lib/messaging/types";
+import { parseListingInquiry, safeDisplayName } from "@/lib/messaging/display";
 
 interface ConversationListProps {
   conversations: ConversationWithMeta[];
@@ -13,14 +14,8 @@ interface ConversationListProps {
 
 function previewFor(message: string | null): string | null {
   if (!message) return null;
-  try {
-    const parsed = JSON.parse(message);
-    if (parsed?.type === "product_inquiry" && parsed.title) {
-      return `📦 ${parsed.title}`;
-    }
-  } catch {
-    // not JSON
-  }
+  const listing = parseListingInquiry(message);
+  if (listing) return `📦 ${listing.title}`;
   return message;
 }
 
@@ -61,7 +56,7 @@ export function ConversationList({
       {conversations.map((convo) => (
         <ContactCard
           key={convo.conversation.id}
-          name={convo.peer?.name || "Unbekannt"}
+          name={safeDisplayName(convo.peer?.name, convo.peer?.username)}
           profilePictureUrl={convo.peer?.avatarUrl ?? null}
           fallbackLabel={
             convo.peer?.username ? `@${convo.peer.username}` : null

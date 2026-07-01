@@ -3,39 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ShoppingBag } from "lucide-react";
+import { parseListingInquiry, formatListingPrice } from "@/lib/messaging/display";
 
 interface ChatBubbleProps {
   content: string;
   isOwn: boolean;
   timestamp: Date | null;
-}
-
-interface ProductInquiry {
-  type: "product_inquiry";
-  listingId: string;
-  title: string;
-  price: number;
-  priceType: string;
-  imageUrl?: string | null;
-  condition?: string;
-}
-
-function parseProductInquiry(content: string): ProductInquiry | null {
-  try {
-    const parsed = JSON.parse(content);
-    if (parsed?.type === "product_inquiry" && parsed.listingId) {
-      return parsed as ProductInquiry;
-    }
-  } catch {
-    // Not JSON
-  }
-  return null;
-}
-
-function formatProductPrice(price: number, priceType: string): string {
-  if (priceType === "free") return "Kostenlos";
-  if (priceType === "negotiable") return `${price.toFixed(2)} € VB`;
-  return `${price.toFixed(2)} €`;
 }
 
 export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
@@ -46,7 +19,7 @@ export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
       })
     : "";
 
-  const product = parseProductInquiry(content);
+  const product = parseListingInquiry(content);
 
   if (product) {
     return (
@@ -54,7 +27,7 @@ export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
         <div
           className={`max-w-[80%] sm:max-w-[70%] rounded-2xl overflow-hidden ${
             isOwn
-              ? "bg-foreground text-white rounded-br-md"
+              ? "bg-primary text-primary-foreground rounded-br-md"
               : "bg-muted text-foreground rounded-bl-md"
           }`}
         >
@@ -82,7 +55,7 @@ export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
               <p className="text-sm font-medium line-clamp-2">{product.title}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm font-bold">
-                  {formatProductPrice(product.price, product.priceType)}
+                  {formatListingPrice(product.price, product.priceType)}
                 </span>
                 {product.condition && (
                   <span className="text-[10px] opacity-70">
@@ -107,7 +80,7 @@ export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
       <div
         className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 ${
           isOwn
-            ? "bg-foreground text-white rounded-br-md"
+            ? "bg-primary text-primary-foreground rounded-br-md"
             : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
@@ -115,7 +88,7 @@ export function ChatBubble({ content, isOwn, timestamp }: ChatBubbleProps) {
         {timeLabel && (
           <p
             className={`text-[10px] mt-1 ${
-              isOwn ? "text-muted-foreground" : "text-muted-foreground"
+              isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
             }`}
           >
             {timeLabel}

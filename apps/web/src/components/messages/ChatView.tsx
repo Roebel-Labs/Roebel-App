@@ -7,6 +7,7 @@ import { ChatBubble } from "./ChatBubble";
 import { MessageInput } from "./MessageInput";
 import { ProductContextBanner } from "./ProductContextBanner";
 import { supabase } from "@/lib/supabase";
+import { safeDisplayName, parseListingInquiry } from "@/lib/messaging/display";
 
 interface ChatViewProps {
   conversationId: string;
@@ -74,7 +75,7 @@ export function ChatView({
 
         if (cancelled) return;
         setPeerInfo({
-          name: username || account.name,
+          name: safeDisplayName(account.name, username),
           avatarUrl: profilePicture ?? account.avatar_url,
           username,
         });
@@ -93,14 +94,8 @@ export function ChatView({
   const [showProductBanner, setShowProductBanner] = useState(true);
   const productContext = useMemo(() => {
     for (const msg of messages) {
-      try {
-        const parsed = JSON.parse(msg.content);
-        if (parsed?.type === "product_inquiry" && parsed.listingId) {
-          return parsed;
-        }
-      } catch {
-        // Not JSON
-      }
+      const listing = parseListingInquiry(msg.content);
+      if (listing) return listing;
     }
     return null;
   }, [messages]);
@@ -167,7 +162,7 @@ export function ChatView({
           price={productContext.price}
           priceType={productContext.priceType}
           imageUrl={productContext.imageUrl}
-          condition={productContext.condition}
+          condition={productContext.condition ?? undefined}
           onDismiss={() => setShowProductBanner(false)}
         />
       )}
@@ -175,7 +170,7 @@ export function ChatView({
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -202,21 +197,12 @@ export function ChatView({
           <>
             {messages.map((msg) => {
               const isOwn = msg.sender_account_id === activeAccountId;
-              let displayContent = msg.content;
-
-              try {
-                const parsed = JSON.parse(msg.content);
-                if (parsed?.type === "product_inquiry" && parsed.title) {
-                  displayContent = `Anfrage zu: ${parsed.title}`;
-                }
-              } catch {
-                // Not JSON
-              }
-
+              // Pass the raw content — ChatBubble renders a marketplace card for
+              // listing/product inquiries and plain text otherwise.
               return (
                 <ChatBubble
                   key={msg.id}
-                  content={displayContent}
+                  content={msg.content}
                   isOwn={isOwn}
                   timestamp={new Date(msg.created_at)}
                 />
