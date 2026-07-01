@@ -54,6 +54,7 @@ const publicClient = createPublicClient({ chain: gnosis, transport: http(GNOSIS_
 
 const hubAbi = [
   { type: "function", name: "isHuman", stateMutability: "view", inputs: [{ name: "h", type: "address" }], outputs: [{ type: "bool" }] },
+  { type: "function", name: "isTrusted", stateMutability: "view", inputs: [{ name: "_truster", type: "address" }, { name: "_trustee", type: "address" }], outputs: [{ type: "bool" }] },
 ] as const;
 
 /** Remaining InvitationFarm quota for an inviter (number of invites it may create). */
@@ -113,6 +114,16 @@ export async function getQuotaFunding(inviter: Address): Promise<QuotaFunding | 
 /** True once `addr` is a registered Circles human (skip — don't waste quota on it). */
 export async function isHuman(addr: Address): Promise<boolean> {
   return publicClient.readContract({ address: HUB, abi: hubAbi, functionName: "isHuman", args: [addr] });
+}
+
+/**
+ * True when `truster` already has a live trust edge to `trustee`. An invite IS a
+ * trust, so a citizen we already trust is "invited — awaiting registration", not
+ * "invitable". Re-trusting them is a no-op that wastes a self-fund slot (and can
+ * look like "nothing happened" in the host wallet), so the UI must distinguish it.
+ */
+export async function isTrusted(truster: Address, trustee: Address): Promise<boolean> {
+  return publicClient.readContract({ address: HUB, abi: hubAbi, functionName: "isTrusted", args: [truster, trustee] });
 }
 
 /** Shape the SDK's TransactionRequest[] for the miniapp host's sendTransactions(). */
