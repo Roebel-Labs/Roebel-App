@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
 import PostAuthorRow from './PostAuthorRow';
+import PostImageGrid from './PostImageGrid';
 import PostLinkedEventCard from './PostLinkedEventCard';
 import PostActions from './PostActions';
+import ImageZoomModal from '@/components/ImageZoomModal';
 
 type Props = {
   post: PostRecord;
@@ -26,6 +28,9 @@ export default function FeedExperienceCard({
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+
+  const mediaUrls = post.media_urls?.filter(Boolean) || [];
 
   const openEvent = () => {
     if (!post.linked_event_id) return;
@@ -39,43 +44,56 @@ export default function FeedExperienceCard({
   };
 
   return (
-    <Pressable
-      onPress={openEvent}
-      style={({ pressed }) => [
-        styles.container,
-        { backgroundColor: colors.background },
-        pressed && { backgroundColor: colors.pressedOverlay },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={
-        post.linked_event?.title
-          ? `Erlebnis bei ${post.linked_event.title} öffnen`
-          : 'Erlebnis öffnen'
-      }
-    >
-      <PostAuthorRow author={post.author} createdAt={post.created_at} onMore={onMore} />
+    <>
+      <Pressable
+        onPress={openEvent}
+        style={({ pressed }) => [
+          styles.container,
+          { backgroundColor: colors.background },
+          pressed && { backgroundColor: colors.pressedOverlay },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={
+          post.linked_event?.title
+            ? `Erlebnis bei ${post.linked_event.title} öffnen`
+            : 'Erlebnis öffnen'
+        }
+      >
+        <PostAuthorRow author={post.author} createdAt={post.created_at} onMore={onMore} />
 
-      {!!post.content && (
-        <Text
-          style={[styles.content, { color: colors.textPrimary }]}
-          numberOfLines={2}
-        >
-          {post.content}
-        </Text>
-      )}
+        {post.content?.trim() ? (
+          <Text
+            style={[styles.content, { color: colors.textPrimary }]}
+            numberOfLines={2}
+          >
+            {post.content}
+          </Text>
+        ) : null}
 
-      {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+        {mediaUrls.length > 0 && (
+          <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
+        )}
 
-      <PostActions
-        likesCount={displayLikeCount}
-        commentsCount={post.comments_count}
-        isLiked={isLiked}
-        onLike={onLike}
-        onComment={openEvent}
-        onShare={onShare}
-        iconOnly
+        {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+
+        <PostActions
+          likesCount={displayLikeCount}
+          commentsCount={post.comments_count}
+          isLiked={isLiked}
+          onLike={onLike}
+          onComment={openEvent}
+          onShare={onShare}
+          iconOnly
+        />
+      </Pressable>
+
+      <ImageZoomModal
+        visible={!!zoomImageUrl}
+        imageUrl={zoomImageUrl || ''}
+        images={mediaUrls}
+        onClose={() => setZoomImageUrl(null)}
       />
-    </Pressable>
+    </>
   );
 }
 
