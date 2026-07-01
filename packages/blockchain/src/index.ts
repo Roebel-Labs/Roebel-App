@@ -26,7 +26,7 @@ export const CONTRACTS = {
   maciVerifier: "0xC95359cF5d7391cD239c9476393706a8132406dc",
   maciVkRegistry: "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
   maciGatekeeper: "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277",
-  maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
+  maciVoiceCreditProxy: "0x30C912fdc68d9c78882E1F118f1fD932Cd80eAbF",
 
   // Archived Base Mainnet stack (kept for historical proposal/revocation lookups)
   // Pre-Gnosis-v2 active set (Base, clean-slate rotation 2026-06-08).
