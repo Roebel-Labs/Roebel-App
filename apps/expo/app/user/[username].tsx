@@ -15,10 +15,6 @@ import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { fetchEquippedRewards } from '@/lib/supabase-rewards';
 import type { LootboxReward, UserLootboxReward } from '@/lib/supabase-rewards';
-import { fetchRoebelPointsCard } from '@/lib/supabase-roebel-points';
-import type { RoebelPointsCardRecord } from '@/lib/supabase-roebel-points';
-import { getRoebelTalerBalance, formatTaler } from '@/lib/roebel-taler';
-import { countUserVotes } from '@/lib/supabase-votes';
 import TierBadge from '@/components/RoleBadge';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
@@ -54,9 +50,6 @@ export default function PublicUserProfileScreen() {
   const [profile, setProfile] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
-  const [pointsCard, setPointsCard] = useState<RoebelPointsCardRecord | null>(null);
-  const [muenzenBalance, setMuenzenBalance] = useState<number>(0);
-  const [voteCount, setVoteCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
   const loadProfile = useCallback(
@@ -75,23 +68,12 @@ export default function PublicUserProfileScreen() {
           console.error('Error loading user:', error);
           setProfile(null);
           setEquipped([]);
-          setPointsCard(null);
-          setVoteCount(0);
-          setMuenzenBalance(0);
         } else {
           const userRow = data as UserRecord;
           setProfile(userRow);
-          const [rewards, card, votes, muenzen] = await Promise.all([
-            fetchEquippedRewards(userRow.wallet_address),
-            fetchRoebelPointsCard(userRow.wallet_address),
-            countUserVotes(userRow.wallet_address),
-            getRoebelTalerBalance(userRow.wallet_address).catch(() => 0n),
-          ]);
+          const rewards = await fetchEquippedRewards(userRow.wallet_address);
           if (!signal.cancelled) {
             setEquipped(rewards);
-            setPointsCard(card);
-            setVoteCount(votes);
-            setMuenzenBalance(Number(formatTaler(muenzen)));
           }
         }
         if (!signal.cancelled) setLoading(false);
@@ -240,30 +222,6 @@ export default function PublicUserProfileScreen() {
               </Text>
             </View>
           </View>
-
-          {/* Stats */}
-          {isFieldVisible(privacy, 'gamification_points') && (
-            <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
-              <View style={styles.stat}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {Math.floor(muenzenBalance).toLocaleString('de-DE')}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Münzen</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {voteCount}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Abstimmungen</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {pointsCard?.streak_days ?? 0}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>Streak</Text>
-              </View>
-            </View>
-          )}
 
           {/* Interests / Vereine pills */}
           {isFieldVisible(privacy, 'interests') && interests.length > 0 && (
@@ -429,27 +387,6 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    marginTop: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  stat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 2,
   },
   pillsRow: {
     flexDirection: 'row',
