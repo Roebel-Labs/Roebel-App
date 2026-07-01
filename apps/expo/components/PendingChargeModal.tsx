@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { formatEuros } from '@/lib/format-currency';
 import {
@@ -33,6 +34,7 @@ interface Props {
 
 export default function PendingChargeModal({ charge, walletAddress, onResolved }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
@@ -95,7 +97,12 @@ export default function PendingChargeModal({ charge, walletAddress, onResolved }
   return (
     <Modal visible transparent animationType="fade" onRequestClose={handleDecline}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) },
+          ]}
+        >
           <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Zahlungsanfrage</Text>
           <Text style={[styles.partnerName, { color: colors.textPrimary }]} numberOfLines={2}>
             {charge.partner_name ?? 'Unbekannter Partner'}

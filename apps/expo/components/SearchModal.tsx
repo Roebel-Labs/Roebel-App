@@ -354,7 +354,7 @@ export default function SearchModal({ visible, onClose, onNavigate }: Props) {
       }}
     >
       <SafeAreaView
-        edges={['top']}
+        edges={['top', 'bottom']}
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         {/* Header */}

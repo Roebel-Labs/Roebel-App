@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Platform } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
-import { BusinessRecord } from '@/lib/types';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
+import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { useAccount } from '@/context/AccountContext';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useUser } from '@/context/UserContext';
@@ -60,11 +59,10 @@ export default function ProfileScreen() {
   const { hasCitizenNFT, hasAttesterNFT, hasAnyNFT, activePendingRequest, userRequests, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, recentOtherAccounts, switchAccount, refreshAccounts } = useAccount();
-  const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
-  const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
+  const { isBusinessOwner, businesses } = useIsBusinessOwner();
+  const businessRecord = businesses.find(b => b.status === 'published') || businesses[0] || null;
   const userBusiness = businessRecord;
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
@@ -80,15 +78,6 @@ export default function ProfileScreen() {
       setShowLoginDrawer(false);
     }
   }, [isConnected]);
-
-  // Fetch business data from businesses table (until business→account migration)
-  useEffect(() => {
-    if (user?.wallet_address) {
-      fetchBusinessesByOwner(user.wallet_address).then(businesses => {
-        setBusinessRecord(businesses.find(b => b.status === 'published') || businesses[0] || null);
-      });
-    }
-  }, [user?.wallet_address]);
 
   const handleDisconnect = async () => {
     if (wallet) {
@@ -565,7 +554,7 @@ const handleRefresh = async () => {
             setShowAccountSheet(false);
             if (wallet) disconnect(wallet);
           }}
-          style={[accountSheetStyles.logoutButton, { paddingBottom: 14 + insets.bottom }]}
+          style={accountSheetStyles.logoutButton}
         >
           <Text style={accountSheetStyles.logoutText}>Ausloggen</Text>
         </Pressable>

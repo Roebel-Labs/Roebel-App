@@ -7,6 +7,7 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -23,6 +24,7 @@ export default function NotificationPromptDrawer({
   onDismiss,
 }: NotificationPromptDrawerProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
@@ -33,7 +35,12 @@ export default function NotificationPromptDrawer({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onDismiss} />
-        <View style={[styles.drawer, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.drawer,
+            { backgroundColor: colors.background, paddingBottom: Math.max(40, insets.bottom) },
+          ]}
+        >
           <View style={[styles.handle, { backgroundColor: colors.borderSecondary }]} />
 
           <Text style={[styles.title, { color: colors.textPrimary }]}>Pushnachrichten</Text>

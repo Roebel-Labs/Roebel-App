@@ -21,7 +21,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import {
   createRoebelCardCheckout,
@@ -66,7 +65,6 @@ export default function TopUpBottomSheet({
   onStripeDismissed,
 }: Props) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('amount');
   const [selected, setSelected] = useState<Denomination | null>(
@@ -191,14 +189,8 @@ export default function TopUpBottomSheet({
         style={styles.kavContainer}
         keyboardVerticalOffset={0}
       >
-        <View
-          style={[
-            styles.sheetInner,
-            {
-              paddingBottom: Math.max(8, insets.bottom),
-            },
-          ]}
-        >
+        {/* BottomDrawer already reserves the bottom safe-area inset. */}
+        <View style={styles.sheetInner}>
           <View style={styles.headerRow}>
               {step === 'verein' ? (
                 <Pressable

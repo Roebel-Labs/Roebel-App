@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
@@ -10,7 +10,6 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 export default function OrgSettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount } = useAccount();
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -106,7 +105,7 @@ export default function OrgSettingsScreen() {
 
           <Pressable
             onPress={() => !isDeleting && setShowConfirm(false)}
-            style={[styles.confirmCancel, { paddingBottom: 12 + insets.bottom }]}
+            style={[styles.confirmCancel, { paddingBottom: 12 }]}
           >
             <Text style={[styles.confirmCancelText, { color: colors.textSecondary }]}>Abbrechen</Text>
           </Pressable>

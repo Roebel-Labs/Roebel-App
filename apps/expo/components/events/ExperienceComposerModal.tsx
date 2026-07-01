@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,7 @@ import {
   BackHandler,
   StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import ExperienceInput, { type ExperienceInputHandle } from './ExperienceInput';
 import type { EventExperience } from '@/lib/types/feed';
@@ -31,7 +32,23 @@ export default function ExperienceComposerModal({
   onError,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const inputRef = useRef<ExperienceInputHandle>(null);
+
+  // Keyboard covers the home indicator while open, so only reserve the bottom
+  // safe-area inset once it's dismissed and the dock rests on the screen edge.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  const dockPaddingBottom = keyboardVisible ? 8 : Math.max(8, insets.bottom);
 
   // Android: single hardware-back press should dismiss the overlay (and any
   // open keyboard) rather than the system's default "first hide keyboard,
@@ -74,7 +91,7 @@ export default function ExperienceComposerModal({
         style={styles.kbWrap}
         pointerEvents="box-none"
       >
-        <View style={[styles.inputDock, { backgroundColor: colors.background }]}>
+        <View style={[styles.inputDock, { backgroundColor: colors.background, paddingBottom: dockPaddingBottom }]}>
           <ExperienceInput
             ref={inputRef}
             eventId={eventId}

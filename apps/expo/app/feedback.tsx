@@ -10,7 +10,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
@@ -31,6 +31,7 @@ const FEEDBACK_TYPES = [
 export default function FeedbackScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const account = useActiveAccount();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -258,7 +259,7 @@ export default function FeedbackScreen() {
         onRequestClose={() => setShowTypeModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.typeModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.typeModal, { backgroundColor: colors.background, paddingBottom: Math.max(40, insets.bottom) }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Feedback-Art auswählen</Text>
             <ScrollView style={styles.typeList}>
               {FEEDBACK_TYPES.map((type) => (

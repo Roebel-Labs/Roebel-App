@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-native';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight } from '@/components/Icons';
 import EventCard from '@/components/EventCard';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +20,7 @@ export default function CalendarModal({ visible, onClose }: Props) {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   // Fetch events when modal opens
   useEffect(() => {
@@ -157,7 +159,11 @@ export default function CalendarModal({ visible, onClose }: Props) {
           <View style={styles.closeButton} />
         </View>
 
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Calendar */}
           <View style={[styles.calendarContainer, { backgroundColor: colors.background }]}>
             {/* Month navigation */}

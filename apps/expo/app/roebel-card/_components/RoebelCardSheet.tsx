@@ -13,6 +13,7 @@ import Animated, {
   SharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import { formatEuros } from '@/lib/format-currency';
@@ -53,6 +54,7 @@ export default function RoebelCardSheet({
   onMeasure,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -78,7 +80,10 @@ export default function RoebelCardSheet({
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(48, insets.bottom) },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

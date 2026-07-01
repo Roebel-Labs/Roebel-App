@@ -8,6 +8,7 @@ import {
   PanResponder,
   Pressable,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -37,6 +38,7 @@ export default function BottomDrawer({
   maxSnapPoint = 0.92,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const lastGestureDy = useRef(0);
 
@@ -139,8 +141,14 @@ export default function BottomDrawer({
 
           {/* Content — flex: 1 for fixed snap points fills the available
               space; for dynamic sizing, shrink so sticky children stay
-              inside the max-height cap. */}
-          <View style={isDynamic ? styles.contentDynamic : styles.content}>
+              inside the max-height cap. paddingBottom keeps the last CTA
+              clear of the home indicator / bottom safe area. */}
+          <View
+            style={[
+              isDynamic ? styles.contentDynamic : styles.content,
+              { paddingBottom: Math.max(8, insets.bottom) },
+            ]}
+          >
             {children}
           </View>
         </Animated.View>

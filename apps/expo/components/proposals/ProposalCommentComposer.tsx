@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useSnackbar } from '@/context/SnackbarContext';
@@ -56,7 +57,24 @@ export default function ProposalCommentComposer({
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const { showSnackbar } = useSnackbar();
+  const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+
+  // When the keyboard is up it already covers the home indicator, so the dock
+  // needs no extra bottom inset; when it's dismissed (media picker, emoji tray,
+  // pre-focus) the dock rests on the screen edge and must clear the safe area.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  const dockPaddingBottom = keyboardVisible ? 12 : Math.max(12, insets.bottom);
 
   const [content, setContent] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
@@ -194,7 +212,7 @@ export default function ProposalCommentComposer({
         style={styles.kbWrap}
         pointerEvents="box-none"
       >
-        <View style={[styles.dock, { backgroundColor: colors.background }]}>
+        <View style={[styles.dock, { backgroundColor: colors.background, paddingBottom: dockPaddingBottom }]}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Kommentar schreiben</Text>
 
           {selectedEmoji && (

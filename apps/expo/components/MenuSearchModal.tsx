@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { SearchIcon } from '@/components/Icons';
 import { searchMenuItems } from '@/lib/supabase-menu';
@@ -16,6 +17,7 @@ type Props = {
 
 export default function MenuSearchModal({ visible, accountId, onClose }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query, 250);
@@ -81,7 +83,7 @@ export default function MenuSearchModal({ visible, accountId, onClose }: Props) 
         <FlatList
           data={results}
           keyExtractor={(it) => it.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(32, insets.bottom) }}
           renderItem={({ item }) => (
             <Pressable onPress={() => onItem(item)} style={[styles.itemRow, { borderBottomColor: colors.border }]}>
               <View style={{ flex: 1 }}>

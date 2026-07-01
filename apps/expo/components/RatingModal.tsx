@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { StarIcon } from '@/components/Icons';
 import { useAccountRating } from '@/hooks/useAccountRating';
@@ -13,6 +14,7 @@ type Props = {
 
 export default function RatingModal({ visible, accountId, accountName, onClose }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { userRating, isSignedIn, setRating, loading } = useAccountRating(accountId);
   const [stars, setStars] = useState<number>(0);
   const [comment, setComment] = useState<string>('');
@@ -36,7 +38,12 @@ export default function RatingModal({ visible, accountId, accountName, onClose }
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.sheet,
+            { backgroundColor: colors.background, paddingBottom: Math.max(28, insets.bottom) },
+          ]}
+        >
           <Text style={[styles.title, { color: colors.textPrimary }]}>{accountName} bewerten</Text>
           {!isSignedIn ? (
             <Text style={[styles.body, { color: colors.textSecondary }]}>

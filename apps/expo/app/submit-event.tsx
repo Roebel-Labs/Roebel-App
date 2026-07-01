@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MinimalAIChat } from '@/components/ai/MinimalAIChat';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -117,6 +117,7 @@ const validateEndTimeAfterStart = (startTime: string, endTime: string): string |
 export default function SubmitEventScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { activeAccount } = useAccount();
   const { user } = useUser();
   const { celebrate } = useRewardCelebration();
@@ -1191,7 +1192,7 @@ export default function SubmitEventScreen() {
         onRequestClose={() => setShowCategoryModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.categoryModal, { backgroundColor: colors.background }]}>
+          <View style={[styles.categoryModal, { backgroundColor: colors.background, paddingBottom: Math.max(40, insets.bottom) }]}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Kategorie auswählen</Text>
             <ScrollView style={styles.categoryList}>
               {CATEGORIES.map((cat) => (

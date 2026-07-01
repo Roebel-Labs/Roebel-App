@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useLocation } from '@/context/LocationContext';
 import { submitHelpRequest, type HelpRequestType } from '@/lib/supabase-pois';
@@ -26,6 +27,7 @@ const TOURIST_INFO_PHONE = '+49 39931 5380';     // Haus des Gastes Röbel
 
 export default function VerlorenSheet({ visible, onClose, walletAddress, userName }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { location, requestLocation } = useLocation();
   const [submitting, setSubmitting] = useState(false);
 
@@ -94,7 +96,12 @@ export default function VerlorenSheet({ visible, onClose, walletAddress, userNam
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.sheet,
+          { backgroundColor: colors.background, paddingBottom: Math.max(36, insets.bottom) },
+        ]}
+      >
         <View style={styles.handle} />
         <Text style={[styles.title, { color: colors.textPrimary }]}>Wo bin ich verloren?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>

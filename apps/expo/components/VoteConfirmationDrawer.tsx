@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 interface VoteConfirmationDrawerProps {
@@ -26,6 +27,7 @@ export default function VoteConfirmationDrawer({
   isVoting,
 }: VoteConfirmationDrawerProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const getVoteLabel = () => {
     switch (voteType) {
@@ -61,7 +63,13 @@ export default function VoteConfirmationDrawer({
       onRequestClose={onCancel}
     >
       <Pressable style={styles.overlay} onPress={onCancel}>
-        <Pressable style={[styles.drawer, { backgroundColor: colors.background }]} onPress={(e) => e.stopPropagation()}>
+        <Pressable
+          style={[
+            styles.drawer,
+            { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
           {/* Pass Illustration */}
           <View style={styles.illustrationContainer}>
             <Image

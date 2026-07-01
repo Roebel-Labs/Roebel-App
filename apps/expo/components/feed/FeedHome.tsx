@@ -43,6 +43,7 @@ import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
 import { HeaderWeather } from './HeaderWeather';
+import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { usePostActions } from '@/hooks/usePostActions';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useFeedTabSeen } from '@/hooks/useFeedTabSeen';
@@ -299,6 +300,16 @@ export default function FeedHome() {
   // Onboarding "Bürger:in" gate for the pinned proposal hero card. Distinct
   // from isCitizen (NFT-verified) — driven by the role picked in onboarding.
   const isBuerger = user?.preferred_role === 'buerger';
+  const { isBusinessOwner } = useIsBusinessOwner();
+
+  // Audience gates. `canSeeProposals` shows the proposal hero card to
+  // self-selected Bürger AND shop/business owners even before they hold the
+  // Citizen NFT. `canAccessCityTabs` additionally unlocks the 'Umfragen' and
+  // 'App' tabs for verified citizens and business owners. Voting itself stays
+  // gated on the real `isCitizen` NFT (see VoteButtons) — a non-verified viewer
+  // gets the "verify to vote" state with a verification CTA.
+  const canSeeProposals = isBuerger || isBusinessOwner;
+  const canAccessCityTabs = isCitizen || isBusinessOwner;
 
   // "New content" dots on the Stadt/App tabs. Each FeedList reports its newest
   // item timestamp; we compare against the persisted last-seen time.
@@ -319,7 +330,7 @@ export default function FeedHome() {
     app: isUnseen(newestByTab.app, lastSeen.app),
   };
 
-  const effectiveTab: FeedType = isCitizen ? activeTab : 'main';
+  const effectiveTab: FeedType = canAccessCityTabs ? activeTab : 'main';
 
   // Mark the active tab as seen (clears its dot) while the user is viewing it,
   // and keep it clear as new items stream in.
@@ -466,7 +477,7 @@ export default function FeedHome() {
         onPress={handleCompose}
       />
 
-      {isCitizen && (
+      {canAccessCityTabs && (
         <FeedTabBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
@@ -517,7 +528,7 @@ export default function FeedHome() {
         scrollProgress={scrollProgress}
         onPageSelected={handlePageSelected}
         pageWidth={screenWidth}
-        scrollEnabled={isCitizen}
+        scrollEnabled={canAccessCityTabs}
       >
         <View key="main" style={[styles.page, { width: screenWidth }]} collapsable={false}>
           <FeedList
@@ -528,7 +539,7 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             listHeader={<HomeStoryBar />}
-            showProposalHero={isBuerger}
+            showProposalHero={canSeeProposals}
             active={screenFocused && effectiveTab === 'main'}
             {...feedListProps}
           />
@@ -542,9 +553,9 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             active={screenFocused && effectiveTab === 'rathaus'}
-            enabled={isCitizen}
+            enabled={canAccessCityTabs}
             onNewestContent={handleNewestContent}
-            showProposalHero={isBuerger}
+            showProposalHero={canSeeProposals}
             {...feedListProps}
           />
         </View>
@@ -557,7 +568,7 @@ export default function FeedHome() {
             onCompose={handleCompose}
             onMore={handleMore}
             active={screenFocused && effectiveTab === 'app'}
-            enabled={isCitizen}
+            enabled={canAccessCityTabs}
             onNewestContent={handleNewestContent}
             {...feedListProps}
           />

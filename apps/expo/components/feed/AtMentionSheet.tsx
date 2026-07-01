@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 
 const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse-2.png');
@@ -31,13 +32,17 @@ export default function AtMentionSheet({
   onClose,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Inner Pressable swallows taps so they don't dismiss via the backdrop. */}
         <Pressable
-          style={[styles.sheet, { backgroundColor: colors.surface }]}
+          style={[
+            styles.sheet,
+            { backgroundColor: colors.surface, paddingBottom: Math.max(32, insets.bottom) },
+          ]}
           onPress={() => {}}
         >
           <View style={[styles.handle, { backgroundColor: colors.border }]} />

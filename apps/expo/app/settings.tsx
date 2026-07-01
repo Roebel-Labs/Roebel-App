@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -72,7 +72,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { preference, setPreference, colors } = useTheme();
   const { hasAnyNFT, hasCitizenNFT, hasAttesterNFT } = useVerificationContext();
-  const insets = useSafeAreaInsets();
   const activeAccount = useActiveAccount();
   const activeWallet = useActiveWallet();
   const { disconnect } = useDisconnect();
@@ -290,7 +289,7 @@ export default function SettingsScreen() {
 
           <Pressable
             onPress={() => setShowMembershipMenu(false)}
-            style={[membershipStyles.cancel, { paddingBottom: 12 + insets.bottom }]}
+            style={[membershipStyles.cancel, { paddingBottom: 12 }]}
           >
             <Text style={[membershipStyles.cancelText, { color: colors.textSecondary }]}>
               Abbrechen
@@ -327,7 +326,7 @@ export default function SettingsScreen() {
 
           <Pressable
             onPress={() => !isDeleting && setShowDeleteConfirm(false)}
-            style={[deleteStyles.cancel, { paddingBottom: 12 + insets.bottom }]}
+            style={[deleteStyles.cancel, { paddingBottom: 12 }]}
           >
             <Text style={[deleteStyles.cancelText, { color: colors.textSecondary }]}>
               Abbrechen

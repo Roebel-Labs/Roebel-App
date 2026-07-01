@@ -5,8 +5,8 @@ import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
-import { EventRecord, BusinessRecord } from '@/lib/types';
-import { fetchBusinessesByOwner } from '@/lib/supabase-businesses';
+import { EventRecord } from '@/lib/types';
+import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { useBookmarks } from '@/context/BookmarksContext';
 import { useGovernanceTest } from '@/context/GovernanceTestContext';
 import { useAccount } from '@/context/AccountContext';
@@ -47,8 +47,8 @@ export default function ProfileContent() {
   const { hasAnyNFT, refresh } = useVerificationContext();
   const { user, tier, tierLabel, isCitizen, refreshUser } = useUser();
   const { activeAccount, ownedAccounts, switchAccount, refreshAccounts } = useAccount();
-  const [businessRecord, setBusinessRecord] = useState<BusinessRecord | null>(null);
-  const isBusinessOwner = ownedAccounts.some(a => a.account_type === 'organisation') || !!businessRecord;
+  const { isBusinessOwner, businesses } = useIsBusinessOwner();
+  const businessRecord = businesses.find(b => b.status === 'approved') || businesses[0] || null;
   const userBusiness = businessRecord;
   const isExtendedMode = tier !== 'guest';
   const accountMode = activeAccount?.account_type === 'organisation' ? 'business' : 'personal';
@@ -76,15 +76,6 @@ export default function ProfileContent() {
       setShowLoginDrawer(false);
     }
   }, [isConnected]);
-
-  // Fetch business data from businesses table (until business→account migration)
-  useEffect(() => {
-    if (user?.wallet_address) {
-      fetchBusinessesByOwner(user.wallet_address).then(businesses => {
-        setBusinessRecord(businesses.find(b => b.status === 'approved') || businesses[0] || null);
-      });
-    }
-  }, [user?.wallet_address]);
 
   useEffect(() => {
     fetchEvents();

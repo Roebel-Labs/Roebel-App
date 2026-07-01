@@ -10,7 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { usePartnerRegisterWizard } from '@/context/PartnerRegisterWizardContext';
@@ -40,6 +40,7 @@ const VAT_ID_REGEX = /^DE\d{9}$/i;
 export default function PartnerRegisterInfoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = usePartnerRegisterWizard();
 
   const [rechtsform, setRechtsform] = useState<Rechtsform | null>(state.rechtsform);
@@ -131,7 +132,7 @@ export default function PartnerRegisterInfoScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setShowPicker(false)}>
           <Pressable
-            style={[styles.modalSheet, { backgroundColor: colors.background }]}
+            style={[styles.modalSheet, { backgroundColor: colors.background, paddingBottom: Math.max(32, insets.bottom) }]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />

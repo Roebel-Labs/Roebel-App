@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import QRCodeStyled from 'react-native-qrcode-styled';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -50,7 +49,6 @@ function ShareIcon({ size = 18, color }: { size?: number; color: string }) {
 export default function ReceiveSheet({ visible, address, name, username, onClose }: ReceiveSheetProps) {
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
-  const insets = useSafeAreaInsets();
 
   const addr = address ?? '';
   const short = addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '';
@@ -111,7 +109,8 @@ export default function ReceiveSheet({ visible, address, name, username, onClose
 
   return (
     <BottomDrawer visible={visible} onClose={onClose}>
-      <View style={[styles.inner, { paddingBottom: Math.max(20, insets.bottom) }]}>
+      {/* BottomDrawer already reserves the bottom safe-area inset. */}
+      <View style={[styles.inner, { paddingBottom: 20 }]}>
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {title}
         </Text>
