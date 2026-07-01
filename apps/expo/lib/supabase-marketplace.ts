@@ -136,6 +136,31 @@ export async function createMarketplaceListing(listing: {
 }
 
 /**
+ * Fetch a person's own active marketplace listings — the ones they created on
+ * their personal account (`account_id IS NULL`), not via an org. Used to show a
+ * "Zu verkaufen" row on their public citizen profile. Wallet is matched
+ * case-insensitively because seller wallets may be stored checksummed.
+ */
+export async function fetchPersonalListingsByWallet(
+  wallet: string
+): Promise<MarketplaceListingRecord[]> {
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .select('*')
+    .ilike('seller_wallet_address', wallet)
+    .is('account_id', null)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching personal listings:', error);
+    return [];
+  }
+
+  return data as MarketplaceListingRecord[];
+}
+
+/**
  * Fetch marketplace listings scoped to an org account
  */
 export async function fetchOrgListings(

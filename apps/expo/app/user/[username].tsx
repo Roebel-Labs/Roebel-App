@@ -26,7 +26,9 @@ import ProfileTabs from '@/components/profile/ProfileTabs';
 import UserPostsList from '@/components/profile/UserPostsList';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import UserEventsList from '@/components/profile/UserEventsList';
-import type { UserRecord } from '@/lib/types';
+import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
+import { fetchPersonalListingsByWallet } from '@/lib/supabase-marketplace';
+import type { UserRecord, MarketplaceListingRecord } from '@/lib/types';
 
 type TabKey = 'posts' | 'events';
 
@@ -50,6 +52,7 @@ export default function PublicUserProfileScreen() {
   const [profile, setProfile] = useState<UserRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [equipped, setEquipped] = useState<UserLootboxReward[]>([]);
+  const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
 
   const loadProfile = useCallback(
@@ -68,12 +71,17 @@ export default function PublicUserProfileScreen() {
           console.error('Error loading user:', error);
           setProfile(null);
           setEquipped([]);
+          setListings([]);
         } else {
           const userRow = data as UserRecord;
           setProfile(userRow);
-          const rewards = await fetchEquippedRewards(userRow.wallet_address);
+          const [rewards, personalListings] = await Promise.all([
+            fetchEquippedRewards(userRow.wallet_address),
+            fetchPersonalListingsByWallet(userRow.wallet_address).catch(() => []),
+          ]);
           if (!signal.cancelled) {
             setEquipped(rewards);
+            setListings(personalListings);
           }
         }
         if (!signal.cancelled) setLoading(false);
@@ -149,7 +157,7 @@ export default function PublicUserProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        stickyHeaderIndices={[3]}
+        stickyHeaderIndices={[4]}
       >
         {/* ── Cover banner with back chevron + optional edit pill ── */}
         <View style={styles.bannerWrap}>
@@ -249,6 +257,9 @@ export default function PublicUserProfileScreen() {
             </View>
           )}
         </View>
+
+        {/* ── Zu verkaufen row (personal listings only; account_id IS NULL) ── */}
+        <ProfileOfferRows listings={listings} />
 
         {/* ── Tabs (sticky) ── */}
         <View style={{ backgroundColor: colors.background }}>

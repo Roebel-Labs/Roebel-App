@@ -19,6 +19,7 @@ import UserIcon from '@/assets/icons/user.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
 import ProfileTabs from '@/components/profile/ProfileTabs';
+import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
@@ -821,6 +822,9 @@ function PublicAccountScreenInner() {
             )}
           </View>
         </View>
+
+        {/* Selling ("Zu verkaufen") + open ads ("Anzeigen") rows, above the tabs */}
+        <ProfileOfferRows listings={listings} deals={deals} />
 
         {/* Tabs */}
         <View style={styles.tabsWrap}>
