@@ -72,7 +72,7 @@ export function EventOwnerActions({
   return (
     <div className="flex gap-2 pt-2 border-t border-border">
       <Button variant="outline" size="sm" asChild className="flex-1 bg-transparent">
-        <a href={`/admin/dashboard/events/${eventId}/edit`}>
+        <a href={`/dashboard/events/${eventId}/edit`}>
           <Pencil className="h-4 w-4 mr-2" />
           Bearbeiten
         </a>
