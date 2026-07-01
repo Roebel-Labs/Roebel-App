@@ -309,19 +309,16 @@ export default function NachweisPage() {
 
   const isRevocation = request?.requestType === 1;
 
-  // Auto-select role for users with only one NFT type, and force "attester"
-  // for revocations (only attester signatures count on-chain).
+  // Auto-select role for single-NFT holders; dual holders pick in the UI.
+  // Citizen revocation now ALSO needs a citizen signature on-chain (v2
+  // revocationCitizenBand = 1), so we no longer force attester-only here.
   useEffect(() => {
-    if (isRevocation) {
-      setSelectedRole("attester");
-      return;
-    }
     if (isAttester && !isCitizen && !selectedRole) {
       setSelectedRole("attester");
     } else if (isCitizen && !isAttester && !selectedRole) {
       setSelectedRole("citizen");
     }
-  }, [isAttester, isCitizen, selectedRole, isRevocation]);
+  }, [isAttester, isCitizen, selectedRole]);
 
   const handleDecrypt = useCallback(async () => {
     if (!account || !evidence) {
@@ -505,25 +502,9 @@ export default function NachweisPage() {
         return;
       }
 
-      // CitizenNFT REVOCATION: contract enforces isAttester. signAsAttester
-      // is forced to true; citizen-only signers are blocked client-side to
-      // avoid a guaranteed on-chain revert (and gasless wallets swallow it).
-      if (isRevocation) {
-        if (!isAttester) {
-          toast.error("Eine Bürger-Entziehung benötigt einen Bescheiniger-Pass");
-          return;
-        }
-        const transaction = prepareContractCall({
-          contract: citizenNFTContract,
-          method: "function approveRequest(uint256 requestId, bool signAsAttester)",
-          params: [BigInt(requestId), true],
-        });
-        sendTransaction(transaction, { onSuccess, onError });
-        return;
-      }
-
-      // CitizenNFT ATTESTATION: dual holders pick a role; single-NFT holders
-      // use whatever they hold (auto-selected on mount).
+      // CitizenNFT ATTESTATION and REVOCATION both use role-based signing: v2
+      // requires attester approvals + 1 citizen approval for either. Dual holders
+      // pick a role; single-NFT holders use whatever they hold (auto-selected).
       if (!selectedRole) {
         toast.error("Bitte wähle eine Rolle aus (Bescheiniger oder Bürger)");
         return;
@@ -560,8 +541,10 @@ export default function NachweisPage() {
     }
   };
 
-  // Revocations and any AttesterNFT request require an Attester signature on-chain.
-  const needsAttesterToSign = isRevocation || contractType === "attester";
+  // Only the AttesterNFT contract is attester-only. The CitizenNFT contract needs a
+  // citizen signature for BOTH attestation and revocation (v2 revocationCitizenBand = 1),
+  // so citizens must be able to sign citizen revocations too.
+  const needsAttesterToSign = contractType === "attester";
   const canSign =
     !!account &&
     (needsAttesterToSign ? isAttester : isAttester || isCitizen) &&
@@ -946,18 +929,17 @@ export default function NachweisPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Revocation: attester-only, no role choice */}
-                  {isRevocation ? (
+                  {/* AttesterNFT contract: attester-only (attestation + revocation). */}
+                  {contractType === "attester" ? (
                     <div className="border border-border rounded-lg p-4">
                       <p className="text-sm text-foreground">
-                        Eine Entziehung kann nur von <strong>Bescheinigern</strong> unterschrieben werden.
+                        {isRevocation
+                          ? "Eine Bescheiniger-Entziehung kann nur von "
+                          : "Diesen Bescheiniger-Antrag können nur "}
+                        <strong>Bescheiniger</strong>
+                        {isRevocation ? " unterschrieben werden." : " unterschreiben."}
                       </p>
-                      {request && contractType === "citizen" && (
-                        <div className="mt-3 text-xs text-muted-foreground">
-                          • Bescheiniger: {request.attesterSignatures || 0}/{request.requiredAttesters ?? 3}
-                        </div>
-                      )}
-                      {request && contractType === "attester" && (
+                      {request && (
                         <div className="mt-3 text-xs text-muted-foreground">
                           • Bescheiniger: {request.signatureCount || 0}/{request.requiredAttesters ?? 3}
                         </div>
@@ -965,8 +947,9 @@ export default function NachweisPage() {
                     </div>
                   ) : (
                     <>
-                      {/* Role selection for dual NFT holders (citizen attestation only) */}
-                      {isAttester && isCitizen && contractType === "citizen" && (
+                      {/* Citizen contract (attestation + revocation): role-based.
+                          Dual holders choose which signature they contribute. */}
+                      {isAttester && isCitizen && (
                         <div className="border border-border rounded-lg p-6">
                           <h3 className="font-medium text-foreground mb-3">
                             Du besitzt beide NFTs - Wähle deine Rolle
@@ -978,7 +961,7 @@ export default function NachweisPage() {
                           <div className="bg-muted rounded-lg p-4 mb-4">
                             <p className="text-sm font-medium text-foreground mb-2">Aktuelle Unterschriften:</p>
                             <div className="space-y-1 text-sm text-muted-foreground">
-                              <div>• Bescheiniger: {request?.attesterSignatures || 0}/{request?.requiredAttesters ?? 2}</div>
+                              <div>• Bescheiniger: {request?.attesterSignatures || 0}/{request?.requiredAttesters ?? (isRevocation ? 3 : 2)}</div>
                               <div>• Bürger: {request?.citizenSignatures || 0}/{request?.requiredCitizens ?? 1}</div>
                             </div>
                           </div>
@@ -1025,35 +1008,20 @@ export default function NachweisPage() {
                         </div>
                       )}
 
-                      {/* Info for single NFT holders (citizen attestation) */}
-                      {contractType === "citizen" &&
-                        ((isAttester && !isCitizen) || (isCitizen && !isAttester)) && (
+                      {/* Info for single-NFT holders (citizen contract). */}
+                      {((isAttester && !isCitizen) || (isCitizen && !isAttester)) && (
                           <div className="border border-border rounded-lg p-4">
                             <p className="text-sm text-foreground">
-                              Du unterschreibst als <strong>{isAttester ? "Bescheiniger" : "Bürger"}</strong> für diesen Bürger-Antrag.
+                              Du unterschreibst als <strong>{isAttester ? "Bescheiniger" : "Bürger"}</strong> für {isRevocation ? "diese Entziehung" : "diesen Bürger-Antrag"}.
                             </p>
                             {request && (
                               <div className="mt-3 text-xs text-muted-foreground">
-                                <div>• Bescheiniger: {request.attesterSignatures || 0}/{request.requiredAttesters ?? 2}</div>
+                                <div>• Bescheiniger: {request.attesterSignatures || 0}/{request.requiredAttesters ?? (isRevocation ? 3 : 2)}</div>
                                 <div>• Bürger: {request.citizenSignatures || 0}/{request.requiredCitizens ?? 1}</div>
                               </div>
                             )}
                           </div>
                         )}
-
-                      {/* AttesterNFT attestation — only attesters can sign */}
-                      {contractType === "attester" && isAttester && (
-                        <div className="border border-border rounded-lg p-4">
-                          <p className="text-sm text-foreground">
-                            Du unterschreibst als <strong>Bescheiniger</strong> für diesen Bescheiniger-Antrag.
-                          </p>
-                          {request && (
-                            <div className="mt-3 text-xs text-muted-foreground">
-                              • Bescheiniger: {request.signatureCount || 0}/{request.requiredAttesters ?? 3}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </>
                   )}
 
