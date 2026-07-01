@@ -4,6 +4,8 @@
 
 Open-source civic technology platform for Roebel/Mueritz, Mecklenburg-Vorpommern, Germany — a replicable blueprint for small towns building digital civic infrastructure.
 
+Verified residents get a soulbound **civic ID**, vote on local proposals with **encrypted MACI ballots**, and transact in **Röbel Münzen**, the town's own [Circles](https://aboutcircles.com) group currency. The whole stack — identity, private voting, and money — runs natively on **Gnosis Chain**.
+
 ## What's Inside
 
 This [Turborepo](https://turbo.build/repo) monorepo contains:
@@ -12,22 +14,23 @@ This [Turborepo](https://turbo.build/repo) monorepo contains:
 
 | App | Description | Stack |
 |-----|-------------|-------|
-| **[apps/web](apps/web/)** | Roebel Website | Next.js 15, Tailwind CSS, thirdweb v5 |
-| **[apps/expo](apps/expo/)** | Roebel Mobile App (iOS + Android) | Expo SDK 55, React Native, thirdweb v5 |
+| **[apps/web](apps/web/)** | Roebel Website + admin dashboards (proposals, verification, treasury, Münzen tokenomics) | Next.js 15, Tailwind CSS, thirdweb v5 |
+| **[apps/expo](apps/expo/)** | Roebel Mobile App (iOS + Android) — voting, verification, Röbel Münzen wallet, Mecky AI | Expo SDK 55, React Native, thirdweb v5 |
+| **[circles-roebel-mini-app](circles-roebel-mini-app/)** | Standalone Circles mini-app ("Röbel Circles") — trust graph, transfers, invites (runs inside the Circles host) | Vite, React 19, Tailwind 4 |
 
 ### Packages
 
 | Package | Description |
 |---------|-------------|
 | **[packages/config](packages/config/)** | Shared ESLint and TypeScript configs |
-| **[packages/blockchain](packages/blockchain/)** | Contract ABIs, addresses, thirdweb utilities |
+| **[packages/blockchain](packages/blockchain/)** | Contract ABIs, addresses, thirdweb utilities — **canonical address source of truth** |
 | **[packages/design-tokens](packages/design-tokens/)** | Shared colors, spacing, typography tokens |
 
 ### Smart Contracts
 
 | Contract | Description |
 |----------|-------------|
-| **[contracts/governor-contract](contracts/governor-contract/)** | Hardhat Smart Contracts (OpenZeppelin v5) |
+| **[contracts/governor-contract](contracts/governor-contract/)** | Hardhat smart contracts (OpenZeppelin v5) — identity NFTs, MACI-aware Governor, Timelock, Circles membership condition |
 
 See [Smart Contracts & Governance](#smart-contracts--governance) below for the full on-chain architecture, deployed addresses, and voting rules.
 
@@ -64,113 +67,158 @@ pnpm dev:expo
 
 ## Architecture
 
-- **Blockchain**: Base L2 + Thirdweb Smart Wallets (invisible Web3 — users never see a wallet)
-- **Backend**: Supabase (Postgres, Auth, Realtime, Edge Functions)
-- **Governance**: MACI v2 privacy-preserving voting. Attesters (soulbound NFT) propose; Citizens (soulbound NFT) vote with encrypted ballots that an off-chain coordinator tallies + posts a ZK proof for. Executed through a Timelock.
-- **AI**: Claude API powering the Mecky chatbot assistant
+- **Chain**: **Gnosis Mainnet (chain id 100)** + Thirdweb Smart Wallets — invisible Web3, gasless ERC-4337 (users never see a wallet or pay gas). Identity, governance, and currency all live on one chain.
+- **Identity**: Two soulbound NFTs — `AttesterNFTv2` (culture committee) and `CitizenNFTv2` (verified residents) — with **scale-aware, Sybil-hardened signature thresholds**.
+- **Governance**: **MACI v2** privacy-preserving voting. Attesters propose; Citizens vote with **encrypted ballots**. An off-chain coordinator (whose decryption key is **Shamir 3-of-5-split across Attesters**) tallies them and posts a Groth16 ZK proof on chain. Proposals execute through a Timelock.
+- **Currency**: **Röbel Münzen** — a collateral-backed [Circles v2](https://aboutcircles.com) group currency, gated on the CitizenNFT, adding an economic Sybil cost and a transparent on-chain trust graph.
+- **Backend**: Supabase (Postgres, Auth, Realtime, Edge Functions).
+- **AI**: Claude API powering the Mecky chatbot assistant (German language).
 
-> 📘 **Full architecture reference:** [docs/MACI_E_GOVERNANCE.md](docs/MACI_E_GOVERNANCE.md) — canonical, current source of truth for the MACI v2 stack: live addresses on Base mainnet, identity layer (AttesterNFT + CitizenNFT), privacy layer (MACI core + Poll + MessageProcessor + Tally + VkRegistry), the off-chain coordinator + auto-finalize cron, the citizen onboarding / proposal / voting / tally flows end-to-end, the production zKey parameters, the operational runbook, the security model, and the **[roadmap to maximal trustlessness + decentralization](docs/MACI_E_GOVERNANCE.md#11-roadmap-to-maximal-trustlessness--decentralization)** (the honest delta between what's deployed today and what the system needs to carry binding civic decisions).
+> 📘 **MACI deep-dive:** [docs/MACI_E_GOVERNANCE.md](docs/MACI_E_GOVERNANCE.md) explains the privacy layer end-to-end (identity → Governor → MACI core/Poll/MessageProcessor/Tally/VkRegistry → coordinator → apps), the ceremony zKey parameters, the operational runbook, and the security model. *Note: that doc predates the Gnosis move and still cites Base addresses for the mechanism walkthrough — the current live addresses are in this README and in the deployment manifest below.*
+>
+> 🛡️ **V2 Sybil-hardening design:** [docs/superpowers/plans/2026-06-24-gnosis-consolidation-and-sybil-hardening.md](docs/superpowers/plans/2026-06-24-gnosis-consolidation-and-sybil-hardening.md) — the threshold model, migration plan, and the Self.xyz Phase-2 roadmap.
+>
+> 🪙 **Circles / Röbel Münzen:** [docs/CIRCLES_ROEBEL_MUENZEN_STATE.md](docs/CIRCLES_ROEBEL_MUENZEN_STATE.md) and [docs/CIRCLES_TOKENOMICS.md](docs/CIRCLES_TOKENOMICS.md).
+>
+> 🔐 **Coordinator privacy federation:** [docs/SHAMIR_CEREMONY.md](docs/SHAMIR_CEREMONY.md) (concept) and [docs/MACI_SHAMIR_OPERATIONS.md](docs/MACI_SHAMIR_OPERATIONS.md) (runbook).
 
 ---
 
 ## Smart Contracts & Governance
 
-The Röbel DAO runs on five contracts on **Base Mainnet (chain id 8453)**, all soulbound/non-transferable, all verified on Basescan. Voting is privacy-preserving via [MACI v2](https://maci.pse.dev). The latest rotation (`2026-05-23`) adds governance-tunable thresholds and changes citizen revocation from a 1-Attester rule to a 1-Attester + 1-Citizen rule (symmetric with attestation).
+The Röbel stack runs on **Gnosis Mainnet (chain id 100)** — a full consolidation from Base completed **2026-06-25** (the "v2 Sybil-hardened" rotation). Identity NFTs are soulbound/non-transferable, voting is privacy-preserving via [MACI v2](https://maci.pse.dev), and the town currency is a Circles v2 group. The old Base stack is archived on chain and in the manifests for historical lookups only.
 
-### Live addresses (rotated 2026-05-23)
+### Live addresses (Gnosis, v2)
+
+#### Identity
 
 | Contract | Address | Purpose |
 |---|---|---|
-| **AttesterNFT** | [`0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb`](https://basescan.org/address/0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb) | Soulbound NFT for "culture committee" members. Only holders can *propose* in the DAO. Owned by the Timelock; thresholds are governance-mutable. |
-| **CitizenNFT** | [`0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB`](https://basescan.org/address/0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB) | Soulbound ERC721Votes NFT for verified citizens. 1 NFT = 1 vote (used by MACI signup gating). Owned by the Timelock; both attestation and revocation thresholds are governance-mutable. |
-| **SignUpTokenGatekeeper** | [`0xc767fa3bbd9f0934Fb419137d7b6506E44105f74`](https://basescan.org/address/0xc767fa3bbd9f0934Fb419137d7b6506E44105f74) | MACI v2 gatekeeper bound to CitizenNFT — enforces "only citizens can sign up to vote". Fresh instance from the 2026-06-08 clean-slate rotation. |
-| **MaciAttesterGovernor** | [`0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177`](https://basescan.org/address/0xb5333aFf2A0015aF0d58C0f92c826Fc503e63177) | OpenZeppelin Governor + MACI-aware `state()` override. Attesters propose, Citizens vote via encrypted MACI ballots, the coordinator submits a ZK tally proof, proposals execute through the Timelock. Quorum/coordinator are all governance-mutable. |
-| **TimelockController** | [`0xe8B8149F9373a56F55112e5Fc867E58308D014c1`](https://basescan.org/address/0xe8B8149F9373a56F55112e5Fc867E58308D014c1) | OpenZeppelin `TimelockController` with `minDelay = 3600` (1h) for the initial test phase. Raise to 1 week via a governance proposal calling `timelock.updateDelay(604800)`. |
+| **AttesterNFTv2** | [`0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82`](https://gnosisscan.io/address/0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82) | Soulbound NFT for "culture committee" members. Only holders can *propose* in the DAO and co-sign attestations. Scale-aware thresholds. Owned by the Attester Safe. |
+| **CitizenNFTv2** | [`0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5`](https://gnosisscan.io/address/0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5) | Soulbound ERC721Votes NFT for verified residents. Gates MACI signup (1 NFT = 1 vote) *and* Circles group membership. Scale-aware thresholds + `validUntil` dormancy. |
 
-Source files: [`AttesterNFT.sol`](contracts/governor-contract/contracts/verification-system/AttesterNFT.sol), [`CitizenNFT.sol`](contracts/governor-contract/contracts/verification-system/CitizenNFT.sol), [`MaciAttesterGovernor.sol`](contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol). Address source of truth: [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) and [`deployments/base.json`](contracts/governor-contract/deployments/base.json).
+#### Governance (MACI v2 privacy voting)
+
+| Contract | Address | Purpose |
+|---|---|---|
+| **MaciAttesterGovernor** | [`0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3`](https://gnosisscan.io/address/0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3) | OZ Governor + MACI-aware `state()`. Attesters propose, Citizens vote via encrypted MACI ballots, the coordinator submits a ZK tally proof, proposals execute through the Timelock. Quorum/coordinator are governance-mutable. |
+| **TimelockController** | [`0x5b358A77E89FF3d699607b4fC235b381d67f3d05`](https://gnosisscan.io/address/0x5b358A77E89FF3d699607b4fC235b381d67f3d05) | OZ `TimelockController`, `minDelay = 3600` (1h) for the pilot. Raise via a `timelock.updateDelay()` governance proposal. |
+
+#### MACI v2 infrastructure
+
+| Contract | Address | Purpose |
+|---|---|---|
+| **MACI core** | [`0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D`](https://gnosisscan.io/address/0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D) | Global signup pool + `deployPoll` factory (deploy block `46867803`). |
+| **Verifier** | [`0xC95359cF5d7391cD239c9476393706a8132406dc`](https://gnosisscan.io/address/0xC95359cF5d7391cD239c9476393706a8132406dc) | Groth16 proof verifier. |
+| **VkRegistry** | [`0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f`](https://gnosisscan.io/address/0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f) | Stores process + tally verifying keys keyed by tree depths. |
+| **SignUpGatekeeper** | [`0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277`](https://gnosisscan.io/address/0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277) | "You can sign up to vote iff you hold a CitizenNFTv2." Bound to the CitizenNFT above. |
+| **Coordinator EOA** | [`0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C`](https://gnosisscan.io/address/0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C) | Submits on-chain tally proofs. Its **MACI decryption key is Shamir 3-of-5-split** across Attesters (see below). |
+
+#### Currency — Röbel Münzen (Circles v2)
+
+| Contract | Address | Purpose |
+|---|---|---|
+| **Röbel Münzen group** | [`0xAc2CeCdBead594F97358a0d3132454f24F3E470c`](https://gnosisscan.io/address/0xAc2CeCdBead594F97358a0d3132454f24F3E470c) | Circles v2 `BaseGroup` (symbol `RCRC`), the town's collateral-backed group currency. |
+| **Membership condition** | [`0x5850A04544c1882d5958872bdbfC591E94abE67b`](https://gnosisscan.io/address/0x5850A04544c1882d5958872bdbfC591E94abE67b) | `CitizenMembershipCondition` — only `CitizenNFTv2` holders can be trusted into the group. |
+| **Attester Safe (owner)** | [`0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa`](https://gnosisscan.io/address/0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa) | 3-of-5 Attester Gnosis Safe — owns both identity NFTs and the Circles group. |
+| **Circles Hub v2** | [`0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8`](https://gnosisscan.io/address/0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8) | The canonical Circles v2 Hub (shared protocol contract). |
+
+Source files: [`AttesterNFTv2.sol`](contracts/governor-contract/contracts/verification-system/AttesterNFTv2.sol), [`CitizenNFTv2.sol`](contracts/governor-contract/contracts/verification-system/CitizenNFTv2.sol), [`ThresholdBands.sol`](contracts/governor-contract/contracts/verification-system/ThresholdBands.sol), [`MaciAttesterGovernor.sol`](contracts/governor-contract/contracts/verification-system/MaciAttesterGovernor.sol), [`CitizenMembershipCondition.sol`](contracts/governor-contract/contracts/verification-system/CitizenMembershipCondition.sol). Address source of truth: [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) and [`deployments/gnosis-v2.json`](contracts/governor-contract/deployments/gnosis-v2.json).
+
+### Sybil-hardened identity — scale-aware thresholds
+
+Every attestation / revocation / rejection gate is a **percentage band** (or a fixed count) evaluated against the *live set size*, snapshotted when the request is created so the bar can't move mid-request:
+
+```
+required = clamp( ceil(setSize · percentBps / 10000), floor, cap )
+```
+
+- **Percentage band** → the required signer count *scales with the community* as it grows.
+- **`floor`** governs behaviour while the set is small; **`cap`** stops onboarding gates from exploding once the set is large (`cap = 65535` means "no cap").
+- **Fixed count** (`percentBps = 0`, `floor == cap`) keeps high-throughput gates (the citizen co-sign) constant no matter how large the town grows — so adoption never slows down.
+
+The gate *type* is chosen by how often it fires: onboarding co-signs stay cheap and fixed; the rare-but-must-stay-strict revocation gate scales with no cap. See [`ThresholdBands.sol`](contracts/governor-contract/contracts/verification-system/ThresholdBands.sol).
 
 ### Governance rules (current)
 
-| Rule | Value |
-|---|---|
-| Become an Attester | 2 existing Attesters approve your evidence request (mutable via `AttesterNFT.setRequiredSignatures()`) |
-| Become a Citizen | 1 Attester + 1 Citizen approve your evidence request (mutable via `CitizenNFT.setAttestationRequirements()`) |
-| Revoke a Citizen | **1 Attester + 1 Citizen signature** (mutable via `CitizenNFT.setRevocationRequirements()`) |
-| Revoke an Attester | 2 Attester signatures (mutable via `AttesterNFT.setRequiredSignatures()`) |
-| Reject a request | Multi-sig with the same role thresholds as approval — a single rogue signer cannot veto. Mutable via the `set…Rejections` setters. |
-| Who can propose | Anyone holding an Attester NFT |
-| Who can vote | Anyone holding a Citizen NFT, via encrypted MACI v2 ballots |
-| Voting period | 604,800 s (7 days) |
-| Quorum | `max(10% of MACI signups, 2)` — both terms mutable via `Governor.setQuorumPercentage()` / `setQuorumAbsolute()` |
-| Tally grace period | 7 days for the coordinator to publish the ZK tally proof; mutable via `Governor.setTallyGracePeriod()` |
-| Timelock delay | 3,600 s (1 h) test setting — raise to 1 week with a `timelock.updateDelay(604800)` governance proposal |
-| Coordinator key rotation | Rotate via `Governor.setCoordinator()` / `setCoordinatorPubKey()` — both Timelock-gated |
+| Rule | Threshold band | Today (5 Attesters / 20 Citizens) |
+|---|---|---|
+| **Become a Citizen** | 30% of Attesters (floor 2, cap 7) **+ fixed 1 Citizen** | 2 Attesters + 1 Citizen (≥ 3 distinct people) |
+| **Revoke a Citizen** | **67% of Attesters (floor 3, no cap)** **+ fixed 1 Citizen** | 4 Attesters + 1 Citizen (≥ 5 distinct people) |
+| **Become / revoke an Attester** | 50% of Attesters (floor 3, cap 7) | 3 Attesters |
+| **Reject a pending request** | 25% each side (floor 2, cap 5) | 2 Attesters + 5 Citizens |
+| **Who can propose** | Anyone holding an Attester NFT | — |
+| **Who can vote** | Anyone holding a Citizen NFT, via encrypted MACI v2 ballots | — |
+| **Voting period** | 604,800 s (7 days) | — |
+| **Quorum** | `max(10% of MACI signups, 2)` — both terms governance-mutable | — |
+| **Tally grace period** | 7 days for the coordinator to publish the ZK tally proof | — |
+| **Timelock delay** | 3,600 s (1 h) pilot setting — raise via `timelock.updateDelay()` | — |
 
-The "2 unique signers" rule means a wallet holding *both* an Attester and Citizen NFT cannot single-handedly attest or revoke: the `signAsAttester` parameter on `approveRequest` / `rejectRequest` forces an explicit role choice, and `msg.sender != req.target` prevents self-approval.
+**Anti-clique guarantee:** attestation requires **≥ 2 Attesters + 1 Citizen** (≥ 3 distinct people), and revocation requires a **≥ 67% Attester supermajority + 1 Citizen** — scaling to 14-of-20 Attesters at 20 Attesters — so "two people revoke everyone" is structurally impossible. Onboarding stays cheap; destructive actions stay hard.
 
-All threshold values above are stored as state variables on the deployed contracts and writable only by the Timelock — so any of them can be tuned by a single governance proposal, no redeploy needed. See [`docs/MACI_E_GOVERNANCE.md`](docs/MACI_E_GOVERNANCE.md) for the full list of governance-tunable settings.
+**No-double-sign invariant:** one approval per wallet, and dual Attester + Citizen holders (the norm here) must pick a single role via `signAsAttester` — so no one wallet can satisfy both halves of a gate alone. `msg.sender != target` prevents self-approval. This is *why* the citizen co-sign can safely be a fixed 1.
 
-### How to become an Attester
-
-1. Call `AttesterNFT.createAttestationRequest(evidenceURI)` with an IPFS link to your supporting evidence.
-2. Two existing Attesters each call `AttesterNFT.approveRequest(requestId)`.
-3. The second approval auto-mints your soulbound Attester NFT.
-
-Bootstrap: three founding Attesters were minted directly in the constructor at deployment.
+All band parameters are stored as state on the deployed contracts and are **governance-mutable** by the owner (the Attester Safe / Timelock) via `setAttestationBands` / `setRevocationBands` / `setRejectionBands` — any of them can be re-tuned by a single transaction, no redeploy.
 
 ### How to become a Citizen
 
-1. Call `CitizenNFT.createAttestationRequest(evidenceURI)` with IPFS evidence.
-2. One existing Attester calls `CitizenNFT.approveRequest(requestId, signAsAttester = true)`.
-3. One existing Citizen calls `CitizenNFT.approveRequest(requestId, signAsAttester = false)`.
-4. Once both signatures are in and the two signers are distinct, the CitizenNFT auto-mints and voting power auto-delegates to you.
+1. Call `CitizenNFTv2.createAttestationRequest(evidenceURI)` with an evidence pointer. Privacy note: the app stores only a one-way **Poseidon commitment** (`commit:0x…`) on chain — no PII ever touches the chain or the server; the plaintext preimage stays in device secure-store.
+2. The required Attesters each call `approveRequest(requestId, signAsAttester = true)`.
+3. One existing Citizen calls `approveRequest(requestId, signAsAttester = false)`.
+4. Once the snapshotted thresholds are met by distinct signers, the CitizenNFT auto-mints and voting power auto-delegates to the holder.
 
-Bootstrap: three founding Citizens were minted directly in the constructor at deployment.
+### How to become an Attester
 
-### How to create and execute a proposal
+1. Call `AttesterNFTv2.createAttestationRequest(evidenceURI)`.
+2. The required number of existing Attesters each call `approveRequest(requestId)`.
+3. When the threshold is met, the soulbound Attester NFT auto-mints.
 
-1. As an Attester, call `MaciAttesterGovernor.propose(targets, values, calldatas, description)`. The Governor automatically deploys a fresh MACI Poll for this proposal.
-2. The proposal enters the `Active` state immediately (MACI v2 has no voting delay). Citizens vote by submitting **encrypted MACI ballots** to the per-proposal Poll contract — `Governor.castVote` is disabled (reverts with `VotingHappensOnMaciPoll`).
-3. After the 7-day voting period, the coordinator (Fly machine wallet `0x5e6528…D4cF`) decrypts ballots off-chain, generates a Groth16 tally proof, and posts it to the per-poll Tally contract. The `Governor.state()` override holds the proposal in `Active` for up to a 7-day grace period until the tally lands on chain.
-4. Once `Tally.totalTallyResults() > 0`, the proposal resolves to `Succeeded` if `forVotes > againstVotes` and `totalSpent ≥ quorum`, otherwise `Defeated`.
-5. Any wallet calls `Governor.queue(…)` to move a Succeeded proposal into the Timelock.
-6. After the Timelock delay (currently 1 h), anyone calls `Governor.execute(…)` to run the proposal's calldata.
+Bootstrap: three founding Attesters and three founding Citizens are seeded in the constructors; the full historical set (20 Citizens + 5 Attesters) was seeded via a one-shot, since-finalized `migrationMint`.
+
+### How a proposal works (MACI private voting)
+
+1. An Attester calls `MaciAttesterGovernor.propose(...)`. The Governor automatically deploys a fresh MACI **Poll** for the proposal.
+2. The proposal is `Active` immediately (MACI v2 has no voting delay). Citizens vote by submitting **encrypted MACI ballots** to the Poll — `Governor.castVote` is disabled by design.
+3. After the 7-day voting period, the coordinator decrypts ballots off-chain, generates a Groth16 tally proof, and posts it to the per-poll `Tally` contract. `state()` holds the proposal `Active` through a 7-day grace period until the tally lands.
+4. Once the tally lands, the proposal resolves to `Succeeded` (if `forVotes > againstVotes` and quorum is met) or `Defeated`.
+5. Anyone calls `queue(...)` then, after the Timelock delay, `execute(...)`.
+
+### Coordinator privacy — Shamir 3-of-5 federation
+
+The MACI coordinator's ballot-decryption key is **not** a single secret on one server. It is **split with Shamir secret-sharing across 5 Attester-held wallets**, and reconstructing it to tally a poll requires **3-of-5 Attesters to cooperate** — there is no single-operator fallback. The plaintext key exists only in a reconstructor process's RAM for a few minutes per tally, then is zeroed. The on-chain tx-signing key (the coordinator EOA above) only authorizes state transitions that the on-chain ZK Verifier has already validated — compromising it breaks liveness, not privacy or result-correctness. See [docs/SHAMIR_CEREMONY.md](docs/SHAMIR_CEREMONY.md) and [docs/MACI_SHAMIR_OPERATIONS.md](docs/MACI_SHAMIR_OPERATIONS.md).
+
+### Röbel Münzen — the town's Circles currency
+
+**Röbel Münzen** (on-chain symbol `RCRC`) is a collateral-backed [Circles v2](https://aboutcircles.com) **group currency** on Gnosis. It gives the identity layer a second, economic Sybil defense and a transparent on-chain trust graph:
+
+- **Gated on the civic ID.** The group's `CitizenMembershipCondition` only lets `CitizenNFTv2` holders be trusted in — so the currency inherits the same verified-resident set as voting.
+- **Economic Sybil cost.** Registering as a Circles human burns personal CRC and mints a welcome bonus; faking many identities is expensive, not just permissioned.
+- **Owned by the 3-of-5 Attester Safe**, matching the identity NFTs. A hands-free service also auto-trusts each new CitizenNFT holder into the group.
+- Surfaced in-app (Expo "Röbel Münzen" home + daily mint), in the web admin dashboard (`/admin/dashboard/circles` + a `/admin/dashboard/muenzen` tokenomics console), and via the standalone **Röbel Circles** mini-app.
+
+> **Roadmap — Phase 2 personhood:** `CitizenNFTv2` reserves an `attestationSource` enum and a `validUntil` dormancy field for a future [Self.xyz](https://self.xyz) proof-of-personhood path — a one-human-one-identity nullifier that does not rely on trusting Attesters, with no PII on chain. See the design plan linked above.
 
 ---
 
 ## Contract Migration History
 
-### 2026-05-23 — Governance-mutable thresholds + symmetric revocation (current)
+### 2026-06-25 — Full consolidation to Gnosis + v2 Sybil-hardening (current)
 
-A pre-deploy audit found that **a single Attester could unilaterally revoke any CitizenNFT** (the old `REQUIRED_REVOCATION_SIGNATURES = 1` constant), plus three other safety / scalability issues. All four were fixed in a single coordinated redeploy.
+Identity, MACI, Governor, Timelock **and** the Circles currency are now all native on **Gnosis (chain id 100)**. Previously production ran on Base while only an identity layer lived on Gnosis to gate Circles — that split meant new citizens kept landing on the wrong chain. The consolidation retired Base and shipped fresh, hardened contracts:
 
-| Change | Before | After |
+| Change | Before (Base v1) | After (Gnosis v2) |
 |---|---|---|
-| Revoke a Citizen | 1 Attester signature | **1 Attester + 1 Citizen** (symmetric with attestation) |
-| Threshold tuning | `public constant` — required full contract redeploy + migration | All thresholds are `owner()`-mutable state vars; one Timelock proposal can change them |
-| Rejection veto | Single rejection auto-flipped status to `Rejected` (any one rogue signer could spam-veto) | Multi-sig rejection: needs the same per-role thresholds as approval |
-| `tokenOfOwnerByIndex` lookup | O(N) scan over every minted token id; revocation gas grew with mint history | O(1) `mapping(address => uint256) _tokenIdByOwner` |
-| Governor quorum / coordinator | `immutable` after deploy — compromised coordinator = full redeploy | 5 new `onlyGovernance` setters: `setQuorumPercentage`, `setQuorumAbsolute`, `setTallyGracePeriod`, `setCoordinator`, `setCoordinatorPubKey` |
-| Timelock min delay | 2 days | 1 hour (test setting; raise to 1 week via `timelock.updateDelay(604800)` proposal) |
+| Chain | Identity + governance on Base; Circles-only identity on Gnosis | Everything on Gnosis (chain 100) |
+| Thresholds | Flat absolute counts (1 Attester + 1 Citizen to join; 2-of-N Attesters) | **Scale-aware percentage bands** (auto-scale with the community, floor + cap) |
+| Attestation (the Sybil lever) | 1 Attester + 1 Citizen | 30%/floor2/cap7 Attesters + fixed 1 Citizen (raised deliberately) |
+| Revocation | 1 Attester + 1 Citizen | **67%/floor3/no-cap** Attester supermajority + fixed 1 Citizen (anti-malicious-removal) |
+| Re-attestation | none | `validUntil` dormancy + cheap `renewSelf` / `renewByVouch` |
+| Personhood hook | none | `attestationSource` enum reserved for Self.xyz (Phase 2) |
+| Coordinator key | single env secret on one machine | **Shamir 3-of-5** across Attesters, no single-operator fallback |
 
-Five contracts redeployed; existing MACI core / Verifier / VkRegistry / Poseidon stack reused. Both NFTs are owned by the new Timelock; the new Governor holds `PROPOSER_ROLE` + `CANCELLER_ROLE` on the new Timelock; deployer `DEFAULT_ADMIN_ROLE` was renounced post-wire (asserted on chain). Re-runnable deploy + recovery + verify scripts live in [`contracts/governor-contract/scripts/`](contracts/governor-contract/scripts/): `redeploy-verification.cjs`, `finish-redeploy-rewire.cjs`, `verify-redeploy.cjs`. Commits `08bd7e7` + `3236290`.
+The Base contracts remain readable on chain for historical proposal/revocation lookups and are marked as archived (`legacyBase*`) in [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts). The Governor + Timelock were re-tuned twice on 2026-06-27; those intermediate deployments are archived under timestamped keys in [`deployments/gnosis-v2.json`](contracts/governor-contract/deployments/gnosis-v2.json).
 
-### Pre-2026-05 rotations (kept on chain for historical traceability)
-
-| Contract | Address | Notes |
-|---|---|---|
-| AttesterNFT (pre-2026-05-23) | `0xa06F09Cb406880512326318fbC09Cdb28631DA73` | 2-sig threshold as `public constant`, no setters |
-| CitizenNFT (pre-2026-05-23) | `0xe2d39ffd2ee0Ccd753486047AEBec031F334b5b7` | 1-Attester revocation rule |
-| MaciAttesterGovernor (pre-2026-05-23) | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` | `coordinator` was `immutable`; no quorum setters |
-| TimelockController (pre-2026-05-23) | `0xD1d6d0c8fd4D232D810FF920c802d748537E14Fe` | 2-day min delay |
-| SignUpTokenGatekeeper (pre-2026-05-23) | `0xbf79Fc06C304058cA77Bb718b21D183843e6c8ee` | Bound to the prior CitizenNFT |
-| AttesterGovernor v1 (public-vote, deprecated) | `0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b` | Pre-MACI public-vote Governor; never deleted, no longer referenced for new proposals |
-| RoebelTimelock v1 (bound to AttesterGovernor v1) | `0xed1680AFf2A4235421b209A1bf8C7f5760149cc0` | Original `minDelay = 0` Timelock |
-| AttesterNFT v0 (3-sig rule) | `0x9b6cc0f9BC74E0a64f662028C4CF52e00bD35D4f` | First-ever Attester NFT |
-| CitizenNFT v3 (1+2 rule) | `0x78C88B01664Df4AA2F026DA68e834B4f33a3d751` | Required 2 Citizen sigs to attest |
-| AttesterGovernor v1 prototype (5-day voting) | `0x572c97329ACaCBeBA74e28E3998674E9058A095a` | First public-vote prototype |
-
-The full rotation log (every MACI Governor + Timelock + VkRegistry rotation since 2026-05-07) is structured in [`apps/web/src/lib/maci-config.ts`](apps/web/src/lib/maci-config.ts) under `ROTATION_HISTORY`. Pre-2024 legacy contracts (HomeTownVotingNFT era) are in [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts) under `legacyNFT` / `legacyGovernor`.
+The full rotation log (every prior MACI Governor + Timelock + VkRegistry rotation) is structured in [`apps/web/src/lib/maci-config.ts`](apps/web/src/lib/maci-config.ts) under `ROTATION_HISTORY`, and every archived address is kept in [`packages/blockchain/src/index.ts`](packages/blockchain/src/index.ts).
 
 ---
 
@@ -182,7 +230,7 @@ This platform is designed to be forked by any small town:
 2. Update branding (colors, fonts, mascot) in `packages/design-tokens/`
 3. Deploy your own Supabase project
 4. Deploy web to Vercel, build mobile with EAS
-5. Deploy governance contracts on Base
+5. Deploy the identity + governance contracts on Gnosis (and, optionally, register your own Circles group currency)
 
 See [docs/FORKING_GUIDE.md](docs/FORKING_GUIDE.md) for the full guide.
 
