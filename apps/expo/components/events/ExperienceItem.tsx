@@ -69,6 +69,10 @@ export default function ExperienceItem({
 
   const imageUrls = experience.media_urls?.filter(Boolean) ?? [];
 
+  // Emoji reactions render inline within the content text (no colored banner).
+  const emojiPrefix = experience.emoji ? `${experience.emoji} ` : '';
+  const bodyText = `${emojiPrefix}${experience.content ?? ''}`.trim();
+
   return (
     <View
       ref={cardRef}
@@ -78,7 +82,7 @@ export default function ExperienceItem({
         showHighlight && { backgroundColor: colors.primaryLight },
       ]}
     >
-      {/* Emoji or sticker banner */}
+      {/* Sticker banner (emoji is rendered inline within the content text below) */}
       {experience.sticker ? (
         <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
           <Image
@@ -86,10 +90,6 @@ export default function ExperienceItem({
             style={styles.stickerBanner}
             contentFit="contain"
           />
-        </View>
-      ) : experience.emoji ? (
-        <View style={[styles.emojiBanner, { backgroundColor: colors.primaryLight }]}>
-          <Text style={styles.emoji}>{experience.emoji}</Text>
         </View>
       ) : null}
 
@@ -123,10 +123,12 @@ export default function ExperienceItem({
           </Pressable>
         )}
 
-        {/* Content text */}
-        <Text style={[styles.content, { color: colors.textPrimary }]}>
-          {experience.content}
-        </Text>
+        {/* Content text (emoji rendered inline) */}
+        {bodyText ? (
+          <Text style={[styles.content, { color: colors.textPrimary }]}>
+            {bodyText}
+          </Text>
+        ) : null}
 
         {/* Images — same grid as feed posts */}
         {imageUrls.length > 0 && (
@@ -163,15 +165,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
-  emoji: {
-    fontSize: 48,
-  },
   stickerBanner: {
     width: 140,
     height: 140,
   },
   body: {
-    paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
   },
@@ -199,7 +197,7 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   videoPlaceholder: {
     flexDirection: 'row',
