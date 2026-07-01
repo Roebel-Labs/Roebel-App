@@ -52,6 +52,9 @@ interface RequestData {
   citizenSignatures?: number;
   signatureCount?: number;
   createdAt: number;
+  // v2: per-request required thresholds (percentage bands, snapshotted at creation).
+  requiredAttesters?: number;
+  requiredCitizens?: number;
 }
 
 export default function NachweisPage() {
@@ -103,6 +106,43 @@ export default function NachweisPage() {
 
         console.log("✅ [Nachweis] Got request data:", result);
 
+        // v2: read the per-request required approval thresholds (scale-aware
+        // percentage bands, snapshotted at creation) so the UI shows the REAL X/Y
+        // instead of the old hardcoded 1/2. The snapshot is request-type-aware:
+        // e.g. a citizen revocation reports its 67%-band attester count, not 30%.
+        let requiredAttesters: number | undefined;
+        let requiredCitizens: number | undefined;
+        try {
+          if (contractType === "attester") {
+            const ra = await readContract({
+              contract,
+              method:
+                "function requiredApprovalsFor(uint256 requestId) view returns (uint256)",
+              params: [BigInt(requestId)],
+            });
+            requiredAttesters = Number(ra);
+          } else {
+            const [ra, rc] = await Promise.all([
+              readContract({
+                contract,
+                method:
+                  "function requiredAttesterApprovalsFor(uint256 requestId) view returns (uint256)",
+                params: [BigInt(requestId)],
+              }),
+              readContract({
+                contract,
+                method:
+                  "function requiredCitizenApprovalsFor(uint256 requestId) view returns (uint256)",
+                params: [BigInt(requestId)],
+              }),
+            ]);
+            requiredAttesters = Number(ra);
+            requiredCitizens = Number(rc);
+          }
+        } catch (e) {
+          console.log("[Nachweis] required-approvals read failed (older contract?)", e);
+        }
+
         if (contractType === "attester") {
           const [requester, target, requestType, status, evidenceURI, signatureCount, createdAt] = result as unknown as [string, string, number, number, string, bigint, bigint];
           setRequest({
@@ -113,6 +153,7 @@ export default function NachweisPage() {
             evidenceURI,
             signatureCount: Number(signatureCount),
             createdAt: Number(createdAt),
+            requiredAttesters,
           });
         } else {
           const [requester, target, requestType, status, evidenceURI, attesterSignatures, citizenSignatures, createdAt] = result as unknown as [string, string, number, number, string, bigint, bigint, bigint];
@@ -125,6 +166,8 @@ export default function NachweisPage() {
             attesterSignatures: Number(attesterSignatures),
             citizenSignatures: Number(citizenSignatures),
             createdAt: Number(createdAt),
+            requiredAttesters,
+            requiredCitizens,
           });
         }
       } catch (error) {
@@ -759,63 +802,76 @@ export default function NachweisPage() {
                 <h2 className="text-xl font-medium text-foreground mb-6">📊 Unterschriften</h2>
 
                 {contractType === "citizen" && request.attesterSignatures !== undefined && request.citizenSignatures !== undefined ? (
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Bescheiniger</span>
-                        <span className="font-medium">{request.attesterSignatures} / 1</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-gray-400 h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min((request.attesterSignatures / 1) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
+                  (() => {
+                    // Real per-request thresholds from the contract (percentage bands).
+                    // Fallbacks match the v2 band floors while the read is in flight.
+                    const reqAtt = request.requiredAttesters ?? (isRevocation ? 3 : 2);
+                    const reqCit = request.requiredCitizens ?? 1;
+                    return (
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-muted-foreground">Bescheiniger</span>
+                            <span className="font-medium">{request.attesterSignatures} / {reqAtt}</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div
+                              className="bg-gray-400 h-2 rounded-full transition-all"
+                              style={{ width: `${Math.min((request.attesterSignatures / Math.max(reqAtt, 1)) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
 
-                    {!isRevocation && (
+                        {reqCit > 0 && (
+                          <div>
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">Bürger</span>
+                              <span className="font-medium">{request.citizenSignatures} / {reqCit}</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div
+                                className="bg-gray-400 h-2 rounded-full transition-all"
+                                style={{ width: `${Math.min((request.citizenSignatures / Math.max(reqCit, 1)) * 100, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-4 p-4 border border-border rounded-lg">
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">Benötigt:</span>{" "}
+                            {reqCit > 0
+                              ? `${reqAtt} Bescheiniger + ${reqCit} Bürger (Unterschriften von verschiedenen Personen)`
+                              : `${reqAtt} Bescheiniger-Unterschrift${reqAtt === 1 ? "" : "en"}`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : request.signatureCount !== undefined ? (
+                  (() => {
+                    const reqAtt = request.requiredAttesters ?? 3;
+                    return (
                       <div>
                         <div className="flex justify-between text-sm mb-2">
-                          <span className="text-muted-foreground">Bürger</span>
-                          <span className="font-medium">{request.citizenSignatures} / 1</span>
+                          <span className="text-muted-foreground">Bescheiniger</span>
+                          <span className="font-medium">{request.signatureCount} / {reqAtt}</span>
                         </div>
                         <div className="w-full bg-muted rounded-full h-2">
                           <div
                             className="bg-gray-400 h-2 rounded-full transition-all"
-                            style={{ width: `${Math.min(request.citizenSignatures * 100, 100)}%` }}
+                            style={{ width: `${Math.min((request.signatureCount / Math.max(reqAtt, 1)) * 100, 100)}%` }}
                           />
                         </div>
+
+                        <div className="mt-4 p-4 border border-border rounded-lg">
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">Benötigt:</span> {reqAtt} Bescheiniger-Unterschrift{reqAtt === 1 ? "" : "en"}
+                          </p>
+                        </div>
                       </div>
-                    )}
-
-                    <div className="mt-4 p-4 border border-border rounded-lg">
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">Benötigt:</span>{" "}
-                        {isRevocation
-                          ? "1 Bescheiniger-Unterschrift"
-                          : "1 Bescheiniger + 1 Bürger Unterschrift (mindestens 2 verschiedene Personen)"}
-                      </p>
-                    </div>
-                  </div>
-                ) : request.signatureCount !== undefined ? (
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Bescheiniger</span>
-                      <span className="font-medium">{request.signatureCount} / 2</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-gray-400 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min((request.signatureCount / 2) * 100, 100)}%` }}
-                      />
-                    </div>
-
-                    <div className="mt-4 p-4 border border-border rounded-lg">
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">Benötigt:</span> 2 Bescheiniger Unterschriften
-                      </p>
-                    </div>
-                  </div>
+                    );
+                  })()
                 ) : null}
               </div>
 
@@ -898,12 +954,12 @@ export default function NachweisPage() {
                       </p>
                       {request && contractType === "citizen" && (
                         <div className="mt-3 text-xs text-muted-foreground">
-                          • Bescheiniger: {request.attesterSignatures || 0}/1
+                          • Bescheiniger: {request.attesterSignatures || 0}/{request.requiredAttesters ?? 3}
                         </div>
                       )}
                       {request && contractType === "attester" && (
                         <div className="mt-3 text-xs text-muted-foreground">
-                          • Bescheiniger: {request.signatureCount || 0}/2
+                          • Bescheiniger: {request.signatureCount || 0}/{request.requiredAttesters ?? 3}
                         </div>
                       )}
                     </div>
@@ -922,8 +978,8 @@ export default function NachweisPage() {
                           <div className="bg-muted rounded-lg p-4 mb-4">
                             <p className="text-sm font-medium text-foreground mb-2">Aktuelle Unterschriften:</p>
                             <div className="space-y-1 text-sm text-muted-foreground">
-                              <div>• Bescheiniger: {request?.attesterSignatures || 0}/1</div>
-                              <div>• Bürger: {request?.citizenSignatures || 0}/1</div>
+                              <div>• Bescheiniger: {request?.attesterSignatures || 0}/{request?.requiredAttesters ?? 2}</div>
+                              <div>• Bürger: {request?.citizenSignatures || 0}/{request?.requiredCitizens ?? 1}</div>
                             </div>
                           </div>
 
@@ -978,8 +1034,8 @@ export default function NachweisPage() {
                             </p>
                             {request && (
                               <div className="mt-3 text-xs text-muted-foreground">
-                                <div>• Bescheiniger: {request.attesterSignatures || 0}/1</div>
-                                <div>• Bürger: {request.citizenSignatures || 0}/1</div>
+                                <div>• Bescheiniger: {request.attesterSignatures || 0}/{request.requiredAttesters ?? 2}</div>
+                                <div>• Bürger: {request.citizenSignatures || 0}/{request.requiredCitizens ?? 1}</div>
                               </div>
                             )}
                           </div>
@@ -993,7 +1049,7 @@ export default function NachweisPage() {
                           </p>
                           {request && (
                             <div className="mt-3 text-xs text-muted-foreground">
-                              • Bescheiniger: {request.signatureCount || 0}/2
+                              • Bescheiniger: {request.signatureCount || 0}/{request.requiredAttesters ?? 3}
                             </div>
                           )}
                         </div>
