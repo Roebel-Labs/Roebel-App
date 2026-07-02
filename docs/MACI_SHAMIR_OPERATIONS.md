@@ -682,3 +682,41 @@ The merged state is committed on-chain and `runFinalize` from the
 subsequent Shamir flow detects it (`Poll.stateMerged()` and
 `Poll.messageAqMerged()`) and skips re-merging. The "failed legacy
 attempt" is effectively free pre-work for the Shamir tally.
+
+### 10.11 CRITICAL: deploy manifests hold the pubkey the governor was BORN with, not the one it HAS
+
+The 2026-06-24/27 Gnosis v2 deploys (and both governor-only redeploys)
+constructed the governor with `parameters.coordinatorPubKey` from
+`base.json`/`gnosis-v2.json` — a **deploy-time snapshot** that was never
+updated after the 2026-06-09 Shamir rotation executed (the rotation only
+ever landed on the Base governor). Result: every Gnosis poll (0/1/2) was
+encrypted to the retired single-operator key `1775076…`, which the 3-of-5
+Shamir shares can NOT reconstruct — a Shamir tally session dies at the
+`coordinatorKeypair.pubKey.hash() === coordinatorPubKeyHashOnChain`
+assertion. The only visible symptom was the admin dashboard's yellow
+"On-Chain Pubkey weicht ab" warning.
+
+Recovery (2026-07-02): the retired key still existed at
+`~/.roebel-deploy/coord-priv.txt`; it was verified against the poll's
+on-chain pubkey and temporarily restored as `COORDINATOR_PRIV` on Fly so
+the legacy scan path could tally polls 0–2 (the Fly machine's
+MACI/verifier/vkRegistry/RPC env also had to be cut over from Base to
+Gnosis first — only GOVERNOR_ADDRESS had been updated). After a fresh
+rotation ceremony re-establishes a Shamir key on the Gnosis governor,
+`COORDINATOR_PRIV` must be unset again — and promptly, because while it
+is set, `scan-and-finalize` runs in LEGACY mode and will try (and fail)
+to single-key-tally polls bound to the new Shamir pubkey instead of
+opening a reconstructor session.
+
+Hard rules to prevent recurrence:
+1. After every executed `setCoordinatorPubKey` rotation, update
+   `parameters.coordinatorPubKey` in the active deployments manifest
+   (`gnosis-v2.json`) and `MACI_COORDINATOR_PUBKEY` in
+   `packages/blockchain/src/index.ts` in the same PR.
+2. `redeploy-governor-only-gnosis.cjs` now reads the LIVE
+   `coordinatorPubKey()` from the old governor and warns when the
+   manifest is stale (manifest is a fallback only).
+3. Also remember: the Supabase `coordinator_key_generations` row is keyed
+   by `governor_address`. A governor redeploy orphans the active
+   generation — the reconstructor will find no generation for the new
+   governor. Re-key the row or run a fresh ceremony after any redeploy.
