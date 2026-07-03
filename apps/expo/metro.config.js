@@ -1,7 +1,20 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require("expo/metro-config");
+const path = require("path");
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
+
+// --- pnpm monorepo support -------------------------------------------------
+// Workspace packages consumed by the app (e.g. @netizen/miniapp-sdk) live
+// OUTSIDE apps/expo, and ship untranspiled TS source. Metro must (a) be allowed
+// to read files from the repo root, and (b) resolve modules from the root
+// node_modules where pnpm links workspace packages.
+const workspaceRoot = path.resolve(__dirname, "../..");
+config.watchFolders = [workspaceRoot];
+config.resolver.nodeModulesPaths = [
+  path.resolve(__dirname, "node_modules"),
+  path.resolve(workspaceRoot, "node_modules"),
+];
 
 // SVG transformer configuration
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer');

@@ -10,6 +10,7 @@ import {
   type BridgeError,
   type BridgeMessage,
   type BridgeMethod,
+  type BridgeResponse,
   type NetizenEvent,
 } from './types';
 
@@ -49,13 +50,15 @@ export class ClientBridge {
     const msg = parse(ev.data);
     if (!msg || msg.netizen !== NETIZEN_PROTOCOL) return;
 
-    if ('id' in msg && msg.id) {
-      const p = this.pending.get(msg.id);
+    // A client only ever receives responses (id, no method) and events.
+    if ('id' in msg && msg.id && !('method' in msg)) {
+      const res = msg as BridgeResponse;
+      const p = this.pending.get(res.id);
       if (!p) return;
-      this.pending.delete(msg.id);
+      this.pending.delete(res.id);
       clearTimeout(p.timer);
-      if (msg.error) p.reject(msg.error);
-      else p.resolve(msg.result);
+      if (res.error) p.reject(res.error);
+      else p.resolve(res.result);
       return;
     }
 
