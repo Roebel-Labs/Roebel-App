@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Netizen Mini App — design tokens (see packages/miniapp-sdk/DESIGN.md).
+
+   Tailwind v4 turns every `--color-*` here into a utility class
+   (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`,
+   `border-border`, `bg-primary`, …). Do NOT invent a second design system —
+   compose these tokens so every mini app speaks the same visual language.
+
+   The fonts are loaded by `next/font/local` in `app/layout.tsx`, which injects
+   the `--font-sans` / `--font-heading` / `--font-mono` CSS variables onto
+   <html>. We map them into the Tailwind theme below so `font-sans`,
+   `font-heading` and `font-mono` work as utilities.
+   ────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Type — Mona Sans (variable). `--font-heading` is the same face rendered at
+     SemiCondensed width (see the `.font-heading` rule below). */
+  --font-sans: var(--font-mona-sans), system-ui, -apple-system, sans-serif;
+  --font-heading: var(--font-mona-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mona-sans-mono), ui-monospace, monospace;
+
+  /* Color — navy #00498B is the ONLY brand accent. Do not add new hues. */
+  --color-primary: #00498b;
+  --color-primary-foreground: #ffffff;
+
+  --color-background: #ffffff;
+  --color-card: #f7f7f7;
+  --color-foreground: #000000;
+  --color-muted: #f0f0f0;
+  --color-muted-foreground: #6b7280;
+  --color-border: #b4b8c1;
+
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  /* Corner radius — 10px on controls/cards; 14px on larger surfaces. */
+  --radius: 10px;
+}
+
+/* Dark mode — the host WebView follows the user's system theme. Navy lightens
+   to #7ABBF2 and surfaces flip to the Röbel dark palette (DESIGN.md §2). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #7abbf2;
+    --color-primary-foreground: #0a0a0a;
+
+    --color-background: #202124;
+    --color-card: #3c4043;
+    --color-foreground: #e8eaed;
+    --color-muted: #3c4043;
+    --color-muted-foreground: #9aa0a6;
+    --color-border: #3c4043;
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings + `.font-heading` render Mona Sans at SemiCondensed width (87.5%).
+   Weight is left to the Tailwind class (font-semibold / font-bold). */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-heading {
+  font-family: var(--font-heading);
+  font-stretch: 87.5%;
+}
+
+::selection {
+  background: rgba(0, 73, 139, 0.14);
+}
+
+/* Respect reduced-motion — mini apps run in a modal; keep motion calm. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
