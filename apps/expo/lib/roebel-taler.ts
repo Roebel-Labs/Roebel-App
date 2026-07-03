@@ -155,8 +155,108 @@ async function getXdaiEurRate(): Promise<number> {
 
 const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
 
+/** Historical xDAI→€ rate for the UTC day of `tsMs` (session-cached per day). */
+const histRateCache = new Map<string, number>();
+async function getXdaiEurRateOn(tsMs: number): Promise<number> {
+	const d = new Date(tsMs || Date.now());
+	const key = `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+	const hit = histRateCache.get(key);
+	if (hit) return hit;
+	try {
+		const res = await fetch(
+			`https://api.coingecko.com/api/v3/coins/xdai/history?date=${key}&localization=false`
+		);
+		const j = await res.json();
+		const rate = Number(j?.market_data?.current_price?.eur);
+		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
+			histRateCache.set(key, rate);
+			return rate;
+		}
+	} catch {
+		/* fall through */
+	}
+	return getXdaiEurRate();
+}
+
+/** A real native-xDAI movement of the treasury (phantom frames excluded). */
+type NativeFlow = { direction: "in" | "out"; xdai: number; timestamp: number; txHash: string };
+
 /**
- * Stadtkasse fiat value in €: native xDAI (live-converted) + EURe.
+ * Every real native-xDAI transfer of `address`, from Blockscout. Merges
+ * regular transactions with internal ones — a Safe pays out via internal
+ * CALL frames (the visible tx is a value-0 execTransaction). DELEGATECALL
+ * frames are skipped: a MultiSend batch mirrors the tx value in its frame
+ * without actually moving it, which would fabricate phantom in/out pairs.
+ */
+async function fetchNativeFlows(address: string): Promise<NativeFlow[]> {
+	const self = address.toLowerCase();
+	const [natRes, intRes] = await Promise.all([
+		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`),
+		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/internal-transactions`),
+	]);
+	const nat = await natRes.json();
+	const intl = await intRes.json();
+	const flows: NativeFlow[] = [];
+	const push = (rawValue: string, toHash: string, ts: string | undefined, txHash: string) => {
+		let v = 0;
+		try {
+			v = Number(BigInt(rawValue || "0")) / 1e18;
+		} catch {
+			return;
+		}
+		if (v <= 0) return;
+		flows.push({
+			direction: toHash.toLowerCase() === self ? "in" : "out",
+			xdai: v,
+			timestamp: ts ? Date.parse(ts) : 0,
+			txHash,
+		});
+	};
+	for (const t of Array.isArray(nat?.items) ? nat.items : []) {
+		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.hash ?? ""));
+	}
+	for (const t of Array.isArray(intl?.items) ? intl.items : []) {
+		if ((t?.type ?? "call") !== "call") continue;
+		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.transaction_hash ?? ""));
+	}
+	// A direct transfer can appear both as the regular tx and as its top-level
+	// internal frame — keep one.
+	const seen = new Set<string>();
+	return flows.filter((f) => {
+		const key = `${f.txHash}:${f.direction}:${f.xdai.toFixed(9)}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+/**
+ * Ledger (cost-basis) € value of the treasury's xDAI: every in-/outflow is
+ * locked in at its own day's rate — like a bank account, money the Kasse
+ * received doesn't silently drift with later FX moves, and the balance always
+ * equals the sum of the visible history rows. Returns null when the flow list
+ * doesn't reconcile with the on-chain balance (indexer lag / pagination) so
+ * callers can fall back to mark-to-market.
+ */
+async function xdaiLedgerEuro(address: string, onchainXdai: number): Promise<number | null> {
+	try {
+		const flows = await fetchNativeFlows(address);
+		if (flows.length === 0) return null;
+		const net = flows.reduce((s, f) => s + (f.direction === "in" ? f.xdai : -f.xdai), 0);
+		if (Math.abs(net - onchainXdai) > 0.01) return null;
+		let total = 0;
+		for (const f of flows) {
+			total += (f.direction === "in" ? 1 : -1) * f.xdai * (await getXdaiEurRateOn(f.timestamp));
+		}
+		return total;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Stadtkasse fiat value in €: native xDAI (ledger-valued — each flow at its
+ * own day's rate, falling back to live mark-to-market) + EURe.
  * Röbel Münzen are deliberately EXCLUDED — they are not euro-redeemable, and
  * every surface must show the same figure as the treasury details page.
  */
@@ -184,7 +284,9 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	return xdai * (await getXdaiEurRate()) + eure;
+	const ledger = await xdaiLedgerEuro(address, xdai);
+	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
+	return xdaiEuro + eure;
 }
 
 export interface TreasuryAssets {
@@ -224,7 +326,9 @@ export async function getTreasuryAssets(address: string): Promise<TreasuryAssets
 		/* ignore */
 	}
 	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
-	return { roebel, xdai, eure, euroTotal: xdai * (await getXdaiEurRate()) + eure };
+	const ledger = await xdaiLedgerEuro(address, xdai);
+	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
+	return { roebel, xdai, eure, euroTotal: xdaiEuro + eure };
 }
 
 export interface TreasuryTx {
@@ -251,68 +355,23 @@ export interface TreasuryTx {
 export async function getTreasuryTransactions(address: string): Promise<TreasuryTx[]> {
 	const self = address.toLowerCase();
 	const eureToken = EURE_ADDRESS.toLowerCase();
-	// Same live rate as the balance calc so history rows match the total.
-	const rate = await getXdaiEurRate();
 
+	// Real native flows (regular + internal CALL frames, phantoms excluded),
+	// each valued at ITS OWN day's rate — the same basis as the ledger total,
+	// so the history rows always sum to the displayed balance.
 	const native = (async (): Promise<TreasuryTx[]> => {
 		try {
-			const res = await fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`);
-			const j = await res.json();
-			const items: any[] = Array.isArray(j?.items) ? j.items : [];
-			return items.map((t) => {
-				const to = (t?.to?.hash ?? "").toLowerCase();
-				let amount = 0;
-				try {
-					// xDAI is USD-pegged → convert to € so the history matches the
-					// total-balance calc (which applies the same live rate).
-					amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * rate;
-				} catch {
-					amount = 0;
-				}
-				const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
-				const direction: "in" | "out" | "admin" = amount === 0 ? "admin" : to === self ? "in" : "out";
-				const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
-				return { direction, amount, currency: "eur" as const, timestamp, label, txHash: String(t?.hash ?? "") };
-			});
-		} catch {
-			return [];
-		}
-	})();
-
-	// A Safe moves native xDAI via INTERNAL transactions: the visible tx is a
-	// value-0 execTransaction() call, and the actual transfer happens one call
-	// frame deeper. Without this, every payout (e.g. the 50 € ad budget) is
-	// invisible in the history.
-	const internal = (async (): Promise<TreasuryTx[]> => {
-		try {
-			const res = await fetch(
-				`https://gnosis.blockscout.com/api/v2/addresses/${address}/internal-transactions`
+			const flows = await fetchNativeFlows(address);
+			return await Promise.all(
+				flows.map(async (f) => ({
+					direction: f.direction,
+					amount: f.xdai * (await getXdaiEurRateOn(f.timestamp)),
+					currency: "eur" as const,
+					timestamp: f.timestamp,
+					label: f.direction === "in" ? "Eingang" : "Ausgang",
+					txHash: f.txHash,
+				})),
 			);
-			const j = await res.json();
-			const items: any[] = Array.isArray(j?.items) ? j.items : [];
-			return items
-				.filter((t) => {
-					try {
-						return BigInt(t?.value ?? "0") > 0n;
-					} catch {
-						return false;
-					}
-				})
-				.map((t) => {
-					const to = (t?.to?.hash ?? "").toLowerCase();
-					const amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * rate;
-					const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
-					const direction: "in" | "out" = to === self ? "in" : "out";
-					const label = direction === "in" ? "Eingang" : "Ausgang";
-					return {
-						direction,
-						amount,
-						currency: "eur" as const,
-						timestamp,
-						label,
-						txHash: String(t?.transaction_hash ?? ""),
-					};
-				});
 		} catch {
 			return [];
 		}
@@ -347,19 +406,8 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 	})();
 
 	try {
-		const [n, i, t] = await Promise.all([native, internal, tokens]);
-		// A plain transfer to the Safe can appear both as a regular tx and as the
-		// top-level internal call frame — dedupe value-moves by (hash, direction,
-		// amount) so it isn't listed twice.
-		const seen = new Set<string>();
-		const merged = [...n, ...i, ...t].filter((x) => {
-			if (x.amount <= 0) return true;
-			const key = `${x.txHash}:${x.direction}:${x.amount.toFixed(6)}`;
-			if (seen.has(key)) return false;
-			seen.add(key);
-			return true;
-		});
-		return merged.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
+		const [n, t] = await Promise.all([native, tokens]);
+		return [...n, ...t].sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
 	} catch {
 		return [];
 	}
