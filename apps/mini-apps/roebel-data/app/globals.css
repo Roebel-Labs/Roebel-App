@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Röbel Circles mini app — design tokens (see packages/miniapp-sdk/DESIGN.md).
+
+   Fonts are loaded by `next/font/local` in `app/layout.tsx`, which injects the
+   `--font-mona-sans` / `--font-mona-sans-mono` CSS variables onto <html>. We map
+   them into the Tailwind theme below so `font-sans`/`font-mono` work as utilities
+   and every `--color-*` becomes a utility (bg-card, text-muted-foreground,
+   border-border, …). One design system — do not invent a second one.
+   ────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Type — Mona Sans (variable). `--font-display` is the same face rendered at
+     SemiCondensed width (see the heading rule below). */
+  --font-sans: var(--font-mona-sans), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-mona-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mona-sans-mono), ui-monospace, monospace;
+
+  /* Navy #00498B is the ONLY brand accent. Do not add new hues. */
+  --color-navy: #00498b;
+  --color-navy-600: #1d4e99;
+  --color-primary: #00498b;
+  --color-primary-foreground: #ffffff;
+
+  /* Surfaces — a true-neutral gray scale (no hue), shadcn-style. */
+  --color-background: #ffffff;
+  --color-card: #ffffff;
+  --color-foreground: #0a0a0a;
+  --color-muted: #f0f0f0;
+  --color-muted-foreground: #6b7280;
+  --color-border: #b4b8c1;
+
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  --radius: 10px;
+}
+
+/* Dark mode — the host WebView follows the user's system theme. Navy lightens
+   to #7ABBF2 and surfaces flip to the Röbel dark palette (DESIGN.md §2). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-navy: #7abbf2;
+    --color-navy-600: #7abbf2;
+    --color-primary: #7abbf2;
+    --color-primary-foreground: #0a0a0a;
+
+    --color-background: #202124;
+    --color-card: #3c4043;
+    --color-foreground: #e8eaed;
+    --color-muted: #3c4043;
+    --color-muted-foreground: #9aa0a6;
+    --color-border: #3c4043;
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+  background: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* All headings (and any .font-display element) use Mona Sans SemiCondensed.
+   Weight is left to the component's Tailwind class (font-semibold / font-bold). */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-display {
+  font-family: var(--font-display);
+  font-stretch: 87.5%;
+}
+
+/* Button labels: Mona Sans SemiCondensed Bold. Unlayered so it overrides
+   Tailwind's font-weight utilities on buttons. Mono content inside a button
+   keeps its own font set on that child. */
+button {
+  font-family: var(--font-display);
+  font-stretch: 87.5%;
+  font-weight: 700;
+}
+
+::selection {
+  background: rgba(0, 73, 139, 0.14);
+}
+
+/* Tabular numerals everywhere they matter — crisper for amounts/counts. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Staggered entrance used on cards/sections (set animation-delay inline). */
+@keyframes rc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rc-rise {
+  animation: rc-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stroke draw-in for the graph edges. */
+@keyframes rc-draw {
+  from {
+    stroke-dashoffset: var(--rc-len, 200);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-rise,
+  .rc-draw {
+    animation: none !important;
+  }
+}
+
+/* Hide scrollbars on the horizontal tab strip while keeping it scrollable. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
