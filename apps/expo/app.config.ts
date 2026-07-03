@@ -5,7 +5,7 @@ const config: ExpoConfig = {
   name: 'Röbel',
   slug: 'roebel-onchain',
   scheme: 'roebel',
-  version: '3.3.0',
+  version: '3.4.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -141,7 +141,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
-    buildNumber: '29',
+    buildNumber: '30',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -159,7 +159,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 35,
+    versionCode: 36,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
