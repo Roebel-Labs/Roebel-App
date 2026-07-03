@@ -1,0 +1,21 @@
+{
+  "name": "@netizen/miniapp-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in the Röbel host (WebView/iframe).",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./host": {
+      "types": "./src/host/index.ts",
+      "default": "./src/host/index.ts"
+    }
+  },
+  "files": ["src", "DESIGN.md"],
+  "sideEffects": false
+}
