@@ -19,35 +19,31 @@ export function useRealtimeProposals() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
-  // Fetch vote data from blockchain for all proposals
+  // Fetch live proposal state from the blockchain.
+  // NOTE: never call proposalVotes() here — the MACI governor has no public
+  // vote counting (ballots are encrypted), so that call always reverts, and
+  // bundling it with state() in one Promise.all dragged the working state()
+  // read into the catch branch. The list then stayed stuck on the stale
+  // Supabase snapshot ("Ausstehend"). Vote counts come from the Supabase row,
+  // which is synced from the Tally contract once results are published.
   const fetchVoteData = useCallback(async (proposalList: Proposal[]) => {
     const voteDataPromises = proposalList.map(async (proposal) => {
       try {
         const blockchainProposalId = BigInt(proposal.blockchainProposalId!);
 
-        const [stateResult, votesResult] = await Promise.all([
-          readContract({
-            contract: governorContract,
-            method: 'function state(uint256) view returns (uint8)',
-            params: [blockchainProposalId],
-          }),
-          readContract({
-            contract: governorContract,
-            method: 'function proposalVotes(uint256) view returns (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes)',
-            params: [blockchainProposalId],
-          }),
-        ]);
+        const stateResult = await readContract({
+          contract: governorContract,
+          method: 'function state(uint256) view returns (uint8)',
+          params: [blockchainProposalId],
+        });
 
         return {
           ...proposal,
           state: stateResult as ProposalState,
-          againstVotes: votesResult[0],
-          forVotes: votesResult[1],
-          abstainVotes: votesResult[2],
           blockchainUnavailable: false,
         };
       } catch (err) {
-        console.warn(`⚠️ Failed to fetch vote data for proposal ${proposal.proposalId}`, err);
+        console.warn(`⚠️ Failed to fetch live state for proposal ${proposal.proposalId}`, err);
         return {
           ...proposal,
           blockchainUnavailable: true,

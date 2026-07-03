@@ -32,11 +32,22 @@ export default function ProposalPreviewCard({ proposal }: Props) {
   const resultsPublished =
     toBig(proposal.for_votes) + toBig(proposal.against_votes) + toBig(proposal.abstain_votes) > 0n;
 
+  // Numeric on-chain id → the badge polls governor.state() live instead of
+  // showing the cached Supabase snapshot (which went stale after tallies).
+  let blockchainId: bigint | undefined;
+  try {
+    blockchainId = proposal.blockchain_proposal_id
+      ? BigInt(proposal.blockchain_proposal_id)
+      : undefined;
+  } catch {
+    blockchainId = undefined;
+  }
+
   return (
     <Pressable onPress={handlePress} style={[styles.container, { borderColor: colors.border }]}>
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.textTertiary }]}>VORSCHLAG</Text>
-        <ProposalStateBadge state={proposal.state as ProposalState} />
+        <ProposalStateBadge state={proposal.state as ProposalState} proposalId={blockchainId} />
       </View>
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
         {proposal.title}

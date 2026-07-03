@@ -243,6 +243,9 @@ export type ProposalFeedRecord = {
 
 export type ProposalPreviewRef = {
   proposal_id: string;
+  /** Numeric on-chain id — lets preview badges poll governor.state() live
+   *  instead of trusting the cached Supabase `state` snapshot. */
+  blockchain_proposal_id?: string | null;
   title: string;
   state: number;
   for_votes: string;
