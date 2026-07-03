@@ -44,6 +44,7 @@ import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPost
 import { ConsentGate } from '@/components/consent/ConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
+import AnimatedSplash from '@/components/AnimatedSplash';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -263,6 +264,7 @@ function ThemedLayout() {
 
 function Layout() {
   const { fontsLoaded, fontError } = useAppFonts();
+  const [splashDone, setSplashDone] = React.useState(false);
 
   React.useEffect(() => {
     if (fontsLoaded) {
@@ -346,6 +348,7 @@ function Layout() {
             </ConsentProvider>
           </ThemeProvider>
         </SafeAreaProvider>
+        {!splashDone && <AnimatedSplash onFinish={() => setSplashDone(true)} />}
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
