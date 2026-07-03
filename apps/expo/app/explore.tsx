@@ -30,6 +30,7 @@ import MarketplaceSection from '@/components/MarketplaceSection';
 import NearbyEventsSection from '@/components/NearbyEventsSection';
 import NearbyOrgAccountsSection from '@/components/NearbyOrgAccountsSection';
 import MapFAB from '@/components/MapFAB';
+import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 
@@ -208,6 +209,9 @@ export default function ExploreScreen() {
               loop
               containerStyle={{ paddingVertical: 16, marginBottom: 0 }}
             />
+
+            {/* Mini Apps store entry */}
+            <MiniAppsEntry />
 
             {/* This Week Events - Horizontal */}
             <ThisWeekEventsHorizontal events={futureEvents} />
