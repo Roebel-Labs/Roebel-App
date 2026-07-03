@@ -155,27 +155,56 @@ async function getXdaiEurRate(): Promise<number> {
 
 const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
 
-/** Historical xDAI→€ rate for the UTC day of `tsMs` (session-cached per day). */
-const histRateCache = new Map<string, number>();
-async function getXdaiEurRateOn(tsMs: number): Promise<number> {
-	const d = new Date(tsMs || Date.now());
-	const key = `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
-	const hit = histRateCache.get(key);
-	if (hit) return hit;
+/**
+ * Historical xDAI→€ rate for the UTC day of `tsMs`.
+ *
+ * All callers of the same day share ONE in-flight promise, and fetches are
+ * serialized with a short gap + one retry: Coingecko's free tier rate-limits
+ * bursts, which previously made random rows fall back to 0.92 while others
+ * used the real rate — mixed-basis rows that didn't sum to the total. A
+ * fallback resolution is evicted after 60 s so a temporary rate-limit doesn't
+ * pin a wrong rate for the whole session.
+ */
+const histRatePromises = new Map<string, Promise<number>>();
+let histQueue: Promise<unknown> = Promise.resolve();
+async function fetchHistRate(key: string): Promise<number | null> {
 	try {
 		const res = await fetch(
 			`https://api.coingecko.com/api/v3/coins/xdai/history?date=${key}&localization=false`
 		);
 		const j = await res.json();
 		const rate = Number(j?.market_data?.current_price?.eur);
-		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
-			histRateCache.set(key, rate);
-			return rate;
-		}
+		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) return rate;
 	} catch {
 		/* fall through */
 	}
-	return getXdaiEurRate();
+	return null;
+}
+function getXdaiEurRateOn(tsMs: number): Promise<number> {
+	const d = new Date(tsMs || Date.now());
+	const key = `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+	const hit = histRatePromises.get(key);
+	if (hit) return hit;
+	const prev = histQueue;
+	const p = (async () => {
+		await prev.catch(() => {});
+		await new Promise((r) => setTimeout(r, 300));
+		let rate = await fetchHistRate(key);
+		if (rate == null) {
+			await new Promise((r) => setTimeout(r, 1500));
+			rate = await fetchHistRate(key);
+		}
+		if (rate == null) {
+			setTimeout(() => {
+				if (histRatePromises.get(key) === p) histRatePromises.delete(key);
+			}, 60_000);
+			return getXdaiEurRate();
+		}
+		return rate;
+	})();
+	histRatePromises.set(key, p);
+	histQueue = p.catch(() => {});
+	return p;
 }
 
 /** A real native-xDAI movement of the treasury (phantom frames excluded). */
@@ -189,6 +218,20 @@ type NativeFlow = { direction: "in" | "out"; xdai: number; timestamp: number; tx
  * without actually moving it, which would fabricate phantom in/out pairs.
  */
 async function fetchNativeFlows(address: string): Promise<NativeFlow[]> {
+	// Balance (ledger) and history are computed from the same flow snapshot —
+	// a 30 s shared promise avoids duplicate Blockscout hits per screen AND
+	// guarantees the hero total equals the sum of the visible rows.
+	const cached = nativeFlowsCache;
+	if (cached && cached.key === address.toLowerCase() && Date.now() - cached.at < 30_000) {
+		return cached.promise;
+	}
+	const promise = fetchNativeFlowsUncached(address);
+	nativeFlowsCache = { key: address.toLowerCase(), at: Date.now(), promise };
+	return promise;
+}
+let nativeFlowsCache: { key: string; at: number; promise: Promise<NativeFlow[]> } | null = null;
+
+async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> {
 	const self = address.toLowerCase();
 	const [natRes, intRes] = await Promise.all([
 		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`),

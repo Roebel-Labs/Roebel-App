@@ -23,6 +23,8 @@ import ProposalOnchainLinks from '@/components/proposals/ProposalOnchainLinks';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
 import { governorContractAddress } from '@/constants/thirdweb';
+import { getTreasuryEuro } from '@/lib/roebel-taler';
+import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 export default function ProposalDetailScreen() {
   const goBack = useGoBack();
@@ -44,6 +46,17 @@ export default function ProposalDetailScreen() {
 
   const [isCitizen, setIsCitizen] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Live Gemeinschaftskasse balance for the piggy-bank card (see below).
+  const [liveKasseEuro, setLiveKasseEuro] = useState<number | null>(null);
+  useEffect(() => {
+    if (!proposal?.gemeinschaftskasseSnapshot) return;
+    let cancelled = false;
+    getTreasuryEuro(attesterSafeGnosisAddress)
+      .then((e) => { if (!cancelled) setLiveKasseEuro(e); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [proposal?.gemeinschaftskasseSnapshot]);
 
   // Fetch Irys content if available
   const proposalContent = useProposalContent(
@@ -222,12 +235,16 @@ export default function ProposalDetailScreen() {
           isLoading={proposalContent.loading}
         />
 
-        {/* Frozen Gemeinschaftskasse balance at proposal time (opt-in by the
-            proposer) — taps through to the treasury. */}
+        {/* LIVE Gemeinschaftskasse balance (opt-in card by the proposer) —
+            taps through to the treasury. Live, not the frozen creation-time
+            figure: voters coming back after a payout executed must see the
+            same number as the Kasse page, otherwise the proposal page and
+            the treasury visibly contradict each other. The frozen value is
+            only the instant placeholder while the live read is in flight. */}
         {proposal.gemeinschaftskasseSnapshot && (
           <View style={styles.snapshotWrap}>
             <StadtkasseSnapshotCard
-              euro={proposal.gemeinschaftskasseSnapshot.euro}
+              euro={liveKasseEuro ?? proposal.gemeinschaftskasseSnapshot.euro}
               onPress={() => router.push('/treasury' as any)}
             />
           </View>
