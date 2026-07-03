@@ -96,9 +96,9 @@ export default function TransactionScreen() {
             onPress={() => Linking.openURL(`https://gnosisscan.io/tx/${txHash}`).catch(() => {})}
             style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.6 : 1 }]}
             accessibilityRole="button"
-            accessibilityLabel="Auf Gnosisscan ansehen"
+            accessibilityLabel="Digitaler Beweis auf Gnosisscan öffnen"
           >
-            <Text style={styles.linkText}>Auf Gnosisscan ansehen</Text>
+            <Text style={styles.linkText}>Digitaler Beweis ↗</Text>
           </Pressable>
         )}
       </ScrollView>
