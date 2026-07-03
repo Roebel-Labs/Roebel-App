@@ -13,8 +13,30 @@ export const GNOSIS_CHAIN_ID = 100;
 export const ATTO = 10n ** 18n;
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-/** Indicative xDAI→€ rate (xDAI is USD-pegged) — orientation only. */
+/** Fallback xDAI→€ rate (xDAI is USD-pegged) — only used when the live FX fetch fails. */
 export const XDAI_EUR = 0.92;
+
+let xdaiEurCache: { rate: number; at: number } | null = null;
+/**
+ * Live xDAI→€ rate (Coingecko, 10-min in-memory cache) so treasury figures
+ * are exact instead of the indicative 0.92 constant. Falls back to the last
+ * known rate, then XDAI_EUR, when offline. Safe for server and client.
+ */
+export async function getXdaiEurRate(): Promise<number> {
+  if (xdaiEurCache && Date.now() - xdaiEurCache.at < 10 * 60 * 1000) return xdaiEurCache.rate;
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
+    const j = (await res.json()) as { xdai?: { eur?: number } };
+    const rate = Number(j?.xdai?.eur);
+    if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
+      xdaiEurCache = { rate, at: Date.now() };
+      return rate;
+    }
+  } catch {
+    /* fall back */
+  }
+  return xdaiEurCache?.rate ?? XDAI_EUR;
+}
 /** Indicative € value of 1 Röbel Münze (orientation only — NOT redeemable). */
 export const MUENZE_EUR = 1;
 

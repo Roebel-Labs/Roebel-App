@@ -17,7 +17,7 @@ import { dailyBuckets, withCumulativeSupply } from "@/lib/muenzen/series";
 import { rcrcTotalSupply, rcrcBalance, nativeBalance, eureBalance } from "@/lib/muenzen/gnosis";
 import {
   ADDR,
-  XDAI_EUR,
+  getXdaiEurRate,
   MUENZE_EUR,
   FUNDER_LOW_RCRC,
   COLLATERAL_DRIFT_TOLERANCE,
@@ -82,7 +82,7 @@ export async function GET(req: Request) {
         }
 
         const safeEuro =
-          attoToNumber(safeXdai) * XDAI_EUR +
+          attoToNumber(safeXdai) * (await getXdaiEurRate()) +
           attoToNumber(safeEure) +
           attoToNumber(safeRcrc) * MUENZE_EUR;
 

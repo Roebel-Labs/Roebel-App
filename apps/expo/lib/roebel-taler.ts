@@ -132,10 +132,34 @@ export async function getMintableTaler(address: string): Promise<bigint> {
 	}
 }
 
-const XDAI_EUR = 0.92; // approx USD→EUR (xDAI is USD-pegged); indicative only
+// xDAI is USD-pegged, so its € value moves with EUR/USD. Fetch the live rate
+// (10-min in-memory cache) so treasury figures match what a payout actually
+// costs; fall back to the last known / an approximate rate when offline.
+const XDAI_EUR_FALLBACK = 0.92;
+let xdaiEurCache: { rate: number; at: number } | null = null;
+async function getXdaiEurRate(): Promise<number> {
+	if (xdaiEurCache && Date.now() - xdaiEurCache.at < 10 * 60 * 1000) return xdaiEurCache.rate;
+	try {
+		const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
+		const j = await res.json();
+		const rate = Number(j?.xdai?.eur);
+		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
+			xdaiEurCache = { rate, at: Date.now() };
+			return rate;
+		}
+	} catch {
+		/* ignore — fall back */
+	}
+	return xdaiEurCache?.rate ?? XDAI_EUR_FALLBACK;
+}
+
 const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
 
-/** Stadtkasse value in € (indicative): native xDAI + EURe + Röbel Münzen, converted. */
+/**
+ * Stadtkasse fiat value in €: native xDAI (live-converted) + EURe.
+ * Röbel Münzen are deliberately EXCLUDED — they are not euro-redeemable, and
+ * every surface must show the same figure as the treasury details page.
+ */
 export async function getTreasuryEuro(address: string): Promise<number> {
 	let xdai = 0;
 	try {
@@ -149,7 +173,6 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	const rt = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
 	let eure = 0;
 	try {
 		const e = (await readContract({
@@ -161,7 +184,7 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	return xdai * XDAI_EUR + eure + rt;
+	return xdai * (await getXdaiEurRate()) + eure;
 }
 
 export interface TreasuryAssets {
@@ -171,7 +194,7 @@ export interface TreasuryAssets {
 	xdai: number;
 	/** EURe (regulated euro) balance. */
 	eure: number;
-	/** Indicative € total (xDAI→€ + EURe + Röbel Münzen). */
+	/** Fiat € total (xDAI live-converted + EURe). Röbel Münzen excluded — not euro-redeemable. */
 	euroTotal: number;
 }
 
@@ -201,7 +224,7 @@ export async function getTreasuryAssets(address: string): Promise<TreasuryAssets
 		/* ignore */
 	}
 	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
-	return { roebel, xdai, eure, euroTotal: xdai * XDAI_EUR + eure + roebel };
+	return { roebel, xdai, eure, euroTotal: xdai * (await getXdaiEurRate()) + eure };
 }
 
 export interface TreasuryTx {
@@ -228,6 +251,8 @@ export interface TreasuryTx {
 export async function getTreasuryTransactions(address: string): Promise<TreasuryTx[]> {
 	const self = address.toLowerCase();
 	const eureToken = EURE_ADDRESS.toLowerCase();
+	// Same live rate as the balance calc so history rows match the total.
+	const rate = await getXdaiEurRate();
 
 	const native = (async (): Promise<TreasuryTx[]> => {
 		try {
@@ -238,9 +263,9 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 				const to = (t?.to?.hash ?? "").toLowerCase();
 				let amount = 0;
 				try {
-					// xDAI is USD-pegged → convert to € (×XDAI_EUR) so the history
-					// matches the total-balance calc (which also applies XDAI_EUR).
-					amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * XDAI_EUR;
+					// xDAI is USD-pegged → convert to € so the history matches the
+					// total-balance calc (which applies the same live rate).
+					amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * rate;
 				} catch {
 					amount = 0;
 				}
@@ -249,6 +274,45 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 				const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
 				return { direction, amount, currency: "eur" as const, timestamp, label, txHash: String(t?.hash ?? "") };
 			});
+		} catch {
+			return [];
+		}
+	})();
+
+	// A Safe moves native xDAI via INTERNAL transactions: the visible tx is a
+	// value-0 execTransaction() call, and the actual transfer happens one call
+	// frame deeper. Without this, every payout (e.g. the 50 € ad budget) is
+	// invisible in the history.
+	const internal = (async (): Promise<TreasuryTx[]> => {
+		try {
+			const res = await fetch(
+				`https://gnosis.blockscout.com/api/v2/addresses/${address}/internal-transactions`
+			);
+			const j = await res.json();
+			const items: any[] = Array.isArray(j?.items) ? j.items : [];
+			return items
+				.filter((t) => {
+					try {
+						return BigInt(t?.value ?? "0") > 0n;
+					} catch {
+						return false;
+					}
+				})
+				.map((t) => {
+					const to = (t?.to?.hash ?? "").toLowerCase();
+					const amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * rate;
+					const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
+					const direction: "in" | "out" = to === self ? "in" : "out";
+					const label = direction === "in" ? "Eingang" : "Ausgang";
+					return {
+						direction,
+						amount,
+						currency: "eur" as const,
+						timestamp,
+						label,
+						txHash: String(t?.transaction_hash ?? ""),
+					};
+				});
 		} catch {
 			return [];
 		}
@@ -283,8 +347,19 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 	})();
 
 	try {
-		const [n, t] = await Promise.all([native, tokens]);
-		return [...n, ...t].sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
+		const [n, i, t] = await Promise.all([native, internal, tokens]);
+		// A plain transfer to the Safe can appear both as a regular tx and as the
+		// top-level internal call frame — dedupe value-moves by (hash, direction,
+		// amount) so it isn't listed twice.
+		const seen = new Set<string>();
+		const merged = [...n, ...i, ...t].filter((x) => {
+			if (x.amount <= 0) return true;
+			const key = `${x.txHash}:${x.direction}:${x.amount.toFixed(6)}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+		return merged.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
 	} catch {
 		return [];
 	}

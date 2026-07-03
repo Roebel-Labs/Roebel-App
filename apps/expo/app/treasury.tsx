@@ -40,8 +40,9 @@ export default function TreasuryScreen() {
 
 	const styles = makeStyles(colors, isDark);
 
-	// € fiat value of the treasury (xDAI→€ + EURe) — excludes Röbel Münzen.
-	const euroFiat = assets ? assets.euroTotal - assets.roebel : 0;
+	// € fiat value of the treasury (xDAI live-converted + EURe) — euroTotal
+	// already excludes Röbel Münzen (not euro-redeemable).
+	const euroFiat = assets ? assets.euroTotal : 0;
 
 	// Treasury history mapped to the shared list (€ badge); drop 0-value admin txs.
 	const historyItems: TxHistoryItem[] = (txs ?? [])
