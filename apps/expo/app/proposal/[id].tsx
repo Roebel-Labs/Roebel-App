@@ -19,10 +19,8 @@ import VoteButtons from '@/components/VoteButtons';
 import ProposalTimeline from '@/components/ProposalTimeline';
 import ProposalDetailSkeleton from '@/components/ProposalDetailSkeleton';
 import MeckyNotFound from '@/components/MeckyNotFound';
-import ProposalOnchainLinks from '@/components/proposals/ProposalOnchainLinks';
 import ProposalCommentSection from '@/components/proposals/ProposalCommentSection';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
-import { governorContractAddress } from '@/constants/thirdweb';
 import { getTreasuryEuro } from '@/lib/roebel-taler';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
@@ -222,12 +220,6 @@ export default function ProposalDetailScreen() {
             {readingTime} min read
           </Text>
         </View>
-
-        {/* Onchain links */}
-        <ProposalOnchainLinks
-          transactionHash={proposal.transactionHash}
-          governorAddress={governorContractAddress}
-        />
 
         {/* Proposal Content */}
         <ProposalContent

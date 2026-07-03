@@ -105,7 +105,7 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
                 }
                 hitSlop={6}
                 accessibilityRole="link"
-                accessibilityLabel="Digitaler Beweis auf Gnosisscan öffnen"
+                accessibilityLabel="Digitalen Beweis öffnen"
               >
                 <Text style={[styles.basescanLink, { color: colors.textSecondary }]}>
                   Digitaler Beweis ↗

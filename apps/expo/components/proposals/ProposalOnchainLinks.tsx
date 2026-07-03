@@ -27,7 +27,7 @@ export default function ProposalOnchainLinks({ transactionHash, governorAddress 
           onPress={openTx}
           style={[styles.pill, { borderColor: colors.border }]}
           accessibilityRole="link"
-          accessibilityLabel="Transaktion auf Gnosisscan öffnen"
+          accessibilityLabel="Digitalen Beweis der Transaktion öffnen"
         >
           <Ionicons name="link-outline" size={14} color={colors.textPrimary} />
           <Text style={[styles.pillText, { color: colors.textPrimary }]}>Transaktion</Text>
@@ -39,7 +39,7 @@ export default function ProposalOnchainLinks({ transactionHash, governorAddress 
         onPress={openContract}
         style={[styles.pill, { borderColor: colors.border }]}
         accessibilityRole="link"
-        accessibilityLabel="Governor-Vertrag auf Gnosisscan öffnen"
+        accessibilityLabel="Digitalen Beweis des Vertrags öffnen"
       >
         <Ionicons name="document-text-outline" size={14} color={colors.textPrimary} />
         <Text style={[styles.pillText, { color: colors.textPrimary }]}>Governor-Vertrag</Text>
