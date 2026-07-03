@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
@@ -19,6 +19,13 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
   const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+
+  // Integer cell size so 7 columns never overflow and wrap (percentage widths
+  // round to > 100% on some devices, pushing the Sunday column to the next row)
+  const [gridAreaWidth, setGridAreaWidth] = useState(windowWidth - 32);
+  const daySize = Math.floor(gridAreaWidth / 7);
+  const gridWidth = daySize * 7;
 
   // Fetch events on component mount
   useEffect(() => {
@@ -114,6 +121,7 @@ export default function CalendarScreen() {
         key={index}
         style={[
           styles.dayContainer,
+          { width: daySize, height: daySize },
           !isCurrentMonth && styles.dayOutsideMonth,
         ]}
         onPress={() => handleDatePress(date)}
@@ -157,7 +165,10 @@ export default function CalendarScreen() {
         </View>
 
         {/* Calendar */}
-        <View style={[styles.calendarContainer, { backgroundColor: colors.background }]}>
+        <View
+          style={[styles.calendarContainer, { backgroundColor: colors.background }]}
+          onLayout={(e) => setGridAreaWidth(e.nativeEvent.layout.width - 32)}
+        >
           {/* Month navigation */}
           <View style={styles.monthHeader}>
             <Pressable onPress={() => navigateMonth('prev')} style={[styles.navButton, { backgroundColor: colors.surfaceSecondary }]}>
@@ -172,16 +183,16 @@ export default function CalendarScreen() {
           </View>
 
           {/* Weekday headers */}
-          <View style={styles.weekHeader}>
+          <View style={[styles.weekHeader, { width: gridWidth }]}>
             {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
-              <View key={day} style={styles.weekDayContainer}>
+              <View key={day} style={[styles.weekDayContainer, { width: daySize }]}>
                 <Text style={[styles.weekDayText, { color: colors.textTertiary }]}>{day}</Text>
               </View>
             ))}
           </View>
 
           {/* Calendar grid */}
-          <View style={styles.calendarGrid}>
+          <View style={[styles.calendarGrid, { width: gridWidth }]}>
             {allDays.map((date, index) => renderDay(date, index))}
           </View>
         </View>
@@ -246,9 +257,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   calendarContainer: {
-    marginHorizontal: 16,
     borderRadius: 16,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     marginBottom: 16,
   },
   monthHeader: {
@@ -269,9 +280,9 @@ const styles = StyleSheet.create({
   weekHeader: {
     flexDirection: 'row',
     marginBottom: 8,
+    alignSelf: 'center',
   },
   weekDayContainer: {
-    flex: 1,
     alignItems: 'center',
     paddingVertical: 8,
   },
@@ -282,10 +293,9 @@ const styles = StyleSheet.create({
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignSelf: 'center',
   },
   dayContainer: {
-    width: `${100/7}%`,
-    aspectRatio: 1,
     padding: 2,
   },
   dayContent: {
