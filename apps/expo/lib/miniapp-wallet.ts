@@ -13,10 +13,16 @@
  */
 import type { Account } from 'thirdweb/wallets';
 import { prepareTransaction, sendTransaction } from 'thirdweb';
-import { client, chain } from '@/constants/thirdweb';
+import { client } from '@/constants/thirdweb';
+import { gnosis } from '@/constants/gnosis';
 import type { WalletConfirmRequest } from '@/components/miniapp/WalletConfirmSheet';
 
-/** Host chain the smart account is configured for (Base). */
+// Mini apps operate on Gnosis — Röbel-Münzen (Circles v2), identity, and
+// governance all live on Gnosis (chainId 100). The active thirdweb smart
+// account signs there (same pattern as the verification/voting flows).
+const chain = gnosis;
+
+/** Host chain the smart account signs on (Gnosis, chainId 100). */
 export const HOST_CHAIN_ID = chain.id;
 
 export type BridgeErrorLike = { code: string; message: string };
