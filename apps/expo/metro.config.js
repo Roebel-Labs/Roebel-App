@@ -1,19 +1,18 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require("expo/metro-config");
-const path = require("path");
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// --- pnpm monorepo support -------------------------------------------------
-// The app consumes ONE workspace package that lives outside apps/expo and ships
-// untranspiled TS source: @netizen/miniapp-sdk. Metro must be allowed to read
-// its files. We watch ONLY that package (not the whole repo root) — watching the
-// entire monorepo made Metro's file map crawl apps/web's heavy crypto deps, both
-// Next mini apps, and contracts, blowing the bundler's heap (OOM at ~2GB during
-// `expo export --platform=all`). The SDK is zero-dependency, so its own imports
-// resolve within its folder; all of the app's deps stay in apps/expo/node_modules
-// (pnpm), so no root nodeModulesPaths override is needed.
-config.watchFolders = [path.resolve(__dirname, "../../packages/miniapp-sdk")];
+// NOTE on the pnpm monorepo: getDefaultConfig() ALREADY auto-configures Metro for
+// this workspace — its watchFolders include the root node_modules (.pnpm store,
+// where react-native + every dep actually live) and each workspace package
+// (incl. @netizen/miniapp-sdk). Do NOT override watchFolders — an earlier override
+// either OOM'd (whole-repo crawl) or broke react-native resolution (dropped the
+// root store). We only PRUNE the crawl below: the two Next.js mini apps under
+// apps/mini-apps/* are workspace members (so getDefaultConfig watches them) but the
+// Expo app never imports them, and crawling their source + node_modules bloated the
+// bundler heap during `expo export --platform=all`. Excluding them keeps memory at
+// the pre-mini-app baseline. The SDK still resolves (it's packages/miniapp-sdk).
 
 // SVG transformer configuration
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer');
@@ -43,10 +42,12 @@ config.resolver.extraNodeModules = {
 // Ensure these globals are available
 config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
-// Block problematic server modules
+// Block problematic server modules + the sibling Next.js mini apps (workspace
+// members the Expo app never imports — pruned to keep the file map / heap small).
 config.resolver.blockList = [
   /ws\/lib\/websocket-server\.js$/,
   /ws\/wrapper\.mjs$/,
+  /[/\\]apps[/\\]mini-apps[/\\].*/,
 ];
 
 // Custom resolver to exclude problematic modules from bundle
