@@ -14,7 +14,9 @@
  * Server-only (uses the TypeScript transpiler + react-dom/server + node vm).
  */
 import * as React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+// NOTE: `react-dom/server` is imported DYNAMICALLY inside renderPreview() below.
+// Next.js bans a static `react-dom/server` import anywhere in the app/ module
+// graph (even server-only lib files) — a top-level import fails the build.
 import * as ts from "typescript";
 import vm from "node:vm";
 import type { MiniAppFilePlan } from "./filePlan";
@@ -212,7 +214,10 @@ function stripDirectives(src: string): string {
  * the srcdoc iframe still reads on-brand without the woff2 assets) + the mock
  * host bridge.
  */
-export function renderPreview(plan: Pick<MiniAppFilePlan, "files">): PreviewResult {
+export async function renderPreview(plan: Pick<MiniAppFilePlan, "files">): Promise<PreviewResult> {
+  // Dynamic import keeps `react-dom/server` out of the static app/ graph (Next ban).
+  const { renderToStaticMarkup } = await import("react-dom/server");
+
   const pageSource = findFile(plan, "app/page.tsx") ?? findFile(plan, "app/page.jsx");
   if (!pageSource) {
     return { ok: false, html: fallbackDoc("Keine app/page.tsx gefunden."), error: "no_page" };
