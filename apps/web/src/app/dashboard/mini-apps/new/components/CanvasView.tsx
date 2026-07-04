@@ -1,19 +1,26 @@
 "use client";
 
-// Open canvas (Figma-like): every screen of the mini app renders as its own
-// frame on a pannable/zoomable board. While the AI streams a new version, the
-// frames it is currently rewriting shimmer; screens whose fresh markup already
-// arrived swap to the new state mid-stream.
+// Open canvas (Figma-like): every screen of the mini app is a column, and every
+// declared STATE of a screen renders as its own live frame in that column —
+// like Figma frames for each state (leer/geladen/fehler/…). Pan/zoom board.
+// While the AI streams a new version, the screen being rewritten shimmers and
+// collapses to a single frame; the full state grid returns when the stream ends.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeCanvasScreens, type CanvasScreen } from "../lib/screens";
+import {
+  computeCanvasScreens,
+  type CanvasFrameSpec,
+  type CanvasScreen,
+} from "../lib/screens";
 import { useMiniAppHost } from "../lib/useMiniAppHost";
 
 const FRAME_W = 360;
 const FRAME_H = 640;
-const GAP = 64;
-const LABEL_H = 30;
+const GAP_X = 64; // between screen columns
+const GAP_Y = 48; // between state frames in a column
+const GROUP_LABEL_H = 34; // screen title row
+const STATE_LABEL_H = 26; // per-frame state label row
 const FIT_PADDING = 56;
 
 export function CanvasView({
@@ -37,8 +44,10 @@ export function CanvasView({
   const [panning, setPanning] = useState(false);
   const panStart = useRef<{ px: number; py: number; x: number; y: number } | null>(null);
 
-  const boardW = screens.length * (FRAME_W + GAP) - GAP;
-  const boardH = FRAME_H + LABEL_H;
+  const maxFrames = Math.max(1, ...screens.map((s) => s.frames.length));
+  const boardW = screens.length * (FRAME_W + GAP_X) - GAP_X;
+  const boardH =
+    GROUP_LABEL_H + maxFrames * (FRAME_H + STATE_LABEL_H) + (maxFrames - 1) * GAP_Y;
 
   const fit = useCallback(() => {
     const vp = viewportRef.current;
@@ -51,19 +60,21 @@ export function CanvasView({
     setView({
       x: (vp.clientWidth - boardW * scale) / 2,
       y: (vp.clientHeight - boardH * scale) / 2,
-      scale: Math.max(scale, 0.1),
+      scale: Math.max(scale, 0.08),
     });
   }, [boardW, boardH, screens.length]);
 
-  // Fit whenever the number of frames changes (first render, new screens).
+  // Refit when the grid shape changes (first render, new screens, states fanning out).
+  const gridSignature = `${screens.length}x${maxFrames}`;
   useEffect(() => {
     fit();
-  }, [screens.length, fit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridSignature]);
 
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
     const vp = viewportRef.current;
     setView((v) => {
-      const scale = Math.min(2, Math.max(0.1, v.scale * factor));
+      const scale = Math.min(2, Math.max(0.08, v.scale * factor));
       const px = cx ?? (vp ? vp.clientWidth / 2 : 0);
       const py = cy ?? (vp ? vp.clientHeight / 2 : 0);
       // Keep the point under the cursor stable while zooming.
@@ -77,7 +88,11 @@ export function CanvasView({
       e.preventDefault();
       const rect = viewportRef.current?.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey) {
-        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - (rect?.left ?? 0), e.clientY - (rect?.top ?? 0));
+        zoomAt(
+          Math.exp(-e.deltaY * 0.01),
+          e.clientX - (rect?.left ?? 0),
+          e.clientY - (rect?.top ?? 0),
+        );
       } else {
         setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
       }
@@ -138,9 +153,15 @@ export function CanvasView({
           height: boardH,
         }}
       >
-        <div className="flex" style={{ gap: GAP }}>
+        <div className="flex items-start" style={{ gap: GAP_X }}>
           {screens.map((s) => (
-            <CanvasFrame key={s.name} screen={s} streaming={streaming} appName={appName} panning={panning} />
+            <ScreenColumn
+              key={s.name}
+              screen={s}
+              streaming={streaming}
+              appName={appName}
+              panning={panning}
+            />
           ))}
         </div>
       </div>
@@ -150,7 +171,8 @@ export function CanvasView({
           <div className="px-8 text-center">
             <p className="text-sm font-medium text-foreground">Noch keine Screens</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Sobald die erste Version gebaut ist, erscheinen hier alle Screens der App.
+              Sobald die erste Version gebaut ist, erscheinen hier alle Screens und ihre
+              Zustände.
             </p>
           </div>
         </div>
@@ -190,7 +212,7 @@ export function CanvasView({
   );
 }
 
-function CanvasFrame({
+function ScreenColumn({
   screen,
   streaming,
   appName,
@@ -201,22 +223,13 @@ function CanvasFrame({
   appName: string;
   panning: boolean;
 }) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  // Full bridge functionality only on settled frames — mid-stream renders are
-  // static visual snapshots (app scripts haven't arrived yet anyway).
-  useMiniAppHost(iframeRef, {
-    html: screen.doc,
-    appName: `${appName} · ${screen.title}`,
-    enabled: screen.phase === "idle",
-  });
-
   const working = screen.phase === "writing";
 
   return (
-    <div data-canvas-frame style={{ width: FRAME_W }} className="shrink-0">
-      {/* frame label (Figma-style) */}
-      <div className="flex items-center gap-2" style={{ height: LABEL_H }}>
-        <span className="truncate text-xs font-medium text-muted-foreground">{screen.title}</span>
+    <div style={{ width: FRAME_W }} className="shrink-0">
+      {/* screen group label (Figma-style) */}
+      <div className="flex items-center gap-2" style={{ height: GROUP_LABEL_H }}>
+        <span className="truncate text-sm font-medium text-foreground">{screen.title}</span>
         <span className="font-mono text-[10px] text-muted-foreground/60">{screen.name}</span>
         {working ? (
           <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
@@ -230,6 +243,66 @@ function CanvasFrame({
         ) : null}
       </div>
 
+      <div className="flex flex-col" style={{ gap: GAP_Y }}>
+        {screen.frames.map((frame, i) => (
+          <StateFrame
+            key={`${screen.name}:${frame.state ?? i}`}
+            frame={frame}
+            working={working}
+            title={
+              frame.state
+                ? `${appName} · ${screen.title} · ${frame.state}`
+                : `${appName} · ${screen.title}`
+            }
+            stateLabel={frame.state}
+            defaultState={i === 0}
+            idle={screen.phase === "idle"}
+            panning={panning}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StateFrame({
+  frame,
+  working,
+  title,
+  stateLabel,
+  defaultState,
+  idle,
+  panning,
+}: {
+  frame: CanvasFrameSpec;
+  working: boolean;
+  title: string;
+  stateLabel: string | null;
+  defaultState: boolean;
+  idle: boolean;
+  panning: boolean;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  // Full bridge functionality only on settled frames — mid-stream renders are
+  // static visual snapshots (app scripts haven't arrived yet anyway).
+  useMiniAppHost(iframeRef, { html: frame.doc, appName: title, enabled: idle });
+
+  return (
+    <div data-canvas-frame>
+      {/* state label */}
+      <div className="flex items-center gap-1.5" style={{ height: STATE_LABEL_H }}>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 font-mono text-[10px]",
+            defaultState
+              ? "bg-primary/10 text-primary"
+              : "border border-border text-muted-foreground",
+          )}
+        >
+          {stateLabel ?? "standard"}
+        </span>
+      </div>
+
       <div
         className={cn(
           "relative overflow-hidden rounded-[14px] border bg-white shadow-sm dark:bg-[#202124]",
@@ -237,11 +310,11 @@ function CanvasFrame({
         )}
         style={{ width: FRAME_W, height: FRAME_H }}
       >
-        {screen.doc ? (
+        {frame.doc ? (
           <iframe
             ref={iframeRef}
-            srcDoc={screen.doc}
-            title={`Screen: ${screen.title}`}
+            srcDoc={frame.doc}
+            title={title}
             sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             className="h-full w-full border-0 bg-white"
             style={panning ? { pointerEvents: "none" } : undefined}

@@ -92,7 +92,19 @@ Der sichtbare Inhalt lebt IMMER in <main> als 1–6 Screens:
 - Navigation (z. B. Bottom-Tabs) wechselt Screens NUR durch Umsetzen der Klasse "active" auf den Sections (+ sdk.track("screen_view", { screen })). Kein display-Styling direkt auf den Sections.
 - Screens niemals verschachteln. Gemeinsames (z. B. eine feste Bottom-Nav) steht außerhalb von <main>.
 - Auch eine Einzel-Screen-App nutzt genau eine section[data-screen].active.
-- Bei ÄNDERUNGEN: bestehende data-screen-Namen stabil halten; nur neue Screens bekommen neue Namen. (Der Builder rendert jeden Screen einzeln auf einem Canvas und erkennt daran, was sich geändert hat.)`;
+- Bei ÄNDERUNGEN: bestehende data-screen-Namen stabil halten; nur neue Screens bekommen neue Namen. (Der Builder rendert jeden Screen einzeln auf einem Canvas und erkennt daran, was sich geändert hat.)
+
+### Zustände (States) — für den Canvas, wie Figma-Frames
+
+Jeder Screen, der mehr als einen sichtbaren Zustand hat, deklariert sie:
+
+\`\`\`html
+<section data-screen="abstimmen" data-title="Abstimmen" data-states="offen,abgestimmt,geschlossen" class="active">
+\`\`\`
+
+- data-states: 2–4 kurze ascii-slugs, kommagetrennt, in sinnvoller Reihenfolge (erster = Normalzustand). Typische Zustände: leer, geladen, fehler, erfolg, abgeschlossen. Screens mit nur einem Zustand lassen data-states weg.
+- PFLICHT-Hook dazu: Der Builder-Canvas lädt die App mehrfach und setzt VOR deinem Script \`window.__NETIZEN_PREVIEW_STATE__ = { screen, state }\`. Dein Init-Code MUSS das prüfen: den genannten Screen aktivieren und den genannten Zustand mit plausiblen Demo-Daten herstellen — ohne echte Interaktion, ohne auf SDK-Antworten zu warten. ready() trotzdem normal aufrufen.
+- Baue das Zustands-Rendering deshalb als Funktion (z. B. renderState(screen, state)), die jeden deklarierten Zustand direkt herstellen kann — dieselbe Funktion nutzt auch die echte App-Logik.`;
 
 /** Condensed, accurate mirror of the NetizenSDK client surface (types.ts). */
 const SDK_REFERENCE = `## SDK-Referenz — @netizen-labs/miniapp-sdk (Version ${SDK_VERSION})
@@ -176,7 +188,7 @@ const SKELETON = `## Minimal-Beispiel (Struktur-Referenz — so sieht eine korre
 ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
 <body class="min-h-screen bg-background">
   <main class="mx-auto max-w-md p-4 pb-20">
-    <section data-screen="stand" data-title="Stand" class="active">
+    <section data-screen="stand" data-title="Stand" data-states="geladen,fehler" class="active">
       <h1 class="font-heading text-xl font-bold">Münz-Stand</h1>
       <div class="mt-3 rounded border border-border bg-card p-4">
         <p class="text-xs text-muted-foreground">Dein Guthaben</p>
@@ -222,7 +234,23 @@ ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
       }
     }
 
+    // Canvas-Vorschau: erzwungenen Screen/Zustand ohne echte Interaktion herstellen.
+    const pv = window.__NETIZEN_PREVIEW_STATE__;
+    function renderState(state) {
+      if (state === "fehler") {
+        $("balance").textContent = "–";
+        $("hello").textContent = "Guthaben konnte gerade nicht geladen werden.";
+        return true;
+      }
+      return false; // "geladen" = normaler Ablauf
+    }
+
     async function init() {
+      if (pv?.screen) showScreen(pv.screen);
+      if (pv?.state && renderState(pv.state)) {
+        sdk.actions.ready().catch(() => {});
+        return;
+      }
       try {
         const ctx = await sdk.getContext();
         const pad = ctx.safeAreaInsets;
