@@ -23,7 +23,7 @@ import { useGoBack } from '@/hooks/useGoBack';
 import { fetchMiniAppBySlug, type MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
-import type { MiniAppPermission } from '@netizen/miniapp-sdk';
+import type { MiniAppPermission } from '@netizen-labs/miniapp-sdk';
 
 const PERMISSION_LABELS: Record<MiniAppPermission, string> = {
   wallet: 'Wallet & Signaturen',

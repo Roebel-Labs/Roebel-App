@@ -1,10 +1,10 @@
-# @netizen/miniapp-sdk
+# @netizen-labs/miniapp-sdk
 
 The Netizen Mini App SDK — one bridge, two halves.
 
-- **Client** (`@netizen/miniapp-sdk`): bundled by every mini app. Talks to whatever host embeds it
+- **Client** (`@netizen-labs/miniapp-sdk`): bundled by every mini app. Talks to whatever host embeds it
   (Röbel Expo WebView, web Playground iframe) over a `postMessage` protocol.
-- **Host** (`@netizen/miniapp-sdk/host`): used by hosts to answer client calls — shared routing,
+- **Host** (`@netizen-labs/miniapp-sdk/host`): used by hosts to answer client calls — shared routing,
   permission-gating, and error normalization; the platform only supplies a `post()` transport and
   capability handlers.
 
@@ -14,7 +14,7 @@ for the full contract and [`DESIGN.md`](./DESIGN.md) for the mini-app design sys
 ## Client usage (in a mini app)
 
 ```ts
-import { sdk } from '@netizen/miniapp-sdk';
+import { sdk } from '@netizen-labs/miniapp-sdk';
 
 // dismiss the host splash once mounted — MANDATORY
 useEffect(() => { void sdk.actions.ready(); }, []);
@@ -26,12 +26,12 @@ await sdk.roebel.grantReward({ amount: 5, reason: 'quiz', idempotencyKey: crypto
 sdk.track('quiz_completed', { score: 10 });
 ```
 
-Next.js apps must add `transpilePackages: ['@netizen/miniapp-sdk']`.
+Next.js apps must add `transpilePackages: ['@netizen-labs/miniapp-sdk']`.
 
 ## Host usage (Expo / web)
 
 ```ts
-import { createHostBridge } from '@netizen/miniapp-sdk/host';
+import { createHostBridge } from '@netizen-labs/miniapp-sdk/host';
 
 const bridge = createHostBridge({
   post: (msg) => webViewRef.injectJavaScript(deliver(msg)), // or iframe.contentWindow.postMessage

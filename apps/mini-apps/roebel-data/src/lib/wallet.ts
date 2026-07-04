@@ -5,8 +5,8 @@
 // by the host's thirdweb smart account — every tx opens a host-native confirm
 // sheet. We translate the batch into sequential `eth_sendTransaction` calls and
 // return the hashes in order, so the invite/event flows keep their existing shape.
-import { sdk } from "@netizen/miniapp-sdk";
-import type { Eip1193Provider } from "@netizen/miniapp-sdk";
+import { sdk } from "@netizen-labs/miniapp-sdk";
+import type { Eip1193Provider } from "@netizen-labs/miniapp-sdk";
 
 export interface HostTx {
   to: string;

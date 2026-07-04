@@ -14,7 +14,7 @@ const SDK_SURFACE = `
 ## The Netizen Mini App SDK — the ONLY host API available to a generated app
 
 Import it as a singleton:
-    import { sdk } from "@netizen/miniapp-sdk";
+    import { sdk } from "@netizen-labs/miniapp-sdk";
 
 Every method is async and talks to the host over a postMessage bridge. There is
 NO other way to reach the wallet, the user, rewards, or notifications — a mini
@@ -58,8 +58,8 @@ const HARD_RULES = `
    root client component. If you forget this, the host shows an INFINITE SPLASH.
    This is the #1 mistake — treat it as a compile-blocking requirement.
 2. **Bundle the SDK.** \`next.config.ts\` MUST include
-   \`transpilePackages: ["@netizen/miniapp-sdk"]\`. Depend on
-   \`"@netizen/miniapp-sdk": "^0.1.0"\` (the published npm package — the app is
+   \`transpilePackages: ["@netizen-labs/miniapp-sdk"]\`. Depend on
+   \`"@netizen-labs/miniapp-sdk": "^0.1.0"\` (the published npm package — the app is
    deployed standalone, so NEVER use \`workspace:*\`).
 3. **Ship \`netizen.manifest.ts\`** exporting a valid MiniAppManifest whose
    \`permissions[]\` lists ONLY the permissions the app actually uses. The host

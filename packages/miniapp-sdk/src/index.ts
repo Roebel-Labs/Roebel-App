@@ -1,8 +1,8 @@
 /**
- * @netizen/miniapp-sdk — client entry.
+ * @netizen-labs/miniapp-sdk — client entry.
  *
  * Usage in a mini app:
- *   import { sdk } from '@netizen/miniapp-sdk';
+ *   import { sdk } from '@netizen-labs/miniapp-sdk';
  *   useEffect(() => { sdk.actions.ready(); }, []);
  */
 import { createClient } from './client';

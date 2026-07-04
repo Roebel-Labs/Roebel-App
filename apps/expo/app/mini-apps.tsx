@@ -28,7 +28,7 @@ import { ChevronLeft, SearchIcon } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '@/lib/miniapp-categories';
 import { MiniAppFeaturedCard, MiniAppRowCard } from '@/components/miniapp/MiniAppCard';
-import type { MiniAppCategory } from '@netizen/miniapp-sdk';
+import type { MiniAppCategory } from '@netizen-labs/miniapp-sdk';
 import { useGoBack } from '@/hooks/useGoBack';
 
 export default function MiniAppsStoreScreen() {

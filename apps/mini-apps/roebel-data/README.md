@@ -6,16 +6,16 @@ It's the town's on-chain economy dashboard — **Town** (supply, backing, trust 
 **invite neighbours** into Röbel-Münzen and **create event QR codes**.
 
 It runs embedded in the Röbel host (Expo WebView / web iframe), bundles
-`@netizen/miniapp-sdk`, and talks to the host over the Netizen `postMessage` bridge.
+`@netizen-labs/miniapp-sdk`, and talks to the host over the Netizen `postMessage` bridge.
 
 > Ported from the standalone Vite Circles mini app to **Next.js 15 (App Router)** and swapped
-> off `@aboutcircles/miniapp-sdk` onto `@netizen/miniapp-sdk`. The rich dashboards (visx charts,
+> off `@aboutcircles/miniapp-sdk` onto `@netizen-labs/miniapp-sdk`. The rich dashboards (visx charts,
 > trust graph, governance) are unchanged — this was a framework + SDK swap, not a rewrite.
 
 ## Stack
 
 Next.js 15 (App Router) · React 19 · TypeScript · Tailwind v4 (`@theme` in `app/globals.css`) ·
-Mona Sans (self-hosted via `next/font/local`) · `@netizen/miniapp-sdk` (workspace) ·
+Mona Sans (self-hosted via `next/font/local`) · `@netizen-labs/miniapp-sdk` (workspace) ·
 `@visx/*` + `@xyflow/react` (charts / graph) · `viem` (Gnosis reads) ·
 `@aboutcircles/sdk-invitations` (the InviteFarm invitation path). A pnpm-workspace member
 under `apps/mini-apps/*`.

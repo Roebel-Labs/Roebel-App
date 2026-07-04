@@ -1,4 +1,4 @@
-import type { MiniAppManifest } from "@netizen/miniapp-sdk";
+import type { MiniAppManifest } from "@netizen-labs/miniapp-sdk";
 
 /**
  * Netizen Mini App manifest — the single row the registry validates against.

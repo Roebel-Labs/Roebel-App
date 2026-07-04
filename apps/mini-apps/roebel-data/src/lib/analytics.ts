@@ -6,7 +6,7 @@
 // throws, never blocks the UI. Event NAMES are unchanged so historical dashboards
 // keep working; we still thread the referrer through `props.ref` for referral
 // attribution (the wallet itself is added by the host from the connected account).
-import { sdk } from "@netizen/miniapp-sdk";
+import { sdk } from "@netizen-labs/miniapp-sdk";
 
 type Props = Record<string, unknown>;
 

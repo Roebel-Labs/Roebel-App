@@ -8,7 +8,7 @@ The **canonical Netizen Mini App scaffold**. This is the fresh, minimal Next.js 
 
 It renders inside the Röbel host — a native WebView (Expo) or a web iframe
 (Playground / AI-builder preview) — and talks to the host over the
-`@netizen/miniapp-sdk` `postMessage` bridge. Keep it clean and idiomatic; clarity
+`@netizen-labs/miniapp-sdk` `postMessage` bridge. Keep it clean and idiomatic; clarity
 here is what keeps every generated app on-brand and correct.
 
 > Contract: [`docs/superpowers/specs/2026-07-03-netizen-mini-apps-design.md`](../../../docs/superpowers/specs/2026-07-03-netizen-mini-apps-design.md)
@@ -81,7 +81,7 @@ _template/
 │   └── page.tsx          # the demo screen (the SDK walkthrough above)
 ├── public/fonts/mona-sans/   # self-hosted variable fonts (SIL OFL 1.1)
 ├── netizen.manifest.ts   # MiniAppManifest — slug/permissions/category/color
-├── next.config.ts        # transpilePackages: ['@netizen/miniapp-sdk'] + standalone
+├── next.config.ts        # transpilePackages: ['@netizen-labs/miniapp-sdk'] + standalone
 ├── postcss.config.mjs    # Tailwind v4 PostCSS plugin
 ├── tsconfig.json
 ├── vercel.json           # framework: nextjs (one-click standalone deploy)
@@ -91,6 +91,6 @@ _template/
 ## Deploy
 
 Standalone-deployable (`output: 'standalone'`, `vercel.json` → `framework: nextjs`).
-Deploy from the monorepo root so the `@netizen/miniapp-sdk` workspace link
+Deploy from the monorepo root so the `@netizen-labs/miniapp-sdk` workspace link
 resolves, then set the deployed URL as `homeUrl` in `netizen.manifest.ts` and
 register the app (a `mini_apps` row) via the web dashboard.

@@ -2,7 +2,7 @@
  * MiniAppHost — the Expo host half of the Netizen mini-app bridge (spec §5①).
  *
  * A full-screen modal that loads a live mini app's `homeUrl` in a
- * `react-native-webview`, wires `createHostBridge` from `@netizen/miniapp-sdk/host`,
+ * `react-native-webview`, wires `createHostBridge` from `@netizen-labs/miniapp-sdk/host`,
  * and maps every bridge method to a native capability:
  *   - ready            → hide splash
  *   - getContext       → MiniAppContext from the user record (untrusted, display only)
@@ -47,13 +47,13 @@ import { useUser } from '@/context/UserContext';
 import { fontFamily } from '@/constants/theme';
 import { CloseIcon, ChevronLeft } from '@/components/miniapp/hostIcons';
 
-import { createHostBridge, type HostHandlers } from '@netizen/miniapp-sdk/host';
+import { createHostBridge, type HostHandlers } from '@netizen-labs/miniapp-sdk/host';
 import type {
   BridgeMessage,
   Eip1193RequestArgs,
   MiniAppContext,
   NetizenEvent,
-} from '@netizen/miniapp-sdk';
+} from '@netizen-labs/miniapp-sdk';
 
 import type { MiniApp } from '@/lib/miniapps';
 import { trackMiniAppEvent, newMiniAppSessionId } from '@/lib/miniapps';

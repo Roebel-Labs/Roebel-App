@@ -8,8 +8,8 @@
 //
 // Copy rule (DESIGN.md §5): the currency is "Röbel-Münzen" / "RÖ" — never CRC,
 // never Circles, never "token", and never a raw wallet address.
-import { sdk } from "@netizen/miniapp-sdk";
-import type { MuenzenBalance, GrantRewardResult } from "@netizen/miniapp-sdk";
+import { sdk } from "@netizen-labs/miniapp-sdk";
+import type { MuenzenBalance, GrantRewardResult } from "@netizen-labs/miniapp-sdk";
 
 /** The connected user's Röbel-Münzen balance, or null if unavailable (dev/host-less). */
 export async function getMuenzenBalance(): Promise<MuenzenBalance | null> {

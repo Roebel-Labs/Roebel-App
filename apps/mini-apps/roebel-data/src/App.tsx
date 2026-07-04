@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { sdk } from "@netizen/miniapp-sdk";
-import type { MiniAppContext, MuenzenBalance } from "@netizen/miniapp-sdk";
+import { sdk } from "@netizen-labs/miniapp-sdk";
+import type { MiniAppContext, MuenzenBalance } from "@netizen-labs/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
 import { ROEBEL_GROUP } from "./lib/circles";
 import { explorerAvatar } from "./lib/citizens";
