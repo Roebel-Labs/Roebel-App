@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { sdk } from "@netizen/miniapp-sdk";
-import type { MiniAppContext, MuenzenBalance } from "@netizen/miniapp-sdk";
+import { sdk } from "@netizen-labs/miniapp-sdk";
+import type { MiniAppContext, MuenzenBalance } from "@netizen-labs/miniapp-sdk";
 
 /**
  * Template demo screen.

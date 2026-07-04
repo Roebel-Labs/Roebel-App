@@ -15,7 +15,7 @@ import type {
   GrantRewardParams,
   GrantRewardResult,
   MuenzenBalance,
-} from '@netizen/miniapp-sdk';
+} from '@netizen-labs/miniapp-sdk';
 
 const API_BASE: string | undefined =
   (Constants.expoConfig?.extra as { MINIAPP_API_BASE?: string } | undefined)?.MINIAPP_API_BASE ??

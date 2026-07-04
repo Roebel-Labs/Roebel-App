@@ -1,4 +1,4 @@
-import type { MiniAppManifest } from "@netizen/miniapp-sdk";
+import type { MiniAppManifest } from "@netizen-labs/miniapp-sdk";
 
 /**
  * Röbel Circles — the Netizen mini app registry entry.

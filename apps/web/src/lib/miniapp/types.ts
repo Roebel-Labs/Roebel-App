@@ -10,7 +10,7 @@ import type {
   MiniAppManifest,
   MiniAppPermission,
   MiniAppStatus,
-} from "@netizen/miniapp-sdk";
+} from "@netizen-labs/miniapp-sdk";
 
 export type {
   MiniAppCategory,

@@ -1,5 +1,5 @@
 {
-  "name": "@netizen/miniapp-sdk",
+  "name": "@netizen-labs/miniapp-sdk",
   "version": "0.1.0",
   "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in a host app (WebView/iframe).",
   "license": "MIT",

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createWebMiniAppHost, type WebMiniAppHost } from "@/lib/miniapp-host";
 import type { MiniAppRow } from "@/lib/miniapp/types";
-import type { MiniAppPermission, WalletAccount } from "@netizen/miniapp-sdk";
+import type { MiniAppPermission, WalletAccount } from "@netizen-labs/miniapp-sdk";
 
 const GNOSIS_CHAIN_ID = 100;
 

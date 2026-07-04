@@ -7,13 +7,13 @@
  * `apps/mini-apps/<slug>/`, so the schema is the single point where we validate
  * the model's output before it touches the filesystem.
  *
- * Kept dependency-free of the SDK package: agent A owns `@netizen/miniapp-sdk`
+ * Kept dependency-free of the SDK package: agent A owns `@netizen-labs/miniapp-sdk`
  * and it may not be resolvable in this app's build yet, so we mirror the frozen
  * `MiniAppManifest` shape from the spec (§3.4) locally as a zod schema.
  */
 import { z } from "zod";
 
-// --- Manifest (mirrors @netizen/miniapp-sdk MiniAppManifest, spec §3.4) --------
+// --- Manifest (mirrors @netizen-labs/miniapp-sdk MiniAppManifest, spec §3.4) --------
 
 export const MINI_APP_CATEGORIES = [
   "community",

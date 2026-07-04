@@ -8,13 +8,13 @@
  *   (RLS allows anon insert). Never throws, never blocks the caller.
  *
  * DB rows are mapped to a typed `MiniApp` that reuses the frozen SDK manifest
- * shape (`MiniAppCategory` / `MiniAppPermission` from `@netizen/miniapp-sdk`).
+ * shape (`MiniAppCategory` / `MiniAppPermission` from `@netizen-labs/miniapp-sdk`).
  */
 import { supabase } from '@/lib/supabase';
 import type {
   MiniAppCategory,
   MiniAppPermission,
-} from '@netizen/miniapp-sdk';
+} from '@netizen-labs/miniapp-sdk';
 
 /** A live mini app as the Expo store consumes it (subset of the `mini_apps` row). */
 export interface MiniApp {

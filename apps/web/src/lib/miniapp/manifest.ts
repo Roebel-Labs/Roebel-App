@@ -6,7 +6,7 @@ import type {
   MiniAppCategory,
   MiniAppManifest,
   MiniAppPermission,
-} from "@netizen/miniapp-sdk";
+} from "@netizen-labs/miniapp-sdk";
 import { MiniAppError } from "./types";
 
 export const CATEGORIES: MiniAppCategory[] = [

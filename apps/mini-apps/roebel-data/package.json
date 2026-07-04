@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Röbel Circles — a Netizen mini app. The town's on-chain economy dashboard (Town / Economy / Governance) plus citizen tools (invite, event QR). Ported from Vite to Next.js 15; bundles @netizen/miniapp-sdk and runs inside the Röbel host.",
+  "description": "Röbel Circles — a Netizen mini app. The town's on-chain economy dashboard (Town / Economy / Governance) plus citizen tools (invite, event QR). Ported from Vite to Next.js 15; bundles @netizen-labs/miniapp-sdk and runs inside the Röbel host.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@aboutcircles/sdk-invitations": "^0.1.25",
-    "@netizen/miniapp-sdk": "workspace:*",
+    "@netizen-labs/miniapp-sdk": "workspace:*",
     "@visx/curve": "^4.0.0",
     "@visx/event": "^4.0.0",
     "@visx/gradient": "^4.0.0",

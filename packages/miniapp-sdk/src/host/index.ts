@@ -1,5 +1,5 @@
 /**
- * @netizen/miniapp-sdk/host — the HOST half of the bridge.
+ * @netizen-labs/miniapp-sdk/host — the HOST half of the bridge.
  *
  * Platform-agnostic router: parses incoming client messages, enforces the app's granted
  * permissions, dispatches to platform handlers, normalizes errors, and posts replies. Both

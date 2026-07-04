@@ -14,7 +14,7 @@ the Röbel Expo app and managed from the Next.js web app. A *mini app* is a stan
 (web), and talks to the host over a `postMessage` bridge.
 
 **Branding:** the platform + developer surface is **Netizen** (ties to the Netizen Labs
-spin-out). The SDK is `@netizen/miniapp-sdk`. The **Röbel app is the first host**. "Röbel-Münzen"
+spin-out). The SDK is `@netizen-labs/miniapp-sdk`. The **Röbel app is the first host**. "Röbel-Münzen"
 is the in-app reward currency (Circles v2 group token on Gnosis) — **never surface CRC/Circles
 jargon in UI copy.**
 
@@ -30,7 +30,7 @@ JSON-Farcaster-Signature domain signing yet).
 
 | # | Name | Location | Owner agent |
 |---|------|----------|-------------|
-| ⓿ | **Contract**: `@netizen/miniapp-sdk` + bridge protocol + `DESIGN.md` + Next template | `packages/miniapp-sdk`, `apps/mini-apps/_template` | A (Foundation) |
+| ⓿ | **Contract**: `@netizen-labs/miniapp-sdk` + bridge protocol + `DESIGN.md` + Next template | `packages/miniapp-sdk`, `apps/mini-apps/_template` | A (Foundation) |
 | ⓿ | **Data model**: Supabase migration (5 tables) | `apps/web/supabase/migrations` (or MCP) | A (Foundation) |
 | ① | **Expo Mini App Store** + `MiniAppHost` WebView bridge | `apps/expo` | B (Expo) |
 | ② | **Web Builder Dashboard + Admin review/Playground + API** | `apps/web` | C (Web) |
@@ -53,7 +53,7 @@ Decisions locked with the user:
 
 ```
 packages/miniapp-sdk/
-  package.json          # name: @netizen/miniapp-sdk, main/types: src/index.ts (src-based, like @roebel/blockchain)
+  package.json          # name: @netizen-labs/miniapp-sdk, main/types: src/index.ts (src-based, like @roebel/blockchain)
   src/
     index.ts            # public export: `sdk`, types, version
     types.ts            # ALL shared types (frozen — see 3.3). Consumers import from here.
@@ -65,8 +65,8 @@ packages/miniapp-sdk/
 ```
 
 - Workspace: add `apps/mini-apps/*` to `pnpm-workspace.yaml`. Mini apps depend on
-  `"@netizen/miniapp-sdk": "workspace:*"` and transpile it (`transpilePackages` in Next).
-- **Host side** (Expo/web) imports the same `types.ts` + a `host` sub-path (`@netizen/miniapp-sdk/host`)
+  `"@netizen-labs/miniapp-sdk": "workspace:*"` and transpile it (`transpilePackages` in Next).
+- **Host side** (Expo/web) imports the same `types.ts` + a `host` sub-path (`@netizen-labs/miniapp-sdk/host`)
   that provides the host half of the bridge (message router → native/web capability handlers).
   Add `src/host/index.ts` + a `./host` export entry.
 
@@ -334,7 +334,7 @@ alter table public.mini_app_rewards enable row level security;
   icon, screenshots, description, "Öffnen".
 - **`MiniAppHost` screen**: `react-native-webview` (already a dep, v13.16.0) full-screen modal with a
   host header (app name + author, close, back), splash overlay until `actions.ready`. Implements the
-  **host half of the bridge** (`@netizen/miniapp-sdk/host`) mapping methods to:
+  **host half of the bridge** (`@netizen-labs/miniapp-sdk/host`) mapping methods to:
   wallet → thirdweb `useActiveAccount()` provider + a native confirm sheet; `haptics` → `expo-haptics`;
   `openUrl` → `Linking`; `share` → RN `Share`; `notifications`/`rewards` → apps/web API routes;
   `context.get` → the user record (display name, isCitizen). Emits `mini_app_events` (app_open,
@@ -361,7 +361,7 @@ alter table public.mini_app_rewards enable row level security;
     gated by the developer's signed token.
 - **Web bridge host**: a `apps/web/src/lib/miniapp-host/` module implementing the host half over
   iframe `postMessage` (reused by both the Playground and the AI-builder preview). Shares the
-  method contract with `@netizen/miniapp-sdk/host`.
+  method contract with `@netizen-labs/miniapp-sdk/host`.
 
 ### ③ AI Mini App Builder (`apps/web`) — Agent C
 - `apps/web/src/app/dashboard/mini-apps/new/` (or `/build`): prompt box → streaming Claude codegen
@@ -380,7 +380,7 @@ alter table public.mini_app_rewards enable row level security;
 - **Port Vite→Next.js** (App Router), reusing existing `src/views`, `src/components` (visx charts,
   ui kit), `src/lib` as-is where possible. Keep Mona Sans (self-hosted) + the navy/visx chart theme.
 - **Swap the SDK**: replace `@aboutcircles/miniapp-sdk` (`onWalletChange`, `sendTransactions`) with
-  `@netizen/miniapp-sdk` — wallet via `sdk.wallet.getEthereumProvider()`, context via
+  `@netizen-labs/miniapp-sdk` — wallet via `sdk.wallet.getEthereumProvider()`, context via
   `sdk.getContext()`, analytics via `sdk.track()` (→ `mini_app_events`), and demonstrate
   `sdk.roebel.getMuenzenBalance()` + a `grantReward` on a citizen action.
 - Add `netizen.manifest.ts`, call `sdk.actions.ready()` on mount.
@@ -402,7 +402,7 @@ Lives at `packages/miniapp-sdk/DESIGN.md`, embedded in the AI builder system pro
   look right at ~360px.
 - **Copy rules**: German primary; **never** show wallet addresses (resolve to display name);
   **never** say "CRC"/"Circles"/"personal token" — the currency is **"Röbel-Münzen"** (symbol RÖ).
-- **Mandatory**: bundle `@netizen/miniapp-sdk`; call `sdk.actions.ready()` once mounted; declare
+- **Mandatory**: bundle `@netizen-labs/miniapp-sdk`; call `sdk.actions.ready()` once mounted; declare
   `permissions[]` in `netizen.manifest.ts`.
 
 ---
@@ -421,7 +421,7 @@ Lives at `packages/miniapp-sdk/DESIGN.md`, embedded in the AI builder system pro
 
 ## 8. Definition of done (MVP)
 
-- `@netizen/miniapp-sdk` builds; a mini app bundling it calls `ready()` and round-trips
+- `@netizen-labs/miniapp-sdk` builds; a mini app bundling it calls `ready()` and round-trips
   `getContext`, `wallet.getAccount`, `track`, `grantReward` against a host.
 - Expo store lists live apps and opens `roebel-data` in the `MiniAppHost`; wallet + analytics work.
 - Web: a developer can submit an app; an admin can review it in the Playground and approve it; both

@@ -69,7 +69,7 @@ function makeRequire(
 
     // The SDK: on the SERVER preview render we stub it. The interactive bridge
     // (ready/getContext/rewards) runs in the iframe via the injected mock below.
-    if (spec === "@netizen/miniapp-sdk") return serverSdkStub();
+    if (spec === "@netizen-labs/miniapp-sdk") return serverSdkStub();
 
     // next/* stubs — enough to render a static screen.
     if (spec === "next/font/local") return () => ({ variable: "", className: "" });

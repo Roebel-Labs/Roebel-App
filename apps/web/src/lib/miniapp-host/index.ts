@@ -3,7 +3,7 @@
 //   • the admin Playground (real reviewer wallet / mock user)
 //   • the AI-builder live preview (agent D)
 //
-// It constructs a `createHostBridge` from `@netizen/miniapp-sdk/host`, posts
+// It constructs a `createHostBridge` from `@netizen-labs/miniapp-sdk/host`, posts
 // replies into the iframe, and routes handler calls to the mini-apps API
 // (rewards / events / notifications) or to injected wallet/context providers.
 //
@@ -15,7 +15,7 @@ import {
   type HostBridge,
   type HostHandlers,
   type MiniAppContext,
-} from "@netizen/miniapp-sdk/host";
+} from "@netizen-labs/miniapp-sdk/host";
 import type {
   BridgeMessage,
   BridgeMethod,
@@ -26,7 +26,7 @@ import type {
   NetizenEvent,
   PayParams,
   WalletAccount,
-} from "@netizen/miniapp-sdk";
+} from "@netizen-labs/miniapp-sdk";
 
 export interface WebHostApp {
   id: string;

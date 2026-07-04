@@ -56,7 +56,7 @@ recharts/chart.js to a mini app unless asked.
 
 ## 6. SDK requirements (mandatory in every generated app)
 
-1. Bundle `@netizen/miniapp-sdk` (add `transpilePackages: ['@netizen/miniapp-sdk']` in `next.config`).
+1. Bundle `@netizen-labs/miniapp-sdk` (add `transpilePackages: ['@netizen-labs/miniapp-sdk']` in `next.config`).
 2. Call **`sdk.actions.ready()`** once the first screen is mounted — otherwise the host shows an
    infinite splash. This is the #1 mistake; treat it as a hard requirement.
 3. Ship a `netizen.manifest.ts` exporting a `MiniAppManifest` with a correct `permissions[]` array.

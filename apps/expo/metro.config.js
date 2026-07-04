@@ -6,7 +6,7 @@ const config = getDefaultConfig(__dirname);
 // NOTE on the pnpm monorepo: getDefaultConfig() ALREADY auto-configures Metro for
 // this workspace — its watchFolders include the root node_modules (.pnpm store,
 // where react-native + every dep actually live) and each workspace package
-// (incl. @netizen/miniapp-sdk). Do NOT override watchFolders — an earlier override
+// (incl. @netizen-labs/miniapp-sdk). Do NOT override watchFolders — an earlier override
 // either OOM'd (whole-repo crawl) or broke react-native resolution (dropped the
 // root store). We only PRUNE the crawl below: the two Next.js mini apps under
 // apps/mini-apps/* are workspace members (so getDefaultConfig watches them) but the

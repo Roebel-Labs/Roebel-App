@@ -2,7 +2,7 @@
   "name": "@netizen/miniapp-template",
   "version": "0.1.0",
   "private": true,
-  "description": "Canonical Netizen Mini App scaffold — Next.js 15 App Router, bundles @netizen/miniapp-sdk. The AI builder clones this; every mini app follows this pattern.",
+  "description": "Canonical Netizen Mini App scaffold — Next.js 15 App Router, bundles @netizen-labs/miniapp-sdk. The AI builder clones this; every mini app follows this pattern.",
   "type": "module",
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@netizen/miniapp-sdk": "^0.1.0",
+    "@netizen-labs/miniapp-sdk": "^0.1.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

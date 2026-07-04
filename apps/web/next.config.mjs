@@ -8,7 +8,7 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   // The Netizen mini-app SDK ships untranspiled TS source (main: src/index.ts),
   // so it must be transpiled by the app that consumes it.
-  transpilePackages: ["@netizen/miniapp-sdk"],
+  transpilePackages: ["@netizen-labs/miniapp-sdk"],
   // Keep heavy server-only packages OUT of the webpack bundle (loaded from
   // node_modules at runtime instead). @safe-global/protocol-kit pulls in
   // @safe-global/safe-deployments — multi-MB of all-chain Safe contract JSON —

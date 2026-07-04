@@ -1,7 +1,7 @@
 /**
  * German labels + display order for mini-app categories (spec §3.4 enum).
  */
-import type { MiniAppCategory } from '@netizen/miniapp-sdk';
+import type { MiniAppCategory } from '@netizen-labs/miniapp-sdk';
 
 export const CATEGORY_LABELS: Record<MiniAppCategory, string> = {
   community: 'Gemeinschaft',

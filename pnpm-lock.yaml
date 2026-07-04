@@ -52,7 +52,7 @@ importers:
       '@irys/sdk':
         specifier: ^0.2.11
         version: 0.2.11(@types/node@22.19.15)(arweave@1.15.7)(bufferutil@4.1.0)(got@11.8.6)(typescript@5.8.3)(utf-8-validate@6.0.6)
-      '@netizen/miniapp-sdk':
+      '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../packages/miniapp-sdk
       '@react-native-async-storage/async-storage':
@@ -404,7 +404,7 @@ importers:
 
   apps/mini-apps/_template:
     dependencies:
-      '@netizen/miniapp-sdk':
+      '@netizen-labs/miniapp-sdk':
         specifier: ^0.1.0
         version: link:../../../packages/miniapp-sdk
       next:
@@ -441,7 +441,7 @@ importers:
       '@aboutcircles/sdk-invitations':
         specifier: ^0.1.25
         version: 0.1.51(typescript@5.8.3)(zod@4.3.6)
-      '@netizen/miniapp-sdk':
+      '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../../packages/miniapp-sdk
       '@visx/curve':
@@ -553,7 +553,7 @@ importers:
       '@irys/web-upload-ethereum-ethers-v6':
         specifier: ^0.0.16
         version: 0.0.16(arweave@1.15.7)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      '@netizen/miniapp-sdk':
+      '@netizen-labs/miniapp-sdk':
         specifier: workspace:*
         version: link:../../packages/miniapp-sdk
       '@radix-ui/react-alert-dialog':
