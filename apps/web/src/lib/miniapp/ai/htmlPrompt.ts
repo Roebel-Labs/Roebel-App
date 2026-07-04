@@ -70,9 +70,29 @@ tailwind.config = {
 }
 html { -webkit-text-size-adjust: 100%; }
 body { font-family: "Mona Sans", system-ui, sans-serif; background: var(--background); color: var(--foreground); }
+main > section[data-screen] { display: none; }
+main > section[data-screen].active { display: block; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 </style>
 </head>`;
+
+const SCREEN_RULES = `## Screens (Pflicht-Struktur)
+
+Der sichtbare Inhalt lebt IMMER in <main> als 1–6 Screens:
+
+\`\`\`html
+<main>
+  <section data-screen="stand" data-title="Stand" class="active">…</section>
+  <section data-screen="verlauf" data-title="Verlauf">…</section>
+</main>
+\`\`\`
+
+- data-screen: kurzer ascii-slug (a-z, 0-9, Bindestrich). data-title: deutscher Titel.
+- Genau EINE Section trägt initial class="active" — das Boilerplate-CSS blendet alle anderen aus.
+- Navigation (z. B. Bottom-Tabs) wechselt Screens NUR durch Umsetzen der Klasse "active" auf den Sections (+ sdk.track("screen_view", { screen })). Kein display-Styling direkt auf den Sections.
+- Screens niemals verschachteln. Gemeinsames (z. B. eine feste Bottom-Nav) steht außerhalb von <main>.
+- Auch eine Einzel-Screen-App nutzt genau eine section[data-screen].active.
+- Bei ÄNDERUNGEN: bestehende data-screen-Namen stabil halten; nur neue Screens bekommen neue Namen. (Der Builder rendert jeden Screen einzeln auf einem Canvas und erkennt daran, was sich geändert hat.)`;
 
 /** Condensed, accurate mirror of the NetizenSDK client surface (types.ts). */
 const SDK_REFERENCE = `## SDK-Referenz — @netizen-labs/miniapp-sdk (Version ${SDK_VERSION})
@@ -155,18 +175,43 @@ const SKELETON = `## Minimal-Beispiel (Struktur-Referenz — so sieht eine korre
 
 ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
 <body class="min-h-screen bg-background">
-  <main id="app" class="mx-auto flex max-w-md flex-col gap-3 p-4">
-    <h1 class="font-heading text-xl font-bold">Münz-Stand</h1>
-    <section class="rounded border border-border bg-card p-4">
-      <p class="text-xs text-muted-foreground">Dein Guthaben</p>
-      <p class="font-mono text-2xl font-semibold tabular-nums"><span id="balance">–</span> RÖ</p>
-      <p id="hello" class="mt-1 text-xs text-muted-foreground"></p>
+  <main class="mx-auto max-w-md p-4 pb-20">
+    <section data-screen="stand" data-title="Stand" class="active">
+      <h1 class="font-heading text-xl font-bold">Münz-Stand</h1>
+      <div class="mt-3 rounded border border-border bg-card p-4">
+        <p class="text-xs text-muted-foreground">Dein Guthaben</p>
+        <p class="font-mono text-2xl font-semibold tabular-nums"><span id="balance">–</span> RÖ</p>
+        <p id="hello" class="mt-1 text-xs text-muted-foreground"></p>
+      </div>
+      <button id="refresh" class="mt-3 w-full rounded bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">Aktualisieren</button>
     </section>
-    <button id="refresh" class="rounded bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">Aktualisieren</button>
+    <section data-screen="hilfe" data-title="Hilfe">
+      <h1 class="font-heading text-xl font-bold">Hilfe</h1>
+      <p class="mt-3 text-sm text-muted-foreground">Röbel-Münzen verdienst du durch Mitmachen in der Röbel App.</p>
+    </section>
   </main>
+  <nav class="fixed inset-x-0 bottom-0 border-t border-border bg-card">
+    <div class="mx-auto flex max-w-md">
+      <button data-goto="stand" class="flex-1 px-3 py-3 text-xs font-medium">Stand</button>
+      <button data-goto="hilfe" class="flex-1 px-3 py-3 text-xs font-medium text-muted-foreground">Hilfe</button>
+    </div>
+  </nav>
   <script type="module">
     import { sdk } from "${SDK_ESM_URL}";
     const $ = (id) => document.getElementById(id);
+
+    function showScreen(name) {
+      document.querySelectorAll("main > section[data-screen]").forEach((s) => {
+        s.classList.toggle("active", s.dataset.screen === name);
+      });
+      document.querySelectorAll("[data-goto]").forEach((b) => {
+        b.classList.toggle("text-muted-foreground", b.dataset.goto !== name);
+      });
+      sdk.track("screen_view", { screen: name });
+    }
+    document.querySelectorAll("[data-goto]").forEach((b) => {
+      b.addEventListener("click", () => showScreen(b.dataset.goto));
+    });
 
     async function loadBalance() {
       try {
@@ -195,7 +240,7 @@ ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
   </script>
 </body>
 </html>
-<!--NOTES: Zeigt das Röbel-Münzen-Guthaben mit Aktualisieren-Button. Grüßt die Nutzer:in aus dem Kontext. Zum Testen: App öffnen, Guthaben laden.-->`;
+<!--NOTES: Zwei Screens (Stand, Hilfe) mit Bottom-Nav. Zeigt das Röbel-Münzen-Guthaben mit Aktualisieren-Button. Zum Testen: App öffnen, Guthaben laden, unten zwischen Screens wechseln.-->`;
 
 export function buildHtmlSystemPrompt(): string {
   return `Du bist der KI-Baukasten der Röbel App: Expert:in für kleine, hochwertige Mini-Apps für die Bürger:innen von Röbel/Müritz. Eine Mini-App ist EINE selbstständige HTML-Datei, die im Röbel-Host (Expo-WebView bzw. iframe) läuft und über die Netizen-Bridge mit dem Host spricht. Du baust vollständige, sofort lauffähige Apps — hübsch, robust, barrierearm.
@@ -205,6 +250,8 @@ export function buildHtmlSystemPrompt(): string {
 ${BOILERPLATE}
 
 ${SDK_REFERENCE}
+
+${SCREEN_RULES}
 
 ${DESIGN_SYSTEM}
 

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
+import { CanvasView } from "./components/CanvasView";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
@@ -59,7 +60,7 @@ export default function NewMiniAppBuilderPage() {
   const [activeIdx, setActiveIdx] = useState(-1);
   const [streaming, setStreaming] = useState(false);
   const [stream, setStream] = useState("");
-  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [tab, setTab] = useState<"preview" | "canvas" | "code">("preview");
   const [complexity, setComplexity] = useState<Complexity>("default");
   const [input, setInput] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
@@ -89,7 +90,10 @@ export default function NewMiniAppBuilderPage() {
       setInput("");
       setStreaming(true);
       setStream("");
-      setTab("code");
+      // Watch the build where it's visible: the phone preview can't show
+      // streaming, so jump to the canvas (screens shimmer as they're written).
+      // An explicit Code view stays put.
+      setTab((t) => (t === "code" ? "code" : "canvas"));
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -137,7 +141,7 @@ export default function NewMiniAppBuilderPage() {
             versionIndex: idx,
           },
         ]);
-        setTab("preview");
+        setTab((t) => (t === "canvas" ? "canvas" : "preview"));
       } catch (e) {
         const aborted = (e as Error)?.name === "AbortError";
         setMessages((prev) => [
@@ -262,6 +266,9 @@ export default function NewMiniAppBuilderPage() {
             <StageTab active={tab === "preview"} onClick={() => setTab("preview")}>
               Vorschau
             </StageTab>
+            <StageTab active={tab === "canvas"} onClick={() => setTab("canvas")}>
+              Canvas
+            </StageTab>
             <StageTab active={tab === "code"} onClick={() => setTab("code")}>
               Code
             </StageTab>
@@ -278,6 +285,13 @@ export default function NewMiniAppBuilderPage() {
           </div>
           {tab === "preview" ? (
             <PreviewFrame html={activeHtml} appName={published?.slug ?? "Mini-App"} />
+          ) : tab === "canvas" ? (
+            <CanvasView
+              baseHtml={activeHtml}
+              stream={stream}
+              streaming={streaming}
+              appName={published?.slug ?? "Mini-App"}
+            />
           ) : (
             <CodePane text={streaming ? stream : activeHtml ?? stream} streaming={streaming} />
           )}
