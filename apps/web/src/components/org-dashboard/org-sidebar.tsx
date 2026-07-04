@@ -17,6 +17,7 @@ import {
   BookOpen,
   Vote,
   ExternalLink,
+  LayoutGrid,
 } from "lucide-react";
 import {
   subTypeFeatures,
@@ -112,6 +113,12 @@ export function OrgSidebar({ account }: OrgSidebarProps) {
       href: "/dashboard/partner",
       icon: <CreditCard className="h-4 w-4" />,
       visible: features.partner,
+    },
+    {
+      name: "Mini-Apps",
+      href: "/dashboard/mini-apps",
+      icon: <LayoutGrid className="h-4 w-4" />,
+      visible: true,
     },
     {
       name: "Einstellungen",
