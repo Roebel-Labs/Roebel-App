@@ -5,16 +5,15 @@ const path = require("path");
 const config = getDefaultConfig(__dirname);
 
 // --- pnpm monorepo support -------------------------------------------------
-// Workspace packages consumed by the app (e.g. @netizen/miniapp-sdk) live
-// OUTSIDE apps/expo, and ship untranspiled TS source. Metro must (a) be allowed
-// to read files from the repo root, and (b) resolve modules from the root
-// node_modules where pnpm links workspace packages.
-const workspaceRoot = path.resolve(__dirname, "../..");
-config.watchFolders = [workspaceRoot];
-config.resolver.nodeModulesPaths = [
-  path.resolve(__dirname, "node_modules"),
-  path.resolve(workspaceRoot, "node_modules"),
-];
+// The app consumes ONE workspace package that lives outside apps/expo and ships
+// untranspiled TS source: @netizen/miniapp-sdk. Metro must be allowed to read
+// its files. We watch ONLY that package (not the whole repo root) — watching the
+// entire monorepo made Metro's file map crawl apps/web's heavy crypto deps, both
+// Next mini apps, and contracts, blowing the bundler's heap (OOM at ~2GB during
+// `expo export --platform=all`). The SDK is zero-dependency, so its own imports
+// resolve within its folder; all of the app's deps stay in apps/expo/node_modules
+// (pnpm), so no root nodeModulesPaths override is needed.
+config.watchFolders = [path.resolve(__dirname, "../../packages/miniapp-sdk")];
 
 // SVG transformer configuration
 config.transformer.babelTransformerPath = require.resolve('react-native-svg-transformer');

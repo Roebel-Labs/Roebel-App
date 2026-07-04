@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = renderPreview({ files: clean });
+    const result = await renderPreview({ files: clean });
     return Response.json(result, { status: 200 });
   } catch (e) {
     console.error("[mini-apps/generate/preview] render failed", e);
