@@ -26,6 +26,13 @@ export interface PublishResult {
   writtenDir: string;
   filesWritten: number;
   deploy: "vercel" | "stubbed";
+  /**
+   * One-click Vercel Deploy Button URL (https://vercel.com/docs/deploy-button).
+   * Clones the app's committed monorepo subdirectory so the developer can host it
+   * on their own Vercel account, then register the resulting URL. See note on
+   * `deployButtonUrl`.
+   */
+  deployButtonUrl?: string;
   status: "pending";
   error?: string;
 }
@@ -41,6 +48,25 @@ const RESERVED_SLUGS = new Set(["_template", "roebel-data", "node_modules", "dis
 export function homeUrlForSlug(slug: string): string {
   const base = process.env.MINI_APPS_BASE_URL || "https://mini.roebel.app";
   return `${base.replace(/\/$/, "")}/${slug}`;
+}
+
+/**
+ * Vercel Deploy Button URL for a published app (https://vercel.com/docs/deploy-button).
+ * It clones the app's subdirectory in the monorepo — so the generated app must be
+ * committed to the repo first (true for the local-dev publish path; on Vercel's
+ * read-only serverless FS the generated files don't persist, so the intended flow is
+ * generate → commit the app under apps/mini-apps/<slug> → this button deploys it).
+ * The developer deploys to their own Vercel account, then registers the live URL.
+ */
+export function deployButtonUrl(slug: string): string {
+  const repo = process.env.MINI_APPS_REPO_URL || "https://github.com/Roebel-Labs/Roebel-App";
+  const tree = `${repo.replace(/\/$/, "")}/tree/main/apps/mini-apps/${slug}`;
+  const params = new URLSearchParams({
+    "repository-url": tree,
+    "project-name": `netizen-${slug}`,
+    "repository-name": `netizen-${slug}`,
+  });
+  return `https://vercel.com/new/clone?${params.toString()}`;
 }
 
 /** Absolute, traversal-safe path for a generated file inside the app dir. */
@@ -205,6 +231,7 @@ export async function publishMiniApp(input: {
     writtenDir: appDir,
     filesWritten,
     deploy,
+    deployButtonUrl: deployButtonUrl(slug),
     status: "pending",
   };
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Loader2, Store, ArrowLeft } from "lucide-react";
 import { AuthGuard } from "@/components/app/AuthGuard";
 import { AccountProvider, useAccount } from "@/lib/context/AccountContext";
@@ -24,11 +25,28 @@ export default function DashboardLayout({
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { activeAccount, ownedAccounts, isLoading, switchAccount } = useAccount();
+  const pathname = usePathname();
+  // The Netizen Mini App builder is open to ANY signed-in user — external
+  // developers (e.g. from other towns) build mini apps here and don't have a
+  // Röbel organisation account. Exempt it from the org-account gate below;
+  // AuthGuard still requires a connected wallet.
+  const isMiniAppBuilder = pathname?.startsWith("/dashboard/mini-apps") ?? false;
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (isMiniAppBuilder) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <DashboardTopBar />
+        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-6xl w-full mx-auto">
+          {children}
+        </main>
       </div>
     );
   }

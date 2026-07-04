@@ -27,6 +27,7 @@ export default function NewMiniAppBuilderPage() {
   const [rawStream, setRawStream] = useState("");
   const [plan, setPlan] = useState<PartialPlan | null>(null);
   const [publishUrl, setPublishUrl] = useState<string | null>(null);
+  const [deployButtonUrl, setDeployButtonUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -114,6 +115,7 @@ export default function NewMiniAppBuilderPage() {
         throw new Error(data?.error ?? `Fehler ${res.status}`);
       }
       setPublishUrl(data.homeUrl ?? null);
+      setDeployButtonUrl(data.deployButtonUrl ?? null);
       setPhase("published");
       toast({
         title: "Zur Prüfung eingereicht",
@@ -216,6 +218,7 @@ export default function NewMiniAppBuilderPage() {
             canPublish={canPublish}
             phase={phase}
             publishUrl={publishUrl}
+            deployButtonUrl={deployButtonUrl}
             onPublish={publish}
           />
         </div>
@@ -230,6 +233,7 @@ function ManifestPublishCard({
   canPublish,
   phase,
   publishUrl,
+  deployButtonUrl,
   onPublish,
 }: {
   manifest: Record<string, unknown> | null;
@@ -237,6 +241,7 @@ function ManifestPublishCard({
   canPublish: boolean;
   phase: Phase;
   publishUrl: string | null;
+  deployButtonUrl: string | null;
   onPublish: () => void;
 }) {
   const name = (manifest?.name as string) ?? "—";
@@ -270,12 +275,23 @@ function ManifestPublishCard({
         </div>
         <div className="shrink-0">
           {phase === "published" ? (
-            <div className="text-right">
+            <div className="flex flex-col items-end gap-1.5 text-right">
               <Badge className="bg-success text-white">In Prüfung</Badge>
               {publishUrl ? (
-                <p className="mt-1 max-w-[160px] truncate text-[10px] text-muted-foreground" title={publishUrl}>
+                <p className="max-w-[160px] truncate text-[10px] text-muted-foreground" title={publishUrl}>
                   {publishUrl}
                 </p>
+              ) : null}
+              {deployButtonUrl ? (
+                <a
+                  href={deployButtonUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background hover:opacity-90"
+                >
+                  <Rocket className="h-3 w-3" />
+                  Auf Vercel deployen
+                </a>
               ) : null}
             </div>
           ) : (
