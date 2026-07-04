@@ -10,8 +10,9 @@
     "test": "jest --watchAll",
     "lint": "expo lint",
     "eas-build-post-install": "bash ./eas-hooks/eas-build-post-prebuild.sh",
-    "update:preview": "eas update --channel preview",
-    "update:production": "eas update --channel production"
+    "export": "NODE_OPTIONS=--max-old-space-size=8192 expo export",
+    "update:preview": "NODE_OPTIONS=--max-old-space-size=8192 eas update --channel preview",
+    "update:production": "NODE_OPTIONS=--max-old-space-size=8192 eas update --channel production"
   },
   "jest": {
     "preset": "jest-expo",
