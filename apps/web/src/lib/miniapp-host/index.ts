@@ -62,6 +62,11 @@ export interface WebMiniAppHostOptions {
   onCall?: (method: string, ok: boolean) => void;
   /** Confirm sheet for signing methods. Resolve=proceed, reject=user_rejected. */
   confirmSign?: (req: Eip1193RequestArgs) => Promise<boolean>;
+  /**
+   * Replace individual host handlers. Used by the AI-builder preview to mock
+   * mutating calls (rewards/analytics) for an app that isn't registered yet.
+   */
+  overrides?: Partial<HostHandlers>;
 }
 
 export interface WebMiniAppHost {
@@ -101,7 +106,8 @@ function originOf(url: string): string {
  * The mini app must load with `src={app.homeUrl}` for origin filtering to work.
  */
 export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHost {
-  const { iframe, app, user, walletProvider, account, authToken, onCall, confirmSign } = opts;
+  const { iframe, app, user, walletProvider, account, authToken, onCall, confirmSign, overrides } =
+    opts;
   const targetOrigin = originOf(app.homeUrl);
 
   const post = (message: BridgeMessage) => {
@@ -243,7 +249,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
   };
 
   const bridge = createHostBridge({
-    handlers,
+    handlers: { ...handlers, ...(overrides ?? {}) },
     post,
     grantedPermissions: app.enforcePermissions ? app.permissions : undefined,
     onCall: onCall ? (m: BridgeMethod, ok: boolean) => onCall(m, ok) : undefined,

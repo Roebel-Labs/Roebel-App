@@ -31,6 +31,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // Röbel organisation account. Exempt it from the org-account gate below;
   // AuthGuard still requires a connected wallet.
   const isMiniAppBuilder = pathname?.startsWith("/dashboard/mini-apps") ?? false;
+  // The AI builder is a standalone full-viewport workspace with its own top
+  // bar — no dashboard chrome at all (auth still applies via AuthGuard above).
+  const isBuilderWorkspace = pathname?.startsWith("/dashboard/mini-apps/new") ?? false;
 
   if (isLoading) {
     return (
@@ -38,6 +41,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (isBuilderWorkspace) {
+    return <>{children}</>;
   }
 
   if (isMiniAppBuilder) {

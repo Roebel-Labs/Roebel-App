@@ -1,17 +1,28 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+// The AI Mini-App Builder — a standalone v0-style workspace. Chat on the left
+// drives chat-iterative generation of a single-file Röbel mini app; the stage
+// on the right runs it live in a phone frame against the real host bridge
+// (Vorschau) or shows the streaming document (Code). Publishing stores the app
+// in Supabase and serves it from /mini/<slug>.
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Rocket, Sparkles, Square, Wand2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUp,
+  History,
+  Rocket,
+  Sparkles,
+  Square,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
-import { GeneratedFiles } from "./components/GeneratedFiles";
-import { LivePreview } from "./components/LivePreview";
-import { parsePartialPlan, usableFiles, type PartialPlan } from "./lib/streamParse";
-
-type Phase = "idle" | "generating" | "ready" | "publishing" | "published";
+import { cn } from "@/lib/utils";
+import { useWalletAddress } from "@/components/mini-apps/useWallet";
+import { CodePane } from "./components/CodePane";
+import { PreviewFrame } from "./components/PreviewFrame";
+import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
+import { extractResult, stripFences } from "./lib/stream";
 
 const EXAMPLE_PROMPTS = [
   "Eine Umfrage-App: Bürger:innen stimmen über die nächste Stadtfest-Location ab und sehen die Ergebnisse als Balken.",
@@ -20,294 +31,523 @@ const EXAMPLE_PROMPTS = [
   "Ein Kassenstand-Dashboard, das den Röbel-Münzen-Stand und die letzten Aktivitäten zeigt.",
 ];
 
+type Complexity = "default" | "hard";
+
+interface ChatMsg {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  versionIndex?: number;
+  error?: boolean;
+}
+
+interface Version {
+  html: string;
+  notes: string;
+}
+
+function uid(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function NewMiniAppBuilderPage() {
-  const [prompt, setPrompt] = useState("");
-  const [complexity, setComplexity] = useState<"default" | "hard">("default");
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [rawStream, setRawStream] = useState("");
-  const [plan, setPlan] = useState<PartialPlan | null>(null);
-  const [publishUrl, setPublishUrl] = useState<string | null>(null);
-  const [deployButtonUrl, setDeployButtonUrl] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const wallet = useWalletAddress();
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [streaming, setStreaming] = useState(false);
+  const [stream, setStream] = useState("");
+  const [tab, setTab] = useState<"preview" | "code">("preview");
+  const [complexity, setComplexity] = useState<Complexity>("default");
+  const [input, setInput] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [published, setPublished] = useState<PublishSuccess | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  const files = useMemo(() => usableFiles(plan), [plan]);
-  const manifest = plan?.manifest ?? null;
-  const streaming = phase === "generating";
+  const activeHtml = activeIdx >= 0 ? versions[activeIdx]?.html ?? null : null;
+  const started = messages.length > 0;
 
-  const generate = useCallback(async () => {
-    const p = prompt.trim();
-    if (p.length < 3) {
-      toast({ title: "Beschreibung fehlt", description: "Beschreibe kurz, was die Mini-App tun soll.", variant: "destructive" });
-      return;
-    }
-    setPhase("generating");
-    setRawStream("");
-    setPlan(null);
-    setPublishUrl(null);
-    setErrorMsg(null);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, streaming]);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const send = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed.length < 3 || streaming) return;
+      const userMsg: ChatMsg = { id: uid(), role: "user", content: trimmed };
+      // Assistant history goes to the model as its short notes, not full code —
+      // the current document is attached separately server-side.
+      const convo = [...messages, userMsg]
+        .filter((m) => !m.error)
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
-    try {
-      const res = await fetch("/api/mini-apps/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: p, complexity }),
-        signal: controller.signal,
-      });
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setStreaming(true);
+      setStream("");
+      setTab("code");
 
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error ?? `Fehler ${res.status}`);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await fetch("/api/mini-apps/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: convo,
+            html: activeHtml ?? undefined,
+            complexity,
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error ?? `Fehler ${res.status}`);
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let acc = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          acc += decoder.decode(value, { stream: true });
+          setStream(stripFences(acc));
+        }
+        acc += decoder.decode();
+
+        const { html, notes } = extractResult(acc);
+        if (!html) {
+          throw new Error(
+            "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
+          );
+        }
+        const idx = versions.length;
+        setVersions((prev) => [...prev, { html, notes }]);
+        setActiveIdx(idx);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            content: notes || "Fertig — neue Version gebaut.",
+            versionIndex: idx,
+          },
+        ]);
+        setTab("preview");
+      } catch (e) {
+        const aborted = (e as Error)?.name === "AbortError";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            content: aborted
+              ? "Abgebrochen. Beschreibe, was anders sein soll, und schick es erneut."
+              : e instanceof Error
+                ? e.message
+                : "Generierung fehlgeschlagen.",
+            error: true,
+          },
+        ]);
+        if (versions.length > 0) setTab("preview");
+      } finally {
+        setStreaming(false);
+        abortRef.current = null;
       }
+    },
+    [messages, versions, activeHtml, complexity, streaming],
+  );
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let acc = "";
-      // Stream loop: accumulate the growing JSON text, parse tolerantly, render live.
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        acc += decoder.decode(value, { stream: true });
-        setRawStream(acc);
-        const partial = parsePartialPlan(acc);
-        if (partial) setPlan(partial);
-      }
-      acc += decoder.decode();
-      const finalPlan = parsePartialPlan(acc);
-      if (finalPlan) setPlan(finalPlan);
+  const stop = useCallback(() => abortRef.current?.abort(), []);
 
-      if (!finalPlan || !finalPlan.files?.length) {
-        throw new Error("Keine gültige Mini-App generiert. Versuch es mit einer klareren Beschreibung.");
-      }
-      setPhase("ready");
-    } catch (e) {
-      if ((e as Error)?.name === "AbortError") {
-        setPhase(plan?.files?.length ? "ready" : "idle");
-        return;
-      }
-      setErrorMsg(e instanceof Error ? e.message : "Generierung fehlgeschlagen");
-      setPhase("idle");
-      toast({ title: "Generierung fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannter Fehler", variant: "destructive" });
-    } finally {
-      abortRef.current = null;
-    }
-  }, [prompt, complexity, plan]);
+  const idea = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" · ")
+    .slice(0, 3500);
 
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
-  const publish = useCallback(async () => {
-    if (!plan) return;
-    setPhase("publishing");
-    setErrorMsg(null);
-    try {
-      const res = await fetch("/api/mini-apps/publish", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data?.error ?? `Fehler ${res.status}`);
-      }
-      setPublishUrl(data.homeUrl ?? null);
-      setDeployButtonUrl(data.deployButtonUrl ?? null);
-      setPhase("published");
-      toast({
-        title: "Zur Prüfung eingereicht",
-        description: `„${manifest?.name ?? "Mini-App"}" wurde erstellt und wartet auf die Admin-Freigabe.`,
-      });
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "Veröffentlichung fehlgeschlagen");
-      setPhase("ready");
-      toast({ title: "Veröffentlichung fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannter Fehler", variant: "destructive" });
-    }
-  }, [plan, manifest]);
-
-  const canPublish = phase === "ready" && files.length > 0 && !!manifest?.slug;
+  if (!started) {
+    return (
+      <EmptyState
+        input={input}
+        setInput={setInput}
+        complexity={complexity}
+        setComplexity={setComplexity}
+        onSend={send}
+      />
+    );
+  }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-[1400px] flex-col gap-4 p-4">
-      {/* header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+    <div className="flex h-dvh flex-col bg-background">
+      {/* top bar */}
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           <Link
             href="/dashboard/mini-apps"
-            className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-muted"
-            aria-label="Zurück"
+            aria-label="Zurück zu meinen Apps"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-muted"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div>
-            <h1 className="flex items-center gap-2 font-heading text-lg font-bold text-foreground">
-              <Sparkles className="h-4 w-4 text-primary" /> Mini-App bauen
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Beschreibe deine Idee — die KI baut eine Röbel-konforme Mini-App, die du live testen und einreichen kannst.
-            </p>
-          </div>
+          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <span className="truncate font-heading text-sm font-bold text-foreground">
+            KI-Baukasten
+          </span>
+          {versions.length > 0 ? (
+            <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:inline">
+              Version {activeIdx + 1}/{versions.length}
+            </span>
+          ) : null}
         </div>
-      </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModelToggle value={complexity} onChange={setComplexity} disabled={streaming} />
+          {published ? (
+            <Badge className="hidden bg-success text-white sm:inline-flex">In Prüfung</Badge>
+          ) : null}
+          <Button
+            size="sm"
+            onClick={() => setPublishOpen(true)}
+            disabled={!activeHtml || streaming}
+          >
+            <Rocket className="mr-1.5 h-3.5 w-3.5" />
+            {published ? "Neue Version einreichen" : "Veröffentlichen"}
+          </Button>
+        </div>
+      </header>
 
-      {/* prompt bar */}
-      <div className="rounded-[10px] border border-border bg-card p-4">
-        <Textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !streaming) generate();
-          }}
-          placeholder="z. B. Eine Umfrage-App, in der Bürger:innen über die nächste Stadtfest-Location abstimmen…"
-          rows={3}
-          className="resize-none border-border bg-background text-sm"
-          disabled={streaming || phase === "publishing"}
-        />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {EXAMPLE_PROMPTS.map((ex, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setPrompt(ex)}
-                disabled={streaming || phase === "publishing"}
-                className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-40"
-              >
-                {ex.length > 42 ? ex.slice(0, 42) + "…" : ex}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={complexity === "hard"}
-                onChange={(e) => setComplexity(e.target.checked ? "hard" : "default")}
-                disabled={streaming}
-                className="h-3.5 w-3.5 accent-[#00498B]"
+      {/* workspace */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* chat panel */}
+        <aside className="flex h-[45dvh] w-full shrink-0 flex-col border-b border-border md:h-auto md:w-[380px] md:border-b-0 md:border-r">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            {messages.map((m) => (
+              <MessageBubble
+                key={m.id}
+                msg={m}
+                activeIdx={activeIdx}
+                onRestore={(i) => {
+                  setActiveIdx(i);
+                  setTab("preview");
+                }}
               />
-              Stärkeres Modell
-            </label>
+            ))}
             {streaming ? (
-              <Button variant="outline" size="sm" onClick={stop}>
-                <Square className="mr-1.5 h-3.5 w-3.5" /> Stopp
-              </Button>
-            ) : (
-              <Button size="sm" onClick={generate} disabled={phase === "publishing"}>
-                <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                {files.length > 0 ? "Neu generieren" : "Generieren"}
-              </Button>
-            )}
+              <div className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  ⌁ {stream.length.toLocaleString("de-DE")} Zeichen · baut…
+                </p>
+              </div>
+            ) : null}
+            <div ref={chatEndRef} />
           </div>
-        </div>
-        {errorMsg ? <p className="mt-2 text-xs text-destructive">{errorMsg}</p> : null}
+          <Composer
+            input={input}
+            setInput={setInput}
+            streaming={streaming}
+            onSend={send}
+            onStop={stop}
+            placeholder="Was soll anders sein? z. B. „Mach die Buttons größer und ergänze eine Bestätigung.“"
+          />
+        </aside>
+
+        {/* stage */}
+        <section className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+          <div className="flex shrink-0 items-center gap-1">
+            <StageTab active={tab === "preview"} onClick={() => setTab("preview")}>
+              Vorschau
+            </StageTab>
+            <StageTab active={tab === "code"} onClick={() => setTab("code")}>
+              Code
+            </StageTab>
+            {published ? (
+              <a
+                href={published.homeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto truncate font-mono text-[11px] text-primary hover:underline"
+              >
+                {published.homeUrl}
+              </a>
+            ) : null}
+          </div>
+          {tab === "preview" ? (
+            <PreviewFrame html={activeHtml} appName={published?.slug ?? "Mini-App"} />
+          ) : (
+            <CodePane text={streaming ? stream : activeHtml ?? stream} streaming={streaming} />
+          )}
+        </section>
       </div>
 
-      {/* main: files | preview */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(380px,440px)]">
-        <GeneratedFiles files={files} streaming={streaming} />
-        <div className="flex min-h-0 flex-col gap-4">
-          <LivePreview files={files} streaming={streaming} />
-          {/* manifest + publish */}
-          <ManifestPublishCard
-            manifest={manifest}
-            notes={plan?.notes}
-            canPublish={canPublish}
-            phase={phase}
-            publishUrl={publishUrl}
-            deployButtonUrl={deployButtonUrl}
-            onPublish={publish}
-          />
-        </div>
+      {activeHtml ? (
+        <PublishDialog
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          html={activeHtml}
+          idea={idea}
+          wallet={wallet}
+          onPublished={setPublished}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ── pieces ───────────────────────────────────────────────────────────────────
+
+function MessageBubble({
+  msg,
+  activeIdx,
+  onRestore,
+}: {
+  msg: ChatMsg;
+  activeIdx: number;
+  onRestore: (i: number) => void;
+}) {
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-[10px] bg-primary px-3 py-2 text-sm text-primary-foreground">
+          {msg.content}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-2">
+      <Sparkles
+        className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", msg.error ? "text-destructive" : "text-primary")}
+      />
+      <div className="min-w-0 space-y-1.5">
+        <p
+          className={cn(
+            "whitespace-pre-wrap text-sm",
+            msg.error ? "text-destructive" : "text-foreground",
+          )}
+        >
+          {msg.content}
+        </p>
+        {msg.versionIndex !== undefined ? (
+          <button
+            type="button"
+            onClick={() => onRestore(msg.versionIndex!)}
+            disabled={msg.versionIndex === activeIdx}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]",
+              msg.versionIndex === activeIdx
+                ? "bg-primary text-primary-foreground"
+                : "border border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <History className="h-2.5 w-2.5" />
+            Version {msg.versionIndex + 1}
+            {msg.versionIndex === activeIdx ? " · aktiv" : " · wiederherstellen"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function ManifestPublishCard({
-  manifest,
-  notes,
-  canPublish,
-  phase,
-  publishUrl,
-  deployButtonUrl,
-  onPublish,
+function Composer({
+  input,
+  setInput,
+  streaming,
+  onSend,
+  onStop,
+  placeholder,
+  autoFocus,
 }: {
-  manifest: Record<string, unknown> | null;
-  notes?: string;
-  canPublish: boolean;
-  phase: Phase;
-  publishUrl: string | null;
-  deployButtonUrl: string | null;
-  onPublish: () => void;
+  input: string;
+  setInput: (v: string) => void;
+  streaming: boolean;
+  onSend: (text: string) => void;
+  onStop: () => void;
+  placeholder: string;
+  autoFocus?: boolean;
 }) {
-  const name = (manifest?.name as string) ?? "—";
-  const slug = (manifest?.slug as string) ?? "";
-  const category = (manifest?.category as string) ?? "";
-  const permissions = (manifest?.permissions as string[]) ?? [];
-
   return (
-    <div className="shrink-0 rounded-[10px] border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-heading text-sm font-semibold text-foreground">{name}</p>
-          {slug ? <p className="truncate text-[11px] text-muted-foreground">/{slug}</p> : null}
-          {(manifest?.description as string) ? (
-            <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-              {manifest?.description as string}
+    <div className="shrink-0 border-t border-border p-3">
+      <div className="flex items-end gap-2 rounded-[10px] border border-border bg-card p-2 focus-within:border-primary">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (!streaming) onSend(input);
+            }
+          }}
+          placeholder={placeholder}
+          rows={2}
+          autoFocus={autoFocus}
+          disabled={streaming}
+          className="max-h-32 min-h-[3rem] flex-1 resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+        />
+        {streaming ? (
+          <Button size="sm" variant="outline" onClick={onStop} aria-label="Stoppen">
+            <Square className="h-3.5 w-3.5" />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={() => onSend(input)}
+            disabled={input.trim().length < 3}
+            aria-label="Senden"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModelToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Complexity;
+  onChange: (v: Complexity) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="hidden items-center rounded-[10px] border border-border p-0.5 sm:flex">
+      {(
+        [
+          ["default", "Schnell"],
+          ["hard", "Stark"],
+        ] as const
+      ).map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          disabled={disabled}
+          title={v === "hard" ? "Stärkeres Modell für komplexe Apps (langsamer)" : "Schnelles Modell"}
+          className={cn(
+            "rounded-[8px] px-2.5 py-1 text-[11px] font-medium",
+            value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StageTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-[10px] px-3 py-1.5 text-xs font-medium",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({
+  input,
+  setInput,
+  complexity,
+  setComplexity,
+  onSend,
+}: {
+  input: string;
+  setInput: (v: string) => void;
+  complexity: Complexity;
+  setComplexity: (v: Complexity) => void;
+  onSend: (text: string) => void;
+}) {
+  return (
+    <div className="relative flex h-dvh flex-col bg-background">
+      {/* Bauplan backdrop */}
+      <div
+        aria-hidden
+        className="absolute inset-0 [background-size:24px_24px] [background-image:linear-gradient(to_right,rgba(0,73,139,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,73,139,0.05)_1px,transparent_1px)] dark:[background-image:linear-gradient(to_right,rgba(122,187,242,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(122,187,242,0.05)_1px,transparent_1px)]"
+      />
+      <header className="relative z-10 flex h-12 shrink-0 items-center px-3">
+        <Link
+          href="/dashboard/mini-apps"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Meine Apps
+        </Link>
+      </header>
+      <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center p-4">
+        <div className="w-full max-w-xl">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-[14px] bg-primary">
+              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <h1 className="font-heading text-3xl font-bold text-foreground">
+              Was baust du für Röbel?
+            </h1>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Beschreibe deine Idee — die KI baut eine Mini-App im Röbel-Design mit echtem SDK.
+              Live testen, anpassen, zur Prüfung einreichen.
             </p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {category ? (
-              <Badge variant="secondary" className="text-[10px]">
-                {category}
-              </Badge>
-            ) : null}
-            {permissions.map((p) => (
-              <Badge key={p} variant="outline" className="text-[10px]">
-                {p}
-              </Badge>
+          </div>
+
+          <div className="rounded-[14px] border border-border bg-card p-3 shadow-sm">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSend(input);
+                }
+              }}
+              placeholder="z. B. Eine Umfrage-App, in der Bürger:innen über die nächste Stadtfest-Location abstimmen…"
+              rows={3}
+              autoFocus
+              className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <ModelToggle value={complexity} onChange={setComplexity} />
+              <Button size="sm" onClick={() => onSend(input)} disabled={input.trim().length < 3}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> App bauen
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {EXAMPLE_PROMPTS.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => setInput(ex)}
+                className="rounded-[10px] border border-border bg-card p-3 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+              >
+                {ex}
+              </button>
             ))}
           </div>
         </div>
-        <div className="shrink-0">
-          {phase === "published" ? (
-            <div className="flex flex-col items-end gap-1.5 text-right">
-              <Badge className="bg-success text-white">In Prüfung</Badge>
-              {publishUrl ? (
-                <p className="max-w-[160px] truncate text-[10px] text-muted-foreground" title={publishUrl}>
-                  {publishUrl}
-                </p>
-              ) : null}
-              {deployButtonUrl ? (
-                <a
-                  href={deployButtonUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background hover:opacity-90"
-                >
-                  <Rocket className="h-3 w-3" />
-                  Auf Vercel deployen
-                </a>
-              ) : null}
-            </div>
-          ) : (
-            <Button size="sm" onClick={onPublish} disabled={!canPublish || phase === "publishing"}>
-              <Rocket className="mr-1.5 h-3.5 w-3.5" />
-              {phase === "publishing" ? "Reiche ein…" : "Veröffentlichen"}
-            </Button>
-          )}
-        </div>
-      </div>
-      {notes ? <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">{notes}</p> : null}
-      {phase === "published" ? (
-        <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
-          Die Mini-App wurde erstellt und in die Admin-Prüfung übernommen. Nach der Freigabe erscheint sie im Mini-App-Store.
-        </p>
-      ) : null}
+      </main>
     </div>
   );
 }

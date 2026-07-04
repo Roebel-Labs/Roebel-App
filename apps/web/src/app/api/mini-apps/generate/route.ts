@@ -1,75 +1,83 @@
 /**
- * POST /api/mini-apps/generate
+ * POST /api/mini-apps/generate — chat-iterative single-file codegen (builder v2).
  *
- * Streams a strict JSON file-plan for a Röbel Mini App generated from a
- * natural-language prompt. Uses a strong Claude model via @ai-sdk/anthropic
- * (same wiring pattern as the Mecky chat route). ANTHROPIC_API_KEY is read
- * server-side only.
+ * Streams a complete HTML mini-app document. First turn: build from the idea.
+ * Later turns: the current document is appended to the newest user message and
+ * the model returns the FULL updated document (LlamaCoder-style iteration —
+ * prior assistant turns arrive as short summaries, not full code, to keep the
+ * context small).
  *
- * Body: { prompt: string; appId?: string; complexity?: "default" | "hard" }
- * Response: text stream of the partial JSON object (partialObjectStream), which
- *           the builder UI parses incrementally for live preview.
+ * Body: {
+ *   messages: { role: "user" | "assistant"; content: string }[]  (≤24, newest last, ends with a user turn)
+ *   html?: string                 current document for iteration turns
+ *   complexity?: "default" | "hard"
+ * }
+ * Response: raw text stream of the HTML document.
  */
-import { streamObject } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { filePlanSchema } from "@/lib/miniapp/ai/filePlan";
-import {
-  buildCodegenSystemPrompt,
-  buildCodegenUserPrompt,
-} from "@/lib/miniapp/ai/systemPrompt";
+import { z } from "zod";
+import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/htmlPrompt";
 import { codegenModelId } from "@/lib/miniapp/ai/model";
 
-// Codegen can run long; allow generous streaming time on platforms that honor it.
 export const maxDuration = 300;
-export const runtime = "nodejs"; // needs node:fs to load DESIGN.md + template
+export const runtime = "nodejs";
+
+const bodySchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(8000),
+      }),
+    )
+    .min(1)
+    .max(24),
+  html: z.string().max(900_000).optional(),
+  complexity: z.enum(["default", "hard"]).optional(),
+});
 
 export async function POST(request: Request) {
-  let body: { prompt?: unknown; appId?: unknown; complexity?: unknown };
+  let raw: unknown;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (prompt.length < 3) {
-    return Response.json({ error: "prompt_required" }, { status: 400 });
+  const parsed = bodySchema.safeParse(raw);
+  if (!parsed.success) {
+    return Response.json({ error: "invalid_body" }, { status: 400 });
   }
-  if (prompt.length > 8000) {
-    return Response.json({ error: "prompt_too_long" }, { status: 400 });
+  const { messages, html, complexity } = parsed.data;
+  if (messages[messages.length - 1].role !== "user") {
+    return Response.json({ error: "last_message_must_be_user" }, { status: 400 });
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
 
-  const complexity = body.complexity === "hard" ? "hard" : "default";
-
-  let system: string;
-  try {
-    system = await buildCodegenSystemPrompt();
-  } catch (e) {
-    console.error("[mini-apps/generate] failed to build system prompt", e);
-    return Response.json({ error: "template_unavailable" }, { status: 500 });
-  }
+  // Append the current document to the newest user turn for iteration.
+  const modelMessages: ModelMessage[] = messages.map((m, i) => ({
+    role: m.role,
+    content:
+      i === messages.length - 1 && html ? m.content + buildIterationSuffix(html) : m.content,
+  }));
 
   try {
-    const result = streamObject({
-      model: anthropic(codegenModelId(complexity)),
-      schema: filePlanSchema,
-      system,
-      prompt: buildCodegenUserPrompt(prompt),
+    const result = streamText({
+      model: anthropic(codegenModelId(complexity ?? "default")),
+      system: buildHtmlSystemPrompt(),
+      messages: modelMessages,
       maxOutputTokens: 32000,
       onError: (event) => {
         console.error("[mini-apps/generate] stream error", event.error);
       },
     });
-
-    // Streams the partial JSON object as it is generated. The builder UI reads
-    // this with the AI SDK client or by parsing the growing JSON text.
     return result.toTextStreamResponse();
   } catch (e) {
-    console.error("[mini-apps/generate] streamObject threw", e);
+    console.error("[mini-apps/generate] streamText threw", e);
     return Response.json({ error: "generation_failed" }, { status: 500 });
   }
 }

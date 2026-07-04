@@ -14,13 +14,9 @@ const nextConfig = {
   // @safe-global/safe-deployments — multi-MB of all-chain Safe contract JSON —
   // which, when bundled, blew the 8GB build container's memory (exit 137 / OOM).
   // These are imported server-side only (safe-server.ts / api-kit.ts).
-  // `typescript` is required at runtime by the AI-builder preview route (it
-  // transpiles generated TSX in a node:vm); keep it external so it loads from
-  // node_modules instead of being bundled.
   serverExternalPackages: [
     "pino-pretty",
     "got",
-    "typescript",
     "@safe-global/protocol-kit",
     "@safe-global/api-kit",
     "@safe-global/safe-deployments",
@@ -76,6 +72,18 @@ const nextConfig = {
           {
             key: 'Content-Type',
             value: 'application/wasm',
+          },
+        ],
+      },
+      {
+        // Mini apps served from /mini/[slug] run with an opaque origin (CSP
+        // sandbox) — @font-face fetches are CORS-gated there, so the shared
+        // fonts must be readable cross-origin.
+        source: '/fonts/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
           },
         ],
       },
