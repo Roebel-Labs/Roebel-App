@@ -128,9 +128,11 @@ export async function publishHtmlMiniApp(input: {
     if (!ownedBySameDeveloper || existing.source !== "ai_builder") {
       return fail(slug, "slug_taken", "slug_taken");
     }
+    // Re-publish without a fresh icon keeps the existing one instead of nulling it.
+    const { icon_url: newIcon, ...withoutIcon } = appFields;
     const { error: updateErr } = await supabase
       .from("mini_apps")
-      .update(appFields)
+      .update(newIcon ? appFields : withoutIcon)
       .eq("id", existing.id);
     if (updateErr) {
       return fail(slug, "db_error", `registry_update_failed: ${updateErr.message}`);

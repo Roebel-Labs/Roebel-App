@@ -11,6 +11,8 @@ import {
   ArrowLeft,
   ArrowUp,
   History,
+  Loader2,
+  MessageSquarePlus,
   Rocket,
   Sparkles,
   Square,
@@ -24,6 +26,7 @@ import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
 import { extractResult, stripFences } from "./lib/stream";
+import type { ManifestDraft } from "@/lib/miniapp/ai/manifest";
 
 const EXAMPLE_PROMPTS = [
   "Eine Umfrage-App: Bürger:innen stimmen über die nächste Stadtfest-Location ab und sehen die Ergebnisse als Balken.",
@@ -65,6 +68,10 @@ export default function NewMiniAppBuilderPage() {
   const [input, setInput] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState<PublishSuccess | null>(null);
+  // Set when an existing app is re-opened (?app=…): prefills the publish form
+  // so re-publishing lands on the SAME slug as a new version.
+  const [preset, setPreset] = useState<ManifestDraft | null>(null);
+  const [loadingApp, setLoadingApp] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,6 +81,100 @@ export default function NewMiniAppBuilderPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, streaming]);
+
+  // Re-open an existing AI-built app: /dashboard/mini-apps/new?app=<id|slug>
+  // seeds the session with its latest stored HTML.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("app");
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingApp(true);
+      try {
+        const res = await fetch(`/api/mini-apps/${encodeURIComponent(id)}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error ?? `Fehler ${res.status}`);
+        const app = json.app as {
+          name: string;
+          slug: string;
+          description: string | null;
+          category: string;
+          tags: string[] | null;
+          permissions: string[] | null;
+          primary_color: string | null;
+          home_url: string;
+        };
+        const versionRows = (json.versions ?? []) as { html?: string | null; version: string }[];
+        const withHtml = versionRows.find((v) => typeof v.html === "string" && v.html.length > 0);
+        if (!withHtml?.html) {
+          throw new Error(
+            "Für diese App ist kein Quelltext gespeichert — extern gehostete Apps können hier nicht geöffnet werden.",
+          );
+        }
+        if (cancelled) return;
+        setVersions([{ html: withHtml.html, notes: "" }]);
+        setActiveIdx(0);
+        setPreset({
+          name: app.name,
+          slug: app.slug,
+          description: app.description ?? "",
+          category: (app.category ?? "utility") as ManifestDraft["category"],
+          tags: (app.tags ?? []).slice(0, 5),
+          permissions: (app.permissions ?? []) as ManifestDraft["permissions"],
+          primaryColor: app.primary_color ?? "#00498B",
+        });
+        setPublished({ slug: app.slug, homeUrl: app.home_url });
+        setMessages([
+          {
+            id: uid(),
+            role: "assistant",
+            content: `„${app.name}“ (Version ${withHtml.version}) ist geladen. Beschreibe, was du ändern möchtest — Veröffentlichen reicht eine neue Version ein.`,
+            versionIndex: 0,
+          },
+        ]);
+      } catch (e) {
+        if (!cancelled) {
+          setMessages([
+            {
+              id: uid(),
+              role: "assistant",
+              content:
+                e instanceof Error ? e.message : "Die App konnte nicht geladen werden.",
+              error: true,
+            },
+          ]);
+        }
+      } finally {
+        if (!cancelled) setLoadingApp(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const newChat = useCallback(() => {
+    if (
+      versions.length > 0 &&
+      !window.confirm("Aktuelle Sitzung verwerfen und eine neue App starten?")
+    ) {
+      return;
+    }
+    abortRef.current?.abort();
+    setMessages([]);
+    setVersions([]);
+    setActiveIdx(-1);
+    setStream("");
+    setStreaming(false);
+    setInput("");
+    setPublished(null);
+    setPreset(null);
+    setPublishOpen(false);
+    setTab("preview");
+    window.history.replaceState(null, "", "/dashboard/mini-apps/new");
+  }, [versions.length]);
 
   const send = useCallback(
     async (text: string) => {
@@ -174,6 +275,15 @@ export default function NewMiniAppBuilderPage() {
     .join(" · ")
     .slice(0, 3500);
 
+  if (loadingApp) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <p className="text-xs text-muted-foreground">App wird geladen…</p>
+      </div>
+    );
+  }
+
   if (!started) {
     return (
       <EmptyState
@@ -209,6 +319,16 @@ export default function NewMiniAppBuilderPage() {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={newChat}
+            disabled={streaming}
+            title="Neue App starten (aktuelle Sitzung verwerfen)"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Neu</span>
+          </button>
           <ModelToggle value={complexity} onChange={setComplexity} disabled={streaming} />
           {published ? (
             <Badge className="hidden bg-success text-white sm:inline-flex">In Prüfung</Badge>
@@ -305,6 +425,7 @@ export default function NewMiniAppBuilderPage() {
           html={activeHtml}
           idea={idea}
           wallet={wallet}
+          preset={preset}
           onPublished={setPublished}
         />
       ) : null}

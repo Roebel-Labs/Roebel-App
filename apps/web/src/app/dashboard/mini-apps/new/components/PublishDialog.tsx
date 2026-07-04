@@ -57,6 +57,7 @@ export function PublishDialog({
   html,
   idea,
   wallet,
+  preset,
   onPublished,
 }: {
   open: boolean;
@@ -64,6 +65,8 @@ export function PublishDialog({
   html: string;
   idea: string;
   wallet: string | undefined;
+  /** Manifest of a re-opened app — used instead of an AI draft so re-publishing keeps the slug. */
+  preset?: ManifestDraft | null;
   onPublished: (result: PublishSuccess) => void;
 }) {
   const [drafting, setDrafting] = useState(false);
@@ -93,8 +96,12 @@ export function PublishDialog({
   }, [html, idea]);
 
   // Draft once per opened dialog (re-drafts when a new version is being published).
+  // A preset (re-opened app) wins over the AI draft so the slug stays stable.
   useEffect(() => {
-    if (open && !draft && !drafting && !success) void loadDraft();
+    if (open && !draft && !drafting && !success) {
+      if (preset) setDraft(preset);
+      else void loadDraft();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

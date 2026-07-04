@@ -82,8 +82,14 @@ export default function MyMiniApps() {
       ) : (
         <div className="space-y-2">
           {apps.map((app) => (
-            <Link key={app.id} href={`/dashboard/mini-apps/${app.id}`}>
-              <Card className="flex items-center gap-3 p-3 transition-colors hover:bg-accent">
+            <Card
+              key={app.id}
+              className="flex items-center gap-3 p-3 transition-colors hover:bg-accent"
+            >
+              <Link
+                href={`/dashboard/mini-apps/${app.id}`}
+                className="flex min-w-0 flex-1 items-center gap-3"
+              >
                 <AppIcon name={app.name} iconUrl={app.icon_url} color={app.primary_color} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{app.name}</p>
@@ -92,9 +98,21 @@ export default function MyMiniApps() {
                   </p>
                 </div>
                 <StatusBadge status={app.status} />
+              </Link>
+              {app.source === "ai_builder" ? (
+                <Link
+                  href={`/dashboard/mini-apps/new?app=${app.id}`}
+                  title="Im KI-Baukasten öffnen"
+                  aria-label={`${app.name} im KI-Baukasten öffnen`}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-background hover:text-primary"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+              ) : null}
+              <Link href={`/dashboard/mini-apps/${app.id}`} aria-hidden tabIndex={-1}>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </Card>
-            </Link>
+              </Link>
+            </Card>
           ))}
         </div>
       )}
