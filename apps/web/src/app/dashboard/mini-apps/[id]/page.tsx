@@ -13,6 +13,7 @@ import {
   categoryLabel,
   InfoRow,
   DetailCard,
+  MiniAppPreviewRow,
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
 import { ManifestForm } from "@/components/mini-apps/ManifestForm";
@@ -140,6 +141,7 @@ export default function BuilderMiniAppDetail({
               <InfoRow label="Aktualisiert">{timeAgo(Date.parse(app.updated_at))}</InfoRow>
             </div>
           </div>
+          <MiniAppPreviewRow images={app.screenshots} className="mt-4" />
         </DetailCard>
       )}
 

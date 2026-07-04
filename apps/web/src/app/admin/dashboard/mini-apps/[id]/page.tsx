@@ -23,6 +23,7 @@ import {
   categoryLabel,
   InfoRow,
   DetailCard,
+  MiniAppPreviewRow,
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
 import { Playground } from "@/components/mini-apps/Playground";
@@ -241,19 +242,7 @@ export default function MiniAppAdminDetail({
             <InfoRow label="Aktualisiert">{timeAgo(Date.parse(app.updated_at))}</InfoRow>
           </div>
         </div>
-        {app.screenshots.length > 0 && (
-          <div className="mt-3 flex gap-2 overflow-x-auto">
-            {app.screenshots.map((s) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={s}
-                src={s}
-                alt=""
-                className="h-40 rounded-md border border-border object-cover"
-              />
-            ))}
-          </div>
-        )}
+        <MiniAppPreviewRow images={app.screenshots} className="mt-3" />
       </DetailCard>
 
       {/* Playground */}

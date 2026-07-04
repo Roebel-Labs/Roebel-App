@@ -18,6 +18,41 @@ export {
   SkeletonGrid,
 } from "@/components/admin/muenzen/ui";
 
+/**
+ * Horizontal row of square (1:1) mini-app preview images. Scrolls sideways when it
+ * overflows. Used on the mini-app detail pages (admin + builder). Renders nothing
+ * when there are no images.
+ */
+export function MiniAppPreviewRow({
+  images,
+  className,
+  size = "lg",
+}: {
+  images?: string[] | null;
+  className?: string;
+  size?: "sm" | "lg";
+}) {
+  if (!images || images.length === 0) return null;
+  const box = size === "sm" ? "h-24 w-24" : "h-40 w-40";
+  return (
+    <div className={cn("flex gap-3 overflow-x-auto pb-1", className)}>
+      {images.map((src, i) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={`${src}-${i}`}
+          src={src}
+          alt="Vorschau"
+          loading="lazy"
+          className={cn(
+            "aspect-square shrink-0 rounded-[10px] border border-border bg-muted object-cover",
+            box,
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 const STATUS_META: Record<
   MiniAppStatus,
   { label: string; className: string }

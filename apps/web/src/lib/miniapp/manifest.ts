@@ -85,7 +85,7 @@ export function validateManifest(input: unknown): MiniAppManifest {
   });
 
   const rawShots = Array.isArray(m.screenshots) ? m.screenshots : [];
-  if (rawShots.length > 3) fail("höchstens 3 screenshots erlaubt.");
+  if (rawShots.length > 6) fail("höchstens 6 Vorschaubilder erlaubt.");
   const screenshots = rawShots.map((s) => {
     if (!isHttpsUrl(s)) fail("screenshots müssen gültige URLs sein.");
     return String(s);

@@ -13,6 +13,7 @@ import {
   DEFAULT_PRIMARY_COLOR,
 } from "@/lib/miniapp/manifest";
 import { categoryLabel } from "./ui";
+import { ScreenshotManager } from "./ScreenshotManager";
 import type { MiniAppManifest, MiniAppRow } from "@/lib/miniapp/types";
 
 export interface ManifestFormValue {
@@ -23,7 +24,7 @@ export interface ManifestFormValue {
   description: string;
   category: string;
   tags: string;
-  screenshots: string;
+  screenshots: string[];
   permissions: string[];
   primaryColor: string;
 }
@@ -37,7 +38,7 @@ function fromApp(app?: MiniAppRow | null): ManifestFormValue {
     description: app?.description ?? "",
     category: app?.category ?? "utility",
     tags: (app?.tags ?? []).join(", "),
-    screenshots: (app?.screenshots ?? []).join("\n"),
+    screenshots: app?.screenshots ?? [],
     permissions: app?.permissions ?? [],
     primaryColor: app?.primary_color ?? DEFAULT_PRIMARY_COLOR,
   };
@@ -55,10 +56,7 @@ export function toManifest(v: ManifestFormValue): MiniAppManifest {
       .split(",")
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean),
-    screenshots: v.screenshots
-      .split(/[\n,]/)
-      .map((s) => s.trim())
-      .filter(Boolean),
+    screenshots: v.screenshots.map((s) => s.trim()).filter(Boolean),
     permissions: v.permissions as MiniAppManifest["permissions"],
     primaryColor: v.primaryColor,
   };
@@ -200,12 +198,13 @@ export function ManifestForm({
       </div>
 
       <div>
-        <Label htmlFor="screenshots">Screenshots (eine URL pro Zeile, max. 3)</Label>
-        <Textarea
-          id="screenshots"
+        <Label>Vorschaubilder (1:1)</Label>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Quadratische Bilder, die auf der Mini-App-Seite in einer Reihe erscheinen.
+        </p>
+        <ScreenshotManager
           value={v.screenshots}
-          rows={2}
-          onChange={(e) => set("screenshots", e.target.value)}
+          onChange={(imgs) => set("screenshots", imgs)}
         />
       </div>
 
