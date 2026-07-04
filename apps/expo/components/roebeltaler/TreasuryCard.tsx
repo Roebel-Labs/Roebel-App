@@ -7,9 +7,10 @@ import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import Skeleton from "@/components/ui/Skeleton";
 
 /**
- * Stadtkasse card — shows the civic Safe's REAL holdings (native xDAI + EURe + Röbel Münzen)
- * as one indicative euro figure. "ca. €" is an orientation value only (Röbel Münzen is NOT
- * euro-redeemable). Taps through to the full assets + transactions page.
+ * Stadtkasse card — shows the civic Safe's fiat holdings (native xDAI live-
+ * converted to € + EURe) as one exact euro figure, matching the treasury
+ * details page. Röbel Münzen are excluded (not euro-redeemable). Taps through
+ * to the full assets + transactions page.
  */
 export default function TreasuryCard() {
 	const { colors } = useTheme();
@@ -35,7 +36,7 @@ export default function TreasuryCard() {
 						<Skeleton width={130} height={28} radius={8} style={{ marginTop: 6 }} />
 					) : (
 						<Text style={styles.eur}>
-							ca. {euro.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+							{euro.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
 						</Text>
 					)}
 				</View>

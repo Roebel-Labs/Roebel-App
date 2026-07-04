@@ -150,7 +150,7 @@ function CitizenCards({
         />
         <ModeCard
           emoji="🗳️"
-          title="Bürgerbefragung"
+          title="Bürgerumfragen"
           subtitle="Abstimmungen"
           onPress={() => router.push('/governance' as any)}
         />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Linking, Pressable } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useProposalTally } from '@/hooks/useProposalTally';
@@ -23,6 +23,33 @@ interface VotingStatsProps {
 export default function VotingStats({ proposalId }: VotingStatsProps) {
   const { colors } = useTheme();
   const tally = useProposalTally(proposalId);
+
+  // "Digitaler Beweis": resolve the transaction that posted the decrypted
+  // results on-chain — the coordinator's LAST successful write to the Tally
+  // contract (addTallyResults, after the ZK proofs). Deep-links citizens to
+  // the actual proof tx instead of the bare contract page; falls back to the
+  // contract address if Blockscout is unreachable.
+  const [proofTxHash, setProofTxHash] = useState<string | null>(null);
+  useEffect(() => {
+    if (!tally.published || !tally.tallyAddress) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `https://gnosis.blockscout.com/api/v2/addresses/${tally.tallyAddress}/transactions`
+        );
+        const j = await res.json();
+        const items: any[] = Array.isArray(j?.items) ? j.items : [];
+        const newestOk = items.find((t) => t?.status === 'ok');
+        if (!cancelled && newestOk?.hash) setProofTxHash(String(newestOk.hash));
+      } catch {
+        /* keep contract-page fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tally.published, tally.tallyAddress]);
 
   const total = tally.total;
   const pct = (n: bigint): number => {
@@ -69,11 +96,19 @@ export default function VotingStats({ proposalId }: VotingStatsProps) {
             </View>
             {tally.tallyAddress ? (
               <Pressable
-                onPress={() => Linking.openURL(`https://gnosisscan.io/address/${tally.tallyAddress}`)}
+                onPress={() =>
+                  Linking.openURL(
+                    proofTxHash
+                      ? `https://gnosisscan.io/tx/${proofTxHash}`
+                      : `https://gnosisscan.io/address/${tally.tallyAddress}`
+                  )
+                }
                 hitSlop={6}
+                accessibilityRole="link"
+                accessibilityLabel="Digitalen Beweis öffnen"
               >
                 <Text style={[styles.basescanLink, { color: colors.textSecondary }]}>
-                  On-chain prüfen ↗
+                  Digitaler Beweis ↗
                 </Text>
               </Pressable>
             ) : null}

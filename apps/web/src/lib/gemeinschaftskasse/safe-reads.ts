@@ -1,7 +1,7 @@
 import "server-only";
 import { getAddress } from "viem";
 import { gnosisClient, nativeBalance, eureBalance, rcrcBalance } from "@/lib/muenzen/gnosis";
-import { XDAI_EUR, attoToNumber, shortAddr } from "@/lib/muenzen/constants";
+import { getXdaiEurRate, attoToNumber, shortAddr } from "@/lib/muenzen/constants";
 import { GK_SAFE, SAFE_ABI, type OwnerView, type AssetHolding } from "./constants";
 import { resolveCitizenProfiles } from "./citizens";
 
@@ -37,7 +37,7 @@ export async function getSafeOverview(you?: string) {
     };
   });
 
-  const euroXdai = (Number(xdai) / 1e18) * XDAI_EUR;
+  const euroXdai = (Number(xdai) / 1e18) * (await getXdaiEurRate());
   const euroEure = Number(eure) / 1e18;
   const euroTotal = euroXdai + euroEure;
   const assets: AssetHolding[] = [

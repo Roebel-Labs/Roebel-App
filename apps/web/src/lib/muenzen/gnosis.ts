@@ -9,6 +9,7 @@ import {
   ERC20_ABI,
   ERC721_ABI,
   GROUP_TOKEN_ID,
+  getXdaiEurRate,
 } from "./constants";
 
 const RPC_URL = process.env.GNOSIS_RPC_URL || "https://rpc.gnosischain.com";
@@ -123,21 +124,19 @@ export async function hasAttesterNFT(account: string): Promise<boolean> {
   }
 }
 
-// xDAI is USD-pegged; ~USD→EUR. Indicative only — matches the Expo
-// Gemeinschaftskasse hero (xDAI→€ + EURe, excludes Röbel Münzen).
-const XDAI_EUR = 0.92;
-
 /**
- * Indicative € value of the Gemeinschaftskasse (civic treasury) Safe:
- * native xDAI (→€) + EURe. Excludes Röbel Münzen (not euro-redeemable).
+ * € value of the Gemeinschaftskasse (civic treasury) Safe:
+ * native xDAI (live-converted to €) + EURe. Excludes Röbel Münzen (not
+ * euro-redeemable) — matches the Expo Gemeinschaftskasse hero.
  * Used to freeze a balance snapshot onto a proposal at creation time.
  */
 export async function treasuryEuro(): Promise<number> {
-  const [xdai, eure] = await Promise.all([
+  const [xdai, eure, rate] = await Promise.all([
     nativeBalance(ADDR.safe),
     eureBalance(ADDR.safe),
+    getXdaiEurRate(),
   ]);
-  return (Number(xdai) / 1e18) * XDAI_EUR + Number(eure) / 1e18;
+  return (Number(xdai) / 1e18) * rate + Number(eure) / 1e18;
 }
 
 export interface WalletAssets {

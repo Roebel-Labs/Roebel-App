@@ -132,10 +132,177 @@ export async function getMintableTaler(address: string): Promise<bigint> {
 	}
 }
 
-const XDAI_EUR = 0.92; // approx USD→EUR (xDAI is USD-pegged); indicative only
+// xDAI is USD-pegged, so its € value moves with EUR/USD. Fetch the live rate
+// (10-min in-memory cache) so treasury figures match what a payout actually
+// costs; fall back to the last known / an approximate rate when offline.
+const XDAI_EUR_FALLBACK = 0.92;
+let xdaiEurCache: { rate: number; at: number } | null = null;
+async function getXdaiEurRate(): Promise<number> {
+	if (xdaiEurCache && Date.now() - xdaiEurCache.at < 10 * 60 * 1000) return xdaiEurCache.rate;
+	try {
+		const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
+		const j = await res.json();
+		const rate = Number(j?.xdai?.eur);
+		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
+			xdaiEurCache = { rate, at: Date.now() };
+			return rate;
+		}
+	} catch {
+		/* ignore — fall back */
+	}
+	return xdaiEurCache?.rate ?? XDAI_EUR_FALLBACK;
+}
+
 const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
 
-/** Stadtkasse value in € (indicative): native xDAI + EURe + Röbel Münzen, converted. */
+/**
+ * Historical xDAI→€ rate for the UTC day of `tsMs`.
+ *
+ * All callers of the same day share ONE in-flight promise, and fetches are
+ * serialized with a short gap + one retry: Coingecko's free tier rate-limits
+ * bursts, which previously made random rows fall back to 0.92 while others
+ * used the real rate — mixed-basis rows that didn't sum to the total. A
+ * fallback resolution is evicted after 60 s so a temporary rate-limit doesn't
+ * pin a wrong rate for the whole session.
+ */
+const histRatePromises = new Map<string, Promise<number>>();
+let histQueue: Promise<unknown> = Promise.resolve();
+async function fetchHistRate(key: string): Promise<number | null> {
+	try {
+		const res = await fetch(
+			`https://api.coingecko.com/api/v3/coins/xdai/history?date=${key}&localization=false`
+		);
+		const j = await res.json();
+		const rate = Number(j?.market_data?.current_price?.eur);
+		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) return rate;
+	} catch {
+		/* fall through */
+	}
+	return null;
+}
+function getXdaiEurRateOn(tsMs: number): Promise<number> {
+	const d = new Date(tsMs || Date.now());
+	const key = `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+	const hit = histRatePromises.get(key);
+	if (hit) return hit;
+	const prev = histQueue;
+	const p = (async () => {
+		await prev.catch(() => {});
+		await new Promise((r) => setTimeout(r, 300));
+		let rate = await fetchHistRate(key);
+		if (rate == null) {
+			await new Promise((r) => setTimeout(r, 1500));
+			rate = await fetchHistRate(key);
+		}
+		if (rate == null) {
+			setTimeout(() => {
+				if (histRatePromises.get(key) === p) histRatePromises.delete(key);
+			}, 60_000);
+			return getXdaiEurRate();
+		}
+		return rate;
+	})();
+	histRatePromises.set(key, p);
+	histQueue = p.catch(() => {});
+	return p;
+}
+
+/** A real native-xDAI movement of the treasury (phantom frames excluded). */
+type NativeFlow = { direction: "in" | "out"; xdai: number; timestamp: number; txHash: string };
+
+/**
+ * Every real native-xDAI transfer of `address`, from Blockscout. Merges
+ * regular transactions with internal ones — a Safe pays out via internal
+ * CALL frames (the visible tx is a value-0 execTransaction). DELEGATECALL
+ * frames are skipped: a MultiSend batch mirrors the tx value in its frame
+ * without actually moving it, which would fabricate phantom in/out pairs.
+ */
+async function fetchNativeFlows(address: string): Promise<NativeFlow[]> {
+	// Balance (ledger) and history are computed from the same flow snapshot —
+	// a 30 s shared promise avoids duplicate Blockscout hits per screen AND
+	// guarantees the hero total equals the sum of the visible rows.
+	const cached = nativeFlowsCache;
+	if (cached && cached.key === address.toLowerCase() && Date.now() - cached.at < 30_000) {
+		return cached.promise;
+	}
+	const promise = fetchNativeFlowsUncached(address);
+	nativeFlowsCache = { key: address.toLowerCase(), at: Date.now(), promise };
+	return promise;
+}
+let nativeFlowsCache: { key: string; at: number; promise: Promise<NativeFlow[]> } | null = null;
+
+async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> {
+	const self = address.toLowerCase();
+	const [natRes, intRes] = await Promise.all([
+		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`),
+		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/internal-transactions`),
+	]);
+	const nat = await natRes.json();
+	const intl = await intRes.json();
+	const flows: NativeFlow[] = [];
+	const push = (rawValue: string, toHash: string, ts: string | undefined, txHash: string) => {
+		let v = 0;
+		try {
+			v = Number(BigInt(rawValue || "0")) / 1e18;
+		} catch {
+			return;
+		}
+		if (v <= 0) return;
+		flows.push({
+			direction: toHash.toLowerCase() === self ? "in" : "out",
+			xdai: v,
+			timestamp: ts ? Date.parse(ts) : 0,
+			txHash,
+		});
+	};
+	for (const t of Array.isArray(nat?.items) ? nat.items : []) {
+		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.hash ?? ""));
+	}
+	for (const t of Array.isArray(intl?.items) ? intl.items : []) {
+		if ((t?.type ?? "call") !== "call") continue;
+		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.transaction_hash ?? ""));
+	}
+	// A direct transfer can appear both as the regular tx and as its top-level
+	// internal frame — keep one.
+	const seen = new Set<string>();
+	return flows.filter((f) => {
+		const key = `${f.txHash}:${f.direction}:${f.xdai.toFixed(9)}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+/**
+ * Ledger (cost-basis) € value of the treasury's xDAI: every in-/outflow is
+ * locked in at its own day's rate — like a bank account, money the Kasse
+ * received doesn't silently drift with later FX moves, and the balance always
+ * equals the sum of the visible history rows. Returns null when the flow list
+ * doesn't reconcile with the on-chain balance (indexer lag / pagination) so
+ * callers can fall back to mark-to-market.
+ */
+async function xdaiLedgerEuro(address: string, onchainXdai: number): Promise<number | null> {
+	try {
+		const flows = await fetchNativeFlows(address);
+		if (flows.length === 0) return null;
+		const net = flows.reduce((s, f) => s + (f.direction === "in" ? f.xdai : -f.xdai), 0);
+		if (Math.abs(net - onchainXdai) > 0.01) return null;
+		let total = 0;
+		for (const f of flows) {
+			total += (f.direction === "in" ? 1 : -1) * f.xdai * (await getXdaiEurRateOn(f.timestamp));
+		}
+		return total;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Stadtkasse fiat value in €: native xDAI (ledger-valued — each flow at its
+ * own day's rate, falling back to live mark-to-market) + EURe.
+ * Röbel Münzen are deliberately EXCLUDED — they are not euro-redeemable, and
+ * every surface must show the same figure as the treasury details page.
+ */
 export async function getTreasuryEuro(address: string): Promise<number> {
 	let xdai = 0;
 	try {
@@ -149,7 +316,6 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	const rt = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
 	let eure = 0;
 	try {
 		const e = (await readContract({
@@ -161,7 +327,9 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	return xdai * XDAI_EUR + eure + rt;
+	const ledger = await xdaiLedgerEuro(address, xdai);
+	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
+	return xdaiEuro + eure;
 }
 
 export interface TreasuryAssets {
@@ -171,7 +339,7 @@ export interface TreasuryAssets {
 	xdai: number;
 	/** EURe (regulated euro) balance. */
 	eure: number;
-	/** Indicative € total (xDAI→€ + EURe + Röbel Münzen). */
+	/** Fiat € total (xDAI live-converted + EURe). Röbel Münzen excluded — not euro-redeemable. */
 	euroTotal: number;
 }
 
@@ -201,7 +369,9 @@ export async function getTreasuryAssets(address: string): Promise<TreasuryAssets
 		/* ignore */
 	}
 	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
-	return { roebel, xdai, eure, euroTotal: xdai * XDAI_EUR + eure + roebel };
+	const ledger = await xdaiLedgerEuro(address, xdai);
+	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
+	return { roebel, xdai, eure, euroTotal: xdaiEuro + eure };
 }
 
 export interface TreasuryTx {
@@ -229,26 +399,22 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 	const self = address.toLowerCase();
 	const eureToken = EURE_ADDRESS.toLowerCase();
 
+	// Real native flows (regular + internal CALL frames, phantoms excluded),
+	// each valued at ITS OWN day's rate — the same basis as the ledger total,
+	// so the history rows always sum to the displayed balance.
 	const native = (async (): Promise<TreasuryTx[]> => {
 		try {
-			const res = await fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`);
-			const j = await res.json();
-			const items: any[] = Array.isArray(j?.items) ? j.items : [];
-			return items.map((t) => {
-				const to = (t?.to?.hash ?? "").toLowerCase();
-				let amount = 0;
-				try {
-					// xDAI is USD-pegged → convert to € (×XDAI_EUR) so the history
-					// matches the total-balance calc (which also applies XDAI_EUR).
-					amount = (Number(BigInt(t?.value ?? "0")) / 1e18) * XDAI_EUR;
-				} catch {
-					amount = 0;
-				}
-				const timestamp = t?.timestamp ? Date.parse(t.timestamp) : 0;
-				const direction: "in" | "out" | "admin" = amount === 0 ? "admin" : to === self ? "in" : "out";
-				const label = direction === "in" ? "Eingang" : direction === "out" ? "Ausgang" : "Verwaltung";
-				return { direction, amount, currency: "eur" as const, timestamp, label, txHash: String(t?.hash ?? "") };
-			});
+			const flows = await fetchNativeFlows(address);
+			return await Promise.all(
+				flows.map(async (f) => ({
+					direction: f.direction,
+					amount: f.xdai * (await getXdaiEurRateOn(f.timestamp)),
+					currency: "eur" as const,
+					timestamp: f.timestamp,
+					label: f.direction === "in" ? "Eingang" : "Ausgang",
+					txHash: f.txHash,
+				})),
+			);
 		} catch {
 			return [];
 		}

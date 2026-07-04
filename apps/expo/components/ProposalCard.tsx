@@ -41,8 +41,8 @@ export default function ProposalCard({ proposal }: ProposalCardProps) {
 
   return (
     <Pressable onPress={handlePress} style={[styles.card, { backgroundColor: colors.background, borderColor: colors.borderSecondary }]}>
-      {/* Status Badge */}
-      <ProposalStateBadge state={proposal.state} />
+      {/* Status Badge — proposalId makes the badge poll governor.state() live */}
+      <ProposalStateBadge state={proposal.state} proposalId={proposal.proposalId} />
 
       {/* Title */}
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>

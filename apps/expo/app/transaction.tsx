@@ -1,7 +1,8 @@
 // Shared transaction-detail screen — used by BOTH the Röbel-Münzen history
 // (rewards) and the Stadtkasse (treasury) history. Shows clean info only; the
-// counterparty is ALWAYS a resolved name, never a raw 0x address. A GnosisScan
-// link sits at the very bottom.
+// counterparty is ALWAYS a resolved name, never a raw 0x address. A
+// "Digitaler Beweis" link (direct tx deep-link) sits at the very bottom —
+// explorer brand names are never surfaced in copy.
 import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -96,9 +97,9 @@ export default function TransactionScreen() {
             onPress={() => Linking.openURL(`https://gnosisscan.io/tx/${txHash}`).catch(() => {})}
             style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.6 : 1 }]}
             accessibilityRole="button"
-            accessibilityLabel="Auf Gnosisscan ansehen"
+            accessibilityLabel="Digitalen Beweis öffnen"
           >
-            <Text style={styles.linkText}>Auf Gnosisscan ansehen</Text>
+            <Text style={styles.linkText}>Digitaler Beweis ↗</Text>
           </Pressable>
         )}
       </ScrollView>

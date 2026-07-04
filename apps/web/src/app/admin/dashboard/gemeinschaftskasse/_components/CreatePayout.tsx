@@ -5,11 +5,10 @@ import { isAddress, parseEther } from "viem";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { buildTransfer, proposeMetaTx } from "@/lib/gemeinschaftskasse/safe-client";
 import type { AssetId } from "@/lib/gemeinschaftskasse/constants";
+import { XDAI_EUR, getXdaiEurRate } from "@/lib/muenzen/constants";
 import { useIsOwner } from "./useIsOwner";
 import { useTxAction } from "./useTxAction";
 import { ActionFeedback } from "./ui/ActionFeedback";
-
-const XDAI_EUR = 0.92;
 const eur = (n: number) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
 const num = (n: number, d = 2) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: d }).format(n);
 
@@ -37,6 +36,7 @@ export function CreatePayout({ onCreated }: { onCreated: () => void }) {
   const [phase, setPhase] = useState<"form" | "review">("form");
   const [formErr, setFormErr] = useState<string | null>(null);
   const [balances, setBalances] = useState<Bal[]>([]);
+  const [xdaiRate, setXdaiRate] = useState(XDAI_EUR);
 
   useEffect(() => {
     fetch("/api/gemeinschaftskasse/overview")
@@ -45,6 +45,7 @@ export function CreatePayout({ onCreated }: { onCreated: () => void }) {
         if (Array.isArray(d.assets)) setBalances(d.assets);
       })
       .catch(() => {});
+    getXdaiEurRate().then(setXdaiRate).catch(() => {});
   }, []);
 
   if (!ownerLoading && !isOwner) {
@@ -61,7 +62,7 @@ export function CreatePayout({ onCreated }: { onCreated: () => void }) {
   const meta = ASSETS.find((a) => a.id === asset)!;
   const bal = balances.find((b) => b.id === asset);
   const parsed = parseFloat(amount.replace(",", "."));
-  const euros = asset === "xdai" ? (parsed || 0) * XDAI_EUR : asset === "eure" ? parsed || 0 : null;
+  const euros = asset === "xdai" ? (parsed || 0) * xdaiRate : asset === "eure" ? parsed || 0 : null;
 
   function toReview(e: React.FormEvent) {
     e.preventDefault();

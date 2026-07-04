@@ -181,7 +181,7 @@ export async function fetchRecentProposalComments(
       ),
       account:accounts(id, account_type, name, avatar_url),
       proposal:proposals!proposal_comments_proposal_id_fkey(
-        proposal_id, title, state, for_votes, against_votes, abstain_votes
+        proposal_id, blockchain_proposal_id, title, state, for_votes, against_votes, abstain_votes
       )
     `)
     .eq('status', 'published')

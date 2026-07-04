@@ -1,21 +1,26 @@
 /**
- * MiniAppsEntry — the discovery entry point for the Mini App store, shown on the
- * Explore tab. A section header + a horizontal rail of the first few live apps
- * ending in a "Alle ansehen" tile → /mini-apps. If no live apps exist, renders a
- * single promo banner so the store is still discoverable.
+ * MiniAppsEntry — the discovery entry point for the Mini App store on the
+ * Explore tab, styled after the reference home surface: a 4-column launcher
+ * grid of app icons (up to 7 + an "Alle ansehen" tile with mini icons) under
+ * a "Mini-Apps · Mehr entdecken ›" header. Falls back to a promo banner when
+ * no live apps exist.
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { ChevronLeft } from '@/components/miniapp/hostIcons';
+import { ChevronRight, GridIcon } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
-import { MiniAppFeaturedCard } from '@/components/miniapp/MiniAppCard';
+import { AppIcon, MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
+
+const GRID_GAP = 12;
+const MAX_TILES = 7;
 
 export default function MiniAppsEntry() {
   const { colors } = useTheme();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const [apps, setApps] = useState<MiniApp[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -37,15 +42,18 @@ export default function MiniAppsEntry() {
   // Until we know, render nothing (avoids layout flash).
   if (!loaded) return null;
 
+  const tileW = Math.floor((width - 32 - 3 * GRID_GAP) / 4);
+  const iconSize = Math.min(tileW, 64);
+  const shown = apps.slice(0, MAX_TILES);
+  const overflow = apps.slice(MAX_TILES, MAX_TILES + 4);
+
   return (
     <View style={styles.section}>
       <Pressable onPress={goStore} style={styles.headerRow} accessibilityRole="button">
         <Text style={[styles.title, { color: colors.textPrimary }]}>Mini-Apps</Text>
         <View style={styles.seeAll}>
-          <Text style={[styles.seeAllText, { color: colors.textSecondary }]}>Alle ansehen</Text>
-          <View style={{ transform: [{ rotate: '180deg' }] }}>
-            <ChevronLeft size={16} color={colors.textSecondary} />
-          </View>
+          <Text style={[styles.seeAllText, { color: colors.textSecondary }]}>Mehr entdecken</Text>
+          <ChevronRight size={16} color={colors.textSecondary} />
         </View>
       </Pressable>
 
@@ -64,19 +72,49 @@ export default function MiniAppsEntry() {
           </Text>
         </Pressable>
       ) : (
-        <FlatList
-          horizontal
-          data={apps.slice(0, 6)}
-          keyExtractor={(a) => a.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-          renderItem={({ item }) => (
-            <MiniAppFeaturedCard
-              app={item}
-              onPress={() => router.push(`/mini-app/${item.slug}` as any)}
+        <View style={styles.grid}>
+          {shown.map((app) => (
+            <MiniAppGridTile
+              key={app.id}
+              app={app}
+              width={tileW}
+              iconSize={iconSize}
+              onPress={() => router.push(`/mini-app/${app.slug}` as any)}
             />
-          )}
-        />
+          ))}
+
+          {/* "Alle ansehen" tile — mini icons of the next apps */}
+          <Pressable
+            onPress={goStore}
+            style={({ pressed }) => [styles.tile, { width: tileW }, pressed && { opacity: 0.7 }]}
+            accessibilityLabel="Alle Mini-Apps ansehen"
+          >
+            <View
+              style={[
+                styles.seeAllIcon,
+                {
+                  width: iconSize,
+                  height: iconSize,
+                  borderRadius: iconSize * 0.24,
+                  backgroundColor: colors.surfaceSecondary,
+                },
+              ]}
+            >
+              {overflow.length > 0 ? (
+                <View style={styles.miniGrid}>
+                  {overflow.map((app) => (
+                    <AppIcon key={app.id} app={app} size={iconSize * 0.32} />
+                  ))}
+                </View>
+              ) : (
+                <GridIcon size={iconSize * 0.4} color={colors.textSecondary} />
+              )}
+            </View>
+            <Text style={[styles.tileName, { color: colors.textPrimary }]} numberOfLines={1}>
+              Alle ansehen
+            </Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -89,12 +127,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   title: { fontFamily: fontFamily.heading, fontSize: 22 },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   seeAllText: { fontFamily: fontFamily.medium, fontSize: 13 },
-  row: { paddingHorizontal: 16, gap: 12 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    columnGap: GRID_GAP,
+    rowGap: 20,
+  },
+  tile: { alignItems: 'center' },
+  tileName: {
+    marginTop: 8,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
+  seeAllIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: '76%',
+    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   banner: {
     marginHorizontal: 16,
     borderRadius: 16,

@@ -10,7 +10,7 @@ import { resolveIdentities } from "@/lib/muenzen/identity";
 import {
   SYSTEM_WALLETS,
   ADDR,
-  XDAI_EUR,
+  getXdaiEurRate,
   MUENZE_EUR,
   FUNDER_LOW_RCRC,
   OPERATOR_LOW_CRC,
@@ -66,6 +66,7 @@ export async function GET(req: Request) {
         }
 
         const identities = await resolveIdentities(list.map((w) => w.address));
+        const xdaiRate = await getXdaiEurRate();
 
         const wallets = await Promise.all(
           list.map(async (w) => {
@@ -74,7 +75,7 @@ export async function GET(req: Request) {
             const personalCrc = attoToNumber(assets.personalCrc);
             const xdai = attoToNumber(assets.xdai);
             const eure = attoToNumber(assets.eure);
-            const euro = xdai * XDAI_EUR + eure + rcrc * MUENZE_EUR;
+            const euro = xdai * xdaiRate + eure + rcrc * MUENZE_EUR;
 
             let health: Health | null = null;
             if (w.kind === "hot" && rcrc < FUNDER_LOW_RCRC) {

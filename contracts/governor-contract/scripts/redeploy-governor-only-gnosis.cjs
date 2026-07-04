@@ -72,6 +72,28 @@ async function main() {
     throw new Error("gnosis-v2.json missing parameters.coordinatorPubKey");
   }
 
+  // The manifest's coordinatorPubKey is a deploy-time snapshot and goes stale
+  // the moment a setCoordinatorPubKey rotation executes on the live governor
+  // (2026-07-02 incident: the v2 governors shipped with the pre-Shamir key
+  // because base.json was never updated after the June-9 rotation). The old
+  // governor on-chain is the source of truth; fall back to the manifest only
+  // if the live read fails (e.g. hardhat dry-run without the live contract).
+  let coordinatorPubKey = { x: p.coordinatorPubKey.x, y: p.coordinatorPubKey.y };
+  try {
+    const oldGov = await ethers.getContractAt("MaciAttesterGovernor", a.maciAttesterGovernor);
+    const live = await oldGov.coordinatorPubKey();
+    const liveKey = { x: live[0].toString(), y: live[1].toString() };
+    if (liveKey.x !== coordinatorPubKey.x || liveKey.y !== coordinatorPubKey.y) {
+      console.warn("⚠️  gnosis-v2.json parameters.coordinatorPubKey is STALE vs the live governor — using the on-chain key.");
+      console.warn("    manifest x =", coordinatorPubKey.x);
+      console.warn("    on-chain x =", liveKey.x);
+      console.warn("    Update gnosis-v2.json after this redeploy.");
+    }
+    coordinatorPubKey = liveKey;
+  } catch (err) {
+    console.warn("⚠️  Could not read coordinatorPubKey() from the old governor (" + err.message + ") — falling back to gnosis-v2.json. Verify it is not stale!");
+  }
+
   // Preserve every governor parameter EXCEPT votingPeriod.
   const timelockMinDelay = BigInt(p.timelockMinDelay ?? 3600);
   const quorumPercentage = BigInt(p.quorumPercentage ?? 10);
@@ -113,7 +135,7 @@ async function main() {
     verifier: a.verifier,
     vkRegistry: a.vkRegistry,
     coordinator: a.coordinator,
-    coordinatorPubKey: { x: p.coordinatorPubKey.x, y: p.coordinatorPubKey.y },
+    coordinatorPubKey,
     treeDepths: {
       intStateTreeDepth: INT_STATE_TREE_DEPTH,
       messageTreeSubDepth: MESSAGE_BATCH_DEPTH,

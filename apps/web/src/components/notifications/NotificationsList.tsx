@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { useActiveAccount } from "thirdweb/react"
 import { NotificationCard } from "./NotificationCard"
 import { getUnifiedNotifications } from "@/app/actions/app-notifications"
 import type { UnifiedNotification } from "@/types/app-notifications"
 import { Bell } from "lucide-react"
 
 const STORAGE_KEY = "lastViewedNotifications"
+const PAGE_SIZE = 30
 
 interface NotificationsListProps {
   initialNotifications: UnifiedNotification[]
@@ -16,6 +18,8 @@ interface NotificationsListProps {
 
 export function NotificationsList({ initialNotifications, initialTotal }: NotificationsListProps) {
   const router = useRouter()
+  const account = useActiveAccount()
+  const walletAddress = account?.address ?? null
   const [notifications, setNotifications] = useState(initialNotifications)
   const [total, setTotal] = useState(initialTotal)
   const [lastViewed, setLastViewed] = useState<string | null>(null)
@@ -29,6 +33,22 @@ export function NotificationsList({ initialNotifications, initialTotal }: Notifi
     // Update the timestamp so next visit shows all as read
     localStorage.setItem(STORAGE_KEY, new Date().toISOString())
   }, [])
+
+  // The server-rendered initial list is broadcast-only (the wallet is unknown
+  // server-side). Once the wallet is known, re-fetch so the logged-in user also
+  // sees their own personal notifications (likes/comments/invites) with avatars.
+  // Re-runs on wallet change (login / account switch / logout).
+  useEffect(() => {
+    let cancelled = false
+    getUnifiedNotifications({ walletAddress, limit: PAGE_SIZE }).then((result) => {
+      if (cancelled || !result.success || !result.data) return
+      setNotifications(result.data)
+      if (result.total !== undefined) setTotal(result.total)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [walletAddress])
 
   const isUnread = (notification: UnifiedNotification) => {
     if (!lastViewed) return true // First visit: all are unread
@@ -46,7 +66,8 @@ export function NotificationsList({ initialNotifications, initialTotal }: Notifi
     setIsLoadingMore(true)
     try {
       const result = await getUnifiedNotifications({
-        limit: 30,
+        walletAddress,
+        limit: PAGE_SIZE,
         offset: notifications.length,
       })
       if (result.success && result.data) {
@@ -56,7 +77,7 @@ export function NotificationsList({ initialNotifications, initialTotal }: Notifi
     } finally {
       setIsLoadingMore(false)
     }
-  }, [isLoadingMore, notifications.length, total])
+  }, [isLoadingMore, notifications.length, total, walletAddress])
 
   if (notifications.length === 0) {
     return (

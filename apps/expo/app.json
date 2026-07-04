@@ -2,7 +2,7 @@
   "expo": {
     "name": "roebel-onchain",
     "slug": "roebel-onchain",
-    "version": "3.2.0",
+    "version": "3.4.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "roebel",
@@ -40,7 +40,7 @@
         "backgroundColor": "#00498B"
       },
       "package": "com.maxbrych.roebelonchain",
-      "versionCode": 34,
+      "versionCode": 36,
       "intentFilters": [
         {
           "action": "VIEW",

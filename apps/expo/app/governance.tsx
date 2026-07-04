@@ -35,7 +35,7 @@ export default function GovernanceScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerbefragungen</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Bürgerumfragen</Text>
         <View style={{ width: 40 }} />
       </View>
 

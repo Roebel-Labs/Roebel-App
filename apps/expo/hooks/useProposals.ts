@@ -42,29 +42,23 @@ export function useProposals() {
         console.log('🔄 Enriching with blockchain data...');
         const enrichedProposalsPromises = mappedProposals.map(async (proposal) => {
           try {
-            // Fetch current state and votes from blockchain
+            // Fetch current state from blockchain. Never call proposalVotes()
+            // — the MACI governor has no public vote counting (ballots are
+            // encrypted), so it always reverts and would drag the working
+            // state() read into the catch branch. Vote counts come from the
+            // Supabase row (synced from the Tally contract after publication).
             const blockchainProposalId = BigInt(proposal.blockchainProposalId!);
 
-            const [stateResult, votesResult] = await Promise.all([
-              readContract({
-                contract: governorContract,
-                method: 'function state(uint256) view returns (uint8)',
-                params: [blockchainProposalId],
-              }),
-              readContract({
-                contract: governorContract,
-                method: 'function proposalVotes(uint256) view returns (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes)',
-                params: [blockchainProposalId],
-              }),
-            ]);
+            const stateResult = await readContract({
+              contract: governorContract,
+              method: 'function state(uint256) view returns (uint8)',
+              params: [blockchainProposalId],
+            });
 
-            // Return proposal with live blockchain data
+            // Return proposal with live blockchain state
             return {
               ...proposal,
               state: stateResult as ProposalState,
-              againstVotes: votesResult[0],
-              forVotes: votesResult[1],
-              abstainVotes: votesResult[2],
               blockchainUnavailable: false,
             };
           } catch (blockchainError) {

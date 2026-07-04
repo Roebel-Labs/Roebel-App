@@ -1,48 +1,58 @@
 /**
- * POST /api/mini-apps/publish
+ * POST /api/mini-apps/publish — publish a single-file AI-built mini app.
  *
- * Managed publish for an AI-generated mini app. Takes the file-plan produced by
- * /api/mini-apps/generate, writes it into apps/mini-apps/<slug>/, and registers
- * a `mini_apps` row (source='ai_builder', status='pending', reward_budget 0) so
- * it enters the admin review queue.
+ * Stores the HTML on a mini_app_versions row + registers/updates the mini_apps
+ * row (status 'pending' → admin review queue). The app is attributed to the
+ * calling developer (x-wallet-address, resolved/created like every builder
+ * route). Served afterwards from GET /mini/[slug] on this web app.
  *
- * Body: { plan: MiniAppFilePlan; developerId?: string }
+ * Body: { html: string; manifest: ManifestDraft }
+ * 201 → { ok, slug, miniAppId, homeUrl, version, republished }
+ * 409 → slug taken/reserved · 400 → invalid html/manifest · 401 → no wallet
  */
-import { publishMiniApp } from "@/lib/miniapp/ai/publish";
+import { publishHtmlMiniApp } from "@/lib/miniapp/ai/publishHtml";
+import { jsonError, resolveDeveloper } from "@/lib/miniapp/http";
 
 export const maxDuration = 60;
-export const runtime = "nodejs"; // needs node:fs to write files
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  let body: { plan?: unknown; developerId?: unknown };
+  let body: { html?: unknown; manifest?: unknown; wallet?: string };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  if (!body.plan || typeof body.plan !== "object") {
-    return Response.json({ error: "plan_required" }, { status: 400 });
+  let developerId: string | null = null;
+  try {
+    const developer = await resolveDeveloper(request, body);
+    developerId = developer.id;
+  } catch (e) {
+    return jsonError(e);
   }
 
-  const developerId =
-    typeof body.developerId === "string" && body.developerId.length > 0
-      ? body.developerId
-      : null;
-
   try {
-    const result = await publishMiniApp({ plan: body.plan, developerId });
+    const origin = new URL(request.url).origin;
+    const result = await publishHtmlMiniApp({
+      html: body.html,
+      manifest: body.manifest,
+      developerId,
+      origin,
+    });
+
     if (!result.ok) {
-      // Map guard failures to a client-actionable 409/400.
-      const conflict =
-        result.error?.startsWith("slug_taken") ||
-        result.error?.startsWith("slug_directory_exists") ||
-        result.error?.startsWith("slug_reserved");
-      return Response.json(result, { status: conflict ? 409 : 400 });
+      const status =
+        result.errorCode === "slug_taken" || result.errorCode === "slug_reserved"
+          ? 409
+          : result.errorCode === "db_error"
+            ? 500
+            : 400;
+      return Response.json(result, { status });
     }
     return Response.json(result, { status: 201 });
   } catch (e) {
     console.error("[mini-apps/publish] failed", e);
-    return Response.json({ error: "publish_failed" }, { status: 500 });
+    return Response.json({ ok: false, error: "publish_failed" }, { status: 500 });
   }
 }

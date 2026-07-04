@@ -24,10 +24,6 @@ function relativeTime(secondsAgo: number): string {
   return `vor ${Math.floor(secondsAgo / 86400)} Tg`;
 }
 
-function shortHash(hash: string): string {
-  if (hash.length < 12) return hash;
-  return `${hash.slice(0, 6)}…${hash.slice(-4)}`;
-}
 
 /**
  * Shown after a successful publishMessage. Confirms the citizen's last
@@ -56,9 +52,14 @@ export default function LastVoteCard({ vote, canChange, onChangeVote }: LastVote
         <Text style={[styles.meta, { color: colors.textSecondary }]}>
           Geheim gesendet · {ago} ·{' '}
         </Text>
-        <Pressable onPress={() => Linking.openURL(txUrl)} hitSlop={6}>
+        <Pressable
+          onPress={() => Linking.openURL(txUrl)}
+          hitSlop={6}
+          accessibilityRole="link"
+          accessibilityLabel="Digitalen Beweis öffnen"
+        >
           <Text style={[styles.txLink, { color: colors.textSecondary }]}>
-            {shortHash(vote.txHash)} ↗
+            Digitaler Beweis ↗
           </Text>
         </Pressable>
       </View>

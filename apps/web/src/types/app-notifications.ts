@@ -21,7 +21,7 @@ export interface AppNotification {
 
 export interface UnifiedNotification {
   id: string
-  source: "push" | "activity"
+  source: "push" | "activity" | "personal"
   title: string
   body: string | null
   type: string

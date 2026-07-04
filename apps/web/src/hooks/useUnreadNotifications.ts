@@ -1,11 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useActiveAccount } from "thirdweb/react"
 import { getUnifiedNotifications } from "@/app/actions/app-notifications"
 
 const STORAGE_KEY = "lastViewedNotifications"
 
 export function useUnreadNotifications(pollingInterval: number = 60000) {
+  const account = useActiveAccount()
+  const walletAddress = account?.address ?? null
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -13,8 +16,9 @@ export function useUnreadNotifications(pollingInterval: number = 60000) {
     try {
       const lastViewed = localStorage.getItem(STORAGE_KEY)
 
-      // Fetch recent notifications (unified: push + activity)
-      const result = await getUnifiedNotifications({ limit: 50 })
+      // Fetch recent notifications scoped to the logged-in user (broadcast +
+      // their own personal notifications). Logged-out → broadcast only.
+      const result = await getUnifiedNotifications({ walletAddress, limit: 50 })
       if (!result.success || !result.data) {
         setUnreadCount(0)
         return
@@ -36,7 +40,7 @@ export function useUnreadNotifications(pollingInterval: number = 60000) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [walletAddress])
 
   useEffect(() => {
     fetchUnreadCount()

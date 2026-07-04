@@ -79,6 +79,18 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Mini apps served from /mini/[slug] run with an opaque origin (CSP
+        // sandbox) — @font-face fetches are CORS-gated there, so the shared
+        // fonts must be readable cross-origin.
+        source: '/fonts/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+        ],
+      },
     ];
   },
 };

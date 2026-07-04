@@ -26,7 +26,7 @@ export const CONTRACTS = {
   maciVerifier: "0xC95359cF5d7391cD239c9476393706a8132406dc",
   maciVkRegistry: "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f",
   maciGatekeeper: "0xc4B9E45F0e84BC0CDe930CE888E4D0e38184f277",
-  maciVoiceCreditProxy: "0x5b358A77E89FF3d699607b4fC235b381d67f3d05",
+  maciVoiceCreditProxy: "0x30C912fdc68d9c78882E1F118f1fD932Cd80eAbF",
 
   // Archived Base Mainnet stack (kept for historical proposal/revocation lookups)
   // Pre-Gnosis-v2 active set (Base, clean-slate rotation 2026-06-08).
@@ -63,8 +63,14 @@ export const CONTRACTS = {
 } as const;
 
 // Coordinator's BabyJubjub public key on the secp256k1-cousin curve used by MACI.
-// Used by clients to ECDH-encrypt vote messages so only the coordinator can decrypt them.
 // (`x`, `y`) point — both decimal-string bigints to avoid JS precision loss.
+//
+// ⚠️ DEPLOY-TIME SNAPSHOT — DO NOT ENCRYPT VOTES TO THIS. It goes stale the
+// moment a setCoordinatorPubKey rotation executes on the governor. Clients
+// MUST read Poll.coordinatorPubKey() on-chain at vote time (see runbook
+// §10.10a — the 0/0/0-tally incident — and §10.11, the 2026-07-02 incident
+// where the v2 governors shipped with this stale pre-Shamir key). Kept only
+// as a historical record of the governor's constructor argument.
 export const MACI_COORDINATOR_PUBKEY = {
   x: "17750760918337237068203925046126855078152981024548838042861633066128051663100",
   y: "8008521168745136880197848799504037322059936483887225034222289791088387810436",
