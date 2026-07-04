@@ -104,9 +104,10 @@ export default function MyMiniApps() {
                   href={`/dashboard/mini-apps/new?app=${app.slug}`}
                   title="Im KI-Baukasten öffnen"
                   aria-label={`${app.name} im KI-Baukasten öffnen`}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-background hover:text-primary"
+                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-primary"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">KI-Editor</span>
                 </Link>
               ) : null}
               <Link href={`/dashboard/mini-apps/${app.id}`} aria-hidden tabIndex={-1}>
