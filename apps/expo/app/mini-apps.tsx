@@ -27,7 +27,7 @@ import { fontFamily } from '@/constants/theme';
 import { ChevronLeft, SearchIcon } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '@/lib/miniapp-categories';
-import { MiniAppFeaturedCard, MiniAppRowCard } from '@/components/miniapp/MiniAppCard';
+import { MiniAppCoverCard, MiniAppRowCard } from '@/components/miniapp/MiniAppCard';
 import type { MiniAppCategory } from '@netizen-labs/miniapp-sdk';
 import { useGoBack } from '@/hooks/useGoBack';
 
@@ -196,7 +196,7 @@ export default function MiniAppsStoreScreen() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.featuredRow}
                     renderItem={({ item }) => (
-                      <MiniAppFeaturedCard app={item} onPress={() => openApp(item)} />
+                      <MiniAppCoverCard app={item} onPress={() => openApp(item)} />
                     )}
                   />
                 </View>
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: 10,
   },
   chipText: {
     fontFamily: fontFamily.medium,

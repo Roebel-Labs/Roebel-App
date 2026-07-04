@@ -1,10 +1,12 @@
 /**
- * Cards for the Mini App store. Two variants:
- *  - <MiniAppFeaturedCard>  large, for the horizontal "Empfohlen" rail.
- *  - <MiniAppRowCard>       compact icon+name+desc row, for lists / search.
+ * Cards for the Mini App store, styled after the reference store flow:
+ *  - <AppIcon>            squircle app icon (image or letter fallback).
+ *  - <MiniAppGridTile>    icon + name, for 4-column launcher grids.
+ *  - <MiniAppCoverCard>   large cover (first screenshot or brand color),
+ *                         name + tagline below — "Empfohlen" rail.
+ *  - <MiniAppRowCard>     icon + name + desc + Öffnen button, for lists.
  *
- * Idioms mirror FeaturedMenuItemsGrid / AttesterGrid: expo-image, useTheme
- * colors, Mona Sans, rounded surfaces. German copy.
+ * Idioms: expo-image, useTheme colors, Mona Sans, 10px button radius.
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -14,21 +16,21 @@ import { fontFamily } from '@/constants/theme';
 import type { MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 
-function AppIcon({ app, size }: { app: MiniApp; size: number }) {
+const BTN_RADIUS = 10;
+
+export function AppIcon({ app, size }: { app: MiniApp; size: number }) {
   const { colors } = useTheme();
   return (
     <View
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: size * 0.22,
-          backgroundColor: app.primaryColor || colors.surfaceSecondary,
-          overflow: 'hidden',
-          alignItems: 'center',
-          justifyContent: 'center',
-        },
-      ]}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size * 0.24,
+        backgroundColor: app.primaryColor || colors.surfaceSecondary,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
     >
       {app.iconUrl ? (
         <Image source={{ uri: app.iconUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
@@ -41,29 +43,60 @@ function AppIcon({ app, size }: { app: MiniApp; size: number }) {
   );
 }
 
-export function MiniAppFeaturedCard({ app, onPress }: { app: MiniApp; onPress: () => void }) {
+/** Launcher-style tile: squircle icon with the name centered underneath. */
+export function MiniAppGridTile({
+  app,
+  onPress,
+  width,
+  iconSize = 64,
+}: {
+  app: MiniApp;
+  onPress: () => void;
+  width: number;
+  iconSize?: number;
+}) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.featured,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        pressed && { opacity: 0.85 },
-      ]}
+      style={({ pressed }) => [styles.tile, { width }, pressed && { opacity: 0.7 }]}
     >
-      <AppIcon app={app} size={56} />
-      <Text style={[styles.featuredName, { color: colors.textPrimary }]} numberOfLines={1}>
+      <AppIcon app={app} size={iconSize} />
+      <Text style={[styles.tileName, { color: colors.textPrimary }]} numberOfLines={1}>
         {app.name}
       </Text>
-      <Text style={[styles.featuredDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+    </Pressable>
+  );
+}
+
+const COVER_W = 280;
+
+/** Big editorial card: cover image (first screenshot) or brand-color block. */
+export function MiniAppCoverCard({ app, onPress }: { app: MiniApp; onPress: () => void }) {
+  const { colors } = useTheme();
+  const cover = app.screenshots[0] ?? null;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.cover, pressed && { opacity: 0.85 }]}
+    >
+      {cover ? (
+        <Image
+          source={{ uri: cover }}
+          style={[styles.coverImg, { backgroundColor: colors.surfaceSecondary }]}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[styles.coverImg, styles.coverFallback, { backgroundColor: app.primaryColor || colors.primary }]}>
+          <AppIcon app={app} size={64} />
+        </View>
+      )}
+      <Text style={[styles.coverName, { color: colors.textPrimary }]} numberOfLines={1}>
+        {app.name}
+      </Text>
+      <Text style={[styles.coverDesc, { color: colors.textSecondary }]} numberOfLines={1}>
         {app.description ?? CATEGORY_LABELS[app.category]}
       </Text>
-      <View style={[styles.pill, { backgroundColor: colors.surfaceSecondary }]}>
-        <Text style={[styles.pillText, { color: colors.textSecondary }]}>
-          {CATEGORY_LABELS[app.category]}
-        </Text>
-      </View>
     </Pressable>
   );
 }
@@ -75,7 +108,7 @@ export function MiniAppRowCard({ app, onPress }: { app: MiniApp; onPress: () => 
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
     >
-      <AppIcon app={app} size={52} />
+      <AppIcon app={app} size={56} />
       <View style={styles.rowBody}>
         <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
           {app.name}
@@ -91,44 +124,45 @@ export function MiniAppRowCard({ app, onPress }: { app: MiniApp; onPress: () => 
   );
 }
 
-const FEATURED_W = 220;
-
 const styles = StyleSheet.create({
-  featured: {
-    width: FEATURED_W,
+  tile: {
+    alignItems: 'center',
+  },
+  tileName: {
+    marginTop: 8,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: '100%',
+  },
+  cover: {
+    width: COVER_W,
+  },
+  coverImg: {
+    width: COVER_W,
+    height: COVER_W * 0.62,
     borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
   },
-  featuredName: {
-    marginTop: 12,
+  coverFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverName: {
+    marginTop: 10,
     fontFamily: fontFamily.semiBold,
-    fontSize: 16,
+    fontSize: 15,
   },
-  featuredDesc: {
-    marginTop: 4,
+  coverDesc: {
+    marginTop: 2,
     fontFamily: fontFamily.regular,
     fontSize: 13,
-    lineHeight: 18,
-    minHeight: 36,
-  },
-  pill: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  pillText: {
-    fontFamily: fontFamily.medium,
-    fontSize: 11,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    gap: 12,
+    gap: 14,
   },
   rowBody: { flex: 1 },
   rowName: {
@@ -142,9 +176,11 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   openBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: 16,
+    height: 34,
+    borderRadius: BTN_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   openBtnText: {
     fontFamily: fontFamily.semiBold,

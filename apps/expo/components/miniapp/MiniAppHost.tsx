@@ -33,9 +33,11 @@ import {
   Platform,
   Linking,
   Share,
+  StatusBar,
   AppState,
   type AppStateStatus,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
@@ -45,14 +47,13 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fontFamily } from '@/constants/theme';
-import { CloseIcon, ChevronLeft } from '@/components/miniapp/hostIcons';
+import { CloseIcon, ShareIcon } from '@/components/miniapp/hostIcons';
 
 import { createHostBridge, type HostHandlers } from '@netizen-labs/miniapp-sdk/host';
 import type {
   BridgeMessage,
   Eip1193RequestArgs,
   MiniAppContext,
-  NetizenEvent,
 } from '@netizen-labs/miniapp-sdk';
 
 import type { MiniApp } from '@/lib/miniapps';
@@ -78,6 +79,13 @@ import {
 
 const HEARTBEAT_MS = 25_000;
 
+/**
+ * Host chrome is always dark (independent of the app theme), so the mini app
+ * floats on a near-black stage with a rounded sheet — like the reference flow.
+ */
+const CHROME_BG = '#0F1013';
+const CHROME_TEXT = '#FFFFFF';
+
 type Props = {
   app: MiniApp;
   visible: boolean;
@@ -94,7 +102,7 @@ type PendingConfirm = {
 };
 
 export default function MiniAppHost({ app, visible, onClose }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const account = useActiveAccount();
   const { user, isCitizen } = useUser();
@@ -343,25 +351,24 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     }
   }, [account?.address, visible]);
 
-  const sendEvent = useCallback((event: NetizenEvent, data?: unknown) => {
-    bridgeRef.current?.sendEvent(event, data);
-  }, []);
-
   const onMessage = useCallback((e: WebViewMessageEvent) => {
     bridgeRef.current?.handleMessage(e.nativeEvent.data);
   }, []);
-
-  // Header back → emit `back` (mini app may intercept for in-app navigation).
-  const handleBack = useCallback(() => {
-    sendEvent('back');
-    void Haptics.selectionAsync();
-  }, [sendEvent]);
 
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
 
-  const author = app.authorName ?? 'Netizen Mini App';
+  // Header share → native share sheet with the mini app's link.
+  const handleShare = useCallback(() => {
+    const message = `${app.name} – Mini-App in der Röbel App`;
+    void Share.share(
+      Platform.OS === 'ios'
+        ? { message, url: app.homeUrl }
+        : { message: `${message}\n${app.homeUrl}` },
+    );
+    track('share', { source: 'host_header' });
+  }, [app.name, app.homeUrl, track]);
 
   return (
     <Modal
@@ -370,37 +377,43 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       presentationStyle="fullScreen"
       onRequestClose={handleClose}
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        {/* Host header */}
-        <View style={[styles.header, { borderBottomColor: colors.borderSecondary }]}>
-          <Pressable
-            onPress={handleBack}
-            style={styles.headerBtn}
-            hitSlop={10}
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeft size={24} color={colors.textPrimary} />
-          </Pressable>
-          <View style={styles.headerCenter} pointerEvents="none">
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-              {app.name}
-            </Text>
-            <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={1}>
-              {author}
-            </Text>
-          </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="light-content" backgroundColor={CHROME_BG} />
+
+        {/* Host chrome: ✕ — icon + name — share */}
+        <View style={styles.header}>
           <Pressable
             onPress={handleClose}
             style={styles.headerBtn}
             hitSlop={10}
             accessibilityLabel="Schließen"
           >
-            <CloseIcon size={22} color={colors.textPrimary} />
+            <CloseIcon size={22} color={CHROME_TEXT} />
+          </Pressable>
+          <View style={styles.headerCenter} pointerEvents="none">
+            <View style={[styles.headerIcon, { backgroundColor: app.primaryColor || colors.primary }]}>
+              {app.iconUrl ? (
+                <Image source={{ uri: app.iconUrl }} style={styles.headerIconImg} contentFit="cover" />
+              ) : (
+                <Text style={styles.headerIconLetter}>{app.name.slice(0, 1).toUpperCase()}</Text>
+              )}
+            </View>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {app.name}
+            </Text>
+          </View>
+          <Pressable
+            onPress={handleShare}
+            style={styles.headerBtn}
+            hitSlop={10}
+            accessibilityLabel="Teilen"
+          >
+            <ShareIcon size={20} color={CHROME_TEXT} />
           </Pressable>
         </View>
 
-        {/* WebView */}
-        <View style={styles.webWrap}>
+        {/* WebView sheet — rounded top corners on the dark stage */}
+        <View style={[styles.webWrap, { backgroundColor: colors.background }]}>
           <WebView
             ref={webViewRef}
             source={{ uri: app.homeUrl }}
@@ -429,18 +442,24 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             }}
           />
 
-          {/* Splash overlay until actions.ready() */}
+          {/* Splash overlay until actions.ready(): centered icon, spinner low */}
           {splashVisible && (
             <View
-              style={[styles.splash, { backgroundColor: app.primaryColor || colors.primary }]}
+              style={[styles.splash, { backgroundColor: colors.background }]}
               pointerEvents="none"
             >
-              <View style={styles.splashInner}>
-                <Text style={styles.splashName} numberOfLines={2}>
-                  {app.name}
-                </Text>
-                <ActivityIndicator color="#fff" style={{ marginTop: 20 }} />
+              <View style={[styles.splashIcon, { backgroundColor: app.primaryColor || colors.primary }]}>
+                {app.iconUrl ? (
+                  <Image source={{ uri: app.iconUrl }} style={styles.splashIconImg} contentFit="cover" />
+                ) : (
+                  <Text style={styles.splashIconLetter}>{app.name.slice(0, 1).toUpperCase()}</Text>
+                )}
               </View>
+              <ActivityIndicator
+                size="large"
+                color={colors.textSecondary}
+                style={[styles.splashSpinner, { bottom: insets.bottom + 56 }]}
+              />
             </View>
           )}
         </View>
@@ -458,14 +477,15 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   );
 }
 
+const SHEET_RADIUS = 24;
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: CHROME_BG },
   header: {
-    height: 52,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
   },
   headerBtn: {
     width: 40,
@@ -475,33 +495,56 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingHorizontal: 4,
   },
-  headerTitle: {
+  headerIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconImg: { width: '100%', height: '100%' },
+  headerIconLetter: {
+    color: '#fff',
     fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    maxWidth: '100%',
+    fontSize: 12,
   },
-  headerSub: {
-    fontFamily: fontFamily.regular,
-    fontSize: 11,
-    marginTop: 1,
+  headerTitle: {
+    color: CHROME_TEXT,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+    maxWidth: '75%',
   },
-  webWrap: { flex: 1 },
+  webWrap: {
+    flex: 1,
+    borderTopLeftRadius: SHEET_RADIUS,
+    borderTopRightRadius: SHEET_RADIUS,
+    overflow: 'hidden',
+  },
   splash: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  splashInner: {
+  splashIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    overflow: 'hidden',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    justifyContent: 'center',
   },
-  splashName: {
+  splashIconImg: { width: '100%', height: '100%' },
+  splashIconLetter: {
     color: '#fff',
     fontFamily: fontFamily.heading,
-    fontSize: 26,
-    textAlign: 'center',
+    fontSize: 40,
   },
+  splashSpinner: { position: 'absolute' },
 });
