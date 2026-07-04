@@ -26,6 +26,16 @@ import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
 import { extractResult, stripFences } from "./lib/stream";
+import {
+  DRAFT_KEY,
+  appSessionKey,
+  clearSession,
+  loadSession,
+  saveSession,
+  type ChatMsg,
+  type StoredSession,
+  type Version,
+} from "./lib/sessionStore";
 import type { ManifestDraft } from "@/lib/miniapp/ai/manifest";
 
 const EXAMPLE_PROMPTS = [
@@ -36,19 +46,6 @@ const EXAMPLE_PROMPTS = [
 ];
 
 type Complexity = "default" | "hard";
-
-interface ChatMsg {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  versionIndex?: number;
-  error?: boolean;
-}
-
-interface Version {
-  html: string;
-  notes: string;
-}
 
 function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -82,16 +79,37 @@ export default function NewMiniAppBuilderPage() {
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, streaming]);
 
-  // Re-open an existing AI-built app: /dashboard/mini-apps/new?app=<id|slug>
-  // seeds the session with its latest stored HTML.
+  const restoreSession = useCallback((s: StoredSession) => {
+    setMessages(s.messages);
+    setVersions(s.versions);
+    setActiveIdx(s.activeIdx);
+    setPreset(s.preset);
+    setPublished(s.published);
+  }, []);
+
+  // Re-open an existing AI-built app (?app=<slug|id>) or restore the last
+  // unpublished draft session. Saved sessions carry the FULL chat + version
+  // history; the registry is only the fallback when no session exists locally.
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("app");
-    if (!id) return;
+    const param = new URLSearchParams(window.location.search).get("app");
+    if (!param) {
+      const draft = loadSession(DRAFT_KEY);
+      if (draft && draft.messages.length > 0) restoreSession(draft);
+      return;
+    }
+
+    // Sessions are keyed by slug; the URL may carry the slug directly.
+    const direct = loadSession(appSessionKey(param));
+    if (direct && direct.messages.length > 0) {
+      restoreSession(direct);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setLoadingApp(true);
       try {
-        const res = await fetch(`/api/mini-apps/${encodeURIComponent(id)}`, {
+        const res = await fetch(`/api/mini-apps/${encodeURIComponent(param)}`, {
           cache: "no-store",
         });
         const json = await res.json().catch(() => ({}));
@@ -106,6 +124,16 @@ export default function NewMiniAppBuilderPage() {
           primary_color: string | null;
           home_url: string;
         };
+        if (cancelled) return;
+        window.history.replaceState(null, "", `/dashboard/mini-apps/new?app=${app.slug}`);
+
+        // The URL carried the uuid — check for a saved session under the slug.
+        const bySlug = loadSession(appSessionKey(app.slug));
+        if (bySlug && bySlug.messages.length > 0) {
+          restoreSession(bySlug);
+          return;
+        }
+
         const versionRows = (json.versions ?? []) as { html?: string | null; version: string }[];
         const withHtml = versionRows.find((v) => typeof v.html === "string" && v.html.length > 0);
         if (!withHtml?.html) {
@@ -113,7 +141,6 @@ export default function NewMiniAppBuilderPage() {
             "Für diese App ist kein Quelltext gespeichert — extern gehostete Apps können hier nicht geöffnet werden.",
           );
         }
-        if (cancelled) return;
         setVersions([{ html: withHtml.html, notes: "" }]);
         setActiveIdx(0);
         setPreset({
@@ -130,7 +157,7 @@ export default function NewMiniAppBuilderPage() {
           {
             id: uid(),
             role: "assistant",
-            content: `„${app.name}“ (Version ${withHtml.version}) ist geladen. Beschreibe, was du ändern möchtest — Veröffentlichen reicht eine neue Version ein.`,
+            content: `„${app.name}“ (Version ${withHtml.version}) ist geladen. Beschreibe, was du ändern möchtest — Veröffentlichen reicht eine neue Version ein. (Der frühere Chat-Verlauf ist nur auf dem Gerät gespeichert, auf dem er entstand.)`,
             versionIndex: 0,
           },
         ]);
@@ -153,7 +180,31 @@ export default function NewMiniAppBuilderPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-save the session (debounced). Published apps save under their slug —
+  // re-opening restores the full chat; unpublished work lives in the draft slot.
+  useEffect(() => {
+    if (!started || loadingApp) return;
+    const t = setTimeout(() => {
+      const session: StoredSession = {
+        messages,
+        versions,
+        activeIdx,
+        preset,
+        published,
+        savedAt: Date.now(),
+      };
+      if (published?.slug) {
+        saveSession(appSessionKey(published.slug), session);
+        clearSession(DRAFT_KEY);
+      } else {
+        saveSession(DRAFT_KEY, session);
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [messages, versions, activeIdx, preset, published, started, loadingApp]);
 
   const newChat = useCallback(() => {
     if (
@@ -163,6 +214,8 @@ export default function NewMiniAppBuilderPage() {
       return;
     }
     abortRef.current?.abort();
+    // The per-app session (if any) stays saved — only the draft slot resets.
+    clearSession(DRAFT_KEY);
     setMessages([]);
     setVersions([]);
     setActiveIdx(-1);
@@ -354,6 +407,9 @@ export default function NewMiniAppBuilderPage() {
                 key={m.id}
                 msg={m}
                 activeIdx={activeIdx}
+                restorable={
+                  m.versionIndex === undefined || Boolean(versions[m.versionIndex]?.html)
+                }
                 onRestore={(i) => {
                   setActiveIdx(i);
                   setTab("preview");
@@ -438,10 +494,13 @@ export default function NewMiniAppBuilderPage() {
 function MessageBubble({
   msg,
   activeIdx,
+  restorable,
   onRestore,
 }: {
   msg: ChatMsg;
   activeIdx: number;
+  /** false when the version's HTML was trimmed from local storage. */
+  restorable: boolean;
   onRestore: (i: number) => void;
 }) {
   if (msg.role === "user") {
@@ -471,17 +530,23 @@ function MessageBubble({
           <button
             type="button"
             onClick={() => onRestore(msg.versionIndex!)}
-            disabled={msg.versionIndex === activeIdx}
+            disabled={msg.versionIndex === activeIdx || !restorable}
+            title={restorable ? undefined : "Diese Version ist lokal nicht mehr gespeichert."}
             className={cn(
               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]",
               msg.versionIndex === activeIdx
                 ? "bg-primary text-primary-foreground"
                 : "border border-border text-muted-foreground hover:bg-muted",
+              !restorable && "opacity-50",
             )}
           >
             <History className="h-2.5 w-2.5" />
             Version {msg.versionIndex + 1}
-            {msg.versionIndex === activeIdx ? " · aktiv" : " · wiederherstellen"}
+            {msg.versionIndex === activeIdx
+              ? " · aktiv"
+              : restorable
+                ? " · wiederherstellen"
+                : " · nicht mehr gespeichert"}
           </button>
         ) : null}
       </div>

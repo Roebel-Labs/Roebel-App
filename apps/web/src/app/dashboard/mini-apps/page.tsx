@@ -101,7 +101,7 @@ export default function MyMiniApps() {
               </Link>
               {app.source === "ai_builder" ? (
                 <Link
-                  href={`/dashboard/mini-apps/new?app=${app.id}`}
+                  href={`/dashboard/mini-apps/new?app=${app.slug}`}
                   title="Im KI-Baukasten öffnen"
                   aria-label={`${app.name} im KI-Baukasten öffnen`}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-border text-muted-foreground hover:bg-background hover:text-primary"
