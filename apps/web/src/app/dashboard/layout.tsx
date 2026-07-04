@@ -31,6 +31,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // Röbel organisation account. Exempt it from the org-account gate below;
   // AuthGuard still requires a connected wallet.
   const isMiniAppBuilder = pathname?.startsWith("/dashboard/mini-apps") ?? false;
+  // The AI builder is a standalone full-viewport workspace with its own top
+  // bar — no dashboard chrome at all (auth still applies via AuthGuard above).
+  const isBuilderWorkspace = pathname?.startsWith("/dashboard/mini-apps/new") ?? false;
 
   if (isLoading) {
     return (
@@ -40,7 +43,17 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isMiniAppBuilder) {
+  if (isBuilderWorkspace) {
+    return <>{children}</>;
+  }
+
+  const isOrg = !!activeAccount && isOrgAccount(activeAccount);
+
+  // External developers (no org account) can still reach the mini-app builder —
+  // give them a minimal shell since there's no org sidebar to render. Org users
+  // fall through to the full dashboard shell below, so they keep the left sidebar
+  // on the Mini-Apps tab like every other dashboard page.
+  if (isMiniAppBuilder && !isOrg) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <DashboardTopBar />
@@ -51,6 +64,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Inline check (not `!isOrg`) so TS narrows `activeAccount` to non-null for <OrgSidebar>.
   if (!activeAccount || !isOrgAccount(activeAccount)) {
     const ownedOrgs = ownedAccounts.filter((a) => a.account_type === "organisation");
     return (
