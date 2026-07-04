@@ -59,7 +59,8 @@ const HARD_RULES = `
    This is the #1 mistake — treat it as a compile-blocking requirement.
 2. **Bundle the SDK.** \`next.config.ts\` MUST include
    \`transpilePackages: ["@netizen/miniapp-sdk"]\`. Depend on
-   \`"@netizen/miniapp-sdk": "workspace:*"\`.
+   \`"@netizen/miniapp-sdk": "^0.1.0"\` (the published npm package — the app is
+   deployed standalone, so NEVER use \`workspace:*\`).
 3. **Ship \`netizen.manifest.ts\`** exporting a valid MiniAppManifest whose
    \`permissions[]\` lists ONLY the permissions the app actually uses. The host
    refuses any bridge method whose permission wasn't declared + admin-approved.

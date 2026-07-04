@@ -1,8 +1,8 @@
 {
   "name": "@netizen/miniapp-sdk",
   "version": "0.1.0",
-  "private": true,
-  "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in the Röbel host (WebView/iframe).",
+  "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in a host app (WebView/iframe).",
+  "license": "MIT",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -16,6 +16,39 @@
       "default": "./src/host/index.ts"
     }
   },
-  "files": ["src", "DESIGN.md"],
-  "sideEffects": false
+  "files": ["dist", "src", "DESIGN.md", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "prepack": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs",
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./host": {
+        "types": "./dist/host.d.ts",
+        "import": "./dist/host.js",
+        "require": "./dist/host.cjs"
+      }
+    }
+  },
+  "keywords": ["mini-app", "netizen", "sdk", "webview", "farcaster", "postmessage"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Roebel-Labs/Roebel-App",
+    "directory": "packages/miniapp-sdk"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.0"
+  }
 }
