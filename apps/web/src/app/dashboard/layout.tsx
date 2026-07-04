@@ -44,6 +44,21 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   if (isBuilderWorkspace) {
+    // The AI builder is a full-height workspace with its own header. Org users get
+    // the dashboard sidebar beside it (desktop) so they can navigate away without
+    // leaving the builder's full-height layout; external developers (no org account)
+    // get the bare workspace. On mobile the sidebar is hidden (the workspace is
+    // full-screen there).
+    if (activeAccount && isOrgAccount(activeAccount)) {
+      return (
+        <div className="bg-background md:flex md:h-dvh">
+          <div className="hidden md:block md:shrink-0">
+            <OrgSidebar account={activeAccount} />
+          </div>
+          <div className="min-w-0 md:flex-1">{children}</div>
+        </div>
+      );
+    }
     return <>{children}</>;
   }
 
