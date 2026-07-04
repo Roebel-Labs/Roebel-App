@@ -430,7 +430,11 @@ function ModelToggle({
           type="button"
           onClick={() => onChange(v)}
           disabled={disabled}
-          title={v === "hard" ? "Stärkeres Modell für komplexe Apps (langsamer)" : "Schnelles Modell"}
+          title={
+            v === "hard"
+              ? "Denkt vor dem Bauen nach — gründlicher, aber langsamer"
+              : "Baut direkt los — schnellste Antwort"
+          }
           className={cn(
             "rounded-[8px] px-2.5 py-1 text-[11px] font-medium",
             value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",

@@ -1,11 +1,11 @@
 /**
  * POST /api/mini-apps/generate — chat-iterative single-file codegen (builder v2).
  *
- * Streams a complete HTML mini-app document. First turn: build from the idea.
- * Later turns: the current document is appended to the newest user message and
- * the model returns the FULL updated document (LlamaCoder-style iteration —
- * prior assistant turns arrive as short summaries, not full code, to keep the
- * context small).
+ * Streams a complete HTML mini-app document from Z.ai GLM-5.2. First turn:
+ * build from the idea. Later turns: the current document is appended to the
+ * newest user message and the model returns the FULL updated document
+ * (LlamaCoder-style iteration — prior assistant turns arrive as short
+ * summaries, not full code, to keep the context small).
  *
  * Body: {
  *   messages: { role: "user" | "assistant"; content: string }[]  (≤24, newest last, ends with a user turn)
@@ -15,10 +15,9 @@
  * Response: raw text stream of the HTML document.
  */
 import { streamText, type ModelMessage } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/htmlPrompt";
-import { codegenModelId } from "@/lib/miniapp/ai/model";
+import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -54,7 +53,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "last_message_must_be_user" }, { status: 400 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!hasCodegenKey()) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
 
@@ -67,9 +66,10 @@ export async function POST(request: Request) {
 
   try {
     const result = streamText({
-      model: anthropic(codegenModelId(complexity ?? "default")),
+      model: codegenModel(),
       system: buildHtmlSystemPrompt(),
       messages: modelMessages,
+      providerOptions: codegenProviderOptions(complexity ?? "default"),
       maxOutputTokens: 32000,
       onError: (event) => {
         console.error("[mini-apps/generate] stream error", event.error);
