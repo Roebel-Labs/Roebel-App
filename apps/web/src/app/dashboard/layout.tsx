@@ -47,7 +47,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (isMiniAppBuilder) {
+  const isOrg = !!activeAccount && isOrgAccount(activeAccount);
+
+  // External developers (no org account) can still reach the mini-app builder —
+  // give them a minimal shell since there's no org sidebar to render. Org users
+  // fall through to the full dashboard shell below, so they keep the left sidebar
+  // on the Mini-Apps tab like every other dashboard page.
+  if (isMiniAppBuilder && !isOrg) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <DashboardTopBar />
@@ -58,6 +64,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Inline check (not `!isOrg`) so TS narrows `activeAccount` to non-null for <OrgSidebar>.
   if (!activeAccount || !isOrgAccount(activeAccount)) {
     const ownedOrgs = ownedAccounts.filter((a) => a.account_type === "organisation");
     return (
