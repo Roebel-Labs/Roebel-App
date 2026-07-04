@@ -97,8 +97,9 @@ export default function MiniAppDetailScreen() {
     if (app?.homeUrl) void Linking.openURL(app.homeUrl);
   }, [app?.homeUrl]);
 
-  const shotW = Math.min(width * 0.7, 300);
-  const shotH = shotW * (16 / 9);
+  // Square (1:1) preview images, shown in a horizontal row.
+  const shotW = Math.min(width * 0.44, 200);
+  const shotH = shotW;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
