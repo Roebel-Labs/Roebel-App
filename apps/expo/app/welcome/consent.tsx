@@ -99,7 +99,12 @@ export default function WelcomeConsentScreen() {
       if (roleAtSubmit === 'buerger' && citizenDataAtSubmit && !hasCitizenNFT && !activePendingRequest) {
         try {
           await createRequest(citizenDataAtSubmit, DEFAULT_CITIZEN_REASON);
-          await refreshVerification();
+          // Post-success refresh is best-effort — the verification context
+          // self-corrects on its next natural refresh; a failure here must
+          // not read as "request failed" (no draft, no error snackbar).
+          await refreshVerification().catch((err) =>
+            console.warn('verification refresh failed (non-fatal):', err),
+          );
         } catch (err) {
           console.error('Auto citizen request failed (non-fatal):', err);
           await saveCitizenDraft(citizenDataAtSubmit);
