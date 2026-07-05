@@ -58,9 +58,16 @@ import type {
 
 import type { MiniApp } from '@/lib/miniapps';
 import { trackMiniAppEvent, newMiniAppSessionId } from '@/lib/miniapps';
+import { markMiniAppInstalled } from '@/lib/miniapp-installs';
+import {
+  getNotificationDecision,
+  setNotificationDecision,
+  saveNotificationOptIn,
+} from '@/lib/miniapp-notifications';
 import WalletConfirmSheet, {
   type WalletConfirmRequest,
 } from '@/components/miniapp/WalletConfirmSheet';
+import MiniAppNotificationSheet from '@/components/miniapp/MiniAppNotificationSheet';
 import {
   HOST_CHAIN_ID,
   buildConfirmRequest,
@@ -116,6 +123,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const [splashVisible, setSplashVisible] = useState(true);
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [notifVisible, setNotifVisible] = useState(false);
+  const [notifBusy, setNotifBusy] = useState(false);
+  const notifCheckedRef = useRef(false);
 
   const walletLc = account?.address?.toLowerCase() ?? null;
 
@@ -140,9 +150,60 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       sessionIdRef.current = newMiniAppSessionId();
       walletConnectFiredRef.current = false;
       appOpenFiredRef.current = false;
+      notifCheckedRef.current = false;
+      setNotifVisible(false);
       setSplashVisible(true);
     }
   }, [visible]);
+
+  // Opening the host IS the install (World-App Get→Open): persist the slug so
+  // store buttons flip to "Öffnen" and skip the preview page next time.
+  useEffect(() => {
+    if (!visible) return;
+    void markMiniAppInstalled(app.slug).then((isNew) => {
+      if (isNew) track('install');
+    });
+  }, [visible, app.slug, track]);
+
+  // Notification opt-in prompt: once per open, after the splash hides, only if
+  // the app may send notifications, a wallet is connected, and the user has
+  // never answered for this app.
+  useEffect(() => {
+    if (!visible || splashVisible || notifCheckedRef.current) return;
+    if (!app.permissions.includes('notifications') || !walletLc) return;
+    notifCheckedRef.current = true;
+    let cancelled = false;
+    void getNotificationDecision(app.slug).then((decision) => {
+      if (decision !== null || cancelled) return;
+      setTimeout(() => {
+        if (!cancelled) setNotifVisible(true);
+      }, 600);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, splashVisible, app.permissions, app.slug, walletLc]);
+
+  const handleNotifEnable = useCallback(async () => {
+    setNotifBusy(true);
+    try {
+      await setNotificationDecision(app.slug, 'enabled');
+      if (walletLc) {
+        await saveNotificationOptIn({ miniAppId: app.id, wallet: walletLc, enabled: true });
+      }
+      track('notifications_enabled');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setNotifBusy(false);
+      setNotifVisible(false);
+    }
+  }, [app.slug, app.id, walletLc, track]);
+
+  const handleNotifDismiss = useCallback(() => {
+    void setNotificationDecision(app.slug, 'dismissed');
+    track('notifications_dismissed');
+    setNotifVisible(false);
+  }, [app.slug, track]);
 
   // app_open once per open.
   useEffect(() => {
@@ -471,6 +532,15 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           busy={confirmBusy}
           onConfirm={handleConfirmApprove}
           onReject={handleConfirmReject}
+        />
+
+        {/* Floating notification opt-in (first open of notification-capable apps) */}
+        <MiniAppNotificationSheet
+          visible={notifVisible}
+          app={app}
+          busy={notifBusy}
+          onEnable={handleNotifEnable}
+          onDismiss={handleNotifDismiss}
         />
       </SafeAreaView>
     </Modal>

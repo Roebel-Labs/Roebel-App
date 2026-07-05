@@ -2,21 +2,32 @@
  * Cards for the Mini App store, styled after the reference store flow:
  *  - <AppIcon>            squircle app icon (image or letter fallback).
  *  - <MiniAppGridTile>    icon + name, for 4-column launcher grids.
+ *  - <MiniAppHeroCard>    full-width featured card (feature image or gray
+ *                         placeholder) with icon/name/tagline + pill CTA.
  *  - <MiniAppCoverCard>   large cover (first screenshot or brand color),
  *                         name + tagline below — "Empfohlen" rail.
- *  - <MiniAppRowCard>     icon + name + desc + Öffnen button, for lists.
+ *  - <MiniAppRowCard>     icon + name + desc + pill button, for lists.
+ *
+ * Buttons are installed-aware (World-App Get→Open): not installed → "Laden"
+ * (goes to the preview page), installed → "Öffnen" (launches the host).
  *
  * Idioms: expo-image, useTheme colors, Mona Sans, 10px button radius.
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import type { MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 
 const BTN_RADIUS = 10;
+
+/** German Get/Open pair (App-Store convention). */
+export function installLabel(installed: boolean): string {
+  return installed ? 'Öffnen' : 'Laden';
+}
 
 export function AppIcon({ app, size }: { app: MiniApp; size: number }) {
   const { colors } = useTheme();
@@ -69,6 +80,68 @@ export function MiniAppGridTile({
   );
 }
 
+const HERO_RATIO = 0.7;
+const HERO_RADIUS = 24;
+
+/**
+ * Full-width featured card for the store hero carousel: feature image (or a
+ * gray placeholder block) with a scrim-backed bottom row — icon, name,
+ * one-line tagline, pill CTA.
+ */
+export function MiniAppHeroCard({
+  app,
+  width,
+  installed,
+  onPress,
+}: {
+  app: MiniApp;
+  width: number;
+  installed: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.hero,
+        { width, height: Math.round(width * HERO_RATIO) },
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      {app.featureImageUrl ? (
+        <Image
+          source={{ uri: app.featureImageUrl }}
+          style={[styles.heroImg, { backgroundColor: colors.surfaceSecondary }]}
+          contentFit="cover"
+        />
+      ) : (
+        // Placeholder until the app has feature artwork: plain gray block.
+        <View style={[styles.heroImg, { backgroundColor: colors.surfaceSecondary }]} />
+      )}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.55)']}
+        style={styles.heroScrim}
+        pointerEvents="none"
+      />
+      <View style={styles.heroRow}>
+        <AppIcon app={app} size={44} />
+        <View style={styles.heroBody}>
+          <Text style={styles.heroName} numberOfLines={1}>
+            {app.name}
+          </Text>
+          <Text style={styles.heroDesc} numberOfLines={1}>
+            {app.description ?? CATEGORY_LABELS[app.category]}
+          </Text>
+        </View>
+        <View style={styles.heroBtn}>
+          <Text style={styles.heroBtnText}>{installLabel(installed)}</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 const COVER_W = 280;
 
 /** Big editorial card: cover image (first screenshot) or brand-color block. */
@@ -101,7 +174,15 @@ export function MiniAppCoverCard({ app, onPress }: { app: MiniApp; onPress: () =
   );
 }
 
-export function MiniAppRowCard({ app, onPress }: { app: MiniApp; onPress: () => void }) {
+export function MiniAppRowCard({
+  app,
+  installed = false,
+  onPress,
+}: {
+  app: MiniApp;
+  installed?: boolean;
+  onPress: () => void;
+}) {
   const { colors } = useTheme();
   return (
     <Pressable
@@ -113,12 +194,14 @@ export function MiniAppRowCard({ app, onPress }: { app: MiniApp; onPress: () => 
         <Text style={[styles.rowName, { color: colors.textPrimary }]} numberOfLines={1}>
           {app.name}
         </Text>
-        <Text style={[styles.rowDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+        <Text style={[styles.rowDesc, { color: colors.textSecondary }]} numberOfLines={1}>
           {app.description ?? CATEGORY_LABELS[app.category]}
         </Text>
       </View>
       <View style={[styles.openBtn, { backgroundColor: colors.surfaceSecondary }]}>
-        <Text style={[styles.openBtnText, { color: colors.textPrimary }]}>Öffnen</Text>
+        <Text style={[styles.openBtnText, { color: colors.textPrimary }]}>
+          {installLabel(installed)}
+        </Text>
       </View>
     </Pressable>
   );
@@ -134,6 +217,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     maxWidth: '100%',
+  },
+  hero: {
+    borderRadius: HERO_RADIUS,
+    overflow: 'hidden',
+  },
+  heroImg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroScrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 110,
+  },
+  heroRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  heroBody: { flex: 1 },
+  heroName: {
+    color: '#fff',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+  },
+  heroDesc: {
+    marginTop: 1,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+  },
+  heroBtn: {
+    backgroundColor: '#111114',
+    paddingHorizontal: 20,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroBtnText: {
+    color: '#fff',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
   },
   cover: {
     width: COVER_W,

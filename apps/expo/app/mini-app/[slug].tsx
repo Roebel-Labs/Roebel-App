@@ -31,10 +31,16 @@ import {
   GlobeIcon,
   GridIcon,
   PersonIcon,
-  ShieldIcon,
+  EyeIcon,
+  UsersIcon,
 } from '@/components/miniapp/hostIcons';
 import { useGoBack } from '@/hooks/useGoBack';
-import { fetchMiniAppBySlug, type MiniApp } from '@/lib/miniapps';
+import {
+  fetchMiniAppBySlug,
+  fetchMiniAppStats,
+  type MiniApp,
+  type MiniAppStats,
+} from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import type { MiniAppPermission } from '@netizen-labs/miniapp-sdk';
@@ -61,6 +67,7 @@ export default function MiniAppDetailScreen() {
   const { width } = useWindowDimensions();
 
   const [app, setApp] = useState<MiniApp | null>(null);
+  const [stats, setStats] = useState<MiniAppStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [hostVisible, setHostVisible] = useState(false);
 
@@ -70,9 +77,12 @@ export default function MiniAppDetailScreen() {
     (async () => {
       setLoading(true);
       const data = await fetchMiniAppBySlug(slug);
-      if (!cancelled) {
-        setApp(data);
-        setLoading(false);
+      if (cancelled) return;
+      setApp(data);
+      setLoading(false);
+      if (data) {
+        const s = await fetchMiniAppStats(data.id);
+        if (!cancelled) setStats(s);
       }
     })();
     return () => {
@@ -97,9 +107,13 @@ export default function MiniAppDetailScreen() {
     if (app?.homeUrl) void Linking.openURL(app.homeUrl);
   }, [app?.homeUrl]);
 
-  // Square (1:1) preview images, shown in a horizontal row.
-  const shotW = Math.min(width * 0.44, 200);
+  // Square (1:1) preview images: the first fills the viewport, the next one
+  // peeks in from the right so swiping is discoverable.
+  const shotW = width - 64;
   const shotH = shotW;
+
+  // German thousands separator without relying on Hermes Intl.
+  const formatCount = (n: number) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -175,7 +189,7 @@ export default function MiniAppDetailScreen() {
                   <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>
                     {app.name}
                   </Text>
-                  <Text style={[styles.tagline, { color: colors.textSecondary }]} numberOfLines={2}>
+                  <Text style={[styles.tagline, { color: colors.textSecondary }]} numberOfLines={1}>
                     {app.description ?? CATEGORY_LABELS[app.category]}
                   </Text>
                   <Pressable
@@ -191,13 +205,34 @@ export default function MiniAppDetailScreen() {
                 </View>
               </View>
 
-              {/* Stats row */}
-              <View style={styles.statsRow}>
+              {/* Stats row — left-aligned, horizontally swipeable */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.statsScroll}
+                contentContainerStyle={styles.statsRow}
+              >
                 <View style={styles.statCell}>
                   <PersonIcon size={18} color={colors.textPrimary} />
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Erstellt von</Text>
                   <Text style={[styles.statValue, { color: colors.textPrimary }]} numberOfLines={1}>
                     {app.authorName ?? 'Netizen Labs'}
+                  </Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statCell}>
+                  <EyeIcon size={18} color={colors.textPrimary} />
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Aufrufe</Text>
+                  <Text style={[styles.statValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {stats ? formatCount(stats.views) : '–'}
+                  </Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statCell}>
+                  <UsersIcon size={18} color={colors.textPrimary} />
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Genutzt von</Text>
+                  <Text style={[styles.statValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {stats ? `${formatCount(stats.citizens)} Bürger:innen` : '–'}
                   </Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
@@ -208,23 +243,18 @@ export default function MiniAppDetailScreen() {
                     {CATEGORY_LABELS[app.category]}
                   </Text>
                 </View>
-                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.statCell}>
-                  <ShieldIcon size={18} color={colors.textPrimary} />
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Berechtigungen</Text>
-                  <Text style={[styles.statValue, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {app.permissions.length === 0 ? 'Keine' : app.permissions.length}
-                  </Text>
-                </View>
-              </View>
+              </ScrollView>
 
-              {/* Screenshots */}
+              {/* Screenshots — 1:1, first fills the viewport, next one peeks */}
               {app.screenshots.length > 0 && (
                 <FlatList
                   horizontal
                   data={app.screenshots}
                   keyExtractor={(s, i) => `${i}-${s}`}
                   showsHorizontalScrollIndicator={false}
+                  snapToInterval={shotW + 12}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
                   contentContainerStyle={styles.shotsRow}
                   style={styles.shots}
                   renderItem={({ item }) => (
@@ -406,7 +436,7 @@ const styles = StyleSheet.create({
   iconImg: { width: '100%', height: '100%' },
   iconLetter: { color: '#fff', fontFamily: fontFamily.heading, fontSize: 40 },
   identityBody: { flex: 1, justifyContent: 'center' },
-  name: { fontFamily: fontFamily.heading, fontSize: 26 },
+  name: { fontFamily: fontFamily.heading, fontSize: 20 },
   tagline: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 19, marginTop: 3 },
   openBtn: {
     alignSelf: 'flex-start',
@@ -418,26 +448,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   openBtnText: { fontFamily: fontFamily.semiBold, fontSize: 14 },
+  statsScroll: { marginTop: 28, flexGrow: 0 },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginTop: 28,
-    paddingHorizontal: 8,
+    paddingHorizontal: 20,
   },
   statCell: {
-    flex: 1,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 4,
-    paddingHorizontal: 6,
+    minWidth: 104,
+    paddingRight: 16,
   },
   statLabel: { fontFamily: fontFamily.regular, fontSize: 12 },
   statValue: { fontFamily: fontFamily.semiBold, fontSize: 13 },
-  statDivider: { width: StyleSheet.hairlineWidth, marginVertical: 2 },
+  statDivider: { width: StyleSheet.hairlineWidth, marginVertical: 2, marginRight: 16 },
   shots: { marginTop: 28 },
   shotsRow: { paddingHorizontal: 20, gap: 12 },
   shot: { borderRadius: 20 },
   block: { paddingHorizontal: 20, marginTop: 28 },
-  blockTitle: { fontFamily: fontFamily.heading, fontSize: 20, marginBottom: 10 },
+  blockTitle: { fontFamily: fontFamily.heading, fontSize: 16, marginBottom: 10 },
   description: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 23 },
   permRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
   permDot: { width: 6, height: 6, borderRadius: 3 },
