@@ -4,7 +4,7 @@
  * Form for users to create a citizen attestation request
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -12,12 +12,12 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
-import { useCreateCitizenRequest, REQUEST_STAGE_LABEL } from '@/hooks/useVerification';
+import { useCreateCitizenRequest, REQUEST_STAGE_LABEL, DEFAULT_CITIZEN_REASON } from '@/hooks/useVerification';
+import { loadCitizenDraft, clearCitizenDraft } from '@/lib/onboarding-storage';
 import { useVerificationContext } from '@/context/VerificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import ErrorDrawer from '@/components/ErrorDrawer';
 import { InformationCircleIcon } from '@/components/Icons';
-const DEFAULT_REASON = 'Bürger von Röbel';
 const DEFAULT_PICKER_DATE = new Date(1990, 0, 1);
 const MIN_BIRTHDATE = new Date(1900, 0, 1);
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -38,6 +38,18 @@ export default function RequestCitizenScreen() {
   const [address, setAddress] = useState('');
 
   const [errorDrawer, setErrorDrawer] = useState({ visible: false, message: '' });
+
+  // Prefill from the onboarding draft (saved when the auto-submit at the end of
+  // the welcome wizard failed) so the user never types their data twice.
+  useEffect(() => {
+    loadCitizenDraft().then((draft) => {
+      if (!draft) return;
+      setFirstName((v) => v || draft.firstName);
+      setLastName((v) => v || draft.lastName);
+      setAddress((v) => v || draft.address);
+      setBirthDate((v) => v ?? (draft.birthdate ? new Date(draft.birthdate) : null));
+    });
+  }, []);
 
   const lockIcon = require('@/assets/illustration/small/encryption.png');
 
@@ -66,10 +78,12 @@ export default function RequestCitizenScreen() {
     try {
       const result = await createRequest(
         { firstName: firstName.trim(), lastName: lastName.trim(), birthdate: iso, address: address.trim() },
-        DEFAULT_REASON
+        DEFAULT_CITIZEN_REASON
       );
 
       await refresh();
+
+      await clearCitizenDraft();
 
       router.replace({
         pathname: '/verification/request-citizen/success' as any,

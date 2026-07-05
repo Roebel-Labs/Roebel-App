@@ -53,6 +53,9 @@ export const REQUEST_STAGE_LABEL: Record<RequestStage, string> = {
   'saving-reference': 'Antrag wird gespeichert',
 };
 
+/** Standard reason attached to citizen attestation requests. */
+export const DEFAULT_CITIZEN_REASON = 'Bürger von Röbel';
+
 /**
  * Hook to create a citizen attestation request
  */
