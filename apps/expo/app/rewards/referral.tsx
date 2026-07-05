@@ -51,7 +51,7 @@ export default function ReferralScreen() {
       const res = await redeemReferral(code, wallet);
       if (res.success) {
         setRedeemInput('');
-        setRedeemMsg({ type: 'success', text: 'Code eingelöst! Münzen gutgeschrieben.' });
+        setRedeemMsg({ type: 'success', text: 'Code eingelöst! Punkte gutgeschrieben.' });
         // Reward the REFERRER in Röbel Münzen for the successful invite (once per invited
         // person). Fire-and-forget; pays to the referrer once the funder is live.
         if (res.referrer) void claimReward(res.referrer, 'referral', wallet);
@@ -109,11 +109,11 @@ export default function ReferralScreen() {
         <Image source={HERO} style={styles.hero} resizeMode="contain" />
 
         <Text style={[styles.title, { color: colors.textPrimary }]}>
-          Lade Freunde ein, gewinnt beide Münzen
+          Lade Freunde ein, gewinnt beide Punkte
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Teile deinen Einladungscode. Sobald dein Freund die App installiert und sich anmeldet,
-          bekommt ihr beide Münzen.
+          bekommt ihr beide Punkte.
         </Text>
 
         <View style={styles.statRow}>
@@ -125,7 +125,7 @@ export default function ReferralScreen() {
           />
           <StatPill
             label="Verdient"
-            value={`${referralStats.coins_earned} M`}
+            value={`${referralStats.coins_earned} P`}
             isDark={isDark}
             colors={colors}
           />
@@ -228,7 +228,7 @@ export default function ReferralScreen() {
           </Text>
           <HowStep n={1} title="Teile deinen Code" body="Per WhatsApp, Link oder Kopieren" isDark={isDark} colors={colors} />
           <HowStep n={2} title="Freund installiert die App" body="Und öffnet deinen Link" isDark={isDark} colors={colors} />
-          <HowStep n={3} title="Ihr bekommt beide Münzen" body="200 Münzen für dich, 100 für deinen Freund" isDark={isDark} colors={colors} />
+          <HowStep n={3} title="Ihr bekommt beide Punkte" body="200 Punkte für dich, 100 Punkte für deinen Freund" isDark={isDark} colors={colors} />
         </View>
 
         <View style={styles.footerNote}>

@@ -15,6 +15,8 @@ interface MuenzenRewardOverlayProps {
   loadingLabel?: string | string[];
   /** Coin variant to show while loading (before the amount is known). */
   coin?: 'single' | 'many';
+  /** Reward unit: real on-chain Röbel Münzen, or off-chain gamification Punkte. */
+  unit?: 'Münzen' | 'Punkte';
   /** Changes per celebration so the entrance animation replays each time. */
   replayKey?: number;
   onClose: () => void;
@@ -32,6 +34,7 @@ export default function MuenzenRewardOverlay({
   loading = false,
   loadingLabel,
   coin,
+  unit,
   replayKey = 0,
   onClose,
 }: MuenzenRewardOverlayProps) {
@@ -46,6 +49,7 @@ export default function MuenzenRewardOverlay({
           loading={loading}
           loadingLabel={loadingLabel}
           coin={coin}
+          unit={unit}
           onContinue={onClose}
         />
       ) : null}

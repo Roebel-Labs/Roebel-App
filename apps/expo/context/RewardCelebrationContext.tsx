@@ -4,6 +4,8 @@ import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 interface CelebrateOptions {
   /** Override the standard reward line. */
   subtitle?: string;
+  /** Reward unit: real on-chain Röbel Münzen (default), or off-chain gamification Punkte. */
+  unit?: 'Münzen' | 'Punkte';
 }
 
 interface PendingOptions {
@@ -49,6 +51,7 @@ interface QueueItem {
   loading: boolean;
   loadingLabel?: string | string[];
   coin?: 'single' | 'many';
+  unit?: 'Münzen' | 'Punkte';
   onClose?: () => void;
 }
 
@@ -67,7 +70,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
     if (!Number.isFinite(amt) || amt <= 0) return;
     setQueue((q) => [
       ...q,
-      { id: nextId.current++, amount: amt, subtitle: opts?.subtitle, loading: false },
+      { id: nextId.current++, amount: amt, subtitle: opts?.subtitle, unit: opts?.unit, loading: false },
     ]);
   }, []);
 
@@ -129,6 +132,7 @@ export function RewardCelebrationProvider({ children }: { children: React.ReactN
         loading={current?.loading ?? false}
         loadingLabel={current?.loadingLabel}
         coin={current?.coin}
+        unit={current?.unit}
         onClose={handleClose}
       />
     </RewardCelebrationContext.Provider>

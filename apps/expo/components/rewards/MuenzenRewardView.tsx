@@ -47,6 +47,8 @@ interface MuenzenRewardViewProps {
   buttonLabel?: string;
   /** Force a coin variant; otherwise derived from amount (defaults to the trio). */
   coin?: 'single' | 'many';
+  /** Reward unit: real on-chain Röbel Münzen, or off-chain gamification Punkte. */
+  unit?: 'Münzen' | 'Punkte';
   onContinue?: () => void;
 }
 
@@ -66,12 +68,15 @@ export default function MuenzenRewardView({
   loadingLabel = 'Wird geladen…',
   buttonLabel = 'Weiter',
   coin,
+  unit = 'Münzen',
   onContinue,
 }: MuenzenRewardViewProps) {
   const hasAmount = amount != null && amount > 0;
   const isSingle = coin ? coin === 'single' : hasAmount && amount === 1;
   const coinSrc = isSingle ? SINGLE : MANY;
-  const label = isSingle ? 'MÜNZE' : 'MÜNZEN';
+  const singular = unit === 'Punkte' ? 'Punkt' : 'Münze';
+  const plural = unit === 'Punkte' ? 'Punkte' : 'Münzen';
+  const label = (isSingle ? singular : plural).toUpperCase();
   const contentReady = !loading && (hasAmount || !!message);
 
   // Loading label(s): advance every ~3s; once we reach the end, loop the
@@ -176,7 +181,7 @@ export default function MuenzenRewardView({
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 allowFontScaling={false}
-                accessibilityLabel={`${amount} ${isSingle ? 'Münze' : 'Münzen'} erhalten`}
+                accessibilityLabel={`${amount} ${isSingle ? singular : plural} erhalten`}
               >
                 {amount} {label}
               </Animated.Text>

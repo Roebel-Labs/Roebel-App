@@ -322,6 +322,7 @@ export default function RewardsIndexScreen() {
             }
             celebrate(res.coins_awarded ?? 0, {
               subtitle: 'Mission erledigt! Deine Belohnung ist da — auf zur nächsten.',
+              unit: 'Punkte',
             });
           } else if (res.error === 'already_completed') {
             showSnackbar({ message: 'Bereits erhalten' });
