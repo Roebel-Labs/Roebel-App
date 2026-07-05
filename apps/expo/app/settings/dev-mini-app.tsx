@@ -36,6 +36,8 @@ function devApp(url: string): MiniApp {
     permissions: ['wallet', 'rewards', 'notifications', 'circles', 'share'],
     primaryColor: '#00498B',
     featured: false,
+    featureImageUrl: null,
+    createdAt: new Date().toISOString(),
     authorName: null,
   };
 }
