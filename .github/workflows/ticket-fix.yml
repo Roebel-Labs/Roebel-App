@@ -30,6 +30,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write # claude-code-action@v1 fetches an OIDC token; without this it aborts
 
 concurrency:
   group: ticket-fix-${{ inputs.ticket_id }}
@@ -57,8 +58,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-sonnet-4-6
-          allowed_tools: "Read,Grep,Glob,Edit,Write,Bash(pnpm install),Bash(pnpm lint:*),Bash(pnpm --filter:*),Bash(git status),Bash(git diff:*),Bash(git log:*)"
+          claude_args: |
+            --model claude-sonnet-4-6
+            --allowedTools "Read,Grep,Glob,Edit,Write,Bash(pnpm install),Bash(pnpm lint:*),Bash(pnpm --filter:*),Bash(git status),Bash(git diff:*),Bash(git log:*)"
           prompt: |
             You are implementing a fix in the Röbel App Turborepo monorepo
             (apps/web = Next.js 15 + Tailwind, apps/expo = Expo SDK 55 with

@@ -17,9 +17,9 @@ export function MoneyFlowsSection({ buckets }: { buckets: DayBucket[] }) {
   const spent = buckets.reduce((a, b) => a + b.spend, 0);
 
   return (
-    <ChartCard title="Geldflüsse" subtitle="Täglich · tippe zum Ein-/Ausblenden">
+    <ChartCard title="Money flows" subtitle="Daily mint · reward · spend · transfer — tap a chip to toggle">
       {total <= 0 ? (
-        <EmptyHint>In diesem Zeitraum noch keine Bewegungen.</EmptyHint>
+        <EmptyHint>No flows in this period yet.</EmptyHint>
       ) : (
         <div className="space-y-3">
           <StackedAreaChart
@@ -33,13 +33,13 @@ export function MoneyFlowsSection({ buckets }: { buckets: DayBucket[] }) {
               <span className="inline-flex" style={{ color: C.sky }}>
                 <ArrowDownLeft className="h-3.5 w-3.5" />
               </span>
-              Kasse erhalten <span className="font-semibold tabular-nums text-foreground">{fmt(earned, 0)}</span>
+              Treasury earned <span className="font-semibold tabular-nums text-foreground">{fmt(earned, 0)}</span>
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-flex" style={{ color: C.gold }}>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </span>
-              ausgegeben <span className="font-semibold tabular-nums text-foreground">{fmt(spent, 0)}</span>
+              spent <span className="font-semibold tabular-nums text-foreground">{fmt(spent, 0)}</span>
             </span>
           </div>
         </div>

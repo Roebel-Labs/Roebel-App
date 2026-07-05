@@ -15,7 +15,7 @@ export function FlowFeedSection({ transfers, profiles }: { transfers: Transfer[]
   const nameOf = (addr: string) => profiles.get(addr.toLowerCase())?.name || shortAddr(addr);
 
   return (
-    <ChartCard title="Verlauf" subtitle="Neueste Münz-Bewegungen">
+    <ChartCard title="Flow feed" subtitle="Most recent coin movements">
       <div className="no-scrollbar mb-3 flex gap-1 overflow-x-auto">
         {KINDS.map((k) => (
           <button
@@ -25,12 +25,12 @@ export function FlowFeedSection({ transfers, profiles }: { transfers: Transfer[]
               filter === k ? "bg-[#00498B] text-white" : "bg-muted text-muted-foreground hover:text-foreground"
             }`}
           >
-            {k === "all" ? "Alle" : flowLabel(k as FlowKind)}
+            {k === "all" ? "All" : flowLabel(k as FlowKind)}
           </button>
         ))}
       </div>
       {filtered.length === 0 ? (
-        <EmptyHint>Noch keine Bewegungen dieser Art.</EmptyHint>
+        <EmptyHint>No flows of this type yet.</EmptyHint>
       ) : (
         <ul className="divide-y divide-border">
           {filtered.map((t, i) => (

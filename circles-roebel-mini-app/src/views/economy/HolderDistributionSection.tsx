@@ -11,27 +11,27 @@ export function HolderDistributionSection({ holders }: { holders: Holder[] }) {
   const dist = holderDistribution(holders);
 
   return (
-    <ChartCard title="Verteilung" subtitle="Wie gleichmäßig die Röbel-Münzen verteilt sind">
+    <ChartCard title="Holder distribution" subtitle="How evenly Röbel Coins are spread across holders">
       {dist.holderCount === 0 ? (
-        <EmptyHint>Noch keine Halter:innen mit Guthaben.</EmptyHint>
+        <EmptyHint>No holders with a balance yet.</EmptyHint>
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="Gini" value={dist.gini.toFixed(2)} hint={dist.gini < 0.4 ? "recht gleichmäßig" : dist.gini < 0.6 ? "mittel" : "konzentriert"} />
-            <Stat label={`Top ${dist.topShare.n} halten`} value={pct(dist.topShare.share, 0)} hint={`von ${dist.holderCount} Halter:innen`} />
-            <Stat label="Median" value={fmt(dist.median, 0)} hint="Münzen" />
+            <Stat label="Gini" value={dist.gini.toFixed(2)} hint={dist.gini < 0.4 ? "fairly even" : dist.gini < 0.6 ? "moderate" : "concentrated"} />
+            <Stat label={`Top ${dist.topShare.n} hold`} value={pct(dist.topShare.share, 0)} hint={`of ${dist.holderCount} holders`} />
+            <Stat label="Median" value={fmt(dist.median, 0)} hint="coins" />
           </div>
 
           <div>
-            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Halter:innen pro Guthaben-Stufe</div>
+            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Holders per balance band</div>
             <Histogram bars={dist.buckets.map((b) => ({ label: b.label, count: b.count, color: b.color }))} height={170} />
           </div>
 
           <div className="border-t border-border/70 pt-3">
-            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Konzentration (Lorenz-Kurve)</div>
+            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Concentration (Lorenz curve)</div>
             <LorenzCurve points={dist.lorenz} gini={dist.gini} height={200} />
             <p className="mt-1 text-center text-[11px] text-muted-foreground">
-              Goldene Linie = perfekte Gleichheit · Navy-Linie = tatsächlich · die Lücke ist die Ungleichheit.
+              Gold line = perfect equality · navy line = actual · the gap is inequality.
             </p>
           </div>
         </div>

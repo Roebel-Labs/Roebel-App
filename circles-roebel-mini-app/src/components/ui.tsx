@@ -109,7 +109,7 @@ export function PageHeader({
           className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.97]"
         >
           <Refresh className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          Aktualisieren
+          Refresh
         </button>
       )}
     </div>

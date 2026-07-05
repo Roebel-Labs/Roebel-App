@@ -15,9 +15,9 @@ export function ReputationSection({ rep, profiles }: { rep: RepNode[]; profiles:
   const top = rep.slice(0, 12);
 
   return (
-    <ChartCard title="Ansehen" subtitle="Gehaltene Münzen + Aktivität · Navy = verifizierte:r Bürger:in · tippen für Details">
+    <ChartCard title="Reputation" subtitle="Coins held + flow activity · navy = verified citizen · tap for breakdown">
       {rep.length === 0 ? (
-        <EmptyHint>Noch keine Ansehens-Daten.</EmptyHint>
+        <EmptyHint>No reputation data yet.</EmptyHint>
       ) : (
         <ol className="space-y-1">
           {top.map((n, i) => {
@@ -37,7 +37,7 @@ export function ReputationSection({ rep, profiles }: { rep: RepNode[]; profiles:
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium leading-tight text-foreground">{p?.name || shortAddr(n.address)}</span>
                     <span className="block text-[11px] tabular-nums text-muted-foreground">
-                      {fmt(n.held, 0)} Münzen · {n.inCount}↓ {n.outCount}↑
+                      {fmt(n.held, 0)} coins · {n.inCount}↓ {n.outCount}↑
                     </span>
                   </span>
                   <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
@@ -61,9 +61,9 @@ function Breakdown({ node }: { node: RepNode }) {
   const sent = node.outCount * 0.25;
   const total = held + recv + sent || 1;
   const parts = [
-    { label: "Gehaltene Münzen", value: held, color: C.navy },
-    { label: "Erhalten", value: recv, color: C.sky },
-    { label: "Gesendet", value: sent, color: C.gold },
+    { label: "Coins held", value: held, color: C.navy },
+    { label: "Received", value: recv, color: C.sky },
+    { label: "Sent", value: sent, color: C.gold },
   ];
   return (
     <div className="ml-[26px] mr-1.5 mb-2 mt-1.5 space-y-2 rounded-[10px] border border-border bg-card p-2.5">
@@ -89,7 +89,7 @@ function Breakdown({ node }: { node: RepNode }) {
         rel="noreferrer"
         className="inline-flex items-center gap-1 text-[11px] font-medium text-[#00498B] hover:underline"
       >
-        Aktivität ansehen
+        View on Circles explorer
         <ArrowUpRight className="h-3 w-3" />
       </a>
     </div>

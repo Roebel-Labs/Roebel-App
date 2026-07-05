@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { onWalletChange } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
+import { ROEBEL_GROUP } from "./lib/circles";
+import { explorerAvatar } from "./lib/citizens";
 import { initAnalytics, setAnalyticsWallet, track, startHeartbeat } from "./lib/analytics";
-import { Coins, BallotBox, Home, ChevronLeft } from "./components/icons";
+import { Coins, BallotBox, Home, ChevronLeft, ArrowUpRight } from "./components/icons";
 import logoData from "./assets/Logo-data.png";
 import InviteView from "./views/InviteView";
 import TownView from "./views/TownView";
@@ -16,9 +18,9 @@ type Tab = "town" | "economy" | "governance";
 // tab as openable pages (see TownView's "Citizen tools" cards + the Documentary card).
 type SubPage = "invite" | "event" | "documentary";
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
-  { id: "town", label: "Gemeinde", icon: Home },
-  { id: "economy", label: "Wirtschaft", icon: Coins },
-  { id: "governance", label: "Mitbestimmung", icon: BallotBox },
+  { id: "town", label: "Town", icon: Home },
+  { id: "economy", label: "Economy", icon: Coins },
+  { id: "governance", label: "Governance", icon: BallotBox },
 ];
 
 const urlParam = (k: string) => {
@@ -34,7 +36,7 @@ const urlInviter = (() => {
   const p = urlParam("inviter");
   return p && isAddress(p) ? getAddress(p) : null;
 })();
-// `?ref=<wallet>` — a referral link shared from inside the app.
+// `?ref=<wallet>` — a referral link shared from inside the app (the GrowCard).
 const urlRef = (() => {
   const p = urlParam("ref");
   return p && isAddress(p) ? getAddress(p) : null;
@@ -155,13 +157,21 @@ export default function App() {
                 onOpenDocumentary={() => openSub("documentary")}
               />
             ))}
-          {tab === "economy" && <PulseView connected={connected} />}
+          {tab === "economy" && <PulseView />}
           {tab === "governance" && <GovernanceView initialProposalId={urlProposal} />}
         </div>
 
         <footer className="mt-8 flex items-center justify-between border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
-          <span>Röbel / Müritz</span>
-          <span className="font-medium text-[#00498B]">Gemeinschaftswährung</span>
+          <span>Röbel / Müritz · Circles v2 on Gnosis</span>
+          <a
+            href={explorerAvatar(ROEBEL_GROUP)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-[#00498B] hover:underline"
+          >
+            On-chain proof
+            <ArrowUpRight className="h-3 w-3" />
+          </a>
         </footer>
       </main>
     </div>
@@ -177,7 +187,7 @@ function SubPage({ onBack, children }: { onBack: () => void; children: ReactNode
         className="-ml-1.5 inline-flex items-center gap-1 rounded-[10px] px-1.5 py-1 text-[13px] font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.98]"
       >
         <ChevronLeft className="h-4 w-4" />
-        Gemeinde
+        Town
       </button>
       {children}
     </div>

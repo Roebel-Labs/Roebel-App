@@ -88,17 +88,17 @@ export async function fetchProposalBody(p: Proposal): Promise<string> {
 // ── Governor state helpers ───────────────────────────────────────────────────
 // OpenZeppelin Governor proposal-state enum.
 export const STATE_LABEL: Record<number, string> = {
-  0: "Ausstehend",
-  1: "Aktiv",
-  2: "Abgebrochen",
-  3: "Abgelehnt",
-  4: "Angenommen",
-  5: "In Warteschlange",
-  6: "Abgelaufen",
-  7: "Umgesetzt",
+  0: "Pending",
+  1: "Active",
+  2: "Canceled",
+  3: "Defeated",
+  4: "Succeeded",
+  5: "Queued",
+  6: "Expired",
+  7: "Executed",
 };
 
-export const stateLabel = (s: number) => STATE_LABEL[s] ?? "Unbekannt";
+export const stateLabel = (s: number) => STATE_LABEL[s] ?? "Unknown";
 /** Pending or Active — the still-votable window. */
 export const isActiveState = (s: number) => s === 0 || s === 1;
 

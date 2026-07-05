@@ -15,7 +15,7 @@ import { track } from "../lib/analytics";
 type RowStatus = "checking" | "registered" | "invited" | "open" | "unknown";
 type Msg = { kind: "ok" | "err" | "info"; text: string; href?: string } | null;
 
-const crc = (a: bigint) => (Number(a) / 1e18).toLocaleString("de-DE", { maximumFractionDigits: 0 });
+const crc = (a: bigint) => (Number(a) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 export default function InviteView({ inviter }: { inviter: Address | null }) {
   const [quota, setQuota] = useState<bigint | null>(null);
@@ -109,22 +109,22 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
   const invited = useMemo(() => citizens.filter((c) => status[c.address.toLowerCase()] === "registered"), [citizens, status]);
 
   const invite = useCallback(async () => {
-    if (!inviter) return setMsg({ kind: "err", text: "Kein Konto verbunden — öffne diese App in der Röbel-App." });
+    if (!inviter) return setMsg({ kind: "err", text: "No wallet connected — open this app inside the Circles app." });
     const list = [...selectedList];
     if (extraValid) list.push(getAddress(extra.trim()) as Address);
-    if (!list.length) return setMsg({ kind: "err", text: "Niemand ausgewählt." });
+    if (!list.length) return setMsg({ kind: "err", text: "No addresses selected." });
 
     setBusy(true);
-    setMsg({ kind: "info", text: `Einladungen für ${list.length} Person(en) werden vorbereitet…` });
+    setMsg({ kind: "info", text: `Building invitations for ${list.length} address(es)…` });
     try {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
-      setMsg({ kind: "info", text: "Bitte bestätigen…" });
+      setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       const hashes = await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
       if (!hashes || hashes.length === 0) {
-        setMsg({ kind: "err", text: "Es wurde nichts abgeschickt. Falls dein Kontingent noch nicht gedeckt ist, nutze unten Selbst bezahlen." });
+        setMsg({ kind: "err", text: "The wallet returned no transaction — nothing was sent on-chain. If your quota isn't funded yet, use Self-fund below." });
         return;
       }
-      setMsg({ kind: "ok", text: `✓ ${list.length} Bürger:in(nen) eingeladen. Sie schließen jetzt in der Röbel-App ab („Bei den Röbel-Münzen mitmachen“).`, href: explorerTx(hashes[hashes.length - 1]) });
+      setMsg({ kind: "ok", text: `✓ Invited ${list.length} citizen(s). They now finish verifying in the Röbel app ("Join Röbel Coins").`, href: explorerTx(hashes[hashes.length - 1]) });
       track("invite_sent", { count: list.length });
       setExtra("");
       await refreshStatus();
@@ -135,7 +135,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
       setMsg({
         kind: "err",
         text: reverted
-          ? "Die Einladung ist fehlgeschlagen — dein Kontingent ist nicht gedeckt (der Einladungs-Topf ist leer). Nutze unten Selbst bezahlen oder bitte die Person, die den Topf auffüllt, um Nachschub."
+          ? "The invite reverted on-chain — your quota isn't funded (the invitation pool is empty). Use Self-fund below, or ask the pool funder to top up the farm."
           : raw,
       });
     } finally {
@@ -150,20 +150,20 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
     // meaningful tx lands, which is exactly the "I accept but nothing happens" bug.
     const needTrust = selectedList.filter((a) => status[a.toLowerCase()] === "open");
     if (!needTrust.length)
-      return setMsg({ kind: "info", text: "Alle Ausgewählten sind schon eingeladen — sie müssen nur noch in der Röbel-App „Bei den Röbel-Münzen mitmachen“ abschließen. Wähle eine noch nicht eingeladene Bürger:in, um eine neue Einladung zu senden." });
+      return setMsg({ kind: "info", text: "Everyone you selected is already invited — they just need to finish “Join Röbel Coins” in the Röbel app. Select an un-invited citizen to send a new invite." });
     const list = needTrust.slice(0, selfFund.affordable);
-    if (!list.length) return setMsg({ kind: "err", text: "Nicht genug Röbel-Münzen zum Selbst-Bezahlen (96 pro Einladung). Wähle weniger aus." });
+    if (!list.length) return setMsg({ kind: "err", text: "Not enough CRC to self-fund (96 per invite). Select fewer, or unwrap more." });
     setBusy(true);
-    setMsg({ kind: "info", text: `${list.length} Bürger:in(nen) werden eingeladen…` });
+    setMsg({ kind: "info", text: `Unwrapping CRC + trusting ${list.length} citizen(s)…` });
     try {
       const hashes = await sendTransactions(buildSelfFundTxs(selfFund, list));
       if (!hashes || hashes.length === 0) {
-        setMsg({ kind: "err", text: "Es wurde nichts abgeschickt. Bitte öffne die App erneut in der Röbel-App und versuch es nochmal." });
+        setMsg({ kind: "err", text: "The wallet returned no transaction hash — nothing landed on-chain. Please re-open the app inside the Circles app and try again." });
         return;
       }
       setMsg({
         kind: "ok",
-        text: `✓ ${list.length} Einladung(en) selbst bezahlt. Jede:r meldet sich jetzt in der Röbel-App an („Bei den Röbel-Münzen mitmachen“) — pro Anmeldung bezahlst du 96 Röbel-Münzen.`,
+        text: `✓ Self-funded ${list.length} invite(s). Each citizen now registers in the Röbel app ("Join Röbel Coins") — 96 CRC burns from you per registration.`,
         href: explorerTx(hashes[hashes.length - 1]),
       });
       track("self_fund_sent", { count: list.length });
@@ -210,7 +210,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
               <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
             </a>
           </div>
-          {c.attester && <Pill tone="primary">Bescheiniger:in</Pill>}
+          {c.attester && <Pill tone="primary">Attester</Pill>}
           <StatusBadge status={st} />
         </label>
       </li>
@@ -219,20 +219,20 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Bürger:innen einladen" description="Lade geprüfte Röbel-Bürger:innen mit deinen verfügbaren Einladungen zu den Röbel-Münzen ein." onRefresh={refreshStatus} />
+      <PageHeader title="Invite citizens" description="Bring verified Röbel citizens into Circles using your invitation quota." onRefresh={refreshStatus} />
 
       <div className="grid grid-cols-2 gap-3">
         <KpiCard
-          label="Einladen als"
-          value={inviter ? <span className="font-mono text-base">{shortAddr(inviter)}</span> : <span className="text-base text-muted-foreground">Verbinden</span>}
-          sub={inviter ? "verbundenes Konto" : "in der Röbel-App öffnen"}
+          label="Inviting as"
+          value={inviter ? <span className="font-mono text-base">{shortAddr(inviter)}</span> : <span className="text-base text-muted-foreground">Connect</span>}
+          sub={inviter ? "connected wallet" : "open in the Circles app"}
           tone={inviter ? "primary" : "warning"}
           icon={<Wallet className="h-5 w-5" />}
         />
         <KpiCard
-          label="Kontingent"
+          label="Quota"
           value={quotaNum == null ? "…" : quotaNum}
-          sub={funding == null ? "Einladungen verfügbar" : fundable! < (quotaNum ?? 0) ? `${fundable} gedeckt` : "Einladungen verfügbar"}
+          sub={funding == null ? "invites available" : fundable! < (quotaNum ?? 0) ? `${fundable} funded on-chain` : "invites available"}
           tone={quotaNum ? (funding && fundable === 0 ? "warning" : "success") : "muted"}
           icon={<UserPlus className="h-5 w-5" />}
         />
@@ -240,31 +240,31 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
 
       {quotaNum === 0 && (
         <Banner kind="info">
-          Noch kein Kontingent. Wende dich an das Team, damit dir Einladungen zugeteilt werden — sie erscheinen dann hier.
-          Du kannst unten trotzdem selbst bezahlen.
+          No quota yet. Share your Circles address with the Gnosis team to get quota assigned — your invites will appear here once
+          it's set. You can still self-fund below.
         </Banner>
       )}
 
       {quotaUnfunded && (
         <Banner kind="warn">
-          Dein Kontingent ({quotaNum}) ist noch nicht gedeckt — der Einladungs-Topf ist leer, eine Einladung daraus würde fehlschlagen.{" "}
+          Your quota ({quotaNum}) isn't funded on-chain yet — the invitation pool is empty, so a quota invite would revert.{" "}
           {selfFund && selfFund.affordable > 0 ? (
             <>
-              Nutze unten <strong>Selbst bezahlen</strong> ({selfFund.affordable} aus deinen eigenen Röbel-Münzen).
+              Use <strong>Self-fund</strong> below ({selfFund.affordable} from your own CRC).
             </>
           ) : (
-            <>Bitte die Person, die den Topf auffüllt, um Nachschub.</>
+            <>Ask the pool funder to top up the farm.</>
           )}
         </Banner>
       )}
 
       <ChartCard
-        title={`Bürger:innen (${citizens.length})`}
-        subtitle={`${invitable.length} einzuladen · ${pending.length} ausstehend · ${registeredCount} dabei`}
+        title={`Citizens (${citizens.length})`}
+        subtitle={`${invitable.length} to invite · ${pending.length} awaiting · ${registeredCount} verified`}
       >
         {invitable.length === 0 ? (
           <p className="px-1 py-3 text-center text-[13px] text-muted-foreground">
-            {pending.length > 0 ? "Alle Übrigen sind eingeladen — sie müssen nur noch in der Röbel-App beitreten." : "Alle Bürger:innen machen schon mit 🎉"}
+            {pending.length > 0 ? "Everyone left is invited — waiting on them to join in the Röbel app." : "All citizens are already in Circles 🎉"}
           </p>
         ) : (
           <ul className="-mx-1 divide-y divide-border">{invitable.map((c) => renderCitizen(c, true))}</ul>
@@ -273,11 +273,11 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         {pending.length > 0 && (
           <div className="mt-1 border-t border-border pt-2">
             <div className="flex items-center gap-2 px-1 pb-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Wartet auf Anmeldung</span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Awaiting registration</span>
               <Pill tone="warning">{pending.length}</Pill>
             </div>
             <p className="px-1 pb-1 text-[11px] leading-relaxed text-muted-foreground">
-              Von dir schon eingeladen — sie schließen in der Röbel-App ab („Bei den Röbel-Münzen mitmachen“). Pro Anmeldung bezahlst du 96 Röbel-Münzen.
+              Already invited by you — they finish in the Röbel app (“Join Röbel Coins”). 96 CRC burns from you when each one registers.
             </p>
             <ul className="-mx-1 divide-y divide-border">{pending.map((c) => renderCitizen(c, false))}</ul>
           </div>
@@ -292,7 +292,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
               className="flex w-full items-center gap-2 px-1 py-2.5 text-left transition hover:opacity-80"
             >
               <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${invitedOpen ? "rotate-90" : ""}`} />
-              <span className="text-[13px] font-medium text-foreground">Eingeladen</span>
+              <span className="text-[13px] font-medium text-foreground">Invited</span>
               <Pill tone="success">
                 <Check className="h-3 w-3" />
                 {invited.length}
@@ -318,7 +318,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         )}
 
         <div className="mt-3 border-t border-border pt-3">
-          <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Weitere Adresse (optional)</label>
+          <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Additional address (optional)</label>
           <input
             value={extra}
             onChange={(e) => setExtra(e.target.value.trim())}
@@ -326,14 +326,14 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
             spellCheck={false}
             className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2 font-mono text-sm outline-none transition focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/15"
           />
-          {extra && !extraValid && <p className="mt-1 text-xs font-medium text-foreground">Keine gültige Adresse.</p>}
+          {extra && !extraValid && <p className="mt-1 text-xs font-medium text-foreground">Not a valid address.</p>}
         </div>
       </ChartCard>
 
       <div className="flex items-center justify-between gap-3">
         <span className="text-[13px] text-muted-foreground">
-          Ausgewählt <strong className="text-foreground">{inviteCount}</strong>
-          {quotaNum != null && <> · Kontingent {quotaNum}</>}
+          Selected <strong className="text-foreground">{inviteCount}</strong>
+          {quotaNum != null && <> · quota {quotaNum}</>}
         </span>
         <button
           onClick={invite}
@@ -341,13 +341,13 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
           className="inline-flex items-center gap-2 rounded-[10px] bg-[#00498B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.98] disabled:opacity-40"
         >
           <UserPlus className="h-4 w-4" />
-          {busy ? "Lädt ein…" : `Einladen (${inviteCount})`}
+          {busy ? "Inviting…" : `Invite (${inviteCount})`}
         </button>
       </div>
-      {overQuota && <p className="-mt-2 text-xs text-muted-foreground">Mehr ausgewählt als dein Kontingent — bitte weniger auswählen.</p>}
+      {overQuota && <p className="-mt-2 text-xs text-muted-foreground">More selected than your quota — please reduce the selection.</p>}
       {!overQuota && overFunded && (
         <p className="-mt-2 text-xs text-muted-foreground">
-          Nur {fundable} deines Kontingents {fundable === 0 ? "ist" : "sind"} gedeckt — nutze unten Selbst bezahlen{fundable! > 0 ? " oder wähle weniger aus" : ""}.
+          Only {fundable} of your quota {fundable === 0 ? "is" : "are"} funded on-chain — use Self-fund below{fundable! > 0 ? ", or reduce the selection" : ""}.
         </p>
       )}
 
@@ -355,18 +355,18 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
         <Card className="p-3.5">
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-[#00498B]" />
-            <span className="text-[13px] font-semibold text-foreground">Selbst bezahlen — kein Kontingent nötig</span>
+            <span className="text-[13px] font-semibold text-foreground">Self-fund — no quota needed</span>
           </div>
           <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-            Bezahlt aus deinen eigenen Röbel-Münzen (96 pro Einladung). Verfügbar: {crc(selfFund.rawAtto)} + {crc(selfFund.wrappedAtto)} → reicht für{" "}
-            <strong className="text-foreground">{selfFund.affordable}</strong> Einladung(en). Die Bürger:innen melden sich danach in der Röbel-App an.
+            Uses your own CRC (96 per invite). You have {crc(selfFund.rawAtto)} raw + {crc(selfFund.wrappedAtto)} wrapped → funds{" "}
+            <strong className="text-foreground">{selfFund.affordable}</strong> invite(s). Citizens then register in the Röbel app.
           </p>
           <button
             onClick={selfFundInvite}
             disabled={busy || selfFund.affordable === 0 || openSelectedCount === 0}
             className="mt-2.5 w-full rounded-[10px] border border-[#00498B] bg-card px-4 py-2.5 text-sm font-semibold text-[#00498B] transition hover:bg-[#00498B]/5 active:scale-[0.99] disabled:opacity-40"
           >
-            {busy ? "Läuft…" : `Selbst bezahlen (${Math.min(openSelectedCount, selfFund.affordable)})`}
+            {busy ? "Working…" : `Self-fund invite (${Math.min(openSelectedCount, selfFund.affordable)})`}
           </button>
         </Card>
       )}
@@ -378,7 +378,7 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
             <>
               {" "}
               <a href={msg.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium underline">
-                Beleg ansehen <ExternalLink className="h-3 w-3" />
+                View tx <ExternalLink className="h-3 w-3" />
               </a>
             </>
           )}
@@ -392,11 +392,11 @@ function StatusBadge({ status }: { status: RowStatus }) {
   if (status === "registered")
     return (
       <Pill tone="success">
-        <Check className="h-3 w-3" /> dabei
+        <Check className="h-3 w-3" /> verified
       </Pill>
     );
-  if (status === "invited") return <Pill tone="warning">wartet auf Anmeldung</Pill>;
-  if (status === "open") return <Pill tone="muted">einladbar</Pill>;
+  if (status === "invited") return <Pill tone="warning">awaiting registration</Pill>;
+  if (status === "open") return <Pill tone="muted">invitable</Pill>;
   if (status === "unknown") return <span className="text-[11px] text-muted-foreground">?</span>;
   return <span className="text-[11px] text-muted-foreground/60">…</span>;
 }
