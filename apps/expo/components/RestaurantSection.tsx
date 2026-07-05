@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { RestaurantRecord } from '@/lib/types';
-import RestaurantCard from './RestaurantCard';
+import { RestaurantRecord, AccountRatingSummary } from '@/lib/types';
+import GastroCard from './GastroCard';
+import { fetchAccountRatingSummaries } from '@/lib/supabase-ratings';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { ArrowRight02Icon } from './Icons';
@@ -13,6 +14,24 @@ type Props = {
 export default function RestaurantSection({ restaurants }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
+  const [summaries, setSummaries] = useState<Record<string, AccountRatingSummary>>({});
+
+  // Star ratings live on the linked org account.
+  const accountIds = restaurants
+    .map((r) => r.account_id)
+    .filter((id): id is string => !!id);
+  const accountIdsKey = accountIds.join(',');
+
+  useEffect(() => {
+    if (!accountIdsKey) return;
+    let cancelled = false;
+    fetchAccountRatingSummaries(accountIdsKey.split(',')).then((sums) => {
+      if (!cancelled) setSummaries(sums);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdsKey]);
 
   if (restaurants.length === 0) {
     return null;
@@ -35,7 +54,12 @@ export default function RestaurantSection({ restaurants }: Props) {
       <FlatList
         horizontal
         data={restaurants}
-        renderItem={({ item }) => <RestaurantCard restaurant={item} compact />}
+        renderItem={({ item }) => (
+          <GastroCard
+            restaurant={item}
+            ratingSummary={item.account_id ? summaries[item.account_id] ?? null : null}
+          />
+        )}
         keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}

@@ -207,11 +207,8 @@ export default function ExploreScreen() {
               events={futurePopularEvents}
               showPagination
               loop
-              containerStyle={{ paddingVertical: 16, marginBottom: 0 }}
+              containerStyle={{ paddingTop: 8, paddingBottom: 16, marginBottom: 0 }}
             />
-
-            {/* Mini Apps store entry */}
-            <MiniAppsEntry />
 
             {/* This Week Events - Horizontal */}
             <ThisWeekEventsHorizontal events={futureEvents} />
@@ -219,11 +216,14 @@ export default function ExploreScreen() {
             {/* Movies */}
             <MovieSection movies={movies} />
 
-            {/* Marketplace */}
-            <MarketplaceSection listings={listings} />
-
             {/* Deals */}
             <DealsGridSection deals={deals} />
+
+            {/* Mini Apps store entry */}
+            <MiniAppsEntry />
+
+            {/* Marketplace */}
+            <MarketplaceSection listings={listings} />
 
             {/* News */}
             <NewsSection articles={newsArticles} />

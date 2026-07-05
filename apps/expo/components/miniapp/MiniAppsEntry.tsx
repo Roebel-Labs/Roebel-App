@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
   },
-  title: { fontFamily: fontFamily.heading, fontSize: 22 },
+  title: { fontFamily: 'MonaSansSemiCondensed-Medium', fontSize: 22 },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   seeAllText: { fontFamily: fontFamily.medium, fontSize: 13 },
   grid: {

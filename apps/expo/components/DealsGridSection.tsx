@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import BusinessDealCard from './BusinessDealCard';
 import type { BusinessDealWithBusiness } from '@/lib/types';
@@ -15,7 +14,6 @@ type Props = {
 };
 
 export default function DealsGridSection({ deals }: Props) {
-  const router = useRouter();
   const { colors } = useTheme();
 
   const displayDeals = useMemo(() => {
@@ -41,12 +39,6 @@ export default function DealsGridSection({ deals }: Props) {
           />
         ))}
       </View>
-      <Pressable
-        style={[styles.viewAllButton, { borderColor: colors.border }]}
-        onPress={() => router.push('/deals' as any)}
-      >
-        <Text style={[styles.viewAllText, { color: colors.textPrimary }]}>Alles anzeigen</Text>
-      </Pressable>
     </View>
   );
 }
@@ -72,17 +64,5 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: GRID_PADDING,
     gap: GRID_GAP,
-  },
-  viewAllButton: {
-    marginHorizontal: GRID_PADDING,
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  viewAllText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
   },
 });
