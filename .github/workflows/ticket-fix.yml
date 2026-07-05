@@ -41,6 +41,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Preflight — verify TICKET_FIX_PAT is set and valid
+        env:
+          TOKEN: ${{ secrets.TICKET_FIX_PAT }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Repo-Secret TICKET_FIX_PAT fehlt (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" https://api.github.com/repos/${{ github.repository }})
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::TICKET_FIX_PAT ist ungültig oder hat keinen Zugriff auf ${{ github.repository }} (HTTP $STATUS)."
+            exit 1
+          fi
+
       # PAT (not GITHUB_TOKEN): pushes/PRs from GITHUB_TOKEN don't trigger
       # ci.yml / security-review on the PR — the merge gate needs green CI.
       - uses: actions/checkout@v4
