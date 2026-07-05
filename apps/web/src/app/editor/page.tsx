@@ -460,7 +460,12 @@ export default function NewMiniAppBuilderPage() {
             ) : null}
           </div>
           {tab === "preview" ? (
-            <PreviewFrame html={activeHtml} appName={published?.slug ?? "Mini-App"} />
+            <PreviewFrame
+              html={activeHtml}
+              appName={published?.slug ?? "Mini-App"}
+              appSlug={published?.slug ?? preset?.slug ?? null}
+              wallet={wallet}
+            />
           ) : tab === "canvas" ? (
             <CanvasView
               baseHtml={activeHtml}

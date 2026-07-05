@@ -74,6 +74,20 @@ main > section[data-screen] { display: none; }
 main > section[data-screen].active { display: block; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 </style>
+<script type="module">
+// Host-Screenshot-Bridge: der Editor/Playground sendet {type:"netizen:capture"},
+// die App antwortet mit einem PNG-DataURL ihres aktuellen Zustands.
+window.addEventListener("message", async (e) => {
+  if (!e.data || e.data.type !== "netizen:capture") return;
+  try {
+    const { toPng } = await import("https://esm.sh/html-to-image@1.11.11");
+    const dataUrl = await toPng(document.body, { pixelRatio: 2, backgroundColor: getComputedStyle(document.body).backgroundColor });
+    (e.source || parent).postMessage({ type: "netizen:capture:result", dataUrl }, "*");
+  } catch (err) {
+    (e.source || parent).postMessage({ type: "netizen:capture:error", error: String(err) }, "*");
+  }
+});
+</script>
 </head>`;
 
 const SCREEN_RULES = `## Screens (Pflicht-Struktur)
