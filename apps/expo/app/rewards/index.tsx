@@ -110,6 +110,7 @@ export default function RewardsIndexScreen() {
     talerBalance,
     mintable: talerMintable,
     onboarded: talerOnboarded,
+    groupBalanceRaw: talerGroupRaw,
     loading: talerLoading,
     minting: talerMinting,
     onboarding: talerOnboarding,
@@ -422,20 +423,22 @@ export default function RewardsIndexScreen() {
         {/* White rounded sheet wraps everything from Senden/Empfangen down */}
         <View style={[styles.sheet, { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}>
         {/* Senden / Empfangen — above the daily mint button */}
-        {isConnected && talerOnboarded && (
+        {isConnected && (
           <View style={styles.sendRecvRow}>
-            <Pressable
-              onPress={() => router.push('/rewards/send' as any)}
-              style={({ pressed }) => [
-                styles.srBtn,
-                { backgroundColor: isDark ? colors.surface : '#F2F2F2', opacity: pressed ? 0.6 : 1 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Röbel Münzen senden"
-            >
-              <NavigationIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
-              <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#000000' }]}>Senden</Text>
-            </Pressable>
+            {talerGroupRaw > 0n && (
+              <Pressable
+                onPress={() => router.push('/rewards/send' as any)}
+                style={({ pressed }) => [
+                  styles.srBtn,
+                  { backgroundColor: isDark ? colors.surface : '#F2F2F2', opacity: pressed ? 0.6 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Röbel Münzen senden"
+              >
+                <NavigationIcon width={20} height={20} color={isDark ? colors.textPrimary : '#001A42'} />
+                <Text style={[styles.srText, { color: isDark ? colors.textPrimary : '#000000' }]}>Senden</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => setShowReceive(true)}
               style={({ pressed }) => [

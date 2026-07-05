@@ -35,7 +35,7 @@ export default function SendRoebelScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { showSnackbar } = useSnackbar();
-  const { talerBalance, send, sending, account } = useRoebelTaler();
+  const { groupBalance, send, sending, account } = useRoebelTaler();
 
   const [recipients, setRecipients] = useState<Recipient[] | null>(null);
   const [query, setQuery] = useState('');
@@ -70,7 +70,7 @@ export default function SendRoebelScreen() {
       showSnackbar({ message: 'Bitte einen Betrag eingeben' });
       return;
     }
-    if (Number(amount.replace(',', '.')) > talerBalance) {
+    if (Number(amount.replace(',', '.')) > groupBalance) {
       showSnackbar({ message: 'Nicht genug Röbel Münzen' });
       return;
     }
@@ -81,7 +81,7 @@ export default function SendRoebelScreen() {
     } catch (e: any) {
       Alert.alert('Senden fehlgeschlagen', e?.message ?? String(e));
     }
-  }, [selected, amount, talerBalance, send, router, showSnackbar]);
+  }, [selected, amount, groupBalance, send, router, showSnackbar]);
 
   const themed = makeStyles(colors);
 
@@ -101,7 +101,7 @@ export default function SendRoebelScreen() {
       </View>
 
       <Text style={themed.balance}>
-        Verfügbar: {Math.round(talerBalance).toLocaleString('de-DE')} Röbel Münzen
+        Verfügbar: {Math.round(groupBalance).toLocaleString('de-DE')} Röbel Münzen
       </Text>
 
       {!selected ? (
