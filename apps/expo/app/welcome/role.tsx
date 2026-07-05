@@ -17,8 +17,14 @@ const ROLES: { value: PreferredRole; image: ImageSourcePropType; label: string; 
   {
     value: 'tourist',
     image: require('../../assets/illustration/onboarding/suitcase.png'),
-    label: 'Tourist:in',
+    label: 'Besucher:in',
     desc: 'Ich besuche Röbel.',
+  },
+  {
+    value: 'organisation',
+    image: require('../../assets/illustration/small/services.png'),
+    label: 'Organisation',
+    desc: 'Ich führe ein Unternehmen oder einen Verein in Röbel.',
   },
 ];
 
@@ -30,7 +36,7 @@ export default function WelcomeRoleScreen() {
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <StoryProgress step={2} totalSteps={3} />
+        <StoryProgress step={2} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Was trifft auf dich zu?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wir zeigen dir passende Funktionen. Du kannst die Auswahl später ändern.
@@ -65,7 +71,12 @@ export default function WelcomeRoleScreen() {
 
       <WizardFooter
         onBack={() => router.back()}
-        onNext={() => state.preferredRole && router.push('/welcome/consent' as any)}
+        onNext={() =>
+          state.preferredRole &&
+          router.push(
+            (state.preferredRole === 'buerger' ? '/welcome/citizen-data' : '/welcome/consent') as any,
+          )
+        }
         nextDisabled={!state.preferredRole}
       />
     </SafeAreaView>
