@@ -1,3 +1,5 @@
+import { escapeHtmlText, sanitizeNewsletterHtml } from "./sanitize"
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 
 const TAG_STYLES: Record<string, string> = {
@@ -40,12 +42,12 @@ export function renderNewsletterEmail(opts: {
   unsubscribeUrl: string
 }): string {
   const { subject, preheader, contentHtml, unsubscribeUrl } = opts
-  const body = inlineStyleNewsletterHtml(contentHtml)
+  const body = inlineStyleNewsletterHtml(sanitizeNewsletterHtml(contentHtml))
   return `<!DOCTYPE html>
 <html lang="de">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${subject}</title></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtmlText(subject)}</title></head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f3f4f6;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>` : ""}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtmlText(preheader)}</div>` : ""}
   <table role="presentation" style="width:100%;border-collapse:collapse;"><tr><td align="center" style="padding:24px 12px;">
     <table role="presentation" style="width:100%;max-width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:16px;overflow:hidden;">
       <tr><td style="background-color:#00498B;padding:24px 32px;">

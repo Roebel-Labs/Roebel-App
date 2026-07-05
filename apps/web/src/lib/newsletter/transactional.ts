@@ -19,6 +19,20 @@ function simpleEmailHtml(heading: string, bodyHtml: string): string {
 const CONFIRM_BUTTON = (url: string) =>
   `<a href="${url}" style="display:inline-block;background:#00498B;color:#ffffff;font-size:15px;font-weight:600;padding:12px 24px;border-radius:10px;text-decoration:none;margin:8px 0 16px;">Anmeldung bestätigen</a>`
 
+/** Builds the invite-variant subject+html so `inviteAppUsers` can batch-send
+ *  without going through the single-send `sendConfirmationEmail` per recipient. */
+export function buildInviteEmail(confirmToken: string): { subject: string; html: string } {
+  const url = `${BASE_URL}/newsletter/bestaetigen?token=${confirmToken}`
+  const intro = `<p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 14px;">Moin! Du nutzt die Röbel App — ab jetzt gibt es auch einen wöchentlichen Newsletter mit allem, was in Röbel passiert: Neuigkeiten, Veranstaltungen, Abstimmungen und mehr.</p>`
+  return {
+    subject: "Der Röbel-Newsletter ist da — möchtest du dabei sein?",
+    html: simpleEmailHtml(
+      "Der Röbel-Newsletter ist da",
+      `${intro}${CONFIRM_BUTTON(url)}<p style="font-size:13px;line-height:1.6;color:#6B7280;margin:0;">Wenn du das nicht warst, kannst du diese E-Mail einfach ignorieren — ohne Bestätigung bekommst du keinen Newsletter.</p>`
+    ),
+  }
+}
+
 export async function sendConfirmationEmail(
   email: string,
   confirmToken: string,
@@ -26,20 +40,26 @@ export async function sendConfirmationEmail(
 ): Promise<boolean> {
   if (!resend) return false
   const url = `${BASE_URL}/newsletter/bestaetigen?token=${confirmToken}`
-  const intro =
-    kind === "invite"
-      ? `<p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 14px;">Moin! Du nutzt die Röbel App — ab jetzt gibt es auch einen wöchentlichen Newsletter mit allem, was in Röbel passiert: Neuigkeiten, Veranstaltungen, Abstimmungen und mehr.</p>`
-      : `<p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 14px;">Moin! Nur noch ein Klick, dann bekommst du jede Woche die wichtigsten Neuigkeiten aus Röbel/Müritz direkt ins Postfach.</p>`
+  if (kind === "invite") {
+    const { subject, html } = buildInviteEmail(confirmToken)
+    const { error } = await resend.emails.send({
+      from: EMAIL_CONFIG.fromNewsletter,
+      to: email,
+      replyTo: EMAIL_CONFIG.replyTo,
+      subject,
+      html,
+    })
+    if (error) console.error("[Newsletter] Confirmation email failed:", error)
+    return !error
+  }
+  const intro = `<p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 14px;">Moin! Nur noch ein Klick, dann bekommst du jede Woche die wichtigsten Neuigkeiten aus Röbel/Müritz direkt ins Postfach.</p>`
   const { error } = await resend.emails.send({
     from: EMAIL_CONFIG.fromNewsletter,
     to: email,
     replyTo: EMAIL_CONFIG.replyTo,
-    subject:
-      kind === "invite"
-        ? "Der Röbel-Newsletter ist da — möchtest du dabei sein?"
-        : "Bitte bestätige deine Newsletter-Anmeldung",
+    subject: "Bitte bestätige deine Newsletter-Anmeldung",
     html: simpleEmailHtml(
-      kind === "invite" ? "Der Röbel-Newsletter ist da" : "Fast geschafft!",
+      "Fast geschafft!",
       `${intro}${CONFIRM_BUTTON(url)}<p style="font-size:13px;line-height:1.6;color:#6B7280;margin:0;">Wenn du das nicht warst, kannst du diese E-Mail einfach ignorieren — ohne Bestätigung bekommst du keinen Newsletter.</p>`
     ),
   })

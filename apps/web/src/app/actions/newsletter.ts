@@ -5,11 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { isAuthenticated } from "@/lib/auth/session"
 import { resend, EMAIL_CONFIG } from "@/lib/resend"
 import { renderNewsletterEmail } from "@/lib/newsletter/template"
-import { sendConfirmationEmail } from "@/lib/newsletter/transactional"
+import { sendConfirmationEmail, buildInviteEmail } from "@/lib/newsletter/transactional"
 import {
   generateNewsletterDraft,
   regenerateIssueContent,
 } from "@/lib/newsletter/generate"
+import { sanitizeNewsletterHtml } from "@/lib/newsletter/sanitize"
 import type { NewsletterIssue, NewsletterSubscriber } from "@/lib/newsletter/types"
 
 export type { NewsletterIssue, NewsletterSubscriber }
@@ -64,7 +65,11 @@ export async function updateIssue(
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from("newsletter_issues")
-    .update({ ...fields, updated_at: new Date().toISOString() })
+    .update({
+      ...fields,
+      content_html: sanitizeNewsletterHtml(fields.content_html),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("status", "draft")
     .select("id")
@@ -260,7 +265,15 @@ export async function deleteSubscriberById(id: string): Promise<{ success: boole
 
 export async function exportSubscribersCsv(): Promise<string> {
   await guard()
-  const subscribers = await listSubscribers()
+  // Query directly instead of listSubscribers() — that helper caps at 1000 rows,
+  // which would silently truncate the export for larger subscriber lists.
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from("newsletter_subscribers")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50000)
+  const subscribers = (data as NewsletterSubscriber[]) ?? []
   // Formel-Injektion in Excel/Sheets verhindern: gefährliche Startzeichen neutralisieren
   const safeCell = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v)
   const header = "email,status,source,created_at"
@@ -286,37 +299,50 @@ export async function inviteAppUsers(): Promise<{
   const targets = (users ?? []).filter(
     (u) => u.email && EMAIL_RE.test(u.email) && !existingSet.has(u.email.toLowerCase())
   )
+
+  const rows = targets.map((u) => ({
+    email: u.email!.toLowerCase(),
+    status: "pending" as const,
+    source: "app_user" as const,
+    wallet_address: u.wallet_address,
+    consent_note: "Einladung an bestehenden App-Nutzer",
+  }))
+
   let invited = 0
   let failed = 0
-  for (const user of targets) {
-    const { data: created } = await supabase
+
+  if (rows.length > 0 && resend) {
+    const { data: created, error: insertError } = await supabase
       .from("newsletter_subscribers")
-      .insert({
-        email: user.email!.toLowerCase(),
-        status: "pending",
-        source: "app_user",
-        wallet_address: user.wallet_address,
-        consent_note: "Einladung an bestehenden App-Nutzer",
+      .upsert(rows, { onConflict: "email", ignoreDuplicates: true })
+      .select("email, confirm_token")
+    if (insertError) console.error("[Newsletter] invite insert failed:", insertError)
+    const createdRows = created ?? []
+    for (let i = 0; i < createdRows.length; i += 100) {
+      const chunk = createdRows.slice(i, i + 100)
+      const payloads = chunk.map((row) => {
+        const { subject, html } = buildInviteEmail(row.confirm_token)
+        return { from: EMAIL_CONFIG.fromNewsletter, to: row.email, replyTo: EMAIL_CONFIG.replyTo, subject, html }
       })
-      .select("confirm_token")
-      .single()
-    if (created) {
-      const ok = await sendConfirmationEmail(user.email!.toLowerCase(), created.confirm_token, "invite")
-      if (ok) {
-        invited++
-      } else {
-        // Zeile bleibt 'pending' — ein späterer Re-Run lädt sie NICHT erneut ein
+      try {
+        const { error } = await resend.batch.send(payloads)
+        if (error) throw error
+        invited += chunk.length
+      } catch (err) {
+        // Zeilen bleiben 'pending' — ein späterer Re-Run lädt sie NICHT erneut ein
         // (existingSet greift dann bereits). Sichtbar für Admins als "Unbestätigt"
         // in der Abonnenten-Tabelle — das ist der Sichtbarkeits-Mechanismus.
-        failed++
-        console.error("[Newsletter] invite email failed:", user.email)
+        failed += chunk.length
+        console.error("[Newsletter] invite batch failed:", err)
       }
-      await new Promise((r) => setTimeout(r, 600)) // Resend ~2 req/s
-    } else {
-      failed++
-      console.error("[Newsletter] invite insert failed:", user.email)
+      if (i + 100 < createdRows.length) await new Promise((r) => setTimeout(r, 600)) // Resend ~2 req/s
     }
+    failed += rows.length - createdRows.length
+  } else if (rows.length > 0) {
+    failed += rows.length
+    console.error("[Newsletter] invite skipped: Resend nicht konfiguriert")
   }
+
   revalidatePath(ADMIN_PATH)
   return { success: true, invited, failed, alreadySubscribed: (users?.length ?? 0) - targets.length }
 }

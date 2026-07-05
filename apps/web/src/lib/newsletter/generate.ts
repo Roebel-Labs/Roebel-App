@@ -4,6 +4,7 @@ import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { gatherNewsletterContent, type NewsletterSourceData } from "./gather"
 import { sendDraftReadyEmail } from "./transactional"
+import { sanitizeNewsletterHtml } from "./sanitize"
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 
@@ -99,6 +100,7 @@ export async function generateNewsletterDraft(opts?: {
       .from("newsletter_issues")
       .select("id")
       .eq("status", "draft")
+      .eq("generated_by", "ai")
       .limit(1)
       .maybeSingle()
     if (draftCheckError) {
@@ -106,7 +108,7 @@ export async function generateNewsletterDraft(opts?: {
       return { created: false, reason: "Entwurfs-Prüfung fehlgeschlagen — bitte erneut versuchen." }
     }
     if (existingDraft) {
-      return { created: false, reason: "Es existiert bereits ein unversendeter Entwurf." }
+      return { created: false, reason: "Es existiert bereits ein unversendeter KI-Entwurf." }
     }
   }
 
@@ -122,7 +124,7 @@ export async function generateNewsletterDraft(opts?: {
     .insert({
       subject: object.subject,
       preheader: object.preheader,
-      content_html: sectionsToHtml(object.sections),
+      content_html: sanitizeNewsletterHtml(sectionsToHtml(object.sections)),
       status: "draft",
       generated_by: "ai",
       generation_sources: sourceCounts(data),
@@ -165,7 +167,7 @@ export async function regenerateIssueContent(
     .update({
       subject: object.subject,
       preheader: object.preheader,
-      content_html: sectionsToHtml(object.sections),
+      content_html: sanitizeNewsletterHtml(sectionsToHtml(object.sections)),
       generated_by: "ai",
       generation_sources: sourceCounts(data),
       updated_at: new Date().toISOString(),

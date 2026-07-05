@@ -34,16 +34,32 @@ export async function POST(req: NextRequest) {
   if (!issue.subject?.trim()) return NextResponse.json({ error: "Betreff fehlt" }, { status: 400 })
 
   // Lock: draft → sending (normal send) / sent|failed → sending (retry).
-  const fromStatuses = retryFailedOnly ? ["sent", "failed"] : ["draft"]
-  const { data: locked } = await supabase
-    .from("newsletter_issues")
-    .update({ status: "sending", updated_at: new Date().toISOString() })
-    .eq("id", issueId)
-    .in("status", fromStatuses)
-    .select("id")
+  // Retry also rescues a stale 'sending' row — a function killed mid-send would
+  // otherwise leave the issue stuck forever with no way to retry it.
+  const { data: locked } = retryFailedOnly
+    ? await supabase
+        .from("newsletter_issues")
+        .update({ status: "sending", updated_at: new Date().toISOString() })
+        .eq("id", issueId)
+        .or(
+          `status.in.(sent,failed),and(status.eq.sending,updated_at.lt.${new Date(
+            Date.now() - 10 * 60 * 1000
+          ).toISOString()})`
+        )
+        .select("id")
+    : await supabase
+        .from("newsletter_issues")
+        .update({ status: "sending", updated_at: new Date().toISOString() })
+        .eq("id", issueId)
+        .in("status", ["draft"])
+        .select("id")
   if (!locked?.length) {
     return NextResponse.json(
-      { error: retryFailedOnly ? "Kein erneuter Versand möglich." : "Ausgabe ist kein Entwurf (läuft der Versand bereits?)" },
+      {
+        error: retryFailedOnly
+          ? "Kein erneuter Versand möglich (läuft der Versand noch?)"
+          : "Ausgabe ist kein Entwurf (läuft der Versand bereits?)",
+      },
       { status: 409 }
     )
   }
@@ -60,6 +76,8 @@ export async function POST(req: NextRequest) {
         // 'queued' mit einschließen: Zeilen, deren Status-Update nach dem Versand fehlschlug
         // oder die nie dispatched wurden. Dank Idempotency-Key ist ein erneuter Versand
         // derselben Batch-Zusammensetzung dedupliziert.
+        // Restrisiko: ändert sich die Batch-Zusammensetzung (z.B. Teilmenge nur aus 'queued')
+        // oder liegt der Retry >24h zurück, greift die Deduplizierung nicht.
         .in("status", ["failed", "queued"])
       recipients = (failedSends ?? [])
         .filter((s: any) => s.newsletter_subscribers?.status === "active")

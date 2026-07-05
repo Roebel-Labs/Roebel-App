@@ -1,11 +1,35 @@
 "use server"
 
+import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendConfirmationEmail } from "@/lib/newsletter/transactional"
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+const COOLDOWN_MS = 15 * 60 * 1000
+
+// Best-effort per-IP throttle (module-level, warm-lambda scope). Nicht die harte
+// Grenze — der DB-Cooldown pro Adresse (unten) ist die eigentliche Sperre.
+const ipHits = new Map<string, { count: number; resetAt: number }>()
+function ipThrottled(ip: string): boolean {
+  const now = Date.now()
+  const entry = ipHits.get(ip)
+  if (!entry || now > entry.resetAt) {
+    ipHits.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 })
+    return false
+  }
+  entry.count++
+  return entry.count > 10
+}
 
 export async function subscribeToNewsletter(email: string): Promise<{ success: boolean; message: string }> {
+  // Silent success for already-active addresses — never reveal subscription state.
+  const okMessage = "Fast geschafft! Bitte bestätige deine Anmeldung über den Link in deinem Postfach."
+
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+  if (ipThrottled(ip)) {
+    return { success: true, message: okMessage }
+  }
+
   const normalized = email.trim().toLowerCase()
   if (!EMAIL_RE.test(normalized)) {
     return { success: false, message: "Bitte gib eine gültige E-Mail-Adresse ein." }
@@ -13,12 +37,9 @@ export async function subscribeToNewsletter(email: string): Promise<{ success: b
   const supabase = createAdminClient()
   const { data: existing } = await supabase
     .from("newsletter_subscribers")
-    .select("id, status")
+    .select("id, status, updated_at")
     .eq("email", normalized)
     .maybeSingle()
-
-  // Silent success for already-active addresses — never reveal subscription state.
-  const okMessage = "Fast geschafft! Bitte bestätige deine Anmeldung über den Link in deinem Postfach."
 
   if (existing?.status === "active") {
     return { success: true, message: okMessage }
@@ -31,6 +52,10 @@ export async function subscribeToNewsletter(email: string): Promise<{ success: b
   }
 
   if (existing) {
+    // Per-email cooldown: don't re-send confirmation mails on rapid repeat submits.
+    if (existing.updated_at && Date.now() - new Date(existing.updated_at).getTime() < COOLDOWN_MS) {
+      return { success: true, message: okMessage }
+    }
     const { data: updated, error: updateError } = await supabase
       .from("newsletter_subscribers")
       .update({

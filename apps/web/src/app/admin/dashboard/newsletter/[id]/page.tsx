@@ -18,6 +18,7 @@ import {
   getIssue, updateIssue, previewIssueEmail, sendTestEmail, regenerateDraft,
   getActiveSubscriberCount, getUnsentSendCount, type NewsletterIssue,
 } from "@/app/actions/newsletter"
+import { sanitizeNewsletterHtml } from "@/lib/newsletter/sanitize"
 
 export default function NewsletterIssueEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -43,8 +44,11 @@ export default function NewsletterIssueEditorPage() {
       setSubject(data.subject)
       setPreheader(data.preheader ?? "")
       setContentHtml(data.content_html)
-      if (data.status === "sent" || data.status === "failed") setUnsentCount(await getUnsentSendCount(data.id))
-      else setUnsentCount(0)
+      if (data.status === "sent" || data.status === "failed" || data.status === "sending") {
+        setUnsentCount(await getUnsentSendCount(data.id))
+      } else {
+        setUnsentCount(0)
+      }
     }
     setLoading(false)
   }, [id])
@@ -195,7 +199,7 @@ export default function NewsletterIssueEditorPage() {
               </AlertDialog>
             </>
           )}
-          {(issue.status === "failed" || issue.status === "sent") && unsentCount > 0 && (
+          {(issue.status === "failed" || issue.status === "sent" || issue.status === "sending") && unsentCount > 0 && (
             <Button variant="outline" onClick={handleRetryFailed} disabled={sending}>
               Fehlgeschlagene erneut senden ({unsentCount})
             </Button>
@@ -207,6 +211,7 @@ export default function NewsletterIssueEditorPage() {
         <iframe
           srcDoc={previewHtml}
           title="E-Mail-Vorschau"
+          sandbox=""
           className="h-[75vh] w-full rounded-xl border border-gray-200 bg-white"
         />
       ) : (
@@ -224,7 +229,7 @@ export default function NewsletterIssueEditorPage() {
             {isDraft ? (
               <RichTextEditor content={contentHtml} onChange={setContentHtml} placeholder="Newsletter-Inhalt…" />
             ) : (
-              <div className="prose max-w-none rounded-xl border border-gray-200 bg-white p-6" dangerouslySetInnerHTML={{ __html: issue.content_html }} />
+              <div className="prose max-w-none rounded-xl border border-gray-200 bg-white p-6" dangerouslySetInnerHTML={{ __html: sanitizeNewsletterHtml(issue.content_html) }} />
             )}
           </div>
           {isDraft && (

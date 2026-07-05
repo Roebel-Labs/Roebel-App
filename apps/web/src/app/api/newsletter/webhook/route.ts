@@ -41,6 +41,12 @@ export async function POST(req: NextRequest) {
   const svixId = req.headers.get("svix-id") ?? ""
   const svixTimestamp = req.headers.get("svix-timestamp") ?? ""
   const svixSignature = req.headers.get("svix-signature") ?? ""
+
+  const ts = Number(svixTimestamp)
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    return NextResponse.json({ error: "stale timestamp" }, { status: 401 })
+  }
+
   if (!verifySvixSignature(secret, svixId, svixTimestamp, payload, svixSignature)) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 })
   }
