@@ -10,10 +10,12 @@ const MeckyPostsSchema = z.object({
         .string()
         .max(500)
         .describe("Der Post-Text in Meckys Stimme, max 500 Zeichen"),
+      // NOTE: no .min(0) here — Anthropic's native structured-outputs API
+      // (used by @ai-sdk/anthropic v3) rejects the `minimum` JSON-schema
+      // keyword on integer types with a 400. Range is validated in code below.
       source_index: z
         .number()
         .int()
-        .min(0)
         .describe("Index des Nachrichtenartikels aus der Liste (0-basiert)"),
     })
   ),
