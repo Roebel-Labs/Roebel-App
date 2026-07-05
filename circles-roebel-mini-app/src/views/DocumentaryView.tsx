@@ -9,7 +9,7 @@ import { PageHeader, Avatar } from "../components/ui";
 import { ChevronLeft, ChevronRight, Play, ArrowUpRight, Users, Film } from "../components/icons";
 
 const fmtDate = (iso: string) =>
-  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  iso ? new Date(iso).toLocaleDateString("de-DE", { month: "short", day: "numeric", year: "numeric" }) : "";
 
 export default function DocumentaryView({ onBack }: { onBack: () => void }) {
   const [selected, setSelected] = useState<number | null>(null);
@@ -41,10 +41,10 @@ export default function DocumentaryView({ onBack }: { onBack: () => void }) {
 function VideoList({ onBack, onOpen }: { onBack: () => void; onOpen: (i: number) => void }) {
   return (
     <div className="space-y-4">
-      <BackButton label="Town" onClick={onBack} />
+      <BackButton label="Stadt" onClick={onBack} />
       <PageHeader
-        title="Video Documentary"
-        description="Follow the build, episode by episode — short films from the making of the Röbel app, minted onchain on Zora."
+        title="Video-Doku"
+        description="Verfolge die Entstehung, Folge für Folge — kurze Filme über die Entwicklung der Röbel-App."
       />
 
       <div className="space-y-3.5">
@@ -70,7 +70,7 @@ function VideoCard({ video: v, onClick }: { video: DocVideo; onClick: () => void
           className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
         />
         <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
-          Ep {v.episode}
+          Folge {v.episode}
         </span>
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#00498B] shadow-lg ring-1 ring-black/5 transition group-hover:scale-110">
@@ -85,7 +85,7 @@ function VideoCard({ video: v, onClick }: { video: DocVideo; onClick: () => void
           <span className="text-border">•</span>
           <span className="inline-flex items-center gap-1">
             <Users className="h-3 w-3" />
-            {v.holders} {v.holders === 1 ? "holder" : "holders"}
+            {v.holders} {v.holders === 1 ? "Sammler:in" : "Sammler:innen"}
           </span>
         </div>
       </div>
@@ -117,7 +117,7 @@ function VideoDetail({
 
   return (
     <div className="space-y-4">
-      <BackButton label="Video Documentary" onClick={onBackToList} />
+      <BackButton label="Video-Doku" onClick={onBackToList} />
 
       {/* Custom in-app player — streams the source mp4 from IPFS. `key` forces a
           fresh load (and re-applies the poster) when switching episodes. */}
@@ -137,7 +137,7 @@ function VideoDetail({
         <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <span className="inline-flex items-center gap-1 rounded-full bg-[#00498B]/10 px-2 py-0.5 text-[#00498B]">
             <Film className="h-3 w-3" />
-            Episode {v.episode}
+            Folge {v.episode}
           </span>
           <span>{fmtDate(v.createdAt)}</span>
         </div>
@@ -149,10 +149,10 @@ function VideoDetail({
         <Avatar address={CREATOR_ADDRESS} name={v.creatorHandle} imageUrl={v.creatorAvatar} size={32} />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-foreground">
-            {v.creatorHandle ? `@${v.creatorHandle}` : "Creator"}
+            {v.creatorHandle ? `@${v.creatorHandle}` : "Ersteller:in"}
           </div>
           <div className="text-[11px] text-muted-foreground">
-            {v.holders} {v.holders === 1 ? "collector" : "collectors"}
+            {v.holders} {v.holders === 1 ? "Sammler:in" : "Sammler:innen"}
           </div>
         </div>
       </div>
@@ -162,7 +162,7 @@ function VideoDetail({
         <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">{v.description}</p>
       ) : (
         <p className="text-[13px] italic leading-relaxed text-muted-foreground">
-          A short episode from the build of the Röbel app.
+          Eine kurze Folge über die Entwicklung der Röbel-App.
         </p>
       )}
 
@@ -173,7 +173,7 @@ function VideoDetail({
         rel="noreferrer"
         className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#00498B] bg-[#00498B]/5 px-4 py-3 text-[13px] font-semibold text-[#00498B] transition hover:bg-[#00498B]/10 active:scale-[0.99]"
       >
-        Collect / view on Zora
+        Video ansehen
         <ArrowUpRight className="h-4 w-4" />
       </a>
 
@@ -209,10 +209,10 @@ function EpisodeNavButton({ dir, video, onClick }: { dir: "prev" | "next"; video
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          {isNext ? "Next" : "Previous"}
+          {isNext ? "Nächste" : "Vorherige"}
         </span>
         <span className="block truncate text-xs font-semibold text-foreground">
-          {video ? `Ep ${video.episode}` : "—"}
+          {video ? `Folge ${video.episode}` : "—"}
         </span>
       </span>
     </button>

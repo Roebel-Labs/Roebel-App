@@ -6,7 +6,7 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "7d", label: "7D" },
   { key: "30d", label: "30D" },
   { key: "90d", label: "90D" },
-  { key: "all", label: "All" },
+  { key: "all", label: "Alle" },
 ];
 
 export function RangeSelector({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) {

@@ -13,10 +13,10 @@ import { track } from "../lib/analytics";
 const EVENT_BASE = "https://www.roebel.app/e/";
 
 const DURATIONS = [
-  { label: "1 hour", hours: 1 },
-  { label: "4 hours", hours: 4 },
-  { label: "Today (24 h)", hours: 24 },
-  { label: "1 week", hours: 168 },
+  { label: "1 Stunde", hours: 1 },
+  { label: "4 Stunden", hours: 4 },
+  { label: "Heute (24 Std.)", hours: 24 },
+  { label: "1 Woche", hours: 168 },
 ];
 
 // The poster (src/assets/event-poster.pdf) has a white rounded square in the
@@ -62,9 +62,9 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
   if (!inviter) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Event invite" description="Create a QR code for a local event." />
+        <PageHeader title="Event-Einladung" description="Erstelle einen QR-Code für ein lokales Event." />
         <Card className="p-5 text-[13px] leading-relaxed text-muted-foreground">
-          Open this mini-app inside the Circles app to connect your wallet — then, as a citizen, you can create an event QR code.
+          Öffne diese Mini-App in der Röbel-App, um dein Konto zu verbinden — dann kannst du als Bürger:in einen Event-QR-Code erstellen.
         </Card>
       </div>
     );
@@ -72,7 +72,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
 
   const create = async () => {
     if (!label.trim()) {
-      setError("Please enter an event name.");
+      setError("Bitte gib einen Event-Namen ein.");
       return;
     }
     setCreating(true);
@@ -85,7 +85,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
         body: JSON.stringify({ creator: inviter, label: label.trim(), expiresAt }),
       });
       const j = await res.json();
-      if (!res.ok || !j.id) throw new Error(j.error || "Could not create event");
+      if (!res.ok || !j.id) throw new Error(j.error || "Event konnte nicht erstellt werden");
       clearPdfCache();
       setEvent({ id: j.id, label: label.trim(), expiresAt });
       track("event_created", { hours });
@@ -103,7 +103,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
   const buildPdf = useCallback(async (): Promise<string> => {
     if (pdfUrlRef.current) return pdfUrlRef.current;
     const canvas = qrCanvasRef.current;
-    if (!canvas) throw new Error("QR code is not ready yet.");
+    if (!canvas) throw new Error("Der QR-Code ist noch nicht bereit.");
 
     const qrBytes = dataUrlToBytes(canvas.toDataURL("image/png"));
     const posterBytes = await fetch(posterPdfUrl).then((r) => r.arrayBuffer());
@@ -179,7 +179,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Event invite" description="A QR code for a local event: guests join Circles and everyone collects a few Röbel Coins as a 'was-in-Röbel' proof — paid from the town treasury, not from you." />
+      <PageHeader title="Event-Einladung" description="Ein QR-Code für ein lokales Event: Gäste machen bei den Röbel-Münzen mit und alle sammeln ein paar Röbel-Münzen als „War-in-Röbel“-Nachweis — bezahlt aus der Gemeinschaftskasse, nicht von dir." />
 
       {!event ? (
         <ChartCard>
@@ -188,24 +188,24 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               <Ticket className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">Create event QR</h3>
-              <p className="text-xs text-muted-foreground">Guests scan → join Circles → collect coins</p>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">Event-QR erstellen</h3>
+              <p className="text-xs text-muted-foreground">Gäste scannen → mitmachen → Röbel-Münzen sammeln</p>
             </div>
           </div>
 
           <label className="block">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Event name</span>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Event-Name</span>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Röbel weekly market"
+              placeholder="z. B. Röbeler Wochenmarkt"
               maxLength={80}
               className="mt-1.5 w-full rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm outline-none transition focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/15"
             />
           </label>
 
           <label className="mt-3 block">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Valid for</span>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Gültig für</span>
             <select
               value={hours}
               onChange={(e) => setHours(Number(e.target.value))}
@@ -227,21 +227,21 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
           >
             <Plus className="h-4 w-4" />
-            {creating ? "Creating…" : "Create event QR"}
+            {creating ? "Wird erstellt…" : "Event-QR erstellen"}
           </button>
         </ChartCard>
       ) : (
         <Card className="p-4">
           <div className="mb-3 text-center">
             <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#00498B]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#00498B]">
-              <Sparkles className="h-3 w-3" /> Event live
+              <Sparkles className="h-3 w-3" /> Event aktiv
             </div>
             <h3 className="font-display text-lg font-bold tracking-tight text-foreground">{event.label}</h3>
           </div>
 
           {/* Live preview of the printed poster: the QR sits in the white square. */}
           <div className="relative mx-auto w-full max-w-[320px] overflow-hidden rounded-xl border border-border shadow-sm">
-            <img src={posterPreview} alt="Röbel event poster" className="block w-full" />
+            <img src={posterPreview} alt="Röbel Event-Plakat" className="block w-full" />
             <div
               className="absolute flex items-center justify-center"
               style={{
@@ -262,7 +262,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
           </div>
 
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            Valid until {new Date(event.expiresAt).toLocaleString("en-US")}
+            Gültig bis {new Date(event.expiresAt).toLocaleString("de-DE")}
           </p>
 
           {error && <p className="mt-2 text-center text-sm font-medium text-foreground">{error}</p>}
@@ -273,7 +273,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#00498B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4e99] active:scale-[0.99] disabled:opacity-60"
           >
             <Printer className="h-4 w-4" />
-            {busy ? "Preparing…" : "Print poster (PDF)"}
+            {busy ? "Wird vorbereitet…" : "Plakat drucken (PDF)"}
           </button>
           <div className="mt-2 flex gap-2">
             <button
@@ -282,13 +282,13 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99] disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
-              Save PDF
+              PDF speichern
             </button>
             <button
               onClick={newEvent}
               className="rounded-[10px] border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.99]"
             >
-              New
+              Neu
             </button>
           </div>
 

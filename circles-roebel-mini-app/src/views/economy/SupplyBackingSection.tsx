@@ -12,27 +12,27 @@ export function SupplyBackingSection({ series, supply, collateral }: { series: S
   const backing = supply > 0 ? collateral / supply : 0;
   const empty = supply <= 0 && series.every((p) => p.supply <= 0);
   return (
-    <ChartCard title="Supply & backing" subtitle="Röbel Coins in circulation vs. collateral locked 1:1">
+    <ChartCard title="Umlauf & Deckung" subtitle="Röbel-Münzen im Umlauf vs. hinterlegte Deckung 1:1">
       {empty ? (
-        <EmptyHint>No coins minted yet — invite citizens to mint the first Röbel Coins.</EmptyHint>
+        <EmptyHint>Noch keine Münzen ausgegeben — lade Bürger:innen ein, um die ersten Röbel-Münzen zu erhalten.</EmptyHint>
       ) : (
         <div className="space-y-4">
           <TimeSeriesChart
             labels={series.map((p) => p.label)}
-            series={[{ key: "supply", label: "Supply", color: C.navy, values: series.map((p) => p.supply), area: true }]}
-            refLine={collateral > 0 ? { value: collateral, label: "Collateral today", color: C.gold } : undefined}
+            series={[{ key: "supply", label: "Umlauf", color: C.navy, values: series.map((p) => p.supply), area: true }]}
+            refLine={collateral > 0 ? { value: collateral, label: "Deckung heute", color: C.gold } : undefined}
             zeroBaseline={false}
             height={190}
           />
           <div className="flex items-center gap-4 border-t border-border/70 pt-3">
-            <Donut value={backing} label={backing >= 1 ? "100%" : pct(backing, 0)} sub="backed" color={C.navy} size={104} />
+            <Donut value={backing} label={backing >= 1 ? "100%" : pct(backing, 0)} sub="gedeckt" color={C.navy} size={104} />
             <div className="min-w-0 flex-1 space-y-1.5">
-              <Row label="In circulation" value={`${fmt(supply, 0)}`} dot={C.navy} />
-              <Row label="Collateral locked" value={`${fmt(collateral, 0)}`} dot={C.gold} />
+              <Row label="Im Umlauf" value={`${fmt(supply, 0)}`} dot={C.navy} />
+              <Row label="Hinterlegte Deckung" value={`${fmt(collateral, 0)}`} dot={C.gold} />
               <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
                 {backing >= 0.999
-                  ? "Every coin is backed 1:1 by personal CRC locked in the town vault."
-                  : "Each coin is backed by personal CRC locked in the town vault."}
+                  ? "Jede Münze ist voll 1:1 gedeckt."
+                  : "Jede Münze ist durch hinterlegte Deckung abgesichert."}
               </p>
             </div>
           </div>

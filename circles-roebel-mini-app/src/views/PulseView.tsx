@@ -26,7 +26,6 @@ import { fmt, fmtInt, shortAddr } from "../lib/format";
 import { ChartCard, PageHeader, KpiCard, SkeletonGrid, Skeleton } from "../components/ui";
 import { Trophy, Activity } from "../components/icons";
 import RadialGraph, { type RadialNode } from "../components/RadialGraph";
-import { AnatomySection } from "./economy/AnatomySection";
 import { RangeSelector } from "./economy/RangeSelector";
 import { KpiStrip } from "./economy/KpiStrip";
 import { SupplyBackingSection } from "./economy/SupplyBackingSection";
@@ -143,7 +142,6 @@ export default function PulseView({ connected }: { connected: Address | null }) 
           <HolderDistributionSection holders={snap.holders} />
           {vel && <VelocitySection vel={vel} />}
           <ReputationSection rep={rep} profiles={profiles} />
-          <AnatomySection />
 
           {/* Trust network — the radial group→member star (moved from the Gemeinde tab) */}
           <ChartCard title="Vertrauensnetz der Röbel-Münzen" subtitle="Wer die Röbel-Münzen nutzt">

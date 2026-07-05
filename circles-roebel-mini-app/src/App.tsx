@@ -177,7 +177,7 @@ function SubPage({ onBack, children }: { onBack: () => void; children: ReactNode
         className="-ml-1.5 inline-flex items-center gap-1 rounded-[10px] px-1.5 py-1 text-[13px] font-medium text-muted-foreground transition hover:text-foreground active:scale-[0.98]"
       >
         <ChevronLeft className="h-4 w-4" />
-        Town
+        Gemeinde
       </button>
       {children}
     </div>
