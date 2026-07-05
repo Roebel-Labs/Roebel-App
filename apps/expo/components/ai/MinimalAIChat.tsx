@@ -63,6 +63,16 @@ interface Message {
   eventRecap?: EventRecapData;
 }
 
+// All events are for the current year — force the year of a YYYY-MM-DD date
+// string to 2026 so the AI can never pick a stale year (e.g. its training year)
+// when the user gives a date without one.
+const EVENT_YEAR = '2026';
+function forceEventYear(dateStr?: string): string | undefined {
+  if (!dateStr) return dateStr;
+  const m = dateStr.match(/^\d{4}(-\d{2}-\d{2})$/);
+  return m ? `${EVENT_YEAR}${m[1]}` : dateStr;
+}
+
 function buildSystemPrompt(params: {
   organizerName: string;
   organizerEmail: string;
@@ -77,6 +87,8 @@ Deine Aufgabe ist es, Nutzer durch den Prozess der Event-Einreichung zu führen.
 - Event-Titel
 - Datum (im Format JJJJ-MM-TT) ODER mehrere Termine für wiederkehrende Events
 - Ort/Adresse in Röbel oder Umgebung
+
+**WICHTIG – Jahr:** Wir sind im Jahr ${EVENT_YEAR}. Verwende für ALLE Datumsangaben immer das Jahr ${EVENT_YEAR}, auch wenn der Nutzer nur Tag und Monat nennt (z. B. „20. Juli" → ${EVENT_YEAR}-07-20). Wähle niemals ein anderes Jahr.
 
 **Veranstalter-Informationen (bereits bekannt – NICHT danach fragen):**
 - Name: ${params.organizerName || '(nicht angegeben)'}
@@ -114,11 +126,11 @@ Stelle die Fragen einzeln und natürlich. Bestätige die Eingaben des Nutzers.
 
 **WICHTIG – Ablauf zum Abschluss:**
 1. Wenn ALLE Pflichtfelder gesammelt wurden, rufe das prepare_event_submission Tool mit allen gesammelten Daten auf. Dies zeigt dem Nutzer AUTOMATISCH eine übersichtliche Zusammenfassung ("Recap-Karte") mit allen Angaben.
-2. Frage danach nur kurz: "Passt alles so? Antworte mit 'Ja' zum Einsenden – oder sag mir, was ich ändern soll." Fasse die Daten NICHT zusätzlich als Text zusammen – die Recap-Karte übernimmt das.
-3. Wenn der Nutzer eine Änderung wünscht, übernimm die neuen Werte und rufe prepare_event_submission ERNEUT mit den aktualisierten Daten auf (die Recap-Karte aktualisiert sich).
-4. Wenn der Nutzer bestätigt (z. B. "Ja", "passt", "senden", "einsenden", "sieht gut aus"), rufe das confirm_event_submission Tool auf. Danach erscheint für den Nutzer die Wisch-Geste zum finalen Einsenden.
+2. Unter der Recap-Karte erscheinen dem Nutzer AUTOMATISCH zwei Buttons: „Ja, einsenden" und „Ändern". Fordere den Nutzer daher NICHT auf, „Ja" zu tippen. Sage danach nur eine kurze, freundliche Zeile wie „Alles bereit – tippe auf ‚Ja, einsenden', wenn es passt." und fasse die Daten NICHT zusätzlich als Text zusammen – die Recap-Karte übernimmt das.
+3. Wenn der Nutzer eine Änderung wünscht, übernimm die neuen Werte und rufe prepare_event_submission ERNEUT mit den aktualisierten Daten auf (die Recap-Karte aktualisiert sich, neue Buttons erscheinen).
+4. Das Einsenden löst der Nutzer selbst über den „Ja, einsenden"-Button aus – DU musst dafür nichts weiter tun. Rufe confirm_event_submission nur dann auf, wenn der Nutzer AUSDRÜCKLICH im Text bestätigt (z. B. „Ja", „passt", „senden") statt den Button zu nutzen.
 
-Rufe confirm_event_submission NIEMALS auf, bevor die Recap-Karte gezeigt und vom Nutzer bestätigt wurde.
+Rufe confirm_event_submission NIEMALS auf, bevor die Recap-Karte gezeigt wurde.
 
 Antworte immer auf Deutsch und sei freundlich und hilfsbereit.`;
 }
@@ -603,6 +615,9 @@ export function MinimalAIChat() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [pendingEventData, setPendingEventData] = useState<any>(null);
+  // Id of the newest recap message — only that card shows the Ja/Ändern buttons.
+  const [activeRecapId, setActiveRecapId] = useState<string | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const translateY = useRef(new Animated.Value(0)).current;
   const iconBounceAnim = useRef(new Animated.Value(0)).current;
   const iconBounceAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -689,6 +704,33 @@ export function MinimalAIChat() {
         }).start();
       }
     }
+  };
+
+  // Reveal the final swipe-to-submit control. Shared by the "Ja, einsenden"
+  // button and the confirm_event_submission tool fallback.
+  const revealSwipeToSubmit = () => {
+    if (!pendingEventDataRef.current) return false;
+    setActiveRecapId(null); // hide the Ja/Ändern buttons
+    setIsReadyToSubmit(true);
+    startIconBounceAnimation();
+    return true;
+  };
+
+  // "Ja, einsenden" button under the recap card → reveal swipe-to-submit.
+  const handleConfirmSubmit = () => {
+    if (revealSwipeToSubmit()) {
+      const confirmMessage: Message = {
+        id: `confirm-${Date.now()}`,
+        role: 'assistant',
+        content: 'Super! Wische nach oben, um dein Event einzureichen.',
+      };
+      setMessages((prev) => [...prev, confirmMessage]);
+    }
+  };
+
+  // "Ändern" button under the recap card → let the user type what to change.
+  const handleRequestChange = () => {
+    inputRef.current?.focus();
   };
 
   // Handle describe button tap
@@ -957,10 +999,17 @@ export function MinimalAIChat() {
         })
       );
 
+      // Organizer email follows the active account: an organisation account uses
+      // its own contact email (falling back to the user's if it has none); a
+      // personal account uses the user's email.
+      const isOrgAccount = activeAccount?.account_type === 'organisation';
+      const organizerEmail =
+        (isOrgAccount ? activeAccount?.contact_email : user?.email) || user?.email || '';
+
       // Call Anthropic API with tools
       const systemPrompt = buildSystemPrompt({
         organizerName: activeAccount?.name ?? '',
-        organizerEmail: user?.email ?? '',
+        organizerEmail,
         organizerPhone: user?.phone_number ?? '',
         accountType: activeAccount?.account_type ?? 'personal',
       });
@@ -979,34 +1028,43 @@ export function MinimalAIChat() {
         const eventData = toolUseBlock.input;
         console.log('Event data extracted via tool:', eventData);
 
+        // Force every date to the current year so a stale AI-picked year can
+        // never reach the recap card or the submission.
+        const normalizedData = {
+          ...eventData,
+          date: forceEventYear(eventData.date),
+          dates: Array.isArray(eventData.dates)
+            ? eventData.dates.map((d: string) => forceEventYear(d))
+            : eventData.dates,
+        };
+
         // Store event data and render the recap card. Do NOT enable the
-        // swipe-to-submit yet — the user must confirm the recap first.
+        // swipe-to-submit yet — the user must confirm via the Ja button first.
         const imageUrlToSubmit = uploadedImageUrl || lastUploadedImageUrl;
-        const recap: EventRecapData = { ...eventData, image_url: imageUrlToSubmit };
+        const recap: EventRecapData = { ...normalizedData, image_url: imageUrlToSubmit };
         setPendingEventData(recap);
         // Re-preparing after a correction: hide any previously shown swipe control.
         setIsReadyToSubmit(false);
         stopIconBounceAnimation();
 
+        const recapId = `recap-${Date.now()}`;
         const recapMessage: Message = {
-          id: `recap-${Date.now()}`,
+          id: recapId,
           role: 'assistant',
           content:
             assistantContent ||
-            'Passt alles so? Antworte mit "Ja" zum Einsenden – oder sag mir, was ich ändern soll.',
+            'Alles bereit. Tippe auf „Ja, einsenden", wenn es passt – oder auf „Ändern".',
           eventRecap: recap,
         };
+        // Only the newest recap card shows the Ja/Ändern buttons.
+        setActiveRecapId(recapId);
 
         setMessages((prev) => prev.map(msg =>
           msg.id === userMessageId ? { ...msg, isLoading: false } : msg
         ).concat([recapMessage]));
       } else if (toolUseBlock && toolUseBlock.name === 'confirm_event_submission') {
         // Only reveal the swipe-to-submit if we actually have prepared data.
-        const hasPreparedData = !!pendingEventDataRef.current;
-        if (hasPreparedData) {
-          setIsReadyToSubmit(true);
-          startIconBounceAnimation();
-        }
+        const hasPreparedData = revealSwipeToSubmit();
 
         const confirmMessage: Message = {
           id: `confirm-${Date.now()}`,
@@ -1094,6 +1152,24 @@ export function MinimalAIChat() {
                       {message.content ? (
                         <MessageBubbleInner role="assistant" content={message.content} />
                       ) : null}
+                      {message.id === activeRecapId && !isReadyToSubmit && !isSubmitting && (
+                        <View style={styles.recapButtonsRow}>
+                          <TouchableOpacity
+                            style={[styles.recapConfirmButton, { backgroundColor: colors.primary }]}
+                            onPress={handleConfirmSubmit}
+                            disabled={isLoading}
+                          >
+                            <Text style={[styles.recapConfirmText, { color: colors.onPrimary }]}>Ja, einsenden</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.recapChangeButton, { borderColor: colors.border }]}
+                            onPress={handleRequestChange}
+                            disabled={isLoading}
+                          >
+                            <Text style={[styles.recapChangeText, { color: colors.textPrimary }]}>Ändern</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   ) : (
                     <MessageBubbleInner
@@ -1165,6 +1241,7 @@ export function MinimalAIChat() {
                     </TouchableOpacity>
 
                     <TextInput
+                      ref={inputRef}
                       style={[styles.textInput, { backgroundColor: colors.pressedOverlay, color: colors.textPrimary }]}
                       value={input}
                       onChangeText={setInput}
@@ -1443,6 +1520,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'MonaSansSemiCondensed-Bold',
     marginTop: 4,
+  },
+  // Recap confirm/change buttons (under the recap card)
+  recapButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  recapConfirmButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recapConfirmText: {
+    fontSize: 15,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
+  },
+  recapChangeButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recapChangeText: {
+    fontSize: 15,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   // Action buttons
   actionButtonsContainer: {
