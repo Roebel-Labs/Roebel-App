@@ -20,18 +20,20 @@ const MAX_PREVIEWS = 5;
 const POLL_MS = 2500;
 const POLL_BUDGET_MS = 120_000;
 
-type Busy = { kind: "icon" | "preview"; slot?: number; label: string } | null;
+type ImgKind = "icon" | "preview" | "feature";
+type Busy = { kind: ImgKind; slot?: number; label: string } | null;
 
+// wallet=null → admin session cookie authenticates server-side instead.
 async function apiJson(
   url: string,
-  wallet: string,
+  wallet: string | null,
   init?: RequestInit,
 ): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
-      "x-wallet-address": wallet,
+      ...(wallet ? { "x-wallet-address": wallet } : {}),
     },
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
@@ -55,7 +57,7 @@ export function ImagesSection({
   const [wish, setWish] = useState("");
   const [shots, setShots] = useState<string[]>([]);
   const [shotPickerSlot, setShotPickerSlot] = useState<number | null>(null);
-  const fileTarget = useRef<{ kind: "icon" | "preview"; slot?: number } | null>(null);
+  const fileTarget = useRef<{ kind: ImgKind; slot?: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
 
@@ -67,7 +69,6 @@ export function ImagesSection({
   }, []);
 
   const loadShots = useCallback(() => {
-    if (!wallet) return;
     apiJson(`/api/mini-apps/images/upload?appId=${app.id}`, wallet)
       .then((j) => {
         if (!cancelled.current && Array.isArray(j.shots)) setShots(j.shots as string[]);
@@ -77,8 +78,8 @@ export function ImagesSection({
 
   useEffect(loadShots, [loadShots]);
 
-  async function generate(kind: "icon" | "preview", slot?: number, referenceUrl?: string) {
-    if (!wallet || busy) return;
+  async function generate(kind: ImgKind, slot?: number, referenceUrl?: string) {
+    if (busy) return;
     setError(null);
     setBusy({ kind, slot, label: "Wird generiert …" });
     try {
@@ -117,7 +118,7 @@ export function ImagesSection({
     }
   }
 
-  function pickFile(kind: "icon" | "preview", slot?: number) {
+  function pickFile(kind: ImgKind, slot?: number) {
     fileTarget.current = { kind, slot };
     fileInput.current?.click();
   }
@@ -126,7 +127,7 @@ export function ImagesSection({
     const file = e.target.files?.[0];
     e.target.value = "";
     const target = fileTarget.current;
-    if (!file || !target || !wallet) return;
+    if (!file || !target) return;
     setError(null);
     setBusy({ ...target, label: "Wird hochgeladen …" });
     try {
@@ -144,8 +145,8 @@ export function ImagesSection({
     }
   }
 
-  async function remove(kind: "icon" | "preview", slot?: number) {
-    if (!wallet || busy) return;
+  async function remove(kind: ImgKind, slot?: number) {
+    if (busy) return;
     setError(null);
     try {
       const params = new URLSearchParams({ appId: app.id, kind });
@@ -158,7 +159,7 @@ export function ImagesSection({
   }
 
   const previews = app.screenshots ?? [];
-  const isBusy = (kind: "icon" | "preview", slot?: number) =>
+  const isBusy = (kind: ImgKind, slot?: number) =>
     busy?.kind === kind && busy?.slot === slot;
 
   return (
@@ -216,6 +217,46 @@ export function ImagesSection({
           </Button>
           {app.icon_url ? (
             <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => remove("icon")}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Entfernen
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Hero-Artwork für die Store-Karussell-Karte (16:9) */}
+      <p className="mt-6 text-sm font-semibold">Store-Artwork (Hero-Karte)</p>
+      <p className="text-xs text-muted-foreground">
+        Breites 16:9-Bild für das Karussell im Mini-App-Store — bis es gesetzt
+        ist, zeigt die Hero-Karte einen grauen Platzhalter.
+      </p>
+      <div className="mt-2 flex items-start gap-4">
+        <div className="relative aspect-video w-full max-w-sm shrink-0 overflow-hidden rounded-xl border border-border bg-muted">
+          {isBusy("feature") ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : app.feature_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={app.feature_image_url}
+              alt={`Store-Artwork von ${app.name}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <ImageIcon className="h-7 w-7 text-muted-foreground/50" />
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => pickFile("feature")}>
+            <Upload className="mr-1 h-3.5 w-3.5" /> Hochladen
+          </Button>
+          <Button size="sm" disabled={!!busy} onClick={() => generate("feature")}>
+            <Sparkles className="mr-1 h-3.5 w-3.5" /> Mit KI generieren
+          </Button>
+          {app.feature_image_url ? (
+            <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => remove("feature")}>
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Entfernen
             </Button>
           ) : null}

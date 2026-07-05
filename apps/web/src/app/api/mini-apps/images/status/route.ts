@@ -19,10 +19,10 @@ export async function GET(req: Request) {
     const appId = getParam(req, "appId") ?? "";
     const kind = getParam(req, "kind") ?? "";
     const slotRaw = getParam(req, "slot");
-    if (!taskId || !appId || (kind !== "icon" && kind !== "preview")) {
+    if (!taskId || !appId || (kind !== "icon" && kind !== "preview" && kind !== "feature")) {
       throw new MiniAppError(
         "invalid_params",
-        "taskId, appId und kind (icon|preview) erforderlich.",
+        "taskId, appId und kind (icon|preview|feature) erforderlich.",
       );
     }
     const slot = slotRaw === null ? undefined : Number(slotRaw);

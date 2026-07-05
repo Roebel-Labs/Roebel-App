@@ -8,12 +8,13 @@ import { MiniAppError, type MiniAppRow } from "../types";
 const BUCKET = "images";
 export const MAX_PREVIEWS = 5;
 
-export type ImageKind = "icon" | "preview" | "shot";
+export type ImageKind = "icon" | "preview" | "feature" | "shot";
 
 function pathFor(appId: string, kind: ImageKind, slot?: number): string {
   const ts = Date.now();
   if (kind === "icon") return `mini-apps/${appId}/icon_${ts}.png`;
   if (kind === "preview") return `mini-apps/${appId}/preview-${slot ?? 0}_${ts}.png`;
+  if (kind === "feature") return `mini-apps/${appId}/feature_${ts}.png`;
   return `mini-apps/${appId}/shots/${ts}.png`;
 }
 
@@ -65,10 +66,11 @@ export async function applyImageToApp(
   slot?: number,
 ): Promise<void> {
   const supabase = createAdminClient();
-  if (kind === "icon") {
+  if (kind === "icon" || kind === "feature") {
+    const column = kind === "icon" ? "icon_url" : "feature_image_url";
     const { error } = await supabase
       .from("mini_apps")
-      .update({ icon_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({ [column]: publicUrl, updated_at: new Date().toISOString() })
       .eq("id", app.id);
     if (error) throw new MiniAppError("internal", error.message);
     return;
@@ -92,10 +94,11 @@ export async function removeImageFromApp(
   slot?: number,
 ): Promise<void> {
   const supabase = createAdminClient();
-  if (kind === "icon") {
+  if (kind === "icon" || kind === "feature") {
+    const column = kind === "icon" ? "icon_url" : "feature_image_url";
     const { error } = await supabase
       .from("mini_apps")
-      .update({ icon_url: null, updated_at: new Date().toISOString() })
+      .update({ [column]: null, updated_at: new Date().toISOString() })
       .eq("id", app.id);
     if (error) throw new MiniAppError("internal", error.message);
     return;

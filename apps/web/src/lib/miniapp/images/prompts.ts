@@ -13,6 +13,17 @@ export function buildIconPrompt(app: MiniAppRow, userPrompt?: string): string {
   return parts.filter(Boolean).join(" ");
 }
 
+export function buildFeaturePrompt(app: MiniAppRow, userPrompt?: string): string {
+  const parts = [
+    `Erstelle ein breites Hero-Artwork (16:9) für die Mini-App "${app.name}" im App-Store.`,
+    app.description ? `Die App: ${app.description}.` : "",
+    `Stimmungsvolle, moderne Illustration der App-Idee mit ruhiger Komposition und der Farbwelt um ${app.primary_color ?? "#00498B"}; unten muss Platz für eine Textzeile bleiben.`,
+    "Keine Texte, keine Logos, keine UI-Screenshots.",
+    userPrompt?.trim() ? `Zusätzlicher Wunsch: ${userPrompt.trim()}.` : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
 export function buildPreviewPrompt(
   app: MiniAppRow,
   opts: { userPrompt?: string; hasReference: boolean },

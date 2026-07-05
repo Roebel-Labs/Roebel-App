@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 import { jsonError, getParam } from "@/lib/miniapp/http";
 import { requireAppAccess } from "@/lib/miniapp/images/access";
 import { createImageTask } from "@/lib/miniapp/images/kie";
-import { buildIconPrompt, buildPreviewPrompt } from "@/lib/miniapp/images/prompts";
+import {
+  buildFeaturePrompt,
+  buildIconPrompt,
+  buildPreviewPrompt,
+} from "@/lib/miniapp/images/prompts";
 import { MAX_PREVIEWS, removeImageFromApp } from "@/lib/miniapp/images/storage";
 import { MiniAppError } from "@/lib/miniapp/types";
 
@@ -40,8 +44,11 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Body | null;
     const appId = body?.appId ?? "";
     const kind = body?.kind ?? "";
-    if (!appId || (kind !== "icon" && kind !== "preview")) {
-      throw new MiniAppError("invalid_params", "appId und kind (icon|preview) erforderlich.");
+    if (!appId || (kind !== "icon" && kind !== "preview" && kind !== "feature")) {
+      throw new MiniAppError(
+        "invalid_params",
+        "appId und kind (icon|preview|feature) erforderlich.",
+      );
     }
     const app = await requireAppAccess(req, appId);
 
@@ -61,14 +68,17 @@ export async function POST(req: Request) {
     const prompt =
       kind === "icon"
         ? buildIconPrompt(app, body?.prompt)
-        : buildPreviewPrompt(app, {
-            userPrompt: body?.prompt,
-            hasReference: !!referenceUrl,
-          });
+        : kind === "feature"
+          ? buildFeaturePrompt(app, body?.prompt)
+          : buildPreviewPrompt(app, {
+              userPrompt: body?.prompt,
+              hasReference: !!referenceUrl,
+            });
 
     const taskId = await createImageTask({
       prompt,
       referenceUrls: referenceUrl ? [referenceUrl] : [],
+      aspectRatio: kind === "feature" ? "16:9" : "1:1",
     });
     return NextResponse.json({ taskId });
   } catch (e) {
@@ -81,8 +91,11 @@ export async function DELETE(req: Request) {
     const appId = getParam(req, "appId") ?? "";
     const kind = getParam(req, "kind") ?? "";
     const slot = Number(getParam(req, "slot") ?? "-1");
-    if (!appId || (kind !== "icon" && kind !== "preview")) {
-      throw new MiniAppError("invalid_params", "appId und kind (icon|preview) erforderlich.");
+    if (!appId || (kind !== "icon" && kind !== "preview" && kind !== "feature")) {
+      throw new MiniAppError(
+        "invalid_params",
+        "appId und kind (icon|preview|feature) erforderlich.",
+      );
     }
     if (kind === "preview" && (!Number.isInteger(slot) || slot < 0 || slot >= MAX_PREVIEWS)) {
       throw new MiniAppError("invalid_params", "Ungültiger Vorschau-Slot.");

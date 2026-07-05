@@ -16,6 +16,7 @@ import {
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
 import { ImagesSection } from "@/components/mini-apps/ImagesSection";
+import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
 import { ManifestForm } from "@/components/mini-apps/ManifestForm";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
@@ -151,8 +152,11 @@ export default function BuilderMiniAppDetail({
         </DetailCard>
       )}
 
-      {/* Icon + Store-Vorschau (1:1) — Upload, KI-Generierung, Screenshots */}
+      {/* Icon + Store-Artwork + Store-Vorschau — Upload, KI-Generierung, Screenshots */}
       <ImagesSection app={app} wallet={wallet} onChanged={refresh} />
+
+      {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
+      <NotificationsSection app={app} wallet={wallet} />
 
       {/* Analytics (developer reads their own app via wallet header) */}
       <AnalyticsPanel appId={app.id} wallet={wallet} />

@@ -26,6 +26,8 @@ import {
   MiniAppPreviewRow,
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
+import { ImagesSection } from "@/components/mini-apps/ImagesSection";
+import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
 import { Playground } from "@/components/mini-apps/Playground";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
 import type { MiniAppRow, MiniAppVersionRow } from "@/lib/miniapp/types";
@@ -244,6 +246,12 @@ export default function MiniAppAdminDetail({
         </div>
         <MiniAppPreviewRow images={app.screenshots} className="mt-3" />
       </DetailCard>
+
+      {/* Icon + Store-Artwork + Store-Vorschau (Admin verwaltet via Session) */}
+      <ImagesSection app={app} wallet={null} onChanged={refresh} />
+
+      {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
+      <NotificationsSection app={app} wallet={null} />
 
       {/* Playground */}
       <div>

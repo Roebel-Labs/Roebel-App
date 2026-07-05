@@ -23,6 +23,8 @@ function kieKey(): string {
 export async function createImageTask(opts: {
   prompt: string;
   referenceUrls?: string[];
+  /** Defaults to 1:1 (icons/previews); the store hero uses 16:9. */
+  aspectRatio?: "1:1" | "16:9";
 }): Promise<string> {
   const res = await fetch(KIE_CREATE, {
     method: "POST",
@@ -35,7 +37,7 @@ export async function createImageTask(opts: {
       input: {
         prompt: opts.prompt,
         image_input: opts.referenceUrls ?? [],
-        aspect_ratio: "1:1",
+        aspect_ratio: opts.aspectRatio ?? "1:1",
         output_format: "png",
       },
     }),

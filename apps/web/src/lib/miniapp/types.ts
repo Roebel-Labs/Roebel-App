@@ -44,6 +44,8 @@ export interface MiniAppRow {
   category: string;
   tags: string[];
   screenshots: string[];
+  /** Hero artwork for the store carousel (store v2; gray placeholder when null). */
+  feature_image_url?: string | null;
   permissions: string[];
   primary_color: string | null;
   status: MiniAppStatus;
