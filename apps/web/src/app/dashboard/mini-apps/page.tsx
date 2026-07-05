@@ -1,7 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { ChevronRight, Plus, Rocket } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronRight, PartyPopper, Plus, Rocket, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +19,35 @@ import { useWalletAddress } from "@/components/mini-apps/useWallet";
 import type { MiniAppRow } from "@/lib/miniapp/types";
 import { timeAgo } from "@/components/admin/muenzen/format";
 
+// Sommer-Camp-Teilnehmer landen nach der Anmeldung mit ?welcome=sommercamp hier.
+function SommercampWelcome() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  if (searchParams.get("welcome") !== "sommercamp") return null;
+  return (
+    <Card className="mb-4 flex items-center gap-3 border-[#FFD84D] bg-[#FFD84D]/15 p-4">
+      <PartyPopper className="h-5 w-5 shrink-0 text-[#00498B]" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">Willkommen beim Sommer Camp!</p>
+        <p className="text-xs text-muted-foreground">
+          Du bist angemeldet. Erstelle jetzt deine erste Mini-App mit KI.
+        </p>
+      </div>
+      <Link href="/editor">
+        <Button size="sm">Mit KI erstellen</Button>
+      </Link>
+      <button
+        type="button"
+        aria-label="Hinweis schließen"
+        onClick={() => router.replace("/dashboard/mini-apps")}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </Card>
+  );
+}
+
 export default function MyMiniApps() {
   const wallet = useWalletAddress();
   const { data, loading, error, refresh, refreshing } = useMiniAppApi<{ apps: MiniAppRow[] }>(
@@ -27,6 +58,10 @@ export default function MyMiniApps() {
 
   return (
     <div>
+      {/* useSearchParams braucht beim Prerender eine Suspense-Grenze */}
+      <Suspense fallback={null}>
+        <SommercampWelcome />
+      </Suspense>
       <PageHeader
         title="Meine Mini Apps"
         description="Baue Mini Apps für die Röbel App — mit KI oder manuell. Nach dem Einreichen prüft ein Admin deine App, testet sie im Playground und schaltet sie live."

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, Map, Vote, Smartphone, BookOpen, Users, KeyRound, ShieldCheck, Coins, Landmark, LayoutGrid, SquareKanban, Mail } from "lucide-react"
+import { LayoutDashboard, Calendar, LogOut, ChevronRight, ChevronDown, Newspaper, MessageSquare, Film, UtensilsCrossed, Bell, Store, Bot, AlertTriangle, Flag, Megaphone, HelpCircle, CreditCard, Gift, Map, Vote, Smartphone, BookOpen, Users, KeyRound, ShieldCheck, Coins, Landmark, LayoutGrid, SquareKanban, Mail, Tent } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -273,6 +273,7 @@ export function AdminSidebar() {
       badgeKey: null,
     },
     { name: "Newsletter", href: "/admin/dashboard/newsletter", icon: <Mail className="h-5 w-5" />, badgeKey: null },
+    { name: "Sommer Camp", href: "/admin/dashboard/sommercamp", icon: <Tent className="h-5 w-5" />, badgeKey: null },
   ]
 
   useEffect(() => {
