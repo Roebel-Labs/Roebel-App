@@ -32,4 +32,8 @@ jobs:
         run: pnpm typecheck
 
       - name: Build
-        run: pnpm build
+        # @roebel/web needs real env (Supabase etc.) at build time and is
+        # already built with it on Vercel for every push and PR — that
+        # deployment check is the build gate for web. CI builds the rest
+        # (SDK, mini-apps, ...) which must stay env-free.
+        run: pnpm exec turbo build --filter='!@roebel/web'
