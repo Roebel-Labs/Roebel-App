@@ -130,7 +130,7 @@ export async function getTrustGraph(verifiedSet: Set<string>): Promise<TrustGrap
     const tone: NodeTone = verifiedSet.has(a) ? "verified" : attester.has(a) ? "attester" : "open";
     return { id: c.address, label: `${c.address.slice(0, 6)}…`, tone, trusted: trusted.has(a) };
   });
-  return { centerLabel: "Röbel Münzen", nodes };
+  return { centerLabel: "Röbel-Münzen", nodes };
 }
 
 // The operational funder (rewards out + lootbox spend in) — classifies the token flows.
@@ -138,7 +138,7 @@ export const FUNDER = "0x5ac82fd7f576c86aed8d174074ba707ec1979d9b";
 const ZERO = "0x0000000000000000000000000000000000000000";
 
 export type FlowKind = "mint" | "reward" | "spend" | "transfer";
-const KIND_LABEL: Record<FlowKind, string> = { mint: "Mint", reward: "Reward", spend: "Lootbox", transfer: "Transfer" };
+const KIND_LABEL: Record<FlowKind, string> = { mint: "Neue Münzen", reward: "Belohnung", spend: "Ausgabe", transfer: "Übertragung" };
 export const flowLabel = (k: FlowKind) => KIND_LABEL[k];
 function classify(from: string, to: string): FlowKind {
   const f = from.toLowerCase(), t = to.toLowerCase();
@@ -522,14 +522,14 @@ export function buildKpis(snap: EconomySnapshot, range: RangeKey): Kpi[] {
   const backing = supply > 0 ? collateral / supply : 0;
 
   return [
-    { key: "supply", label: "Supply", value: supply, format: "num0", sub: "Röbel Coins in circulation", deltaPct: deltaPct(supply, supplySpark[0] ?? supply), spark: supplySpark },
-    { key: "backing", label: "Backing", value: backing * 100, format: "pct", sub: "collateral ÷ supply", deltaPct: null, spark: [] },
-    { key: "volume", label: "Volume", value: curVol, format: "num0", sub: "coins moved", deltaPct: deltaPct(curVol, prevVol), spark: vSpark },
-    { key: "transfers", label: "Transfers", value: curTx, format: "int", sub: "on-chain events", deltaPct: deltaPct(curTx, prevTx), spark: tSpark },
-    { key: "active", label: "Active", value: curActive.size, format: "int", sub: "wallets moving coins", deltaPct: deltaPct(curActive.size, prevActive.size), spark: aSpark.map((s) => s.size) },
-    { key: "holders", label: "Holders", value: holders.length, format: "int", sub: "hold Röbel Coins", deltaPct: deltaPct(holders.length, Math.max(0, holders.length - curNew)), spark: growth.points.map((p) => p.cumulative) },
-    { key: "mints", label: "Mints", value: curMint, format: "num0", sub: "new coins minted", deltaPct: deltaPct(curMint, prevMint), spark: mSpark },
-    { key: "newHolders", label: "New holders", value: curNew, format: "int", sub: "joined this period", deltaPct: deltaPct(curNew, prevNew), spark: growth.points.map((p) => p.added) },
+    { key: "supply", label: "Umlauf", value: supply, format: "num0", sub: "Röbel-Münzen im Umlauf", deltaPct: deltaPct(supply, supplySpark[0] ?? supply), spark: supplySpark },
+    { key: "backing", label: "Deckung", value: backing * 100, format: "pct", sub: "Deckung ÷ Umlauf", deltaPct: null, spark: [] },
+    { key: "volume", label: "Volumen", value: curVol, format: "num0", sub: "bewegte Münzen", deltaPct: deltaPct(curVol, prevVol), spark: vSpark },
+    { key: "transfers", label: "Übertragungen", value: curTx, format: "int", sub: "Vorgänge", deltaPct: deltaPct(curTx, prevTx), spark: tSpark },
+    { key: "active", label: "Aktiv", value: curActive.size, format: "int", sub: "bewegen Münzen", deltaPct: deltaPct(curActive.size, prevActive.size), spark: aSpark.map((s) => s.size) },
+    { key: "holders", label: "Halter:innen", value: holders.length, format: "int", sub: "halten Röbel-Münzen", deltaPct: deltaPct(holders.length, Math.max(0, holders.length - curNew)), spark: growth.points.map((p) => p.cumulative) },
+    { key: "mints", label: "Neue Münzen", value: curMint, format: "num0", sub: "neu ausgegeben", deltaPct: deltaPct(curMint, prevMint), spark: mSpark },
+    { key: "newHolders", label: "Neue Halter:innen", value: curNew, format: "int", sub: "in diesem Zeitraum dazu", deltaPct: deltaPct(curNew, prevNew), spark: growth.points.map((p) => p.added) },
   ];
 }
 

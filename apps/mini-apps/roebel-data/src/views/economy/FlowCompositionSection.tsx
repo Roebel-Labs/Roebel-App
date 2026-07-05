@@ -11,8 +11,8 @@ export function FlowCompositionSection({ transfers }: { transfers: Transfer[] })
     .map((b) => ({ key: b.kind, label: b.label, value: b.amount, count: b.count, color: b.color }));
 
   return (
-    <ChartCard title="Flow composition" subtitle="Where coins move, by type · this period">
-      {summary.totalAmount <= 0 ? <EmptyHint>No flows in this period yet.</EmptyHint> : <InteractiveSplitBar parts={parts} />}
+    <ChartCard title="Zusammensetzung" subtitle="Wohin die Münzen fließen · dieser Zeitraum">
+      {summary.totalAmount <= 0 ? <EmptyHint>In diesem Zeitraum noch keine Bewegungen.</EmptyHint> : <InteractiveSplitBar parts={parts} />}
     </ChartCard>
   );
 }

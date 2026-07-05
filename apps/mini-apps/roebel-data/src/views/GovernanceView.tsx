@@ -67,24 +67,24 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Governance"
-        description="The town treasury and proposals, live on Gnosis. Vote privately in the Röbel app."
+        title="Mitbestimmung"
+        description="Gemeinschaftskasse und Vorschläge im Überblick. Stimme in der Röbel-App privat ab."
         onRefresh={load}
         refreshing={loading}
       />
 
       {/* Town treasury */}
-      <ChartCard title="Town treasury" subtitle="Gemeinschaftskasse · Safe multisig on Gnosis">
+      <ChartCard title="Gemeinschaftskasse" subtitle="Gemeinschaftskasse der Gemeinde">
         {!treasury ? (
           <Skeleton className="h-[120px]" />
         ) : (
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Reserve balance</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Kassenstand</div>
             <div className="mt-1 text-4xl font-semibold leading-none tracking-tight text-foreground tnum">€{fmt(treasury.euro, 2)}</div>
             <div className="mt-4 space-y-2.5 border-t border-border pt-3.5">
-              <AssetRow label="xDAI" sub="Network currency" value={fmt(treasury.xdai, 2)} />
-              <AssetRow label="EURe" sub="Euro stablecoin" value={fmt(treasury.eure, 2)} />
-              <AssetRow label="Röbel-Münzen" sub="Community token" value={fmt(treasury.muenzen, 0)} />
+              <AssetRow label="Reserve" sub="Netz-Guthaben" value={fmt(treasury.xdai, 2)} />
+              <AssetRow label="Euro" sub="Digitaler Euro" value={fmt(treasury.eure, 2)} />
+              <AssetRow label="Röbel-Münzen" sub="Gemeinschaftswährung" value={fmt(treasury.muenzen, 0)} />
             </div>
           </div>
         )}
@@ -93,23 +93,23 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
       {/* Governance KPIs */}
       <div className="grid grid-cols-3 gap-3">
         <KpiCard
-          label="Open"
+          label="Offen"
           value={proposals ? active.length : "—"}
-          sub="proposals"
+          sub="Vorschläge"
           tone="primary"
           icon={<BallotBox className="h-5 w-5" />}
         />
         <KpiCard
-          label="Total"
+          label="Gesamt"
           value={proposals ? proposals.length : "—"}
-          sub="proposals"
+          sub="Vorschläge"
           tone="info"
           icon={<Vault className="h-5 w-5" />}
         />
         <KpiCard
-          label="Registered"
+          label="Angemeldet"
           value={signups ?? "—"}
-          sub="to vote"
+          sub="zum Abstimmen"
           tone="success"
           icon={<Users className="h-5 w-5" />}
         />
@@ -122,12 +122,12 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
           <Skeleton className="h-[96px]" />
         </div>
       ) : proposals.length === 0 ? (
-        <EmptyHint>No proposals yet. New proposals from the Röbel app appear here.</EmptyHint>
+        <EmptyHint>Noch keine Vorschläge. Neue Vorschläge aus der Röbel-App erscheinen hier.</EmptyHint>
       ) : (
         <div className="space-y-4">
           {active.length > 0 && (
             <div className="space-y-2.5">
-              <SectionTitle>Active</SectionTitle>
+              <SectionTitle>Aktiv</SectionTitle>
               {active.map((p) => (
                 <ProposalCard key={p.proposal_id} p={p} onClick={() => open(p)} />
               ))}
@@ -135,7 +135,7 @@ export default function GovernanceView({ initialProposalId = null }: { initialPr
           )}
           {closed.length > 0 && (
             <div className="space-y-2.5">
-              <SectionTitle>Closed</SectionTitle>
+              <SectionTitle>Abgeschlossen</SectionTitle>
               {closed.map((p) => (
                 <ProposalCard key={p.proposal_id} p={p} onClick={() => open(p)} />
               ))}
@@ -181,7 +181,7 @@ function ProposalCard({ p, onClick }: { p: Proposal; onClick: () => void }) {
         {active && t.total === 0 ? (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Lock className="h-3.5 w-3.5 text-[#00498B]" />
-            Voting in progress — encrypted
+            Abstimmung läuft — verschlüsselt
           </span>
         ) : t.total > 0 ? (
           <SplitBar
@@ -192,7 +192,7 @@ function ProposalCard({ p, onClick }: { p: Proposal; onClick: () => void }) {
             ]}
           />
         ) : (
-          <span className="text-[11px] text-muted-foreground">No votes recorded</span>
+          <span className="text-[11px] text-muted-foreground">Noch keine Stimmen</span>
         )}
       </div>
     </button>

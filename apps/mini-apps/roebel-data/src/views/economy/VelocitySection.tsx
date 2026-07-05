@@ -10,19 +10,19 @@ import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 export function VelocitySection({ vel }: { vel: VelocitySummary }) {
   const hasData = vel.points.some((p) => p.volume > 0);
   return (
-    <ChartCard title="Velocity & circulation" subtitle="How actively coins change hands · volume ÷ supply per day">
+    <ChartCard title="Umlaufgeschwindigkeit" subtitle="Wie aktiv die Münzen den Besitzer wechseln · Volumen ÷ Umlauf pro Tag">
       {!hasData ? (
-        <EmptyHint>Not enough circulation yet to measure velocity.</EmptyHint>
+        <EmptyHint>Noch nicht genug Umlauf, um die Geschwindigkeit zu messen.</EmptyHint>
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="Avg velocity" value={pct(vel.avgVelocity, 1)} hint="of supply / day" />
-            <Stat label="Tx / wallet" value={fmt(vel.avgTxPerWallet, 1)} hint="on active days" />
-            <Stat label="Peak day" value={vel.peak && vel.peak.velocity > 0 ? pct(vel.peak.velocity, 1) : "—"} hint={vel.peak?.label ?? ""} />
+            <Stat label="Ø Geschwindigkeit" value={pct(vel.avgVelocity, 1)} hint="vom Umlauf / Tag" />
+            <Stat label="Vorgänge / Person" value={fmt(vel.avgTxPerWallet, 1)} hint="an aktiven Tagen" />
+            <Stat label="Spitzentag" value={vel.peak && vel.peak.velocity > 0 ? pct(vel.peak.velocity, 1) : "—"} hint={vel.peak?.label ?? ""} />
           </div>
           <TimeSeriesChart
             labels={vel.points.map((p) => p.label)}
-            series={[{ key: "vel", label: "Velocity", color: C.navy, values: vel.points.map((p) => p.velocity * 100), area: true }]}
+            series={[{ key: "vel", label: "Geschwindigkeit", color: C.navy, values: vel.points.map((p) => p.velocity * 100), area: true }]}
             valueFormat={(n) => `${fmt(n, 1)}%`}
             height={170}
           />
