@@ -95,12 +95,16 @@ export async function generateNewsletterDraft(opts?: {
   const supabase = createAdminClient()
 
   if (!opts?.force) {
-    const { data: existingDraft } = await supabase
+    const { data: existingDraft, error: draftCheckError } = await supabase
       .from("newsletter_issues")
       .select("id")
       .eq("status", "draft")
       .limit(1)
       .maybeSingle()
+    if (draftCheckError) {
+      console.error("[Newsletter] draft check failed:", draftCheckError)
+      return { created: false, reason: "Entwurfs-Prüfung fehlgeschlagen — bitte erneut versuchen." }
+    }
     if (existingDraft) {
       return { created: false, reason: "Es existiert bereits ein unversendeter Entwurf." }
     }
@@ -140,11 +144,15 @@ export async function regenerateIssueContent(
   issueId: string
 ): Promise<{ success: boolean; message: string }> {
   const supabase = createAdminClient()
-  const { data: issue } = await supabase
+  const { data: issue, error: lookupError } = await supabase
     .from("newsletter_issues")
     .select("id, status")
     .eq("id", issueId)
     .maybeSingle()
+  if (lookupError) {
+    console.error("[Newsletter] issue lookup failed:", lookupError)
+    return { success: false, message: "Datenbankfehler — bitte erneut versuchen." }
+  }
   if (!issue) return { success: false, message: "Ausgabe nicht gefunden." }
   if (issue.status !== "draft") {
     return { success: false, message: "Nur Entwürfe können neu generiert werden." }
