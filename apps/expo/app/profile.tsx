@@ -328,10 +328,10 @@ const handleRefresh = async () => {
                   <>
                     {/* Tourist: header + 2-up coins/Röbel Card row */}
                     <ProfileHeaderCard
-                      name={displayName || 'Besucher'}
+                      name={displayName || (user?.preferred_role === 'organisation' ? 'Organisation' : 'Besucher')}
                       avatarUrl={user?.profile_picture_url ?? null}
                       variant="tourist"
-                      pillLabel="Besucher:in"
+                      pillLabel={user?.preferred_role === 'organisation' ? 'Organisation' : 'Besucher:in'}
                       onPress={() => router.push(profileHref as any)}
                     />
                     <TouristActionRow />
