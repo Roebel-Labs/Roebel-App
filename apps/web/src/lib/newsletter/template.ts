@@ -15,12 +15,21 @@ const TAG_STYLES: Record<string, string> = {
   strong: "font-weight:600;color:#111827;",
 }
 
-/** Injects inline styles into Tiptap-generated HTML so email clients render it. */
+/** Injects inline styles into Tiptap-generated HTML so email clients render it.
+ *  Merges with any existing style attribute (author styles win over the base). */
 export function inlineStyleNewsletterHtml(html: string): string {
   return html.replace(
-    /<(h1|h2|h3|p|ul|ol|li|a|blockquote|hr|img|strong)([\s>/])/g,
-    (_m, tag: string, after: string) =>
-      `<${tag} style="${TAG_STYLES[tag]}"${after.trim() === "" ? " " : after}`
+    /<(h1|h2|h3|p|ul|ol|li|a|blockquote|hr|img|strong)((?:\s[^>]*)?\/?)>/g,
+    (_m, tag: string, attrs: string) => {
+      const base = TAG_STYLES[tag]
+      const styleMatch = attrs.match(/\sstyle\s*=\s*"([^"]*)"/i)
+      if (styleMatch) {
+        const author = styleMatch[1].trim()
+        const merged = `${base}${author}${author.endsWith(";") || author === "" ? "" : ";"}`
+        return `<${tag}${attrs.replace(styleMatch[0], ` style="${merged}"`)}>`
+      }
+      return `<${tag} style="${base}"${attrs}>`
+    }
   )
 }
 
