@@ -33,10 +33,14 @@ jobs:
   summary:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Cosmetic helper — must never red-X a PR (e.g. when the API key secret
+    # is missing or the model call flakes).
+    continue-on-error: true
     permissions:
       contents: read
       pull-requests: write
       issues: write
+      id-token: write # claude-code-action exchanges a GitHub OIDC token
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,8 +51,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          model: claude-sonnet-4-6
-          allowed_tools: "Bash(gh pr:*),Bash(git diff:*),Bash(git log:*),Read,Grep,Glob"
+          claude_args: |
+            --model claude-sonnet-4-6
+            --allowedTools "Bash(gh pr:*),Bash(git diff:*),Bash(git log:*),Read,Grep,Glob"
           prompt: |
             Triage pull request #${{ github.event.pull_request.number }} in this
             Turborepo monorepo (web / Expo / Supabase / Solidity contracts).

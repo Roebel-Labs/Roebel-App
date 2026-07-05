@@ -7,9 +7,8 @@ name: Security review
 #                     tracking issue when it finds something.
 #
 # Required repo secret:
-#   CLAUDE_API_KEY    — Anthropic API key (Settings → Secrets → Actions).
-#                       (ANTHROPIC_API_KEY also referenced by the audit job;
-#                        set both to the same value, or rename to taste.)
+#   ANTHROPIC_API_KEY — Anthropic API key (Settings → Secrets → Actions).
+#                       Used by both the pr-review and weekly-audit jobs.
 #
 # Prompt-injection note: fork PRs do NOT receive secrets, so pr-review is
 # guarded to same-repo PRs only. Review external contributions manually or
@@ -44,7 +43,7 @@ jobs:
       - uses: anthropics/claude-code-security-review@main
         with:
           comment-pr: true
-          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Single line to bump for a model upgrade (e.g. a future model):
           claude-model: claude-opus-4-8
           # Skip vendored / generated paths to save tokens and noise.
