@@ -8,7 +8,7 @@ import { runWithRetry } from '@/lib/muenzen-settlement';
 import {
   isOnboarded, findInviter, getRoebelTalerBalance, getPersonalCrcBalance,
   getMintableTaler, formatTaler, prepareDailyMint, prepareOnboard,
-  prepareContributeToRoebelTaler, prepareSendRoebelTaler,
+  prepareContributeToRoebelTaler, prepareSendRoebelTaler, isGroupMember,
 } from '@/lib/roebel-taler';
 
 export interface SettlementJob {
@@ -24,6 +24,9 @@ export interface SettlementJob {
 interface RoebelTalerContextValue {
   talerBalance: number;
   balanceRaw: bigint;
+  /** Sendable Röbel Münzen (group token only) — caps the Senden flow. */
+  groupBalance: number;
+  groupBalanceRaw: bigint;
   mintable: number;
   mintableRaw: bigint;
   onboarded: boolean;
@@ -55,7 +58,8 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
   const { showSnackbar } = useSnackbar();
   const address = gnosisAccount?.address;
 
-  const [balanceRaw, setBalanceRaw] = useState<bigint>(0n);
+  const [groupRaw, setGroupRaw] = useState<bigint>(0n);
+  const [personalRaw, setPersonalRaw] = useState<bigint>(0n);
   const [mintableRaw, setMintableRaw] = useState<bigint>(0n);
   const [onboarded, setOnboarded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -70,13 +74,15 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
   // background reconcile so no consumer flashes a spinner mid-settle).
   const reconcile = useCallback(async () => {
     if (!address) return;
-    const [ob, bal, mintable] = await Promise.all([
+    const [ob, group, personal, mintable] = await Promise.all([
       isOnboarded(address).catch(() => false),
       getRoebelTalerBalance(address).catch(() => 0n),
+      getPersonalCrcBalance(address).catch(() => 0n),
       getMintableTaler(address).catch(() => 0n),
     ]);
     setOnboarded(ob);
-    setBalanceRaw(bal);
+    setGroupRaw(group);
+    setPersonalRaw(personal);
     setMintableRaw(mintable);
   }, [address]);
 
@@ -103,12 +109,17 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     setMinting(true);
     try {
       await sendTransaction({ account: gnosisAccount, transaction: prepareDailyMint() });
-      const pcrc = await getPersonalCrcBalance(gnosisAccount.address).catch(() => 0n);
-      if (pcrc > 0n) {
-        await sendTransaction({
-          account: gnosisAccount,
-          transaction: prepareContributeToRoebelTaler(gnosisAccount.address, pcrc),
-        });
+      // Citizens (trusted by the group) convert to the shared Röbel Münzen;
+      // guests keep their personal Münzen — the group would revert their mint.
+      const member = await isGroupMember(gnosisAccount.address).catch(() => false);
+      if (member) {
+        const pcrc = await getPersonalCrcBalance(gnosisAccount.address).catch(() => 0n);
+        if (pcrc > 0n) {
+          await sendTransaction({
+            account: gnosisAccount,
+            transaction: prepareContributeToRoebelTaler(gnosisAccount.address, pcrc),
+          });
+        }
       }
     } finally {
       setMinting(false);
@@ -176,11 +187,14 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     () => Object.values(pendingDeltas).reduce((a, b) => a + b, 0),
     [pendingDeltas],
   );
+  const balanceRaw = groupRaw + personalRaw;
   const optimisticRaw = balanceRaw + BigInt(Math.round(deltaSum)) * ONE;
 
   const value = useMemo<RoebelTalerContextValue>(() => ({
     talerBalance: Number(formatTaler(optimisticRaw)),
     balanceRaw: optimisticRaw,
+    groupBalance: Number(formatTaler(groupRaw)),
+    groupBalanceRaw: groupRaw,
     mintable: Number(formatTaler(mintableRaw)),
     mintableRaw,
     onboarded,
@@ -194,7 +208,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     refresh,
     enqueueSettlement,
     account: gnosisAccount,
-  }), [optimisticRaw, mintableRaw, onboarded, loading, ready, minting, onboarding,
+  }), [optimisticRaw, groupRaw, mintableRaw, onboarded, loading, ready, minting, onboarding,
        sending, dailyMint, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
 
   return <RoebelTalerContext.Provider value={value}>{children}</RoebelTalerContext.Provider>;

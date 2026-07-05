@@ -107,6 +107,16 @@ export async function getPersonalCrcBalance(address: string): Promise<bigint> {
 	});
 }
 
+/** True when the Röbel Münzen group trusts `addr` — i.e. groupMint is allowed
+ *  (citizens). Guests mint personal Münzen only. */
+export async function isGroupMember(address: string): Promise<boolean> {
+	return readContract({
+		contract: hubRead,
+		method: "function isTrusted(address,address) view returns (bool)",
+		params: [roebeltalerGroupAddress, address],
+	});
+}
+
 /** Indicative € value of 1 Röbel Münze (orientation only — NOT euro-redeemable). */
 export const MUENZE_EUR = 1;
 /** Convert a Röbel Münzen amount (display number) to its indicative € value. */
