@@ -30,6 +30,10 @@ export interface MiniApp {
   permissions: MiniAppPermission[];
   primaryColor: string;
   featured: boolean;
+  /** Hero artwork for the store's featured carousel (gray placeholder if null). */
+  featureImageUrl: string | null;
+  /** ISO timestamp — powers the "Neu & bemerkenswert" section. */
+  createdAt: string;
   /** Resolved developer/author display name, if the join returns one. */
   authorName: string | null;
 }
@@ -48,6 +52,8 @@ interface MiniAppRow {
   permissions: string[] | null;
   primary_color: string | null;
   featured: boolean | null;
+  feature_image_url: string | null;
+  created_at: string | null;
   status: string;
   developers?: { display_name: string | null } | { display_name: string | null }[] | null;
 }
@@ -107,12 +113,14 @@ function mapRow(row: MiniAppRow): MiniApp {
     permissions: coercePermissions(row.permissions),
     primaryColor: row.primary_color || DEFAULT_PRIMARY,
     featured: !!row.featured,
+    featureImageUrl: row.feature_image_url,
+    createdAt: row.created_at ?? '',
     authorName: resolveAuthorName(row.developers),
   };
 }
 
 const SELECT_COLUMNS =
-  'id, slug, name, icon_url, home_url, description, category, tags, screenshots, permissions, primary_color, featured, status, developers(display_name)';
+  'id, slug, name, icon_url, home_url, description, category, tags, screenshots, permissions, primary_color, featured, feature_image_url, created_at, status, developers(display_name)';
 
 /** Fetch every live mini app (featured first, then newest). Returns [] on error. */
 export async function fetchLiveMiniApps(): Promise<MiniApp[]> {
@@ -152,6 +160,40 @@ export async function fetchMiniAppBySlug(slug: string): Promise<MiniApp | null> 
     return data ? mapRow(data as unknown as MiniAppRow) : null;
   } catch (e) {
     console.warn('[miniapps] fetchMiniAppBySlug threw:', e);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Store stats — get_mini_app_stats RPC
+// ---------------------------------------------------------------------------
+
+export interface MiniAppStats {
+  /** Total `app_open` events. */
+  views: number;
+  /** Distinct wallets that used the app. */
+  citizens: number;
+}
+
+/**
+ * Aggregate store stats for the detail page ("Aufrufe" / "Genutzt von").
+ * Backed by the security-definer `get_mini_app_stats` function. Null on error.
+ */
+export async function fetchMiniAppStats(miniAppId: string): Promise<MiniAppStats | null> {
+  try {
+    // Not in the generated Supabase types yet — cast (repo convention).
+    const { data, error } = await (supabase.rpc as any)('get_mini_app_stats', {
+      p_mini_app_id: miniAppId,
+    });
+    if (error) {
+      console.warn('[miniapps] fetchMiniAppStats failed:', error.message);
+      return null;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    return { views: Number(row.views ?? 0), citizens: Number(row.citizens ?? 0) };
+  } catch (e) {
+    console.warn('[miniapps] fetchMiniAppStats threw:', e);
     return null;
   }
 }

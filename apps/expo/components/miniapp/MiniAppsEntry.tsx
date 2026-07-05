@@ -5,14 +5,16 @@
  * a "Mini-Apps · Mehr entdecken ›" header. Falls back to a promo banner when
  * no live apps exist.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { ChevronRight, GridIcon } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
+import { useInstalledMiniApps } from '@/lib/miniapp-installs';
 import { AppIcon, MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
+import MiniAppHost from '@/components/miniapp/MiniAppHost';
 
 const GRID_GAP = 12;
 const MAX_TILES = 7;
@@ -21,8 +23,12 @@ export default function MiniAppsEntry() {
   const { colors } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { isInstalled } = useInstalledMiniApps();
   const [apps, setApps] = useState<MiniApp[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Installed apps launch straight into the host from the grid.
+  const [runningApp, setRunningApp] = useState<MiniApp | null>(null);
+  const [hostVisible, setHostVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +44,20 @@ export default function MiniAppsEntry() {
   }, []);
 
   const goStore = () => router.push('/mini-apps' as any);
+
+  const openApp = useCallback(
+    (app: MiniApp) => {
+      if (isInstalled(app.slug)) {
+        setRunningApp(app);
+        setHostVisible(true);
+      } else {
+        router.push(`/mini-app/${app.slug}` as any);
+      }
+    },
+    [isInstalled, router],
+  );
+
+  const closeHost = useCallback(() => setHostVisible(false), []);
 
   // Until we know, render nothing (avoids layout flash).
   if (!loaded) return null;
@@ -79,7 +99,7 @@ export default function MiniAppsEntry() {
               app={app}
               width={tileW}
               iconSize={iconSize}
-              onPress={() => router.push(`/mini-app/${app.slug}` as any)}
+              onPress={() => openApp(app)}
             />
           ))}
 
@@ -116,6 +136,8 @@ export default function MiniAppsEntry() {
           </Pressable>
         </View>
       )}
+
+      {runningApp && <MiniAppHost app={runningApp} visible={hostVisible} onClose={closeHost} />}
     </View>
   );
 }

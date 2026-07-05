@@ -141,6 +141,71 @@ export function GridIcon({ size = 18, color = '#000', strokeWidth = 2 }: Props) 
   );
 }
 
+export function InfoIcon({ size = 20, color = '#000', strokeWidth = 2 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={strokeWidth} />
+      <Path
+        d="M12 11v5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+      <Circle cx={12} cy={8} r={1.1} fill={color} />
+    </Svg>
+  );
+}
+
+export function EyeIcon({ size = 18, color = '#000', strokeWidth = 2 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+}
+
+export function UsersIcon({ size = 18, color = '#000', strokeWidth = 2 }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={9} cy={8} r={3.5} stroke={color} strokeWidth={strokeWidth} />
+      <Path
+        d="M2.5 20c.7-2.9 3.3-4.5 6.5-4.5s5.8 1.6 6.5 4.5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 15.9c1.6.7 2.7 2 3 3.9"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Filled verified badge (check in a circle), like the reference sheet's "to App ✓". */
+export function VerifiedIcon({ size = 16, color = '#00498B' }: Props) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={10} fill={color} />
+      <Path
+        d="m8 12.2 2.7 2.7L16 9.6"
+        stroke="#fff"
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function ChevronRight({ size = 16, color = '#000', strokeWidth = 2 }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
