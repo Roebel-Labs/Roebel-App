@@ -656,7 +656,7 @@ export default function RewardsIndexScreen() {
                   Freunde einladen
                 </Text>
                 <Text style={[styles.referralSubtitle, { color: colors.textSecondary }]}>
-                  Du und dein Freund bekommen 200 / 100 Münzen
+                  Du und dein Freund bekommen 200 / 100 Punkte
                 </Text>
                 {!!referralCode && (
                   <Text style={[styles.referralCode, { color: colors.primary }]}>
