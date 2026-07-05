@@ -36,7 +36,7 @@ interface FlippableIdentityCardProps {
 type CardMode = 'tourist' | 'citizen' | 'org';
 
 const CARD_BACK_LABELS: Record<CardMode, string> = {
-  tourist: 'Tourist Card',
+  tourist: 'Besucher Card',
   citizen: 'Bürgerausweis',
   org: 'Partner Card',
 };

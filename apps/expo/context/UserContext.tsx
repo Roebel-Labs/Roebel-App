@@ -17,7 +17,7 @@ import type { UserRecord, UserTier } from '@/lib/types';
 
 const TIER_LABELS: Record<UserTier, string> = {
   guest: 'Gast',
-  tourist: 'Tourist',
+  tourist: 'Besucher',
   citizen: 'Bürger',
 };
 

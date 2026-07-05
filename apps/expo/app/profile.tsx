@@ -259,7 +259,7 @@ const handleRefresh = async () => {
               !isOrg && !isCitizen && !!citizenRequest && user?.preferred_role !== 'tourist';
             const orgPillLabel = isOrg
               ? ORG_TYPE_LABELS[activeAccount?.sub_type || ''] || 'Organisation'
-              : 'Tourist:in';
+              : 'Besucher:in';
 
             const profileHref = user?.username
               ? ({ pathname: '/user/[username]', params: { username: user.username } } as const)
@@ -328,10 +328,10 @@ const handleRefresh = async () => {
                   <>
                     {/* Tourist: header + 2-up coins/Röbel Card row */}
                     <ProfileHeaderCard
-                      name={displayName || 'Tourist'}
+                      name={displayName || 'Besucher'}
                       avatarUrl={user?.profile_picture_url ?? null}
                       variant="tourist"
-                      pillLabel="Tourist:in"
+                      pillLabel="Besucher:in"
                       onPress={() => router.push(profileHref as any)}
                     />
                     <TouristActionRow />

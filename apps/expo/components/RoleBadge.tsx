@@ -39,7 +39,7 @@ const TIER_CONFIG: Record<UserTier, TierCfg> = {
     fgDark: '#9CA3AF',
   },
   tourist: {
-    label: 'Tourist',
+    label: 'Besucher',
     icon: 'compass',
     bgLight: '#DBEAFE',
     bgDark: '#1E3A5F',
