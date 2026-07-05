@@ -73,7 +73,7 @@ export default function BuilderMiniAppDetail({
       <PageHeader title={app.name} description={app.description ?? undefined}>
         <div className="flex items-center gap-2">
           {app.source === "ai_builder" ? (
-            <Link href={`/dashboard/mini-apps/new?app=${app.slug}`}>
+            <Link href={`/editor?app=${app.slug}`}>
               <Button size="sm">Im KI-Baukasten bearbeiten</Button>
             </Link>
           ) : null}

@@ -34,7 +34,7 @@ export default function MyMiniApps() {
         refreshing={refreshing}
       >
         <div className="flex gap-2">
-          <Link href="/dashboard/mini-apps/new">
+          <Link href="/editor">
             <Button size="sm">Mit KI erstellen</Button>
           </Link>
           <Link href="/dashboard/mini-apps/submit">
@@ -65,7 +65,7 @@ export default function MyMiniApps() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/dashboard/mini-apps/new">
+            <Link href="/editor">
               <Button size="sm">Mit KI starten</Button>
             </Link>
             <Link href="/dashboard/mini-apps/submit">
@@ -97,7 +97,7 @@ export default function MyMiniApps() {
               </Link>
               {app.source === "ai_builder" ? (
                 <Link
-                  href={`/dashboard/mini-apps/new?app=${app.slug}`}
+                  href={`/editor?app=${app.slug}`}
                   title="Im KI-Baukasten öffnen"
                   aria-label={`${app.name} im KI-Baukasten öffnen`}
                   className="flex h-8 shrink-0 items-center rounded-[10px] border border-border px-2.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-primary"
