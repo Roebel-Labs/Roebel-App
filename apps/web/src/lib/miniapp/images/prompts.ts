@@ -1,0 +1,27 @@
+// Prompt builders for Nano Banana 2 — app icons and 1:1 store previews.
+import "server-only";
+import type { MiniAppRow } from "../types";
+
+export function buildIconPrompt(app: MiniAppRow, userPrompt?: string): string {
+  const parts = [
+    `Ein hochwertiges App-Icon für die Mini-App "${app.name}".`,
+    app.description ? `Die App: ${app.description}.` : "",
+    `Flaches, modernes Design mit einem zentrierten, freundlichen Motiv auf ruhigem Hintergrund in der Farbe ${app.primary_color ?? "#00498B"}.`,
+    "Abgerundete Formen, klare Silhouette, kein Text, kein Rahmen, kein Schlagschatten außerhalb der Fläche.",
+    userPrompt?.trim() ? `Zusätzlicher Wunsch: ${userPrompt.trim()}.` : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+export function buildPreviewPrompt(
+  app: MiniAppRow,
+  opts: { userPrompt?: string; hasReference: boolean },
+): string {
+  const base = opts.hasReference
+    ? `Erstelle ein App-Store-Vorschaubild für die Mini-App "${app.name}". Zeige den beigefügten Screenshot in einem modernen, leicht geneigten Smartphone-Rahmen auf einem ruhigen Verlaufshintergrund in ${app.primary_color ?? "#00498B"}. Der Screenshot muss klar erkennbar und unverändert bleiben.`
+    : `Erstelle ein App-Store-Vorschaubild für die Mini-App "${app.name}"${app.description ? ` (${app.description})` : ""}. Moderne, freundliche Illustration der App-Idee auf ruhigem Verlaufshintergrund in ${app.primary_color ?? "#00498B"}.`;
+  const style =
+    "Viel Luft, keine zusätzlichen Texte oder Logos, hochwertiger App-Store-Look.";
+  const extra = opts.userPrompt?.trim() ? `Zusätzlicher Wunsch: ${opts.userPrompt.trim()}.` : "";
+  return [base, style, extra].filter(Boolean).join(" ");
+}
