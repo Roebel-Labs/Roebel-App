@@ -8,8 +8,11 @@ import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { slugifyDisplayName, ensureUniqueUsernameSlug } from '@/lib/username-slug';
-import { setNotificationPromptPending } from '@/lib/onboarding-storage';
+import { setNotificationPromptPending, saveCitizenDraft } from '@/lib/onboarding-storage';
 import StoryProgress from '@/components/StoryProgress';
+import { useCreateCitizenRequest, REQUEST_STAGE_LABEL, DEFAULT_CITIZEN_REASON } from '@/hooks/useVerification';
+import { useVerificationContext } from '@/context/VerificationContext';
+import { useSnackbar } from '@/context/SnackbarContext';
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -21,6 +24,9 @@ export default function WelcomeConsentScreen() {
   const { acceptAll, acceptEssential } = useConsent();
   const { state, dispatch } = useWelcomeWizard();
   const [submitting, setSubmitting] = useState(false);
+  const { createRequest, stage } = useCreateCitizenRequest();
+  const { hasCitizenNFT, activePendingRequest, refresh: refreshVerification } = useVerificationContext();
+  const { showSnackbar } = useSnackbar();
 
   const dismissToProfile = () => {
     dispatch({ type: 'RESET' });
@@ -28,6 +34,8 @@ export default function WelcomeConsentScreen() {
   };
 
   const handleAccept = async () => {
+    const roleAtSubmit = state.preferredRole;
+    const citizenDataAtSubmit = state.citizenData;
     if (!user?.wallet_address) {
       await acceptAll('welcome_terms');
       await setNotificationPromptPending();
@@ -85,11 +93,26 @@ export default function WelcomeConsentScreen() {
       }
 
       await refreshUser();
+
+      // Bürger path: fire the verification request automatically so the data
+      // from the citizen-data step is never typed twice. Never blocks onboarding.
+      if (roleAtSubmit === 'buerger' && citizenDataAtSubmit && !hasCitizenNFT && !activePendingRequest) {
+        try {
+          await createRequest(citizenDataAtSubmit, DEFAULT_CITIZEN_REASON);
+          await refreshVerification();
+        } catch (err) {
+          console.error('Auto citizen request failed (non-fatal):', err);
+          await saveCitizenDraft(citizenDataAtSubmit);
+          showSnackbar({
+            message: 'Dein Bürger-Antrag konnte nicht gesendet werden — starte ihn später im Profil, deine Angaben sind vorausgefüllt.',
+          });
+        }
+      }
     } finally {
       await setNotificationPromptPending();
       dispatch({ type: 'RESET' });
       setSubmitting(false);
-      router.replace('/');
+      router.replace((roleAtSubmit === 'organisation' ? '/create-org' : '/') as any);
     }
   };
 
@@ -136,7 +159,10 @@ export default function WelcomeConsentScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <StoryProgress step={3} totalSteps={3} />
+        <StoryProgress
+          step={state.preferredRole === 'buerger' ? 4 : 3}
+          totalSteps={state.preferredRole === 'buerger' ? 4 : 3}
+        />
         <Image
           source={require('../../assets/icons/Heart.png')}
           style={styles.illustration}
@@ -180,7 +206,14 @@ export default function WelcomeConsentScreen() {
           style={[styles.acceptButton, { backgroundColor: colors.primary }, submitting && { opacity: 0.6 }]}
         >
           {submitting ? (
-            <ActivityIndicator color={colors.onPrimary} />
+            <View style={styles.acceptProgressRow}>
+              <ActivityIndicator color={colors.onPrimary} />
+              {stage !== 'idle' && (
+                <Text style={[styles.acceptText, { color: colors.onPrimary }]}>
+                  {REQUEST_STAGE_LABEL[stage]}
+                </Text>
+              )}
+            </View>
           ) : (
             <Text style={[styles.acceptText, { color: colors.onPrimary }]}>Akzeptieren</Text>
           )}
@@ -257,6 +290,11 @@ const styles = StyleSheet.create({
   acceptText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
+  },
+  acceptProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   declineButton: {
     paddingVertical: 14,
