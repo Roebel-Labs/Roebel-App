@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Plus, Sparkles, Rocket } from "lucide-react";
+import { ChevronRight, Plus, Rocket } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,9 +35,7 @@ export default function MyMiniApps() {
       >
         <div className="flex gap-2">
           <Link href="/dashboard/mini-apps/new">
-            <Button size="sm">
-              <Sparkles className="mr-1 h-4 w-4" /> Mit KI erstellen
-            </Button>
+            <Button size="sm">Mit KI erstellen</Button>
           </Link>
           <Link href="/dashboard/mini-apps/submit">
             <Button size="sm" variant="outline">
@@ -68,9 +66,7 @@ export default function MyMiniApps() {
           </div>
           <div className="flex gap-2">
             <Link href="/dashboard/mini-apps/new">
-              <Button size="sm">
-                <Sparkles className="mr-1 h-4 w-4" /> Mit KI starten
-              </Button>
+              <Button size="sm">Mit KI starten</Button>
             </Link>
             <Link href="/dashboard/mini-apps/submit">
               <Button size="sm" variant="outline">
@@ -104,10 +100,9 @@ export default function MyMiniApps() {
                   href={`/dashboard/mini-apps/new?app=${app.slug}`}
                   title="Im KI-Baukasten öffnen"
                   aria-label={`${app.name} im KI-Baukasten öffnen`}
-                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-primary"
+                  className="flex h-8 shrink-0 items-center rounded-[10px] border border-border px-2.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-primary"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">KI-Editor</span>
+                  KI-Editor
                 </Link>
               ) : null}
               <Link href={`/dashboard/mini-apps/${app.id}`} aria-hidden tabIndex={-1}>

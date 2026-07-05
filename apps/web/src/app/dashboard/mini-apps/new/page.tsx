@@ -733,7 +733,7 @@ function EmptyState({
             <div className="mt-2 flex items-center justify-between gap-2">
               <ModelToggle value={complexity} onChange={setComplexity} />
               <Button size="sm" onClick={() => onSend(input)} disabled={input.trim().length < 3}>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> App bauen
+                App bauen
               </Button>
             </div>
           </div>

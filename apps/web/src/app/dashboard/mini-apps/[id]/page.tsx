@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, ExternalLink, Sparkles } from "lucide-react";
+import { ArrowLeft, Pencil, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,9 +74,7 @@ export default function BuilderMiniAppDetail({
         <div className="flex items-center gap-2">
           {app.source === "ai_builder" ? (
             <Link href={`/dashboard/mini-apps/new?app=${app.slug}`}>
-              <Button size="sm">
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Im KI-Baukasten bearbeiten
-              </Button>
+              <Button size="sm">Im KI-Baukasten bearbeiten</Button>
             </Link>
           ) : null}
           <StatusBadge status={app.status} />
