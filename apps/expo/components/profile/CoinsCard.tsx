@@ -2,10 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useRewards } from '@/context/RewardsContext';
-import { useUser } from '@/context/UserContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
-import { formatTaler } from '@/lib/roebel-taler';
 import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
 import { softShadow } from '@/lib/shadow';
 
@@ -14,15 +11,11 @@ const COIN_STACK = require('../../assets/illustration/gamification/stack.png');
 export default function CoinsCard() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { coins } = useRewards();
-  const { isCitizen } = useUser();
-  const { balanceRaw } = useRoebelTaler();
+  const { talerBalance } = useRoebelTaler();
   const cardBg = colors.background;
-  // Verified citizens see their real Röbel Münzen balance; others see gamification points.
-  // Show whole Münzen (no decimals) — e.g. 89.94 → 90.
-  const display = isCitizen
-    ? Math.round(Number(formatTaler(balanceRaw))).toLocaleString('de-DE')
-    : coins.toLocaleString('de-DE');
+  // The REAL on-chain Röbel Münzen for everyone — citizens hold the shared
+  // Münzen, guests their personal ones. Whole Münzen, no decimals.
+  const display = Math.round(talerBalance).toLocaleString('de-DE');
 
   return (
     <View
@@ -40,7 +33,7 @@ export default function CoinsCard() {
       >
         <Image source={COIN_STACK} style={styles.coin} resizeMode="contain" />
         <Text style={[styles.balance, { color: colors.textPrimary }]}>
-          {display}{isCitizen ? ' Münzen' : ''}
+          {display} Münzen
         </Text>
         <ChevronRightIcon width={16} height={16} color={colors.textSecondary} />
       </Pressable>

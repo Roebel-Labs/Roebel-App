@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import { useRewards } from '@/context/RewardsContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { softShadow } from '@/lib/shadow';
 
 const COIN_STACK = require('../../assets/illustration/gamification/stack.png');
@@ -10,7 +10,7 @@ const COIN_STACK = require('../../assets/illustration/gamification/stack.png');
 export default function TouristActionRow() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { coins } = useRewards();
+  const { talerBalance } = useRoebelTaler();
   const cardBg = colors.background;
 
   return (
@@ -27,7 +27,7 @@ export default function TouristActionRow() {
       >
         <Image source={COIN_STACK} style={styles.icon} resizeMode="contain" />
         <Text style={[styles.label, { color: colors.textPrimary }]}>
-          {coins.toLocaleString('de-DE')} Münzen
+          {Math.round(talerBalance).toLocaleString('de-DE')} Münzen
         </Text>
       </Pressable>
     </View>
