@@ -213,8 +213,12 @@ export async function importSubscribers(
       confirmed_at: new Date().toISOString(),
       consent_note: "CSV-Import (Einwilligung lag laut Import vor)",
     }))
-    const { error } = await supabase.from("newsletter_subscribers").insert(chunk)
-    if (!error) added += chunk.length
+    const { data: inserted, error } = await supabase
+      .from("newsletter_subscribers")
+      .upsert(chunk, { onConflict: "email", ignoreDuplicates: true })
+      .select("id")
+    if (error) console.error("[Newsletter] import chunk failed:", error)
+    added += inserted?.length ?? 0
   }
   revalidatePath(ADMIN_PATH)
   return { success: true, added, skipped: emails.length - added }
@@ -246,14 +250,17 @@ export async function deleteSubscriberById(id: string): Promise<{ success: boole
 export async function exportSubscribersCsv(): Promise<string> {
   await guard()
   const subscribers = await listSubscribers()
+  // Formel-Injektion in Excel/Sheets verhindern: gefährliche Startzeichen neutralisieren
+  const safeCell = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v)
   const header = "email,status,source,created_at"
-  const rows = subscribers.map((s) => `${s.email},${s.status},${s.source},${s.created_at}`)
+  const rows = subscribers.map((s) => `${safeCell(s.email)},${s.status},${s.source},${s.created_at}`)
   return [header, ...rows].join("\n")
 }
 
 export async function inviteAppUsers(): Promise<{
   success: boolean
   invited: number
+  failed: number
   alreadySubscribed: number
 }> {
   await guard()
@@ -269,6 +276,7 @@ export async function inviteAppUsers(): Promise<{
     (u) => u.email && EMAIL_RE.test(u.email) && !existingSet.has(u.email.toLowerCase())
   )
   let invited = 0
+  let failed = 0
   for (const user of targets) {
     const { data: created } = await supabase
       .from("newsletter_subscribers")
@@ -283,10 +291,21 @@ export async function inviteAppUsers(): Promise<{
       .single()
     if (created) {
       const ok = await sendConfirmationEmail(user.email!.toLowerCase(), created.confirm_token, "invite")
-      if (ok) invited++
+      if (ok) {
+        invited++
+      } else {
+        // Zeile bleibt 'pending' — ein späterer Re-Run lädt sie NICHT erneut ein
+        // (existingSet greift dann bereits). Sichtbar für Admins als "Unbestätigt"
+        // in der Abonnenten-Tabelle — das ist der Sichtbarkeits-Mechanismus.
+        failed++
+        console.error("[Newsletter] invite email failed:", user.email)
+      }
       await new Promise((r) => setTimeout(r, 600)) // Resend ~2 req/s
+    } else {
+      failed++
+      console.error("[Newsletter] invite insert failed:", user.email)
     }
   }
   revalidatePath(ADMIN_PATH)
-  return { success: true, invited, alreadySubscribed: (users?.length ?? 0) - targets.length }
+  return { success: true, invited, failed, alreadySubscribed: (users?.length ?? 0) - targets.length }
 }
