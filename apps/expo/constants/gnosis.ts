@@ -39,3 +39,9 @@ export const nameRegistryAddress =
 /** Returns a contract handle for the CitizenNFT on Gnosis. */
 export const citizenNFTGnosisContract = () =>
 	getContract({ client, address: citizenNFTGnosisAddress, chain: gnosisRead });
+
+/** External Gnosis-App referral link (Max's personal referral — new users who
+ *  join there get a SEPARATE Gnosis account, independent of the app wallet). */
+export const gnosisReferralUrl =
+	process.env.EXPO_PUBLIC_GNOSIS_REFERRAL_URL ||
+	"https://app.gnosis.io/referral/0x2d94a225f02d6cafebe7fda1a272c790b93750b5027443ad2b6f78398d672cc7?utm_campaign=referral";
