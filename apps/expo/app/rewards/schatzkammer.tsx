@@ -48,7 +48,9 @@ export default function SchatzkammerScreen() {
     isLoading,
   } = useRewards();
   // Lootbox keys are now bought with real Röbel Münzen (RCRC), not off-chain points.
-  const { talerBalance, account: gnosisAccount } = useRoebelTaler();
+  // Purchases spend GROUP tokens only (prepareSendRoebelTaler), so every
+  // affordability gate below reads `groupBalance`, not the unified `talerBalance`.
+  const { talerBalance, groupBalance, account: gnosisAccount } = useRoebelTaler();
 
   const { buy } = useLocalSearchParams<{ buy?: string }>();
   const [buySheetLootbox, setBuySheetLootbox] = useState<Lootbox | null>(null);
@@ -92,15 +94,15 @@ export default function SchatzkammerScreen() {
         return;
       }
       const price = priceRcrc(lootbox);
-      if (talerBalance >= price) {
+      if (groupBalance >= price) {
         setBuySheetLootbox(lootbox);
       } else {
         showSnackbar({
-          message: `Noch ${Math.ceil(price - talerBalance)} Röbel Münzen nötig`,
+          message: `Noch ${Math.ceil(price - groupBalance)} Röbel Münzen nötig`,
         });
       }
     },
-    [talerBalance, isConnected, keyCountFor, router, showSnackbar]
+    [groupBalance, isConnected, keyCountFor, router, showSnackbar]
   );
 
   const handleBuyKey = useCallback(async () => {
@@ -224,7 +226,7 @@ export default function SchatzkammerScreen() {
                       key={lootbox.id}
                       lootbox={lootbox}
                       hasKey={keyCountFor(lootbox.id) > 0}
-                      canAfford={talerBalance >= priceRcrc(lootbox)}
+                      canAfford={groupBalance >= priceRcrc(lootbox)}
                       onPress={() => handleChestPress(lootbox)}
                     />
                   ))}
@@ -295,18 +297,18 @@ export default function SchatzkammerScreen() {
             <View style={styles.balanceInline}>
               <Image source={COIN_SMALL} style={styles.balanceIcon} resizeMode="contain" />
               <Text style={[styles.buyStatValue, { color: colors.textPrimary }]}>
-                {Math.round(talerBalance).toLocaleString('de-DE')}
+                {Math.round(groupBalance).toLocaleString('de-DE')}
               </Text>
             </View>
           </View>
           <Pressable
             onPress={handleBuyKey}
-            disabled={isBuying || !buySheetLootbox || talerBalance < priceRcrc(buySheetLootbox)}
+            disabled={isBuying || !buySheetLootbox || groupBalance < priceRcrc(buySheetLootbox)}
             style={({ pressed }) => [
               styles.buyCTA,
               {
                 backgroundColor:
-                  !buySheetLootbox || talerBalance < priceRcrc(buySheetLootbox)
+                  !buySheetLootbox || groupBalance < priceRcrc(buySheetLootbox)
                     ? colors.disabled
                     : colors.primary,
                 opacity: pressed ? 0.85 : 1,
@@ -319,7 +321,7 @@ export default function SchatzkammerScreen() {
               <Text style={styles.buyCTAText}>
                 {!buySheetLootbox
                   ? 'Schlüssel kaufen'
-                  : talerBalance < priceRcrc(buySheetLootbox)
+                  : groupBalance < priceRcrc(buySheetLootbox)
                     ? 'Nicht genug Röbel Münzen'
                     : `Für ${priceRcrc(buySheetLootbox)} Röbel Münzen kaufen`}
               </Text>

@@ -48,7 +48,10 @@ export default function LootboxDetailScreen() {
   const { showSnackbar } = useSnackbar();
   const { lootboxes, keyCountFor, openChest } = useRewards();
   // Lootbox keys are paid in real Röbel Münzen (RCRC), not off-chain points.
-  const { talerBalance } = useRoebelTaler();
+  // Purchases spend GROUP tokens only, so the buy-CTA affordability gate below
+  // reads `groupBalance`, not the unified `talerBalance` (header badge stays
+  // talerBalance — that's a pure "your balance" display, not a spend gate).
+  const { talerBalance, groupBalance } = useRoebelTaler();
 
   const [directLootbox, setDirectLootbox] = useState<Lootbox | null>(null);
   const [isOpening, setIsOpening] = useState(false);
@@ -299,15 +302,15 @@ export default function LootboxDetailScreen() {
             style={({ pressed }) => [
               styles.primaryCTA,
               {
-                backgroundColor: talerBalance >= price ? colors.primary : colors.disabled,
+                backgroundColor: groupBalance >= price ? colors.primary : colors.disabled,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
             <Text style={styles.primaryCTAText}>
-              {talerBalance >= price
+              {groupBalance >= price
                 ? `Schlüssel kaufen für ${price} Röbel Münzen`
-                : `Noch ${Math.ceil(price - talerBalance)} Röbel Münzen nötig`}
+                : `Noch ${Math.ceil(price - groupBalance)} Röbel Münzen nötig`}
             </Text>
           </Pressable>
         )}

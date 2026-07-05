@@ -151,7 +151,7 @@ export default function RewardScreen() {
 
         {type === 'coin_bundle' && coinValue > 0 && (
           <View style={[styles.coinBundleRow, { backgroundColor: '#FFFBEA', borderColor: '#E9B949' }]}>
-            <Text style={styles.coinBundleText}>+{coinValue} Münzen gutgeschrieben</Text>
+            <Text style={styles.coinBundleText}>+{coinValue} Punkte gutgeschrieben</Text>
           </View>
         )}
       </ScrollView>
