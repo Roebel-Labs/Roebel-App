@@ -2,6 +2,12 @@ import { escapeHtmlText, sanitizeNewsletterHtml } from "./sanitize"
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 
+// Mona Sans (selbst gehostet): Apple Mail/iOS laden die Webfont, Gmail/Outlook
+// ignorieren @font-face und fallen sauber auf den System-Stack zurück.
+export const FONT_STACK =
+  "'Mona Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
+export const FONT_FACE_STYLE = `<style>@font-face{font-family:'Mona Sans';font-style:normal;font-weight:200 900;font-display:swap;src:url('${BASE_URL}/fonts/mona-sans/MonaSansVF.woff2') format('woff2');}</style>`
+
 const TAG_STYLES: Record<string, string> = {
   h1: "font-size:24px;line-height:1.3;color:#111827;margin:28px 0 12px;font-weight:700;",
   h2: "font-size:20px;line-height:1.35;color:#111827;margin:26px 0 10px;font-weight:700;",
@@ -45,20 +51,20 @@ export function renderNewsletterEmail(opts: {
   const body = inlineStyleNewsletterHtml(sanitizeNewsletterHtml(contentHtml))
   return `<!DOCTYPE html>
 <html lang="de">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtmlText(subject)}</title></head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f3f4f6;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtmlText(subject)}</title>${FONT_FACE_STYLE}</head>
+<body style="margin:0;padding:0;font-family:${FONT_STACK};background-color:#f3f4f6;">
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtmlText(preheader)}</div>` : ""}
   <table role="presentation" style="width:100%;border-collapse:collapse;"><tr><td align="center" style="padding:24px 12px;">
     <table role="presentation" style="width:100%;max-width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:16px;overflow:hidden;">
       <tr><td style="background-color:#00498B;padding:24px 32px;">
         <table role="presentation" style="border-collapse:collapse;"><tr>
           <td><img src="${BASE_URL}/apple-touch-icon.png" width="40" height="40" alt="Röbel App" style="border-radius:8px;display:block;"></td>
-          <td style="padding-left:12px;font-size:18px;font-weight:700;color:#ffffff;">Röbel App · Newsletter</td>
+          <td style="padding-left:12px;font-size:18px;font-weight:700;color:#ffffff;font-family:${FONT_STACK};">Röbel App · Newsletter</td>
         </tr></table>
       </td></tr>
-      <tr><td style="padding:32px;">${body}</td></tr>
+      <tr><td style="padding:32px;font-family:${FONT_STACK};">${body}</td></tr>
       <tr><td style="padding:24px 32px;background-color:#f9fafb;border-top:1px solid #E5E7EB;">
-        <p style="font-size:12px;line-height:1.6;color:#6B7280;margin:0;">
+        <p style="font-size:12px;line-height:1.6;color:#6B7280;margin:0;font-family:${FONT_STACK};">
           Du erhältst diese E-Mail, weil du den Newsletter der Röbel App abonniert hast.<br>
           <a href="${unsubscribeUrl}" style="color:#6B7280;text-decoration:underline;">Abmelden</a> ·
           <a href="${BASE_URL}/impressum" style="color:#6B7280;text-decoration:underline;">Impressum</a> ·

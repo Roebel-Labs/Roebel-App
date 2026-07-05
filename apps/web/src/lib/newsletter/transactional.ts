@@ -1,13 +1,14 @@
 import { resend, EMAIL_CONFIG } from "@/lib/resend"
+import { FONT_FACE_STYLE, FONT_STACK } from "./template"
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 
 function simpleEmailHtml(heading: string, bodyHtml: string): string {
-  return `<!DOCTYPE html><html lang="de"><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background-color:#f3f4f6;">
+  return `<!DOCTYPE html><html lang="de"><head>${FONT_FACE_STYLE}</head><body style="margin:0;padding:0;font-family:${FONT_STACK};background-color:#f3f4f6;">
 <table role="presentation" style="width:100%;border-collapse:collapse;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" style="width:100%;max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;border-collapse:collapse;">
 <tr><td style="background:#00498B;padding:20px 28px;font-size:17px;font-weight:700;color:#ffffff;">Röbel App</td></tr>
-<tr><td style="padding:28px;">
+<tr><td style="padding:28px;font-family:${FONT_STACK};">
   <h1 style="font-size:20px;color:#111827;margin:0 0 12px;">${heading}</h1>
   ${bodyHtml}
 </td></tr>
