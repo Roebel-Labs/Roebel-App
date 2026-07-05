@@ -13,7 +13,7 @@ export async function subscribeToNewsletter(email: string): Promise<{ success: b
   const supabase = createAdminClient()
   const { data: existing } = await supabase
     .from("newsletter_subscribers")
-    .select("id, status, confirm_token")
+    .select("id, status")
     .eq("email", normalized)
     .maybeSingle()
 
@@ -23,8 +23,15 @@ export async function subscribeToNewsletter(email: string): Promise<{ success: b
   if (existing?.status === "active") {
     return { success: true, message: okMessage }
   }
+
+  // Spam-Beschwerde: diese Adresse darf nie wieder angeschrieben werden —
+  // stille Erfolgsmeldung, kein Versand, keine Statusänderung.
+  if (existing?.status === "complained") {
+    return { success: true, message: okMessage }
+  }
+
   if (existing) {
-    const { data: updated } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from("newsletter_subscribers")
       .update({
         status: "pending",
@@ -34,6 +41,7 @@ export async function subscribeToNewsletter(email: string): Promise<{ success: b
       .eq("id", existing.id)
       .select("confirm_token")
       .single()
+    if (updateError) console.error("[Newsletter] subscribe update failed:", updateError)
     if (updated) await sendConfirmationEmail(normalized, updated.confirm_token, "signup")
     return { success: true, message: okMessage }
   }
