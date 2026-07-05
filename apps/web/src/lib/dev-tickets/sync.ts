@@ -68,6 +68,12 @@ export async function syncTicketGithub(ticket: DevTicket): Promise<DevTicket> {
   if (run === "in_progress" && ticket.fix_status === "queued") {
     return updateTicket(ticket.id, { fix_status: "running" });
   }
+  // The run is still genuinely active — never apply the timeout while it's
+  // in flight, or a late-arriving PR would be orphaned (fix_status='failed'
+  // is outside ACTIVE_FIX_STATUSES).
+  if (run === "in_progress" || run === "queued") {
+    return ticket;
+  }
   const dispatchedAt = ticket.fix_dispatched_at
     ? new Date(ticket.fix_dispatched_at).getTime()
     : 0;

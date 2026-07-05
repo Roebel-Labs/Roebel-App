@@ -36,7 +36,7 @@ export async function POST(
     if (ci !== "success") {
       return jsonError(new Error(`CI ist nicht grün (Status: ${ci})`), 409);
     }
-    await mergePr(pr.number);
+    await mergePr(pr.number, pr.head_sha);
     const updated = await updateTicket(id, {
       fix_status: "merged",
       status: "done",

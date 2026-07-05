@@ -161,9 +161,12 @@ export async function findTicketWorkflowRun(
   return run.status === "in_progress" ? "in_progress" : "queued";
 }
 
-export async function mergePr(prNumber: number): Promise<void> {
+export async function mergePr(prNumber: number, headSha: string): Promise<void> {
   await gh<{ merged: boolean }>(
     `/repos/${repoSlug()}/pulls/${prNumber}/merge`,
-    { method: "PUT", body: JSON.stringify({ merge_method: "squash" }) }
+    {
+      method: "PUT",
+      body: JSON.stringify({ merge_method: "squash", sha: headSha }),
+    }
   );
 }
