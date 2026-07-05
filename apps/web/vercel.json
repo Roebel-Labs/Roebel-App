@@ -11,6 +11,10 @@
     {
       "path": "/api/coordinator/chain-listener",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/dev-tickets/triage",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
