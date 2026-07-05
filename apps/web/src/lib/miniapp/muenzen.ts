@@ -62,7 +62,9 @@ export async function issueMuenzenOnChain(params: {
       };
     }
     const res = data as { status?: string; txHash?: string; reason?: string } | null;
-    if (res?.status === "paid" && res.txHash) {
+    // The deployed edge fn answers { status: "granted", txHash } (it settles the
+    // ledger row itself); accept legacy "paid" too.
+    if ((res?.status === "granted" || res?.status === "paid") && res.txHash) {
       return { onChain: true, txRef: res.txHash };
     }
     return {

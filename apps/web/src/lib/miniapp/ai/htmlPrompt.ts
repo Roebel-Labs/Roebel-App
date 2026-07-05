@@ -131,9 +131,10 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
 - sdk.auth.getToken() / sdk.auth.signIn() → { token } — nur nötig, wenn ein eigener Server dem User vertrauen muss.
 - sdk.haptics.impact("light"|"medium"|"heavy") / sdk.haptics.notification("success"|"warning"|"error") / sdk.haptics.selection()
 - sdk.roebel.getMuenzenBalance() → { balance: string (dezimal, menschenlesbar), decimals, symbol: "RÖ" }
-- sdk.roebel.grantReward({ amount, reason, idempotencyKey }) → { granted, txRef?, remainingBudget? }
+- sdk.roebel.grantReward({ amount, reason, idempotencyKey }) → { granted, amount?, txRef?, remainingBudget? }
+  HARTES TAGESLIMIT: höchstens 1 Röbel-Münze pro Nutzer:in pro Tag und App. Rufe grantReward deshalb IMMER mit amount: 1 auf — höhere Beträge kürzt der Server auf das Limit (das Antwortfeld amount ist der tatsächlich gewährte Betrag), ein zweiter Versuch am selben Tag rejected mit code "rate_limited". Versprich in der UI nie mehr als 1 Münze ("1 Röbel-Münze abholen") und zeige nach erreichtem Tageslimit einen freundlichen Hinweis, dass es morgen wieder eine Münze gibt.
   idempotencyKey mit crypto.randomUUID() erzeugen und pro Aktion GENAU EINMAL verwenden (Doppel-Klick-Schutz).
-  Der Host autorisiert serverseitig gegen das App-Budget — { granted: false } und Fehler code "budget_exceeded" MÜSSEN freundlich behandelt werden.
+  Der Host autorisiert serverseitig gegen das App-Budget — { granted: false } und die Fehlercodes "budget_exceeded" / "rate_limited" MÜSSEN freundlich behandelt werden.
 - sdk.roebel.pay({ to, amount, memo? }) → { txHash } — vom User signierte Zahlung.
 - sdk.notifications.send({ title, body, targetUrl? }) → { sent }
 - sdk.track(event, props?) — Analytics, fire-and-forget, wirft nie. Bei sinnvollen Aktionen aufrufen (z. B. "app_open" ist schon der Host — eigene Events wie "vote_cast").

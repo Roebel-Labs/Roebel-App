@@ -74,6 +74,9 @@ begin
   ) using p_issue_id;
 end $$;
 
+revoke execute on function newsletter_bump_counter(uuid, text) from public, anon, authenticated;
+grant execute on function newsletter_bump_counter(uuid, text) to service_role;
+
 -- AGB auto-enroll: OFF by default; Max flips app_settings.newsletter_auto_enroll to 'on'
 -- only after AGB/Datenschutzerklaerung contain the newsletter clause.
 insert into app_settings (key, value) values ('newsletter_auto_enroll', 'off')
@@ -102,3 +105,11 @@ drop trigger if exists trg_newsletter_auto_enroll on users;
 create trigger trg_newsletter_auto_enroll
 after insert or update of email on users
 for each row execute function newsletter_auto_enroll_user();
+
+-- Protect the legal auto-enroll gate: only the service role may write this key.
+drop policy if exists "app_settings_update" on app_settings;
+create policy "app_settings_update" on app_settings
+  for update using (key <> 'newsletter_auto_enroll') with check (key <> 'newsletter_auto_enroll');
+drop policy if exists "app_settings_insert" on app_settings;
+create policy "app_settings_insert" on app_settings
+  for insert with check (key <> 'newsletter_auto_enroll');

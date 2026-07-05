@@ -30,6 +30,11 @@ import {
 const REWARD_RATE_LIMIT = 10;
 const REWARD_RATE_WINDOW_MS = 60 * 60 * 1000; // 1h
 
+/** Max Münzen one app may pay one wallet per rolling day. Requests above the
+ * remaining allowance are clamped, a second grant the same day is rejected. */
+const REWARD_DAILY_COIN_CAP = 1;
+const REWARD_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 const RANGE_MS: Record<Exclude<AnalyticsRange, "all">, number> = {
   "24h": 24 * 3600 * 1000,
   "7d": 7 * 24 * 3600 * 1000,
@@ -418,6 +423,8 @@ export async function ingestEvent(input: {
  *  - app.status === 'live'
  *  - reward_spent + amount ≤ reward_budget  (else `budget_exceeded`)
  *  - per-(app, wallet) rate-limit             (else `rate_limited`)
+ *  - max 1 Münze per (app, wallet) per rolling day — requests are clamped to
+ *    the remaining allowance, a fully spent allowance → `rate_limited`
  *  - unique(mini_app_id, idempotency_key)     (idempotent replay)
  * then records `mini_app_rewards`, increments `reward_spent`, and attempts the
  * on-chain issuance via the isolated rail.
@@ -466,14 +473,6 @@ export async function grantReward(
     );
   }
 
-  // Budget check.
-  if (app.reward_spent + amount > app.reward_budget) {
-    throw new MiniAppError(
-      "budget_exceeded",
-      "Belohnungs-Budget dieser App ist erschöpft.",
-    );
-  }
-
   // Rate-limit per (app, wallet).
   const since = new Date(Date.now() - REWARD_RATE_WINDOW_MS).toISOString();
   const { count } = await supabase
@@ -487,13 +486,46 @@ export async function grantReward(
     throw new MiniAppError("rate_limited", "Zu viele Belohnungen — bitte später erneut.");
   }
 
+  // Daily coin cap per (app, wallet): sum what this app already paid (or has
+  // pending toward) this wallet in the last 24h. Failed/rejected rows don't
+  // burn the allowance. Requests above the remainder are CLAMPED, not refused,
+  // so an app asking for 5 still delivers the 1 the user is owed.
+  const daySince = new Date(Date.now() - REWARD_DAILY_WINDOW_MS).toISOString();
+  const { data: dayRows } = await supabase
+    .from("mini_app_rewards")
+    .select("amount")
+    .eq("mini_app_id", app.id)
+    .eq("wallet", wallet)
+    .in("status", ["pending", "granted"])
+    .gte("created_at", daySince);
+  const paidToday = (dayRows ?? []).reduce(
+    (sum, r) => sum + Number((r as { amount: number | string }).amount || 0),
+    0,
+  );
+  const allowance = REWARD_DAILY_COIN_CAP - paidToday;
+  if (allowance <= 0) {
+    throw new MiniAppError(
+      "rate_limited",
+      "Tageslimit erreicht — diese App kann dir höchstens 1 Röbel-Münze pro Tag geben. Versuch es morgen wieder.",
+    );
+  }
+  const grantAmount = Math.min(amount, allowance);
+
+  // Budget check (on the clamped amount).
+  if (app.reward_spent + grantAmount > app.reward_budget) {
+    throw new MiniAppError(
+      "budget_exceeded",
+      "Belohnungs-Budget dieser App ist erschöpft.",
+    );
+  }
+
   // Reserve the ledger row (the unique index is the lock).
   const { data: row, error: insErr } = await supabase
     .from("mini_app_rewards")
     .insert({
       mini_app_id: app.id,
       wallet,
-      amount,
+      amount: grantAmount,
       reason: input.reason ?? null,
       idempotency_key: key,
       status: "pending",
@@ -516,7 +548,7 @@ export async function grantReward(
   // grants see the higher spent value.
   const { error: budErr } = await supabase
     .from("mini_apps")
-    .update({ reward_spent: app.reward_spent + amount })
+    .update({ reward_spent: app.reward_spent + grantAmount })
     .eq("id", app.id);
   if (budErr) {
     await supabase
@@ -528,7 +560,12 @@ export async function grantReward(
 
   // Attempt on-chain issuance (isolated). Ledger stays 'pending' when the rail
   // isn't wired yet so an operator can settle later; budget stays reserved.
-  const issue = await issueMuenzenOnChain({ wallet, amount, reason: input.reason, ref: rowId });
+  const issue = await issueMuenzenOnChain({
+    wallet,
+    amount: grantAmount,
+    reason: input.reason,
+    ref: rowId,
+  });
   if (issue.onChain) {
     await supabase
       .from("mini_app_rewards")
@@ -536,23 +573,27 @@ export async function grantReward(
       .eq("id", rowId);
     return {
       granted: true,
+      amount: grantAmount,
       txRef: issue.txRef,
-      remainingBudget: Math.max(0, app.reward_budget - (app.reward_spent + amount)),
+      remainingBudget: Math.max(0, app.reward_budget - (app.reward_spent + grantAmount)),
     };
   }
 
   // On-chain rail unavailable: keep the pending ledger row (budget reserved),
   // annotate the note for the operator. Report success=false to the client.
   if (issue.note) {
+    // Only annotate rows the edge fn hasn't settled itself in the meantime.
     await supabase
       .from("mini_app_rewards")
       .update({ tx_ref: issue.note.slice(0, 500) })
-      .eq("id", rowId);
+      .eq("id", rowId)
+      .eq("status", "pending");
     console.warn("[miniapp] grantReward on-chain deferred:", issue.note);
   }
   return {
     granted: false,
-    remainingBudget: Math.max(0, app.reward_budget - (app.reward_spent + amount)),
+    amount: grantAmount,
+    remainingBudget: Math.max(0, app.reward_budget - (app.reward_spent + grantAmount)),
   };
 }
 

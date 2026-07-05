@@ -124,6 +124,8 @@ export interface GrantRewardInput {
 
 export interface GrantRewardOutcome {
   granted: boolean;
+  /** Münzen actually granted — may be LESS than requested (daily-cap clamp). */
+  amount?: number;
   txRef?: string;
   remainingBudget: number;
 }

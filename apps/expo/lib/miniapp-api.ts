@@ -85,6 +85,9 @@ export async function apiGrantReward(
   p: GrantRewardParams,
 ): Promise<GrantRewardResult> {
   return post<GrantRewardResult>('/api/mini-apps/rewards', {
+    // `appId` is what the route reads first; keep miniAppId+slug for
+    // compatibility with older web deploys that accept those.
+    appId: id.miniAppId,
     miniAppId: id.miniAppId,
     slug: id.slug,
     wallet: id.wallet,

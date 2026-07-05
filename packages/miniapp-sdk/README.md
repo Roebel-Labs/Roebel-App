@@ -22,7 +22,8 @@ useEffect(() => { void sdk.actions.ready(); }, []);
 const ctx = await sdk.getContext();               // untrusted, display only
 const provider = await sdk.wallet.getEthereumProvider(); // EIP-1193, host-signed
 const { balance } = await sdk.roebel.getMuenzenBalance();
-await sdk.roebel.grantReward({ amount: 5, reason: 'quiz', idempotencyKey: crypto.randomUUID() });
+// Rewards are capped server-side at 1 Münze per user per app per day — always request 1.
+await sdk.roebel.grantReward({ amount: 1, reason: 'quiz', idempotencyKey: crypto.randomUUID() });
 sdk.track('quiz_completed', { score: 10 });
 ```
 

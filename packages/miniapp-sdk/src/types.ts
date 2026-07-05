@@ -138,6 +138,9 @@ export interface GrantRewardParams {
 
 export interface GrantRewardResult {
   granted: boolean;
+  /** Münzen actually granted — may be LESS than requested (the host caps
+   * rewards at 1 Münze per user per app per day and clamps to the remainder). */
+  amount?: number;
   txRef?: string;
   remainingBudget?: number;
 }

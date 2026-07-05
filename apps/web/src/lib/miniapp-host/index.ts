@@ -188,6 +188,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       });
       const json = (await res.json().catch(() => ({}))) as {
         granted?: boolean;
+        amount?: number;
         txRef?: string;
         remainingBudget?: number;
         error?: string;
@@ -198,6 +199,7 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
       }
       return {
         granted: Boolean(json.granted),
+        amount: json.amount,
         txRef: json.txRef,
         remainingBudget: json.remainingBudget,
       };

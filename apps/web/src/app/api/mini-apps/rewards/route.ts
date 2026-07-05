@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const appId = String(body.appId ?? "");
+    // The web Playground host sends `appId`; the Expo host sends `miniAppId` +
+    // `slug`. Accept all three (getApp resolves both uuid and slug).
+    const appId = String(body.appId ?? body.miniAppId ?? body.slug ?? "");
     const outcome = await grantReward(appId, {
       amount: Number(body.amount),
       reason: String(body.reason ?? ""),
