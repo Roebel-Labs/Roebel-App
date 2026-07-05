@@ -546,7 +546,7 @@ export type UserRecord = {
   achievements: unknown[];
   active_account_id: string | null;
   privacy_settings: Record<string, string>;
-  preferred_role: 'buerger' | 'tourist' | null;
+  preferred_role: 'buerger' | 'tourist' | 'organisation' | null;
   onboarding_completed_at: string | null;
   terms_accepted_at: string | null;
   /** Denormalized asset_url of the currently-equipped profile_frame reward. Synced via DB trigger. */

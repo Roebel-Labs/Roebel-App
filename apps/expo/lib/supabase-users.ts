@@ -147,7 +147,7 @@ export async function updateUserOnboarding(
   updates: {
     username?: string | null;
     displayName?: string | null;
-    preferredRole?: 'buerger' | 'tourist' | null;
+    preferredRole?: 'buerger' | 'tourist' | 'organisation' | null;
     termsAccepted?: boolean;
     markCompleted?: boolean;
   }

@@ -3,41 +3,15 @@ import { useRouter } from 'expo-router';
 import { useUser } from '@/context/UserContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import ExitWizardSheet from '@/components/ExitWizardSheet';
+import {
+  reducer,
+  initialState,
+  type WelcomeWizardAction,
+  type WelcomeWizardState,
+  type PreferredRole,
+} from '@/context/welcome-wizard-state';
 
-export type PreferredRole = 'buerger' | 'tourist';
-
-export type WelcomeWizardState = {
-  displayName: string;
-  preferredRole: PreferredRole | null;
-  isSubmitting: boolean;
-};
-
-type WelcomeWizardAction =
-  | { type: 'SET_DISPLAY_NAME'; payload: string }
-  | { type: 'SET_ROLE'; payload: PreferredRole }
-  | { type: 'SET_SUBMITTING'; payload: boolean }
-  | { type: 'RESET' };
-
-const initialState: WelcomeWizardState = {
-  displayName: '',
-  preferredRole: null,
-  isSubmitting: false,
-};
-
-function reducer(state: WelcomeWizardState, action: WelcomeWizardAction): WelcomeWizardState {
-  switch (action.type) {
-    case 'SET_DISPLAY_NAME':
-      return { ...state, displayName: action.payload };
-    case 'SET_ROLE':
-      return { ...state, preferredRole: action.payload };
-    case 'SET_SUBMITTING':
-      return { ...state, isSubmitting: action.payload };
-    case 'RESET':
-      return initialState;
-    default:
-      return state;
-  }
-}
+export type { PreferredRole, WelcomeWizardState };
 
 interface ContextValue {
   state: WelcomeWizardState;

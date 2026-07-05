@@ -9,7 +9,7 @@ type IoniconName = ComponentProps<typeof Ionicons>['name'];
 type Props = {
   tier: UserTier;
   size?: 'small' | 'medium';
-  preferredRole?: 'buerger' | 'tourist' | null;
+  preferredRole?: 'buerger' | 'tourist' | 'organisation' | null;
   isVerifiedCitizen?: boolean;
 };
 
