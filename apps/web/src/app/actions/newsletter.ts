@@ -158,6 +158,17 @@ export async function getActiveSubscriberCount(): Promise<number> {
   return count ?? 0
 }
 
+export async function getUnsentSendCount(issueId: string): Promise<number> {
+  await guard()
+  const supabase = createAdminClient()
+  const { count } = await supabase
+    .from("newsletter_sends")
+    .select("id", { count: "exact", head: true })
+    .eq("issue_id", issueId)
+    .in("status", ["failed", "queued"])
+  return count ?? 0
+}
+
 export async function listSubscribers(filter?: {
   search?: string
   status?: string

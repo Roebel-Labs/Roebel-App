@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/miniapp/http"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
         .from("newsletter_sends")
         .select("id, subscriber_id, email, newsletter_subscribers(unsubscribe_token, status)")
         .eq("issue_id", issueId)
-        .eq("status", "failed")
+        // 'queued' mit einschließen: Zeilen, deren Status-Update nach dem Versand fehlschlug
+        // oder die nie dispatched wurden. Dank Idempotency-Key ist ein erneuter Versand
+        // derselben Batch-Zusammensetzung dedupliziert.
+        .in("status", ["failed", "queued"])
       recipients = (failedSends ?? [])
         .filter((s: any) => s.newsletter_subscribers?.status === "active")
         .map((s: any) => ({
@@ -93,6 +97,9 @@ export async function POST(req: NextRequest) {
       }))
     }
 
+    // Deterministische Reihenfolge → stabile Idempotency-Keys bei Retries
+    recipients.sort((a, b) => (a.sendId < b.sendId ? -1 : 1))
+
     let sent = 0
     let failed = 0
 
@@ -119,11 +126,17 @@ export async function POST(req: NextRequest) {
         }
       })
 
+      const idempotencyKey = `newsletter/${issueId}/${crypto
+        .createHash("sha256")
+        .update(batch.map((r) => r.sendId).join(","))
+        .digest("hex")
+        .slice(0, 32)}`
+
       try {
-        const { data, error } = await resend.batch.send(payloads)
+        const { data, error } = await resend.batch.send(payloads, { idempotencyKey })
         if (error) throw error
         const ids: Array<{ id: string }> = (data as any)?.data ?? []
-        await Promise.all(
+        const updateResults = await Promise.all(
           batch.map((r, idx) =>
             supabase
               .from("newsletter_sends")
@@ -131,14 +144,30 @@ export async function POST(req: NextRequest) {
               .eq("id", r.sendId)
           )
         )
+        updateResults.forEach((res, idx) => {
+          if (res.error) {
+            console.error(
+              `[Newsletter] send-row update failed (bleibt 'queued', wird beim Retry erneut versucht): sendId=${batch[idx].sendId} resendId=${ids[idx]?.id}`,
+              res.error
+            )
+          }
+        })
         sent += batch.length
       } catch (batchError) {
         console.error("[Newsletter] batch failed:", batchError)
-        await Promise.all(
+        const updateResults = await Promise.all(
           batch.map((r) =>
             supabase.from("newsletter_sends").update({ status: "failed" }).eq("id", r.sendId)
           )
         )
+        updateResults.forEach((res, idx) => {
+          if (res.error) {
+            console.error(
+              `[Newsletter] send-row update failed (bleibt 'queued', wird beim Retry erneut versucht): sendId=${batch[idx].sendId}`,
+              res.error
+            )
+          }
+        })
         failed += batch.length
       }
       if (i + BATCH_SIZE < recipients.length) await sleep(600) // Resend ~2 req/s

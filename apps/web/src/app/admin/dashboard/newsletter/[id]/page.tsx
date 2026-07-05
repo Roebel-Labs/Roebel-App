@@ -16,7 +16,7 @@ import { ArrowLeft, Save, Eye, Pencil, Send, Sparkles, FlaskConical } from "luci
 import { toast } from "sonner"
 import {
   getIssue, updateIssue, previewIssueEmail, sendTestEmail, regenerateDraft,
-  getActiveSubscriberCount, type NewsletterIssue,
+  getActiveSubscriberCount, getUnsentSendCount, type NewsletterIssue,
 } from "@/app/actions/newsletter"
 
 export default function NewsletterIssueEditorPage() {
@@ -33,6 +33,7 @@ export default function NewsletterIssueEditorPage() {
   const [testEmail, setTestEmail] = useState("")
   const [recipientCount, setRecipientCount] = useState<number | null>(null)
   const [sending, setSending] = useState(false)
+  const [unsentCount, setUnsentCount] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,6 +43,8 @@ export default function NewsletterIssueEditorPage() {
       setSubject(data.subject)
       setPreheader(data.preheader ?? "")
       setContentHtml(data.content_html)
+      if (data.status === "sent" || data.status === "failed") setUnsentCount(await getUnsentSendCount(data.id))
+      else setUnsentCount(0)
     }
     setLoading(false)
   }, [id])
@@ -192,9 +195,9 @@ export default function NewsletterIssueEditorPage() {
               </AlertDialog>
             </>
           )}
-          {issue.status === "failed" && (
+          {(issue.status === "failed" || issue.status === "sent") && unsentCount > 0 && (
             <Button variant="outline" onClick={handleRetryFailed} disabled={sending}>
-              Fehlgeschlagene erneut senden
+              Fehlgeschlagene erneut senden ({unsentCount})
             </Button>
           )}
         </div>
