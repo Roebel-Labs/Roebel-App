@@ -6,6 +6,8 @@ import { openBrowserAsync } from 'expo-web-browser';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import { useVerificationContext } from '@/context/VerificationContext';
+import { useDeveloperMode } from '@/context/DeveloperModeContext';
+import { CustomToggle } from '@/components/consent/CustomToggle';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
 import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -75,6 +77,7 @@ export default function SettingsScreen() {
   const activeAccount = useActiveAccount();
   const activeWallet = useActiveWallet();
   const { disconnect } = useDisconnect();
+  const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMembershipMenu, setShowMembershipMenu] = useState(false);
@@ -216,6 +219,43 @@ export default function SettingsScreen() {
             </View>
             <Text style={[styles.chevron, { color: colors.textTertiary }]}>↗</Text>
           </Pressable>
+        </Section>
+
+        <Section title="ENTWICKLER" colors={colors}>
+          <View
+            style={[
+              styles.themeOptionRow,
+              isDeveloperMode
+                ? { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary }
+                : undefined,
+            ]}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Entwicklermodus
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Eigene Mini-Apps per URL in der App testen.
+              </Text>
+            </View>
+            <CustomToggle value={isDeveloperMode} onChange={() => toggleDeveloperMode()} />
+          </View>
+          {isDeveloperMode && (
+            <Pressable
+              style={styles.themeOptionRow}
+              onPress={() => router.push('/settings/dev-mini-app' as any)}
+            >
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Mini-App Vorschau
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  URL eingeben und im Mini-App-Host öffnen.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          )}
         </Section>
 
         {activeAccount && (

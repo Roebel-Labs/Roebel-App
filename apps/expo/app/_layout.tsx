@@ -15,6 +15,7 @@ import { BookmarksProvider } from '@/context/BookmarksContext';
 import { InterestProvider } from '@/context/InterestContext';
 import { LocationProvider } from '@/context/LocationContext';
 import { GovernanceTestProvider } from '@/context/GovernanceTestContext';
+import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { ExploreDotProvider } from '@/context/ExploreDotContext';
 import { PendingPostFeedbackProvider } from '@/context/PendingPostFeedbackContext';
@@ -250,6 +251,7 @@ function ThemedLayout() {
           <TransitionStack.Screen name="settings/consent/[category]" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/consent/history" options={{ headerShown: false }} />
           <TransitionStack.Screen name="settings/reveal-key" options={{ headerShown: false }} />
+          <TransitionStack.Screen name="settings/dev-mini-app" options={{ headerShown: false }} />
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
         </TransitionStack>
       </View>
@@ -310,6 +312,7 @@ function Layout() {
                       <RewardsProvider>
                       <MeckyProvider>
                       <GovernanceTestProvider>
+                      <DeveloperModeProvider>
                       <MaciProvider>
                       <InterestProvider>
                       <BookmarksProvider>
@@ -332,6 +335,7 @@ function Layout() {
                       </BookmarksProvider>
                       </InterestProvider>
                       </MaciProvider>
+                      </DeveloperModeProvider>
                       </GovernanceTestProvider>
                       </MeckyProvider>
                       </RewardsProvider>
