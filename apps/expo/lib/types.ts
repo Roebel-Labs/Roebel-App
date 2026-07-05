@@ -125,6 +125,7 @@ export type FeedbackRecord = {
   contact_email: string | null;
   contact_phone: string | null;
   device_info: DeviceInfo;
+  source?: 'app_form' | 'web_form' | 'mecky';
   status: 'new' | 'in_review' | 'resolved' | 'closed';
   created_at: string;
   updated_at: string;

@@ -18,6 +18,7 @@ export async function submitFeedback(formData: FormData) {
       contact_phone: (formData.get("contact_phone") as string) || null,
       device_info: formData.get("device_info") ? JSON.parse(formData.get("device_info") as string) : {},
       status: "new" as FeedbackStatus,
+      source: "web_form" as const,
     }
 
     // Validate required fields

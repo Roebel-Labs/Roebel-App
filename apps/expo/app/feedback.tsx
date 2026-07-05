@@ -82,6 +82,7 @@ export default function FeedbackScreen() {
         contact_email: form.contact_email.trim() || null,
         contact_phone: form.contact_phone.trim() || null,
         device_info: deviceInfo,
+        source: 'app_form',
       });
 
       setIsSuccess(true);

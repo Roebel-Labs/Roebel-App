@@ -42,6 +42,10 @@ import {
   executeExtractFlyer,
   executeSubmitEvent,
 } from "./event-submission-tools";
+import { Platform } from "react-native";
+import * as Device from "expo-device";
+import * as Application from "expo-application";
+import { submitFeedback } from "../supabase-feedback";
 
 // ── Schemas ──────────────────────────────────────────────────────────
 
@@ -160,6 +164,23 @@ const recommendTourSchema = z.object({
   q: z.string().optional().describe("Freitextsuche im Titel."),
 });
 
+const reportProblemSchema = z.object({
+  summary: z.string().describe("Kurzer deutscher Titel des Problems oder Wunschs (max. 80 Zeichen)"),
+  details: z
+    .string()
+    .describe("Ausführliche Beschreibung: Was ist passiert? Was wurde erwartet? Wo in der App?"),
+  category: z
+    .enum(["bug", "feature", "improvement"])
+    .describe("bug=Fehler/Absturz, feature=Wunsch nach neuer Funktion, improvement=Verbesserungsvorschlag"),
+  conversation_context: z
+    .string()
+    .describe("Kurze Zusammenfassung der relevanten Chat-Nachrichten des Nutzers (Zitate erlaubt)"),
+  contact_email: z
+    .string()
+    .optional()
+    .describe("E-Mail für Rückfragen — NUR wenn der Nutzer sie ausdrücklich nennt"),
+});
+
 // ── Tool definitions ─────────────────────────────────────────────────
 
 const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
@@ -246,6 +267,12 @@ const meckySearchToolDefinitions: AnthropicToolDefinition[] = [
     description:
       "Liefert den Wildlife-Saisonkalender — Kraniche-Rast, Fischadler-Brut, Hirschbrunft, Singschwan-Winterrast, Kranichtanz, Reiherenten-Schwärme. Mit Push-Nachrichten und Zeitfenstern.",
     input_schema: zodToToolInputSchema(seasonalCalendarSchema),
+  },
+  {
+    name: "reportProblem",
+    description:
+      "Meldet einen Fehler, ein Problem oder einen Wunsch des Nutzers ans Röbel-App-Team. WICHTIG: Erst die Zusammenfassung vom Nutzer bestätigen lassen, DANN dieses Tool aufrufen — nie ohne Zustimmung melden.",
+    input_schema: zodToToolInputSchema(reportProblemSchema),
   },
 ];
 
@@ -809,6 +836,49 @@ async function executeTodayAdvisories(): Promise<ToolResult> {
   }
 }
 
+const CATEGORY_TO_FEEDBACK_TYPE = {
+  bug: "bug_report",
+  feature: "feature_request",
+  improvement: "improvement",
+} as const;
+
+async function executeReportProblem(
+  input: z.infer<typeof reportProblemSchema>
+): Promise<ToolResult> {
+  try {
+    const record = await submitFeedback({
+      user_wallet_address: null,
+      feedback_type: CATEGORY_TO_FEEDBACK_TYPE[input.category],
+      subject: input.summary.slice(0, 200),
+      message: `${input.details}\n\n---\nKontext aus dem Mecky-Chat:\n${input.conversation_context}`,
+      contact_email: input.contact_email || null,
+      contact_phone: null,
+      device_info: {
+        os: `${Platform.OS} ${Platform.Version}`,
+        appVersion: Application.nativeApplicationVersion || "unknown",
+        deviceModel: Device.modelName || Device.brand || "unknown",
+      },
+      source: "mecky",
+    });
+    return {
+      success: true,
+      data: {
+        id: record.id,
+        message: `Meldung "${input.summary}" wurde ans Röbel-Team übermittelt. Danke!`,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: String(error),
+      data: {
+        message:
+          "Die Meldung konnte gerade nicht übermittelt werden. Bitte später erneut versuchen oder das Feedback-Formular in den Einstellungen nutzen.",
+      },
+    };
+  }
+}
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 export const meckyToolDefinitions: AnthropicToolDefinition[] = [
@@ -836,6 +906,7 @@ const meckyToolExecutors: Record<string, (input: any) => Promise<ToolResult>> = 
   recommendTour: executeRecommendTour,
   searchWildlife: executeSearchWildlife,
   seasonalCalendar: executeSeasonalCalendar,
+  reportProblem: executeReportProblem,
 };
 
 export async function executeMeckyTool(

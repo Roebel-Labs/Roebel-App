@@ -2,6 +2,8 @@ export type FeedbackType = "bug_report" | "feature_request" | "general" | "impro
 
 export type FeedbackStatus = "new" | "in_review" | "resolved" | "closed"
 
+export type FeedbackSource = "app_form" | "web_form" | "mecky"
+
 export interface DeviceInfo {
   userAgent?: string
   platform?: string
@@ -19,6 +21,7 @@ export interface Feedback {
   contact_email: string | null
   contact_phone: string | null
   device_info: DeviceInfo | null
+  source?: FeedbackSource | null
   status: FeedbackStatus
   created_at: string
   updated_at: string
