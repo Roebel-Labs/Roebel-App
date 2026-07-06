@@ -12,6 +12,7 @@ import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3, Home, Landma
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { uploadResumable } from "@/lib/storage/resumable-upload";
+import { probeStreamConfigured, uploadVideoToStream } from "@/lib/stream-upload";
 import { PollCreator } from "@/components/app/PollCreator";
 import { CategorySelector } from "@/components/app/CategorySelector";
 import { GuidelinesBanner, GuidelinesInfoButton } from "@/components/app/CommunityGuidelines";
@@ -187,6 +188,14 @@ export function PostComposer({
     if (type === "video") {
       try {
         setVideoUploadProgress(0);
+        // Cloudflare Stream (adaptive HLS) when configured; Supabase Storage otherwise.
+        if (await probeStreamConfigured()) {
+          const url = await uploadVideoToStream(file, account?.address ?? "", (pct) =>
+            setVideoUploadProgress(pct),
+          );
+          if (!url) toast.error("Video-Upload fehlgeschlagen. Bitte versuche es erneut.");
+          return url;
+        }
         const url = await uploadResumable({
           file,
           bucket: "images",
