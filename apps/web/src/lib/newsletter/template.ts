@@ -11,7 +11,7 @@ export const FONT_FACE_STYLE = `<style>@font-face{font-family:'Mona Sans';font-s
 // Headline-Treatment wie im Web (globals.css): Mona Sans SemiCondensed = Breitenachse 87,5%.
 // UPPERCASE + Letterspacing + Navy rendern überall; die Condensed-Stauchung greift nur in
 // Clients, die die Variable-Font laden (Apple Mail/iOS) — der Rest fällt sauber zurück.
-const HEADLINE_BASE = `font-family:${FONT_STACK};font-stretch:87.5%;text-transform:uppercase;letter-spacing:0.08em;font-weight:800;color:#00498B;`
+const HEADLINE_BASE = `font-family:${FONT_STACK};font-stretch:87.5%;text-transform:uppercase;letter-spacing:0.03em;font-weight:800;color:#00498B;`
 
 const TAG_STYLES: Record<string, string> = {
   h1: `${HEADLINE_BASE}font-size:22px;line-height:1.25;margin:30px 0 12px;`,
@@ -62,12 +62,6 @@ export function renderNewsletterEmail(opts: {
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtmlText(preheader)}</div>` : ""}
   <table role="presentation" style="width:100%;border-collapse:collapse;"><tr><td align="center" style="padding:24px 12px;">
     <table role="presentation" style="width:100%;max-width:600px;border-collapse:collapse;background-color:#ffffff;border-radius:16px;overflow:hidden;">
-      <tr><td style="background-color:#00498B;padding:24px 32px;">
-        <table role="presentation" style="border-collapse:collapse;"><tr>
-          <td><img src="${BASE_URL}/apple-touch-icon.png" width="40" height="40" alt="Röbel App" style="border-radius:8px;display:block;"></td>
-          <td style="padding-left:12px;font-size:16px;font-weight:800;color:#ffffff;font-family:${FONT_STACK};font-stretch:87.5%;text-transform:uppercase;letter-spacing:0.1em;">Röbel App · Newsletter</td>
-        </tr></table>
-      </td></tr>
       ${heroImageUrl ? `<tr><td style="padding:0;"><img src="${heroImageUrl}" width="600" alt="" style="width:100%;max-width:600px;height:auto;display:block;"></td></tr>` : ""}
       <tr><td style="padding:32px;font-family:${FONT_STACK};">${body}</td></tr>
       <tr><td style="padding:24px 32px;background-color:#f9fafb;border-top:1px solid #E5E7EB;">

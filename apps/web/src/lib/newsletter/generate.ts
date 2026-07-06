@@ -56,6 +56,7 @@ HARTE REGELN:
 - Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>. Keine Überschriften im HTML (die kommen aus "heading").
 - VERLINKE KONSEQUENT: Jede erwähnte Neuigkeit und jede erwähnte Veranstaltung bekommt ihren Link aus dem Datenfeld "url" (<a href="URL">Titel</a>). Erwähnst du Abstimmungen, verlinke die Übersichtsseite; erwähnst du Marktplatz-Angebote, verlinke deren Übersichtsseite.
 - Leere Datenquellen lässt du einfach weg — kein "diese Woche gab es keine…".
+- SCHREIBSTIL: Klingt wie ein Mensch aus Röbel, nicht wie eine KI. Keine Gedankenstriche (– oder —) als Stilmittel und keine mit "-" abgesetzten Einschübe; nutze Kommas oder mach zwei Sätze draus. Keine Floskeln wie "Tauche ein", "Egal ob ... oder ...", "Lass dich überraschen". Nicht jede Aufzählung als <ul>-Liste; erzähl lieber im Fließtext.
 - Zum Schluss ein kurzer, freundlicher Abschied (1-2 Sätze).`
 
 function buildPrompt(data: NewsletterSourceData): string {
