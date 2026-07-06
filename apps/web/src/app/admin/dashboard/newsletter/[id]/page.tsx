@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
+import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone"
 import { ArrowLeft, Save, Eye, Pencil, Send, Sparkles, FlaskConical } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -29,6 +30,7 @@ export default function NewsletterIssueEditorPage() {
   const [subject, setSubject] = useState("")
   const [preheader, setPreheader] = useState("")
   const [contentHtml, setContentHtml] = useState("")
+  const [heroImageUrl, setHeroImageUrl] = useState("")
   const [showPreview, setShowPreview] = useState(false)
   const [previewHtml, setPreviewHtml] = useState("")
   const [testEmail, setTestEmail] = useState("")
@@ -44,6 +46,7 @@ export default function NewsletterIssueEditorPage() {
       setSubject(data.subject)
       setPreheader(data.preheader ?? "")
       setContentHtml(data.content_html)
+      setHeroImageUrl(data.hero_image_url ?? "")
       if (data.status === "sent" || data.status === "failed" || data.status === "sending") {
         setUnsentCount(await getUnsentSendCount(data.id))
       } else {
@@ -61,7 +64,7 @@ export default function NewsletterIssueEditorPage() {
 
   async function handleSave(): Promise<boolean> {
     setSaving(true)
-    const result = await updateIssue(id, { subject, preheader, content_html: contentHtml })
+    const result = await updateIssue(id, { subject, preheader, content_html: contentHtml, hero_image_url: heroImageUrl || null })
     setSaving(false)
     if (result.success) toast.success(result.message)
     else toast.error(result.message)
@@ -216,6 +219,27 @@ export default function NewsletterIssueEditorPage() {
         />
       ) : (
         <div className="space-y-4">
+          <div>
+            <Label>Header-Bild (optional, volle Breite oben in der E-Mail)</Label>
+            <div className="mt-2">
+              {isDraft ? (
+                <ImageUploadDropzone
+                  onUploadComplete={(url) => setHeroImageUrl(url)}
+                  currentImageUrl={heroImageUrl}
+                  bucketName="news-images"
+                  folder="newsletter"
+                  maxSizeMB={5}
+                />
+              ) : heroImageUrl ? (
+                <img src={heroImageUrl} alt="Header" className="max-h-48 rounded-xl border border-gray-200" />
+              ) : null}
+              {isDraft && heroImageUrl && (
+                <Button variant="ghost" size="sm" className="mt-1 text-gray-500" onClick={() => setHeroImageUrl("")}>
+                  Bild entfernen
+                </Button>
+              )}
+            </div>
+          </div>
           <div>
             <Label htmlFor="subject">Betreff</Label>
             <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={!isDraft} placeholder="Betreff der Ausgabe" />

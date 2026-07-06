@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
           replyTo: EMAIL_CONFIG.replyTo,
           subject: issue.subject,
           html: renderNewsletterEmail({
+            heroImageUrl: issue.hero_image_url,
             subject: issue.subject,
             preheader: issue.preheader,
             contentHtml: issue.content_html,

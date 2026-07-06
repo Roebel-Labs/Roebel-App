@@ -23,6 +23,7 @@ export interface NewsletterIssue {
   subject: string
   preheader: string | null
   content_html: string
+  hero_image_url: string | null
   status: IssueStatus
   generated_by: "ai" | "manual"
   generation_sources: Record<string, number> | null

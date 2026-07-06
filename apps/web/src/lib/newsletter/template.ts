@@ -46,8 +46,9 @@ export function renderNewsletterEmail(opts: {
   preheader?: string | null
   contentHtml: string
   unsubscribeUrl: string
+  heroImageUrl?: string | null
 }): string {
-  const { subject, preheader, contentHtml, unsubscribeUrl } = opts
+  const { subject, preheader, contentHtml, unsubscribeUrl, heroImageUrl } = opts
   const body = inlineStyleNewsletterHtml(sanitizeNewsletterHtml(contentHtml))
   return `<!DOCTYPE html>
 <html lang="de">
@@ -62,6 +63,7 @@ export function renderNewsletterEmail(opts: {
           <td style="padding-left:12px;font-size:18px;font-weight:700;color:#ffffff;font-family:${FONT_STACK};">Röbel App · Newsletter</td>
         </tr></table>
       </td></tr>
+      ${heroImageUrl ? `<tr><td style="padding:0;"><img src="${heroImageUrl}" width="600" alt="" style="width:100%;max-width:600px;height:auto;display:block;"></td></tr>` : ""}
       <tr><td style="padding:32px;font-family:${FONT_STACK};">${body}</td></tr>
       <tr><td style="padding:24px 32px;background-color:#f9fafb;border-top:1px solid #E5E7EB;">
         <p style="font-size:12px;line-height:1.6;color:#6B7280;margin:0;font-family:${FONT_STACK};">

@@ -59,7 +59,7 @@ export async function createBlankIssue(): Promise<{ success: boolean; issueId?: 
 
 export async function updateIssue(
   id: string,
-  fields: { subject: string; preheader: string; content_html: string }
+  fields: { subject: string; preheader: string; content_html: string; hero_image_url?: string | null }
 ): Promise<{ success: boolean; message: string }> {
   await guard()
   const supabase = createAdminClient()
@@ -125,6 +125,7 @@ export async function previewIssueEmail(id: string): Promise<string> {
   if (!issue) return "<p>Ausgabe nicht gefunden</p>"
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
   return renderNewsletterEmail({
+    heroImageUrl: issue.hero_image_url,
     subject: issue.subject || "(Ohne Betreff)",
     preheader: issue.preheader,
     contentHtml: issue.content_html,
