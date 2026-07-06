@@ -9,6 +9,7 @@ import { sendConfirmationEmail, buildInviteEmail } from "@/lib/newsletter/transa
 import {
   generateNewsletterDraft,
   regenerateIssueContent,
+  editIssueContentWithAI,
 } from "@/lib/newsletter/generate"
 import { sanitizeNewsletterHtml } from "@/lib/newsletter/sanitize"
 import type { NewsletterIssue, NewsletterSubscriber } from "@/lib/newsletter/types"
@@ -116,6 +117,23 @@ export async function regenerateDraft(issueId: string): Promise<{ success: boole
   } catch (err) {
     console.error("[Newsletter] regenerateDraft failed:", err)
     return { success: false, message: "KI-Generierung fehlgeschlagen. Bitte erneut versuchen." }
+  }
+}
+
+export async function editDraftWithAI(
+  issueId: string,
+  instruction: string
+): Promise<{ success: boolean; message: string }> {
+  await guard()
+  const trimmed = instruction.trim()
+  if (!trimmed) return { success: false, message: "Bitte gib eine Anweisung ein." }
+  try {
+    const result = await editIssueContentWithAI(issueId, trimmed)
+    revalidatePath(ADMIN_PATH)
+    return result
+  } catch (err) {
+    console.error("[Newsletter] editDraftWithAI failed:", err)
+    return { success: false, message: "KI-Bearbeitung fehlgeschlagen. Bitte erneut versuchen." }
   }
 }
 

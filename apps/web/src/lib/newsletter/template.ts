@@ -6,11 +6,16 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://roebel.app"
 // ignorieren @font-face und fallen sauber auf den System-Stack zurück.
 export const FONT_STACK =
   "'Mona Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
-export const FONT_FACE_STYLE = `<style>@font-face{font-family:'Mona Sans';font-style:normal;font-weight:200 900;font-display:swap;src:url('${BASE_URL}/fonts/mona-sans/MonaSansVF.woff2') format('woff2');}</style>`
+export const FONT_FACE_STYLE = `<style>@font-face{font-family:'Mona Sans';font-style:normal;font-weight:200 900;font-stretch:75% 125%;font-display:swap;src:url('${BASE_URL}/fonts/mona-sans/MonaSansVF.woff2') format('woff2');}</style>`
+
+// Headline-Treatment wie im Web (globals.css): Mona Sans SemiCondensed = Breitenachse 87,5%.
+// UPPERCASE + Letterspacing + Navy rendern überall; die Condensed-Stauchung greift nur in
+// Clients, die die Variable-Font laden (Apple Mail/iOS) — der Rest fällt sauber zurück.
+const HEADLINE_BASE = `font-family:${FONT_STACK};font-stretch:87.5%;text-transform:uppercase;letter-spacing:0.08em;font-weight:800;color:#00498B;`
 
 const TAG_STYLES: Record<string, string> = {
-  h1: "font-size:24px;line-height:1.3;color:#111827;margin:28px 0 12px;font-weight:700;",
-  h2: "font-size:20px;line-height:1.35;color:#111827;margin:26px 0 10px;font-weight:700;",
+  h1: `${HEADLINE_BASE}font-size:22px;line-height:1.25;margin:30px 0 12px;`,
+  h2: `${HEADLINE_BASE}font-size:16px;line-height:1.3;margin:28px 0 10px;`,
   h3: "font-size:17px;line-height:1.4;color:#111827;margin:20px 0 8px;font-weight:600;",
   p: "font-size:15px;line-height:1.65;color:#374151;margin:0 0 14px;",
   ul: "margin:0 0 14px;padding-left:22px;",
@@ -60,7 +65,7 @@ export function renderNewsletterEmail(opts: {
       <tr><td style="background-color:#00498B;padding:24px 32px;">
         <table role="presentation" style="border-collapse:collapse;"><tr>
           <td><img src="${BASE_URL}/apple-touch-icon.png" width="40" height="40" alt="Röbel App" style="border-radius:8px;display:block;"></td>
-          <td style="padding-left:12px;font-size:18px;font-weight:700;color:#ffffff;font-family:${FONT_STACK};">Röbel App · Newsletter</td>
+          <td style="padding-left:12px;font-size:16px;font-weight:800;color:#ffffff;font-family:${FONT_STACK};font-stretch:87.5%;text-transform:uppercase;letter-spacing:0.1em;">Röbel App · Newsletter</td>
         </tr></table>
       </td></tr>
       ${heroImageUrl ? `<tr><td style="padding:0;"><img src="${heroImageUrl}" width="600" alt="" style="width:100%;max-width:600px;height:auto;display:block;"></td></tr>` : ""}

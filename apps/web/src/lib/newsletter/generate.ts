@@ -22,39 +22,48 @@ const newsletterSchema = z.object({
     .max(6),
 })
 
-function buildPrompt(data: NewsletterSourceData): string {
-  return `Du schreibst den wöchentlichen E-Mail-Newsletter der Röbel App für die Kleinstadt Röbel/Müritz.
+function buildDataBlock(data: NewsletterSourceData): string {
+  // URLs vorberechnen, damit das Modell nur noch verlinken muss (nie raten).
+  const news = data.news.map((n) => ({ ...n, url: `${BASE_URL}/news/${n.slug}` }))
+  const events = data.events.map((e) => ({ ...e, url: `${BASE_URL}/events/${e.id}` }))
+  return `DATEN SEIT ${data.windowStart}:
 
-TONALITÄT: Warm, bürgernah, norddeutsch-locker (ein "Moin" zur Begrüßung passt). Kurze Sätze. Du-Form. Kein Amtsdeutsch, kein Marketing-Sprech.
+NEUIGKEITEN (jede mit fertiger url):
+${JSON.stringify(news, null, 2)}
 
-HARTE REGELN:
-- Nutze AUSSCHLIESSLICH die Daten unten. Erfinde nichts dazu — keine Termine, keine Zahlen, keine Namen.
-- Niemals Wallet-Adressen (0x…) erwähnen.
-- Niemals "CRC", "Circles" oder Krypto-Jargon — die Stadtwährung heißt ausschließlich "Röbel-Taler".
-- Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>. Keine Überschriften im HTML (die kommen aus "heading").
-- News-Artikel verlinkst du als <a href="${BASE_URL}/news/SLUG">Titel</a>.
-- Leere Datenquellen lässt du einfach weg — kein "diese Woche gab es keine…".
-- Zum Schluss ein kurzer, freundlicher Abschied (1-2 Sätze).
+KOMMENDE VERANSTALTUNGEN (nächste 14 Tage, jede mit fertiger url):
+${JSON.stringify(events, null, 2)}
 
-DATEN SEIT ${data.windowStart}:
-
-NEUIGKEITEN (mit slug für Links):
-${JSON.stringify(data.news, null, 2)}
-
-KOMMENDE VERANSTALTUNGEN (nächste 14 Tage):
-${JSON.stringify(data.events, null, 2)}
-
-BÜRGERBETEILIGUNG / ABSTIMMUNGEN:
+BÜRGERBETEILIGUNG / ABSTIMMUNGEN (Übersichtsseite: ${BASE_URL}/proposals):
 ${JSON.stringify(data.proposals, null, 2)}
 
-NEUE MARKTPLATZ-ANGEBOTE:
+NEUE MARKTPLATZ-ANGEBOTE (Übersichtsseite: ${BASE_URL}/app/marktplatz):
 ${JSON.stringify(data.listings, null, 2)}
 
 NEUE GEWERBE IN DER APP:
 ${JSON.stringify(data.businesses, null, 2)}
 
 BELIEBTE COMMUNITY-BEITRÄGE (ohne Namensnennung zitieren/zusammenfassen):
-${JSON.stringify(data.posts, null, 2)}
+${JSON.stringify(data.posts, null, 2)}`
+}
+
+const HARD_RULES = `TONALITÄT: Warm, bürgernah, norddeutsch-locker (ein "Moin" zur Begrüßung passt). Kurze Sätze. Du-Form. Kein Amtsdeutsch, kein Marketing-Sprech.
+
+HARTE REGELN:
+- Nutze AUSSCHLIESSLICH die bereitgestellten Daten. Erfinde nichts dazu — keine Termine, keine Zahlen, keine Namen, keine URLs.
+- Niemals Wallet-Adressen (0x…) erwähnen.
+- Niemals "CRC", "Circles" oder Krypto-Jargon — die Stadtwährung heißt ausschließlich "Röbel-Taler".
+- Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>. Keine Überschriften im HTML (die kommen aus "heading").
+- VERLINKE KONSEQUENT: Jede erwähnte Neuigkeit und jede erwähnte Veranstaltung bekommt ihren Link aus dem Datenfeld "url" (<a href="URL">Titel</a>). Erwähnst du Abstimmungen, verlinke die Übersichtsseite; erwähnst du Marktplatz-Angebote, verlinke deren Übersichtsseite.
+- Leere Datenquellen lässt du einfach weg — kein "diese Woche gab es keine…".
+- Zum Schluss ein kurzer, freundlicher Abschied (1-2 Sätze).`
+
+function buildPrompt(data: NewsletterSourceData): string {
+  return `Du schreibst den wöchentlichen E-Mail-Newsletter der Röbel App für die Kleinstadt Röbel/Müritz.
+
+${HARD_RULES}
+
+${buildDataBlock(data)}
 
 Erstelle daraus den Newsletter dieser Woche.`
 }
@@ -175,4 +184,67 @@ export async function regenerateIssueContent(
     .eq("id", issueId)
   if (error) return { success: false, message: "Speichern fehlgeschlagen." }
   return { success: true, message: "Entwurf neu generiert." }
+}
+
+
+const editSchema = z.object({
+  subject: z.string().describe("Betreffzeile (unverändert lassen, wenn die Anweisung nichts anderes verlangt)"),
+  preheader: z.string().describe("Vorschautext (unverändert lassen, wenn die Anweisung nichts anderes verlangt)"),
+  html: z.string().describe("Der vollständige überarbeitete Newsletter-Body als HTML (h2, h3, p, ul, li, a, strong, em, hr)"),
+})
+
+export async function editIssueContentWithAI(
+  issueId: string,
+  instruction: string
+): Promise<{ success: boolean; message: string }> {
+  const supabase = createAdminClient()
+  const { data: issue, error: lookupError } = await supabase
+    .from("newsletter_issues")
+    .select("id, status, subject, preheader, content_html")
+    .eq("id", issueId)
+    .maybeSingle()
+  if (lookupError) {
+    console.error("[Newsletter] issue lookup failed:", lookupError)
+    return { success: false, message: "Datenbankfehler — bitte erneut versuchen." }
+  }
+  if (!issue) return { success: false, message: "Ausgabe nicht gefunden." }
+  if (issue.status !== "draft") {
+    return { success: false, message: "Nur Entwürfe können bearbeitet werden." }
+  }
+
+  const data = await gatherNewsletterContent()
+  const { object } = await generateObject({
+    model: anthropic("claude-sonnet-5"),
+    schema: editSchema,
+    prompt: `Du überarbeitest den wöchentlichen E-Mail-Newsletter der Röbel App nach einer Anweisung der Redaktion.
+
+${HARD_RULES}
+
+AKTUELLER STAND:
+Betreff: ${issue.subject}
+Vorschautext: ${issue.preheader ?? ""}
+Body-HTML:
+${issue.content_html}
+
+${buildDataBlock(data)}
+
+ANWEISUNG DER REDAKTION:
+${instruction}
+
+Führe NUR diese Anweisung aus und lass alles andere inhaltlich unverändert. Gib den vollständigen überarbeiteten Body als HTML zurück (mit <h2>-Abschnittsüberschriften und <hr> zwischen Abschnitten, wie im aktuellen Stand).`,
+    maxOutputTokens: 8000,
+  })
+
+  const { error } = await supabase
+    .from("newsletter_issues")
+    .update({
+      subject: object.subject,
+      preheader: object.preheader,
+      content_html: sanitizeNewsletterHtml(object.html),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", issueId)
+    .eq("status", "draft")
+  if (error) return { success: false, message: "Speichern fehlgeschlagen." }
+  return { success: true, message: "Entwurf mit KI überarbeitet." }
 }
