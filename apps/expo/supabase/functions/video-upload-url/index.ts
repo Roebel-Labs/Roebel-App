@@ -32,7 +32,15 @@ function config() {
   const apiToken = Deno.env.get("CLOUDFLARE_STREAM_API_TOKEN");
   const rawCode = Deno.env.get("CLOUDFLARE_STREAM_CUSTOMER_CODE");
   if (!accountId || !apiToken || !rawCode) return null;
-  return { accountId, apiToken, customerCode: rawCode.replace(/^customer-/, "") };
+  // Accept "xxx", "customer-xxx", "customer-xxx.cloudflarestream.com" or a full URL.
+  const customerCode = rawCode
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/^customer-/, "")
+    .replace(/\.cloudflarestream\.com.*$/, "")
+    .replace(/\/.*$/, "");
+  if (!customerCode) return null;
+  return { accountId, apiToken, customerCode };
 }
 
 Deno.serve(async (req: Request) => {
