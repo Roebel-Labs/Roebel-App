@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaFile } from '@/lib/upload-media';
+import { probeStreamConfigured, uploadVideoToStream } from '@/lib/stream-upload';
 import type { PostCategory, FeedType, PostType, StadtkasseSnapshot } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import type { LootboxReward } from '@/lib/supabase-rewards';
@@ -22,6 +23,7 @@ type CreatePostState = {
   pollType: 'single' | 'multi';
   isUploading: boolean;
   pendingUploads: number;
+  uploadProgress: number | null;
   linkedEventId: string | null;
   linkedEventData: LinkedEventData | null;
   linkedMarketplaceId: string | null;
@@ -65,6 +67,7 @@ const initialState: CreatePostState = {
   pollType: 'single',
   isUploading: false,
   pendingUploads: 0,
+  uploadProgress: null,
   linkedEventId: null,
   linkedEventData: null,
   linkedMarketplaceId: null,
@@ -131,22 +134,32 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const pickVideo = useCallback(async (walletAddress: string) => {
+    // Stream configured → 10-min cap + direct-to-Cloudflare tus upload.
+    // Not configured → exactly the legacy behavior (60s, Supabase Storage).
+    const useStream = await probeStreamConfigured();
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos'],
       quality: 0.8,
-      videoMaxDuration: 60,
+      videoMaxDuration: useStream ? 600 : 60,
     });
 
     if (result.canceled) return;
 
-    setState((prev) => ({ ...prev, isUploading: true }));
+    setState((prev) => ({ ...prev, isUploading: true, uploadProgress: useStream ? 0 : null }));
 
-    const url = await uploadMediaFile(result.assets[0].uri, walletAddress, 'video', 'posts', result.assets[0].mimeType || undefined);
+    const asset = result.assets[0];
+    const url = useStream
+      ? await uploadVideoToStream(asset.uri, walletAddress, (fraction) =>
+          setState((prev) => ({ ...prev, uploadProgress: fraction })),
+        )
+      : await uploadMediaFile(asset.uri, walletAddress, 'video', 'posts', asset.mimeType || undefined);
 
     setState((prev) => ({
       ...prev,
       videoUrl: url,
       isUploading: false,
+      uploadProgress: null,
     }));
   }, []);
 

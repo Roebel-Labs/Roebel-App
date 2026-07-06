@@ -490,7 +490,11 @@ export default function CreateScreen() {
             <View style={styles.uploadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={[styles.uploadingText, { color: colors.textSecondary }]}>
-                Wird hochgeladen...
+                {draft.uploadProgress == null
+                  ? 'Wird hochgeladen...'
+                  : draft.uploadProgress >= 1
+                    ? 'Video wird verarbeitet…'
+                    : `Wird hochgeladen… ${Math.round(draft.uploadProgress * 100)} %`}
               </Text>
             </View>
           )}
