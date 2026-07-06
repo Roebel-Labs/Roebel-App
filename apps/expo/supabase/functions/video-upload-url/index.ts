@@ -104,6 +104,10 @@ Deno.serve(async (req: Request) => {
       return json({
         readyToStream: data?.result?.readyToStream === true,
         state: data?.result?.status?.state ?? null,
+        errorReasonCode: data?.result?.status?.errorReasonCode ?? null,
+        errorReasonText: data?.result?.status?.errorReasonText ?? null,
+        pctComplete: data?.result?.status?.pctComplete ?? null,
+        duration: data?.result?.duration ?? null,
       });
     }
 
