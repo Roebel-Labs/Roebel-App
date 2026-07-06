@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Play } from "lucide-react";
+import { useHlsVideo, isHlsUrl, hlsPosterUrl } from "@/hooks/useHlsVideo";
 
 interface VideoPlayerProps {
   url: string;
@@ -13,6 +14,8 @@ export function VideoPlayer({ url, onFullscreen }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
+
+  useHlsVideo(videoRef, url);
 
   // Intersection Observer for autoplay
   useEffect(() => {
@@ -67,7 +70,8 @@ export function VideoPlayer({ url, onFullscreen }: VideoPlayerProps) {
     >
       <video
         ref={videoRef}
-        src={url}
+        src={isHlsUrl(url) ? undefined : url}
+        poster={hlsPosterUrl(url) ?? undefined}
         className="w-full h-full object-contain"
         muted
         loop

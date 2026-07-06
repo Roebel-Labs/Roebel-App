@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
+import { useHlsVideo, isHlsUrl } from "@/hooks/useHlsVideo";
 import {
   Dialog,
   DialogPortal,
@@ -28,6 +29,8 @@ export function MediaLightbox({
   mode,
 }: MediaLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const lightboxVideoRef = useRef<HTMLVideoElement>(null);
+  useHlsVideo(lightboxVideoRef, videoUrl ?? "");
 
   useEffect(() => {
     if (open) setCurrentIndex(initialIndex);
@@ -83,7 +86,8 @@ export function MediaLightbox({
           {mode === "video" && videoUrl ? (
             <div className="w-full max-w-4xl px-4">
               <video
-                src={videoUrl}
+                ref={lightboxVideoRef}
+                src={isHlsUrl(videoUrl) ? undefined : videoUrl}
                 className="w-full max-h-[85vh] object-contain"
                 controls
                 autoPlay
