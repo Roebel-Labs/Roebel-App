@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { ImageUploadDropzone } from "@/components/ui/image-upload-dropzone"
-import { ArrowLeft, Save, Eye, Pencil, Send, Sparkles, FlaskConical } from "lucide-react"
+import { ArrowLeft, Save, Eye, Pencil, Send, Sparkles, FlaskConical, Copy } from "lucide-react"
 import { toast } from "sonner"
 import {
   getIssue, updateIssue, previewIssueEmail, sendTestEmail, regenerateDraft,
-  getActiveSubscriberCount, getUnsentSendCount, editDraftWithAI, type NewsletterIssue,
+  getActiveSubscriberCount, getUnsentSendCount, editDraftWithAI, duplicateIssue, type NewsletterIssue,
 } from "@/app/actions/newsletter"
 import { sanitizeNewsletterHtml } from "@/lib/newsletter/sanitize"
 
@@ -102,6 +102,17 @@ export default function NewsletterIssueEditorPage() {
       load()
     } else {
       toast.error(result.message, { id: t })
+    }
+  }
+
+
+  async function handleDuplicate() {
+    const result = await duplicateIssue(id)
+    if (result.success && result.issueId) {
+      toast.success(result.message)
+      router.push(`/admin/dashboard/newsletter/${result.issueId}`)
+    } else {
+      toast.error(result.message)
     }
   }
 
@@ -220,6 +231,11 @@ export default function NewsletterIssueEditorPage() {
                 </AlertDialogContent>
               </AlertDialog>
             </>
+          )}
+          {!isDraft && (
+            <Button variant="outline" onClick={handleDuplicate}>
+              <Copy className="mr-2 h-4 w-4" /> Als Entwurf duplizieren
+            </Button>
           )}
           {(issue.status === "failed" || issue.status === "sent" || issue.status === "sending") && unsentCount > 0 && (
             <Button variant="outline" onClick={handleRetryFailed} disabled={sending}>

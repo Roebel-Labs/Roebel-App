@@ -95,6 +95,32 @@ export async function deleteIssue(id: string): Promise<{ success: boolean; messa
   return { success: true, message: "Entwurf gelöscht." }
 }
 
+export async function duplicateIssue(id: string): Promise<{ success: boolean; issueId?: string; message: string }> {
+  await guard()
+  const supabase = createAdminClient()
+  const { data: source } = await supabase
+    .from("newsletter_issues")
+    .select("subject, preheader, content_html, hero_image_url, generated_by")
+    .eq("id", id)
+    .maybeSingle()
+  if (!source) return { success: false, message: "Ausgabe nicht gefunden." }
+  const { data: created, error } = await supabase
+    .from("newsletter_issues")
+    .insert({
+      subject: source.subject,
+      preheader: source.preheader,
+      content_html: source.content_html,
+      hero_image_url: source.hero_image_url,
+      status: "draft",
+      generated_by: source.generated_by,
+    })
+    .select("id")
+    .single()
+  revalidatePath(ADMIN_PATH)
+  if (error || !created) return { success: false, message: "Duplizieren fehlgeschlagen." }
+  return { success: true, issueId: created.id, message: "Als neuer Entwurf dupliziert." }
+}
+
 export async function generateDraftNow(): Promise<{ success: boolean; message: string; issueId?: string }> {
   await guard()
   try {
