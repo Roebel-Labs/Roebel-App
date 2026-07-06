@@ -17,7 +17,10 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_DURATION_SECONDS = 600; // hard server-side cap (10 min)
+// Hard server-side cap. Cloudflare validates AFTER the full upload, so keep
+// comfortable headroom over the advertised "10 minutes" — a 10:03 recording
+// must not burn a 1 GB upload. Clients pre-check against the same value.
+const MAX_DURATION_SECONDS = 900; // 15 min
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB safety cap
 
 function json(body: unknown, status = 200) {

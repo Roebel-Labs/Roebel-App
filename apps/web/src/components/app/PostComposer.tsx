@@ -12,7 +12,12 @@ import { ImagePlus, Video, X, Loader2, Link as LinkIcon, BarChart3, Home, Landma
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { uploadResumable } from "@/lib/storage/resumable-upload";
-import { probeStreamConfigured, uploadVideoToStream } from "@/lib/stream-upload";
+import {
+  probeStreamConfigured,
+  uploadVideoToStream,
+  getVideoFileDuration,
+  MAX_VIDEO_DURATION_SECONDS,
+} from "@/lib/stream-upload";
 import { PollCreator } from "@/components/app/PollCreator";
 import { CategorySelector } from "@/components/app/CategorySelector";
 import { GuidelinesBanner, GuidelinesInfoButton } from "@/components/app/CommunityGuidelines";
@@ -136,8 +141,10 @@ export function PostComposer({
   };
 
   // Handle video selection
-  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset input so the same file can be re-picked after a rejection
+    e.target.value = "";
     if (!file) return;
 
     if (file.size > MAX_VIDEO_SIZE) {
@@ -145,11 +152,24 @@ export function PostComposer({
       return;
     }
 
+    // Cloudflare Stream validates duration only AFTER the full upload —
+    // reject over-long videos here instead of after gigabytes of upload.
+    if (await probeStreamConfigured()) {
+      try {
+        const duration = await getVideoFileDuration(file);
+        if (duration > MAX_VIDEO_DURATION_SECONDS) {
+          toast.error(
+            `Video ist zu lang (maximal ${Math.floor(MAX_VIDEO_DURATION_SECONDS / 60)} Minuten)`
+          );
+          return;
+        }
+      } catch {
+        // metadata unreadable — let the server-side cap decide
+      }
+    }
+
     setVideoFile(file);
     setVideoPreview(URL.createObjectURL(file));
-
-    // Reset input
-    e.target.value = "";
   };
 
   const removeImage = (index: number) => {

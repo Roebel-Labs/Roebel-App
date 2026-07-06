@@ -141,7 +141,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos'],
       quality: 0.8,
-      videoMaxDuration: useStream ? 600 : 60,
+      videoMaxDuration: useStream ? 900 : 60,
     });
 
     if (result.canceled) return;

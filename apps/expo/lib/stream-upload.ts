@@ -37,7 +37,7 @@ export function _resetProbeCacheForTests() {
 }
 
 /** Poll the edge function until Cloudflare reports the video is playable. */
-async function waitUntilReady(uid: string, timeoutMs = 180_000): Promise<boolean> {
+async function waitUntilReady(uid: string, timeoutMs = 360_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
