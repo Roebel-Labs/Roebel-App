@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Header } from "@/components/layout/Header"
 import { NewsletterSignupForm } from "./signup-form"
 
 export const metadata: Metadata = {
@@ -8,15 +9,22 @@ export const metadata: Metadata = {
 
 export default function NewsletterPage() {
   return (
-    <main className="mx-auto max-w-xl px-4 py-16">
-      <h1 className="text-3xl font-bold text-gray-900">Der Röbel-Newsletter</h1>
-      <p className="mt-3 text-gray-600">
-        Einmal pro Woche: Neuigkeiten, Veranstaltungen, Abstimmungen und alles, was in
-        Röbel/Müritz passiert. Kostenlos, jederzeit abbestellbar.
-      </p>
-      <div className="mt-8">
-        <NewsletterSignupForm />
-      </div>
-    </main>
+    <div className="min-h-screen bg-white">
+      <Header />
+      <main className="mx-auto max-w-xl px-4 py-16">
+        <h1 className="text-3xl font-bold text-gray-900">Der Röbel-Newsletter</h1>
+        <p className="mt-3 text-gray-600">
+          Einmal pro Woche: Neuigkeiten, Veranstaltungen, Abstimmungen und alles, was in
+          Röbel/Müritz passiert. Kostenlos, jederzeit abbestellbar.
+        </p>
+        <div className="mt-8">
+          <NewsletterSignupForm />
+        </div>
+        <p className="mt-10 text-xs text-gray-400">
+          Details zur Verarbeitung deiner Daten findest du im Abschnitt „Newsletter" unserer{" "}
+          <a href="/datenschutz" className="underline">Datenschutzerklärung</a>.
+        </p>
+      </main>
+    </div>
   )
 }

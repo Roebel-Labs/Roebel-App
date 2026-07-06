@@ -1194,6 +1194,36 @@ Bei Unstimmigkeiten zwischen den Versionen hat die deutsche Version Vorrang.
 
 ---
 
+## Newsletter
+
+### Beschreibung und Zweck
+
+Auf unserer Website können Sie sich für unseren wöchentlichen E-Mail-Newsletter anmelden. Der Newsletter informiert über Neuigkeiten, Veranstaltungen, Bürgerbeteiligung und lokale Angebote aus Röbel/Müritz.
+
+### Verarbeitete Daten
+
+- E-Mail-Adresse
+- Zeitpunkt der An- und Abmeldung sowie der Bestätigung (Double-Opt-in-Protokollierung als Einwilligungsnachweis)
+- Zustell-, Öffnungs- und Klickstatistiken (aggregiert je Ausgabe, zur Reichweitenmessung)
+
+### Double-Opt-in-Verfahren
+
+Nach Ihrer Anmeldung erhalten Sie eine E-Mail mit einem Bestätigungslink. Erst nach Klick auf diesen Link ist die Anmeldung wirksam und Sie erhalten den Newsletter. Ohne Bestätigung wird Ihnen kein Newsletter zugesandt.
+
+### Rechtsgrundlage
+
+Die Verarbeitung erfolgt auf Grundlage Ihrer Einwilligung (Art. 6 Abs. 1 lit. a DSGVO, § 7 Abs. 2 Nr. 3 UWG). Die Protokollierung des Anmeldeverfahrens erfolgt auf Grundlage unseres berechtigten Interesses am Nachweis der Einwilligung (Art. 6 Abs. 1 lit. f DSGVO).
+
+### Versanddienstleister
+
+Der Versand erfolgt über den Auftragsverarbeiter Resend Inc., 2261 Market Street #5039, San Francisco, CA 94114, USA. Mit Resend besteht ein Auftragsverarbeitungsvertrag gemäß Art. 28 DSGVO; die Datenübermittlung in die USA erfolgt auf Grundlage der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO). Weitere Informationen: https://resend.com/legal/privacy-policy
+
+### Widerruf und Speicherdauer
+
+Sie können Ihre Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen — über den „Abmelden"-Link in jeder Newsletter-E-Mail oder unter https://roebel.app/newsletter/abmelden. Nach dem Widerruf wird Ihre E-Mail-Adresse für den Newsletterversand gesperrt. Auf Wunsch löschen wir Ihre Daten vollständig; kontaktieren Sie uns dazu oder nutzen Sie Ihr Recht auf Löschung (Art. 17 DSGVO).
+
+---
+
 ## Zusätzliche Hinweise
 
 ### Kinder
@@ -1212,8 +1242,8 @@ Wenn wir Social-Media-Plugins einbinden, werden diese nur nach Ihrer Einwilligun
 
 **Diese Datenschutzerklärung entspricht den Anforderungen der DSGVO (Datenschutz-Grundverordnung) und des BDSG (Bundesdatenschutzgesetz) in der jeweils gültigen Fassung.**
 
-**Stand:** 31. Januar 2025
-**Version:** 1.0
+**Stand:** 6. Juli 2026
+**Version:** 1.1 (Newsletter-Abschnitt ergänzt)
 
 ---
 
