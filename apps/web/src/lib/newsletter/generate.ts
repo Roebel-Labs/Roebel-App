@@ -24,7 +24,19 @@ const newsletterSchema = z.object({
 
 function buildDataBlock(data: NewsletterSourceData): string {
   // URLs vorberechnen, damit das Modell nur noch verlinken muss (nie raten).
-  const news = data.news.map((n) => ({ ...n, url: `${BASE_URL}/news/${n.slug}` }))
+  // Artikelbilder als serverseitig quadratisch zugeschnittene Variante (Supabase render/image).
+  const toSquare = (url: string | null) =>
+    url && url.includes("/storage/v1/object/public/")
+      ? url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") +
+        "?width=600&height=600&resize=cover&quality=80"
+      : null
+  const news = data.news.map((n) => ({
+    title: n.title,
+    excerpt: n.excerpt,
+    category: n.category,
+    url: `${BASE_URL}/news/${n.slug}`,
+    img_1x1: toSquare(n.cover_image_url),
+  }))
   const events = data.events.map((e) => ({ ...e, url: `${BASE_URL}/events/${e.id}` }))
   return `DATEN SEIT ${data.windowStart}:
 
@@ -53,7 +65,8 @@ HARTE REGELN:
 - Nutze AUSSCHLIESSLICH die bereitgestellten Daten. Erfinde nichts dazu — keine Termine, keine Zahlen, keine Namen, keine URLs.
 - Niemals Wallet-Adressen (0x…) erwähnen.
 - Niemals "CRC", "Circles" oder Krypto-Jargon — die Stadtwährung heißt ausschließlich "Röbel-Taler".
-- Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>. Keine Überschriften im HTML (die kommen aus "heading").
+- Erlaubte HTML-Tags im Abschnitts-HTML: <p>, <ul>, <li>, <a>, <strong>, <em>, <img>. Keine Überschriften im HTML (die kommen aus "heading").
+- Hat eine Neuigkeit ein Bild (Feld "img_1x1"), setze GENAU dieses Bild direkt vor ihre Erwähnung: <img src="IMG_1X1_URL">. Keine anderen Bildquellen, nichts an der URL ändern.
 - VERLINKE KONSEQUENT: Jede erwähnte Neuigkeit und jede erwähnte Veranstaltung bekommt ihren Link aus dem Datenfeld "url" (<a href="URL">Titel</a>). Erwähnst du Abstimmungen, verlinke die Übersichtsseite; erwähnst du Marktplatz-Angebote, verlinke deren Übersichtsseite.
 - Leere Datenquellen lässt du einfach weg — kein "diese Woche gab es keine…".
 - SCHREIBSTIL: Klingt wie ein Mensch aus Röbel, nicht wie eine KI. Keine Gedankenstriche (– oder —) als Stilmittel und keine mit "-" abgesetzten Einschübe; nutze Kommas oder mach zwei Sätze draus. Keine Floskeln wie "Tauche ein", "Egal ob ... oder ...", "Lass dich überraschen". Nicht jede Aufzählung als <ul>-Liste; erzähl lieber im Fließtext.

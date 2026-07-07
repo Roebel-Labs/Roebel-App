@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 export interface NewsletterSourceData {
   windowStart: string
-  news: Array<{ title: string; excerpt: string | null; category: string | null; slug: string }>
+  news: Array<{ title: string; excerpt: string | null; category: string | null; slug: string; cover_image_url: string | null }>
   events: Array<{ id: string; title: string; date: string; time: string | null; location: string | null }>
   proposals: Array<{ title: string; summary: string | null; state: string; for_votes: number; against_votes: number }>
   listings: Array<{ title: string; category: string | null }>
@@ -47,7 +47,7 @@ export async function gatherNewsletterContent(): Promise<NewsletterSourceData> {
     safe("news", async () => {
       const { data, error } = await supabase
         .from("news_articles")
-        .select("title, excerpt, category, slug")
+        .select("title, excerpt, category, slug, cover_image_url")
         .eq("status", "published")
         .gte("published_at", windowStart)
         .order("published_at", { ascending: false })
