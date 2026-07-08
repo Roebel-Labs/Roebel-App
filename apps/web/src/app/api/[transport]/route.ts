@@ -105,6 +105,9 @@ function validateHtmlDocument(html: string): { ok: boolean; errors: string[]; wa
   if (!html.includes("actions.ready")) {
     errors.push("Missing sdk.actions.ready() — the host splash would never dismiss.");
   }
+  if (!/<\/html\s*>/i.test(html.slice(-400))) {
+    errors.push("Document is incomplete (missing </html>) — likely truncated output.");
+  }
   if (!/data-screen=/.test(html)) {
     warnings.push(
       'No <section data-screen="…"> structure found — the editor canvas and store previews work better with it (see get_docs section "screens").',

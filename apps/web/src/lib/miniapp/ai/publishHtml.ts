@@ -92,6 +92,15 @@ export async function publishHtmlMiniApp(input: {
   if (!html.includes("actions.ready")) {
     return fail(slug, "invalid_html", "invalid_html: missing sdk.actions.ready() call");
   }
+  // A document without </html> was cut off mid-stream (e.g. the model's output
+  // budget) — its script is broken and the app would hang at the splash.
+  if (!/<\/html\s*>/i.test(html.slice(-400))) {
+    return fail(
+      slug,
+      "invalid_html",
+      "invalid_html: document is incomplete (missing </html>) — the generation was truncated",
+    );
+  }
 
   const homeUrl = homeUrlForSlug(slug, input.origin);
   const iconUrl = safeIconDataUri(manifest.iconSvg);

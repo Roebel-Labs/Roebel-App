@@ -338,6 +338,7 @@ export default function NewMiniAppBuilderPage() {
         let htmlAcc = "";
         let thinkAcc = "";
         let briefAcc = "";
+        let finishReason = "";
         const feed = makeFrameParser((f) => {
           if (f.t === "html" && f.v) {
             htmlAcc += f.v;
@@ -349,6 +350,8 @@ export default function NewMiniAppBuilderPage() {
             briefAcc = f.v;
           } else if (f.t === "status" && (f.v === "vision" || f.v === "code")) {
             setPhase(f.v);
+          } else if (f.t === "done" && f.v) {
+            finishReason = f.v;
           }
         });
         for (;;) {
@@ -358,10 +361,14 @@ export default function NewMiniAppBuilderPage() {
         }
         feed(decoder.decode());
 
-        const { html, notes } = extractResult(htmlAcc);
+        const { html, notes, truncated } = extractResult(htmlAcc);
         if (!html) {
           throw new Error(
-            "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
+            truncated
+              ? finishReason === "length"
+                ? "Die App wurde abgeschnitten: Die Antwort hat das Ausgabe-Limit erreicht (im Modus „Stark“ zählt auch das Nachdenken mit). Versuch es mit „Schnell“ oder formuliere die Anforderung kompakter."
+                : "Die Übertragung ist mittendrin abgebrochen — diese Version ist unvollständig und wurde verworfen. Schick die Anfrage einfach noch einmal ab."
+              : "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
           );
         }
         const idx = versions.length;

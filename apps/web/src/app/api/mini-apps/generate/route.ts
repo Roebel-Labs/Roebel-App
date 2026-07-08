@@ -142,7 +142,10 @@ export async function POST(request: Request) {
           system: buildHtmlSystemPrompt(),
           messages: modelMessages,
           providerOptions: codegenProviderOptions(complexity ?? "default"),
-          maxOutputTokens: 32000,
+          // "Stark" reasoning tokens count AGAINST this budget — 32k proved too
+          // small for long thinking + a content-rich app (doc truncated
+          // mid-script, 2026-07-08). GLM-5.2 supports 128K output.
+          maxOutputTokens: 64000,
           onError: (event) => {
             console.error("[mini-apps/generate] stream error", event.error);
           },
@@ -163,6 +166,10 @@ export async function POST(request: Request) {
               console.error("[mini-apps/generate] stream part error", p.error);
             }
           }
+          // Why the stream ended — 'length' = output budget hit (doc truncated);
+          // the client turns that into a precise error instead of a broken app.
+          const finish = await result.finishReason.catch(() => "unknown");
+          frame("done", String(finish));
         } else {
           let firstChunk = true;
           for await (const chunk of result.textStream) {

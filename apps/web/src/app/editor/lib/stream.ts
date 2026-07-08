@@ -43,7 +43,13 @@ export function stripFences(raw: string): string {
 }
 
 /** Split the finished stream into the HTML document and the trailing NOTES comment. */
-export function extractResult(raw: string): { html: string | null; notes: string } {
+export function extractResult(raw: string): {
+  html: string | null;
+  notes: string;
+  /** true = document started but never closed (</html> missing) — the stream
+   * or the model's output budget was cut mid-document. Never use such a doc. */
+  truncated?: boolean;
+} {
   const s = stripFences(raw);
   const notesMatch = s.match(/<!--\s*NOTES:?\s*([\s\S]*?)-->\s*$/i);
   const notes = notesMatch ? notesMatch[1].trim() : "";
@@ -51,5 +57,8 @@ export function extractResult(raw: string): { html: string | null; notes: string
   const looksLikeHtml =
     html.slice(0, 200).toLowerCase().includes("<!doctype html") ||
     html.slice(0, 200).toLowerCase().startsWith("<html");
+  if (looksLikeHtml && !/<\/html\s*>/i.test(html.slice(-400))) {
+    return { html: null, notes, truncated: true };
+  }
   return { html: looksLikeHtml ? html : null, notes };
 }

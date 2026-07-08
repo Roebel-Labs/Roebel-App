@@ -31,12 +31,17 @@ export function Playground({ app }: { app: MiniAppRow }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [mockCitizen, setMockCitizen] = useState(true);
 
+  // Reset splash/log only when the APP or an iframe reload changes — not when
+  // the reviewer wallet (re)connects: the embedded app keeps running and never
+  // calls ready() twice, so resetting on account change froze the splash.
+  useEffect(() => {
+    setReady(false);
+    setLog([]);
+  }, [app.id, app.home_url, reloadKey]);
+
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-
-    setReady(false);
-    setLog([]);
 
     const walletAccount: WalletAccount | null = account?.address
       ? { address: account.address, chainId: GNOSIS_CHAIN_ID }
