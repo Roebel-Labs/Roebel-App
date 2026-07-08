@@ -15,6 +15,11 @@ export interface ChatMsg {
   content: string;
   versionIndex?: number;
   error?: boolean;
+  /** Attachment thumbnails (~160px JPEG data URLs) — display only; the
+   * full-size images go to the API once and are not persisted. */
+  images?: string[];
+  /** Label of the preview element this edit targeted ("Bearbeiten" mode). */
+  elementLabel?: string;
 }
 
 export interface Version {

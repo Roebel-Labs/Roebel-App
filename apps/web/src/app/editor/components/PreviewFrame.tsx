@@ -2,10 +2,13 @@
 
 // Live preview: the generated single-file app runs in a sandboxed srcdoc iframe
 // wired to the real Netizen web host bridge (via useMiniAppHost) — ready()/
-// context/balance/track all settle like in the Röbel app.
-import { useEffect, useRef, useState } from "react";
-import { Camera, Loader2, RefreshCw } from "lucide-react";
+// context/balance/track all settle like in the Röbel app. The preview document
+// is augmented (inspect.ts) with an element inspector ("Bearbeiten") and a
+// runtime-error reporter; published HTML stays clean.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, Loader2, MousePointerClick, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { augmentPreviewHtml, type InspectedElement, type RuntimeError } from "../lib/inspect";
 import { useMiniAppHost } from "../lib/useMiniAppHost";
 
 const CAPTURE_TIMEOUT_MS = 10_000;
@@ -15,17 +18,56 @@ export function PreviewFrame({
   appName,
   appSlug,
   wallet,
+  onInspect,
+  onRuntimeError,
 }: {
   html: string | null;
   appName: string;
   /** Slug of the published app — screenshots need an app row to attach to. */
   appSlug?: string | null;
   wallet?: string | null;
+  /** Called when the user picks an element in "Bearbeiten" mode. */
+  onInspect?: (el: InspectedElement) => void;
+  /** Called (deduped in-page) for every runtime error the preview reports. */
+  onRuntimeError?: (err: RuntimeError) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const { ready, calls, reload, reloadKey } = useMiniAppHost(iframeRef, { html, appName });
+  const previewHtml = useMemo(() => (html ? augmentPreviewHtml(html) : null), [html]);
+  const { ready, calls, reload, reloadKey } = useMiniAppHost(iframeRef, {
+    html: previewHtml,
+    appName,
+  });
   const [shotState, setShotState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [shotMsg, setShotMsg] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+
+  // Inspector wiring: toggle state into the frame, listen for picks + errors.
+  useEffect(() => {
+    const frame = iframeRef.current?.contentWindow;
+    if (frame) frame.postMessage({ type: "netizen:inspect", enabled: inspecting }, "*");
+  }, [inspecting, reloadKey, ready]);
+
+  useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (e.source !== iframeRef.current?.contentWindow || !e.data) return;
+      if (e.data.type === "netizen:inspect:pick" && e.data.element) {
+        setInspecting(false);
+        onInspect?.(e.data.element as InspectedElement);
+      } else if (e.data.type === "netizen:runtime-error" && e.data.message) {
+        onRuntimeError?.({
+          message: String(e.data.message),
+          source: String(e.data.source ?? "error"),
+        });
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [onInspect, onRuntimeError]);
+
+  // A new document ends any active inspection.
+  useEffect(() => {
+    setInspecting(false);
+  }, [html]);
 
   // Kurzlebige Statusanzeige zurücksetzen
   useEffect(() => {
@@ -103,11 +145,16 @@ export function PreviewFrame({
               <iframe
                 key={reloadKey}
                 ref={iframeRef}
-                srcDoc={html}
+                srcDoc={previewHtml ?? undefined}
                 title={`Vorschau: ${appName}`}
                 sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                 className="h-full w-full rounded-[20px] border-0 bg-white"
               />
+              {inspecting && (
+                <div className="pointer-events-none absolute inset-x-1.5 top-1.5 z-10 rounded-t-[20px] bg-primary/90 px-3 py-1.5 text-center text-[11px] font-medium text-primary-foreground">
+                  Element anklicken, das geändert werden soll
+                </div>
+              )}
               {!ready && (
                 <div className="pointer-events-none absolute inset-1.5 flex flex-col items-center justify-center gap-2 rounded-[20px] bg-white/95 text-center dark:bg-[#202124]/95">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -138,6 +185,20 @@ export function PreviewFrame({
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setInspecting((v) => !v)}
+                title="Bearbeiten-Modus: Element in der Vorschau anklicken und die nächste Änderung gezielt darauf beziehen"
+                className={cn(
+                  "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px]",
+                  inspecting
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <MousePointerClick className="h-3 w-3" />
+                Bearbeiten
+              </button>
               <button
                 type="button"
                 onClick={captureShot}

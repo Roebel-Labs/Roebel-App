@@ -10,12 +10,16 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowUp,
+  Bug,
   History,
+  ImagePlus,
   Loader2,
   MessageSquarePlus,
+  MousePointerClick,
   Rocket,
   Sparkles,
   Square,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +29,14 @@ import { CanvasView } from "./components/CanvasView";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
+import { isAcceptedImage, prepareImage, type PreparedImage } from "./lib/images";
+import {
+  buildElementContext,
+  buildErrorFixPrompt,
+  elementLabel,
+  type InspectedElement,
+  type RuntimeError,
+} from "./lib/inspect";
 import { extractResult, stripFences } from "./lib/stream";
 import {
   DRAFT_KEY,
@@ -69,8 +81,33 @@ export default function NewMiniAppBuilderPage() {
   // so re-publishing lands on the SAME slug as a new version.
   const [preset, setPreset] = useState<ManifestDraft | null>(null);
   const [loadingApp, setLoadingApp] = useState(false);
+  const [attachments, setAttachments] = useState<PreparedImage[]>([]);
+  const [inspected, setInspected] = useState<InspectedElement | null>(null);
+  const [runtimeErrors, setRuntimeErrors] = useState<RuntimeError[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const addFiles = useCallback(async (files: Iterable<File>) => {
+    const accepted = Array.from(files).filter(isAcceptedImage);
+    for (const file of accepted) {
+      try {
+        const prepared = await prepareImage(file);
+        setAttachments((prev) => (prev.length >= 4 ? prev : [...prev, prepared]));
+      } catch {
+        /* not decodable — skip silently */
+      }
+    }
+  }, []);
+
+  const onRuntimeError = useCallback((err: RuntimeError) => {
+    setRuntimeErrors((prev) =>
+      prev.length >= 5 || prev.some((e) => e.message === err.message) ? prev : [...prev, err],
+    );
+  }, []);
+
+  const onInspect = useCallback((el: InspectedElement) => {
+    setInspected(el);
+  }, []);
 
   const activeHtml = activeIdx >= 0 ? versions[activeIdx]?.html ?? null : null;
   const started = messages.length > 0;
@@ -231,17 +268,40 @@ export default function NewMiniAppBuilderPage() {
 
   const send = useCallback(
     async (text: string) => {
-      const trimmed = text.trim();
-      if (trimmed.length < 3 || streaming) return;
-      const userMsg: ChatMsg = { id: uid(), role: "user", content: trimmed };
+      let trimmed = text.trim();
+      if (streaming) return;
+      if (trimmed.length < 3) {
+        if (attachments.length === 0) return;
+        trimmed = "Setze die angehängte Vorlage als Mini-App um.";
+      }
+      const userMsg: ChatMsg = {
+        id: uid(),
+        role: "user",
+        content: trimmed,
+        images: attachments.length > 0 ? attachments.map((a) => a.thumb) : undefined,
+        elementLabel: inspected ? elementLabel(inspected) : undefined,
+      };
       // Assistant history goes to the model as its short notes, not full code —
-      // the current document is attached separately server-side.
+      // the current document is attached separately server-side. The newest turn
+      // carries the element context ("Bearbeiten" mode) + full-size attachments.
       const convo = [...messages, userMsg]
         .filter((m) => !m.error)
-        .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
+        .map((m, i, arr) => {
+          const isLast = i === arr.length - 1;
+          const content =
+            isLast && inspected
+              ? (buildElementContext(inspected) + m.content).slice(0, 8000)
+              : m.content.slice(0, 8000);
+          return isLast && attachments.length > 0
+            ? { role: m.role, content, images: attachments.map((a) => a.dataUrl) }
+            : { role: m.role, content };
+        });
 
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
+      setAttachments([]);
+      setInspected(null);
+      setRuntimeErrors([]);
       setStreaming(true);
       setStream("");
       // Watch the build where it's visible: the phone preview can't show
@@ -317,10 +377,16 @@ export default function NewMiniAppBuilderPage() {
         abortRef.current = null;
       }
     },
-    [messages, versions, activeHtml, complexity, streaming],
+    [messages, versions, activeHtml, complexity, streaming, attachments, inspected],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
+
+  // Switching versions invalidates preview-derived state.
+  useEffect(() => {
+    setRuntimeErrors([]);
+    setInspected(null);
+  }, [activeIdx]);
 
   const idea = messages
     .filter((m) => m.role === "user")
@@ -345,6 +411,9 @@ export default function NewMiniAppBuilderPage() {
         complexity={complexity}
         setComplexity={setComplexity}
         onSend={send}
+        attachments={attachments}
+        onAddFiles={addFiles}
+        onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
       />
     );
   }
@@ -366,9 +435,23 @@ export default function NewMiniAppBuilderPage() {
             KI-Baukasten
           </span>
           {versions.length > 0 ? (
-            <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:inline">
-              Version {activeIdx + 1}/{versions.length}
-            </span>
+            <select
+              value={activeIdx}
+              onChange={(e) => {
+                setActiveIdx(Number(e.target.value));
+                setTab("preview");
+              }}
+              disabled={streaming}
+              title="Versionsverlauf — frühere Version wiederherstellen"
+              className="hidden h-7 shrink-0 rounded-[8px] border border-border bg-card px-1.5 font-mono text-[11px] text-muted-foreground outline-none hover:text-foreground sm:inline-block"
+            >
+              {versions.map((v, i) => (
+                <option key={i} value={i} disabled={!v.html}>
+                  Version {i + 1}/{versions.length}
+                  {v.html ? "" : " · nicht mehr gespeichert"}
+                </option>
+              ))}
+            </select>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -420,19 +503,66 @@ export default function NewMiniAppBuilderPage() {
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
                 <p className="font-mono text-[11px] text-muted-foreground">
-                  ⌁ {stream.length.toLocaleString("de-DE")} Zeichen · baut…
+                  {stream.length === 0 &&
+                  messages[messages.length - 1]?.images?.length
+                    ? "⌁ Vorlage wird analysiert…"
+                    : `⌁ ${stream.length.toLocaleString("de-DE")} Zeichen · baut…`}
                 </p>
               </div>
             ) : null}
             <div ref={chatEndRef} />
           </div>
+          {runtimeErrors.length > 0 && !streaming ? (
+            <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-[10px] border border-destructive/40 bg-destructive/10 px-2.5 py-1.5">
+              <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-destructive">
+                <Bug className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {runtimeErrors.length === 1
+                    ? "1 Laufzeitfehler in der Vorschau"
+                    : `${runtimeErrors.length} Laufzeitfehler in der Vorschau`}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => send(buildErrorFixPrompt(runtimeErrors))}
+                className="shrink-0 rounded-full bg-destructive px-2.5 py-1 text-[11px] font-medium text-white hover:opacity-90"
+              >
+                Automatisch beheben
+              </button>
+            </div>
+          ) : null}
+          {inspected ? (
+            <div className="mx-3 mb-2 flex items-center justify-between gap-2 rounded-[10px] border border-primary/40 bg-primary/10 px-2.5 py-1.5">
+              <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-primary">
+                <MousePointerClick className="h-3 w-3 shrink-0" />
+                <span className="truncate">Ausgewählt: {elementLabel(inspected)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setInspected(null)}
+                aria-label="Auswahl aufheben"
+                className="shrink-0 rounded-full p-0.5 text-primary hover:bg-primary/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : null}
           <Composer
             input={input}
             setInput={setInput}
             streaming={streaming}
             onSend={send}
             onStop={stop}
-            placeholder="Was soll anders sein? z. B. „Mach die Buttons größer und ergänze eine Bestätigung.“"
+            attachments={attachments}
+            onAddFiles={addFiles}
+            onRemoveAttachment={(i) =>
+              setAttachments((prev) => prev.filter((_, idx) => idx !== i))
+            }
+            placeholder={
+              inspected
+                ? "Was soll an dem ausgewählten Element anders sein?"
+                : "Was soll anders sein? z. B. „Mach die Buttons größer und ergänze eine Bestätigung.“"
+            }
           />
         </aside>
 
@@ -465,6 +595,8 @@ export default function NewMiniAppBuilderPage() {
               appName={published?.slug ?? "Mini-App"}
               appSlug={published?.slug ?? preset?.slug ?? null}
               wallet={wallet}
+              onInspect={onInspect}
+              onRuntimeError={onRuntimeError}
             />
           ) : tab === "canvas" ? (
             <CanvasView
@@ -511,9 +643,29 @@ function MessageBubble({
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-[10px] bg-primary px-3 py-2 text-sm text-primary-foreground">
-          {msg.content}
-        </p>
+        <div className="max-w-[85%] space-y-1.5">
+          {msg.images && msg.images.length > 0 ? (
+            <div className="flex justify-end gap-1.5">
+              {msg.images.map((thumb, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={thumb}
+                  alt={`Anhang ${i + 1}`}
+                  className="h-14 w-14 rounded-[8px] border border-border object-cover"
+                />
+              ))}
+            </div>
+          ) : null}
+          {msg.elementLabel ? (
+            <p className="text-right font-mono text-[10px] text-muted-foreground">
+              ↳ {msg.elementLabel}
+            </p>
+          ) : null}
+          <p className="whitespace-pre-wrap rounded-[10px] bg-primary px-3 py-2 text-sm text-primary-foreground">
+            {msg.content}
+          </p>
+        </div>
       </div>
     );
   }
@@ -559,6 +711,107 @@ function MessageBubble({
   );
 }
 
+function AttachmentTray({
+  attachments,
+  onRemove,
+}: {
+  attachments: PreparedImage[];
+  onRemove: (i: number) => void;
+}) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="mb-2 flex flex-wrap gap-2">
+      {attachments.map((a, i) => (
+        <div key={`${a.name}-${i}`} className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={a.thumb}
+            alt={a.name}
+            className="h-14 w-14 rounded-[8px] border border-border object-cover"
+          />
+          <button
+            type="button"
+            onClick={() => onRemove(i)}
+            aria-label={`${a.name} entfernen`}
+            className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background hover:opacity-80"
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AttachButton({
+  disabled,
+  onAddFiles,
+}: {
+  disabled?: boolean;
+  onAddFiles: (files: Iterable<File>) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) onAddFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={disabled}
+        title="Bilder anhängen: Mockup, Screenshot, Skizze oder Logo als Vorlage (max. 4)"
+        aria-label="Bilder anhängen"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <ImagePlus className="h-4 w-4" />
+      </button>
+    </>
+  );
+}
+
+/** Shared paste/drop plumbing: forward image files to onAddFiles. */
+function useImageIntake(onAddFiles: (files: Iterable<File>) => void) {
+  const onPaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+        f.type.startsWith("image/"),
+      );
+      if (files.length > 0) {
+        e.preventDefault();
+        onAddFiles(files);
+      }
+    },
+    [onAddFiles],
+  );
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith("image/"),
+      );
+      if (files.length > 0) {
+        e.preventDefault();
+        onAddFiles(files);
+      }
+    },
+    [onAddFiles],
+  );
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer?.items ?? []).some((i) => i.type.startsWith("image/"))) {
+      e.preventDefault();
+    }
+  }, []);
+  return { onPaste, onDrop, onDragOver };
+}
+
 function Composer({
   input,
   setInput,
@@ -567,6 +820,9 @@ function Composer({
   onStop,
   placeholder,
   autoFocus,
+  attachments,
+  onAddFiles,
+  onRemoveAttachment,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -575,39 +831,48 @@ function Composer({
   onStop: () => void;
   placeholder: string;
   autoFocus?: boolean;
+  attachments: PreparedImage[];
+  onAddFiles: (files: Iterable<File>) => void;
+  onRemoveAttachment: (i: number) => void;
 }) {
+  const intake = useImageIntake(onAddFiles);
+  const canSend = input.trim().length >= 3 || attachments.length > 0;
   return (
     <div className="shrink-0 border-t border-border p-3">
-      <div className="flex items-end gap-2 rounded-[10px] border border-border bg-card p-2 focus-within:border-primary">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (!streaming) onSend(input);
-            }
-          }}
-          placeholder={placeholder}
-          rows={2}
-          autoFocus={autoFocus}
-          disabled={streaming}
-          className="max-h-32 min-h-[3rem] flex-1 resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-        />
-        {streaming ? (
-          <Button size="sm" variant="outline" onClick={onStop} aria-label="Stoppen">
-            <Square className="h-3.5 w-3.5" />
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            onClick={() => onSend(input)}
-            disabled={input.trim().length < 3}
-            aria-label="Senden"
-          >
-            <ArrowUp className="h-3.5 w-3.5" />
-          </Button>
-        )}
+      <div
+        className="rounded-[10px] border border-border bg-card p-2 focus-within:border-primary"
+        onDrop={intake.onDrop}
+        onDragOver={intake.onDragOver}
+      >
+        <AttachmentTray attachments={attachments} onRemove={onRemoveAttachment} />
+        <div className="flex items-end gap-2">
+          <AttachButton disabled={streaming || attachments.length >= 4} onAddFiles={onAddFiles} />
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!streaming) onSend(input);
+              }
+            }}
+            onPaste={intake.onPaste}
+            placeholder={placeholder}
+            rows={2}
+            autoFocus={autoFocus}
+            disabled={streaming}
+            className="max-h-32 min-h-[3rem] flex-1 resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
+          />
+          {streaming ? (
+            <Button size="sm" variant="outline" onClick={onStop} aria-label="Stoppen">
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => onSend(input)} disabled={!canSend} aria-label="Senden">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -683,13 +948,21 @@ function EmptyState({
   complexity,
   setComplexity,
   onSend,
+  attachments,
+  onAddFiles,
+  onRemoveAttachment,
 }: {
   input: string;
   setInput: (v: string) => void;
   complexity: Complexity;
   setComplexity: (v: Complexity) => void;
   onSend: (text: string) => void;
+  attachments: PreparedImage[];
+  onAddFiles: (files: Iterable<File>) => void;
+  onRemoveAttachment: (i: number) => void;
 }) {
+  const intake = useImageIntake(onAddFiles);
+  const canSend = input.trim().length >= 3 || attachments.length > 0;
   return (
     <div className="relative flex h-dvh flex-col bg-background">
       {/* Bauplan backdrop */}
@@ -720,7 +993,12 @@ function EmptyState({
             </p>
           </div>
 
-          <div className="rounded-[14px] border border-border bg-card p-3 shadow-sm">
+          <div
+            className="rounded-[14px] border border-border bg-card p-3 shadow-sm"
+            onDrop={intake.onDrop}
+            onDragOver={intake.onDragOver}
+          >
+            <AttachmentTray attachments={attachments} onRemove={onRemoveAttachment} />
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -730,14 +1008,18 @@ function EmptyState({
                   onSend(input);
                 }
               }}
-              placeholder="z. B. Eine Umfrage-App, in der Bürger:innen über die nächste Stadtfest-Location abstimmen…"
+              onPaste={intake.onPaste}
+              placeholder="z. B. Eine Umfrage-App, in der Bürger:innen über die nächste Stadtfest-Location abstimmen… — oder häng ein Mockup/Foto als Vorlage an."
               rows={3}
               autoFocus
               className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <div className="mt-2 flex items-center justify-between gap-2">
-              <ModelToggle value={complexity} onChange={setComplexity} />
-              <Button size="sm" onClick={() => onSend(input)} disabled={input.trim().length < 3}>
+              <div className="flex items-center gap-1.5">
+                <AttachButton disabled={attachments.length >= 4} onAddFiles={onAddFiles} />
+                <ModelToggle value={complexity} onChange={setComplexity} />
+              </div>
+              <Button size="sm" onClick={() => onSend(input)} disabled={!canSend}>
                 App bauen
               </Button>
             </div>

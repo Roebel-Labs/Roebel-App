@@ -12,8 +12,12 @@
  * FS at runtime, which breaks on Vercel lambdas. Keep in sync on contract bumps.
  */
 
-export const SDK_VERSION = "0.1.0";
-export const SDK_ESM_URL = `https://esm.sh/@netizen-labs/miniapp-sdk@${SDK_VERSION}`;
+export const SDK_VERSION = "0.2.0";
+// Self-hosted build of @netizen-labs/miniapp-sdk (synced from packages/miniapp-sdk
+// via `pnpm sync-web`, served with ACAO:*). Absolute URL so the document also works
+// when saved/hosted outside roebel.app. v0.2 adds mock mode: outside the Röbel
+// host the SDK answers locally instead of hanging.
+export const SDK_ESM_URL = `https://www.roebel.app/sdk/miniapp-sdk-${SDK_VERSION}.mjs`;
 
 /** Verbatim <head> boilerplate every generated app must start from. */
 const BOILERPLATE = `<!doctype html>
@@ -194,7 +198,8 @@ const OUTPUT_CONTRACT = `## Ausgabe-Vertrag (STRIKT)
 - Ganz am Ende des Dokuments (nach </html>) genau ein Kommentar: \`<!--NOTES: 2-3 deutsche Sätze, was gebaut bzw. geändert wurde und wie man es testet.-->\`
 - Die App ist komplett selbstständig: kein Build-Schritt, keine weiteren Dateien. Erlaubte externe Quellen: cdn.tailwindcss.com, esm.sh (SDK gepinnt; bei komplexem State zusätzlich preact/htm von esm.sh erlaubt), /fonts/… vom Host. Öffentliche APIs nur, wenn der Auftrag es verlangt — dann mit Lade-/Fehlerzustand.
 - Vanilla-JS in einem <script type="module"> ist der Standard. Zustand lebt im Speicher; localStorage ist in der Produktions-Sandbox oft NICHT verfügbar — wenn du es versuchst, immer in try/catch und die App muss ohne gespeicherten Zustand voll funktionieren.
-- Die App muss auch OHNE Host funktionieren (direkt im Browser geöffnet): SDK-Aufrufe scheitern dann — abfangen und mit sinnvollen Platzhaltern weiterlaufen.
+- Die App muss auch OHNE Host funktionieren (direkt im Browser geöffnet): das SDK schaltet dann automatisch in einen Mock-Modus (ready()/getContext()/Guthaben liefern Demo-Daten; Wallet/Belohnungen sind inaktiv). Trotzdem JEDEN sdk-Aufruf mit try/catch absichern und freundlich degradieren.
+- Wenn die Nutzer-Nachricht einen Block "[Bildanalyse der angehängten Vorlage(n)]" enthält: Das ist die Analyse hochgeladener Bilder (Mockup/Screenshot/Skizze/Logo). Setze Layoutstruktur, Komponenten und TEXTE daraus exakt um; Farben/Typografie kommen aus dem Röbel-Design-System, sofern die Analyse nichts anderes verlangt.
 - Bei einer ÄNDERUNG (dir wird die aktuelle App als HTML mitgegeben): Gib das VOLLSTÄNDIGE aktualisierte Dokument zurück. Ändere nur, was verlangt ist; bewahre Struktur, Design und funktionierende Teile.`;
 
 /** A compact, complete reference app the model should structurally follow. */
