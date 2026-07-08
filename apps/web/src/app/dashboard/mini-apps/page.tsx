@@ -72,9 +72,9 @@ export default function MyMiniApps() {
           <Link href="/editor">
             <Button size="sm">Mit KI erstellen</Button>
           </Link>
-          <Link href="/dashboard/mini-apps/submit">
+          <Link href="/dashboard/mini-apps/import">
             <Button size="sm" variant="outline">
-              <Plus className="mr-1 h-4 w-4" /> Manuell
+              <Plus className="mr-1 h-4 w-4" /> Importieren
             </Button>
           </Link>
         </div>
@@ -103,9 +103,9 @@ export default function MyMiniApps() {
             <Link href="/editor">
               <Button size="sm">Mit KI starten</Button>
             </Link>
-            <Link href="/dashboard/mini-apps/submit">
+            <Link href="/dashboard/mini-apps/import">
               <Button size="sm" variant="outline">
-                Manuell einreichen
+                App importieren
               </Button>
             </Link>
           </div>

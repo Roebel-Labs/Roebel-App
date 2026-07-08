@@ -9,7 +9,8 @@ import { TabNav } from "@/components/mini-apps/ui";
 const TABS = [
   { href: "/dashboard/mini-apps", label: "Meine Apps" },
   { href: "/editor", label: "Mit KI erstellen" },
-  { href: "/dashboard/mini-apps/submit", label: "Manuell einreichen" },
+  { href: "/dashboard/mini-apps/import", label: "Importieren" },
+  { href: "/dashboard/mini-apps/api", label: "API & MCP" },
 ];
 
 export default function MiniAppsBuilderLayout({

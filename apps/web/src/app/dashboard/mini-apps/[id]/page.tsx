@@ -152,6 +152,34 @@ export default function BuilderMiniAppDetail({
         </DetailCard>
       )}
 
+      {/* Versionsverlauf — jede Einreichung/Neuveröffentlichung als eigene Zeile */}
+      {(data?.versions ?? []).length > 0 ? (
+        <DetailCard title="Versionen">
+          <div className="divide-y divide-border">
+            {(data?.versions ?? []).map((v) => (
+              <div key={v.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="font-mono text-xs">{v.version}</span>
+                <span className="text-xs text-muted-foreground">
+                  {timeAgo(Date.parse(v.created_at))}
+                </span>
+                <span className="ml-auto">
+                  <StatusBadge status={v.status} />
+                </span>
+              </div>
+            ))}
+          </div>
+          {app.source === "ai_builder" ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ältere Stände stellst du im{" "}
+              <Link href={`/editor?app=${app.slug}`} className="text-primary hover:underline">
+                KI-Baukasten
+              </Link>{" "}
+              über den Versionsverlauf wieder her.
+            </p>
+          ) : null}
+        </DetailCard>
+      ) : null}
+
       {/* Icon + Store-Artwork + Store-Vorschau — Upload, KI-Generierung, Screenshots */}
       <ImagesSection app={app} wallet={wallet} onChanged={refresh} />
 

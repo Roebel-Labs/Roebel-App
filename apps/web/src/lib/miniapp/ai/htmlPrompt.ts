@@ -19,8 +19,10 @@ export const SDK_VERSION = "0.2.0";
 // host the SDK answers locally instead of hanging.
 export const SDK_ESM_URL = `https://www.roebel.app/sdk/miniapp-sdk-${SDK_VERSION}.mjs`;
 
-/** Verbatim <head> boilerplate every generated app must start from. */
-const BOILERPLATE = `<!doctype html>
+/** Verbatim <head> boilerplate every generated app must start from.
+ * Exported for the developer docs (devdocs.ts / llms-full.txt) — external
+ * builders (Claude Code, other agents) start from the same boilerplate. */
+export const BOILERPLATE = `<!doctype html>
 <html lang="de">
 <head>
 <meta charset="utf-8" />
@@ -94,7 +96,7 @@ window.addEventListener("message", async (e) => {
 </script>
 </head>`;
 
-const SCREEN_RULES = `## Screens (Pflicht-Struktur)
+export const SCREEN_RULES = `## Screens (Pflicht-Struktur)
 
 Der sichtbare Inhalt lebt IMMER in <main> als 1–6 Screens:
 
@@ -125,7 +127,7 @@ Jeder Screen, der mehr als einen sichtbaren Zustand hat, deklariert sie:
 - Baue das Zustands-Rendering deshalb als Funktion (z. B. renderState(screen, state)), die jeden deklarierten Zustand direkt herstellen kann — dieselbe Funktion nutzt auch die echte App-Logik.`;
 
 /** Condensed, accurate mirror of the NetizenSDK client surface (types.ts). */
-const SDK_REFERENCE = `## SDK-Referenz — @netizen-labs/miniapp-sdk (Version ${SDK_VERSION})
+export const SDK_REFERENCE = `## SDK-Referenz — @netizen-labs/miniapp-sdk (Version ${SDK_VERSION})
 
 Import (immer genau so, gepinnt):
 \`\`\`html
@@ -162,7 +164,7 @@ Fehler der Bridge haben { code, message } mit code ∈ user_rejected | unauthori
 JEDER sdk-Aufruf kann rejecten (z. B. fehlende Berechtigung → "unsupported"). Immer try/catch und eine freundliche deutsche Meldung zeigen — die App darf nie an einem Bridge-Fehler sterben.`;
 
 /** Mirrors packages/miniapp-sdk/DESIGN.md — the Röbel mini-app design system. */
-const DESIGN_SYSTEM = `## Design-System (Pflicht — die App läuft im Röbel-Host und muss on-brand sein)
+export const DESIGN_SYSTEM = `## Design-System (Pflicht — die App läuft im Röbel-Host und muss on-brand sein)
 
 Typografie: Mona Sans (font-sans, Fließtext/UI), Mona Sans SemiCondensed (font-heading, Überschriften, SemiBold/Bold), Mona Sans Mono (font-mono, Zahlen/Werte mit tabular-nums). Die @font-face-Deklarationen stehen im Boilerplate — nichts anderes laden, keine Google Fonts.
 
@@ -184,7 +186,7 @@ Diagramme: NUR die Röbel-Rampe — ink #051433, navy #00498B / #679AC8 / #E5ECF
 
 Layout: Mobile-first für ~360 px Breite (die App läuft in einem telefonbreiten WebView). Eine Spalte, keine festen Breiten, max-width 100% auf Medien, KEIN horizontales Scrollen. safeAreaInsets aus getContext() als padding-top/-bottom übernehmen. Touch-Ziele ≥ 44 px, sichtbarer :focus-visible-Ring.`;
 
-const COPY_RULES = `## Text-Regeln (STRIKT)
+export const COPY_RULES = `## Text-Regeln (STRIKT)
 
 - Alle UI-Texte auf DEUTSCH (Zielgruppe: Bürger:innen in Röbel/Müritz), schlicht und bürgernah, Verben aktiv ("Speichern", nicht "Submit"). Englisch nur, wenn ausdrücklich verlangt.
 - NIEMALS eine rohe Wallet-Adresse anzeigen. displayName verwenden, sonst "Jemand".
