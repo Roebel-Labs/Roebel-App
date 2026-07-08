@@ -23,7 +23,9 @@ import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/ht
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
 import { analyzeImagesForBrief } from "@/lib/miniapp/ai/vision";
 
-export const maxDuration = 300;
+// 800s needs Fluid compute (Pro). Budget: vision ≤75s + GLM thinking (can be
+// minutes on "Stark") + the stream itself. Vercel clamps to the plan max.
+export const maxDuration = 800;
 export const runtime = "nodejs";
 
 const imageDataUrl = z
@@ -74,44 +76,94 @@ export async function POST(request: Request) {
     return Response.json({ error: "server_misconfigured" }, { status: 500 });
   }
 
-  // Attached images (last user turn only): GLM-4.6V → implementation brief.
-  // Non-blocking: a failed analysis falls back to the plain text prompt.
+  // The response must start streaming IMMEDIATELY: vision analysis (≤75s) and
+  // GLM's thinking phase (minutes on "Stark") both run before the first model
+  // token, and Vercel only counts a function as responding once bytes flow —
+  // waiting silently produced a 504 after the full maxDuration (2026-07-08).
+  // So: return a stream now, heartbeat with newlines (the client trims leading
+  // whitespace) while vision + thinking run, then pipe the document through.
   const lastMsg = messages[messages.length - 1];
-  let visionBrief: string | null = null;
-  if (lastMsg.images && lastMsg.images.length > 0) {
-    visionBrief = await analyzeImagesForBrief(
-      lastMsg.images.map((dataUrl) => ({ dataUrl })),
-      lastMsg.content,
-    );
-  }
+  const encoder = new TextEncoder();
 
-  // Append the vision brief + current document to the newest user turn.
-  const modelMessages: ModelMessage[] = messages.map((m, i) => {
-    if (i !== messages.length - 1) return { role: m.role, content: m.content };
-    let content = m.content;
-    if (visionBrief) {
-      content += `\n\n[Bildanalyse der angehängten Vorlage(n)]\n${visionBrief}`;
-    } else if (m.images && m.images.length > 0) {
-      content += `\n\n(Hinweis: Es wurden ${m.images.length} Bild(er) angehängt, deren Analyse gerade nicht verfügbar war — setze die Textbeschreibung bestmöglich um.)`;
-    }
-    if (html) content += buildIterationSuffix(html);
-    return { role: m.role, content };
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const enqueue = (s: string) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(s));
+        } catch {
+          closed = true; // client went away — stop writing
+        }
+      };
+      enqueue("\n"); // flush headers right away
+      const keepalive = setInterval(() => enqueue("\n"), 10_000);
+
+      try {
+        // Attached images (last user turn only): GLM-4.6V → implementation
+        // brief. Non-blocking: a failed analysis falls back to plain text.
+        let visionBrief: string | null = null;
+        if (lastMsg.images && lastMsg.images.length > 0) {
+          visionBrief = await analyzeImagesForBrief(
+            lastMsg.images.map((dataUrl) => ({ dataUrl })),
+            lastMsg.content,
+          );
+        }
+
+        // Append the vision brief + current document to the newest user turn.
+        const modelMessages: ModelMessage[] = messages.map((m, i) => {
+          if (i !== messages.length - 1) return { role: m.role, content: m.content };
+          let content = m.content;
+          if (visionBrief) {
+            content += `\n\n[Bildanalyse der angehängten Vorlage(n)]\n${visionBrief}`;
+          } else if (m.images && m.images.length > 0) {
+            content += `\n\n(Hinweis: Es wurden ${m.images.length} Bild(er) angehängt, deren Analyse gerade nicht verfügbar war — setze die Textbeschreibung bestmöglich um.)`;
+          }
+          if (html) content += buildIterationSuffix(html);
+          return { role: m.role, content };
+        });
+
+        const result = streamText({
+          model: codegenModel(),
+          system: buildHtmlSystemPrompt(),
+          messages: modelMessages,
+          providerOptions: codegenProviderOptions(complexity ?? "default"),
+          maxOutputTokens: 32000,
+          onError: (event) => {
+            console.error("[mini-apps/generate] stream error", event.error);
+          },
+        });
+
+        let firstChunk = true;
+        for await (const chunk of result.textStream) {
+          if (firstChunk) {
+            firstChunk = false;
+            // No keepalives once real content flows — a stray newline inside
+            // the document would corrupt it.
+            clearInterval(keepalive);
+          }
+          enqueue(chunk);
+        }
+      } catch (e) {
+        console.error("[mini-apps/generate] generation failed", e);
+      } finally {
+        clearInterval(keepalive);
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    },
   });
 
-  try {
-    const result = streamText({
-      model: codegenModel(),
-      system: buildHtmlSystemPrompt(),
-      messages: modelMessages,
-      providerOptions: codegenProviderOptions(complexity ?? "default"),
-      maxOutputTokens: 32000,
-      onError: (event) => {
-        console.error("[mini-apps/generate] stream error", event.error);
-      },
-    });
-    return result.toTextStreamResponse();
-  } catch (e) {
-    console.error("[mini-apps/generate] streamText threw", e);
-    return Response.json({ error: "generation_failed" }, { status: 500 });
-  }
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+      // disable proxy buffering so heartbeats actually reach the client
+      "x-accel-buffering": "no",
+    },
+  });
 }

@@ -14,7 +14,9 @@
 
 const VISION_MODEL = "glm-4.6v";
 const ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
-const VISION_TIMEOUT_MS = 90_000;
+// Hard wall-clock cap for the WHOLE vision call (connect + compute + body read).
+// The generate route's total budget is maxDuration; vision must never eat it.
+const VISION_TIMEOUT_MS = 75_000;
 
 const BRIEF_PROMPT = `Du bist UI-Analyst:in für einen Mini-App-Baukasten. Analysiere die angehängten Bilder als Umsetzungsvorlage für eine mobile Mini-App (~360px breit) und schreibe einen präzisen deutschen Umsetzungs-Brief:
 
@@ -55,9 +57,12 @@ export async function analyzeImagesForBrief(
     })),
   ];
 
+  const controller = new AbortController();
+  // The timer must stay armed through the BODY read too — an early-headers/
+  // slow-body response would otherwise hang past the abort (this exact gap
+  // burned a full 300s maxDuration → 504 on 2026-07-08).
+  const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
     const res = await fetch(
       `${process.env.Z_API_BASE_URL || ZAI_BASE_URL}/chat/completions`,
       {
@@ -76,7 +81,6 @@ export async function analyzeImagesForBrief(
         signal: controller.signal,
       },
     );
-    clearTimeout(timer);
     if (!res.ok) {
       console.error("[mini-apps/vision] HTTP", res.status, await res.text().catch(() => ""));
       return null;
@@ -89,5 +93,7 @@ export async function analyzeImagesForBrief(
   } catch (e) {
     console.error("[mini-apps/vision] failed", e);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
