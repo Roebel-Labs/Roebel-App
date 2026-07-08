@@ -37,10 +37,18 @@ export function useMiniAppHost(
   const budgetRef = useRef(100);
   const enabled = opts.enabled ?? true;
 
+  // Reset the preview state ONLY when the document itself changes — NOT when
+  // the wallet (re)connects. The thirdweb smart account resolves seconds after
+  // mount; the wiring effect below re-runs then, but the app inside the iframe
+  // keeps running and never calls ready() a second time — resetting here left
+  // the splash stuck on "Wartet auf ready()…" forever (found 2026-07-08).
   useEffect(() => {
-    const iframe = iframeRef.current;
     setReady(false);
     setCalls([]);
+  }, [opts.html, reloadKey, enabled]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
     if (!iframe || !opts.html || !enabled) return;
     budgetRef.current = 100;
 
@@ -99,6 +107,15 @@ export function useMiniAppHost(
         },
       },
     });
+    // Late wallet connect: tell the (already running) app about the account —
+    // the SDK re-emits this as accountsChanged on its EIP-1193 provider.
+    if (walletAccount) {
+      const t = setTimeout(() => host.sendEvent("walletChanged", walletAccount), 300);
+      return () => {
+        clearTimeout(t);
+        host.destroy();
+      };
+    }
     return () => host.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opts.html, enabled, account?.address, opts.appName, reloadKey, iframeRef]);

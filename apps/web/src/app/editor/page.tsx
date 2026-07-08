@@ -378,7 +378,9 @@ export default function NewMiniAppBuilderPage() {
             brief: briefAcc ? briefAcc.slice(0, 6000) : undefined,
           },
         ]);
-        setTab((t) => (t === "canvas" ? "canvas" : "preview"));
+        // Done → always land on the live phone preview (canvas was only the
+        // construction view while streaming).
+        setTab("preview");
       } catch (e) {
         const aborted = (e as Error)?.name === "AbortError";
         setMessages((prev) => [
