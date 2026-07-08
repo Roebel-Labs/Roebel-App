@@ -20,6 +20,10 @@ export interface ChatMsg {
   images?: string[];
   /** Label of the preview element this edit targeted ("Bearbeiten" mode). */
   elementLabel?: string;
+  /** Model reasoning ("Stark" mode), trimmed — collapsible in the bubble. */
+  reasoning?: string;
+  /** GLM-4.6V image-analysis brief for this turn's attachments. */
+  brief?: string;
 }
 
 export interface Version {

@@ -37,7 +37,7 @@ import {
   type InspectedElement,
   type RuntimeError,
 } from "./lib/inspect";
-import { extractResult, stripFences } from "./lib/stream";
+import { extractResult, makeFrameParser, stripFences } from "./lib/stream";
 import {
   DRAFT_KEY,
   appSessionKey,
@@ -72,6 +72,9 @@ export default function NewMiniAppBuilderPage() {
   const [activeIdx, setActiveIdx] = useState(-1);
   const [streaming, setStreaming] = useState(false);
   const [stream, setStream] = useState("");
+  // Live narration while generating: current phase + the model's Gedankengang.
+  const [phase, setPhase] = useState<"vision" | "code" | null>(null);
+  const [thinking, setThinking] = useState("");
   const [tab, setTab] = useState<"preview" | "canvas" | "code">("preview");
   const [complexity, setComplexity] = useState<Complexity>("default");
   const [input, setInput] = useState("");
@@ -297,6 +300,7 @@ export default function NewMiniAppBuilderPage() {
             : { role: m.role, content };
         });
 
+      const hadImages = attachments.length > 0;
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setAttachments([]);
@@ -304,6 +308,8 @@ export default function NewMiniAppBuilderPage() {
       setRuntimeErrors([]);
       setStreaming(true);
       setStream("");
+      setThinking("");
+      setPhase(hadImages ? "vision" : "code");
       // Watch the build where it's visible: the phone preview can't show
       // streaming, so jump to the canvas (screens shimmer as they're written).
       // An explicit Code view stays put.
@@ -319,6 +325,7 @@ export default function NewMiniAppBuilderPage() {
             messages: convo,
             html: activeHtml ?? undefined,
             complexity,
+            protocol: 2,
           }),
           signal: controller.signal,
         });
@@ -328,16 +335,30 @@ export default function NewMiniAppBuilderPage() {
         }
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let acc = "";
+        let htmlAcc = "";
+        let thinkAcc = "";
+        let briefAcc = "";
+        const feed = makeFrameParser((f) => {
+          if (f.t === "html" && f.v) {
+            htmlAcc += f.v;
+            setStream(stripFences(htmlAcc));
+          } else if (f.t === "think" && f.v) {
+            thinkAcc += f.v;
+            setThinking(thinkAcc);
+          } else if (f.t === "brief" && f.v) {
+            briefAcc = f.v;
+          } else if (f.t === "status" && (f.v === "vision" || f.v === "code")) {
+            setPhase(f.v);
+          }
+        });
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          acc += decoder.decode(value, { stream: true });
-          setStream(stripFences(acc));
+          feed(decoder.decode(value, { stream: true }));
         }
-        acc += decoder.decode();
+        feed(decoder.decode());
 
-        const { html, notes } = extractResult(acc);
+        const { html, notes } = extractResult(htmlAcc);
         if (!html) {
           throw new Error(
             "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
@@ -353,6 +374,8 @@ export default function NewMiniAppBuilderPage() {
             role: "assistant",
             content: notes || "Fertig — neue Version gebaut.",
             versionIndex: idx,
+            reasoning: thinkAcc ? thinkAcc.slice(0, 6000) : undefined,
+            brief: briefAcc ? briefAcc.slice(0, 6000) : undefined,
           },
         ]);
         setTab((t) => (t === "canvas" ? "canvas" : "preview"));
@@ -374,6 +397,8 @@ export default function NewMiniAppBuilderPage() {
         if (versions.length > 0) setTab("preview");
       } finally {
         setStreaming(false);
+        setPhase(null);
+        setThinking("");
         abortRef.current = null;
       }
     },
@@ -502,12 +527,22 @@ export default function NewMiniAppBuilderPage() {
             {streaming ? (
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
-                <p className="font-mono text-[11px] text-muted-foreground">
-                  {stream.length === 0 &&
-                  messages[messages.length - 1]?.images?.length
-                    ? "⌁ Vorlage wird analysiert…"
-                    : `⌁ ${stream.length.toLocaleString("de-DE")} Zeichen · baut…`}
-                </p>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {phase === "vision"
+                      ? "⌁ Vorlage wird analysiert…"
+                      : stream.length > 0
+                        ? `⌁ ${stream.length.toLocaleString("de-DE")} Zeichen · baut…`
+                        : thinking
+                          ? "⌁ denkt nach…"
+                          : "⌁ startet…"}
+                  </p>
+                  {thinking && stream.length === 0 ? (
+                    <p className="whitespace-pre-wrap break-words text-[11px] italic leading-snug text-muted-foreground">
+                      {thinking.length > 480 ? `…${thinking.slice(-480)}` : thinking}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             <div ref={chatEndRef} />
@@ -675,6 +710,26 @@ function MessageBubble({
         className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", msg.error ? "text-destructive" : "text-primary")}
       />
       <div className="min-w-0 space-y-1.5">
+        {msg.brief ? (
+          <details className="rounded-[8px] border border-border bg-card px-2 py-1">
+            <summary className="cursor-pointer select-none text-[11px] font-medium text-muted-foreground">
+              Bildanalyse der Vorlage
+            </summary>
+            <p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap text-[11px] leading-snug text-muted-foreground">
+              {msg.brief}
+            </p>
+          </details>
+        ) : null}
+        {msg.reasoning ? (
+          <details className="rounded-[8px] border border-border bg-card px-2 py-1">
+            <summary className="cursor-pointer select-none text-[11px] font-medium text-muted-foreground">
+              Gedankengang der KI
+            </summary>
+            <p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap text-[11px] italic leading-snug text-muted-foreground">
+              {msg.reasoning}
+            </p>
+          </details>
+        ) : null}
         <p
           className={cn(
             "whitespace-pre-wrap text-sm",

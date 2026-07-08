@@ -1,4 +1,37 @@
-// Helpers for the raw HTML text stream coming from /api/mini-apps/generate.
+// Helpers for the /api/mini-apps/generate stream.
+//
+// Protocol 2 (current): newline-delimited JSON frames —
+//   {t:"status", v:"vision"|"code"}  phase changes
+//   {t:"brief",  v:string}           the GLM-4.6V image-analysis brief
+//   {t:"think",  v:string}           model reasoning delta ("Stark" mode)
+//   {t:"html",   v:string}           document text delta
+//   {t:"ping"}                       keepalive (ignore)
+// Legacy (no `protocol` in the request): raw HTML text stream.
+
+export interface StreamFrame {
+  t: "status" | "brief" | "think" | "html" | "ping" | string;
+  v?: string;
+}
+
+/** Incremental NDJSON parser: feed decoded chunks, get one callback per frame. */
+export function makeFrameParser(onFrame: (f: StreamFrame) => void): (chunk: string) => void {
+  let buffer = "";
+  return (chunk: string) => {
+    buffer += chunk;
+    for (;;) {
+      const nl = buffer.indexOf("\n");
+      if (nl < 0) return;
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      try {
+        onFrame(JSON.parse(line) as StreamFrame);
+      } catch {
+        /* skip malformed frame */
+      }
+    }
+  };
+}
 
 /** Remove a leading ```/```html fence and a trailing ``` the model may emit despite instructions. */
 export function stripFences(raw: string): string {

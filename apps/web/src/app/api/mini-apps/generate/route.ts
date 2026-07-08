@@ -47,6 +47,8 @@ const bodySchema = z
       .max(24),
     html: z.string().max(900_000).optional(),
     complexity: z.enum(["default", "hard"]).optional(),
+    /** 2 → NDJSON frames (status/brief/think/html/ping); absent → legacy raw text. */
+    protocol: z.literal(2).optional(),
   })
   .refine(
     (b) =>
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
-  const { messages, html, complexity } = parsed.data;
+  const { messages, html, complexity, protocol } = parsed.data;
   if (messages[messages.length - 1].role !== "user") {
     return Response.json({ error: "last_message_must_be_user" }, { status: 400 });
   }
@@ -85,6 +87,8 @@ export async function POST(request: Request) {
   const lastMsg = messages[messages.length - 1];
   const encoder = new TextEncoder();
 
+  const ndjson = protocol === 2;
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false;
@@ -96,19 +100,29 @@ export async function POST(request: Request) {
           closed = true; // client went away — stop writing
         }
       };
-      enqueue("\n"); // flush headers right away
-      const keepalive = setInterval(() => enqueue("\n"), 10_000);
+      // NDJSON: one JSON object per line. Legacy: raw text (heartbeat = bare
+      // newline, safe only BEFORE the document starts).
+      const frame = (t: string, v?: string) =>
+        enqueue(JSON.stringify(v === undefined ? { t } : { t, v }) + "\n");
+
+      // Flush headers right away — Vercel 504s a function that stays silent.
+      if (ndjson) frame("ping");
+      else enqueue("\n");
+      const keepalive = setInterval(() => (ndjson ? frame("ping") : enqueue("\n")), 10_000);
 
       try {
         // Attached images (last user turn only): GLM-4.6V → implementation
         // brief. Non-blocking: a failed analysis falls back to plain text.
         let visionBrief: string | null = null;
         if (lastMsg.images && lastMsg.images.length > 0) {
+          if (ndjson) frame("status", "vision");
           visionBrief = await analyzeImagesForBrief(
             lastMsg.images.map((dataUrl) => ({ dataUrl })),
             lastMsg.content,
           );
+          if (ndjson && visionBrief) frame("brief", visionBrief);
         }
+        if (ndjson) frame("status", "code");
 
         // Append the vision brief + current document to the newest user turn.
         const modelMessages: ModelMessage[] = messages.map((m, i) => {
@@ -134,15 +148,32 @@ export async function POST(request: Request) {
           },
         });
 
-        let firstChunk = true;
-        for await (const chunk of result.textStream) {
-          if (firstChunk) {
-            firstChunk = false;
-            // No keepalives once real content flows — a stray newline inside
-            // the document would corrupt it.
-            clearInterval(keepalive);
+        if (ndjson) {
+          // fullStream also carries the model's reasoning ("Stark" mode) —
+          // streamed to the chat as the AI's live Gedankengang. Frames keep
+          // channels separated, so keepalives stay safe throughout.
+          for await (const part of result.fullStream) {
+            const p = part as { type: string; text?: string; textDelta?: string; error?: unknown };
+            const delta = p.text ?? p.textDelta ?? "";
+            if (p.type === "reasoning-delta" || p.type === "reasoning") {
+              if (delta) frame("think", delta);
+            } else if (p.type === "text-delta") {
+              if (delta) frame("html", delta);
+            } else if (p.type === "error") {
+              console.error("[mini-apps/generate] stream part error", p.error);
+            }
           }
-          enqueue(chunk);
+        } else {
+          let firstChunk = true;
+          for await (const chunk of result.textStream) {
+            if (firstChunk) {
+              firstChunk = false;
+              // No keepalives once real content flows — a stray newline inside
+              // the document would corrupt it.
+              clearInterval(keepalive);
+            }
+            enqueue(chunk);
+          }
         }
       } catch (e) {
         console.error("[mini-apps/generate] generation failed", e);
