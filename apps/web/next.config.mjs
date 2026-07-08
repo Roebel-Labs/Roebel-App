@@ -6,6 +6,11 @@ const nextConfig = {
   // out of the production build — run `turbo run typecheck` / `lint` in CI instead.
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  // Vercel build hit exit 137 (OOM at the 8GB ceiling) again on 2026-07-08
+  // (commit ac1c425, right at the webpack compile). This trades a bit of build
+  // time for materially lower webpack memory — the documented next step after
+  // the 4096MB heap cap (see package.json build script).
+  experimental: { webpackMemoryOptimizations: true },
   // The Netizen mini-app SDK ships untranspiled TS source (main: src/index.ts),
   // so it must be transpiled by the app that consumes it.
   transpilePackages: ["@netizen-labs/miniapp-sdk"],
