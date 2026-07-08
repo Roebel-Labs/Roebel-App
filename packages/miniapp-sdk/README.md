@@ -29,6 +29,40 @@ sdk.track('quiz_completed', { score: 10 });
 
 Next.js apps must add `transpilePackages: ['@netizen-labs/miniapp-sdk']`.
 
+### Getting the SDK
+
+- **npm** (any bundler — Next.js, Vite, Lovable, …): `npm i @netizen-labs/miniapp-sdk`
+- **CDN** (single-file HTML apps): `import { sdk } from 'https://www.roebel.app/sdk/miniapp-sdk.mjs'`
+  (pinned: `/sdk/miniapp-sdk-0.2.0.mjs`). Self-hosted build of this package — always current.
+
+### Mock mode (v0.2) — develop anywhere
+
+If no Netizen host answers the handshake within 1.5s (plain browser tab, `vite dev`,
+an external AI editor's preview iframe), the SDK switches to a **local mock**: `ready()`
+resolves, `getContext()` returns a demo user, `getMuenzenBalance()` returns a demo
+balance, `grantReward()` resolves `{ granted: false }`, `track()` no-ops, and signing
+methods reject `unsupported`. Inside the Röbel app nothing changes.
+
+```ts
+await sdk.isReady;
+sdk.isMockMode();      // true outside the Röbel host
+sdk.hostEnvironment(); // 'webview' | 'iframe' | 'standalone' (transport only)
+
+// Optional page-level overrides (set BEFORE the SDK loads):
+window.__NETIZEN_MOCK__ = {
+  context: { user: { id: '0x1', displayName: 'Testerin', isCitizen: true } },
+  account: { address: '0x…', chainId: 100 },
+  balance: { balance: '42', decimals: 18, symbol: 'RÖ' },
+  rewards: true, // demo happy-path for grantReward
+};
+```
+
+### Releasing
+
+After changing `src/`, run `pnpm --filter @netizen-labs/miniapp-sdk sync-web` (rebuilds
+`dist/` and refreshes the checked-in web bundle `apps/web/public/sdk/miniapp-sdk*.mjs`),
+then bump the version and `npm publish` (dist-swapped via `publishConfig`).
+
 ## Host usage (Expo / web)
 
 ```ts

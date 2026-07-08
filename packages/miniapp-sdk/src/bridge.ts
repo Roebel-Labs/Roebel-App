@@ -5,6 +5,7 @@
  *  - RN WebView: posts to `window.ReactNativeWebView`; host replies by injecting a `message`
  *                event onto `window` (so the same `window` message listener handles both).
  */
+import { announceMockMode, getMockConfig, mockDispatch } from './mock';
 import {
   NETIZEN_PROTOCOL,
   type BridgeError,
@@ -21,6 +22,12 @@ declare global {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** How long `bridge.hello` may go unanswered before we fall back to mock mode.
+ * Real hosts (Expo WebView / web iframe) answer in single-digit ms; a foreign
+ * embedder (external editor preview) or a plain browser tab never answers. */
+const HELLO_TIMEOUT_MS = 1_500;
+
+export type BridgeMode = 'unknown' | 'host' | 'mock';
 
 function uuid(): string {
   // Prefer crypto.randomUUID; fall back to a non-crypto id (bridge ids are not secrets).
@@ -40,10 +47,88 @@ export class ClientBridge {
   private listeners = new Map<NetizenEvent, Set<(data: unknown) => void>>();
   private started = false;
 
+  /** 'host' once the handshake was answered; 'mock' once we gave up waiting. */
+  private mode: BridgeMode = 'unknown';
+  private settleMode!: () => void;
+  private modeSettled = new Promise<void>((resolve) => {
+    this.settleMode = resolve;
+  });
+
+  getMode(): BridgeMode {
+    return this.mode;
+  }
+
   start(): void {
     if (this.started || typeof window === 'undefined') return;
     this.started = true;
     window.addEventListener('message', this.onMessage);
+  }
+
+  /**
+   * Probe for a Netizen host. Resolves once the mode is decided ('host' or
+   * 'mock'). All other requests wait for this, so nothing hangs for 30s when
+   * the app runs outside the Röbel app (plain tab, external editor preview).
+   */
+  handshake(sdkVersion: string): Promise<void> {
+    if (typeof window === 'undefined') {
+      this.settle('mock', { silent: true }); // SSR — never announce
+      return Promise.resolve();
+    }
+    this.start();
+    const id = uuid();
+    const envelope: BridgeMessage = {
+      netizen: NETIZEN_PROTOCOL,
+      id,
+      method: 'bridge.hello',
+      params: { sdkVersion },
+    };
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        this.settle('mock');
+        resolve();
+      }, HELLO_TIMEOUT_MS);
+      this.pending.set(id, {
+        resolve: () => {
+          this.settle('host');
+          resolve();
+        },
+        reject: () => {
+          // A host that answers hello with an error is still a host.
+          this.settle('host');
+          resolve();
+        },
+        timer,
+      });
+      try {
+        post(envelope);
+      } catch {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        this.settle('mock');
+        resolve();
+      }
+    });
+  }
+
+  private settle(mode: 'host' | 'mock', opts?: { silent?: boolean }): void {
+    if (this.mode !== 'unknown') return;
+    this.mode = mode;
+    this.settleMode();
+    if (mode === 'mock' && !opts?.silent) {
+      announceMockMode();
+      // If the page configured a mock wallet, let `on('walletChanged')`
+      // subscribers (usually registered right after ready()) hear about it.
+      const account = getMockConfig().account;
+      if (account) {
+        setTimeout(() => this.dispatchEvent('walletChanged', account), 50);
+      }
+    }
+  }
+
+  private dispatchEvent(event: NetizenEvent, data: unknown): void {
+    const set = this.listeners.get(event);
+    if (set) for (const cb of set) safeCall(cb, data);
   }
 
   private onMessage = (ev: MessageEvent): void => {
@@ -63,14 +148,18 @@ export class ClientBridge {
     }
 
     if ('event' in msg && msg.event) {
-      const set = this.listeners.get(msg.event);
-      if (set) for (const cb of set) safeCall(cb, msg.data);
+      this.dispatchEvent(msg.event, msg.data);
     }
   };
 
-  /** Send a request and await the host's reply. */
-  request<T = unknown>(method: BridgeMethod, params?: unknown): Promise<T> {
+  /**
+   * Send a request and await the reply. Waits for the handshake to decide the
+   * mode first; with no host present the request is answered by the local mock.
+   */
+  async request<T = unknown>(method: BridgeMethod, params?: unknown): Promise<T> {
     this.start();
+    if (this.mode === 'unknown') await this.modeSettled;
+    if (this.mode === 'mock') return mockDispatch(method, params) as Promise<T>;
     const id = uuid();
     const envelope: BridgeMessage = { netizen: NETIZEN_PROTOCOL, id, method, params };
     return new Promise<T>((resolve, reject) => {
@@ -92,11 +181,14 @@ export class ClientBridge {
   /** Fire-and-forget send (no reply awaited) — used by analytics.track. */
   notify(method: BridgeMethod, params?: unknown): void {
     this.start();
-    try {
-      post({ netizen: NETIZEN_PROTOCOL, id: uuid(), method, params });
-    } catch {
-      /* swallow — analytics/notify must never throw */
-    }
+    void this.modeSettled.then(() => {
+      if (this.mode !== 'host') return; // mock: tracking is a no-op
+      try {
+        post({ netizen: NETIZEN_PROTOCOL, id: uuid(), method, params });
+      } catch {
+        /* swallow — analytics/notify must never throw */
+      }
+    });
   }
 
   on(event: NetizenEvent, cb: (data: unknown) => void): () => void {

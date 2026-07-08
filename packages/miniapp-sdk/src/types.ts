@@ -190,6 +190,22 @@ export type MiniAppStatus =
   | 'suspended';
 
 // ---------------------------------------------------------------------------
+// Mock mode (v0.2) — development outside the Röbel host
+// ---------------------------------------------------------------------------
+
+/**
+ * Page-level overrides for mock mode, read from `window.__NETIZEN_MOCK__`.
+ * Only consulted when no Netizen host answers the handshake.
+ */
+export interface NetizenMockConfig {
+  context?: Partial<MiniAppContext>;
+  account?: WalletAccount | null;
+  balance?: MuenzenBalance;
+  /** true → grantReward resolves granted:true (demo happy path). Default false. */
+  rewards?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Public SDK surface
 // ---------------------------------------------------------------------------
 
@@ -239,4 +255,14 @@ export interface NetizenSDK {
 
   /** Subscribe to a host event. Returns an unsubscribe function. */
   on(event: NetizenEvent, cb: (data: unknown) => void): () => void;
+
+  // --- v0.2 additive introspection (no behavior change inside a real host) ---
+
+  /** Transport heuristic: 'webview' | 'iframe' | 'standalone'. An 'iframe' may
+   * still be a foreign embedder — use `isMockMode()` after `isReady` for truth. */
+  hostEnvironment(): 'webview' | 'iframe' | 'standalone';
+
+  /** true once the bridge fell back to the local mock (no Netizen host
+   * answered). Settled by the time `isReady` resolves. */
+  isMockMode(): boolean;
 }

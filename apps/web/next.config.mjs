@@ -91,6 +91,23 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Self-hosted @netizen-labs/miniapp-sdk bundle (synced from
+        // packages/miniapp-sdk via `pnpm sync-web`). Imported as an ES module
+        // by sandboxed /mini/[slug] apps (opaque origin) and by externally
+        // hosted mini apps — must be CORS-readable everywhere.
+        source: '/sdk/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
+          },
+        ],
+      },
     ];
   },
 };

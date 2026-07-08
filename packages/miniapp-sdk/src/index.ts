@@ -12,4 +12,5 @@ import type { NetizenSDK } from './types';
 export const sdk: NetizenSDK = createClient();
 
 export { createClient };
+export { getHostEnvironment, type HostEnvironment } from './env';
 export * from './types';

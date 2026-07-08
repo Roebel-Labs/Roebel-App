@@ -2,6 +2,7 @@
  * The `sdk` object mini apps use. Thin, typed wrappers over the bridge.
  */
 import { ClientBridge } from './bridge';
+import { getHostEnvironment } from './env';
 import { createEip1193Provider } from './provider';
 import type {
   Eip1193Provider,
@@ -15,16 +16,16 @@ import type {
   WalletAccount,
 } from './types';
 
+const SDK_VERSION = '0.2.0';
+
 export function createClient(): NetizenSDK {
   const bridge = new ClientBridge();
   let provider: Eip1193Provider | undefined;
 
-  // Handshake: resolves isReady once the host acknowledges. Non-fatal on failure
-  // (a mini app may run in a plain browser during development).
-  const isReady = bridge
-    .request('bridge.hello', { sdkVersion: '0.1.0' })
-    .then(() => undefined)
-    .catch(() => undefined);
+  // Handshake: probes for a host and decides host vs mock mode. `isReady`
+  // resolves either way — outside the Röbel app the SDK answers locally
+  // (mock mode) instead of hanging, so apps stay demo-able anywhere.
+  const isReady = bridge.handshake(SDK_VERSION);
 
   const sdk: NetizenSDK = {
     isReady,
@@ -71,6 +72,9 @@ export function createClient(): NetizenSDK {
     track: (event, props) => bridge.notify('analytics.track', { event, props: props ?? {} }),
 
     on: (event: NetizenEvent, cb) => bridge.on(event, cb),
+
+    hostEnvironment: () => getHostEnvironment(),
+    isMockMode: () => bridge.getMode() === 'mock',
   };
 
   return sdk;

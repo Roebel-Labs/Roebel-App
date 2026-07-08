@@ -1,6 +1,6 @@
 {
   "name": "@netizen-labs/miniapp-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Netizen Mini App SDK — client bridge + host bridge for embedding mini apps in a host app (WebView/iframe).",
   "license": "MIT",
   "type": "module",
@@ -21,6 +21,7 @@
   "scripts": {
     "build": "tsup",
     "prepack": "tsup",
+    "sync-web": "tsup && node scripts/sync-web.mjs",
     "typecheck": "tsc --noEmit"
   },
   "publishConfig": {

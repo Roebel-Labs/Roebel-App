@@ -12,6 +12,9 @@ export default defineConfig({
   dts: true,
   clean: true,
   treeshake: true,
+  // No shared chunks: each entry must be a single self-contained file, because
+  // apps/web/public/sdk/miniapp-sdk.mjs is served standalone (sync-web.mjs).
+  splitting: false,
   sourcemap: false,
   target: "es2020",
 });
