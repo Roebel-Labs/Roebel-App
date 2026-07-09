@@ -136,7 +136,7 @@ export function WasIstDasSection({ night }: SectionProps) {
 // Gold zuletzt.
 const PODIUM = [
   { place: "2", amount: "60 €", bar: "h-32 sm:h-40", delay: 0 },
-  { place: "1", amount: "125 €", bar: "h-48 sm:h-60", delay: 350 },
+  { place: "1", amount: "120 €", bar: "h-48 sm:h-60", delay: 350 },
   { place: "3", amount: "60 €", bar: "h-24 sm:h-32", delay: 175 },
 ] as const;
 
