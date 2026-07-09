@@ -637,18 +637,47 @@ export default function NewMiniAppBuilderPage() {
   }, []);
 
   // One-click update for already-published apps: push the current code as a
-  // new version, reuse ALL existing metadata (manifest preset; icon/images
-  // stay). Metadata edits live in the dashboard. Falls back to the full
-  // publish dialog if anything is off.
+  // new version, reuse ALL existing metadata (icon/images stay). Metadata
+  // edits live in the dashboard. The manifest comes from the local preset —
+  // or, when this session predates it, straight from the registry. Falls back
+  // to the full publish dialog only when even that fails.
   const [updating, setUpdating] = useState(false);
   const quickUpdate = useCallback(async () => {
-    if (!activeHtml || !preset || !wallet || updating) return;
+    if (!activeHtml || !published || !wallet || updating) return;
     setUpdating(true);
     try {
+      let manifest = preset;
+      if (!manifest) {
+        const appRes = await fetch(`/api/mini-apps/${encodeURIComponent(published.slug)}`, {
+          cache: "no-store",
+          headers: { "x-wallet-address": wallet },
+        });
+        const appJson = await appRes.json().catch(() => ({}));
+        if (!appRes.ok) throw new Error(appJson.error ?? `Fehler ${appRes.status}`);
+        const app = appJson.app as {
+          name: string;
+          slug: string;
+          description: string | null;
+          category: string;
+          tags: string[] | null;
+          permissions: string[] | null;
+          primary_color: string | null;
+        };
+        manifest = {
+          name: app.name,
+          slug: app.slug,
+          description: app.description?.trim() || app.name,
+          category: (app.category ?? "utility") as ManifestDraft["category"],
+          tags: (app.tags ?? []).slice(0, 5),
+          permissions: (app.permissions ?? []) as ManifestDraft["permissions"],
+          primaryColor: app.primary_color ?? "#00498B",
+        };
+        setPreset(manifest);
+      }
       const res = await fetch("/api/mini-apps/publish", {
         method: "POST",
         headers: { "content-type": "application/json", "x-wallet-address": wallet },
-        body: JSON.stringify({ html: activeHtml, manifest: preset }),
+        body: JSON.stringify({ html: activeHtml, manifest }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) throw new Error(json.error ?? `Fehler ${res.status}`);
@@ -680,7 +709,7 @@ export default function NewMiniAppBuilderPage() {
     } finally {
       setUpdating(false);
     }
-  }, [activeHtml, preset, wallet, updating]);
+  }, [activeHtml, preset, published, wallet, updating]);
 
   // Switching versions invalidates preview-derived state.
   useEffect(() => {
@@ -777,7 +806,7 @@ export default function NewMiniAppBuilderPage() {
           ) : null}
           <Button
             size="sm"
-            onClick={() => (published && preset ? void quickUpdate() : setPublishOpen(true))}
+            onClick={() => (published ? void quickUpdate() : setPublishOpen(true))}
             disabled={!activeHtml || streaming || updating}
             title={
               published
