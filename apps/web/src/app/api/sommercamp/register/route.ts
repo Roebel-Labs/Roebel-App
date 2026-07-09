@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { jsonError, resolveDeveloper } from "@/lib/miniapp/http";
 import { subscribeToNewsletter } from "@/app/actions/newsletter-public";
+import { sendSommercampConfirmation } from "@/lib/email/sommercamp-confirmation";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,9 @@ type RegisterBody = {
   agb?: boolean;
   newsletterOptIn?: boolean;
   email?: string;
+  // Login-E-Mail des thirdweb-Kontos (vom Client aus den linked profiles
+  // gelesen) — Empfänger der Anmelde-Bestätigung.
+  authEmail?: string;
 };
 
 export async function POST(req: Request) {
@@ -135,7 +139,25 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, already: !!existing });
+    // Bestätigungs-Mail ("du bist dabei") — nur bei Erst-Anmeldung, an die
+    // thirdweb-Login-E-Mail, sonst an die Newsletter-E-Mail. Non-fatal.
+    let confirmationSent = false;
+    if (!existing) {
+      const authEmail = (body.authEmail ?? "").trim().toLowerCase();
+      const confirmTo = EMAIL_RE.test(authEmail)
+        ? authEmail
+        : newsletterOptIn && EMAIL_RE.test(email)
+          ? email
+          : null;
+      if (confirmTo) {
+        confirmationSent = await sendSommercampConfirmation({
+          email: confirmTo,
+          name,
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true, already: !!existing, confirmationSent });
   } catch (e) {
     return jsonError(e);
   }

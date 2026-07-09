@@ -6,7 +6,7 @@ import { activeChain } from "@/lib/chains";
 export const wallets = [
   inAppWallet({
     auth: {
-      options: ["phone", "email", "google", "apple", "facebook"],
+      options: ["email", "google", "apple", "facebook"],
     },
     smartAccount: {
       chain: activeChain,

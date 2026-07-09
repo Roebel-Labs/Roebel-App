@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, Timer } from "lucide-react";
-import { ConnectButton, useActiveAccount } from "thirdweb/react";
+import { ConnectButton, useActiveAccount, useProfiles } from "thirdweb/react";
 import { client } from "@/app/client";
 import { activeChain } from "@/lib/chains";
 import { wallets } from "@/lib/wallet-config";
@@ -104,6 +104,7 @@ function StartGate() {
 
 export function RegistrationCard({ night }: { night: boolean }) {
   const account = useActiveAccount();
+  const { data: profiles } = useProfiles({ client });
   const [status, setStatus] = useState<Status>("checking");
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -113,6 +114,12 @@ export function RegistrationCard({ night }: { night: boolean }) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mailSent, setMailSent] = useState(false);
+
+  // Login-E-Mail des Röbel-App-Kontos (thirdweb in-app wallet) — Empfänger
+  // der Anmelde-Bestätigung.
+  const authEmail =
+    profiles?.find((p) => p.details?.email)?.details.email ?? null;
 
   useEffect(() => {
     if (!account?.address) return;
@@ -150,6 +157,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
           agb,
           newsletterOptIn: newsletter,
           email: newsletter ? email : undefined,
+          authEmail: authEmail ?? undefined,
         }),
       });
       const data = await res.json();
@@ -159,6 +167,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
       }
       // Kein direkter Sprung ins Dashboard: erst zeigt das StartGate den
       // Countdown bis zum offiziellen Runden-Start (Freitag 18 Uhr).
+      setMailSent(data.confirmationSent === true);
       setStatus("registered");
     } catch {
       setError("Keine Verbindung. Bitte versuche es erneut.");
@@ -205,6 +214,11 @@ export function RegistrationCard({ night }: { night: boolean }) {
         <div className="flex flex-col items-center gap-3 py-2 text-center">
           <CheckCircle2 className="h-10 w-10 text-green-600" />
           <p className="font-bold">Du bist angemeldet!</p>
+          {mailSent && (
+            <p className="text-sm text-[#3D4E68]">
+              Eine Bestätigung ist unterwegs — schau in dein E-Mail-Postfach.
+            </p>
+          )}
           <StartGate />
         </div>
       ) : (
