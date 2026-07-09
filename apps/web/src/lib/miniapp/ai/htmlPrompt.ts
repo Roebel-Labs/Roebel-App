@@ -12,7 +12,7 @@
  * FS at runtime, which breaks on Vercel lambdas. Keep in sync on contract bumps.
  */
 
-export const SDK_VERSION = "0.2.0";
+export const SDK_VERSION = "0.3.0";
 // Self-hosted build of @netizen-labs/miniapp-sdk (synced from packages/miniapp-sdk
 // via `pnpm sync-web`, served with ACAO:*). Absolute URL so the document also works
 // when saved/hosted outside roebel.app. v0.2 adds mock mode: outside the Röbel
@@ -159,6 +159,15 @@ Vollständige Client-Oberfläche (alle Methoden geben Promises zurück, außer t
 - sdk.notifications.send({ title, body, targetUrl? }) → { sent }
 - sdk.track(event, props?) — Analytics, fire-and-forget, wirft nie. Bei sinnvollen Aktionen aufrufen (z. B. "app_open" ist schon der Host — eigene Events wie "vote_cast").
 - sdk.on(event, cb) → unsubscribe. Events: "walletChanged" | "back" | "visibilityChanged" | "themeChanged".
+- sdk.data — Daten-Speicher der Plattform (v0.3, kein eigener Server nötig):
+  · sdk.data.get(key) → { value, exists } und sdk.data.list(prefix?) → { items: [{key, value}] } — die INHALTE der App (z. B. Lektionen, Produkte, Texte). Redakteur:innen pflegen sie im Dashboard unter „Inhalte“; zur Laufzeit read-only.
+  · sdk.data.getUser(key) → { value, exists } und sdk.data.setUser(key, value) → { ok } — der ZUSTAND der aktuellen Nutzer:in (Fortschritt, Antworten, Punktestände), pro Wallet gespeichert.
+  PFLICHT-MUSTER für Apps mit pflegbaren Inhalten: Inhalte IMMER zuerst fest in einer Konstante einbauen (Fallback), dann per sdk.data.get(...) überschreiben, wenn exists — so läuft die App auch in der Vorschau/ohne Host:
+  \`\`\`js
+  let lektionen = DEFAULT_LEKTIONEN;                     // eingebauter Fallback
+  try { const r = await sdk.data.get("lektionen"); if (r.exists && Array.isArray(r.value)) lektionen = r.value; } catch {}
+  \`\`\`
+  Nutzer-Fortschritt beim Start laden (getUser) und bei Änderungen speichern (setUser) — jede Methode kann rejecten (älterer Host → "unsupported"): immer try/catch.
 
 Fehler der Bridge haben { code, message } mit code ∈ user_rejected | unauthorized | unsupported | invalid_params | rate_limited | budget_exceeded | timeout | internal.
 JEDER sdk-Aufruf kann rejecten (z. B. fehlende Berechtigung → "unsupported"). Immer try/catch und eine freundliche deutsche Meldung zeigen — die App darf nie an einem Bridge-Fehler sterben.`;

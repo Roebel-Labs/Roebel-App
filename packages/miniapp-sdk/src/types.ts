@@ -73,7 +73,13 @@ export type BridgeMethod =
   | 'roebel.grantReward'
   | 'roebel.pay'
   | 'notifications.send'
-  | 'analytics.track';
+  | 'analytics.track'
+  // v0.3 — mini-app datastore ("Mini-CMS"). Older hosts answer `unsupported`;
+  // apps must ship built-in fallback content.
+  | 'data.get'
+  | 'data.list'
+  | 'data.userGet'
+  | 'data.userSet';
 
 export type NetizenEvent =
   | 'walletChanged'
@@ -203,6 +209,9 @@ export interface NetizenMockConfig {
   balance?: MuenzenBalance;
   /** true → grantReward resolves granted:true (demo happy path). Default false. */
   rewards?: boolean;
+  /** Mock app CONTENT for sdk.data.get/list (key → value). User-scope
+   * setUser/getUser use an in-memory map on top. */
+  data?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +264,21 @@ export interface NetizenSDK {
 
   /** Subscribe to a host event. Returns an unsubscribe function. */
   on(event: NetizenEvent, cb: (data: unknown) => void): () => void;
+
+  // --- v0.3 additive: mini-app datastore ("Mini-CMS") -----------------------
+
+  /** Scoped storage through the host — no own backend needed.
+   * `get`/`list` read the app's shared CONTENT (edited by the developer in
+   * the dashboard "Inhalte" tab or via MCP; read-only at runtime).
+   * `getUser`/`setUser` read/write the CURRENT USER's own state (progress,
+   * submissions), keyed by their wallet. Apps must ship fallbacks: every call
+   * can reject (older host → `unsupported`). */
+  data: {
+    get(key: string): Promise<{ value: unknown | null; exists: boolean }>;
+    list(prefix?: string): Promise<{ items: { key: string; value: unknown }[] }>;
+    getUser(key: string): Promise<{ value: unknown | null; exists: boolean }>;
+    setUser(key: string, value: unknown): Promise<{ ok: boolean }>;
+  };
 
   // --- v0.2 additive introspection (no behavior change inside a real host) ---
 

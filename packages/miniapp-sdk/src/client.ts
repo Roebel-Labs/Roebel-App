@@ -16,7 +16,7 @@ import type {
   WalletAccount,
 } from './types';
 
-const SDK_VERSION = '0.2.0';
+const SDK_VERSION = '0.3.0';
 
 export function createClient(): NetizenSDK {
   const bridge = new ClientBridge();
@@ -72,6 +72,13 @@ export function createClient(): NetizenSDK {
     track: (event, props) => bridge.notify('analytics.track', { event, props: props ?? {} }),
 
     on: (event: NetizenEvent, cb) => bridge.on(event, cb),
+
+    data: {
+      get: (key) => bridge.request('data.get', { key }),
+      list: (prefix) => bridge.request('data.list', prefix ? { prefix } : {}),
+      getUser: (key) => bridge.request('data.userGet', { key }),
+      setUser: (key, value) => bridge.request('data.userSet', { key, value }),
+    },
 
     hostEnvironment: () => getHostEnvironment(),
     isMockMode: () => bridge.getMode() === 'mock',

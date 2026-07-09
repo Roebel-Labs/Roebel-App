@@ -60,6 +60,14 @@ export interface HostHandlers {
 
   /** Fire-and-forget; no reply. */
   track?(p: { event: string; props?: Record<string, unknown> }): void;
+
+  // v0.3 — mini-app datastore ("Mini-CMS"). get/list = the app's shared
+  // content (read-only at runtime); userGet/userSet = the current user's own
+  // state, keyed server-side by their wallet.
+  dataGet?(p: { key: string }): Promise<{ value: unknown; exists: boolean }>;
+  dataList?(p: { prefix?: string }): Promise<{ items: { key: string; value: unknown }[] }>;
+  dataUserGet?(p: { key: string }): Promise<{ value: unknown; exists: boolean }>;
+  dataUserSet?(p: { key: string; value: unknown }): Promise<{ ok: boolean }>;
 }
 
 /** Which permission a method requires. Methods not listed are always allowed. */
@@ -143,6 +151,14 @@ export function createHostBridge(opts: HostBridgeOptions): HostBridge {
       case 'analytics.track':
         handlers.track?.(params as { event: string; props?: Record<string, unknown> });
         return undefined;
+      case 'data.get':
+        return requireHandler(handlers.dataGet)(params as { key: string });
+      case 'data.list':
+        return requireHandler(handlers.dataList)((params ?? {}) as { prefix?: string });
+      case 'data.userGet':
+        return requireHandler(handlers.dataUserGet)(params as { key: string });
+      case 'data.userSet':
+        return requireHandler(handlers.dataUserSet)(params as { key: string; value: unknown });
       default:
         throw err('unsupported', `unknown method "${method}"`);
     }

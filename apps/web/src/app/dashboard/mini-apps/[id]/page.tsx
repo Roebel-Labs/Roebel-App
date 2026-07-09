@@ -15,6 +15,7 @@ import {
   DetailCard,
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
+import { ContentSection } from "@/components/mini-apps/ContentSection";
 import { ImagesSection } from "@/components/mini-apps/ImagesSection";
 import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
 import { ManifestForm } from "@/components/mini-apps/ManifestForm";
@@ -179,6 +180,9 @@ export default function BuilderMiniAppDetail({
           ) : null}
         </DetailCard>
       ) : null}
+
+      {/* Mini-CMS: app-Inhalte, die die App via sdk.data liest — ohne Republish */}
+      <ContentSection app={app} wallet={wallet} />
 
       {/* Icon + Store-Artwork + Store-Vorschau — Upload, KI-Generierung, Screenshots */}
       <ImagesSection app={app} wallet={wallet} onChanged={refresh} />

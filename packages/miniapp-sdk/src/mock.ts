@@ -70,6 +70,9 @@ function err(code: BridgeError['code'], message: string): BridgeError {
   return { code, message };
 }
 
+/** In-memory user-scope store for mock mode (per page load). */
+const mockUserData = new Map<string, unknown>();
+
 let announced = false;
 export function announceMockMode(): void {
   if (announced || typeof console === 'undefined') return;
@@ -144,6 +147,31 @@ export function mockDispatch(method: BridgeMethod, params: unknown): Promise<unk
       return Promise.reject(err('unsupported', 'Mock-Modus: Zahlungen brauchen den Röbel-Host'));
     case 'notifications.send':
       return Promise.resolve({ sent: false });
+    case 'data.get': {
+      const key = (params as { key?: string } | undefined)?.key ?? '';
+      const store = getMockConfig().data ?? {};
+      const exists = Object.prototype.hasOwnProperty.call(store, key);
+      return Promise.resolve({ value: exists ? store[key] : null, exists });
+    }
+    case 'data.list': {
+      const prefix = (params as { prefix?: string } | undefined)?.prefix ?? '';
+      const store = getMockConfig().data ?? {};
+      const items = Object.keys(store)
+        .filter((k) => k.startsWith(prefix))
+        .sort()
+        .map((k) => ({ key: k, value: store[k] }));
+      return Promise.resolve({ items });
+    }
+    case 'data.userGet': {
+      const key = (params as { key?: string } | undefined)?.key ?? '';
+      const exists = mockUserData.has(key);
+      return Promise.resolve({ value: exists ? mockUserData.get(key) : null, exists });
+    }
+    case 'data.userSet': {
+      const p = (params ?? {}) as { key?: string; value?: unknown };
+      if (p.key) mockUserData.set(p.key, p.value ?? null);
+      return Promise.resolve({ ok: true });
+    }
     case 'analytics.track':
       return Promise.resolve(undefined);
     default:

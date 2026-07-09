@@ -35,6 +35,8 @@ export function useMiniAppHost(
   const [reloadKey, setReloadKey] = useState(0);
   // Mock reward budget for the unregistered preview app (mirrors production semantics).
   const budgetRef = useRef(100);
+  // In-memory user-scope datastore for the preview session.
+  const previewDataRef = useRef(new Map<string, unknown>());
   const enabled = opts.enabled ?? true;
 
   // Reset the preview state ONLY when the document itself changes — NOT when
@@ -96,6 +98,19 @@ export function useMiniAppHost(
         notificationsSend: () => ({ sent: true }),
         track: () => {
           /* keep preview sessions out of mini_app_events */
+        },
+        // Preview datastore: the app isn't registered yet, so app content is
+        // empty (the app's built-in fallbacks show) and user state lives in
+        // memory for the session.
+        dataGet: async () => ({ value: null, exists: false }),
+        dataList: async () => ({ items: [] }),
+        dataUserGet: async (p: { key: string }) => ({
+          value: previewDataRef.current.has(p.key) ? previewDataRef.current.get(p.key) : null,
+          exists: previewDataRef.current.has(p.key),
+        }),
+        dataUserSet: async (p: { key: string; value: unknown }) => {
+          previewDataRef.current.set(p.key, p.value);
+          return { ok: true };
         },
         getMuenzenBalance: async () => {
           if (!account?.address) return { balance: "48", decimals: 18, symbol: "RÖ" as const };

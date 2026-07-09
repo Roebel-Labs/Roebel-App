@@ -45,6 +45,9 @@ export interface StoredSession {
   activeIdx: number;
   preset: ManifestDraft | null;
   published: PublishedInfo | null;
+  /** Server-side generation job still running when the session was saved —
+   * the editor resumes it after sleep/reload (generate/status polling). */
+  pendingJob?: { id: string; startedAt: number } | null;
   savedAt: number;
 }
 

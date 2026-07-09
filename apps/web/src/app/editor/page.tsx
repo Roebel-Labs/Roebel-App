@@ -59,6 +59,8 @@ const EXAMPLE_PROMPTS = [
 
 type Complexity = "default" | "hard";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -75,6 +77,12 @@ export default function NewMiniAppBuilderPage() {
   // Live narration while generating: current phase + the model's Gedankengang.
   const [phase, setPhase] = useState<"vision" | "code" | null>(null);
   const [thinking, setThinking] = useState("");
+  // Server-side job backing the current/last generation — survives sleep,
+  // reload and tab close; resumed via /api/mini-apps/generate/status.
+  const [pendingJob, setPendingJob] = useState<{ id: string; startedAt: number } | null>(null);
+  const jobIdRef = useRef<string | null>(null);
+  const resumeGuardRef = useRef(false);
+  const resumeCancelRef = useRef(false);
   const [tab, setTab] = useState<"preview" | "canvas" | "code">("preview");
   const [complexity, setComplexity] = useState<Complexity>("default");
   const [input, setInput] = useState("");
@@ -125,6 +133,7 @@ export default function NewMiniAppBuilderPage() {
     setActiveIdx(s.activeIdx);
     setPreset(s.preset);
     setPublished(s.published);
+    setPendingJob(s.pendingJob ?? null);
   }, []);
 
   // Re-open an existing AI-built app (?app=<slug|id>) or restore the last
@@ -234,6 +243,7 @@ export default function NewMiniAppBuilderPage() {
         activeIdx,
         preset,
         published,
+        pendingJob,
         savedAt: Date.now(),
       };
       if (published?.slug) {
@@ -244,7 +254,7 @@ export default function NewMiniAppBuilderPage() {
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [messages, versions, activeIdx, preset, published, started, loadingApp]);
+  }, [messages, versions, activeIdx, preset, published, pendingJob, started, loadingApp]);
 
   const newChat = useCallback(() => {
     if (
@@ -254,6 +264,9 @@ export default function NewMiniAppBuilderPage() {
       return;
     }
     abortRef.current?.abort();
+    resumeCancelRef.current = true;
+    setPendingJob(null);
+    jobIdRef.current = null;
     // The per-app session (if any) stays saved — only the draft slot resets.
     clearSession(DRAFT_KEY);
     setMessages([]);
@@ -268,6 +281,140 @@ export default function NewMiniAppBuilderPage() {
     setTab("preview");
     window.history.replaceState(null, "", "/editor");
   }, [versions.length]);
+
+  // Turn a finished generation (from the live stream OR a resumed background
+  // job) into a version + chat entry — or a precise error bubble.
+  const applyResult = useCallback(
+    (htmlAcc: string, thinkAcc: string, briefAcc: string, finishReason: string): boolean => {
+      const { html, notes, truncated } = extractResult(htmlAcc);
+      if (!html) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            content: truncated
+              ? finishReason === "length"
+                ? "Die App wurde abgeschnitten: Die Antwort hat das Ausgabe-Limit erreicht (im Modus „Stark“ zählt auch das Nachdenken mit). Versuch es mit „Schnell“ oder formuliere die Anforderung kompakter."
+                : "Die Übertragung ist mittendrin abgebrochen — diese Version ist unvollständig und wurde verworfen. Schick die Anfrage einfach noch einmal ab."
+              : "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
+            error: true,
+          },
+        ]);
+        return false;
+      }
+      setVersions((prev) => {
+        const idx = prev.length;
+        setActiveIdx(idx);
+        setMessages((msgs) => [
+          ...msgs,
+          {
+            id: uid(),
+            role: "assistant",
+            content: notes || "Fertig — neue Version gebaut.",
+            versionIndex: idx,
+            reasoning: thinkAcc ? thinkAcc.slice(0, 6000) : undefined,
+            brief: briefAcc ? briefAcc.slice(0, 6000) : undefined,
+          },
+        ]);
+        return [...prev, { html, notes }];
+      });
+      // Done → always land on the live phone preview (canvas was only the
+      // construction view while streaming).
+      setTab("preview");
+      return true;
+    },
+    [],
+  );
+
+  // Resume a background job (laptop woke up, page reloaded, stream dropped):
+  // poll the job state and feed the same UI states the live stream would.
+  const resumeJob = useCallback(
+    async (jobId: string) => {
+      resumeCancelRef.current = false;
+      setStreaming(true);
+      setStream("");
+      setThinking("");
+      setPhase("code");
+      try {
+        for (let i = 0; i < 360; i++) {
+          if (resumeCancelRef.current) return;
+          const res = await fetch(`/api/mini-apps/generate/status?job=${jobId}`, {
+            cache: "no-store",
+          });
+          if (res.status === 404) {
+            // freshly created jobs can lag a poll or two behind
+            if (i < 3) {
+              await sleep(2000);
+              continue;
+            }
+            throw new Error(
+              "Der Hintergrund-Job ist nicht mehr auffindbar — schick die Anfrage bitte erneut ab.",
+            );
+          }
+          if (!res.ok) throw new Error(`Fehler ${res.status}`);
+          const st = (await res.json()) as {
+            status: "running" | "done" | "error";
+            phase: string;
+            thinkingTail?: string;
+            brief?: string;
+            html?: string;
+            finishReason?: string;
+            error?: string;
+            updatedAt: number;
+          };
+          setPhase(st.phase === "vision" ? "vision" : "code");
+          if (st.thinkingTail) setThinking(st.thinkingTail);
+          if (st.html) setStream(stripFences(st.html));
+          if (st.status === "done") {
+            applyResult(st.html ?? "", st.thinkingTail ?? "", st.brief ?? "", st.finishReason ?? "");
+            setPendingJob(null);
+            return;
+          }
+          if (st.status === "error") {
+            throw new Error(st.error || "Generierung fehlgeschlagen.");
+          }
+          if (Date.now() - st.updatedAt > 180_000) {
+            throw new Error(
+              "Der Hintergrund-Job meldet sich nicht mehr — schick die Anfrage bitte erneut ab.",
+            );
+          }
+          await sleep(2500);
+        }
+        throw new Error("Zeitüberschreitung beim Warten auf den Hintergrund-Job.");
+      } catch (e) {
+        setPendingJob(null);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            content: e instanceof Error ? e.message : String(e),
+            error: true,
+          },
+        ]);
+      } finally {
+        setStreaming(false);
+        setPhase(null);
+        setThinking("");
+      }
+    },
+    [applyResult],
+  );
+
+  // Auto-resume: a restored session (or a dropped stream) leaves pendingJob
+  // set while nothing is streaming → pick the job back up.
+  useEffect(() => {
+    if (!pendingJob || streaming || loadingApp || resumeGuardRef.current) return;
+    if (Date.now() - pendingJob.startedAt > 20 * 60_000) {
+      setPendingJob(null);
+      return;
+    }
+    resumeGuardRef.current = true;
+    void resumeJob(pendingJob.id).finally(() => {
+      resumeGuardRef.current = false;
+    });
+  }, [pendingJob, streaming, loadingApp, resumeJob]);
 
   const send = useCallback(
     async (text: string) => {
@@ -310,6 +457,7 @@ export default function NewMiniAppBuilderPage() {
       setStream("");
       setThinking("");
       setPhase(hadImages ? "vision" : "code");
+      jobIdRef.current = null;
       // Watch the build where it's visible: the phone preview can't show
       // streaming, so jump to the canvas (screens shimmer as they're written).
       // An explicit Code view stays put.
@@ -352,6 +500,10 @@ export default function NewMiniAppBuilderPage() {
             setPhase(f.v);
           } else if (f.t === "done" && f.v) {
             finishReason = f.v;
+          } else if (f.t === "job" && f.v) {
+            // Server-side job backing this generation — survives disconnects.
+            jobIdRef.current = f.v;
+            setPendingJob({ id: f.v, startedAt: Date.now() });
           }
         });
         for (;;) {
@@ -361,35 +513,21 @@ export default function NewMiniAppBuilderPage() {
         }
         feed(decoder.decode());
 
-        const { html, notes, truncated } = extractResult(htmlAcc);
-        if (!html) {
-          throw new Error(
-            truncated
-              ? finishReason === "length"
-                ? "Die App wurde abgeschnitten: Die Antwort hat das Ausgabe-Limit erreicht (im Modus „Stark“ zählt auch das Nachdenken mit). Versuch es mit „Schnell“ oder formuliere die Anforderung kompakter."
-                : "Die Übertragung ist mittendrin abgebrochen — diese Version ist unvollständig und wurde verworfen. Schick die Anfrage einfach noch einmal ab."
-              : "Die KI hat kein gültiges HTML geliefert. Formuliere die Anfrage anders und versuch es noch einmal.",
-          );
-        }
-        const idx = versions.length;
-        setVersions((prev) => [...prev, { html, notes }]);
-        setActiveIdx(idx);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: uid(),
-            role: "assistant",
-            content: notes || "Fertig — neue Version gebaut.",
-            versionIndex: idx,
-            reasoning: thinkAcc ? thinkAcc.slice(0, 6000) : undefined,
-            brief: briefAcc ? briefAcc.slice(0, 6000) : undefined,
-          },
-        ]);
-        // Done → always land on the live phone preview (canvas was only the
-        // construction view while streaming).
-        setTab("preview");
+        applyResult(htmlAcc, thinkAcc, briefAcc, finishReason);
+        jobIdRef.current = null;
+        setPendingJob(null);
       } catch (e) {
         const aborted = (e as Error)?.name === "AbortError";
+        if (aborted) {
+          // Deliberate stop: don't resume the server-side job.
+          jobIdRef.current = null;
+          setPendingJob(null);
+        } else if (jobIdRef.current) {
+          // Stream died (sleep/network) but the job lives on server-side —
+          // the auto-resume effect picks it up from pendingJob.
+          jobIdRef.current = null;
+          return;
+        }
         setMessages((prev) => [
           ...prev,
           {
@@ -414,7 +552,12 @@ export default function NewMiniAppBuilderPage() {
     [messages, versions, activeHtml, complexity, streaming, attachments, inspected],
   );
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    // Also stop a resume-polling loop and drop the job (deliberate cancel).
+    resumeCancelRef.current = true;
+    setPendingJob(null);
+  }, []);
 
   // Switching versions invalidates preview-derived state.
   useEffect(() => {

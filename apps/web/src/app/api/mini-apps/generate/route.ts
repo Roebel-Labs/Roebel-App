@@ -17,9 +17,11 @@
  * }
  * Response: raw text stream of the HTML document.
  */
+import { waitUntil } from "@vercel/functions";
 import { streamText, type ModelMessage } from "ai";
 import { z } from "zod";
 import { buildHtmlSystemPrompt, buildIterationSuffix } from "@/lib/miniapp/ai/htmlPrompt";
+import { writeJobState, type GenerationJobState } from "@/lib/miniapp/ai/jobs";
 import { codegenModel, codegenProviderOptions, hasCodegenKey } from "@/lib/miniapp/ai/model";
 import { analyzeImagesForBrief } from "@/lib/miniapp/ai/vision";
 
@@ -88,16 +90,47 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
 
   const ndjson = protocol === 2;
+  // Background job (NDJSON clients only): progress mirrors into a state file
+  // so the generation SURVIVES the client — laptop sleep, tab close, reload.
+  // The client resumes via GET /api/mini-apps/generate/status?job=<id>.
+  const jobId = ndjson ? crypto.randomUUID() : null;
+  const job: GenerationJobState | null = jobId
+    ? {
+        jobId,
+        status: "running",
+        phase: lastMsg.images?.length ? "vision" : "thinking",
+        thinkingTail: "",
+        html: "",
+        chars: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+    : null;
+  let lastMirror = 0;
+  const mirror = async (force = false) => {
+    if (!job) return;
+    const now = Date.now();
+    if (!force && now - lastMirror < 3000) return;
+    lastMirror = now;
+    await writeJobState(job);
+  };
 
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(c) {
+      controller = c;
+    },
+  });
+
+  const work = (async () => {
+    {
       let closed = false;
       const enqueue = (s: string) => {
         if (closed) return;
         try {
           controller.enqueue(encoder.encode(s));
         } catch {
-          closed = true; // client went away — stop writing
+          closed = true; // client went away — job mirroring keeps the work alive
         }
       };
       // NDJSON: one JSON object per line. Legacy: raw text (heartbeat = bare
@@ -108,6 +141,10 @@ export async function POST(request: Request) {
       // Flush headers right away — Vercel 504s a function that stays silent.
       if (ndjson) frame("ping");
       else enqueue("\n");
+      if (jobId) {
+        frame("job", jobId);
+        await mirror(true); // job must be findable before anything slow runs
+      }
       const keepalive = setInterval(() => (ndjson ? frame("ping") : enqueue("\n")), 10_000);
 
       try {
@@ -121,6 +158,11 @@ export async function POST(request: Request) {
             lastMsg.content,
           );
           if (ndjson && visionBrief) frame("brief", visionBrief);
+          if (job) {
+            job.phase = "thinking";
+            if (visionBrief) job.brief = visionBrief;
+            await mirror(true);
+          }
         }
         if (ndjson) frame("status", "code");
 
@@ -159,9 +201,23 @@ export async function POST(request: Request) {
             const p = part as { type: string; text?: string; textDelta?: string; error?: unknown };
             const delta = p.text ?? p.textDelta ?? "";
             if (p.type === "reasoning-delta" || p.type === "reasoning") {
-              if (delta) frame("think", delta);
+              if (delta) {
+                frame("think", delta);
+                if (job) {
+                  job.thinkingTail = (job.thinkingTail + delta).slice(-1500);
+                  await mirror();
+                }
+              }
             } else if (p.type === "text-delta") {
-              if (delta) frame("html", delta);
+              if (delta) {
+                frame("html", delta);
+                if (job) {
+                  job.phase = "building";
+                  job.html += delta;
+                  job.chars = job.html.length;
+                  await mirror();
+                }
+              }
             } else if (p.type === "error") {
               console.error("[mini-apps/generate] stream part error", p.error);
             }
@@ -170,6 +226,12 @@ export async function POST(request: Request) {
           // the client turns that into a precise error instead of a broken app.
           const finish = await result.finishReason.catch(() => "unknown");
           frame("done", String(finish));
+          if (job) {
+            job.status = "done";
+            job.finishReason = String(finish);
+            job.chars = job.html.length;
+            await mirror(true);
+          }
         } else {
           let firstChunk = true;
           for await (const chunk of result.textStream) {
@@ -184,6 +246,11 @@ export async function POST(request: Request) {
         }
       } catch (e) {
         console.error("[mini-apps/generate] generation failed", e);
+        if (job) {
+          job.status = "error";
+          job.error = e instanceof Error ? e.message : String(e);
+          await mirror(true);
+        }
       } finally {
         clearInterval(keepalive);
         closed = true;
@@ -193,8 +260,12 @@ export async function POST(request: Request) {
           /* already closed */
         }
       }
-    },
-  });
+    }
+  })();
+
+  // Keep the invocation alive to job completion even when the client
+  // disconnects (laptop sleep / tab close) — the editor resumes via the job.
+  waitUntil(work);
 
   return new Response(stream, {
     headers: {

@@ -29,6 +29,7 @@ import {
   submitApp,
   updateAppManifest,
 } from "@/lib/miniapp/data";
+import { deleteData, listData, setData } from "@/lib/miniapp/dataStore";
 import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
 import { verifyApiKey } from "@/lib/miniapp/keys";
 import { validateManifest } from "@/lib/miniapp/manifest";
@@ -281,6 +282,57 @@ const handler = createMcpHandler(
           throw new Error(`App "${app}" not found for this account.`);
         }
         return json(await queryAnalytics(row.id, range));
+      },
+    );
+
+    server.tool(
+      "get_app_content",
+      "List the app's shared content (Mini-CMS, scope 'app') — the keys the app reads at runtime via sdk.data.get/list.",
+      { app: z.string().min(1).describe("slug or uuid") },
+      async ({ app }, extra) => {
+        const { developerId } = requireDev(extra);
+        const row = await getApp(app);
+        if (!row || row.developer_id !== developerId) {
+          throw new Error(`App "${app}" not found for this account.`);
+        }
+        return json({ items: await listData(row.id, "app") });
+      },
+    );
+
+    server.tool(
+      "set_app_content",
+      "Create or update one content key of your app (Mini-CMS). The running app picks it up on next load — no re-publish needed. Value is arbitrary JSON.",
+      {
+        app: z.string().min(1).describe("slug or uuid"),
+        key: z.string().min(1).max(64).describe("a-z0-9-_. (e.g. 'lektionen')"),
+        value: z.unknown().describe("JSON value (string, array, object, …)"),
+      },
+      async ({ app, key, value }, extra) => {
+        const { developerId } = requireDev(extra);
+        const row = await getApp(app);
+        if (!row || row.developer_id !== developerId) {
+          throw new Error(`App "${app}" not found for this account.`);
+        }
+        const item = await setData(row.id, "app", key, value, null);
+        return json({ ok: true, item });
+      },
+    );
+
+    server.tool(
+      "delete_app_content",
+      "Delete one content key of your app (Mini-CMS).",
+      {
+        app: z.string().min(1).describe("slug or uuid"),
+        key: z.string().min(1).max(64),
+      },
+      async ({ app, key }, extra) => {
+        const { developerId } = requireDev(extra);
+        const row = await getApp(app);
+        if (!row || row.developer_id !== developerId) {
+          throw new Error(`App "${app}" not found for this account.`);
+        }
+        await deleteData(row.id, "app", key, null);
+        return json({ ok: true });
       },
     );
 

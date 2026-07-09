@@ -248,6 +248,55 @@ export function createWebMiniAppHost(opts: WebMiniAppHostOptions): WebMiniAppHos
         }),
       }).catch(() => undefined);
     },
+
+    // v0.3 mini-app datastore ("Mini-CMS"): app content is world-readable and
+    // runtime-read-only; user scope is the current wallet's own state.
+    dataGet: async (p: { key: string }) => {
+      const res = await fetch(
+        `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=app&key=${encodeURIComponent(p.key)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) unsupported("Inhalte sind für diese App nicht verfügbar.");
+      return (await res.json()) as { value: unknown; exists: boolean };
+    },
+    dataList: async (p: { prefix?: string }) => {
+      const prefix = p.prefix ? `&prefix=${encodeURIComponent(p.prefix)}` : "";
+      const res = await fetch(
+        `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=app${prefix}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) unsupported("Inhalte sind für diese App nicht verfügbar.");
+      const json = (await res.json()) as { items?: { key: string; value: unknown }[] };
+      return { items: json.items ?? [] };
+    },
+    dataUserGet: async (p: { key: string }) => {
+      if (!account?.address) unsupported("Keine Wallet verbunden.");
+      const res = await fetch(
+        `/api/mini-apps/data?app=${encodeURIComponent(app.id)}&scope=user&wallet=${account.address}&key=${encodeURIComponent(p.key)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) unsupported("Speicher ist für diese App nicht verfügbar.");
+      return (await res.json()) as { value: unknown; exists: boolean };
+    },
+    dataUserSet: async (p: { key: string; value: unknown }) => {
+      if (!account?.address) unsupported("Keine Wallet verbunden.");
+      const res = await fetch("/api/mini-apps/data", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          app: app.id,
+          scope: "user",
+          key: p.key,
+          value: p.value,
+          wallet: account.address,
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw { code: "internal", message: j.error ?? "Speichern fehlgeschlagen." };
+      }
+      return { ok: true };
+    },
   };
 
   const bridge = createHostBridge({

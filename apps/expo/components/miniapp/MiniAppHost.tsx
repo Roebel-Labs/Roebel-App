@@ -78,6 +78,10 @@ import {
   userRejected,
 } from '@/lib/miniapp-wallet';
 import {
+  apiDataGet,
+  apiDataList,
+  apiDataUserGet,
+  apiDataUserSet,
   apiGetMuenzenBalance,
   apiGrantReward,
   apiSendNotification,
@@ -387,6 +391,24 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       notificationsSend: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
         return apiSendNotification(apiId, p);
+      },
+
+      // v0.3 mini-app datastore ("Mini-CMS"): app content + per-user state.
+      dataGet: async (p) => {
+        if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
+        return apiDataGet(apiId, p.key);
+      },
+      dataList: async (p) => {
+        if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
+        return apiDataList(apiId, p.prefix);
+      },
+      dataUserGet: async (p) => {
+        if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
+        return apiDataUserGet(apiId, p.key);
+      },
+      dataUserSet: async (p) => {
+        if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
+        return apiDataUserSet(apiId, p.key, p.value);
       },
 
       track: ({ event, props }) => track(event, props),

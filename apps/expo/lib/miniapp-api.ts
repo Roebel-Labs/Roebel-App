@@ -110,3 +110,57 @@ export async function apiSendNotification(
     targetUrl: p.targetUrl,
   });
 }
+
+// ── v0.3 mini-app datastore ("Mini-CMS") ─────────────────────────────────────
+// App content (scope app, read-only at runtime) + per-user state (scope user,
+// keyed by the host wallet). Server enforces scoping + quotas.
+
+export async function apiDataGet(
+  id: MiniAppApiIdentity,
+  key: string,
+): Promise<{ value: unknown; exists: boolean }> {
+  return get<{ value: unknown; exists: boolean }>('/api/mini-apps/data', {
+    app: id.miniAppId,
+    scope: 'app',
+    key,
+  });
+}
+
+export async function apiDataList(
+  id: MiniAppApiIdentity,
+  prefix?: string,
+): Promise<{ items: { key: string; value: unknown }[] }> {
+  return get<{ items: { key: string; value: unknown }[] }>('/api/mini-apps/data', {
+    app: id.miniAppId,
+    scope: 'app',
+    ...(prefix ? { prefix } : {}),
+  });
+}
+
+export async function apiDataUserGet(
+  id: MiniAppApiIdentity,
+  key: string,
+): Promise<{ value: unknown; exists: boolean }> {
+  if (!id.wallet) throw { code: 'unsupported', message: 'Keine Wallet verbunden.' };
+  return get<{ value: unknown; exists: boolean }>('/api/mini-apps/data', {
+    app: id.miniAppId,
+    scope: 'user',
+    wallet: id.wallet,
+    key,
+  });
+}
+
+export async function apiDataUserSet(
+  id: MiniAppApiIdentity,
+  key: string,
+  value: unknown,
+): Promise<{ ok: boolean }> {
+  if (!id.wallet) throw { code: 'unsupported', message: 'Keine Wallet verbunden.' };
+  return post<{ ok: boolean }>('/api/mini-apps/data', {
+    app: id.miniAppId,
+    scope: 'user',
+    wallet: id.wallet,
+    key,
+    value,
+  });
+}
