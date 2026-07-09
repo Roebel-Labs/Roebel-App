@@ -2,7 +2,8 @@
 
 // Content sections of the /sommercamp landing page. Every component takes
 // `night` and renders the roll-up-matching palette for that mode.
-import { Play, Sparkles, Smartphone, GraduationCap } from "lucide-react";
+import Image from "next/image";
+import { Play } from "lucide-react";
 
 // YouTube-ID des Intro-Videos — eintragen, sobald das Video hochgeladen ist.
 export const SOMMERCAMP_VIDEO_ID = "";
@@ -61,17 +62,23 @@ export function VideoSection({ night }: SectionProps) {
 
 const PILLARS = [
   {
-    icon: Sparkles,
+    img: "/illustration/sommercamp/01.png",
+    width: 550,
+    height: 460,
     title: "Mit KI bauen",
     text: "Du beschreibst deine Idee, die KI baut mit — direkt im Browser, im KI-Baukasten der Röbel App.",
   },
   {
-    icon: Smartphone,
+    img: "/illustration/sommercamp/02.png",
+    width: 245,
+    height: 245,
     title: "Echt in der App",
     text: "Deine Mini-App läuft am Ende live in der Röbel App — für alle in Röbel sichtbar.",
   },
   {
-    icon: GraduationCap,
+    img: "/illustration/sommercamp/03.png",
+    width: 480,
+    height: 460,
     title: "Ohne Vorwissen",
     text: "Kein Code, keine Installation. Neugier reicht — den Rest zeigen wir dir beim Kickoff.",
   },
@@ -83,19 +90,29 @@ export function WasIstDasSection({ night }: SectionProps) {
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <SectionTitle night={night}>Was ist das Sommer Camp?</SectionTitle>
         <p className={`mt-3 max-w-xl text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
-          Ein Hackathon für Röbel: Eine Woche lang baust du deine eigene Mini-App
-          — allein oder mit Freunden, zu Hause oder beim Kickoff in der Schule.
+          Ein Hackathon für Röbel: Jede Woche baust du deine eigene Mini-App —
+          allein oder mit Freunden, zu Hause oder beim Kickoff in der Schule.
         </p>
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {PILLARS.map(({ icon: Icon, title, text }) => (
+          {PILLARS.map(({ img, width, height, title, text }) => (
             <div
               key={title}
-              className={`rounded-2xl p-5 ${
+              className={`rounded-2xl p-5 text-center ${
                 night ? "bg-white/5" : "border border-[#DFE6EF] bg-white"
               }`}
             >
-              <Icon className={`h-6 w-6 ${night ? "text-[#FFD84D]" : "text-[#00498B]"}`} />
-              <h3 className="mt-3 font-bold">{title}</h3>
+              <div className="flex h-32 items-center justify-center sm:h-36">
+                <Image
+                  src={img}
+                  alt=""
+                  width={width}
+                  height={height}
+                  className="max-h-full w-auto object-contain"
+                />
+              </div>
+              <h3 className="font-heading mt-4 text-xl font-black uppercase tracking-tight sm:text-2xl">
+                {title}
+              </h3>
               <p className={`mt-1.5 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
                 {text}
               </p>
@@ -107,91 +124,124 @@ export function WasIstDasSection({ night }: SectionProps) {
   );
 }
 
-const PRIZES = [
-  { place: "1. Platz", amount: "100 €", first: true },
-  { place: "2. Platz", amount: "50 €", first: false },
-  { place: "3. Platz", amount: "50 €", first: false },
+// Siegertreppchen: 2. Platz links, 1. Platz erhöht in der Mitte, 3. rechts.
+const PODIUM = [
+  { place: "2", label: "2. Platz", amount: "50 €", bar: "h-32 sm:h-40" },
+  { place: "1", label: "1. Platz", amount: "100 €", bar: "h-48 sm:h-60" },
+  { place: "3", label: "3. Platz", amount: "50 €", bar: "h-24 sm:h-32" },
 ] as const;
 
 export function PreiseSection({ night }: SectionProps) {
+  const barColor = (place: string) => {
+    if (place === "1") return "bg-[#FDC705] text-[#051433] shadow-lg";
+    if (place === "2")
+      return night ? "bg-white/15 text-white" : "bg-[#E3E5E9] text-[#051433]";
+    return night ? "bg-white/10 text-white" : "bg-[#7BBBF2] text-[#051433]";
+  };
+
   return (
     <section className={night ? "bg-[#0E1A38]" : "bg-white"}>
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <SectionTitle night={night}>Das gibt&apos;s zu gewinnen</SectionTitle>
-        <div className="mt-8 grid grid-cols-3 gap-3 sm:gap-4">
-          {PRIZES.map(({ place, amount, first }) => (
-            <div
-              key={place}
-              className={`rounded-2xl p-4 text-center sm:p-6 ${
-                first
-                  ? "-translate-y-1 bg-[#FFD84D] text-[#0E2A47] shadow-lg"
-                  : night
-                    ? "bg-white/5 text-white"
-                    : "border border-[#DFE6EF] bg-white text-[#12203A]"
-              }`}
-            >
-              <p className={`text-xs font-bold uppercase tracking-wider ${first ? "text-[#0E2A47]/70" : night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
-                {place}
+        <p className={`mt-3 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+          Jede Woche ein neues Treppchen: Die Jury kürt jeden Freitag die besten
+          drei Apps der Woche.
+        </p>
+        <div className="mx-auto mt-10 flex max-w-lg items-end justify-center gap-3 sm:gap-4">
+          {PODIUM.map(({ place, label, amount, bar }) => (
+            <div key={place} className="flex flex-1 flex-col items-center">
+              <p
+                className={`font-heading text-2xl font-black sm:text-3xl ${
+                  place === "1"
+                    ? night
+                      ? "text-[#FDC705]"
+                      : "text-[#00498B]"
+                    : night
+                      ? "text-white"
+                      : "text-[#12203A]"
+                }`}
+              >
+                {amount}
               </p>
-              <p className="font-heading mt-1 text-3xl font-black sm:text-4xl">{amount}</p>
+              <p className={`mb-2 mt-0.5 text-[11px] font-bold uppercase tracking-wider ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+                pro Woche
+              </p>
+              <div
+                className={`flex w-full flex-col items-center rounded-t-2xl pt-4 ${bar} ${barColor(place)}`}
+              >
+                <span className="font-heading text-4xl font-black leading-none sm:text-5xl">
+                  {place}
+                </span>
+                <span className="mt-1 text-[11px] font-bold uppercase tracking-widest opacity-70">
+                  Platz
+                </span>
+              </div>
             </div>
           ))}
         </div>
-        <p className={`mt-4 text-center text-xs ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
-          Die Jury kürt die Gewinner beim Finale am 17. Juli.
+        <div className={`h-1 w-full max-w-lg rounded-full mx-auto ${night ? "bg-white/20" : "bg-[#DFE6EF]"}`} />
+        <p className={`mt-5 text-center text-xs ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+          Siegerehrung jeden Freitag um 18&nbsp;Uhr — 6 Wochen lang.
         </p>
       </div>
     </section>
   );
 }
 
-const SCHEDULE = [
-  {
-    date: "FR 10. JULI",
-    title: "Kickoff an der Schule Röbel",
-    text: "Wir zeigen dir den KI-Baukasten und du startest deine erste Mini-App. Uhrzeit folgt.",
-  },
-  {
-    date: "10. – 17. JULI",
-    title: "Bauwoche",
-    text: "Bau, wann du Zeit hast — zu Hause oder unterwegs. Bei Fragen helfen wir dir.",
-  },
-  {
-    date: "FR 17. JULI",
-    title: "Finale & Siegerehrung",
-    text: "Alle Apps werden gezeigt, die Jury kürt die besten drei. Uhrzeit folgt.",
-  },
-] as const;
+// 6 Wochen-Runden (Cohorts) über die kompletten Sommerferien in MV.
+// Jede Runde startet freitags 18 Uhr; die Siegerehrung ist am Freitag darauf.
+const COHORTS: ReadonlyArray<{
+  week: number;
+  start: string;
+  finale: string;
+  note?: string;
+}> = [
+  { week: 1, start: "Fr 10.07.", finale: "Fr 17.07.", note: "Kickoff an der Schule Röbel" },
+  { week: 2, start: "Fr 17.07.", finale: "Fr 24.07." },
+  { week: 3, start: "Fr 24.07.", finale: "Fr 31.07." },
+  { week: 4, start: "Fr 31.07.", finale: "Fr 07.08." },
+  { week: 5, start: "Fr 07.08.", finale: "Fr 14.08." },
+  { week: 6, start: "Fr 14.08.", finale: "Fr 21.08." },
+];
 
 export function AblaufSection({ night }: SectionProps) {
   return (
     <section className={night ? "bg-[#101F42]" : "bg-[#F4F7FB]"}>
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <SectionTitle night={night}>Ablauf</SectionTitle>
-        <ol className="mt-8 space-y-3">
-          {SCHEDULE.map(({ date, title, text }) => (
+        <p className={`mt-3 max-w-xl text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+          Das Sommer Camp läuft in 6 Wochen-Runden — die kompletten
+          Sommerferien in Mecklenburg-Vorpommern. Jede Runde startet freitags
+          um 18&nbsp;Uhr, am Freitag darauf kürt die Jury die besten drei der
+          Woche. Du kannst jede Woche neu einsteigen.
+        </p>
+        <ol className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {COHORTS.map(({ week, start, finale, note }) => (
             <li
-              key={date}
-              className={`flex flex-col gap-1 rounded-2xl p-5 sm:flex-row sm:items-baseline sm:gap-6 ${
+              key={week}
+              className={`flex flex-col rounded-2xl p-4 ${
                 night ? "bg-white/5" : "border border-[#DFE6EF] bg-white"
               }`}
             >
               <span
-                className={`shrink-0 font-mono text-xs font-bold tracking-wider sm:w-28 ${
+                className={`font-mono text-[11px] font-bold tracking-widest ${
                   night ? "text-[#FFD84D]" : "text-[#00498B]"
                 }`}
               >
-                {date}
+                WOCHE {week}
               </span>
-              <div>
-                <h3 className="font-bold">{title}</h3>
-                <p className={`mt-1 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
-                  {text}
-                </p>
-              </div>
+              <span className="mt-1.5 text-sm font-bold">
+                {start} <span aria-hidden>→</span> {finale}
+              </span>
+              <span className={`mt-1 text-xs leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+                {note ?? "Siegerehrung: 1., 2. & 3. Platz"}
+              </span>
             </li>
           ))}
         </ol>
+        <p className={`mt-4 text-center text-xs ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+          Start &amp; Siegerehrung: immer freitags um 18&nbsp;Uhr.
+        </p>
       </div>
     </section>
   );
@@ -212,11 +262,15 @@ const FAQS = [
   },
   {
     q: "Wie werden die Gewinner ermittelt?",
-    a: "Beim Finale am 17. Juli schaut sich die Jury alle Apps an. Zählen Kreativität, Nutzen für Röbel und Umsetzung.",
+    a: "Jeden Freitag schaut sich die Jury alle Apps der Woche an und kürt die besten drei. Es zählen Kreativität, Nutzen für Röbel und Umsetzung.",
   },
   {
     q: "Muss ich die ganze Woche dabei sein?",
-    a: "Nein. Nach dem Kickoff baust du, wann du willst. Nur zum Finale solltest du kommen — da wird deine App gezeigt.",
+    a: "Nein. Nach dem Start am Freitag um 18 Uhr baust du, wann du willst. Zur Siegerehrung deiner Woche solltest du kommen — da wird deine App gezeigt.",
+  },
+  {
+    q: "Kann ich auch später einsteigen?",
+    a: "Ja. Das Camp läuft 6 Wochen, die ganzen Sommerferien. Jede Woche startet freitags um 18 Uhr eine neue Runde — mit eigenem 1., 2. und 3. Platz.",
   },
 ] as const;
 

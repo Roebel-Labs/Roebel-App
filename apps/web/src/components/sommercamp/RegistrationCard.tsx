@@ -2,11 +2,11 @@
 
 // Registration = wallet onboarding: connect with the Röbel App account
 // (thirdweb in-app wallet), then name/age + consents. Submitting creates the
-// developer row, so the participant lands in the mini-app builder dashboard.
+// developer row — der KI-Baukasten öffnet aber erst zum offiziellen
+// Runden-Start (freitags 18 Uhr deutscher Zeit), bis dahin läuft ein Countdown.
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Timer } from "lucide-react";
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { client } from "@/app/client";
 import { activeChain } from "@/lib/chains";
@@ -14,9 +14,96 @@ import { wallets } from "@/lib/wallet-config";
 
 type Status = "checking" | "form" | "registered";
 
+// Offizieller Start jeder Wochen-Runde: Freitag 18:00 deutscher Zeit.
+// Nach dem Start bleibt der Zugang fürs Kickoff-Wochenende offen; danach
+// zählt der Countdown zur nächsten Runde.
+const START_WEEKDAY = 5; // Freitag
+const START_HOUR = 18;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const UNLOCK_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+// Millisekunden bis zum nächsten Freitag 18:00 Europe/Berlin — gerechnet in
+// Berliner Wandzeit, damit der Countdown in jeder Nutzer-Zeitzone stimmt.
+function msUntilNextStart(now: Date): number {
+  const berlin = new Date(
+    now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }),
+  );
+  const target = new Date(berlin);
+  target.setDate(berlin.getDate() + ((START_WEEKDAY - berlin.getDay() + 7) % 7));
+  target.setHours(START_HOUR, 0, 0, 0);
+  if (target.getTime() <= berlin.getTime()) {
+    target.setDate(target.getDate() + 7);
+  }
+  return target.getTime() - berlin.getTime();
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86400);
+  const hms = [
+    Math.floor((total % 86400) / 3600),
+    Math.floor((total % 3600) / 60),
+    total % 60,
+  ]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
+  return days > 0 ? `${days} T ${hms}` : hms;
+}
+
+// Countdown-Button vor dem KI-Baukasten: gesperrt bis Freitag 18 Uhr,
+// im Kickoff-Fenster danach führt er direkt ins Dashboard.
+function StartGate() {
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    const tick = () => setRemaining(msUntilNextStart(new Date()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const unlocked =
+    remaining !== null && WEEK_MS - remaining < UNLOCK_WINDOW_MS;
+
+  if (unlocked) {
+    return (
+      <>
+        <p className="text-sm text-[#3D4E68]">
+          Die Runde läuft — leg direkt los und bau deine Mini-App.
+        </p>
+        <Link
+          href="/dashboard/mini-apps?welcome=sommercamp"
+          className="mt-1 rounded-full bg-[#00498B] px-6 py-3 text-sm font-bold text-white"
+        >
+          Zum KI-Baukasten
+        </Link>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="text-sm text-[#3D4E68]">
+        Deine Runde startet offiziell am Freitag um 18&nbsp;Uhr — dann öffnet
+        sich der KI-Baukasten.
+      </p>
+      <button
+        type="button"
+        disabled
+        aria-live="polite"
+        className="mt-1 inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-[#051433] px-6 py-3 text-sm font-bold text-white/90"
+      >
+        <Timer className="h-4 w-4 text-[#FDC705]" />
+        <span className="font-mono tabular-nums">
+          {remaining === null ? "Start: Freitag 18 Uhr" : `Start in ${formatCountdown(remaining)}`}
+        </span>
+      </button>
+    </>
+  );
+}
+
 export function RegistrationCard({ night }: { night: boolean }) {
   const account = useActiveAccount();
-  const router = useRouter();
   const [status, setStatus] = useState<Status>("checking");
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -70,7 +157,9 @@ export function RegistrationCard({ night }: { night: boolean }) {
         setError(data.error ?? "Etwas ist schiefgelaufen. Bitte versuche es erneut.");
         return;
       }
-      router.push("/dashboard/mini-apps?welcome=sommercamp");
+      // Kein direkter Sprung ins Dashboard: erst zeigt das StartGate den
+      // Countdown bis zum offiziellen Runden-Start (Freitag 18 Uhr).
+      setStatus("registered");
     } catch {
       setError("Keine Verbindung. Bitte versuche es erneut.");
     } finally {
@@ -116,15 +205,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
         <div className="flex flex-col items-center gap-3 py-2 text-center">
           <CheckCircle2 className="h-10 w-10 text-green-600" />
           <p className="font-bold">Du bist angemeldet!</p>
-          <p className="text-sm text-[#3D4E68]">
-            Leg direkt los und bau deine erste Mini-App.
-          </p>
-          <Link
-            href="/dashboard/mini-apps?welcome=sommercamp"
-            className="mt-1 rounded-full bg-[#00498B] px-6 py-3 text-sm font-bold text-white"
-          >
-            Zum KI-Baukasten
-          </Link>
+          <StartGate />
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4" noValidate>
@@ -233,7 +314,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
             disabled={submitting || !name || !age || !privacy || !agb}
             className="w-full rounded-full bg-[#00498B] px-6 py-3.5 text-sm font-bold text-white transition-opacity disabled:opacity-50"
           >
-            {submitting ? "Wird gesendet …" : "Anmelden & losbauen"}
+            {submitting ? "Wird gesendet …" : "Jetzt anmelden"}
           </button>
         </form>
       )}

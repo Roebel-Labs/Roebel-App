@@ -1,7 +1,8 @@
 "use client";
 
-// Landing page for the Sommer Camp Mini-App Hackathon (10.–17. Juli 2026,
-// Schule Röbel). The printed roll-ups exist in a day and a night variant —
+// Landing page for the Sommer Camp Mini-App Hackathon — 6 Wochen-Runden
+// (Cohorts) über die kompletten Sommerferien in MV, jede Runde startet
+// freitags 18 Uhr. The printed roll-ups exist in a day and a night variant —
 // this page mirrors both: time of day picks the default, a sun/moon toggle
 // overrides it (persisted per browser).
 import { useEffect, useState } from "react";
@@ -78,13 +79,14 @@ export function SommercampPage() {
         {night ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
       </button>
 
-      {/* Hero — der Roll-Up-Himmel */}
+      {/* Hero — der Roll-Up-Himmel (exakte Poster-Verläufe: Tag + Nacht) */}
       <header
-        className={`relative overflow-hidden ${
-          night
-            ? "bg-gradient-to-b from-[#0B1530] via-[#12234A] to-[#2C4A7A]"
-            : "bg-gradient-to-b from-[#F5D96B] via-[#A9C9EE] to-[#EAF2FB]"
-        }`}
+        className="relative overflow-hidden"
+        style={{
+          background: night
+            ? "linear-gradient(180deg, #051433 50.42%, #7ABBF2 79.81%, #D3D6DE 86.52%, #FDC705 100%)"
+            : "linear-gradient(180deg, #FDC705 15.34%, #E3E5E9 36.57%, #7BBBF2 80.57%)",
+        }}
       >
         {night && (
           <div aria-hidden className="absolute inset-0" style={STARS} />
@@ -92,14 +94,14 @@ export function SommercampPage() {
         <div className="relative mx-auto flex max-w-3xl flex-col items-center px-4 pb-16 pt-20 text-center sm:pb-20 sm:pt-24">
           <span
             className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold tracking-widest ${
-              night ? "bg-white/10 text-white" : "bg-white text-[#12203A]"
+              night ? "bg-white/10 text-white" : "bg-white text-[#051433]"
             }`}
           >
             RÖBEL APP
           </span>
           <h1
             className={`font-heading mt-6 text-6xl font-black uppercase leading-[0.9] tracking-tight sm:text-8xl ${
-              night ? "text-white" : "text-[#12203A]"
+              night ? "text-white" : "text-[#051433]"
             }`}
           >
             Sommer
@@ -108,37 +110,36 @@ export function SommercampPage() {
           </h1>
           <p
             className={`mt-4 text-lg font-semibold ${
-              night ? "text-[#CFE2F5]" : "text-[#12203A]"
+              night ? "text-[#CFE2F5]" : "text-[#051433]"
             }`}
           >
             Mini-App Hackathon
           </p>
-          <span
-            className={`mt-4 rounded-full px-5 py-1.5 font-mono text-sm font-bold tracking-wider ${
-              night ? "bg-[#9CC4EA] text-[#0E2A47]" : "bg-[#FFD84D] text-[#0E2A47]"
+          <span className="mt-4 rounded-full bg-[#FDC705] px-5 py-1.5 font-mono text-sm font-bold tracking-wider text-[#051433]">
+            ZEITLICH BEGRENZT
+          </span>
+          <p
+            className={`mt-6 max-w-md text-2xl font-semibold leading-snug sm:text-3xl ${
+              night ? "text-white" : "text-[#051433]"
             }`}
           >
-            10. JULI – 17. JULI
-          </span>
-          <p className="mt-6 max-w-md text-xl font-semibold leading-snug">
-            Baue Apps für Röbel und gewinne{" "}
-            <span className={night ? "text-[#FFD84D]" : "text-[#00498B]"}>
-              100&nbsp;€
-            </span>
+            Baue Apps für Röbel.
+            <br />
+            Gewinne Preise
           </p>
           <p
             className={`mt-3 max-w-md text-sm leading-relaxed ${
-              night ? "text-[#9DB4D0]" : "text-[#3D4E68]"
+              night ? "text-white/85" : "text-[#1D2E4C]"
             }`}
           >
-            Eine Woche, deine Idee, eine echte Mini-App in der Röbel App — gebaut
-            mit KI, ganz ohne Vorwissen.
+            Die ganzen Sommerferien lang: Jede Woche eine neue Runde, jeden
+            Freitag Preise — gebaut mit KI, ganz ohne Vorwissen.
           </p>
           <a
             href="#mitmachen"
             className={`mt-8 rounded-full px-8 py-3.5 text-sm font-bold shadow-lg transition-transform hover:scale-[1.03] ${
               night
-                ? "bg-[#FFD84D] text-[#0E2A47]"
+                ? "bg-[#051433] text-white"
                 : "bg-[#00498B] text-white"
             }`}
           >
@@ -167,8 +168,8 @@ export function SommercampPage() {
               Anmeldung
             </h2>
             <p className="mt-2 text-center text-sm text-white/80">
-              Kostenlos. Dauert eine Minute — danach geht&apos;s direkt in den
-              KI-Baukasten.
+              Kostenlos. Dauert eine Minute — deine Runde startet offiziell
+              freitags um 18&nbsp;Uhr.
             </p>
             <div className="mt-8">
               <RegistrationCard night={night} />
