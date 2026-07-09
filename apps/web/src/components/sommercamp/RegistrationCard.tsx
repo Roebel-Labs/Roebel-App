@@ -93,7 +93,7 @@ function StartGate() {
         aria-live="polite"
         className="mt-1 inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-[#051433] px-6 py-3 text-sm font-bold text-white/90"
       >
-        <Timer className="h-4 w-4 text-[#FDC705]" />
+        <Timer className="h-4 w-4 animate-pulse text-[#FDC705] motion-reduce:animate-none" />
         <span className="font-mono tabular-nums">
           {remaining === null ? "Start: Freitag 18 Uhr" : `Start in ${formatCountdown(remaining)}`}
         </span>

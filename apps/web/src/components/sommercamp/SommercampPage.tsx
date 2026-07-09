@@ -6,8 +6,10 @@
 // this page mirrors both: time of day picks the default, a sun/moon toggle
 // overrides it (persisted per browser).
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Moon, Sun } from "lucide-react";
+import { Reveal } from "./Reveal";
 import { RegistrationCard } from "./RegistrationCard";
 import {
   AblaufSection,
@@ -70,7 +72,7 @@ export function SommercampPage() {
         onClick={toggleMode}
         aria-pressed={night}
         aria-label={night ? "Tag-Ansicht einschalten" : "Nacht-Ansicht einschalten"}
-        className={`fixed top-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-colors ${
+        className={`fixed top-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border shadow-sm backdrop-blur transition hover:rotate-12 motion-reduce:transition-none ${
           night
             ? "border-white/20 bg-white/10 text-[#FFD84D] hover:bg-white/20"
             : "border-black/10 bg-white/70 text-[#00498B] hover:bg-white"
@@ -92,59 +94,76 @@ export function SommercampPage() {
           <div aria-hidden className="absolute inset-0" style={STARS} />
         )}
         <div className="relative mx-auto flex max-w-3xl flex-col items-center px-4 pb-16 pt-20 text-center sm:pb-20 sm:pt-24">
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold tracking-widest ${
-              night ? "bg-white/10 text-white" : "bg-white text-[#051433]"
-            }`}
-          >
-            RÖBEL APP
-          </span>
-          <h1
-            className={`font-heading mt-6 text-6xl font-black uppercase leading-[0.9] tracking-tight sm:text-8xl ${
-              night ? "text-white" : "text-[#051433]"
-            }`}
-          >
-            Sommer
-            <br />
-            Camp
-          </h1>
-          <p
-            className={`mt-4 text-lg font-semibold ${
-              night ? "text-[#CFE2F5]" : "text-[#051433]"
-            }`}
-          >
-            Mini-App Hackathon
-          </p>
-          <span className="mt-4 rounded-full bg-[#FDC705] px-5 py-1.5 font-mono text-sm font-bold tracking-wider text-[#051433]">
-            ZEITLICH BEGRENZT
-          </span>
-          <p
-            className={`mt-6 max-w-md text-2xl font-semibold leading-snug sm:text-3xl ${
-              night ? "text-white" : "text-[#051433]"
-            }`}
-          >
-            Baue Apps für Röbel.
-            <br />
-            Gewinne Preise
-          </p>
-          <p
-            className={`mt-3 max-w-md text-sm leading-relaxed ${
-              night ? "text-white/85" : "text-[#1D2E4C]"
-            }`}
-          >
-            Die ganzen Sommerferien lang: Jede Woche eine neue Runde, jeden
-            Freitag Preise — gebaut mit KI, ganz ohne Vorwissen.
-          </p>
-          <a
-            href="#mitmachen"
-            className={`mt-8 rounded-full px-8 py-3.5 text-sm font-bold shadow-lg transition-transform hover:scale-[1.03] ${
-              night
-                ? "bg-[#051433] text-white"
-                : "bg-[#00498B] text-white"
-            }`}
-          >
-            Jetzt mitmachen
-          </a>
+          <Reveal>
+            <Image
+              src="/Logo-new.png"
+              alt="Röbel App"
+              width={175}
+              height={40}
+              priority
+              className={`h-9 w-auto object-contain sm:h-10 ${
+                night ? "brightness-0 invert" : ""
+              }`}
+            />
+          </Reveal>
+          <Reveal delay={100}>
+            <h1
+              className={`font-heading mt-6 text-6xl font-black uppercase leading-[0.9] tracking-tight sm:text-8xl ${
+                night ? "text-white" : "text-[#051433]"
+              }`}
+            >
+              Sommer
+              <br />
+              Camp
+            </h1>
+          </Reveal>
+          <Reveal delay={200}>
+            <p
+              className={`mt-4 text-lg font-semibold ${
+                night ? "text-[#CFE2F5]" : "text-[#051433]"
+              }`}
+            >
+              Mini-App Hackathon
+            </p>
+          </Reveal>
+          <Reveal delay={300}>
+            <span className="mt-4 inline-block rounded-full bg-[#FDC705] px-5 py-1.5 font-mono text-sm font-bold tracking-wider text-[#051433]">
+              ZEITLICH BEGRENZT
+            </span>
+          </Reveal>
+          <Reveal delay={400}>
+            <p
+              className={`mt-6 max-w-md text-2xl font-semibold leading-snug sm:text-3xl ${
+                night ? "text-white" : "text-[#051433]"
+              }`}
+            >
+              Baue Apps für Röbel.
+              <br />
+              Gewinne Preise
+            </p>
+          </Reveal>
+          <Reveal delay={500}>
+            <p
+              className={`mt-3 max-w-md text-sm leading-relaxed ${
+                night ? "text-white/85" : "text-[#1D2E4C]"
+              }`}
+            >
+              Die ganzen Sommerferien lang: Jede Woche eine neue Runde, jeden
+              Freitag Preise — gebaut mit KI, ganz ohne Vorwissen.
+            </p>
+          </Reveal>
+          <Reveal delay={600}>
+            <a
+              href="#mitmachen"
+              className={`mt-8 inline-block rounded-full px-8 py-3.5 text-sm font-bold shadow-lg transition-transform hover:scale-[1.03] motion-reduce:transition-none ${
+                night
+                  ? "bg-[#051433] text-white"
+                  : "bg-[#00498B] text-white"
+              }`}
+            >
+              Jetzt mitmachen
+            </a>
+          </Reveal>
         </div>
       </header>
 
@@ -164,16 +183,18 @@ export function SommercampPage() {
           }
         >
           <div className="mx-auto max-w-xl px-4 py-14 sm:py-16">
-            <h2 className="font-heading text-center text-3xl font-black uppercase tracking-tight text-white">
-              Anmeldung
-            </h2>
-            <p className="mt-2 text-center text-sm text-white/80">
-              Kostenlos. Dauert eine Minute — deine Runde startet offiziell
-              freitags um 18&nbsp;Uhr.
-            </p>
-            <div className="mt-8">
+            <Reveal>
+              <h2 className="font-heading text-center text-3xl font-black uppercase tracking-tight text-white">
+                Anmeldung
+              </h2>
+              <p className="mt-2 text-center text-sm text-white/80">
+                Kostenlos. Dauert eine Minute — deine Runde startet offiziell
+                freitags um 18&nbsp;Uhr.
+              </p>
+            </Reveal>
+            <Reveal delay={150} className="mt-8">
               <RegistrationCard night={night} />
-            </div>
+            </Reveal>
           </div>
         </section>
 
