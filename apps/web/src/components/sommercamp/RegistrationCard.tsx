@@ -115,6 +115,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mailSent, setMailSent] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
 
   // Login-E-Mail des Röbel-App-Kontos (thirdweb in-app wallet) — Empfänger
   // der Anmelde-Bestätigung.
@@ -291,7 +292,14 @@ export function RegistrationCard({ night }: { night: boolean }) {
               <input
                 type="checkbox"
                 checked={newsletter}
-                onChange={(e) => setNewsletter(e.target.checked)}
+                onChange={(e) => {
+                  setNewsletter(e.target.checked);
+                  // E-Mail liegt schon im thirdweb-Konto — vorbefüllen statt
+                  // erneut abfragen; ändern bleibt möglich.
+                  if (e.target.checked && !email && authEmail) {
+                    setEmail(authEmail);
+                  }
+                }}
                 className="mt-0.5 h-4 w-4 accent-[#00498B]"
               />
               <span>
@@ -301,18 +309,33 @@ export function RegistrationCard({ night }: { night: boolean }) {
             </label>
             {newsletter && (
               <div className="pl-6">
-                <label htmlFor="sc-email" className="text-sm font-semibold">
-                  E-Mail
-                </label>
-                <input
-                  id="sc-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="du@example.de"
-                  className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-sm outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
-                />
+                {authEmail && email === authEmail && !editingEmail ? (
+                  <p className="text-sm text-[#3D4E68]">
+                    Geht an <span className="font-semibold">{email}</span>{" "}
+                    <button
+                      type="button"
+                      onClick={() => setEditingEmail(true)}
+                      className="font-semibold text-[#00498B] underline"
+                    >
+                      Ändern
+                    </button>
+                  </p>
+                ) : (
+                  <>
+                    <label htmlFor="sc-email" className="text-sm font-semibold">
+                      E-Mail
+                    </label>
+                    <input
+                      id="sc-email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="du@example.de"
+                      className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-sm outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
+                    />
+                  </>
+                )}
               </div>
             )}
           </div>

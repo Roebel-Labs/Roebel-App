@@ -114,6 +114,12 @@ export function AdminSidebar() {
       badgeKey: null,
     },
     {
+      name: "Sommer Camp",
+      href: "/admin/dashboard/sommercamp",
+      icon: <Tent className="h-5 w-5" />,
+      badgeKey: null,
+    },
+    {
       name: "Nutzer",
       href: "/admin/dashboard/users",
       icon: <Users className="h-5 w-5" />,
@@ -273,7 +279,6 @@ export function AdminSidebar() {
       badgeKey: null,
     },
     { name: "Newsletter", href: "/admin/dashboard/newsletter", icon: <Mail className="h-5 w-5" />, badgeKey: null },
-    { name: "Sommer Camp", href: "/admin/dashboard/sommercamp", icon: <Tent className="h-5 w-5" />, badgeKey: null },
   ]
 
   useEffect(() => {

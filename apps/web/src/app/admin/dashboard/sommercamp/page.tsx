@@ -36,7 +36,8 @@ export default function SommercampAdminPage() {
           Sommer Camp – Anmeldungen
         </h1>
         <p className="text-sm text-muted-foreground">
-          Mini-App Hackathon, 10.–17. Juli 2026 · Landing page: /sommercamp
+          Mini-App Hackathon · 6 Wochen-Runden über die Sommerferien (Start
+          freitags 18&nbsp;Uhr) · Landing page: /sommercamp
         </p>
       </div>
 
