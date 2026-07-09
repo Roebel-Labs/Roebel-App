@@ -24,6 +24,10 @@ export interface ChatMsg {
   reasoning?: string;
   /** GLM-4.6V image-analysis brief for this turn's attachments. */
   brief?: string;
+  /** Mini-CMS pre-flight plan (setup card rendered in the chat). */
+  cmsPlan?: import("./cms").CmsPlan;
+  /** Decision on the card: built with CMS, without, or still open (undefined). */
+  cmsResolved?: "cms" | "plain";
 }
 
 export interface Version {
@@ -48,6 +52,8 @@ export interface StoredSession {
   /** Server-side generation job still running when the session was saved —
    * the editor resumes it after sleep/reload (generate/status polling). */
   pendingJob?: { id: string; startedAt: number } | null;
+  /** Confirmed Mini-CMS keys — seeded as initial content after a fresh publish. */
+  cmsKeys?: import("./cms").CmsKeyPlan[] | null;
   savedAt: number;
 }
 

@@ -26,9 +26,16 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
 import { CanvasView } from "./components/CanvasView";
+import { CmsSetupCard } from "./components/CmsSetupCard";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
+import {
+  buildCmsPromptBlock,
+  fetchCmsPlan,
+  type CmsKeyPlan,
+  type CmsUserKeyPlan,
+} from "./lib/cms";
 import { isAcceptedImage, prepareImage, type PreparedImage } from "./lib/images";
 import {
   buildElementContext,
@@ -83,6 +90,11 @@ export default function NewMiniAppBuilderPage() {
   const jobIdRef = useRef<string | null>(null);
   const resumeGuardRef = useRef(false);
   const resumeCancelRef = useRef(false);
+  // Mini-CMS pre-flight: check runs on the first build; a positive plan defers
+  // the generation until the user decides on the setup card.
+  const [checkingCms, setCheckingCms] = useState(false);
+  const [cmsKeys, setCmsKeys] = useState<CmsKeyPlan[] | null>(null);
+  const pendingBuildRef = useRef<{ text: string; images: string[] } | null>(null);
   const [tab, setTab] = useState<"preview" | "canvas" | "code">("preview");
   const [complexity, setComplexity] = useState<Complexity>("default");
   const [input, setInput] = useState("");
@@ -134,6 +146,7 @@ export default function NewMiniAppBuilderPage() {
     setPreset(s.preset);
     setPublished(s.published);
     setPendingJob(s.pendingJob ?? null);
+    setCmsKeys(s.cmsKeys ?? null);
   }, []);
 
   // Re-open an existing AI-built app (?app=<slug|id>) or restore the last
@@ -244,6 +257,7 @@ export default function NewMiniAppBuilderPage() {
         preset,
         published,
         pendingJob,
+        cmsKeys,
         savedAt: Date.now(),
       };
       if (published?.slug) {
@@ -254,7 +268,7 @@ export default function NewMiniAppBuilderPage() {
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [messages, versions, activeIdx, preset, published, pendingJob, started, loadingApp]);
+  }, [messages, versions, activeIdx, preset, published, pendingJob, cmsKeys, started, loadingApp]);
 
   const newChat = useCallback(() => {
     if (
@@ -267,6 +281,9 @@ export default function NewMiniAppBuilderPage() {
     resumeCancelRef.current = true;
     setPendingJob(null);
     jobIdRef.current = null;
+    setCmsKeys(null);
+    setCheckingCms(false);
+    pendingBuildRef.current = null;
     // The per-app session (if any) stays saved — only the draft slot resets.
     clearSession(DRAFT_KEY);
     setMessages([]);
@@ -416,43 +433,12 @@ export default function NewMiniAppBuilderPage() {
     });
   }, [pendingJob, streaming, loadingApp, resumeJob]);
 
-  const send = useCallback(
-    async (text: string) => {
-      let trimmed = text.trim();
-      if (streaming) return;
-      if (trimmed.length < 3) {
-        if (attachments.length === 0) return;
-        trimmed = "Setze die angehängte Vorlage als Mini-App um.";
-      }
-      const userMsg: ChatMsg = {
-        id: uid(),
-        role: "user",
-        content: trimmed,
-        images: attachments.length > 0 ? attachments.map((a) => a.thumb) : undefined,
-        elementLabel: inspected ? elementLabel(inspected) : undefined,
-      };
-      // Assistant history goes to the model as its short notes, not full code —
-      // the current document is attached separately server-side. The newest turn
-      // carries the element context ("Bearbeiten" mode) + full-size attachments.
-      const convo = [...messages, userMsg]
-        .filter((m) => !m.error)
-        .map((m, i, arr) => {
-          const isLast = i === arr.length - 1;
-          const content =
-            isLast && inspected
-              ? (buildElementContext(inspected) + m.content).slice(0, 8000)
-              : m.content.slice(0, 8000);
-          return isLast && attachments.length > 0
-            ? { role: m.role, content, images: attachments.map((a) => a.dataUrl) }
-            : { role: m.role, content };
-        });
-
-      const hadImages = attachments.length > 0;
-      setMessages((prev) => [...prev, userMsg]);
-      setInput("");
-      setAttachments([]);
-      setInspected(null);
-      setRuntimeErrors([]);
+  /** Core generation run — shared by send() and the CMS-setup confirm path. */
+  const runGeneration = useCallback(
+    async (
+      convo: { role: "user" | "assistant"; content: string; images?: string[] }[],
+      hadImages: boolean,
+    ) => {
       setStreaming(true);
       setStream("");
       setThinking("");
@@ -549,7 +535,97 @@ export default function NewMiniAppBuilderPage() {
         abortRef.current = null;
       }
     },
-    [messages, versions, activeHtml, complexity, streaming, attachments, inspected],
+    [versions.length, activeHtml, complexity, applyResult],
+  );
+
+  const send = useCallback(
+    async (text: string) => {
+      let trimmed = text.trim();
+      if (streaming || checkingCms) return;
+      if (trimmed.length < 3) {
+        if (attachments.length === 0) return;
+        trimmed = "Setze die angehängte Vorlage als Mini-App um.";
+      }
+      const userMsg: ChatMsg = {
+        id: uid(),
+        role: "user",
+        content: trimmed,
+        images: attachments.length > 0 ? attachments.map((a) => a.thumb) : undefined,
+        elementLabel: inspected ? elementLabel(inspected) : undefined,
+      };
+      // Assistant history goes to the model as its short notes, not full code —
+      // the current document is attached separately server-side. The newest turn
+      // carries the element context ("Bearbeiten" mode) + full-size attachments.
+      const convo = [...messages, userMsg]
+        .filter((m) => !m.error && !m.cmsPlan)
+        .map((m, i, arr) => {
+          const isLast = i === arr.length - 1;
+          const content =
+            isLast && inspected
+              ? (buildElementContext(inspected) + m.content).slice(0, 12000)
+              : m.content.slice(0, 12000);
+          return isLast && attachments.length > 0
+            ? { role: m.role, content, images: attachments.map((a) => a.dataUrl) }
+            : { role: m.role, content };
+        });
+
+      const hadImages = attachments.length > 0;
+      const fullImages = attachments.map((a) => a.dataUrl);
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setAttachments([]);
+      setInspected(null);
+      setRuntimeErrors([]);
+
+      // FIRST build: quick pre-flight — would this app benefit from the
+      // Mini-CMS? If yes, show the setup card and defer the generation until
+      // the user decides (Mit CMS / Ohne CMS). Fails soft on any error.
+      if (messages.length === 0 && versions.length === 0) {
+        setCheckingCms(true);
+        const plan = await fetchCmsPlan(trimmed);
+        setCheckingCms(false);
+        if (plan?.cms && plan.keys.length > 0) {
+          pendingBuildRef.current = { text: trimmed, images: fullImages };
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "assistant", content: "", cmsPlan: plan },
+          ]);
+          return;
+        }
+      }
+
+      void runGeneration(convo, hadImages);
+    },
+    [messages, versions.length, streaming, checkingCms, attachments, inspected, runGeneration],
+  );
+
+  /** Decision on the CMS setup card: build with the confirmed keys or without. */
+  const confirmCms = useCallback(
+    (withCms: boolean, keys: CmsKeyPlan[], userKeys: CmsUserKeyPlan[]) => {
+      const pending = pendingBuildRef.current;
+      if (!pending || streaming) return;
+      pendingBuildRef.current = null;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.cmsPlan && !m.cmsResolved ? { ...m, cmsResolved: withCms ? "cms" : "plain" } : m,
+        ),
+      );
+      setCmsKeys(withCms ? keys : null);
+      const content = withCms
+        ? `${pending.text}\n${buildCmsPromptBlock(keys, userKeys)}`
+        : pending.text;
+      void runGeneration(
+        [
+          {
+            role: "user",
+            content: content.slice(0, 12000),
+            ...(pending.images.length > 0 ? { images: pending.images } : {}),
+          },
+        ],
+        pending.images.length > 0,
+      );
+    },
+    [streaming, runGeneration],
   );
 
   const stop = useCallback(() => {
@@ -674,8 +750,17 @@ export default function NewMiniAppBuilderPage() {
                   setActiveIdx(i);
                   setTab("preview");
                 }}
+                onCmsBuild={confirmCms}
               />
             ))}
+            {checkingCms ? (
+              <div className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  ⌁ Prüfe, ob ein Mini-CMS für diese App sinnvoll ist…
+                </p>
+              </div>
+            ) : null}
             {streaming ? (
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
@@ -806,6 +891,7 @@ export default function NewMiniAppBuilderPage() {
           idea={idea}
           wallet={wallet}
           preset={preset}
+          cmsSeed={cmsKeys}
           onPublished={setPublished}
         />
       ) : null}
@@ -820,13 +906,29 @@ function MessageBubble({
   activeIdx,
   restorable,
   onRestore,
+  onCmsBuild,
 }: {
   msg: ChatMsg;
   activeIdx: number;
   /** false when the version's HTML was trimmed from local storage. */
   restorable: boolean;
   onRestore: (i: number) => void;
+  onCmsBuild: (withCms: boolean, keys: CmsKeyPlan[], userKeys: CmsUserKeyPlan[]) => void;
 }) {
+  if (msg.cmsPlan) {
+    return (
+      <div className="flex items-start gap-2">
+        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <CmsSetupCard
+            plan={msg.cmsPlan}
+            resolved={msg.cmsResolved ?? null}
+            onBuild={onCmsBuild}
+          />
+        </div>
+      </div>
+    );
+  }
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">

@@ -41,7 +41,8 @@ const bodySchema = z
       .array(
         z.object({
           role: z.enum(["user", "assistant"]),
-          content: z.string().min(1).max(8000),
+          // 12k: the first user turn may carry the Mini-CMS setup block.
+          content: z.string().min(1).max(12_000),
           images: z.array(imageDataUrl).max(4).optional(),
         }),
       )

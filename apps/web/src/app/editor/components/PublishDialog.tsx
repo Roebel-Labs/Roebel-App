@@ -58,6 +58,7 @@ export function PublishDialog({
   idea,
   wallet,
   preset,
+  cmsSeed,
   onPublished,
 }: {
   open: boolean;
@@ -67,6 +68,9 @@ export function PublishDialog({
   wallet: string | undefined;
   /** Manifest of a re-opened app — used instead of an AI draft so re-publishing keeps the slug. */
   preset?: ManifestDraft | null;
+  /** Confirmed Mini-CMS keys — seeded as initial Inhalte after a FRESH publish
+   * (never on republish, so hand-edited content is never overwritten). */
+  cmsSeed?: import("../lib/cms").CmsKeyPlan[] | null;
   onPublished: (result: PublishSuccess) => void;
 }) {
   const [drafting, setDrafting] = useState(false);
@@ -138,6 +142,12 @@ export function PublishDialog({
         { html, manifest: draft },
         wallet,
       );
+      // Seed the confirmed Mini-CMS keys as initial Inhalte (fresh apps only —
+      // a republish must never clobber content the Verein already edited).
+      if (cmsSeed && cmsSeed.length > 0 && !result.republished && wallet) {
+        const { seedCmsContent } = await import("../lib/cms");
+        void seedCmsContent(result.slug, wallet, cmsSeed);
+      }
       setSuccess(result);
       onPublished(result);
     } catch (e) {
