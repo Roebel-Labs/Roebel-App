@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   ErrorState,
-  SkeletonGrid,
+  AppListSkeleton,
   StatusBadge,
   AppIcon,
   categoryLabel,
 } from "@/components/mini-apps/ui";
+import { BuildOptions } from "@/components/mini-apps/BuildOptions";
 import { useMiniAppApi } from "@/components/mini-apps/client";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
 import type { MiniAppRow } from "@/lib/miniapp/types";
@@ -87,7 +88,7 @@ export default function MyMiniApps() {
       ) : error ? (
         <ErrorState error={error} onRetry={refresh} />
       ) : loading && !data ? (
-        <SkeletonGrid count={3} />
+        <AppListSkeleton count={3} />
       ) : apps.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#00498B]/10">
@@ -147,6 +148,8 @@ export default function MyMiniApps() {
           ))}
         </div>
       )}
+
+      <BuildOptions />
     </div>
   );
 }

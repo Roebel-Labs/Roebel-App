@@ -7,20 +7,13 @@ import Link from "next/link";
 import { Blocks, Bot, FileCode2, Globe, Sparkles, TerminalSquare } from "lucide-react";
 import { DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
+import { LOVABLE_PROMPT } from "@/lib/miniapp/buildSnippets";
 
 export const metadata: Metadata = {
   title: "Mini Apps bauen — Röbel App",
   description:
     "Baue Mini-Apps für die Röbel App: mit dem KI-Baukasten, mit Claude Code, mit Lovable oder per MCP. SDK, Design-System und Veröffentlichung — alles offen.",
 };
-
-const LOVABLE_PROMPT = `Baue eine Mini-App für die Röbel App (Deutschland, deutsche UI-Texte).
-Lies zuerst die Plattform-Doku: ${DOCS_BASE_URL}/mini-apps/llms-full.txt
-Wichtig: npm-Paket @netizen-labs/miniapp-sdk installieren, sdk.actions.ready()
-nach dem ersten Rendern aufrufen, niemals Wallet-Adressen oder Krypto-Jargon
-zeigen (Währung heißt "Röbel-Münzen"). Außerhalb der Röbel App läuft das SDK
-automatisch im Mock-Modus — die Vorschau hier funktioniert also ganz normal.
-Die App: [BESCHREIBE DEINE IDEE]`;
 
 function Code({ children }: { children: string }) {
   return (

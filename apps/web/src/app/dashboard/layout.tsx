@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Loader2, Store, ArrowLeft } from "lucide-react";
+import { Store, ArrowLeft } from "lucide-react";
 import { AuthGuard } from "@/components/app/AuthGuard";
 import { AccountProvider, useAccount } from "@/lib/context/AccountContext";
 import { isOrgAccount } from "@/types/account";
@@ -26,27 +26,14 @@ export default function DashboardLayout({
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { activeAccount, ownedAccounts, isLoading, switchAccount } = useAccount();
   const pathname = usePathname();
-  // The Netizen Mini App builder is open to ANY signed-in user — external
-  // developers (e.g. from other towns) build mini apps here and don't have a
-  // Röbel organisation account. Exempt it from the org-account gate below;
-  // AuthGuard still requires a connected wallet.
+  // The Netizen Mini App builder is open to ANY signed-in user and is keyed by
+  // WALLET, not by the active account. It renders outside the org-account gate
+  // entirely: a Citizen (personal) account opens it directly, and the restored
+  // last-used org account never captures the route. Checked BEFORE the account
+  // loading state so the builder shell paints immediately (the pages bring
+  // their own skeletons). AuthGuard still requires a connected wallet.
   const isMiniAppBuilder = pathname?.startsWith("/dashboard/mini-apps") ?? false;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const isOrg = !!activeAccount && isOrgAccount(activeAccount);
-
-  // External developers (no org account) can still reach the mini-app builder —
-  // give them a minimal shell since there's no org sidebar to render. Org users
-  // fall through to the full dashboard shell below, so they keep the left sidebar
-  // on the Mini-Apps tab like every other dashboard page.
-  if (isMiniAppBuilder && !isOrg) {
+  if (isMiniAppBuilder) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <DashboardTopBar />
@@ -57,7 +44,35 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Inline check (not `!isOrg`) so TS narrows `activeAccount` to non-null for <OrgSidebar>.
+  if (isLoading) {
+    // Skeleton in the shape of the real dashboard (top bar + sidebar + content
+    // blocks) instead of a bare centered spinner.
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <DashboardTopBar />
+        <div className="flex-1 md:flex md:items-stretch" aria-busy>
+          <div className="hidden md:block w-60 shrink-0 border-r border-border p-4 space-y-2">
+            <div className="h-9 animate-pulse rounded-lg bg-muted/60" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-8 animate-pulse rounded-lg bg-muted/40" />
+            ))}
+          </div>
+          <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-6xl w-full space-y-4">
+            <div className="h-7 w-52 animate-pulse rounded bg-muted/60" />
+            <div className="h-4 w-full max-w-md animate-pulse rounded bg-muted/50" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-20 animate-pulse rounded-lg border border-border bg-card" />
+              ))}
+            </div>
+            <div className="h-64 animate-pulse rounded-lg border border-border bg-card" />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Inline check so TS narrows `activeAccount` to non-null for <OrgSidebar>.
   if (!activeAccount || !isOrgAccount(activeAccount)) {
     const ownedOrgs = ownedAccounts.filter((a) => a.account_type === "organisation");
     return (

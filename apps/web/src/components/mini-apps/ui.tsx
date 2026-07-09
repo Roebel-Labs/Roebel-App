@@ -19,6 +19,28 @@ export {
 } from "@/components/admin/muenzen/ui";
 
 /**
+ * Skeleton that mirrors the "Meine Apps" list rows exactly (icon, two text
+ * lines, status badge, chevron) — so loading doesn't jump when data arrives.
+ */
+export function AppListSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-2" aria-hidden>
+      {Array.from({ length: count }).map((_, i) => (
+        <Card key={i} className="flex items-center gap-3 p-3">
+          <div className="h-10 w-10 shrink-0 animate-pulse rounded-[12px] bg-muted/60" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-3.5 w-40 max-w-[55%] animate-pulse rounded bg-muted/60" />
+            <div className="h-3 w-56 max-w-[75%] animate-pulse rounded bg-muted/50" />
+          </div>
+          <div className="h-5 w-20 shrink-0 animate-pulse rounded-full bg-muted/50" />
+          <div className="h-4 w-4 shrink-0 animate-pulse rounded bg-muted/40" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Horizontal row of square (1:1) mini-app preview images. Scrolls sideways when it
  * overflows. Used on the mini-app detail pages (admin + builder). Renders nothing
  * when there are no images.
