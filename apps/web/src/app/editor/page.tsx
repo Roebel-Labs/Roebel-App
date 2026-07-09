@@ -6,6 +6,7 @@
 // (Vorschau) or shows the streaming document (Code). Publishing stores the app
 // in Supabase and serves it from /mini/<slug>.
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -683,7 +684,13 @@ export default function NewMiniAppBuilderPage() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <Image
+            src="/logo.png"
+            alt=""
+            width={20}
+            height={20}
+            className="h-5 w-5 shrink-0 object-contain"
+          />
           <span className="truncate font-heading text-sm font-bold text-foreground">
             KI-Baukasten
           </span>
@@ -1290,9 +1297,13 @@ function EmptyState({
       <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center p-4">
         <div className="w-full max-w-xl">
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-[14px] bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <Image
+              src="/logo.png"
+              alt="Röbel App"
+              width={44}
+              height={44}
+              className="mx-auto mb-4 h-11 w-11 object-contain"
+            />
             <h1 className="font-heading text-3xl font-bold text-foreground">
               Was baust du für Röbel?
             </h1>
