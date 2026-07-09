@@ -636,6 +636,52 @@ export default function NewMiniAppBuilderPage() {
     setPendingJob(null);
   }, []);
 
+  // One-click update for already-published apps: push the current code as a
+  // new version, reuse ALL existing metadata (manifest preset; icon/images
+  // stay). Metadata edits live in the dashboard. Falls back to the full
+  // publish dialog if anything is off.
+  const [updating, setUpdating] = useState(false);
+  const quickUpdate = useCallback(async () => {
+    if (!activeHtml || !preset || !wallet || updating) return;
+    setUpdating(true);
+    try {
+      const res = await fetch("/api/mini-apps/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-wallet-address": wallet },
+        body: JSON.stringify({ html: activeHtml, manifest: preset }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error ?? `Fehler ${res.status}`);
+      setPublished({
+        slug: json.slug,
+        homeUrl: json.homeUrl,
+        version: json.version,
+        republished: true,
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          content: `Update eingereicht — Version ${json.version} ist in der Prüfung. Name, Beschreibung und Bilder pflegst du jederzeit im Dashboard.`,
+        },
+      ]);
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          content: `Schnell-Update fehlgeschlagen (${e instanceof Error ? e.message : String(e)}) — prüfe die Angaben im Dialog.`,
+          error: true,
+        },
+      ]);
+      setPublishOpen(true);
+    } finally {
+      setUpdating(false);
+    }
+  }, [activeHtml, preset, wallet, updating]);
+
   // Switching versions invalidates preview-derived state.
   useEffect(() => {
     setRuntimeErrors([]);
@@ -731,11 +777,24 @@ export default function NewMiniAppBuilderPage() {
           ) : null}
           <Button
             size="sm"
-            onClick={() => setPublishOpen(true)}
-            disabled={!activeHtml || streaming}
+            onClick={() => (published && preset ? void quickUpdate() : setPublishOpen(true))}
+            disabled={!activeHtml || streaming || updating}
+            title={
+              published
+                ? "Neue Code-Version mit den bestehenden App-Daten einreichen — Metadaten pflegst du im Dashboard"
+                : undefined
+            }
           >
-            <Rocket className="mr-1.5 h-3.5 w-3.5" />
-            {published ? "Neue Version einreichen" : "Veröffentlichen"}
+            {updating ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Rocket className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {published
+              ? updating
+                ? "Wird eingereicht…"
+                : "Update veröffentlichen"
+              : "Veröffentlichen"}
           </Button>
         </div>
       </header>
@@ -899,7 +958,10 @@ export default function NewMiniAppBuilderPage() {
           wallet={wallet}
           preset={preset}
           cmsSeed={cmsKeys}
-          onPublished={setPublished}
+          onPublished={(result, manifest) => {
+            setPublished(result);
+            if (manifest) setPreset(manifest); // enables one-click updates
+          }}
         />
       ) : null}
     </div>

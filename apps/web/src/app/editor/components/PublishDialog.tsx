@@ -71,7 +71,9 @@ export function PublishDialog({
   /** Confirmed Mini-CMS keys — seeded as initial Inhalte after a FRESH publish
    * (never on republish, so hand-edited content is never overwritten). */
   cmsSeed?: import("../lib/cms").CmsKeyPlan[] | null;
-  onPublished: (result: PublishSuccess) => void;
+  /** Second arg = the manifest that was published — the editor keeps it as the
+   * preset so later one-click updates reuse it without this dialog. */
+  onPublished: (result: PublishSuccess, manifest?: ManifestDraft) => void;
 }) {
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
@@ -149,7 +151,7 @@ export function PublishDialog({
         void seedCmsContent(result.slug, wallet, cmsSeed);
       }
       setSuccess(result);
-      onPublished(result);
+      onPublished(result, draft);
     } catch (e) {
       const err = e as Error & { code?: string };
       setPublishError(

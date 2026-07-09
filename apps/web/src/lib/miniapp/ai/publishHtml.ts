@@ -228,5 +228,33 @@ export async function publishHtmlMiniApp(input: {
     return fail(slug, "db_error", `version_insert_failed: ${versionErr.message}`);
   }
 
+  // 5. Mini-CMS: register every sdk.data.get("<key>") the code references so
+  // the keys show up in the dashboard "Inhalte" section — also when the CMS
+  // was requested mid-chat ("richte ein CMS ein") instead of via the
+  // pre-flight card. Creates MISSING keys with value null (the app's built-in
+  // fallback shows until content is filled); never overwrites existing
+  // content. Best-effort — publishing must not fail on a missing data table.
+  await registerReferencedDataKeys(miniAppId, html);
+
   return { ok: true, slug, miniAppId, homeUrl, version, republished, status: "pending" };
+}
+
+async function registerReferencedDataKeys(miniAppId: string, html: string): Promise<void> {
+  try {
+    const keys = new Set<string>();
+    const re = /sdk\s*\.\s*data\s*\.\s*get\s*\(\s*["'`]([a-z0-9][a-z0-9-_.]{0,63})["'`]/g;
+    for (let m = re.exec(html); m && keys.size < 20; m = re.exec(html)) keys.add(m[1]);
+    if (keys.size === 0) return;
+    const { getData, setData } = await import("../dataStore");
+    for (const key of keys) {
+      try {
+        const existing = await getData(miniAppId, "app", key);
+        if (!existing) await setData(miniAppId, "app", key, null, null);
+      } catch {
+        return; // data table not applied yet / transient — skip silently
+      }
+    }
+  } catch (e) {
+    console.error("[mini-apps/publish] data-key registration skipped", e);
+  }
 }
