@@ -30,6 +30,11 @@ const nextConfig = {
     "@safe-global/api-kit",
     "@safe-global/safe-deployments",
     "@safe-global/safe-modules-deployments",
+    // MCP server stack (/api/[transport]) — bundling it tipped the build back
+    // into exit 137 (OOM) from ac1c425 on; server-only, load from node_modules.
+    "mcp-handler",
+    "@modelcontextprotocol/sdk",
+    "@vercel/functions",
   ],
   images: {
     remotePatterns: [
