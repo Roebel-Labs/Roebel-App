@@ -135,9 +135,9 @@ export function WasIstDasSection({ night }: SectionProps) {
 // `delay` staffelt den Einzug in Zeremonie-Reihenfolge: erst 2, dann 3,
 // Gold zuletzt.
 const PODIUM = [
-  { place: "2", amount: "50 €", bar: "h-32 sm:h-40", delay: 0 },
-  { place: "1", amount: "100 €", bar: "h-48 sm:h-60", delay: 350 },
-  { place: "3", amount: "50 €", bar: "h-24 sm:h-32", delay: 175 },
+  { place: "2", amount: "60 €", bar: "h-32 sm:h-40", delay: 0 },
+  { place: "1", amount: "125 €", bar: "h-48 sm:h-60", delay: 350 },
+  { place: "3", amount: "60 €", bar: "h-24 sm:h-32", delay: 175 },
 ] as const;
 
 export function PreiseSection({ night }: SectionProps) {
@@ -163,7 +163,7 @@ export function PreiseSection({ night }: SectionProps) {
           {PODIUM.map(({ place, amount, bar, delay }) => (
             <Reveal key={place} delay={delay} className="flex flex-1 flex-col items-center self-end">
               <p
-                className={`font-heading text-2xl font-black sm:text-3xl ${
+                className={`mb-2 font-heading text-2xl font-black sm:text-3xl ${
                   place === "1"
                     ? night
                       ? "text-[#FDC705]"
@@ -174,9 +174,6 @@ export function PreiseSection({ night }: SectionProps) {
                 }`}
               >
                 {amount}
-              </p>
-              <p className={`mb-2 mt-0.5 text-[11px] font-bold uppercase tracking-wider ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
-                pro Woche
               </p>
               {/* Balken wächst vom Boden, danach blendet die Platzierung ein */}
               <div className={`relative w-full ${bar}`}>
