@@ -241,7 +241,7 @@ export function PublishDialog({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="ma-slug" className="text-xs">
-                    Kurzname (Adresse: /mini/…)
+                    Kurzname (Adresse: &lt;kurzname&gt;.roebel.site)
                   </Label>
                   <Input
                     id="ma-slug"

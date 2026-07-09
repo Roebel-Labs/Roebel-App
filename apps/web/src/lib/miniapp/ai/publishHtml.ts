@@ -10,9 +10,14 @@
  * a new version row and puts the app back into review.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteDomainActiveForPublish, siteOriginForSlug } from "../siteDomain";
 import { manifestDraftSchema, safeIconDataUri, type ManifestDraft } from "./manifest";
 
-/** Slugs that must never be claimed (existing apps, template, route namespaces). */
+/**
+ * Slugs that must never be claimed (existing apps, template, route namespaces —
+ * and, since slugs are also *.roebel.site subdomains, well-known DNS/infra and
+ * product hostnames someone could squat for phishing).
+ */
 const RESERVED_SLUGS = new Set([
   "_template",
   "roebel-data",
@@ -22,6 +27,35 @@ const RESERVED_SLUGS = new Set([
   "admin",
   "mini",
   "app",
+  // DNS / mail / infra labels
+  "www",
+  "mail",
+  "smtp",
+  "imap",
+  "pop",
+  "mx",
+  "ns1",
+  "ns2",
+  "ftp",
+  "cdn",
+  "static",
+  "assets",
+  "vercel",
+  // product / trust surfaces
+  "editor",
+  "dashboard",
+  "store",
+  "docs",
+  "dev",
+  "blog",
+  "status",
+  "help",
+  "support",
+  "login",
+  "auth",
+  "sdk",
+  "mcp",
+  "roebel",
 ]);
 
 const HTML_MIN_BYTES = 500;
@@ -40,8 +74,16 @@ export interface PublishHtmlResult {
   errorCode?: "invalid_manifest" | "invalid_html" | "slug_reserved" | "slug_taken" | "db_error";
 }
 
-/** Where the app will be served. `origin` = the request origin; overridable for custom domains. */
+/**
+ * Where the app will be served. On production every app gets its own origin
+ * (https://<slug>.roebel.site); the wildcard host is rewritten back to
+ * /mini/[slug] in next.config.mjs. Local/preview publishes keep the request
+ * origin's /mini/ path so the URL stays openable there.
+ */
 export function homeUrlForSlug(slug: string, origin: string): string {
+  if (siteDomainActiveForPublish()) {
+    return siteOriginForSlug(slug);
+  }
   const base = process.env.MINI_APPS_WEB_ORIGIN || origin;
   return `${base.replace(/\/$/, "")}/mini/${slug}`;
 }

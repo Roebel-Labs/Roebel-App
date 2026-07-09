@@ -31,6 +31,7 @@ import {
 } from "@/lib/miniapp/data";
 import { deleteData, listData, setData } from "@/lib/miniapp/dataStore";
 import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
+import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
 import { validateManifest } from "@/lib/miniapp/manifest";
 import { SDK_ESM_URL } from "@/lib/miniapp/ai/htmlPrompt";
@@ -136,7 +137,7 @@ const handler = createMcpHandler(
             `1. get_docs {section:"all"} — read the full contract (SDK, screens, design, copy rules, boilerplate).\n` +
             `2. Build ONE self-contained HTML document following it.\n` +
             `3. validate_html {html} — fix everything it reports.\n` +
-            `4. publish_html_app {html, manifest} — creates/updates your app, serves it at ${DOCS_BASE_URL}/mini/<slug>, status "pending" until an admin approves.\n\n` +
+            `4. publish_html_app {html, manifest} — creates/updates your app, serves it at https://<slug>.${MINI_APPS_SITE_DOMAIN}, status "pending" until an admin approves.\n\n` +
             `Hosted apps (Lovable/Vercel/own server): build with @netizen-labs/miniapp-sdk from npm, allow iframe embedding (frame-ancestors *), then submit_external_app {manifest incl. homeUrl}.\n\n` +
             `Auth for publishing tools: Authorization: Bearer nz_<api-key> — create at ${DOCS_BASE_URL}/dashboard/mini-apps/api.`,
         ),
@@ -191,7 +192,7 @@ const handler = createMcpHandler(
 
     server.tool(
       "publish_html_app",
-      "Publish a single-file HTML mini app (new app, or a new version when the slug already belongs to you). The app is served from roebel.app/mini/<slug> and enters admin review (status pending).",
+      `Publish a single-file HTML mini app (new app, or a new version when the slug already belongs to you). The app is served from https://<slug>.${MINI_APPS_SITE_DOMAIN} and enters admin review (status pending).`,
       {
         html: z.string().min(500).max(900_000),
         manifest: manifestDraftSchema.describe(

@@ -323,7 +323,7 @@ function HtmlImport() {
         <Label>Selbstständige HTML-Datei</Label>
         <p className="mb-2 mt-0.5 text-xs text-muted-foreground">
           Eine einzelne .html-Datei — z. B. mit Claude Code gebaut (Anleitung im Tab „Claude Code
-          & MCP“). Sie wird wie eine KI-App gespeichert und unter roebel.app/mini/&lt;slug&gt;
+          & MCP“). Sie wird wie eine KI-App gespeichert und unter &lt;slug&gt;.roebel.site
           ausgeliefert.
         </p>
         <label

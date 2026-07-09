@@ -103,7 +103,7 @@ Röbel Mini-App als einzelne HTML-Datei: [DEINE IDEE]`}</Code>
               App importieren → HTML-Datei
             </Link>{" "}
             — oder direkt per MCP (unten). Gehostet wird sie von uns unter{" "}
-            <span className="font-mono text-xs">roebel.app/mini/&lt;slug&gt;</span>.
+            <span className="font-mono text-xs">&lt;slug&gt;.roebel.site</span>.
           </p>
         </Door>
 

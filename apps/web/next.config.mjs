@@ -1,3 +1,11 @@
+// Every published mini app is served on its own subdomain of this apex domain
+// (https://<slug>.roebel.site — the chatgpt.site / lovable.site pattern). The
+// domain + wildcard *.roebel.site are attached to this Vercel project. Keep the
+// default in sync with src/lib/miniapp/siteDomain.ts (this file can't import TS).
+const MINI_APPS_SITE_DOMAIN = process.env.MINI_APPS_SITE_DOMAIN || "roebel.site";
+const MINI_APPS_SITE_APEX_RE = MINI_APPS_SITE_DOMAIN.replace(/\./g, "\\.");
+const MINI_APPS_SITE_HOST_RE = `(?<slug>[a-z0-9-]+)\\.${MINI_APPS_SITE_APEX_RE}`;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // The Vercel build container is 4 cores / 8GB. Type-checking + ESLint over the
@@ -58,6 +66,32 @@ const nextConfig = {
       };
     }
     return config;
+  },
+  async rewrites() {
+    return {
+      // beforeFiles: on <slug>.roebel.site EVERY path serves the app's HTML
+      // (single-file apps may pushState to deep paths; a reload must not fall
+      // through to the main site's pages). Must run before the filesystem, or
+      // "/" would be served by the roebel.app homepage.
+      beforeFiles: [
+        {
+          source: "/:path*",
+          has: [{ type: "host", value: MINI_APPS_SITE_HOST_RE }],
+          destination: "/mini/:slug",
+        },
+      ],
+    };
+  },
+  async redirects() {
+    return [
+      // Bare roebel.site → the store. Subdomains never match (host is exact).
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: MINI_APPS_SITE_APEX_RE }],
+        destination: "https://www.roebel.app/mini-apps",
+        permanent: false,
+      },
+    ];
   },
   // Headers for Universal Links (iOS) and App Links (Android)
   async headers() {

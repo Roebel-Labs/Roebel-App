@@ -21,8 +21,12 @@ import {
   SDK_REFERENCE,
   SDK_VERSION,
 } from "./ai/htmlPrompt";
+import { MINI_APPS_SITE_DOMAIN } from "./siteDomain";
 
 export const DOCS_BASE_URL = "https://www.roebel.app";
+
+/** Where a published single-file app is served (its own dedicated origin). */
+const SERVED_AT = `https://<slug>.${MINI_APPS_SITE_DOMAIN}`;
 
 const INTRO = `# Röbel Mini Apps — Developer Guide (Netizen platform)
 
@@ -43,7 +47,7 @@ Hard rules (apps violating these fail review):
 
 A) **AI editor (KI-Baukasten)** — ${DOCS_BASE_URL}/editor
    Chat (with image upload: mockups/screenshots/logos) → single-file HTML app →
-   one-click publish into admin review. Served from ${DOCS_BASE_URL}/mini/<slug>.
+   one-click publish into admin review. Served from ${SERVED_AT}.
 
 B) **Single-file HTML with Claude Code (or any agent)**
    Produce ONE self-contained HTML document following the boilerplate + rules
@@ -104,7 +108,7 @@ const PUBLISH_API = `## Publishing API (what the dashboard/MCP call for you)
   headers: x-wallet-address: 0x… (or use the MCP with an API key)
   body: { html: "<!doctype html>…", manifest: { name, slug, description,
           category, tags[], permissions[], primaryColor, iconSvg? } }
-  → stores the HTML, serves it at ${DOCS_BASE_URL}/mini/<slug>, creates the
+  → stores the HTML, serves it at ${SERVED_AT}, creates the
     registry row (status "pending"). Re-publishing the same slug (same
     developer) adds a new version.
 - POST ${DOCS_BASE_URL}/api/mini-apps/submit — hosted apps (path C)

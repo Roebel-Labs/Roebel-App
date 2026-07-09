@@ -3,7 +3,9 @@
  *
  * This is the `home_url` target for apps published by the AI builder: the
  * newest mini_app_versions.html for the slug, returned as text/html. Loaded by
- * the Expo WebView host, the web Playground, and the builder preview.
+ * the Expo WebView host, the web Playground, and the builder preview. On
+ * production each app lives on its own origin — https://<slug>.roebel.site is
+ * rewritten to this route by next.config.mjs (wildcard domain on Vercel).
  *
  * Review gating happens at the store/list layer (only 'live' apps are listed);
  * this route also serves pending/approved apps so reviewers and the developer
@@ -11,6 +13,7 @@
  * kill-switch for already-distributed home_urls.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 
 export const runtime = "nodejs";
 
@@ -27,13 +30,20 @@ function htmlMessage(status: number, title: string, body: string): Response {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
   if (!SLUG_RE.test(slug)) {
     return htmlMessage(404, "Mini-App nicht gefunden", "Diese Adresse gibt es nicht.");
   }
+
+  // Served on the app's OWN dedicated origin (<slug>.roebel.site, rewritten
+  // here by next.config.mjs)? The host slug must equal the path slug — a
+  // mismatch (e.g. other-app.roebel.site/mini/<slug>) must NOT run this app's
+  // HTML on another app's origin, so it keeps the sandbox below.
+  const requestHost = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const servedOnOwnOrigin = requestHost === `${slug}.${MINI_APPS_SITE_DOMAIN}`;
 
   const supabase = createAdminClient();
   const { data: app, error } = await supabase
@@ -72,12 +82,18 @@ export async function GET(
       // Short shared cache so review-state flips (kill-switch) take effect quickly.
       "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
       "x-robots-tag": "noindex",
-      // CRITICAL: the app is untrusted model/developer HTML served from the SAME
-      // origin as the dashboard. `sandbox` forces an opaque origin even when the
-      // page is opened top-level — no cookies, no same-origin /api access, so a
-      // malicious app can't ride an admin session. The bridge (postMessage /
-      // ReactNativeWebView) and CDN imports keep working; localStorage degrades.
-      "content-security-policy": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+      // CRITICAL: the app is untrusted model/developer HTML. On its own
+      // subdomain (<slug>.roebel.site) the dedicated origin IS the isolation —
+      // no roebel.app cookies/API in reach, and the app gets real
+      // localStorage. On the legacy same-origin /mini/ path, `sandbox` forces
+      // an opaque origin so a malicious app can't ride an admin session. The
+      // bridge (postMessage / ReactNativeWebView) works in both modes.
+      ...(servedOnOwnOrigin
+        ? {}
+        : {
+            "content-security-policy":
+              "sandbox allow-scripts allow-forms allow-popups allow-modals",
+          }),
     },
   });
 }
