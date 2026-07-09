@@ -11,6 +11,7 @@ import {
   MiniAppError,
   type AnalyticsRange,
   type AnalyticsSummary,
+  type AppRankings,
   type DeveloperRow,
   type GrantRewardInput,
   type GrantRewardOutcome,
@@ -641,12 +642,17 @@ export async function queryAnalytics(
   const [{ data: events, error: evErr }, { data: rewards }] = await Promise.all([evQ, rwQ]);
   if (evErr) throw new MiniAppError("internal", evErr.message);
 
-  const evs = (events as Pick<MiniAppEventRow, "wallet" | "event" | "created_at">[]) ?? [];
+  const evs =
+    (events as Pick<
+      MiniAppEventRow,
+      "wallet" | "event" | "created_at" | "session_id"
+    >[]) ?? [];
   const rws =
     (rewards as Pick<MiniAppRewardRow, "amount" | "status" | "created_at">[]) ?? [];
 
-  // Opens = app_open events; unique wallets across all events.
+  // Opens = app_open events; unique wallets + unique sessions across all events.
   const wallets = new Set<string>();
+  const sessionIds = new Set<string>();
   let opens = 0;
   const eventCounts = new Map<string, number>();
   const dailyOpens = new Map<string, number>();
@@ -654,6 +660,7 @@ export async function queryAnalytics(
 
   for (const e of evs) {
     if (e.wallet) wallets.add(e.wallet);
+    if (e.session_id) sessionIds.add(e.session_id);
     eventCounts.set(e.event, (eventCounts.get(e.event) ?? 0) + 1);
     const day = e.created_at.slice(0, 10);
     if (e.event === "app_open") {
@@ -725,6 +732,7 @@ export async function queryAnalytics(
     opens,
     uniqueWallets: wallets.size,
     events: evs.length,
+    sessions: sessionIds.size,
     returningWallets: returning,
     retentionRate,
     rewardsGranted: granted.length,
@@ -735,4 +743,69 @@ export async function queryAnalytics(
     topEvents,
     generatedAt: now,
   };
+}
+
+// ── Rankings ────────────────────────────────────────────────────────────────
+
+/**
+ * Public "Beliebte Apps" ranking: every published app ranked by unique active
+ * wallets (fallback: opens) over the trailing window. Powers
+ * /dashboard/mini-apps/rankings — no auth, no wallets exposed.
+ */
+export async function queryAppRankings(windowDays = 7): Promise<AppRankings> {
+  const supabase = db();
+  const now = Date.now();
+  const sinceIso = new Date(now - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: apps, error: appErr }, { data: events, error: evErr }] =
+    await Promise.all([
+      supabase
+        .from("mini_apps")
+        .select("id, name, slug, icon_url, primary_color, status")
+        .eq("status", "published"),
+      supabase
+        .from("mini_app_events")
+        .select("mini_app_id, wallet, session_id, event, created_at")
+        .gte("created_at", sinceIso)
+        .limit(50000),
+    ]);
+  if (appErr) throw new MiniAppError("internal", appErr.message);
+  if (evErr) throw new MiniAppError("internal", evErr.message);
+
+  const byApp = new Map<string, { wallets: Set<string>; sessions: Set<string>; opens: number }>();
+  for (const e of (events ?? []) as Pick<
+    MiniAppEventRow,
+    "mini_app_id" | "wallet" | "session_id" | "event"
+  >[]) {
+    if (!e.mini_app_id) continue;
+    const agg =
+      byApp.get(e.mini_app_id) ??
+      { wallets: new Set<string>(), sessions: new Set<string>(), opens: 0 };
+    if (e.wallet) agg.wallets.add(e.wallet);
+    if (e.session_id) agg.sessions.add(e.session_id);
+    if (e.event === "app_open") agg.opens += 1;
+    byApp.set(e.mini_app_id, agg);
+  }
+
+  const rows = ((apps ?? []) as Pick<
+    MiniAppRow,
+    "id" | "name" | "slug" | "icon_url" | "primary_color"
+  >[])
+    .map((a) => {
+      const agg = byApp.get(a.id);
+      // Anonymous sessions still count as usage when no wallet was connected.
+      const users = agg ? Math.max(agg.wallets.size, Math.min(agg.sessions.size, 999999)) : 0;
+      return {
+        id: a.id,
+        name: a.name,
+        slug: a.slug,
+        icon_url: a.icon_url,
+        primary_color: a.primary_color,
+        users,
+        opens: agg?.opens ?? 0,
+      };
+    })
+    .sort((x, y) => y.users - x.users || y.opens - x.opens || x.name.localeCompare(y.name));
+
+  return { apps: rows, windowDays, generatedAt: now };
 }

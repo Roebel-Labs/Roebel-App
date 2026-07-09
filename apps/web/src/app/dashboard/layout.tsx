@@ -14,6 +14,13 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  // The mini-app builder area owns its ENTIRE experience: its own login screen
+  // (wallet-only, no account context), its own top bar, dialogs and pages.
+  // Bypass AuthGuard + AccountProvider + the org shell completely.
+  if (pathname?.startsWith("/dashboard/mini-apps")) {
+    return <>{children}</>;
+  }
   return (
     <AuthGuard>
       <AccountProvider>
@@ -25,24 +32,6 @@ export default function DashboardLayout({
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { activeAccount, ownedAccounts, isLoading, switchAccount } = useAccount();
-  const pathname = usePathname();
-  // The Netizen Mini App builder is open to ANY signed-in user and is keyed by
-  // WALLET, not by the active account. It renders outside the org-account gate
-  // entirely: a Citizen (personal) account opens it directly, and the restored
-  // last-used org account never captures the route. Checked BEFORE the account
-  // loading state so the builder shell paints immediately (the pages bring
-  // their own skeletons). AuthGuard still requires a connected wallet.
-  const isMiniAppBuilder = pathname?.startsWith("/dashboard/mini-apps") ?? false;
-  if (isMiniAppBuilder) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <DashboardTopBar />
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 max-w-6xl w-full mx-auto">
-          {children}
-        </main>
-      </div>
-    );
-  }
 
   if (isLoading) {
     // Skeleton in the shape of the real dashboard (top bar + sidebar + content

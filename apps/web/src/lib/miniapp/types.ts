@@ -149,6 +149,8 @@ export interface AnalyticsSummary {
   opens: number;
   uniqueWallets: number;
   events: number;
+  /** unique SDK sessions in the range (distinct session_id) */
+  sessions: number;
   /** wallets active in the LATER half of the range who were also active in the earlier half */
   returningWallets: number;
   retentionRate: number; // 0..1
@@ -158,6 +160,26 @@ export interface AnalyticsSummary {
   spent: number | null;
   series: AnalyticsSeriesPoint[];
   topEvents: { event: string; count: number }[];
+  generatedAt: number;
+}
+
+// ── Rankings ────────────────────────────────────────────────────────────────
+
+/** One row of the public "Beliebte Apps" ranking (7-day active users). */
+export interface AppRankingRow {
+  id: string;
+  name: string;
+  slug: string;
+  icon_url: string | null;
+  primary_color: string | null;
+  /** unique wallets with events in the window */
+  users: number;
+  opens: number;
+}
+
+export interface AppRankings {
+  apps: AppRankingRow[];
+  windowDays: number;
   generatedAt: number;
 }
 

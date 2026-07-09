@@ -124,9 +124,9 @@ const OPTIONS = [
   },
 ] as const;
 
-export function BuildOptions() {
+export function BuildOptions({ className = "mt-10" }: { className?: string }) {
   return (
-    <section className="mt-10">
+    <section className={className}>
       <h2 className="text-base font-semibold">Mit deinen eigenen Tools bauen</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Kein Zwang zum KI-Baukasten — drei Wege, von außen zu bauen. Snippet
