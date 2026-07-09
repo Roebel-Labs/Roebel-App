@@ -9,6 +9,7 @@ const HIDDEN_FOOTER_ROUTES = [
   "/admin",
   "/app",
   "/proposals/timeline",
+  "/editor",
 ];
 
 export function ConditionalFooter() {
