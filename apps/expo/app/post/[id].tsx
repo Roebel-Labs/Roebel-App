@@ -37,6 +37,7 @@ import {
   DuplicateReportError,
 } from '@/lib/supabase-posts';
 import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
+import { trackPostViews, setViewTrackerWallet } from '@/lib/viewTracker';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import { Ionicons } from '@expo/vector-icons';
 import LinkifiedText from '@/components/feed/LinkifiedText';
@@ -54,6 +55,7 @@ import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
+import PostViewersDrawer from '@/components/feed/PostViewersDrawer';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentScrim from '@/components/feed/CommentScrim';
@@ -97,6 +99,7 @@ export default function PostDetailScreen() {
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [commentFocused, setCommentFocused] = useState(false);
   const [likers, setLikers] = useState<PostLiker[]>([]);
+  const [viewersDrawerVisible, setViewersDrawerVisible] = useState(false);
 
   const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
 
@@ -121,6 +124,10 @@ export default function PostDetailScreen() {
 
     if (postData) {
       setPost(postData);
+
+      // Opening the detail page counts as an impression too.
+      setViewTrackerWallet(walletAddress);
+      trackPostViews([postData.id]);
 
       // Init like state
       if (walletAddress) {
@@ -564,6 +571,8 @@ export default function PostDetailScreen() {
         }}
         onComment={() => {}}
         onShare={() => sharePost(post.id, post.content)}
+        viewsCount={post.views_count ?? 0}
+        onViewsPress={isOwnPost ? () => setViewersDrawerVisible(true) : undefined}
       />
 
       {/* Who liked this — stacked avatars, tappable for the full list */}
@@ -718,6 +727,12 @@ export default function PostDetailScreen() {
         visible={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
         onReport={handleSubmitReport}
+      />
+
+      <PostViewersDrawer
+        visible={viewersDrawerVisible}
+        onClose={() => setViewersDrawerVisible(false)}
+        postId={post.id}
       />
 
       <ConfirmationDrawer

@@ -17,6 +17,7 @@ import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from './StadtkasseSnapshotCard';
 import PostActions from './PostActions';
+import PostViewersDrawer from './PostViewersDrawer';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 
@@ -49,6 +50,10 @@ export default function FeedPostCard({
   const router = useRouter();
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [viewersVisible, setViewersVisible] = useState(false);
+
+  const isOwnPost =
+    !!walletAddress && post.wallet_address?.toLowerCase() === walletAddress.toLowerCase();
 
   const handlePress = () => {
     router.push(`/post/${post.id}` as any);
@@ -170,6 +175,14 @@ export default function FeedPostCard({
         onComment={handleComment}
         onShare={onShare}
         iconOnly={isMarketplacePost}
+        viewsCount={post.views_count ?? 0}
+        onViewsPress={isOwnPost ? () => setViewersVisible(true) : undefined}
+      />
+
+      <PostViewersDrawer
+        visible={viewersVisible}
+        onClose={() => setViewersVisible(false)}
+        postId={post.id}
       />
 
       <ImageZoomModal

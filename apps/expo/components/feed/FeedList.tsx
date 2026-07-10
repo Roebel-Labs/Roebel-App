@@ -16,6 +16,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useFeed } from '@/hooks/useFeed';
 import { usePostActions } from '@/hooks/usePostActions';
 import { getUserLikedPostIds } from '@/lib/supabase-posts';
+import { trackPostViews, setViewTrackerWallet } from '@/lib/viewTracker';
 import type {
   FeedItem,
   FeedType,
@@ -150,6 +151,10 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
+    setViewTrackerWallet(walletAddress);
+  }, [walletAddress]);
+
+  React.useEffect(() => {
     if (!walletAddress || items.length === 0) return;
 
     const postIds = items
@@ -176,6 +181,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const nextVideoIds = new Set<string>();
+      const impressionIds: string[] = [];
       viewableItems.forEach((item) => {
         if (item.item?.type === 'sponsored') {
           const dealId = item.item.data?.id;
@@ -188,8 +194,12 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           if (post?.video_url) {
             nextVideoIds.add(post.id);
           }
+          // Impressions count the ORIGINAL on repost rows.
+          const target = post?.post_type === 'repost' && post.quoted_post ? post.quoted_post : post;
+          if (target?.id) impressionIds.push(target.id);
         }
       });
+      if (impressionIds.length > 0) trackPostViews(impressionIds);
       setVisibleVideoIds((prev) => {
         if (prev.size === nextVideoIds.size) {
           let same = true;
