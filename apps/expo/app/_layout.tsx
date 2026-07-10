@@ -24,6 +24,7 @@ import { VerificationProvider } from '@/context/VerificationContext';
 import { UserProvider } from '@/context/UserContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { MessagingProvider } from '@/context/MessagingContext';
+import { XmtpProvider } from '@/context/XmtpContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { MeckyProvider } from '@/context/MeckyContext';
 import { RewardsProvider } from '@/context/RewardsContext';
@@ -307,6 +308,7 @@ function Layout() {
                     <VerificationProvider>
                       <UserProvider>
                       <AccountProvider>
+                      <XmtpProvider>
                       <MessagingProvider>
                       <NotificationsProvider>
                       <RewardsProvider>
@@ -341,6 +343,7 @@ function Layout() {
                       </RewardsProvider>
                       </NotificationsProvider>
                       </MessagingProvider>
+                      </XmtpProvider>
                       </AccountProvider>
                       </UserProvider>
                     </VerificationProvider>
