@@ -72,7 +72,7 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 
 ### Backend
 - Supabase (Postgres, Auth, Realtime, Edge Functions)
-- Direct messaging via Supabase Realtime (replaced XMTP)
+- Direct messaging: dual-rail since 2026-07-10 — XMTP v3/MLS (E2E, personal↔personal, in-chat Röbel-Münzen payments / reactions / read receipts / blocking; identity = thirdweb Gnosis smart account, SCW/ERC-1271) + Supabase Realtime (conversation registry, org/support chats, fallback rail). READ `docs/XMTP_INTEGRATION_STATE.md` before touching DMs. Needs the ≥2026-07-10 EAS build; remote kill switch `app_settings.xmtp_dms_enabled`.
 
 ## Smart Contracts
 
