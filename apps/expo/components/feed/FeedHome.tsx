@@ -28,7 +28,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
 import { deletePost, pinPost, DuplicateReportError } from '@/lib/supabase-posts';
-import { isPostPinned } from '@/lib/utils/pin';
+import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
@@ -420,7 +420,7 @@ export default function FeedHome() {
       refreshAll();
     } catch (e) {
       console.error('[FeedHome.handleTogglePin]', e);
-      showSnackbar({ message: 'Anheften nicht möglich' });
+      showSnackbar({ message: pinErrorMessage(e) });
     }
   };
 

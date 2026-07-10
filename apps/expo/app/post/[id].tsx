@@ -36,7 +36,7 @@ import {
   type PostLiker,
   DuplicateReportError,
 } from '@/lib/supabase-posts';
-import { isPostPinned } from '@/lib/utils/pin';
+import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import { Ionicons } from '@expo/vector-icons';
 import LinkifiedText from '@/components/feed/LinkifiedText';
@@ -257,7 +257,7 @@ export default function PostDetailScreen() {
       });
     } catch (e) {
       console.error('[post/[id].handleTogglePin]', e);
-      showSnackbar({ message: 'Anheften nicht möglich' });
+      showSnackbar({ message: pinErrorMessage(e) });
     }
   };
 

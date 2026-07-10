@@ -44,7 +44,14 @@ BEGIN
     RAISE EXCEPTION 'NOT_OWNER' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT COALESCE(u.is_verified_citizen, false)
+  -- Verified-Citizen check. The client treats a user as a citizen when they
+  -- hold the CitizenNFT on-chain OR users.is_verified_citizen is set, and it
+  -- upgrades users.tier to 'citizen' the moment the NFT is detected. The
+  -- is_verified_citizen column can lag — it is only written when tier *flips*
+  -- to 'citizen', so a citizen whose tier was already 'citizen' never gets it
+  -- backfilled. Accept tier = 'citizen' as the persisted, DB-checkable proxy
+  -- for on-chain citizenship, otherwise real citizens are wrongly rejected.
+  SELECT (COALESCE(u.is_verified_citizen, false) OR u.tier = 'citizen')
     INTO v_citizen
     FROM public.users u
    WHERE lower(u.wallet_address) = lower(p_wallet);
