@@ -189,3 +189,17 @@ export async function updateUserOnboarding(
 
   return data as UserRecord;
 }
+
+/**
+ * Marks this wallet's user row as XMTP-reachable. Other clients read
+ * `xmtp_registered_at` as the rail-selection signal (see lib/xmtp/transport.ts):
+ * a peer without it keeps receiving DMs over the Supabase rail even if their
+ * wallet is XMTP-registered via a third-party app.
+ */
+export async function markUserXmtpRegistered(walletAddress: string): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update({ xmtp_registered_at: new Date().toISOString() } as any)
+    .eq('wallet_address', walletAddress.toLowerCase());
+  if (error) console.error('markUserXmtpRegistered error:', error);
+}
