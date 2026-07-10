@@ -36,7 +36,8 @@ interface RoebelTalerContextValue {
   sending: boolean;
   dailyMint: () => Promise<void>;
   onboard: () => Promise<void>;
-  send: (to: string, amount: bigint) => Promise<void>;
+  /** Resolves with the transaction hash (used by in-chat payment receipts). */
+  send: (to: string, amount: bigint) => Promise<string>;
   refresh: () => Promise<void>;
   enqueueSettlement: (job: SettlementJob) => void;
   account: ReturnType<typeof useGnosisWallet>['gnosisAccount'];
@@ -149,11 +150,12 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
     setSending(true);
     try {
-      await sendTransaction({
+      const result = await sendTransaction({
         account: gnosisAccount,
         transaction: prepareSendRoebelTaler(gnosisAccount.address, to, amount),
       });
       await refresh();
+      return result.transactionHash;
     } finally {
       setSending(false);
     }

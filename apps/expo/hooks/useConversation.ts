@@ -1,18 +1,45 @@
 /**
- * Hook for a single Supabase conversation.
+ * Hook for a single conversation — dual-rail.
+ *
  * Account-keyed: identity is the user's currently active account, not the
  * underlying wallet — so an owned org can hold its own chats and replies.
+ *
+ * Rails: threads always RENDER the union of the legacy Supabase rows and the
+ * XMTP DM for this account pair; SENDS pick exactly one rail. XMTP is used
+ * for personal↔personal chats whose peer has registered (E2E, payments,
+ * reactions, read receipts, blocking); everything else stays on Supabase.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Dm } from '@xmtp/react-native-sdk';
 import { supabase } from '@/lib/supabase';
 import { useAccount } from '@/context/AccountContext';
+import { useXmtp } from '@/context/XmtpContext';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import {
   fetchMessages,
   sendMessage as sendMsg,
   hydrateMessageSticker,
+  safeDisplayName,
   type Message,
 } from '@/lib/supabase-messages';
+import {
+  canMessageCached,
+  fetchXmtpThread,
+  getDmForWallet,
+  getXmtpConsentState,
+  blockXmtpConversation,
+  unblockXmtpConversation,
+  isXmtpRailEligible,
+  sendXmtpReaction,
+  sendXmtpReadReceipt,
+  sendXmtpSticker,
+  sendXmtpText,
+  sendXmtpTransactionReference,
+  syncDm,
+} from '@/lib/xmtp/transport';
+import { CONTENT_TYPE_READ_RECEIPT } from '@/lib/xmtp/codecs';
+import { notifyDmPush, pushBodyForMessage } from '@/lib/xmtp/push';
 import type { OrgSubType } from '@/lib/types';
 
 export type PeerAccount = {
@@ -24,39 +51,65 @@ export type PeerAccount = {
   avatarUrl: string | null;
   equippedFrameUrl: string | null;
   isVerified: boolean;
+  /** Lowercased owner wallet (personal accounts; null for orgs). */
+  ownerWallet: string | null;
+  xmtpRegisteredAt: string | null;
 };
+
+export type ConversationRail = 'supabase' | 'xmtp';
 
 export function useConversation(conversationId: string) {
   const { activeAccount } = useAccount();
   const myAccountId = activeAccount?.id ?? null;
+  const myAccountType = (activeAccount as any)?.account_type as string | undefined;
+  const myAccountName = (activeAccount as any)?.name as string | undefined;
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { handle: xmtp, ready: xmtpReady, subscribeMessages } = useXmtp();
+  const { send: sendTaler } = useRoebelTaler();
+
+  const [supabaseMessages, setSupabaseMessages] = useState<Message[]>([]);
+  const [xmtpMessages, setXmtpMessages] = useState<Message[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [isLoadingPeer, setIsLoadingPeer] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [peerAccount, setPeerAccount] = useState<PeerAccount | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [rail, setRail] = useState<ConversationRail>('supabase');
+  const [peerReadAt, setPeerReadAt] = useState<string | null>(null);
+  const [consent, setConsent] = useState<'allowed' | 'denied' | 'unknown'>('allowed');
 
-  // Two parallel chains: messages and peer hydration. Either can complete
-  // first — the chat screen shows real bubbles as soon as messages land and
-  // a header skeleton until peer data lands. Cuts perceived load time roughly
-  // in half compared to the previous sequential chain.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const dmRef = useRef<Dm<any> | null>(null);
+  const xmtpOldestNsRef = useRef<number | null>(null);
+  const lastReceiptNsRef = useRef<number>(0);
+
+  const threadIds = useMemo(
+    () =>
+      myAccountId && peerAccount
+        ? { conversationId, myAccountId, peerAccountId: peerAccount.id }
+        : null,
+    [conversationId, myAccountId, peerAccount]
+  );
+
+  // ── Load: Supabase messages + peer hydration (parallel chains) ──
   useEffect(() => {
     if (!conversationId || !myAccountId) return;
     let cancelled = false;
 
-    // Reset per-conversation state so stale data from the previous chat
-    // doesn't flash in.
-    setMessages([]);
+    setSupabaseMessages([]);
+    setXmtpMessages([]);
     setPeerAccount(null);
+    setRail('supabase');
+    setPeerReadAt(null);
+    dmRef.current = null;
+    xmtpOldestNsRef.current = null;
     setIsLoadingMessages(true);
     setIsLoadingPeer(true);
 
-    // Chain A — messages
+    // Chain A — Supabase messages
     (async () => {
       try {
         const msgs = await fetchMessages(conversationId, 50);
-        if (!cancelled) setMessages(msgs);
+        if (!cancelled) setSupabaseMessages(msgs);
       } catch (err) {
         console.error('Failed to load messages:', err);
       } finally {
@@ -64,7 +117,7 @@ export function useConversation(conversationId: string) {
       }
     })();
 
-    // Chain B — peer hydration
+    // Chain B — peer hydration (incl. XMTP rail fields)
     (async () => {
       try {
         const { data: convoRow } = await supabase
@@ -85,12 +138,10 @@ export function useConversation(conversationId: string) {
 
         if (!peerId || cancelled) return;
 
-        // Fetch the peer account row and (for personal peers) the owner's
-        // users row in a single joined query. Cuts a round trip.
         const { data: acc } = await supabase
           .from('accounts' as any)
           .select(
-            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, profile_picture_url, equipped_frame_asset_url))'
+            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, profile_picture_url, equipped_frame_asset_url, xmtp_registered_at))'
           )
           .eq('id', peerId)
           .single();
@@ -112,13 +163,15 @@ export function useConversation(conversationId: string) {
           subType: row.sub_type,
           name: row.name,
           username: isPersonal ? ownerUser?.username ?? null : null,
-          // Personal peers: photo lives on the owner's `users` row, not the
-          // (stale) accounts.avatar_url. Orgs use the account avatar.
           avatarUrl: isPersonal
             ? ownerUser?.profile_picture_url ?? row.avatar_url
             : row.avatar_url,
           equippedFrameUrl: isPersonal ? ownerUser?.equipped_frame_asset_url ?? null : null,
           isVerified: row.is_verified,
+          ownerWallet: isPersonal && owner?.wallet_address
+            ? String(owner.wallet_address).toLowerCase()
+            : null,
+          xmtpRegisteredAt: isPersonal ? ownerUser?.xmtp_registered_at ?? null : null,
         });
       } catch (err) {
         console.error('Failed to hydrate peer:', err);
@@ -132,7 +185,53 @@ export function useConversation(conversationId: string) {
     };
   }, [conversationId, myAccountId]);
 
-  // Realtime subscription for this conversation
+  // ── Rail decision + XMTP thread load ─────────────────────────────
+  useEffect(() => {
+    if (!xmtp || !xmtpReady || !peerAccount || !threadIds) return;
+    if (!isXmtpRailEligible(peerAccount, myAccountType)) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) return;
+        const dm = await getDmForWallet(xmtp, peerAccount.ownerWallet!);
+        if (cancelled) return;
+        dmRef.current = dm;
+        setRail('xmtp');
+        getXmtpConsentState(dm).then((state) => {
+          if (!cancelled) setConsent(state);
+        });
+
+        await syncDm(dm);
+        const page = await fetchXmtpThread(xmtp, dm, threadIds, { limit: 50 });
+        if (cancelled) return;
+        setXmtpMessages(page.messages);
+        xmtpOldestNsRef.current = page.oldestNs;
+        if (page.peerReadAtNs) {
+          setPeerReadAt(new Date(page.peerReadAtNs / 1e6).toISOString());
+        }
+
+        // Tell the peer we've seen the thread (their "Gelesen" indicator).
+        const newestPeerNs = page.messages.length
+          ? Date.parse(page.messages[0].created_at) * 1e6
+          : 0;
+        if (newestPeerNs > lastReceiptNsRef.current) {
+          lastReceiptNsRef.current = newestPeerNs;
+          sendXmtpReadReceipt(dm);
+        }
+      } catch (err) {
+        console.warn('[xmtp] thread load failed — staying on Supabase rail', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xmtp, xmtpReady, peerAccount, threadIds, myAccountType]);
+
+  // ── Live updates ─────────────────────────────────────────────────
+  // Supabase realtime (unchanged behavior)
   useEffect(() => {
     if (!conversationId) return;
 
@@ -149,7 +248,7 @@ export function useConversation(conversationId: string) {
         async (payload) => {
           const newMsg = payload.new as Message;
           const enriched = await hydrateMessageSticker(newMsg);
-          setMessages((prev) => {
+          setSupabaseMessages((prev) => {
             if (prev.some((m) => m.id === enriched.id)) return prev;
             return [enriched, ...prev];
           });
@@ -165,34 +264,203 @@ export function useConversation(conversationId: string) {
     };
   }, [conversationId]);
 
+  // XMTP stream → refresh this thread when a message for it arrives
+  const refreshXmtpThread = useCallback(async () => {
+    const dm = dmRef.current;
+    if (!xmtp || !dm || !threadIds) return;
+    try {
+      const page = await fetchXmtpThread(xmtp, dm, threadIds, { limit: 50 });
+      setXmtpMessages(page.messages);
+      if (page.oldestNs && !xmtpOldestNsRef.current) {
+        xmtpOldestNsRef.current = page.oldestNs;
+      }
+      if (page.peerReadAtNs) {
+        setPeerReadAt(new Date(page.peerReadAtNs / 1e6).toISOString());
+      }
+      const newestPeerNs = page.messages.length
+        ? Date.parse(page.messages[0].created_at) * 1e6
+        : 0;
+      if (newestPeerNs > lastReceiptNsRef.current) {
+        lastReceiptNsRef.current = newestPeerNs;
+        sendXmtpReadReceipt(dm);
+      }
+    } catch (err) {
+      console.warn('[xmtp] thread refresh failed', err);
+    }
+  }, [xmtp, threadIds]);
+
+  useEffect(() => {
+    if (!xmtp) return;
+    const unsubscribe = subscribeMessages((message) => {
+      const dm = dmRef.current;
+      if (!dm || message.topic !== dm.topic) return;
+      if (message.contentTypeId === CONTENT_TYPE_READ_RECEIPT) {
+        if (message.senderInboxId !== xmtp.inboxId) {
+          setPeerReadAt(new Date(message.sentNs / 1e6).toISOString());
+        }
+        return;
+      }
+      refreshXmtpThread();
+    });
+    return unsubscribe;
+  }, [xmtp, subscribeMessages, refreshXmtpThread]);
+
+  // ── Merged view ──────────────────────────────────────────────────
+  const messages = useMemo(() => {
+    if (xmtpMessages.length === 0) return supabaseMessages;
+    const merged = [...xmtpMessages, ...supabaseMessages];
+    merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    return merged;
+  }, [supabaseMessages, xmtpMessages]);
+
+  // ── Sends ────────────────────────────────────────────────────────
+  const firePush = useCallback(
+    (body: string) => {
+      if (!peerAccount?.ownerWallet) return;
+      notifyDmPush({
+        senderName: safeDisplayName(myAccountName, null),
+        body,
+        recipientWallets: [peerAccount.ownerWallet],
+        conversationId,
+      });
+    },
+    [peerAccount?.ownerWallet, myAccountName, conversationId]
+  );
+
   const sendMessage = useCallback(
     async (text: string, stickerRewardId: string | null = null) => {
       if (!conversationId || !myAccountId) return;
       if (!text.trim() && !stickerRewardId) return;
       setIsSending(true);
       try {
-        await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
+        const dm = dmRef.current;
+        if (rail === 'xmtp' && dm) {
+          if (text.trim()) await sendXmtpText(dm, text.trim());
+          if (stickerRewardId) await sendXmtpSticker(dm, stickerRewardId);
+          await refreshXmtpThread();
+          firePush(
+            pushBodyForMessage({ content: text.trim(), sticker_reward_id: stickerRewardId })
+          );
+        } else {
+          await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
+        }
       } catch (err) {
         console.error('Failed to send message:', err);
       } finally {
         setIsSending(false);
       }
     },
-    [conversationId, myAccountId]
+    [conversationId, myAccountId, rail, refreshXmtpThread, firePush]
   );
 
-  const loadMore = useCallback(async () => {
-    if (!conversationId || messages.length === 0) return;
-    const oldest = messages[messages.length - 1];
-    try {
-      const older = await fetchMessages(conversationId, 30, oldest.created_at);
-      if (older.length > 0) {
-        setMessages((prev) => [...prev, ...older]);
+  /**
+   * In-chat Röbel Münzen payment: gasless on-chain transfer to the peer's
+   * wallet, then a transactionReference receipt message on the XMTP rail.
+   */
+  const sendPayment = useCallback(
+    async (amountRaw: bigint, amountDecimal: number) => {
+      const dm = dmRef.current;
+      if (rail !== 'xmtp' || !dm || !peerAccount?.ownerWallet || !xmtp) {
+        throw new Error('Zahlungen sind in diesem Chat noch nicht verfügbar');
       }
+      setIsSending(true);
+      try {
+        const txHash = await sendTaler(peerAccount.ownerWallet, amountRaw);
+        try {
+          await sendXmtpTransactionReference(dm, {
+            namespace: 'eip155',
+            networkId: 'eip155:100',
+            reference: txHash || '',
+            metadata: {
+              transactionType: 'transfer',
+              currency: 'Röbel Münzen',
+              amount: amountDecimal,
+              decimals: 18,
+              fromAddress: xmtp.wallet,
+              toAddress: peerAccount.ownerWallet,
+            },
+          });
+          await refreshXmtpThread();
+          firePush('hat dir Röbel Münzen gesendet');
+        } catch (msgErr) {
+          // Funds moved; only the receipt bubble failed. The recipient's
+          // balance updates regardless — log loudly, don't re-throw.
+          console.error('[xmtp] payment sent but receipt message failed', msgErr);
+        }
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [rail, peerAccount?.ownerWallet, xmtp, sendTaler, refreshXmtpThread, firePush]
+  );
+
+  const sendReaction = useCallback(
+    async (messageId: string, emoji: string, add: boolean) => {
+      const dm = dmRef.current;
+      if (rail !== 'xmtp' || !dm) return;
+      try {
+        await sendXmtpReaction(dm, messageId, emoji, add ? 'added' : 'removed');
+        await refreshXmtpThread();
+      } catch (err) {
+        console.warn('[xmtp] reaction failed', err);
+      }
+    },
+    [rail, refreshXmtpThread]
+  );
+
+  const blockPeer = useCallback(async () => {
+    const dm = dmRef.current;
+    if (!dm) return;
+    await blockXmtpConversation(dm);
+    setConsent('denied');
+  }, []);
+
+  const unblockPeer = useCallback(async () => {
+    const dm = dmRef.current;
+    if (!dm) return;
+    await unblockXmtpConversation(dm);
+    setConsent('allowed');
+  }, []);
+
+  // ── Pagination (both rails page independently) ───────────────────
+  const loadMore = useCallback(async () => {
+    if (!conversationId) return;
+
+    const oldestSupabase = supabaseMessages[supabaseMessages.length - 1];
+    const tasks: Promise<void>[] = [];
+
+    if (oldestSupabase) {
+      tasks.push(
+        fetchMessages(conversationId, 30, oldestSupabase.created_at).then((older) => {
+          if (older.length > 0) setSupabaseMessages((prev) => [...prev, ...older]);
+        })
+      );
+    }
+
+    const dm = dmRef.current;
+    if (xmtp && dm && threadIds && xmtpOldestNsRef.current) {
+      tasks.push(
+        fetchXmtpThread(xmtp, dm, threadIds, {
+          limit: 30,
+          beforeNs: xmtpOldestNsRef.current,
+        }).then((page) => {
+          if (page.messages.length > 0) {
+            setXmtpMessages((prev) => {
+              const known = new Set(prev.map((m) => m.id));
+              return [...prev, ...page.messages.filter((m) => !known.has(m.id))];
+            });
+          }
+          if (page.oldestNs) xmtpOldestNsRef.current = page.oldestNs;
+        })
+      );
+    }
+
+    try {
+      await Promise.all(tasks);
     } catch (err) {
       console.error('Failed to load more messages:', err);
     }
-  }, [conversationId, messages]);
+  }, [conversationId, supabaseMessages, xmtp, threadIds]);
 
   return {
     messages,
@@ -202,6 +470,13 @@ export function useConversation(conversationId: string) {
     isLoading: isLoadingMessages,
     isSending,
     sendMessage,
+    sendPayment,
+    sendReaction,
+    blockPeer,
+    unblockPeer,
+    consent,
+    rail,
+    peerReadAt,
     loadMore,
     peerAccount,
     myAccountId,
