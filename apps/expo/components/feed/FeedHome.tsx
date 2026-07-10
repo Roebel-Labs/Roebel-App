@@ -35,6 +35,7 @@ import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
 import PostOptionsDrawer from './PostOptionsDrawer';
+import RepostDrawer from './RepostDrawer';
 import ReportDrawer from './ReportDrawer';
 import ConfirmationDrawer from '@/components/ConfirmationDrawer';
 import FeedFAB from './FeedFAB';
@@ -195,7 +196,7 @@ export default function FeedHome() {
   const router = useRouter();
   const { user, isCitizen } = useUser();
   const walletAddress = user?.wallet_address;
-  const { isOwnerOf } = useAccount();
+  const { isOwnerOf, activeAccount } = useAccount();
   const activeProfileImage = useActiveProfileImage();
   const requireAuth = useRequireAuth();
   const { showSnackbar } = useSnackbar();
@@ -244,6 +245,9 @@ export default function FeedHome() {
   const [selectedPost, setSelectedPost] = useState<PostRecord | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [editComposerVisible, setEditComposerVisible] = useState(false);
+  const [repostTarget, setRepostTarget] = useState<{ post: PostRecord; reposted: boolean } | null>(
+    null,
+  );
 
   const pagerRef = useRef<PagerHandle>(null);
   const scrollProgress = useSharedValue(0);
@@ -252,7 +256,7 @@ export default function FeedHome() {
   const rathausListRef = useRef<FeedListHandle>(null);
   const appListRef = useRef<FeedListHandle>(null);
 
-  const { reportPost } = usePostActions(walletAddress);
+  const { reportPost, repost, unrepost } = usePostActions(walletAddress);
 
   const refreshAll = useCallback(() => {
     mainListRef.current?.refresh();
@@ -372,6 +376,41 @@ export default function FeedHome() {
   const handleMore = (post: PostRecord) => {
     setSelectedPost(post);
     setOptionsDrawerVisible(true);
+  };
+
+  const handleRepostPress = useCallback(
+    (target: PostRecord, reposted: boolean) => {
+      requireAuth(() => setRepostTarget({ post: target, reposted }));
+    },
+    [requireAuth],
+  );
+
+  const handleConfirmRepost = async () => {
+    if (!repostTarget) return;
+    const { post: target, reposted } = repostTarget;
+    setRepostTarget(null);
+    try {
+      if (reposted) {
+        await unrepost(target);
+        showSnackbar({ message: 'Repost entfernt' });
+      } else {
+        await repost(target, activeAccount?.id);
+        showSnackbar({ message: 'Repostet — erscheint in „Für Alle“' });
+      }
+      refreshAll();
+    } catch (e) {
+      console.error('[FeedHome.handleConfirmRepost]', e);
+      showSnackbar({ message: 'Repost fehlgeschlagen' });
+    }
+  };
+
+  const handleQuote = () => {
+    if (!repostTarget) return;
+    const id = repostTarget.post.id;
+    setRepostTarget(null);
+    requireAuth(() => {
+      router.push({ pathname: '/create', params: { quotedPostId: id } } as any);
+    });
   };
 
   const handleEditPost = () => {
@@ -511,6 +550,7 @@ export default function FeedHome() {
     headerHeight,
     topPadding: headerHeight,
     bottomPadding,
+    onRepost: handleRepostPress,
   };
 
   return (
@@ -625,6 +665,14 @@ export default function FeedHome() {
         visible={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
         onReport={handleSubmitReport}
+      />
+
+      <RepostDrawer
+        visible={!!repostTarget}
+        onClose={() => setRepostTarget(null)}
+        isReposted={repostTarget?.reposted ?? false}
+        onRepost={handleConfirmRepost}
+        onQuote={handleQuote}
       />
 
       <ConfirmationDrawer

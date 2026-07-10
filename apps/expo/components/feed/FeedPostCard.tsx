@@ -18,7 +18,9 @@ import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from './StadtkasseSnapshotCard';
 import PostActions from './PostActions';
 import PostViewersDrawer from './PostViewersDrawer';
+import QuotedPostPreview from './QuotedPostPreview';
 import ImageZoomModal from '@/components/ImageZoomModal';
+import RepostIcon from '@/assets/icons/repost.svg';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 
 // Posts can hold up to 500 chars; in the feed we preview the first 250 and
@@ -34,6 +36,10 @@ type Props = {
   onLike: () => void;
   onShare: () => void;
   onMore?: () => void;
+  isReposted?: boolean;
+  displayRepostCount?: number;
+  /** Called with the repost TARGET (original for repost rows). Button hidden when undefined. */
+  onRepost?: (target: PostRecord) => void;
 };
 
 export default function FeedPostCard({
@@ -45,6 +51,9 @@ export default function FeedPostCard({
   onLike,
   onShare,
   onMore,
+  isReposted = false,
+  displayRepostCount,
+  onRepost,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -52,22 +61,34 @@ export default function FeedPostCard({
   const [expanded, setExpanded] = useState(false);
   const [viewersVisible, setViewersVisible] = useState(false);
 
-  const isOwnPost =
-    !!walletAddress && post.wallet_address?.toLowerCase() === walletAddress.toLowerCase();
+  // Repost rows render the ORIGINAL post's body; every interaction
+  // (like/comment/share/views/repost) binds to that original too. Only the
+  // ⋯ options menu keeps targeting the row itself so a reposter can remove it.
+  const isRepostRow = post.post_type === 'repost' && !!post.quoted_post;
+  const display = isRepostRow ? post.quoted_post! : post;
+  const canRepost = !!onRepost && display.feed_type === 'app';
+
+  const reposterName =
+    (post.author?.account?.account_type === 'organisation'
+      ? post.author?.account?.name
+      : post.author?.username) || 'Jemand';
+
+  const isOwnDisplayPost =
+    !!walletAddress && display.wallet_address?.toLowerCase() === walletAddress.toLowerCase();
 
   const handlePress = () => {
-    router.push(`/post/${post.id}` as any);
+    router.push(`/post/${display.id}` as any);
   };
 
   const handleComment = () => {
-    router.push(`/post/${post.id}` as any);
+    router.push(`/post/${display.id}` as any);
   };
 
-  const mediaUrls = post.media_urls?.filter(Boolean) || [];
-  const firstLink = post.links && post.links.length > 0 ? post.links[0] : null;
-  const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
-  const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
-  const isMarketplacePost = !!post.linked_marketplace;
+  const mediaUrls = display.media_urls?.filter(Boolean) || [];
+  const firstLink = display.links && display.links.length > 0 ? display.links[0] : null;
+  const youtubeUrl = resolveYouTubeUrl(display.content, display.links?.map((l) => l.url));
+  const displayContent = youtubeUrl ? removeYouTubeUrls(display.content) : display.content;
+  const isMarketplacePost = !!display.linked_marketplace;
   const pinned = isPostPinned(post.pinned_until);
 
   const showMoreToggle = !expanded && (displayContent?.length || 0) > FEED_PREVIEW_LIMIT;
@@ -100,10 +121,19 @@ export default function FeedPostCard({
           </View>
         )}
 
+        {isRepostRow && (
+          <View style={styles.pinnedRow}>
+            <RepostIcon width={14} height={14} color={colors.textTertiary} />
+            <Text style={[styles.pinnedText, { color: colors.textTertiary }]}>
+              {reposterName} hat repostet
+            </Text>
+          </View>
+        )}
+
         <PostAuthorRow
-          author={post.author}
-          category={isMarketplacePost ? undefined : post.category}
-          createdAt={post.created_at}
+          author={display.author}
+          category={isMarketplacePost ? undefined : display.category}
+          createdAt={display.created_at}
           onMore={onMore}
         />
 
@@ -124,17 +154,17 @@ export default function FeedPostCard({
           </LinkifiedText>
         ) : null}
 
-        {post.linked_event && (
-          <PostLinkedEventCard event={post.linked_event} />
+        {display.linked_event && (
+          <PostLinkedEventCard event={display.linked_event} />
         )}
 
-        {post.linked_marketplace && (
-          <PostLinkedMarketplaceCard listing={post.linked_marketplace} />
+        {display.linked_marketplace && (
+          <PostLinkedMarketplaceCard listing={display.linked_marketplace} />
         )}
 
-        {post.stadtkasse_snapshot && (
+        {display.stadtkasse_snapshot && (
           <StadtkasseSnapshotCard
-            euro={post.stadtkasse_snapshot.euro}
+            euro={display.stadtkasse_snapshot.euro}
             onPress={() => router.push('/treasury' as any)}
           />
         )}
@@ -143,16 +173,30 @@ export default function FeedPostCard({
           <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
         )}
 
-        {post.video_url && (
-          <PostVideoPlayer videoUrl={post.video_url} isVisible={isVisible} />
+        {display.video_url && (
+          <PostVideoPlayer videoUrl={display.video_url} isVisible={isVisible} />
         )}
 
-        {post.sticker && (
+        {display.sticker && (
           <Image
-            source={{ uri: post.sticker.asset_url }}
+            source={{ uri: display.sticker.asset_url }}
             style={styles.sticker}
             contentFit="contain"
             accessibilityIgnoresInvertColors
+          />
+        )}
+
+        {/* Quote rows embed a mini preview of the original. `undefined` means
+            not hydrated (nested quote-of-quote — one level deep by design),
+            `null` means the original was deleted. */}
+        {display.post_type === 'quote' && display.quoted_post !== undefined && (
+          <QuotedPostPreview
+            post={display.quoted_post}
+            onPress={
+              display.quoted_post
+                ? () => router.push(`/post/${display.quoted_post!.id}` as any)
+                : undefined
+            }
           />
         )}
 
@@ -163,26 +207,29 @@ export default function FeedPostCard({
 
       {youtubeUrl ? <PostYouTubePreview youtubeUrl={youtubeUrl} /> : null}
 
-      {post.poll && (
-        <PostPollView poll={post.poll} walletAddress={walletAddress} />
+      {display.poll && (
+        <PostPollView poll={display.poll} walletAddress={walletAddress} />
       )}
 
       <PostActions
         likesCount={displayLikeCount}
-        commentsCount={post.comments_count}
+        commentsCount={display.comments_count}
         isLiked={isLiked}
         onLike={onLike}
         onComment={handleComment}
         onShare={onShare}
         iconOnly={isMarketplacePost}
-        viewsCount={post.views_count ?? 0}
-        onViewsPress={isOwnPost ? () => setViewersVisible(true) : undefined}
+        repostsCount={displayRepostCount ?? display.reposts_count ?? 0}
+        isReposted={isReposted}
+        onRepost={canRepost ? () => onRepost!(display) : undefined}
+        viewsCount={display.views_count ?? 0}
+        onViewsPress={isOwnDisplayPost ? () => setViewersVisible(true) : undefined}
       />
 
       <PostViewersDrawer
         visible={viewersVisible}
         onClose={() => setViewersVisible(false)}
-        postId={post.id}
+        postId={display.id}
       />
 
       <ImageZoomModal

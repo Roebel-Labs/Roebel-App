@@ -1,15 +1,23 @@
 import { useState, useCallback } from 'react';
 import { Share } from 'react-native';
-import { togglePostLike, reportPost as reportPostApi } from '@/lib/supabase-posts';
+import {
+  togglePostLike,
+  reportPost as reportPostApi,
+  createRepost,
+  undoRepost,
+} from '@/lib/supabase-posts';
+import type { PostRecord } from '@/lib/types/feed';
 import { useRequireAuth } from '@/context/AuthGateContext';
 
 /**
- * Hook for post interactions: like, share, report
+ * Hook for post interactions: like, repost, share, report
  */
 export function usePostActions(walletAddress: string | undefined) {
   const requireAuth = useRequireAuth();
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set());
+  const [repostCounts, setRepostCounts] = useState<Record<string, number>>({});
 
   /**
    * Initialize like state from batch-checked data
@@ -86,6 +94,87 @@ export function usePostActions(walletAddress: string | undefined) {
   );
 
   /**
+   * Initialize repost state from batch-checked data (ORIGINAL post ids)
+   */
+  const initReposts = useCallback(
+    (ids: Set<string>, counts: Record<string, number>) => {
+      setRepostedPosts(ids);
+      setRepostCounts(counts);
+    },
+    []
+  );
+
+  const isReposted = useCallback(
+    (postId: string) => repostedPosts.has(postId),
+    [repostedPosts]
+  );
+
+  const getRepostCount = useCallback(
+    (postId: string, originalCount: number) => repostCounts[postId] ?? originalCount,
+    [repostCounts]
+  );
+
+  /**
+   * Plain repost with optimistic update. Throws on failure (caller shows UI).
+   */
+  const repost = useCallback(
+    async (post: PostRecord, accountId?: string) => {
+      if (!walletAddress) {
+        requireAuth(() => {});
+        return;
+      }
+      if (repostedPosts.has(post.id)) return;
+      setRepostedPosts((prev) => new Set(prev).add(post.id));
+      setRepostCounts((prev) => ({
+        ...prev,
+        [post.id]: (prev[post.id] ?? post.reposts_count ?? 0) + 1,
+      }));
+      try {
+        const created = await createRepost(post.id, walletAddress, accountId);
+        if (!created) throw new Error('repost failed');
+      } catch (err) {
+        setRepostedPosts((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+        setRepostCounts((prev) => ({ ...prev, [post.id]: post.reposts_count ?? 0 }));
+        throw err;
+      }
+    },
+    [walletAddress, repostedPosts, requireAuth]
+  );
+
+  /**
+   * Undo the caller's repost with optimistic update. Throws on failure.
+   */
+  const unrepost = useCallback(
+    async (post: PostRecord) => {
+      if (!walletAddress) {
+        requireAuth(() => {});
+        return;
+      }
+      setRepostedPosts((prev) => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+      setRepostCounts((prev) => ({
+        ...prev,
+        [post.id]: Math.max(0, (prev[post.id] ?? post.reposts_count ?? 0) - 1),
+      }));
+      try {
+        await undoRepost(post.id, walletAddress);
+      } catch (err) {
+        setRepostedPosts((prev) => new Set(prev).add(post.id));
+        setRepostCounts((prev) => ({ ...prev, [post.id]: post.reposts_count ?? 0 }));
+        throw err;
+      }
+    },
+    [walletAddress, requireAuth]
+  );
+
+  /**
    * Share a post via native share sheet
    */
   const sharePost = useCallback(async (postId: string, content: string) => {
@@ -123,6 +212,11 @@ export function usePostActions(walletAddress: string | undefined) {
     toggleLike,
     isLiked,
     getLikeCount,
+    initReposts,
+    isReposted,
+    getRepostCount,
+    repost,
+    unrepost,
     sharePost,
     reportPost,
   };

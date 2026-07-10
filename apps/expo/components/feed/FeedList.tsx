@@ -15,7 +15,7 @@ import Animated, {
 import { useTheme } from '@/context/ThemeContext';
 import { useFeed } from '@/hooks/useFeed';
 import { usePostActions } from '@/hooks/usePostActions';
-import { getUserLikedPostIds } from '@/lib/supabase-posts';
+import { getUserLikedPostIds, getUserRepostedPostIds } from '@/lib/supabase-posts';
 import { trackPostViews, setViewTrackerWallet } from '@/lib/viewTracker';
 import type {
   FeedItem,
@@ -65,6 +65,11 @@ type Props = {
   walletAddress?: string;
   onCompose: () => void;
   onMore: (post: PostRecord) => void;
+  /**
+   * Opens the repost drawer for the given TARGET post (original for repost
+   * rows), with the viewer's current reposted-state for that target.
+   */
+  onRepost?: (target: PostRecord, isReposted: boolean) => void;
   listHeader?: React.ReactNode;
   /** Shared value tracking the floating header translateY. Updated on scroll. */
   headerTranslateY?: SharedValue<number>;
@@ -111,6 +116,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     walletAddress,
     onCompose,
     onMore,
+    onRepost,
     listHeader,
     headerTranslateY,
     headerHeight = 0,
@@ -143,7 +149,8 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     onNewestContent(feedType, newest === null ? null : new Date(newest).toISOString());
   }, [items, feedType, onNewestContent]);
 
-  const { isLiked, getLikeCount, toggleLike, sharePost, initLikes } = usePostActions(walletAddress);
+  const { isLiked, getLikeCount, toggleLike, sharePost, initLikes, initReposts, isReposted, getRepostCount } =
+    usePostActions(walletAddress);
 
   useImperativeHandle(ref, () => ({ refresh, removePost }), [refresh, removePost]);
 
@@ -157,24 +164,29 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   React.useEffect(() => {
     if (!walletAddress || items.length === 0) return;
 
-    const postIds = items
-      .filter((item): item is FeedItem & { type: 'post' | 'mecky' } =>
-        item.type === 'post' || item.type === 'mecky',
-      )
-      .map((item) => (item.data as PostRecord).id);
-
-    if (postIds.length === 0) return;
-
-    const counts: Record<string, number> = {};
-    items.forEach((item) => {
-      if (item.type === 'post' || item.type === 'mecky') {
+    // Like/repost state binds to the TARGET post: the original on repost rows.
+    const targets = items
+      .filter((item) => item.type === 'post' || item.type === 'mecky')
+      .map((item) => {
         const post = item.data as PostRecord;
-        counts[post.id] = post.likes_count;
-      }
+        return post.post_type === 'repost' && post.quoted_post ? post.quoted_post : post;
+      });
+
+    if (targets.length === 0) return;
+
+    const postIds = targets.map((t) => t.id);
+    const counts: Record<string, number> = {};
+    const repostCounts: Record<string, number> = {};
+    targets.forEach((t) => {
+      counts[t.id] = t.likes_count;
+      repostCounts[t.id] = t.reposts_count ?? 0;
     });
 
     getUserLikedPostIds(postIds, walletAddress).then((likedIds) => {
       initLikes(likedIds, counts);
+    });
+    getUserRepostedPostIds(postIds, walletAddress).then((ids) => {
+      initReposts(ids, repostCounts);
     });
   }, [items, walletAddress]);
 
@@ -245,16 +257,20 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
               </View>
             );
           }
+          const target = post.post_type === 'repost' && post.quoted_post ? post.quoted_post : post;
           return (
             <FeedPostCard
               post={post}
-              isLiked={isLiked(post.id)}
-              displayLikeCount={getLikeCount(post.id, post.likes_count)}
+              isLiked={isLiked(target.id)}
+              displayLikeCount={getLikeCount(target.id, target.likes_count)}
               walletAddress={walletAddress}
               isVisible={active && visibleVideoIds.has(post.id)}
-              onLike={() => toggleLike(post.id, post.likes_count)}
-              onShare={() => sharePost(post.id, post.content)}
+              onLike={() => toggleLike(target.id, target.likes_count)}
+              onShare={() => sharePost(target.id, target.content)}
               onMore={() => onMore(post)}
+              isReposted={isReposted(target.id)}
+              displayRepostCount={getRepostCount(target.id, target.reposts_count ?? 0)}
+              onRepost={onRepost ? (t) => onRepost(t, isReposted(t.id)) : undefined}
             />
           );
         }
@@ -383,7 +399,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return null;
       }
     },
-    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, visibleVideoIds, active],
+    [walletAddress, isLiked, getLikeCount, toggleLike, sharePost, onMore, onRepost, isReposted, getRepostCount, visibleVideoIds, active],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
@@ -395,10 +411,20 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   // when there's no eligible proposal.
   const heroAnchorIds = useRef<Set<string> | null>(null);
   const displayData = React.useMemo(() => {
-    if (!showProposalHero) return items;
+    // Repost rows whose original was deleted (quoted_post hydrated to null)
+    // render nothing — drop them so they don't leave empty separator gaps.
+    const visible = items.filter(
+      (it) =>
+        !(
+          (it.type === 'post' || it.type === 'mecky') &&
+          (it.data as PostRecord).post_type === 'repost' &&
+          !(it.data as PostRecord).quoted_post
+        ),
+    );
+    if (!showProposalHero) return visible;
     // Snapshot the posts present when the hero first has a feed to anchor to.
-    if (heroAnchorIds.current === null && items.length > 0) {
-      heroAnchorIds.current = new Set(items.map((it) => it.id));
+    if (heroAnchorIds.current === null && visible.length > 0) {
+      heroAnchorIds.current = new Set(visible.map((it) => it.id));
     }
     const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
     // Insert after the freshly-arrived posts — the leading items that weren't in
@@ -406,10 +432,10 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     const seen = heroAnchorIds.current;
     let at = 0;
     if (seen) {
-      while (at < items.length && !seen.has(items[at].id)) at++;
+      while (at < visible.length && !seen.has(visible[at].id)) at++;
       at = Math.min(at, PROPOSAL_HERO_MAX_SINK);
     }
-    return [...items.slice(0, at), hero, ...items.slice(at)];
+    return [...visible.slice(0, at), hero, ...visible.slice(at)];
   }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.

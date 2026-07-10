@@ -32,6 +32,7 @@ import {
   updateComment,
   toggleCommentLike,
   getUserLikedPostIds,
+  getUserRepostedPostIds,
   getPostLikers,
   type PostLiker,
   DuplicateReportError,
@@ -56,6 +57,8 @@ import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCa
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
 import PostViewersDrawer from '@/components/feed/PostViewersDrawer';
+import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
+import RepostDrawer from '@/components/feed/RepostDrawer';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentScrim from '@/components/feed/CommentScrim';
@@ -100,8 +103,21 @@ export default function PostDetailScreen() {
   const [commentFocused, setCommentFocused] = useState(false);
   const [likers, setLikers] = useState<PostLiker[]>([]);
   const [viewersDrawerVisible, setViewersDrawerVisible] = useState(false);
+  const [repostDrawerVisible, setRepostDrawerVisible] = useState(false);
 
-  const { isLiked, getLikeCount, toggleLike, sharePost, reportPost, initLikes } = usePostActions(walletAddress);
+  const {
+    isLiked,
+    getLikeCount,
+    toggleLike,
+    sharePost,
+    reportPost,
+    initLikes,
+    initReposts,
+    isReposted,
+    getRepostCount,
+    repost,
+    unrepost,
+  } = usePostActions(walletAddress);
 
   const isOwnPost = !!walletAddress && !!post && (
     post.wallet_address?.toLowerCase() === walletAddress.toLowerCase() ||
@@ -123,11 +139,23 @@ export default function PostDetailScreen() {
     ]);
 
     if (postData) {
+      // A repost row has no content of its own — deep links land on the original.
+      if (postData.post_type === 'repost' && postData.quoted_post_id) {
+        router.replace(`/post/${postData.quoted_post_id}` as any);
+        return;
+      }
+
       setPost(postData);
 
       // Opening the detail page counts as an impression too.
       setViewTrackerWallet(walletAddress);
       trackPostViews([postData.id]);
+
+      // Init repost state (🔁 only shows on App-feed posts).
+      if (walletAddress && postData.feed_type === 'app') {
+        const repostedIds = await getUserRepostedPostIds([postData.id], walletAddress);
+        initReposts(repostedIds, { [postData.id]: postData.reposts_count ?? 0 });
+      }
 
       // Init like state
       if (walletAddress) {
@@ -147,6 +175,33 @@ export default function PostDetailScreen() {
     if (!id) return;
     getPostLikers(id, 5).then(setLikers);
   }, [id]);
+
+  const handleConfirmRepost = async () => {
+    if (!post) return;
+    if (!walletAddress) {
+      requireAuth(() => {});
+      return;
+    }
+    try {
+      if (isReposted(post.id)) {
+        await unrepost(post);
+        showSnackbar({ message: 'Repost entfernt' });
+      } else {
+        await repost(post, activeAccount?.id);
+        showSnackbar({ message: 'Repostet — erscheint in „Für Alle“' });
+      }
+    } catch (e) {
+      console.error('[PostDetail.handleConfirmRepost]', e);
+      showSnackbar({ message: 'Repost fehlgeschlagen' });
+    }
+  };
+
+  const handleQuote = () => {
+    if (!post) return;
+    requireAuth(() => {
+      router.push({ pathname: '/create', params: { quotedPostId: post.id } } as any);
+    });
+  };
 
   const loadMoreComments = useCallback(async () => {
     if (isLoadingMoreComments || !hasMoreComments) return;
@@ -536,6 +591,17 @@ export default function PostDetailScreen() {
         />
       )}
 
+      {post.post_type === 'quote' && post.quoted_post !== undefined && (
+        <QuotedPostPreview
+          post={post.quoted_post}
+          onPress={
+            post.quoted_post
+              ? () => router.push(`/post/${post.quoted_post!.id}` as any)
+              : undefined
+          }
+        />
+      )}
+
       {mediaUrls.length > 0 && (
         <PostImageGrid imageUrls={mediaUrls} onPress={(i) => setZoomImageUrl(mediaUrls[i])} />
       )}
@@ -571,6 +637,9 @@ export default function PostDetailScreen() {
         }}
         onComment={() => {}}
         onShare={() => sharePost(post.id, post.content)}
+        repostsCount={getRepostCount(post.id, post.reposts_count ?? 0)}
+        isReposted={isReposted(post.id)}
+        onRepost={post.feed_type === 'app' ? () => setRepostDrawerVisible(true) : undefined}
         viewsCount={post.views_count ?? 0}
         onViewsPress={isOwnPost ? () => setViewersDrawerVisible(true) : undefined}
       />
@@ -733,6 +802,14 @@ export default function PostDetailScreen() {
         visible={viewersDrawerVisible}
         onClose={() => setViewersDrawerVisible(false)}
         postId={post.id}
+      />
+
+      <RepostDrawer
+        visible={repostDrawerVisible}
+        onClose={() => setRepostDrawerVisible(false)}
+        isReposted={isReposted(post.id)}
+        onRepost={handleConfirmRepost}
+        onQuote={handleQuote}
       />
 
       <ConfirmationDrawer
