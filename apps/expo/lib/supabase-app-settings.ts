@@ -25,3 +25,14 @@ async function fetchAppSetting(key: string): Promise<string | null> {
 export function fetchEventStoriesAudioUrl(): Promise<string | null> {
   return fetchAppSetting('event_stories_audio_url');
 }
+
+/**
+ * Remote kill switch for the XMTP DM rail. Missing key (or any fetch error)
+ * counts as ENABLED so the feature works without seeding the table; setting
+ * the key to 'false' flips every client back to Supabase-only sends without
+ * an app update.
+ */
+export async function fetchXmtpDmsEnabled(): Promise<boolean> {
+  const value = await fetchAppSetting('xmtp_dms_enabled');
+  return value !== 'false';
+}
