@@ -14,9 +14,12 @@ import type {
 const PAGE_SIZE = 15;
 
 /** Merge top-level `account` join into `author.account` for PostAuthorRow */
-function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: T): T {
+function mergeAccountIntoAuthor<T extends { author?: any; account?: any; quoted_post?: any }>(row: T): T {
   if (row.account && row.author) {
     row.author = { ...row.author, account: row.account };
+  }
+  if (row.quoted_post) {
+    row.quoted_post = mergeAccountIntoAuthor(row.quoted_post);
   }
   return row;
 }
@@ -38,6 +41,35 @@ const FEED_POST_SELECT = `
   linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
   sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
 `;
+
+/**
+ * Attach the quoted original onto repost/quote rows. PostgREST can't
+ * disambiguate the self-referential posts→posts embed (the column hint
+ * resolves to the reverse to-many direction), so originals are hydrated in a
+ * second batched query. Deleted originals stay null — repost rows get dropped
+ * by the feed, quote previews show a placeholder. One level deep by design.
+ */
+async function attachQuotedPosts<T extends PostRecord>(rows: T[]): Promise<T[]> {
+  const ids = Array.from(
+    new Set(rows.map((r) => r.quoted_post_id).filter(Boolean)),
+  ) as string[];
+  if (ids.length === 0) return rows;
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(FEED_POST_SELECT)
+    .in('id', ids)
+    .eq('status', 'published');
+  if (error || !data) return rows;
+
+  const byId = new Map<string, PostRecord>(
+    (data as PostRecord[]).map((p) => [p.id, mergeAccountIntoAuthor(p)]),
+  );
+  rows.forEach((r) => {
+    if (r.quoted_post_id) r.quoted_post = byId.get(r.quoted_post_id) ?? null;
+  });
+  return rows;
+}
 
 export async function fetchFeedPosts(options: {
   feedType: FeedType;
@@ -89,7 +121,7 @@ export async function fetchFeedPosts(options: {
   }
 
   return {
-    data: rows,
+    data: await attachQuotedPosts(rows),
     hasMore: data.length === size,
   };
 }
@@ -232,7 +264,8 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
     return null;
   }
 
-  return mergeAccountIntoAuthor(data as PostRecord);
+  const [row] = await attachQuotedPosts([mergeAccountIntoAuthor(data as PostRecord)]);
+  return row;
 }
 
 /**
@@ -299,6 +332,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       // Only reference the column when a snapshot is attached, so normal posting
       // keeps working even before the stadtkasse_snapshot migration is applied.
       ...(input.stadtkasse_snapshot ? { stadtkasse_snapshot: input.stadtkasse_snapshot } : {}),
+      ...(input.quoted_post_id ? { quoted_post_id: input.quoted_post_id } : {}),
       status: 'published',
     })
     .select(`
@@ -409,6 +443,102 @@ export async function updatePost(
   }
 
   return mergeAccountIntoAuthor(data as PostRecord);
+}
+
+// ─── Reposts ────────────────────────────────────────────────
+
+/**
+ * Plain repost: a posts row referencing the original. Lands in the main feed
+ * (App-feed posts get promoted into "Für Alle"). RLS/posting rules apply — a
+ * PostingDeniedError propagates like normal post creation.
+ */
+export async function createRepost(
+  postId: string,
+  walletAddress: string,
+  accountId?: string,
+): Promise<PostRecord | null> {
+  return createPost({
+    wallet_address: walletAddress,
+    account_id: accountId,
+    content: '',
+    feed_type: 'main',
+    post_type: 'repost',
+    quoted_post_id: postId,
+  });
+}
+
+/** Remove the caller's published repost of `postId`. Returns false if none exists. */
+export async function undoRepost(postId: string, walletAddress: string): Promise<boolean> {
+  const wallet = walletAddress.toLowerCase();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('wallet_address', wallet)
+    .eq('quoted_post_id', postId)
+    .eq('post_type', 'repost')
+    .eq('status', 'published')
+    .limit(1);
+  if (error || !data || data.length === 0) return false;
+  await deletePost(data[0].id, walletAddress);
+  return true;
+}
+
+/** Which of `postIds` (ORIGINAL ids) has this wallet already reposted? */
+export async function getUserRepostedPostIds(
+  postIds: string[],
+  walletAddress: string,
+): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('quoted_post_id')
+    .eq('wallet_address', walletAddress.toLowerCase())
+    .eq('post_type', 'repost')
+    .eq('status', 'published')
+    .in('quoted_post_id', postIds);
+  if (error || !data) return new Set();
+  return new Set(data.map((r: any) => r.quoted_post_id).filter(Boolean));
+}
+
+// ─── Views ──────────────────────────────────────────────────
+
+export type PostViewer = {
+  wallet_address: string;
+  view_count: number;
+  username: string | null;
+  display_name: string | null;
+  profile_picture_url: string | null;
+};
+
+/** Everyone who viewed a post, with per-user counts — for the creator-only drawer. */
+export async function getPostViewers(postId: string): Promise<PostViewer[]> {
+  const { data: views, error } = await supabase
+    .from('post_views')
+    .select('wallet_address, view_count')
+    .eq('post_id', postId)
+    .order('view_count', { ascending: false })
+    .limit(200);
+  if (error || !views || views.length === 0) return [];
+
+  const wallets = views.map((v: any) => v.wallet_address);
+  const { data: users } = await supabase
+    .from('users')
+    .select('wallet_address, username, display_name, profile_picture_url')
+    .in('wallet_address', wallets);
+
+  const byWallet = new Map<string, any>(
+    (users ?? []).map((u: any) => [u.wallet_address.toLowerCase(), u]),
+  );
+  return views.map((v: any) => {
+    const u = byWallet.get(v.wallet_address.toLowerCase());
+    return {
+      wallet_address: v.wallet_address,
+      view_count: v.view_count,
+      username: u?.username ?? null,
+      display_name: u?.display_name ?? null,
+      profile_picture_url: u?.profile_picture_url ?? null,
+    };
+  });
 }
 
 // ─── Likes ──────────────────────────────────────────────────

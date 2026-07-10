@@ -11,7 +11,7 @@ export type PostCategory =
   | 'generell';
 
 export type FeedType = 'main' | 'rathaus' | 'app';
-export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share' | 'event_experience';
+export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share' | 'event_experience' | 'repost' | 'quote';
 
 export type PostAuthor = Pick<
   UserRecord,
@@ -84,6 +84,11 @@ export type PostRecord = {
   stadtkasse_snapshot: StadtkasseSnapshot | null;
   likes_count: number;
   comments_count: number;
+  /** Denormalized totals — undefined until the feed_views_reposts migration is applied. */
+  views_count?: number;
+  reposts_count?: number;
+  /** Set on repost/quote rows: the original post being referenced. */
+  quoted_post_id?: string | null;
   /** When set and in the future, the post is pinned to the top of its feed. */
   pinned_until: string | null;
   created_at: string;
@@ -93,6 +98,7 @@ export type PostRecord = {
   links?: PostLinkRecord[];
   poll?: PostPollRecord;
   sticker?: StickerRewardRef | null;
+  quoted_post?: PostRecord | null;
   linked_event?: Pick<EventRecord, 'id' | 'title' | 'date' | 'time' | 'location' | 'image_url' | 'category'>;
   linked_marketplace?: Pick<MarketplaceListingRecord, 'id' | 'title' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'neighborhood'>;
 };
@@ -166,6 +172,7 @@ export type CreatePostInput = {
   linked_marketplace_id?: string;
   linked_mecky_draft_id?: string;
   linked_experience_id?: string;
+  quoted_post_id?: string;
   sticker_reward_id?: string | null;
   stadtkasse_snapshot?: StadtkasseSnapshot | null;
 };
