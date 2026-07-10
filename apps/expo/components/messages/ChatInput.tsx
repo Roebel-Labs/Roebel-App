@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   View,
+  Text,
   TextInput,
   Pressable,
   StyleSheet,
@@ -17,9 +18,11 @@ import type { LootboxReward } from '@/lib/supabase-rewards';
 type Props = {
   onSend: (text: string, stickerRewardId: string | null) => void;
   isSending: boolean;
+  /** When set, shows the Röbel-Münzen button (XMTP-rail chats only). */
+  onOpenPayment?: () => void;
 };
 
-export default function ChatInput({ onSend, isSending }: Props) {
+export default function ChatInput({ onSend, isSending, onOpenPayment }: Props) {
   const { colors } = useTheme();
   const [text, setText] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -67,6 +70,15 @@ export default function ChatInput({ onSend, isSending }: Props) {
         </View>
       )}
       <View style={[styles.container, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+        {onOpenPayment && (
+          <Pressable
+            style={styles.emojiButton}
+            onPress={onOpenPayment}
+            accessibilityLabel="Röbel Münzen senden"
+          >
+            <Text style={styles.coinButtonText}>🪙</Text>
+          </Pressable>
+        )}
         <Pressable
           style={styles.emojiButton}
           onPress={() => setShowPicker((prev) => !prev)}
@@ -121,6 +133,9 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  coinButtonText: {
+    fontSize: 22,
   },
   input: {
     flex: 1,

@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
+import PaymentBubble from './PaymentBubble';
 import type { Message } from '@/lib/supabase-messages';
 
 type Props = {
@@ -11,6 +12,12 @@ type Props = {
   isOwn: boolean;
   peerAvatar?: string | null;
   peerFrameUrl?: string | null;
+  /** Long-press opens the reaction bar (XMTP-rail chats only). */
+  onLongPress?: (message: Message) => void;
+  /** Toggle a reaction directly from its chip. */
+  onToggleReaction?: (message: Message, emoji: string, add: boolean) => void;
+  /** "Gelesen" indicator under the newest own message. */
+  showRead?: boolean;
 };
 
 function formatTime(isoDate: string): string {
@@ -45,15 +52,30 @@ function tryParseListingInquiry(content: string): ListingInquiry | null {
   return null;
 }
 
-export default function MessageBubble({ message, isOwn, peerAvatar, peerFrameUrl }: Props) {
+export default function MessageBubble({
+  message,
+  isOwn,
+  peerAvatar,
+  peerFrameUrl,
+  onLongPress,
+  onToggleReaction,
+  showRead,
+}: Props) {
   const { colors } = useTheme();
 
   const hasSticker = !!message.sticker?.asset_url;
   const hasText = !!message.content && message.content.trim().length > 0;
+  const hasPayment = !!message.payment;
 
-  if (!hasSticker && !hasText) return null;
+  if (!hasSticker && !hasText && !hasPayment) return null;
 
-  const listingData = !hasSticker && hasText ? tryParseListingInquiry(message.content) : null;
+  const listingData = !hasSticker && !hasPayment && hasText ? tryParseListingInquiry(message.content) : null;
+
+  const timeLabel = showRead
+    ? `${formatTime(message.created_at)} · Gelesen`
+    : formatTime(message.created_at);
+
+  const reactions = message.reactions ?? [];
 
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
@@ -68,17 +90,22 @@ export default function MessageBubble({ message, isOwn, peerAvatar, peerFrameUrl
         </View>
       )}
 
-      <View style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}>
+      <Pressable
+        style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}
+        onLongPress={onLongPress ? () => onLongPress(message) : undefined}
+        delayLongPress={300}
+      >
         {listingData ? (
           <>
             <ListingCard data={listingData} isOwn={isOwn} />
             <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: colors.textTertiary }]}>
-              {formatTime(message.created_at)}
+              {timeLabel}
             </Text>
           </>
         ) : (
           <>
-            {hasText && (
+            {hasPayment && <PaymentBubble payment={message.payment!} isOwn={isOwn} />}
+            {!hasPayment && hasText && (
               <View
                 style={[
                   styles.bubble,
@@ -105,12 +132,40 @@ export default function MessageBubble({ message, isOwn, peerAvatar, peerFrameUrl
                 accessibilityIgnoresInvertColors
               />
             )}
+            {reactions.length > 0 && (
+              <View style={[styles.reactionRow, isOwn ? styles.reactionRowOwn : null]}>
+                {reactions.map((r) => (
+                  <Pressable
+                    key={r.emoji}
+                    onPress={
+                      onToggleReaction
+                        ? () => onToggleReaction(message, r.emoji, !r.reactedByMe)
+                        : undefined
+                    }
+                    style={[
+                      styles.reactionChip,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: r.reactedByMe ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+                    {r.count > 1 && (
+                      <Text style={[styles.reactionCount, { color: colors.textSecondary }]}>
+                        {r.count}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeOther, { color: colors.textTertiary }]}>
-              {formatTime(message.created_at)}
+              {timeLabel}
             </Text>
           </>
         )}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -161,6 +216,30 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     marginTop: 2,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 4,
+  },
+  reactionRowOwn: {
+    justifyContent: 'flex-end',
+  },
+  reactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  reactionEmoji: {
+    fontSize: 13,
+  },
+  reactionCount: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
   },
   time: {
     fontSize: 11,

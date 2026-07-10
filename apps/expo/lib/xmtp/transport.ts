@@ -13,7 +13,7 @@
 
 import type { DecodedMessage, Dm, ReactionContent } from '@xmtp/react-native-sdk';
 
-import type { Message, MessageReaction } from '@/lib/supabase-messages';
+import { hydrateMessageSticker, type Message, type MessageReaction } from '@/lib/supabase-messages';
 import type { XmtpClientHandle } from './client';
 import {
   CONTENT_TYPE_READ_RECEIPT,
@@ -237,7 +237,13 @@ export async function fetchXmtpThread(
     if (mapped) messages.push(mapped);
   }
 
-  return { messages, peerReadAtNs, oldestNs };
+  // Sticker messages carry only the reward id over the wire — join the asset
+  // like the Supabase rail does so MessageBubble renders them identically.
+  const hydrated = await Promise.all(
+    messages.map((m) => (m.sticker_reward_id ? hydrateMessageSticker(m) : m))
+  );
+
+  return { messages: hydrated, peerReadAtNs, oldestNs };
 }
 
 // ── Sends ──────────────────────────────────────────────────────────
