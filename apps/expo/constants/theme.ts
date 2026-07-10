@@ -146,8 +146,9 @@ export const lightColors = {
 } as const;
 
 export const darkColors = {
-  // Backgrounds
-  background: '#202124',
+  // Backgrounds — one unified dark surface: background, feedBackground, card
+  // and popover all share the same darker tone (#18191B) by design.
+  background: '#18191B',
   surface: '#3c4043',
   surfaceSecondary: '#2d2e31',
   feedBackground: '#18191B',
@@ -190,9 +191,9 @@ export const darkColors = {
 
   // Extended / shadcn-aligned (mirrors Figma "Röbel Design System" collection)
   foreground: '#E8EAED',
-  card: '#202124',
+  card: '#18191B',
   cardForeground: '#E8EAED',
-  popover: '#202124',
+  popover: '#18191B',
   popoverForeground: '#E8EAED',
   primaryForeground: '#202124',
   secondary: '#323436',
