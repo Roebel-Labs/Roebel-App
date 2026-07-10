@@ -95,16 +95,36 @@ export function SommercampPage() {
         )}
         <div className="relative mx-auto flex max-w-3xl flex-col items-center px-4 pb-16 pt-20 text-center sm:pb-20 sm:pt-24">
           <Reveal>
-            <Image
-              src="/Logo-new.png"
-              alt="Röbel App"
-              width={175}
-              height={40}
-              priority
-              className={`h-9 w-auto object-contain sm:h-10 ${
-                night ? "brightness-0 invert" : ""
-              }`}
-            />
+            {night ? (
+              // Nachts würde der volle Lockup per `brightness-0 invert` zu
+              // einem flächigen weißen Klecks — das Mühlen-Motiv verschwindet.
+              // Stattdessen: die Bildmarke in einem weißen Chip (Windmühle
+              // bleibt erkennbar) + Wortmarke in Weiß daneben.
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                  <Image
+                    src="/logo.png"
+                    alt="Röbel App"
+                    width={28}
+                    height={28}
+                    priority
+                    className="h-7 w-7 object-contain"
+                  />
+                </span>
+                <span className="font-heading text-xl font-black uppercase tracking-tight text-white">
+                  Röbel App
+                </span>
+              </div>
+            ) : (
+              <Image
+                src="/Logo-new.png"
+                alt="Röbel App"
+                width={175}
+                height={40}
+                priority
+                className="h-9 w-auto object-contain sm:h-10"
+              />
+            )}
           </Reveal>
           <Reveal delay={100}>
             <h1
@@ -144,7 +164,7 @@ export function SommercampPage() {
           </Reveal>
           <Reveal delay={500}>
             <p
-              className={`mt-3 max-w-md text-sm leading-relaxed ${
+              className={`mt-3 max-w-md text-base leading-relaxed ${
                 night ? "text-white/85" : "text-[#1D2E4C]"
               }`}
             >
@@ -155,7 +175,7 @@ export function SommercampPage() {
           <Reveal delay={600}>
             <a
               href="#mitmachen"
-              className={`mt-8 inline-block rounded-full px-8 py-3.5 text-sm font-bold shadow-lg transition-transform hover:scale-[1.03] motion-reduce:transition-none ${
+              className={`mt-8 inline-block rounded-full px-8 py-3.5 text-base font-bold shadow-lg transition-transform hover:scale-[1.03] motion-reduce:transition-none ${
                 night
                   ? "bg-[#051433] text-white"
                   : "bg-[#00498B] text-white"
@@ -187,7 +207,7 @@ export function SommercampPage() {
               <h2 className="font-heading text-center text-3xl font-black uppercase tracking-tight text-white">
                 Anmeldung
               </h2>
-              <p className="mt-2 text-center text-sm text-white/80">
+              <p className="mt-2 text-center text-base text-white/80">
                 Kostenlos. Dauert eine Minute — deine Runde startet offiziell
                 freitags um 18&nbsp;Uhr.
               </p>
@@ -202,7 +222,7 @@ export function SommercampPage() {
       </main>
 
       <footer
-        className={`px-4 py-10 text-center text-xs ${
+        className={`px-4 py-10 text-center text-base ${
           night ? "bg-[#0B1530] text-[#9DB4D0]" : "bg-[#F4F7FB] text-[#6B7280]"
         }`}
       >

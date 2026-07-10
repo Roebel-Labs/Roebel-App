@@ -68,12 +68,12 @@ function StartGate() {
   if (unlocked) {
     return (
       <>
-        <p className="text-sm text-[#3D4E68]">
+        <p className="text-base text-[#3D4E68]">
           Die Runde läuft — leg direkt los und bau deine Mini-App.
         </p>
         <Link
           href="/dashboard/mini-apps?welcome=sommercamp"
-          className="mt-1 rounded-full bg-[#00498B] px-6 py-3 text-sm font-bold text-white"
+          className="mt-1 rounded-full bg-[#00498B] px-6 py-3 text-base font-bold text-white"
         >
           Zum KI-Baukasten
         </Link>
@@ -83,7 +83,7 @@ function StartGate() {
 
   return (
     <>
-      <p className="text-sm text-[#3D4E68]">
+      <p className="text-base text-[#3D4E68]">
         Deine Runde startet offiziell am Freitag um 18&nbsp;Uhr — dann öffnet
         sich der KI-Baukasten.
       </p>
@@ -91,7 +91,7 @@ function StartGate() {
         type="button"
         disabled
         aria-live="polite"
-        className="mt-1 inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-[#051433] px-6 py-3 text-sm font-bold text-white/90"
+        className="mt-1 inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-[#051433] px-6 py-3 text-base font-bold text-white/90"
       >
         <Timer className="h-4 w-4 animate-pulse text-[#FDC705] motion-reduce:animate-none" />
         <span className="font-mono tabular-nums">
@@ -182,7 +182,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
     <div className="rounded-2xl bg-white p-6 text-[#12203A] shadow-xl">
       {!account ? (
         <div className="flex flex-col items-center gap-3 py-2 text-center">
-          <p className="text-sm text-[#3D4E68]">
+          <p className="text-base text-[#3D4E68]">
             Melde dich mit deinem Röbel-App-Konto an — oder erstelle in einer
             Minute ein neues.
           </p>
@@ -207,7 +207,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
           />
         </div>
       ) : status === "checking" ? (
-        <div className="flex items-center justify-center gap-2 py-6 text-sm text-[#6B7280]">
+        <div className="flex items-center justify-center gap-2 py-6 text-base text-[#6B7280]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Einen Moment …
         </div>
@@ -216,7 +216,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
           <CheckCircle2 className="h-10 w-10 text-green-600" />
           <p className="font-bold">Du bist angemeldet!</p>
           {mailSent && (
-            <p className="text-sm text-[#3D4E68]">
+            <p className="text-base text-[#3D4E68]">
               Eine Bestätigung ist unterwegs — schau in dein E-Mail-Postfach.
             </p>
           )}
@@ -225,7 +225,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
       ) : (
         <form onSubmit={submit} className="space-y-4" noValidate>
           <div>
-            <label htmlFor="sc-name" className="text-sm font-semibold">
+            <label htmlFor="sc-name" className="text-base font-semibold">
               Name
             </label>
             <input
@@ -237,11 +237,11 @@ export function RegistrationCard({ night }: { night: boolean }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Vor- und Nachname"
-              className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-sm outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
+              className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-base outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
             />
           </div>
           <div>
-            <label htmlFor="sc-age" className="text-sm font-semibold">
+            <label htmlFor="sc-age" className="text-base font-semibold">
               Alter
             </label>
             <input
@@ -253,12 +253,12 @@ export function RegistrationCard({ night }: { night: boolean }) {
               value={age}
               onChange={(e) => setAge(e.target.value)}
               placeholder="z. B. 14"
-              className="mt-1 w-24 rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-sm outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
+              className="mt-1 w-24 rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-base outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
             />
           </div>
 
           <div className="space-y-2.5 pt-1">
-            <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+            <label className="flex cursor-pointer items-start gap-2.5 text-base">
               <input
                 type="checkbox"
                 checked={privacy}
@@ -273,7 +273,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
                 <span className="text-[#B4B8C1]">(Pflicht)</span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+            <label className="flex cursor-pointer items-start gap-2.5 text-base">
               <input
                 type="checkbox"
                 checked={agb}
@@ -288,7 +288,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
                 <span className="text-[#B4B8C1]">(Pflicht)</span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+            <label className="flex cursor-pointer items-start gap-2.5 text-base">
               <input
                 type="checkbox"
                 checked={newsletter}
@@ -310,7 +310,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
             {newsletter && (
               <div className="pl-6">
                 {authEmail && email === authEmail && !editingEmail ? (
-                  <p className="text-sm text-[#3D4E68]">
+                  <p className="text-base text-[#3D4E68]">
                     Geht an <span className="font-semibold">{email}</span>{" "}
                     <button
                       type="button"
@@ -322,7 +322,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
                   </p>
                 ) : (
                   <>
-                    <label htmlFor="sc-email" className="text-sm font-semibold">
+                    <label htmlFor="sc-email" className="text-base font-semibold">
                       E-Mail
                     </label>
                     <input
@@ -332,7 +332,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="du@example.de"
-                      className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-sm outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
+                      className="mt-1 w-full rounded-lg border border-[#DFE6EF] px-3 py-2.5 text-base outline-none focus:border-[#00498B] focus:ring-2 focus:ring-[#00498B]/20"
                     />
                   </>
                 )}
@@ -341,7 +341,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
           </div>
 
           {error && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-base text-red-700">
               {error}
             </p>
           )}
@@ -349,7 +349,7 @@ export function RegistrationCard({ night }: { night: boolean }) {
           <button
             type="submit"
             disabled={submitting || !name || !age || !privacy || !agb}
-            className="w-full rounded-full bg-[#00498B] px-6 py-3.5 text-sm font-bold text-white transition-opacity disabled:opacity-50"
+            className="w-full rounded-full bg-[#00498B] px-6 py-3.5 text-base font-bold text-white transition-opacity disabled:opacity-50"
           >
             {submitting ? "Wird gesendet …" : "Jetzt anmelden"}
           </button>

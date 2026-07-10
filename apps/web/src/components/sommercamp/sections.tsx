@@ -28,7 +28,7 @@ export function VideoSection({ night }: SectionProps) {
     <section className={night ? "bg-[#0E1A38]" : "bg-white"}>
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <Reveal>
-          <SectionTitle night={night}>So funktioniert&apos;s</SectionTitle>
+          <SectionTitle night={night}>Launch Video</SectionTitle>
         </Reveal>
         <Reveal
           delay={150}
@@ -53,7 +53,7 @@ export function VideoSection({ night }: SectionProps) {
               >
                 <Play className="ml-0.5 h-6 w-6" />
               </span>
-              <p className={`text-sm ${night ? "text-[#9DB4D0]" : "text-white/70"}`}>
+              <p className={`text-base ${night ? "text-[#9DB4D0]" : "text-white/70"}`}>
                 Das Intro-Video folgt in Kürze.
               </p>
             </div>
@@ -94,7 +94,7 @@ export function WasIstDasSection({ night }: SectionProps) {
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <Reveal>
           <SectionTitle night={night}>Was ist das Sommer Camp?</SectionTitle>
-          <p className={`mt-3 max-w-xl text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+          <p className={`mt-3 max-w-xl text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
             Ein Hackathon für Röbel: Jede Woche baust du deine eigene Mini-App —
             allein oder mit Freunden, zu Hause oder beim Kickoff in der Schule.
           </p>
@@ -119,7 +119,7 @@ export function WasIstDasSection({ night }: SectionProps) {
                 <h3 className="font-heading mt-4 text-xl font-black uppercase tracking-tight sm:text-2xl">
                   {title}
                 </h3>
-                <p className={`mt-1.5 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+                <p className={`mt-1.5 text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
                   {text}
                 </p>
               </div>
@@ -154,7 +154,7 @@ export function PreiseSection({ night }: SectionProps) {
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <Reveal>
           <SectionTitle night={night}>Das gibt&apos;s zu gewinnen</SectionTitle>
-          <p className={`mt-3 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+          <p className={`mt-3 text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
             Jede Woche ein neues Treppchen: Die Jury kürt jeden Freitag die
             besten drei Apps der Woche.
           </p>
@@ -162,19 +162,18 @@ export function PreiseSection({ night }: SectionProps) {
         <div className="mx-auto mt-10 flex max-w-lg items-end justify-center gap-3 sm:gap-4">
           {PODIUM.map(({ place, amount, bar, delay }) => (
             <Reveal key={place} delay={delay} className="flex flex-1 flex-col items-center self-end">
-              <p
-                className={`mb-2 font-heading text-2xl font-black sm:text-3xl ${
-                  place === "1"
-                    ? night
-                      ? "text-[#FDC705]"
-                      : "text-[#00498B]"
-                    : night
-                      ? "text-white"
-                      : "text-[#12203A]"
-                }`}
-              >
-                {amount}
-              </p>
+              <div className="mb-2 text-center">
+                <p
+                  className={`font-heading text-2xl font-black sm:text-3xl ${
+                    night ? "text-white" : "text-[#12203A]"
+                  }`}
+                >
+                  {amount}
+                </p>
+                <p className={`text-sm ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+                  Insgesamt
+                </p>
+              </div>
               {/* Balken wächst vom Boden, danach blendet die Platzierung ein */}
               <div className={`relative w-full ${bar}`}>
                 <div
@@ -198,7 +197,7 @@ export function PreiseSection({ night }: SectionProps) {
           ))}
         </div>
         <div className={`mx-auto h-1 w-full max-w-lg rounded-full ${night ? "bg-white/20" : "bg-[#DFE6EF]"}`} />
-        <p className={`mt-5 text-center text-xs ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+        <p className={`mt-5 text-center text-base ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
           Siegerehrung jeden Freitag um 18&nbsp;Uhr — 6 Wochen lang.
         </p>
       </div>
@@ -228,7 +227,7 @@ export function AblaufSection({ night }: SectionProps) {
       <div className="mx-auto max-w-3xl px-4 py-14 sm:py-16">
         <Reveal>
           <SectionTitle night={night}>Ablauf</SectionTitle>
-          <p className={`mt-3 max-w-xl text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+          <p className={`mt-3 max-w-xl text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
             Das Sommer Camp läuft in 6 Wochen-Runden — die kompletten
             Sommerferien in Mecklenburg-Vorpommern. Jede Runde startet freitags
             um 18&nbsp;Uhr, am Freitag darauf kürt die Jury die besten drei der
@@ -251,10 +250,10 @@ export function AblaufSection({ night }: SectionProps) {
                   >
                     WOCHE {week}
                   </span>
-                  <span className="mt-1.5 text-sm font-bold">
+                  <span className="mt-1.5 text-base font-bold">
                     {start} <span aria-hidden>→</span> {finale}
                   </span>
-                  <span className={`mt-1 text-xs leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+                  <span className={`mt-1 text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
                     {note ?? "Siegerehrung: 1., 2. & 3. Platz"}
                   </span>
                 </div>
@@ -262,7 +261,7 @@ export function AblaufSection({ night }: SectionProps) {
             </li>
           ))}
         </ol>
-        <p className={`mt-4 text-center text-xs ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
+        <p className={`mt-4 text-center text-base ${night ? "text-[#9DB4D0]" : "text-[#6B7280]"}`}>
           Start &amp; Siegerehrung: immer freitags um 18&nbsp;Uhr.
         </p>
       </div>
@@ -274,6 +273,10 @@ const FAQS = [
   {
     q: "Wer kann mitmachen?",
     a: "Alle aus Röbel und Umgebung — besonders Schülerinnen und Schüler. Du kannst allein oder mit Freunden bauen.",
+  },
+  {
+    q: "Wo findet es statt?",
+    a: "Komplett online — du machst ganz bequem von zu Hause aus mit, von überall und wann du willst. Du brauchst nur ein Gerät mit Browser. Zum Kickoff der ersten Woche kannst du optional an die Schule Röbel kommen, nötig ist das aber nicht.",
   },
   {
     q: "Brauche ich Programmier-Erfahrung?",
@@ -317,7 +320,7 @@ export function FaqSection({ night }: SectionProps) {
               <summary className="cursor-pointer list-none font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
                 {q}
               </summary>
-              <p className={`mt-2 text-sm leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
+              <p className={`mt-2 text-base leading-relaxed ${night ? "text-[#9DB4D0]" : "text-[#3D4E68]"}`}>
                 {a}
               </p>
             </details>
