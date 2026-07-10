@@ -7,6 +7,9 @@ import HeartIcon from '@/assets/icons/heart-02.svg';
 import HeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
 import CommentIcon from '@/assets/icons/comment-02.svg';
 import ShareIcon from '@/assets/icons/share-02.svg';
+import RepostIcon from '@/assets/icons/repost.svg';
+import ViewIcon from '@/assets/icons/view.svg';
+import { formatCompactCount } from '@/lib/utils/format-count';
 
 const HEART_PNG = require('@/assets/icons/Heart.png');
 
@@ -19,6 +22,14 @@ type Props = {
   onShare: () => void;
   /** When true, hides numeric counts and the top divider for a cleaner row. */
   iconOnly?: boolean;
+  /** 🔁 shown between comment and share when provided. */
+  repostsCount?: number;
+  isReposted?: boolean;
+  onRepost?: () => void;
+  /** Views: rendered right-most, muted; hidden when 0/undefined or iconOnly. */
+  viewsCount?: number;
+  /** When set, the views element is pressable (creator-only viewer list). */
+  onViewsPress?: () => void;
 };
 
 export default function PostActions({
@@ -29,6 +40,11 @@ export default function PostActions({
   onComment,
   onShare,
   iconOnly = false,
+  repostsCount = 0,
+  isReposted = false,
+  onRepost,
+  viewsCount,
+  onViewsPress,
 }: Props) {
   const { colors } = useTheme();
 
@@ -129,6 +145,23 @@ export default function PostActions({
         )}
       </Pressable>
 
+      {onRepost && (
+        <Pressable onPress={onRepost} style={styles.action} accessibilityLabel="Reposten">
+          <RepostIcon
+            width={22}
+            height={22}
+            color={isReposted ? colors.primary : colors.textPrimary}
+          />
+          {!iconOnly && repostsCount > 0 && (
+            <Text
+              style={[styles.count, { color: isReposted ? colors.primary : colors.textPrimary }]}
+            >
+              {repostsCount}
+            </Text>
+          )}
+        </Pressable>
+      )}
+
       <Pressable onPress={onShare} style={styles.action}>
         <ShareIcon width={22} height={22} color={colors.textPrimary} />
       </Pressable>
@@ -172,6 +205,20 @@ export default function PostActions({
           </Animated.View>
         </View>
       </Pressable>
+
+      {!iconOnly && typeof viewsCount === 'number' && viewsCount > 0 && (
+        <Pressable
+          onPress={onViewsPress}
+          disabled={!onViewsPress}
+          style={styles.action}
+          accessibilityLabel={`${viewsCount} Aufrufe`}
+        >
+          <ViewIcon width={18} height={18} color={colors.textTertiary} />
+          <Text style={[styles.count, { color: colors.textTertiary }]}>
+            {formatCompactCount(viewsCount)}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
