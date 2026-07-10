@@ -123,7 +123,24 @@ export function assembleFeed(params: {
       });
     }
 
-    sortable.sort((a, b) => b.ts - a.ts);
+    // Active-pinned posts float to the top (most-recently-pinned first), then
+    // everything else by recency. Only posts can be pinned; proposals/comments
+    // rank 0. Mirrors the pinned-first ordering the main feed gets from
+    // fetchFeedPosts (which this branch's re-sort would otherwise scramble).
+    const now = Date.now();
+    const pinRank = (item: FeedItem): number => {
+      if (item.type !== 'post' && item.type !== 'mecky') return 0;
+      const until = (item.data as PostRecord).pinned_until;
+      if (!until) return 0;
+      const t = new Date(until).getTime();
+      return !Number.isNaN(t) && t > now ? t : 0;
+    };
+    sortable.sort((a, b) => {
+      const pa = pinRank(a.item);
+      const pb = pinRank(b.item);
+      if (pa !== pb) return pb - pa;
+      return b.ts - a.ts;
+    });
     items.push(...sortable.map((s) => s.item));
     return items;
   }

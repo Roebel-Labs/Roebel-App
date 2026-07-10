@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
+import { isPostPinned } from '@/lib/utils/pin';
+import LinkifiedText from './LinkifiedText';
 import PostAuthorRow from './PostAuthorRow';
 import PostImageGrid from './PostImageGrid';
 import PostVideoPlayer from './PostVideoPlayer';
@@ -60,6 +63,7 @@ export default function FeedPostCard({
   const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
   const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
   const isMarketplacePost = !!post.linked_marketplace;
+  const pinned = isPostPinned(post.pinned_until);
 
   const showMoreToggle = !expanded && (displayContent?.length || 0) > FEED_PREVIEW_LIMIT;
   const previewContent = showMoreToggle
@@ -84,6 +88,13 @@ export default function FeedPostCard({
           pressed && { backgroundColor: colors.pressedOverlay },
         ]}
       >
+        {pinned && (
+          <View style={styles.pinnedRow}>
+            <Ionicons name="pin" size={13} color={colors.textTertiary} />
+            <Text style={[styles.pinnedText, { color: colors.textTertiary }]}>Angeheftet</Text>
+          </View>
+        )}
+
         <PostAuthorRow
           author={post.author}
           category={isMarketplacePost ? undefined : post.category}
@@ -92,8 +103,11 @@ export default function FeedPostCard({
         />
 
         {displayContent ? (
-          <Text style={[styles.content, { color: colors.textPrimary }]}>
-            {previewContent}
+          <LinkifiedText
+            content={previewContent}
+            style={[styles.content, { color: colors.textPrimary }]}
+            linkColor={colors.primary}
+          >
             {showMoreToggle && (
               <Text
                 style={[styles.moreToggle, { color: colors.primary }]}
@@ -102,7 +116,7 @@ export default function FeedPostCard({
                 Mehr anzeigen
               </Text>
             )}
-          </Text>
+          </LinkifiedText>
         ) : null}
 
         {post.linked_event && (
@@ -186,6 +200,16 @@ const styles = StyleSheet.create({
   },
   tappableMarketplace: {
     gap: 14,
+  },
+  pinnedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: -2,
+  },
+  pinnedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   content: {
     fontSize: 16,

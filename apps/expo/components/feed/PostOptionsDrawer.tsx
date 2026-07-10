@@ -11,6 +11,11 @@ type Props = {
   onEdit: () => void;
   onDelete: () => void;
   onReport: () => void;
+  /** Show the pin row (owner AND Verified Citizen). */
+  canPin?: boolean;
+  /** Whether the post is currently pinned — toggles the pin row's label/icon. */
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 };
 
 export default function PostOptionsDrawer({
@@ -20,14 +25,39 @@ export default function PostOptionsDrawer({
   onEdit,
   onDelete,
   onReport,
+  canPin = false,
+  isPinned = false,
+  onTogglePin,
 }: Props) {
   const { colors } = useTheme();
 
   return (
-    <BottomDrawer visible={visible} onClose={onClose} snapPoint={0.25}>
+    <BottomDrawer visible={visible} onClose={onClose}>
       <View style={styles.container}>
         {isOwner ? (
           <>
+            {canPin && (
+              <Pressable
+                onPress={() => {
+                  onClose();
+                  onTogglePin?.();
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  { borderBottomColor: colors.border },
+                  pressed && { backgroundColor: colors.pressedOverlay },
+                ]}
+              >
+                <Ionicons
+                  name={isPinned ? 'pin' : 'pin-outline'}
+                  size={20}
+                  color={colors.textPrimary}
+                />
+                <Text style={[styles.rowText, { color: colors.textPrimary }]}>
+                  {isPinned ? 'Anheftung aufheben' : 'Oben anheften'}
+                </Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => {
                 onClose();

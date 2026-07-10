@@ -26,6 +26,19 @@ function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: 
 /**
  * Fetch paginated posts for a feed tab with author data joined
  */
+const FEED_POST_SELECT = `
+  *,
+  author:users!posts_wallet_address_fkey(
+    wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
+  ),
+  account:accounts(id, account_type, name, avatar_url),
+  links:post_links(*),
+  poll:post_polls(*),
+  linked_event:events(id, title, date, time, location, image_url, category),
+  linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
+  sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
+`;
+
 export async function fetchFeedPosts(options: {
   feedType: FeedType;
   page: number;
@@ -37,18 +50,7 @@ export async function fetchFeedPosts(options: {
 
   const { data, error } = await supabase
     .from('posts')
-    .select(`
-      *,
-      author:users!posts_wallet_address_fkey(
-        wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
-      ),
-      account:accounts(id, account_type, name, avatar_url),
-      links:post_links(*),
-      poll:post_polls(*),
-      linked_event:events(id, title, date, time, location, image_url, category),
-      linked_marketplace:marketplace_listings(id, title, price, price_type, category, condition, media_urls, neighborhood),
-      sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
-    `)
+    .select(FEED_POST_SELECT)
     .eq('feed_type', options.feedType)
     .eq('status', 'published')
     .order('created_at', { ascending: false })
@@ -59,8 +61,35 @@ export async function fetchFeedPosts(options: {
     return { data: [], hasMore: false };
   }
 
+  let rows = (data as PostRecord[]).map(mergeAccountIntoAuthor);
+
+  // On the first page, surface currently-pinned posts at the very top — even a
+  // pin on an older post that wouldn't fall inside this page's window. Pins
+  // expire by time (a pinned_until in the past no longer matches "> now"), so
+  // no cleanup job is needed. Guarded so the feed still loads before the
+  // pinning migration is applied (missing column → error → skip silently).
+  if (options.page === 0) {
+    try {
+      const { data: pinnedData, error: pinnedErr } = await supabase
+        .from('posts')
+        .select(FEED_POST_SELECT)
+        .eq('feed_type', options.feedType)
+        .eq('status', 'published')
+        .gt('pinned_until', new Date().toISOString())
+        .order('pinned_until', { ascending: false });
+
+      if (!pinnedErr && pinnedData && pinnedData.length > 0) {
+        const pinned = (pinnedData as PostRecord[]).map(mergeAccountIntoAuthor);
+        const pinnedIds = new Set(pinned.map((p) => p.id));
+        rows = [...pinned, ...rows.filter((r) => !pinnedIds.has(r.id))];
+      }
+    } catch {
+      // Pinning not migrated yet — leave the chronological order untouched.
+    }
+  }
+
   return {
-    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
+    data: rows,
     hasMore: data.length === size,
   };
 }
@@ -322,6 +351,31 @@ export async function deletePost(postId: string, walletAddress: string): Promise
     console.error('[deletePost] rpc error', error);
     throw error;
   }
+}
+
+/**
+ * Pin or unpin a post via the SECURITY DEFINER RPC `pin_own_post`. The RPC
+ * enforces ownership AND Verified-Citizen status, and — when pinning — clears
+ * the wallet's other active pins first (one pin per citizen). Returns the new
+ * `pinned_until` (ISO string) when pinning, or null when unpinning.
+ */
+export async function pinPost(
+  postId: string,
+  walletAddress: string,
+  pin: boolean,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('pin_own_post', {
+    p_post_id: postId,
+    p_wallet: walletAddress,
+    p_pin: pin,
+  });
+
+  if (error) {
+    console.error('[pinPost] rpc error', error);
+    throw error;
+  }
+
+  return (data as string | null) ?? null;
 }
 
 /**

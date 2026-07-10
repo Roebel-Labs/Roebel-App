@@ -27,7 +27,8 @@ import { useRequireAuth } from '@/context/AuthGateContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
-import { deletePost, DuplicateReportError } from '@/lib/supabase-posts';
+import { deletePost, pinPost, DuplicateReportError } from '@/lib/supabase-posts';
+import { isPostPinned } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import FeedTabBar from './FeedTabBar';
@@ -407,6 +408,22 @@ export default function FeedHome() {
     refreshAll();
   };
 
+  const handleTogglePin = async () => {
+    if (!selectedPost || !walletAddress) return;
+    const currentlyPinned = isPostPinned(selectedPost.pinned_until);
+    try {
+      await pinPost(selectedPost.id, walletAddress, !currentlyPinned);
+      showSnackbar({
+        message: currentlyPinned ? 'Anheftung aufgehoben' : 'Beitrag oben angeheftet',
+      });
+      setSelectedPost(null);
+      refreshAll();
+    } catch (e) {
+      console.error('[FeedHome.handleTogglePin]', e);
+      showSnackbar({ message: 'Anheften nicht möglich' });
+    }
+  };
+
   const handleOpenReport = () => {
     if (!selectedPost) return;
     setReportingPostId(selectedPost.id);
@@ -596,6 +613,9 @@ export default function FeedHome() {
         visible={optionsDrawerVisible}
         onClose={() => setOptionsDrawerVisible(false)}
         isOwner={isOwnPost(selectedPost)}
+        canPin={isOwnPost(selectedPost) && isCitizen}
+        isPinned={isPostPinned(selectedPost?.pinned_until)}
+        onTogglePin={handleTogglePin}
         onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onReport={handleOpenReport}

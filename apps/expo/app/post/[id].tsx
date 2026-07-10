@@ -27,6 +27,7 @@ import {
   fetchCommentReplies,
   createComment,
   deletePost,
+  pinPost,
   deleteComment,
   updateComment,
   toggleCommentLike,
@@ -35,7 +36,10 @@ import {
   type PostLiker,
   DuplicateReportError,
 } from '@/lib/supabase-posts';
+import { isPostPinned } from '@/lib/utils/pin';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
+import { Ionicons } from '@expo/vector-icons';
+import LinkifiedText from '@/components/feed/LinkifiedText';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import CommentThread from '@/components/feed/CommentThread';
 import AvatarStack from '@/components/AvatarStack';
@@ -66,7 +70,7 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
-  const { user } = useUser();
+  const { user, isCitizen } = useUser();
   const { activeAccount, isOwnerOf } = useAccount();
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
@@ -240,6 +244,21 @@ export default function PostDetailScreen() {
     setPost(updatedPost);
     setEditComposerVisible(false);
     showSnackbar({ message: 'Beitrag aktualisiert' });
+  };
+
+  const handleTogglePin = async () => {
+    if (!post || !walletAddress) return;
+    const currentlyPinned = isPostPinned(post.pinned_until);
+    try {
+      const newPinnedUntil = await pinPost(post.id, walletAddress, !currentlyPinned);
+      setPost((prev) => (prev ? { ...prev, pinned_until: newPinnedUntil } : prev));
+      showSnackbar({
+        message: currentlyPinned ? 'Anheftung aufgehoben' : 'Beitrag oben angeheftet',
+      });
+    } catch (e) {
+      console.error('[post/[id].handleTogglePin]', e);
+      showSnackbar({ message: 'Anheften nicht möglich' });
+    }
   };
 
   // Update a single comment (top-level or nested reply) by id.
@@ -479,6 +498,13 @@ export default function PostDetailScreen() {
       likeCount === 1 ? '1 Person gefällt das' : `${likeCount} Personen gefällt das`;
     return (
     <View style={[styles.postSection, { borderBottomColor: colors.border }]}>
+      {isPostPinned(post.pinned_until) && (
+        <View style={styles.pinnedRow}>
+          <Ionicons name="pin" size={13} color={colors.textTertiary} />
+          <Text style={[styles.pinnedText, { color: colors.textTertiary }]}>Angeheftet</Text>
+        </View>
+      )}
+
       <PostAuthorRow
         author={post.author}
         category={post.category}
@@ -487,7 +513,11 @@ export default function PostDetailScreen() {
       />
 
       {displayContent ? (
-        <Text style={[styles.postContent, { color: colors.textPrimary }]}>{displayContent}</Text>
+        <LinkifiedText
+          content={displayContent}
+          style={[styles.postContent, { color: colors.textPrimary }]}
+          linkColor={colors.primary}
+        />
       ) : null}
 
       {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
@@ -504,7 +534,7 @@ export default function PostDetailScreen() {
       )}
 
       {post.video_url && (
-        <PostVideoPlayer videoUrl={post.video_url} isVisible autoPlay />
+        <PostVideoPlayer videoUrl={post.video_url} isVisible autoPlay startUnmuted />
       )}
 
       {post.sticker && (
@@ -676,6 +706,9 @@ export default function PostDetailScreen() {
         visible={optionsDrawerVisible}
         onClose={() => setOptionsDrawerVisible(false)}
         isOwner={isOwnPost}
+        canPin={isOwnPost && isCitizen}
+        isPinned={isPostPinned(post.pinned_until)}
+        onTogglePin={handleTogglePin}
         onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onReport={() => setReportDrawerVisible(true)}
@@ -768,6 +801,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     lineHeight: 24,
+  },
+  pinnedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: -2,
+  },
+  pinnedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   postSticker: {
     width: 200,

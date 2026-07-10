@@ -192,7 +192,12 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
       const postsResult = await fetchFeedPosts({ feedType, page: nextPage });
       pageRef.current = nextPage;
 
-      const updatedPosts = [...allPostsRef.current, ...postsResult.data];
+      // De-dupe by id: a pinned post prepended on page 0 can reappear at its
+      // natural chronological position on a later page.
+      const seen = new Set<string>();
+      const updatedPosts = [...allPostsRef.current, ...postsResult.data].filter(
+        (p) => (seen.has(p.id) ? false : (seen.add(p.id), true)),
+      );
       allPostsRef.current = updatedPosts;
 
       setItems(buildFeed(updatedPosts));

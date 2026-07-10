@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { openBrowserAsync } from 'expo-web-browser';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostLinkRecord } from '@/lib/types/feed';
@@ -12,7 +13,7 @@ export default function PostLinkPreview({ link }: Props) {
   const { colors } = useTheme();
 
   const handlePress = () => {
-    Linking.openURL(link.url).catch(() => {});
+    openBrowserAsync(link.url).catch(() => {});
   };
 
   const hostname = (() => {

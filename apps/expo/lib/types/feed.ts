@@ -84,6 +84,8 @@ export type PostRecord = {
   stadtkasse_snapshot: StadtkasseSnapshot | null;
   likes_count: number;
   comments_count: number;
+  /** When set and in the future, the post is pinned to the top of its feed. */
+  pinned_until: string | null;
   created_at: string;
   updated_at: string;
   // Joined data
