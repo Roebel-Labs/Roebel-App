@@ -56,9 +56,12 @@ export default function FeedEventCard({ event }: Props) {
             contentFit="contain"
             accessibilityIgnoresInvertColors
           />
+          {/* The badge is always white (overlaying the photo), so its text
+              colors are fixed dark — theme tokens would go light-on-white
+              in dark mode. */}
           <View style={styles.dateBadge}>
-            <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateSplit.day}</Text>
-            <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateSplit.label}</Text>
+            <Text style={[styles.dateDay, { color: '#111827' }]}>{dateSplit.day}</Text>
+            <Text style={[styles.dateLabel, { color: '#6B7280' }]}>{dateSplit.label}</Text>
           </View>
           {event.is_cancelled && <EventCancelledScrim />}
         </View>
