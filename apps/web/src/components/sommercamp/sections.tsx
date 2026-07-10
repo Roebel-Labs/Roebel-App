@@ -6,8 +6,8 @@ import Image from "next/image";
 import { Play } from "lucide-react";
 import { Reveal } from "./Reveal";
 
-// YouTube-ID des Intro-Videos — eintragen, sobald das Video hochgeladen ist.
-export const SOMMERCAMP_VIDEO_ID = "";
+// YouTube-ID des Intro-Videos (https://youtu.be/QKxNUsw_7CM).
+export const SOMMERCAMP_VIDEO_ID = "QKxNUsw_7CM";
 
 type SectionProps = { night: boolean };
 
