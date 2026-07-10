@@ -157,9 +157,9 @@ export function SommercampPage() {
                 night ? "text-white" : "text-[#051433]"
               }`}
             >
-              Baue Apps für Röbel.
+              100% Online.
               <br />
-              Gewinne Preise
+              Mini-Apps mit KI bauen von Zuhause aus.
             </p>
           </Reveal>
           <Reveal delay={500}>
