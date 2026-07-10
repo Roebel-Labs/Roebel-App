@@ -168,10 +168,14 @@ session are not counted (the app auto-connects wallets, so this is marginal).
   quoted_post_id, content: '' })`. Quote: same with `post_type: 'quote'`
   and the user's text. Author = reposter (wallet or active org account).
 - Undo repost: find own published repost row for that post → `deletePost`.
-- `FEED_POST_SELECT` gains `reposts_count`, `quoted_post_id` (via `*`) and a
-  self-join `quoted_post:posts!posts_quoted_post_id_fkey(…)` with the
-  original's author/media/linked previews (one level deep — a quote of a
-  quote renders the inner preview without further nesting).
+- `FEED_POST_SELECT` gains `reposts_count`, `quoted_post_id` (via `*`).
+  **Implementation deviation:** the planned PostgREST self-join embed
+  (`posts!posts_quoted_post_id_fkey`) does not resolve — the constraint-name
+  hint isn't matched for self-referential FKs and the column hint picks the
+  reverse to-many direction. Instead, `attachQuotedPosts()` hydrates
+  `quoted_post` in a second batched `.in('id', …)` query (also filtering
+  deleted originals). One level deep — a quote of a quote renders the inner
+  preview without further nesting.
 - `PostRecord` type: add `views_count`, `reposts_count`, `quoted_post_id`,
   `quoted_post?: PostRecord`, and extend `PostType` with
   `'repost' | 'quote'`.
