@@ -5,7 +5,11 @@ const config: ExpoConfig = {
   name: 'Röbel',
   slug: 'roebel-onchain',
   scheme: 'roebel',
-  version: '3.4.0',
+  // 3.5.0 = first XMTP-era runtime. runtimeVersion follows appVersion, so this
+  // bump FENCES old 3.4.0 builds from ever receiving XMTP-era JS via OTA
+  // (2026-07-10: a main-tip preview update onto the 3.4.0 runtime crash-looped
+  // a device — never publish post-XMTP JS to pre-XMTP builds).
+  version: '3.5.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -141,7 +145,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
-    buildNumber: '30',
+    buildNumber: '31',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -159,7 +163,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 36,
+    versionCode: 37,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
