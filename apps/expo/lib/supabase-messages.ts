@@ -20,6 +20,21 @@ export interface MessageStickerRef {
   asset_url: string;
 }
 
+/** Aggregated emoji reaction on a message (XMTP rail). */
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+}
+
+/** In-chat Röbel Münzen payment receipt (XMTP transactionReference). */
+export interface MessagePayment {
+  txHash: string;
+  networkId: string;
+  /** Decimal amount, e.g. 2.5 — rendered as "2,50 Röbel Münzen". */
+  amount: number;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -29,6 +44,12 @@ export interface Message {
   sticker_reward_id: string | null;
   sticker?: MessageStickerRef | null;
   created_at: string;
+  // ── Additive, optional fields for the XMTP rail ──────────────────
+  /** Which rail carried this message. Absent = supabase (legacy rows). */
+  source?: 'supabase' | 'xmtp';
+  reactions?: MessageReaction[];
+  payment?: MessagePayment;
+  delivery?: 'sending' | 'sent' | 'failed';
 }
 
 export interface ConversationWithLastMessage extends Conversation {
@@ -49,6 +70,9 @@ export interface ConversationWithLastMessage extends Conversation {
   lastMessage: Message | null;
   lastReadAt: string | null;
   hasUnread: boolean;
+  // ── XMTP rail plumbing (personal peers only, null for orgs) ──────
+  peerOwnerWallet: string | null;
+  peerXmtpRegisteredAt: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -164,6 +188,7 @@ type UserFields = {
   username: string | null;
   profile_picture_url: string | null;
   equipped_frame_asset_url: string | null;
+  xmtp_registered_at: string | null;
 };
 
 export async function fetchConversations(
@@ -214,12 +239,12 @@ export async function fetchConversations(
     (id) => accountById.get(id)?.account_type === 'personal'
   );
   const userByAccountId = new Map<string, UserFields>();
+  const walletByAccount = new Map<string, string>();
   if (personalAccountIds.length > 0) {
     const { data: ownerRows } = await supabase
       .from('account_owners' as any)
       .select('account_id, wallet_address')
       .in('account_id', personalAccountIds);
-    const walletByAccount = new Map<string, string>();
     for (const r of (ownerRows ?? []) as Array<{ account_id: string; wallet_address: string }>) {
       // Personal accounts have a single owner; first row wins if duplicates exist.
       if (!walletByAccount.has(r.account_id)) {
@@ -230,7 +255,7 @@ export async function fetchConversations(
     if (wallets.length > 0) {
       const { data: users } = await supabase
         .from('users')
-        .select('wallet_address, username, profile_picture_url, equipped_frame_asset_url')
+        .select('wallet_address, username, profile_picture_url, equipped_frame_asset_url, xmtp_registered_at')
         .in('wallet_address', wallets);
       const userByWallet = new Map<string, UserFields>();
       for (const u of (users ?? []) as UserFields[]) {
@@ -302,6 +327,8 @@ export async function fetchConversations(
         lastMessage,
         lastReadAt,
         hasUnread,
+        peerOwnerWallet: walletByAccount.get(peerId)?.toLowerCase() ?? null,
+        peerXmtpRegisteredAt: peerUser?.xmtp_registered_at ?? null,
       } satisfies ConversationWithLastMessage;
     })
   );
@@ -420,6 +447,24 @@ export async function fetchPersonalAccountIdByWallet(
   }>;
   const personal = rows.find((r) => r.accounts?.account_type === 'personal');
   return personal?.account_id ?? null;
+}
+
+// Owner/admin wallets of an account (lowercased, deduped) — used for XMTP
+// addressing and DM push targeting. Personal accounts have exactly one.
+export async function fetchAccountOwnerWallets(accountId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('account_owners' as any)
+    .select('wallet_address, role')
+    .eq('account_id', accountId);
+  if (error || !data) return [];
+  const rows = data as Array<{ wallet_address: string; role: string | null }>;
+  return Array.from(
+    new Set(
+      rows
+        .filter((r) => !r.role || r.role === 'owner' || r.role === 'admin')
+        .map((r) => r.wallet_address.toLowerCase())
+    )
+  );
 }
 
 // Hydrate a Message row (e.g. from a realtime payload) with its joined
