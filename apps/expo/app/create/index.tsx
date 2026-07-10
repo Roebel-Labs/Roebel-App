@@ -474,7 +474,7 @@ export default function CreateScreen() {
           {/* Video preview */}
           {draft.videoUrl && (
             <View style={styles.videoPreviewWrapper}>
-              <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay />
+              <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay startUnmuted />
               <Pressable
                 onPress={draft.removeVideo}
                 style={[styles.videoRemoveBtn, { backgroundColor: colors.error }]}

@@ -187,7 +187,7 @@ export default function ReviewScreen() {
           )}
 
           {draft.videoUrl && (
-            <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay />
+            <PostVideoPlayer videoUrl={draft.videoUrl} isVisible autoPlay startUnmuted />
           )}
 
           {draft.isPoll && (

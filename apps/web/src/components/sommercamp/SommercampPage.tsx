@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Moon, Sun } from "lucide-react";
+import { MessageCircle, Moon, Sun } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { RegistrationCard } from "./RegistrationCard";
 import {
@@ -214,6 +214,19 @@ export function SommercampPage() {
             </Reveal>
             <Reveal delay={150} className="mt-8">
               <RegistrationCard night={night} />
+            </Reveal>
+            {/* Fragen? Direkter Draht per WhatsApp (+49 176 82275490). */}
+            <Reveal delay={250} className="mt-6 text-center">
+              <p className="text-base text-white/80">Noch Fragen?</p>
+              <a
+                href="https://wa.me/4917682275490?text=Hallo!%20Ich%20habe%20eine%20Frage%20zum%20Sommer%20Camp."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-base font-bold text-white shadow-lg transition-transform hover:scale-[1.03] motion-reduce:transition-none"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Frag uns auf WhatsApp
+              </a>
             </Reveal>
           </div>
         </section>
