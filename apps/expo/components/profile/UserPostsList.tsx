@@ -7,6 +7,8 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import PostImageGrid from '@/components/feed/PostImageGrid';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
+import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
+import RepostIcon from '@/assets/icons/repost.svg';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import type { PostRecord } from '@/lib/types/feed';
 
@@ -62,12 +64,17 @@ export default function UserPostsList({ walletAddress }: Props) {
   return (
     <View>
       {posts.map((post) => {
-        const youtubeUrl = resolveYouTubeUrl(post.content, post.links?.map((l) => l.url));
-        const displayContent = youtubeUrl ? removeYouTubeUrls(post.content) : post.content;
+        // Repost rows show the ORIGINAL post's body under a "hat repostet"
+        // marker; rows whose original was deleted are skipped entirely.
+        if (post.post_type === 'repost' && !post.quoted_post) return null;
+        const isRepost = post.post_type === 'repost';
+        const display = isRepost && post.quoted_post ? post.quoted_post : post;
+        const youtubeUrl = resolveYouTubeUrl(display.content, display.links?.map((l) => l.url));
+        const displayContent = youtubeUrl ? removeYouTubeUrls(display.content) : display.content;
         return (
           <Pressable
             key={post.id}
-            onPress={() => router.push(`/post/${post.id}` as any)}
+            onPress={() => router.push(`/post/${display.id}` as any)}
             style={({ pressed }) => [
               styles.post,
               { borderBottomColor: colors.border },
@@ -76,10 +83,18 @@ export default function UserPostsList({ walletAddress }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Beitrag öffnen"
           >
+            {isRepost && (
+              <View style={styles.repostRow}>
+                <RepostIcon width={13} height={13} color={colors.textTertiary} />
+                <Text style={[styles.repostText, { color: colors.textTertiary }]}>
+                  hat repostet
+                </Text>
+              </View>
+            )}
             <PostAuthorRow
-              author={post.author}
-              category={post.category}
-              createdAt={post.created_at}
+              author={display.author}
+              category={display.category}
+              createdAt={display.created_at}
             />
             {displayContent ? (
               <Text
@@ -89,10 +104,13 @@ export default function UserPostsList({ walletAddress }: Props) {
                 {displayContent}
               </Text>
             ) : null}
-            {post.media_urls && post.media_urls.length > 0 && (
-              <PostImageGrid imageUrls={post.media_urls as string[]} />
+            {display.media_urls && display.media_urls.length > 0 && (
+              <PostImageGrid imageUrls={display.media_urls as string[]} />
             )}
-            {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
+            {display.linked_event && <PostLinkedEventCard event={display.linked_event} />}
+            {display.post_type === 'quote' && display.quoted_post !== undefined && (
+              <QuotedPostPreview post={display.quoted_post} />
+            )}
             {youtubeUrl && <PostYouTubePreview youtubeUrl={youtubeUrl} />}
           </Pressable>
         );
@@ -107,6 +125,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  repostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: -2,
+  },
+  repostText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   content: {
     fontSize: 15,

@@ -191,7 +191,7 @@ export async function fetchUserPosts(
   }
 
   return {
-    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
+    data: await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor)),
     hasMore: data.length === size,
   };
 }
@@ -233,7 +233,7 @@ export async function fetchAccountPosts(
   }
 
   return {
-    data: (data as PostRecord[]).map(mergeAccountIntoAuthor),
+    data: await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor)),
     hasMore: data.length === size,
   };
 }
