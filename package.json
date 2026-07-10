@@ -8,6 +8,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "test:web": "tsx --test apps/web/tests/*.test.ts",
     "clean": "turbo clean",
     "dev:web": "turbo dev --filter=@roebel/web",
     "dev:expo": "turbo dev --filter=@roebel/expo",

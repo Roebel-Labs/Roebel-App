@@ -25,6 +25,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Web unit tests
+        run: pnpm test:web
+
       - name: Lint
         run: pnpm lint
 

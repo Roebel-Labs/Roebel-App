@@ -7,22 +7,7 @@ import {
   cleanNotificationBody,
   isWalletLike,
 } from "@/lib/notification-display"
-
-// Personal notification types are logged per-recipient in the `notifications`
-// table (scoped by recipient_wallet). `notification_log` is a GLOBAL audit log
-// of every push sent to anyone — it has NO recipient column — so surfacing
-// these types from the global log would leak other people's likes/comments/
-// DMs/invites into everyone's inbox (including logged-out visitors). Only
-// broadcast types (feed posts, news, events) legitimately belong to every user.
-// Mirrors apps/expo/lib/supabase-notifications.ts PERSONAL_LOG_TYPES.
-const PERSONAL_LOG_TYPES = [
-  "direct_message",
-  "post_like",
-  "post_comment",
-  "comment_like",
-  "post_reply",
-  "org_invite",
-]
+import { PERSONAL_NOTIFICATION_LOG_FILTER } from "@/lib/notifications/policy"
 
 // ============================================
 // Create
@@ -117,7 +102,7 @@ export async function getUnifiedNotifications(params?: {
         .from("notification_log")
         .select("id, title, body, notification_type, created_at, data", { count: "exact" })
         .in("status", ["sent", "partial"])
-        .not("notification_type", "in", `(${PERSONAL_LOG_TYPES.join(",")})`)
+        .not("notification_type", "in", PERSONAL_NOTIFICATION_LOG_FILTER)
         .order("created_at", { ascending: false })
         .limit(fetchLimit),
 
