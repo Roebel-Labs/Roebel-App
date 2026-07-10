@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { probeStreamConfigured, uploadVideoToStream } from '@/lib/stream-upload';
-import type { PostCategory, FeedType, PostType, StadtkasseSnapshot } from '@/lib/types/feed';
+import type { PostCategory, FeedType, PostType, StadtkasseSnapshot, PostRecord } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
@@ -30,6 +30,9 @@ type CreatePostState = {
   linkedMarketplaceData: LinkedMarketplaceData | null;
   sticker: LootboxReward | null;
   stadtkasseSnapshot: StadtkasseSnapshot | null;
+  /** Quote mode: id + preview data of the post being quoted. */
+  quotedPostId: string | null;
+  quotedPostData: PostRecord | null;
 };
 
 type CreatePostActions = {
@@ -48,6 +51,7 @@ type CreatePostActions = {
   clearLinkedItem: () => void;
   setSticker: (reward: LootboxReward | null) => void;
   setStadtkasseSnapshot: (snapshot: StadtkasseSnapshot | null) => void;
+  setQuotedPost: (id: string, data: PostRecord | null) => void;
   reset: () => void;
 };
 
@@ -74,6 +78,8 @@ const initialState: CreatePostState = {
   linkedMarketplaceData: null,
   sticker: null,
   stadtkasseSnapshot: null,
+  quotedPostId: null,
+  quotedPostData: null,
 };
 
 export function CreatePostProvider({ children }: { children: React.ReactNode }) {
@@ -220,6 +226,12 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
     setState((prev) => ({ ...prev, stadtkasseSnapshot: snapshot }));
   }, []);
 
+  // Quotes always land in the main feed ("Für Alle") — the whole point is
+  // promoting an App-feed post into the town-wide timeline.
+  const setQuotedPost = useCallback((id: string, data: PostRecord | null) => {
+    setState((prev) => ({ ...prev, quotedPostId: id, quotedPostData: data, feedType: 'main' }));
+  }, []);
+
   const reset = useCallback(() => {
     setState(initialState);
   }, []);
@@ -243,6 +255,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
         clearLinkedItem,
         setSticker,
         setStadtkasseSnapshot,
+        setQuotedPost,
         reset,
       }}
     >

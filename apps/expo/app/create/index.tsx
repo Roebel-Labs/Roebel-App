@@ -22,11 +22,13 @@ import { useAccount } from '@/context/AccountContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import { useCreatePost } from '@/context/CreatePostContext';
+import { fetchPostById } from '@/lib/supabase-posts';
 import { POST_CATEGORY_LABELS } from '@/lib/types/feed';
 import type { PostCategory, FeedType } from '@/lib/types/feed';
 import { isOrgAccount } from '@/lib/types';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import AtMentionSheet from '@/components/feed/AtMentionSheet';
 import PostImageGrid from '@/components/feed/PostImageGrid';
@@ -92,6 +94,7 @@ export default function CreateScreen() {
     linkedListingCondition?: string;
     linkedListingMediaUrls?: string;
     linkedListingNeighborhood?: string;
+    quotedPostId?: string;
   }>();
   const { user, isCitizen, updateProfile } = useUser();
   const { activeAccount } = useAccount();
@@ -170,6 +173,15 @@ export default function CreateScreen() {
     }
   }, [params.feedType]);
 
+  // Quote mode ("Zitieren" on an App-feed post): hydrate the quoted original
+  // for the embedded preview. setQuotedPost also forces feedType 'main'.
+  useEffect(() => {
+    if (!params.quotedPostId || draft.quotedPostId) return;
+    fetchPostById(params.quotedPostId).then((p) => {
+      draft.setQuotedPost(params.quotedPostId!, p);
+    });
+  }, [params.quotedPostId]);
+
   // Non-citizens can only post to 'main' — force it if the draft is anything else
   useEffect(() => {
     if (!isCitizen && draft.feedType !== 'main') {
@@ -181,7 +193,10 @@ export default function CreateScreen() {
 
   const canProceed =
     postingAllowed &&
-    (draft.content.trim().length > 0 || hasLinkedItem || !!draft.stadtkasseSnapshot);
+    (draft.content.trim().length > 0 ||
+      hasLinkedItem ||
+      !!draft.stadtkasseSnapshot ||
+      !!draft.quotedPostId);
 
   // "@" menu → attach a frozen snapshot of the Stadtkasse (or remove it if one is
   // already attached). The euro figure is read on-chain once, here, then frozen.
@@ -299,18 +314,18 @@ export default function CreateScreen() {
           <View>
             <Pressable
               style={[styles.audiencePill, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-              onPress={() => isCitizen && setFeedDropdownOpen(!feedDropdownOpen)}
-              disabled={!isCitizen}
+              onPress={() => isCitizen && !draft.quotedPostId && setFeedDropdownOpen(!feedDropdownOpen)}
+              disabled={!isCitizen || !!draft.quotedPostId}
             >
               <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
               <Text style={[styles.audienceText, { color: colors.textPrimary }]}>
                 {FEED_TYPE_LABELS[draft.feedType]}
               </Text>
-              {isCitizen && (
+              {isCitizen && !draft.quotedPostId && (
                 <Ionicons name={feedDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textSecondary} />
               )}
             </Pressable>
-            {feedDropdownOpen && isCitizen && (
+            {feedDropdownOpen && isCitizen && !draft.quotedPostId && (
               <View style={[styles.feedDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 {(Object.keys(FEED_TYPE_LABELS) as FeedType[]).map((ft) => (
                   <Pressable
@@ -414,6 +429,13 @@ export default function CreateScreen() {
           >
             {draft.content.length}/{MAX_CONTENT_LENGTH}
           </Text>
+
+          {/* Quoted-post preview (Zitieren mode) — read-only, forces main feed */}
+          {draft.quotedPostId && (
+            <View style={styles.linkedItemWrapper}>
+              <QuotedPostPreview post={draft.quotedPostData} />
+            </View>
+          )}
 
           {/* Stadtkasse snapshot preview — directly under the body text */}
           {draft.stadtkasseSnapshot && (

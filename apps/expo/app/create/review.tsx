@@ -20,6 +20,7 @@ import { usePendingPostFeedback } from '@/context/PendingPostFeedbackContext';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { createPost, createPoll, PostingDeniedError } from '@/lib/supabase-posts';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
+import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
@@ -53,7 +54,8 @@ export default function ReviewScreen() {
     const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
     const hasSticker = !!draft.sticker;
     const hasStadtkasse = !!draft.stadtkasseSnapshot;
-    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem && !hasSticker && !hasStadtkasse)) return;
+    const hasQuote = !!draft.quotedPostId;
+    if (!walletAddress || (!draft.content.trim() && !hasLinkedItem && !hasSticker && !hasStadtkasse && !hasQuote)) return;
     setIsSubmitting(true);
 
     try {
@@ -64,7 +66,8 @@ export default function ReviewScreen() {
         content,
         category: draft.category,
         feed_type: draft.feedType,
-        post_type: draft.postType,
+        post_type: draft.quotedPostId ? 'quote' : draft.postType,
+        quoted_post_id: draft.quotedPostId || undefined,
         media_urls: draft.images.length > 0 ? draft.images : undefined,
         video_url: draft.videoUrl || undefined,
         linked_event_id: draft.linkedEventId || undefined,
@@ -178,6 +181,8 @@ export default function ReviewScreen() {
           {draft.stadtkasseSnapshot && (
             <StadtkasseSnapshotCard euro={draft.stadtkasseSnapshot.euro} />
           )}
+
+          {draft.quotedPostId && <QuotedPostPreview post={draft.quotedPostData} />}
 
           {draft.images.length > 0 && (
             <PostImageGrid
