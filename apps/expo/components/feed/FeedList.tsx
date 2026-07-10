@@ -213,20 +213,26 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     ({ item }: { item: FeedItem }) => {
       switch (item.type) {
         case 'alert':
-          return <FeedAlertCard alert={item.data} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedAlertCard alert={item.data} />
+            </View>
+          );
 
         case 'post': {
           const post = item.data as PostRecord;
           if (post.post_type === 'event_experience') {
             return (
-              <FeedExperienceCard
-                post={post}
-                isLiked={isLiked(post.id)}
-                displayLikeCount={getLikeCount(post.id, post.likes_count)}
-                onLike={() => toggleLike(post.id, post.likes_count)}
-                onShare={() => sharePost(post.id, post.content)}
-                onMore={() => onMore(post)}
-              />
+              <View style={styles.moduleWrap}>
+                <FeedExperienceCard
+                  post={post}
+                  isLiked={isLiked(post.id)}
+                  displayLikeCount={getLikeCount(post.id, post.likes_count)}
+                  onLike={() => toggleLike(post.id, post.likes_count)}
+                  onShare={() => sharePost(post.id, post.content)}
+                  onMore={() => onMore(post)}
+                />
+              </View>
             );
           }
           return (
@@ -261,59 +267,107 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
         case 'sponsored':
           return (
-            <FeedSponsoredCard
-              deal={item.data as BusinessDealWithBusiness}
-              isVisible={visibleDeals.current.has((item.data as BusinessDealWithBusiness).id)}
-            />
+            <View style={styles.moduleWrap}>
+              <FeedSponsoredCard
+                deal={item.data as BusinessDealWithBusiness}
+                isVisible={visibleDeals.current.has((item.data as BusinessDealWithBusiness).id)}
+              />
+            </View>
           );
 
         case 'marketplace':
-          return <FeedMarketplaceCard listing={item.data as MarketplaceListingRecord} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedMarketplaceCard listing={item.data as MarketplaceListingRecord} />
+            </View>
+          );
 
         case 'event':
-          return <FeedEventCard event={item.data as EventRecord} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedEventCard event={item.data as EventRecord} />
+            </View>
+          );
 
         case 'news_section':
-          return <FeedNewsSection articles={item.data as NewsArticle[]} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedNewsSection articles={item.data as NewsArticle[]} />
+            </View>
+          );
 
         case 'cinema_section':
-          return <FeedCinemaSection movies={item.data as MovieRecord[]} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedCinemaSection movies={item.data as MovieRecord[]} />
+            </View>
+          );
 
         case 'restaurant_section':
-          return <FeedRestaurantSection restaurants={item.data as RestaurantRecord[]} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedRestaurantSection restaurants={item.data as RestaurantRecord[]} />
+            </View>
+          );
 
         case 'special_menu_section':
-          return <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedSpecialMenuSection menus={item.data as SpecialMenuRecord[]} />
+            </View>
+          );
 
         case 'governance_nudge': {
           const nudge = item.data as GovernanceNudgeData;
           return (
-            <GovernanceNudge
-              proposalId={nudge.proposalId}
-              title={nudge.title}
-              forPercentage={nudge.forPercentage}
-              againstPercentage={nudge.againstPercentage}
-              daysRemaining={nudge.daysRemaining}
-            />
+            <View style={styles.moduleWrap}>
+              <GovernanceNudge
+                proposalId={nudge.proposalId}
+                title={nudge.title}
+                forPercentage={nudge.forPercentage}
+                againstPercentage={nudge.againstPercentage}
+                daysRemaining={nudge.daysRemaining}
+              />
+            </View>
           );
         }
 
         case 'mecky_tip': {
           const tip = item.data as MeckyTipData;
-          return <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <MeckyTip text={tip.text} actionLabel={tip.actionLabel} actionRoute={tip.actionRoute} />
+            </View>
+          );
         }
 
         case 'audio_player':
-          return <FeedAudioPlayerCard data={item.data as AudioPlayerData} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedAudioPlayerCard data={item.data as AudioPlayerData} />
+            </View>
+          );
 
         case 'proposal':
-          return <FeedProposalCard proposal={item.data} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedProposalCard proposal={item.data} />
+            </View>
+          );
 
         case 'proposal_comment':
-          return <FeedProposalCommentCard comment={item.data} />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedProposalCommentCard comment={item.data} />
+            </View>
+          );
 
         case 'proposal_hero':
-          return <FeedProposalHeroCard />;
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedProposalHeroCard />
+            </View>
+          );
 
         default:
           return null;
@@ -388,7 +442,10 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ListHeaderComponent={listHeader ? <>{listHeader}</> : undefined}
-      style={{ backgroundColor: colors.feedBackground }}
+      ItemSeparatorComponent={() => (
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
+      )}
+      style={{ backgroundColor: colors.background }}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
@@ -437,9 +494,17 @@ export default FeedList;
 
 const styles = StyleSheet.create({
   feedContent: {
-    paddingHorizontal: 8,
     paddingTop: 8,
-    gap: 8,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+  },
+  // Non-post modules (news, deals, proposals, …) keep their rounded widget
+  // look inside the otherwise edge-to-edge X-style list.
+  moduleWrap: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   skeletonList: {
     flex: 1,

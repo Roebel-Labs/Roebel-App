@@ -104,7 +104,6 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: 12,
     overflow: 'hidden' as const,
     borderLeftWidth: 3,
     gap: 10,

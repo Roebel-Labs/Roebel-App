@@ -186,13 +186,11 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: 12,
     overflow: 'hidden' as const,
     gap: 10,
   },
   containerMarketplace: {
     paddingVertical: 16,
-    borderRadius: 20,
     gap: 14,
   },
   tappable: {
