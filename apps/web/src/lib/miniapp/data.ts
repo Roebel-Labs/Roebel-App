@@ -211,17 +211,20 @@ export async function updateAppManifest(
     if (clash) throw new MiniAppError("conflict", `Der slug "${m.slug}" ist bereits vergeben.`);
   }
 
+  // Icon/previews are managed in the "Bilder" section (upload + KI). A
+  // manifest edit that omits them keeps the stored images instead of
+  // clobbering them — clearing happens über die Bilder-Sektion.
   const { data: updated, error } = await supabase
     .from("mini_apps")
     .update({
       slug: m.slug,
       name: m.name,
-      icon_url: m.iconUrl || null,
+      icon_url: m.iconUrl || app.icon_url,
       home_url: m.homeUrl,
       description: m.description || null,
       category: m.category,
       tags: m.tags,
-      screenshots: m.screenshots,
+      screenshots: m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
       permissions: m.permissions,
       primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
       status: "pending",

@@ -67,11 +67,19 @@ export function ManifestForm({
   submitLabel,
   onSubmit,
   busy,
+  hideImageFields,
 }: {
   app?: MiniAppRow | null;
   submitLabel: string;
   onSubmit: (manifest: MiniAppManifest) => void;
   busy?: boolean;
+  /**
+   * Edit surfaces with a "Bilder" section set this: the icon/preview fields
+   * disappear and the submit sends them EMPTY — the server keeps the stored
+   * images (AI-built apps carry a data:-URI icon that would otherwise fail
+   * the https validation and block every save).
+   */
+  hideImageFields?: boolean;
 }) {
   const [v, setV] = useState<ManifestFormValue>(() => fromApp(app));
 
@@ -91,7 +99,8 @@ export function ManifestForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(toManifest(v));
+        const m = toManifest(v);
+        onSubmit(hideImageFields ? { ...m, iconUrl: "", screenshots: [] } : m);
       }}
       className="space-y-4"
     >
@@ -176,16 +185,18 @@ export function ManifestForm({
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="iconUrl">Icon-URL (1024×1024 PNG)</Label>
-        <Input
-          id="iconUrl"
-          type="url"
-          value={v.iconUrl}
-          onChange={(e) => set("iconUrl", e.target.value)}
-          placeholder="https://…/icon.png"
-        />
-      </div>
+      {hideImageFields ? null : (
+        <div>
+          <Label htmlFor="iconUrl">Icon-URL (1024×1024 PNG)</Label>
+          <Input
+            id="iconUrl"
+            type="url"
+            value={v.iconUrl}
+            onChange={(e) => set("iconUrl", e.target.value)}
+            placeholder="https://…/icon.png"
+          />
+        </div>
+      )}
 
       <div>
         <Label htmlFor="tags">Tags (Komma-getrennt, max. 5)</Label>
@@ -197,16 +208,18 @@ export function ManifestForm({
         />
       </div>
 
-      <div>
-        <Label>Vorschaubilder (1:1)</Label>
-        <p className="mb-2 text-xs text-muted-foreground">
-          Quadratische Bilder, die auf der Mini-App-Seite in einer Reihe erscheinen.
-        </p>
-        <ScreenshotManager
-          value={v.screenshots}
-          onChange={(imgs) => set("screenshots", imgs)}
-        />
-      </div>
+      {hideImageFields ? null : (
+        <div>
+          <Label>Vorschaubilder (1:1)</Label>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Quadratische Bilder, die auf der Mini-App-Seite in einer Reihe erscheinen.
+          </p>
+          <ScreenshotManager
+            value={v.screenshots}
+            onChange={(imgs) => set("screenshots", imgs)}
+          />
+        </div>
+      )}
 
       <div>
         <Label>Berechtigungen</Label>

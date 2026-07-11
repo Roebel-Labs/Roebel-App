@@ -213,13 +213,22 @@ export function SettingsDialog({
                   </div>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  Änderungen setzen die App zurück in die Prüfung.
+                  Änderungen setzen die App zurück in die Prüfung.{" "}
+                  <button
+                    type="button"
+                    onClick={() => onSectionChange("images")}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Icon und Vorschaubilder verwaltest du unter „Bilder“
+                  </button>{" "}
+                  — dort auch mit KI-Generierung und -Bearbeitung.
                 </p>
                 <ManifestForm
                   app={app}
                   submitLabel="Speichern & erneut einreichen"
                   onSubmit={saveManifest}
                   busy={busy}
+                  hideImageFields
                 />
               </div>
             ) : null}

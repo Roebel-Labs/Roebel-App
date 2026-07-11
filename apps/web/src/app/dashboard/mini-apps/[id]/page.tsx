@@ -110,9 +110,16 @@ export default function BuilderMiniAppDetail({
             </Button>
           </div>
           <p className="mb-4 text-xs text-muted-foreground">
-            Änderungen setzen die App zurück in die Prüfung.
+            Änderungen setzen die App zurück in die Prüfung. Icon und Vorschaubilder
+            verwaltest du im Bereich „Bilder“ weiter unten.
           </p>
-          <ManifestForm app={app} submitLabel="Speichern & erneut einreichen" onSubmit={save} busy={busy} />
+          <ManifestForm
+            app={app}
+            submitLabel="Speichern & erneut einreichen"
+            onSubmit={save}
+            busy={busy}
+            hideImageFields
+          />
         </Card>
       ) : (
         <DetailCard
