@@ -1,8 +1,9 @@
 // Auto store images after publish: screenshot every app screen in a hidden
-// iframe (netizen:capture bridge), then let Nano Banana 2 fill whatever the
-// store entry is missing — raster icon, 16:9 hero artwork and one 1:1 preview
-// per screen (screenshot as image reference). Only missing images are
-// generated; existing raster icons / previews are never overwritten.
+// iframe (netizen:capture bridge), then let the KIE image model (Seedream
+// 4.5) fill whatever the store entry is missing — raster icon, 16:9 hero
+// artwork and one 1:1 preview per screen (screenshot as image reference).
+// Only missing images are generated (unless force); existing raster icons /
+// previews are never overwritten in the normal run.
 import type { MiniAppRow } from "@/lib/miniapp/types";
 import { buildScreenDoc, parseScreens } from "./screens";
 

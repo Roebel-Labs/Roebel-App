@@ -1,4 +1,4 @@
-// Poll a Nano Banana 2 task. On success the result is copied into the
+// Poll a KIE (Seedream 4.5) task. On success the result is copied into the
 // `images` bucket and written onto the app row (icon_url / screenshots[slot]).
 import { NextResponse } from "next/server";
 import { jsonError, getParam } from "@/lib/miniapp/http";

@@ -1,8 +1,9 @@
 "use client";
 
 // "Bilder" section on the builder app-detail page: 1:1 app icon + up to five
-// 1:1 store previews. Each slot can be filled by upload, Nano Banana 2
-// generation, or NB2 with an editor screenshot as reference ("Aus Screenshot").
+// 1:1 store previews. Each slot can be filled by upload, Seedream 4.5
+// generation, KI-edit of the current image, or generation with an editor
+// screenshot as reference ("Aus Screenshot").
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,

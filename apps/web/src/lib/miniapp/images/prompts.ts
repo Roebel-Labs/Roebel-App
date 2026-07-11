@@ -1,4 +1,5 @@
-// Prompt builders for Nano Banana 2 — app icons and 1:1 store previews.
+// Prompt builders for the KIE image models (Seedream 4.5) — app icons,
+// store hero and 1:1 previews.
 import "server-only";
 import type { MiniAppRow } from "../types";
 

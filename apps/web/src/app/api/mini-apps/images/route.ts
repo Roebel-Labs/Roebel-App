@@ -1,5 +1,6 @@
-// POST: start a Nano Banana 2 generation for an app icon or 1:1 store
-// preview. Returns { taskId } — the client polls /api/mini-apps/images/status.
+// POST: start a Seedream 4.5 generation (or edit, mode="edit") for an app
+// icon, store hero or 1:1 preview. Returns { taskId } — the client polls
+// /api/mini-apps/images/status.
 // DELETE: remove the icon or a preview slot.
 import { NextResponse } from "next/server";
 import { jsonError, getParam } from "@/lib/miniapp/http";

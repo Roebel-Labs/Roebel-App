@@ -1,9 +1,9 @@
 "use client";
 
-// Post-publish runner: captures every app screen offscreen and lets Nano
-// Banana 2 fill the store entry (raster icon, 16:9 hero, 1:1 previews with
-// the screenshots as reference). Shows a floating progress card bottom-right;
-// the generated images land directly on the app row (dashboard "Bilder").
+// Post-publish runner: captures every app screen offscreen and lets the KIE
+// image model (Seedream 4.5) fill the store entry (raster icon, 16:9 hero,
+// 1:1 previews with the screenshots as reference). Shows a floating progress
+// card bottom-right; the images land directly on the app row ("Bilder").
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Loader2, Minus, Sparkles, X } from "lucide-react";
 import {
