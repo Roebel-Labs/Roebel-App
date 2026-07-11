@@ -47,7 +47,7 @@ export function deriveTasks(app: MiniAppRow | null): InboxTask[] {
     ];
   }
   const publishTask: InboxTask =
-    app.status === "published"
+    app.status === "live"
       ? {
           key: "publish",
           title: "App veröffentlicht",

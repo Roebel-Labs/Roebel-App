@@ -762,7 +762,7 @@ export async function queryAppRankings(windowDays = 7): Promise<AppRankings> {
       supabase
         .from("mini_apps")
         .select("id, name, slug, icon_url, primary_color, status")
-        .eq("status", "published"),
+        .eq("status", "live"),
       supabase
         .from("mini_app_events")
         .select("mini_app_id, wallet, session_id, event, created_at")

@@ -234,7 +234,7 @@ export default function MiniAppDashboard() {
                         <span
                           className={cn(
                             "h-1.5 w-1.5 shrink-0 rounded-full",
-                            a.status === "published"
+                            a.status === "live"
                               ? "bg-green-500"
                               : a.status === "pending"
                                 ? "bg-amber-500"
