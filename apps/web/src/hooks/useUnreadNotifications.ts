@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useActiveAccount } from "thirdweb/react"
-import { getUnifiedNotifications } from "@/app/actions/app-notifications"
-
-const STORAGE_KEY = "lastViewedNotifications"
+import { startVisiblePoller } from "@/lib/visible-poller"
+import {
+  LAST_VIEWED_NOTIFICATIONS_KEY,
+  NOTIFICATIONS_VIEWED_EVENT,
+} from "@/lib/notifications/client-state"
 
 export function useUnreadNotifications(pollingInterval: number = 60000) {
   const account = useActiveAccount()
@@ -12,53 +14,80 @@ export function useUnreadNotifications(pollingInterval: number = 60000) {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const lastViewed = localStorage.getItem(STORAGE_KEY)
+  const fetchUnreadCount = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const payload: { since?: string; wallet?: string } = {}
+        const lastViewed = localStorage.getItem(LAST_VIEWED_NOTIFICATIONS_KEY)
+        if (lastViewed) {
+          const parsed = new Date(lastViewed)
+          if (!Number.isNaN(parsed.getTime())) {
+            payload.since = parsed.toISOString()
+          }
+        }
+        if (walletAddress) payload.wallet = walletAddress
 
-      // Fetch recent notifications scoped to the logged-in user (broadcast +
-      // their own personal notifications). Logged-out → broadcast only.
-      const result = await getUnifiedNotifications({ walletAddress, limit: 50 })
-      if (!result.success || !result.data) {
-        setUnreadCount(0)
-        return
+        const response = await fetch("/api/notifications/unread-count", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          cache: "no-store",
+          signal,
+        })
+        if (!response.ok) {
+          throw new Error("Unread count failed: " + response.status)
+        }
+
+        const result = (await response.json()) as { count?: unknown }
+        if (
+          typeof result.count !== "number" ||
+          !Number.isFinite(result.count)
+        ) {
+          throw new Error("Unread count response was invalid")
+        }
+        if (!signal.aborted) {
+          setUnreadCount(Math.max(0, Math.floor(result.count)))
+        }
+      } finally {
+        if (!signal.aborted) setIsLoading(false)
       }
-
-      if (!lastViewed) {
-        // First visit ever: show all as unread
-        setUnreadCount(result.data.length)
-        return
-      }
-
-      const lastViewedDate = new Date(lastViewed)
-      const unread = result.data.filter(
-        (n) => new Date(n.created_at) > lastViewedDate
-      )
-      setUnreadCount(unread.length)
-    } catch {
-      setUnreadCount(0)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [walletAddress])
+    },
+    [walletAddress]
+  )
 
   useEffect(() => {
-    fetchUnreadCount()
+    const poller = startVisiblePoller({
+      intervalMs: pollingInterval,
+      poll: fetchUnreadCount,
+      scheduler: {
+        setTimeout: (callback, delayMs) =>
+          window.setTimeout(callback, delayMs),
+        clearTimeout: (handle) => window.clearTimeout(handle as number),
+      },
+      visibility: {
+        get hidden() {
+          return document.hidden
+        },
+        addEventListener: (_type, listener) =>
+          document.addEventListener("visibilitychange", listener),
+        removeEventListener: (_type, listener) =>
+          document.removeEventListener("visibilitychange", listener),
+      },
+    })
 
-    const interval = setInterval(fetchUnreadCount, pollingInterval)
-    return () => clearInterval(interval)
-  }, [fetchUnreadCount, pollingInterval])
-
-  // Listen for storage changes (when user visits notifications page in another tab)
-  useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        fetchUnreadCount()
-      }
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === LAST_VIEWED_NOTIFICATIONS_KEY) poller.refresh()
     }
+    const handleViewed = () => poller.refresh()
     window.addEventListener("storage", handleStorage)
-    return () => window.removeEventListener("storage", handleStorage)
-  }, [fetchUnreadCount])
+    window.addEventListener(NOTIFICATIONS_VIEWED_EVENT, handleViewed)
+
+    return () => {
+      poller.stop()
+      window.removeEventListener("storage", handleStorage)
+      window.removeEventListener(NOTIFICATIONS_VIEWED_EVENT, handleViewed)
+    }
+  }, [fetchUnreadCount, pollingInterval])
 
   return { unreadCount, isLoading }
 }

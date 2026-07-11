@@ -7,8 +7,10 @@ import { NotificationCard } from "./NotificationCard"
 import { getUnifiedNotifications } from "@/app/actions/app-notifications"
 import type { UnifiedNotification } from "@/types/app-notifications"
 import { Bell } from "lucide-react"
-
-const STORAGE_KEY = "lastViewedNotifications"
+import {
+  LAST_VIEWED_NOTIFICATIONS_KEY,
+  NOTIFICATIONS_VIEWED_EVENT,
+} from "@/lib/notifications/client-state"
 const PAGE_SIZE = 30
 
 interface NotificationsListProps {
@@ -27,11 +29,15 @@ export function NotificationsList({ initialNotifications, initialTotal }: Notifi
 
   // Read last viewed timestamp and then update it
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(LAST_VIEWED_NOTIFICATIONS_KEY)
     setLastViewed(stored)
 
     // Update the timestamp so next visit shows all as read
-    localStorage.setItem(STORAGE_KEY, new Date().toISOString())
+    localStorage.setItem(
+      LAST_VIEWED_NOTIFICATIONS_KEY,
+      new Date().toISOString()
+    )
+    window.dispatchEvent(new Event(NOTIFICATIONS_VIEWED_EVENT))
   }, [])
 
   // The server-rendered initial list is broadcast-only (the wallet is unknown
