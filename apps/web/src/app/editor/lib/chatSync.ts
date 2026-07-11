@@ -50,14 +50,16 @@ let pushing = false;
 let queued: { session: StoredSession; wallet: string; chatId: string | null } | null = null;
 
 /**
- * Debounced push. Resolves the (possibly new) chat id via `onChatId` so the
- * caller can persist it into the local session.
+ * Debounced push. Resolves the server-confirmed chat id via `onChatId` so the
+ * caller can persist it into the local session. `replaced` is true when the
+ * previous chat row no longer existed (deleted elsewhere) and a fresh one was
+ * created — the caller must adopt the new id unconditionally.
  */
 export function schedulePush(
   session: StoredSession,
   wallet: string,
   chatId: string | null,
-  onChatId: (id: string) => void,
+  onChatId: (id: string, replaced: boolean) => void,
 ): void {
   queued = { session, wallet, chatId };
   if (pushTimer) clearTimeout(pushTimer);
@@ -67,24 +69,36 @@ export function schedulePush(
   }, PUSH_DEBOUNCE_MS);
 }
 
-async function flush(onChatId: (id: string) => void): Promise<void> {
+async function flush(onChatId: (id: string, replaced: boolean) => void): Promise<void> {
   if (pushing || !queued) return;
   const job = queued;
   queued = null;
   pushing = true;
   try {
-    const res = await fetch("/api/mini-apps/chats", {
-      method: "POST",
-      headers: headers(job.wallet),
-      body: JSON.stringify({
-        id: job.chatId,
-        session: trimForServer(job.session),
-        appSlug: job.session.published?.slug ?? null,
-      }),
-    });
+    const post = (id: string | null) =>
+      fetch("/api/mini-apps/chats", {
+        method: "POST",
+        headers: headers(job.wallet),
+        body: JSON.stringify({
+          id,
+          session: trimForServer(job.session),
+          appSlug: job.session.published?.slug ?? null,
+        }),
+      });
+    let replaced = false;
+    let res = await post(job.chatId);
+    if (!res.ok && job.chatId) {
+      // Chat row deleted elsewhere (switcher on another tab)? Re-create it —
+      // otherwise this session's sync would fail silently forever.
+      const body = (await res.json().catch(() => ({}))) as { code?: string };
+      if (body?.code === "not_found") {
+        replaced = true;
+        res = await post(null);
+      }
+    }
     if (res.ok) {
       const data = (await res.json()) as { chat?: ChatMeta };
-      if (data.chat?.id) onChatId(data.chat.id);
+      if (data.chat?.id) onChatId(data.chat.id, replaced);
     }
   } catch {
     /* offline/flaky — next save retries */

@@ -309,9 +309,11 @@ export default function NewMiniAppBuilderPage() {
   // One-time backfill: sessions saved BEFORE server-side history existed live
   // only in this browser's localStorage. Push each un-synced one to
   // mini_app_editor_chats once (chatId written back) so the switcher and the
-  // dashboard card show the full history immediately. Delayed a few seconds so
-  // the ACTIVE session's own sync assigns its chatId first (no duplicates).
+  // dashboard card show the full history immediately. The ACTIVE session is
+  // excluded entirely — its own live sync owns it (anything else duplicates
+  // the row when both land in the same window).
   const backfillRef = useRef(false);
+  const activeStorageKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!wallet || backfillRef.current) return;
     backfillRef.current = true;
@@ -323,6 +325,7 @@ export default function NewMiniAppBuilderPage() {
           if (k?.startsWith("netizen-builder:")) keys.push(k);
         }
         for (const key of keys) {
+          if (key === activeStorageKeyRef.current) continue;
           const s = loadSession(key);
           if (!s || s.chatId || s.messages.length === 0) continue;
           try {
@@ -354,6 +357,8 @@ export default function NewMiniAppBuilderPage() {
   // (mini_app_editor_chats) so chats survive devices and power the dashboard.
   useEffect(() => {
     if (!started || loadingApp) return;
+    // Mark which storage slot the ACTIVE session occupies (backfill skips it).
+    activeStorageKeyRef.current = published?.slug ? appSessionKey(published.slug) : DRAFT_KEY;
     const t = setTimeout(() => {
       const session: StoredSession = {
         messages,
@@ -373,7 +378,9 @@ export default function NewMiniAppBuilderPage() {
         saveSession(DRAFT_KEY, session);
       }
       if (wallet) {
-        schedulePush(session, wallet, chatId, (id) => setChatId((prev) => prev ?? id));
+        schedulePush(session, wallet, chatId, (id, replaced) =>
+          setChatId((prev) => (replaced ? id : prev ?? id)),
+        );
       }
     }, 800);
     return () => clearTimeout(t);
