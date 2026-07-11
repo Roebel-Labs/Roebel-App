@@ -35,7 +35,7 @@ import { CmsSetupCard } from "./components/CmsSetupCard";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
-import { fetchChat, schedulePush } from "./lib/chatSync";
+import { fetchChat, schedulePush, trimForServer } from "./lib/chatSync";
 import { uploadContentImage } from "./lib/cmsData";
 import {
   buildCmsPromptBlock,
@@ -299,6 +299,48 @@ export default function NewMiniAppBuilderPage() {
       setLoadingApp(false);
     })();
   }, [wallet, restoreSession]);
+
+  // One-time backfill: sessions saved BEFORE server-side history existed live
+  // only in this browser's localStorage. Push each un-synced one to
+  // mini_app_editor_chats once (chatId written back) so the switcher and the
+  // dashboard card show the full history immediately. Delayed a few seconds so
+  // the ACTIVE session's own sync assigns its chatId first (no duplicates).
+  const backfillRef = useRef(false);
+  useEffect(() => {
+    if (!wallet || backfillRef.current) return;
+    backfillRef.current = true;
+    const t = setTimeout(() => {
+      void (async () => {
+        const keys: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k?.startsWith("netizen-builder:")) keys.push(k);
+        }
+        for (const key of keys) {
+          const s = loadSession(key);
+          if (!s || s.chatId || s.messages.length === 0) continue;
+          try {
+            const res = await fetch("/api/mini-apps/chats", {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-wallet-address": wallet },
+              body: JSON.stringify({
+                id: null,
+                session: trimForServer(s),
+                appSlug: s.published?.slug ?? null,
+              }),
+            });
+            if (res.ok) {
+              const data = (await res.json()) as { chat?: { id?: string } };
+              if (data.chat?.id) saveSession(key, { ...s, chatId: data.chat.id });
+            }
+          } catch {
+            /* offline — the next visit retries */
+          }
+        }
+      })();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [wallet]);
 
   // Auto-save the session (debounced). Published apps save under their slug —
   // re-opening restores the full chat; unpublished work lives in the draft slot.
@@ -831,6 +873,10 @@ export default function NewMiniAppBuilderPage() {
         attachments={attachments}
         onAddFiles={addFiles}
         onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+        wallet={wallet ?? null}
+        onOpenChat={(id) => {
+          window.location.href = `/editor?chat=${id}`;
+        }}
       />
     );
   }
@@ -1569,6 +1615,8 @@ function EmptyState({
   attachments,
   onAddFiles,
   onRemoveAttachment,
+  wallet,
+  onOpenChat,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -1578,6 +1626,8 @@ function EmptyState({
   attachments: PreparedImage[];
   onAddFiles: (files: Iterable<File>) => void;
   onRemoveAttachment: (i: number) => void;
+  wallet: string | null;
+  onOpenChat: (id: string) => void;
 }) {
   const intake = useImageIntake(onAddFiles);
   const canSend = input.trim().length >= 3 || attachments.length > 0;
@@ -1588,13 +1638,21 @@ function EmptyState({
         aria-hidden
         className="absolute inset-0 [background-size:24px_24px] [background-image:linear-gradient(to_right,rgba(0,73,139,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,73,139,0.05)_1px,transparent_1px)] dark:[background-image:linear-gradient(to_right,rgba(122,187,242,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(122,187,242,0.05)_1px,transparent_1px)]"
       />
-      <header className="relative z-10 flex h-12 shrink-0 items-center px-3">
+      <header className="relative z-10 flex h-12 shrink-0 items-center justify-between px-3">
         <Link
           href="/dashboard/mini-apps"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Meine Apps
         </Link>
+        {/* Chat history is reachable from the start screen too — not only
+            inside a running session. */}
+        <ChatSwitcher
+          wallet={wallet}
+          activeChatId={null}
+          onOpenChat={onOpenChat}
+          onNewChat={() => {}}
+        />
       </header>
       <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center p-4">
         <div className="w-full max-w-xl">
