@@ -21,15 +21,22 @@ interface CallLogEntry {
   at: number;
 }
 
-export function Playground({ app }: { app: MiniAppRow }) {
+export function Playground({ app, html }: { app: MiniAppRow; html?: string | null }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const hostRef = useRef<WebMiniAppHost | null>(null);
   const account = useActiveAccount();
   const [log, setLog] = useState<CallLogEntry[]>([]);
   const [ready, setReady] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [enforcePermissions, setEnforcePermissions] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [mockCitizen, setMockCitizen] = useState(true);
+
+  // Direct-HTML mode: render the stored version document (srcDoc) instead of
+  // fetching home_url — independent of DNS/wildcard-domain wiring and of the
+  // /mini tombstone for rejected/suspended apps, so reviewers always see the
+  // real app. Bridge + same-origin API calls (Mini-CMS) work identically.
+  const useSrcDoc = typeof html === "string" && html.length > 0;
 
   // Reset splash/log only when the APP or an iframe reload changes — not when
   // the reviewer wallet (re)connects: the embedded app keeps running and never
@@ -37,6 +44,14 @@ export function Playground({ app }: { app: MiniAppRow }) {
   useEffect(() => {
     setReady(false);
     setLog([]);
+  }, [app.id, app.home_url, reloadKey]);
+
+  // Surface a hint when the app never announces itself (blocked framing,
+  // tombstoned home_url, broken script) instead of an eternal splash.
+  useEffect(() => {
+    setSlow(false);
+    const t = setTimeout(() => setSlow(true), 8000);
+    return () => clearTimeout(t);
   }, [app.id, app.home_url, reloadKey]);
 
   useEffect(() => {
@@ -53,7 +68,9 @@ export function Playground({ app }: { app: MiniAppRow }) {
         id: app.id,
         slug: app.slug,
         name: app.name,
-        homeUrl: app.home_url,
+        // srcDoc iframes have an opaque origin — a non-URL homeUrl makes the
+        // host post with targetOrigin "*" (same pattern as the editor preview).
+        homeUrl: useSrcDoc ? "playground-srcdoc" : app.home_url,
         permissions: (app.permissions ?? []) as MiniAppPermission[],
         enforcePermissions,
       },
@@ -79,13 +96,9 @@ export function Playground({ app }: { app: MiniAppRow }) {
     };
     // reloadKey forces a rebuild after an iframe reload
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.id, app.home_url, enforcePermissions, mockCitizen, account?.address, reloadKey]);
+  }, [app.id, app.home_url, useSrcDoc, enforcePermissions, mockCitizen, account?.address, reloadKey]);
 
-  const reload = () => {
-    setReloadKey((k) => k + 1);
-    const f = iframeRef.current;
-    if (f) f.src = app.home_url;
-  };
+  const reload = () => setReloadKey((k) => k + 1);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
@@ -123,17 +136,26 @@ export function Playground({ app }: { app: MiniAppRow }) {
           style={{ width: 320, height: 640, maxWidth: "100%" }}
         >
           <iframe
+            key={reloadKey}
             ref={iframeRef}
-            src={app.home_url}
+            {...(useSrcDoc ? { srcDoc: html as string } : { src: app.home_url })}
             title={`Playground: ${app.name}`}
             // Cross-origin isolation; scripts/forms/popups only.
             sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             className="h-full w-full border-0 bg-white"
           />
           {!ready && (
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90 text-center">
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90 px-4 text-center">
               <Play className="h-6 w-6 text-[#00498B]" />
               <p className="text-xs text-muted-foreground">Splash bis die App ready() ruft</p>
+              {slow && (
+                <p className="text-xs text-red-600">
+                  Die App hat sich nach 8&nbsp;s nicht gemeldet.{" "}
+                  {useSrcDoc
+                    ? "Vermutlich ein Skriptfehler im Dokument — Konsole prüfen."
+                    : "Lädt die home_url? Externe Seiten müssen das Einbetten erlauben (frame-ancestors) und den Netizen-SDK-Handshake ausführen."}
+                </p>
+              )}
             </div>
           )}
         </div>

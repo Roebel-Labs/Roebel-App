@@ -66,6 +66,8 @@ export interface MiniAppVersionRow {
   status: "pending" | "approved" | "rejected";
   reviewed_by: string | null;
   reviewed_at: string | null;
+  /** Single-file apps (ai_builder / HTML import): the published document. */
+  html?: string | null;
 }
 
 export interface MiniAppEventRow {
@@ -105,7 +107,8 @@ export interface ListAppsFilter {
   limit?: number;
 }
 
-export type ReviewDecision = "approve" | "reject";
+/** `reset` puts an already-reviewed app back into the review queue (`pending`). */
+export type ReviewDecision = "approve" | "reject" | "reset";
 
 export interface SubmitAppInput {
   manifest: MiniAppManifest;

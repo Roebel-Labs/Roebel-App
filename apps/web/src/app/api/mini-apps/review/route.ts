@@ -1,6 +1,7 @@
-// POST /api/mini-apps/review — admin approves/rejects an app.
-// Body: { id, decision: 'approve'|'reject', notes?: string }
-// Approve → status 'live'; reject → 'rejected'. Also settles the pending version.
+// POST /api/mini-apps/review — admin approves/rejects/resets an app.
+// Body: { id, decision: 'approve'|'reject'|'reset', notes?: string }
+// Approve → status 'live'; reject → 'rejected'; reset → back to 'pending'
+// (re-enters the review queue). Also settles/reopens the latest version.
 import { NextResponse } from "next/server";
 import { reviewApp, MiniAppError } from "@/lib/miniapp";
 import { getSession } from "@/lib/auth/session";
@@ -16,8 +17,11 @@ export async function POST(req: Request) {
     const id = String(body.id ?? "");
     const decision = body.decision;
     if (!id) throw new MiniAppError("invalid_params", "id fehlt.");
-    if (decision !== "approve" && decision !== "reject") {
-      throw new MiniAppError("invalid_params", "decision muss 'approve' oder 'reject' sein.");
+    if (decision !== "approve" && decision !== "reject" && decision !== "reset") {
+      throw new MiniAppError(
+        "invalid_params",
+        "decision muss 'approve', 'reject' oder 'reset' sein.",
+      );
     }
     const session = await getSession();
     const reviewer = session?.username ?? "admin";

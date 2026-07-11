@@ -285,7 +285,8 @@ export async function listVersions(miniAppId: string): Promise<MiniAppVersionRow
 
 /**
  * Approve or reject an app (and its latest pending version). Approve →
- * status 'live' (visible in the store); reject → 'rejected'.
+ * status 'live' (visible in the store); reject → 'rejected'; reset →
+ * back to 'pending' (re-enters the review queue, latest version reopened).
  */
 export async function reviewApp(
   id: string,
@@ -296,7 +297,8 @@ export async function reviewApp(
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
   const supabase = db();
-  const nextStatus: MiniAppStatus = decision === "approve" ? "live" : "rejected";
+  const nextStatus: MiniAppStatus =
+    decision === "approve" ? "live" : decision === "reset" ? "pending" : "rejected";
 
   const { data: updated, error } = await supabase
     .from("mini_apps")
@@ -309,6 +311,24 @@ export async function reviewApp(
     .select("*")
     .single();
   if (error) throw new MiniAppError("internal", error.message);
+
+  if (decision === "reset") {
+    // Reopen the latest version so a later approve has something to settle.
+    const { data: latest } = await supabase
+      .from("mini_app_versions")
+      .select("id")
+      .eq("mini_app_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latest) {
+      await supabase
+        .from("mini_app_versions")
+        .update({ status: "pending", reviewed_by: null, reviewed_at: null })
+        .eq("id", (latest as { id: string }).id);
+    }
+    return updated as MiniAppRow;
+  }
 
   // Settle the latest pending version too.
   const { data: pending } = await supabase

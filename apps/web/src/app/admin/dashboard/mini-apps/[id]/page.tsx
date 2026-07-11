@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Check,
@@ -10,6 +11,7 @@ import {
   Star,
   Coins,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,14 +55,17 @@ export default function MiniAppAdminDetail({
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  async function act(label: string, fn: () => Promise<unknown>) {
+  async function act(label: string, fn: () => Promise<unknown>, successMessage?: string) {
     setBusy(label);
     setActionError(null);
     try {
       await fn();
       refresh();
+      if (successMessage) toast.success(successMessage);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setActionError(message);
+      toast.error(message);
     } finally {
       setBusy(null);
     }
@@ -106,8 +111,11 @@ export default function MiniAppAdminDetail({
               className="flex-1 bg-emerald-600 hover:bg-emerald-700"
               disabled={busy != null}
               onClick={() =>
-                act("approve", () =>
-                  miniAppWrite("review", "POST", { id: app.id, decision: "approve", notes }),
+                act(
+                  "approve",
+                  () =>
+                    miniAppWrite("review", "POST", { id: app.id, decision: "approve", notes }),
+                  `"${app.name}" freigegeben — die App ist jetzt live.`,
                 )
               }
             >
@@ -119,14 +127,34 @@ export default function MiniAppAdminDetail({
               className="flex-1 border-red-300 text-red-700 hover:bg-red-50"
               disabled={busy != null}
               onClick={() =>
-                act("reject", () =>
-                  miniAppWrite("review", "POST", { id: app.id, decision: "reject", notes }),
+                act(
+                  "reject",
+                  () =>
+                    miniAppWrite("review", "POST", { id: app.id, decision: "reject", notes }),
+                  `"${app.name}" abgelehnt.`,
                 )
               }
             >
               <X className="mr-1 h-4 w-4" /> Ablehnen
             </Button>
           </div>
+          {app.status !== "pending" && app.status !== "draft" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2 w-full justify-start"
+              disabled={busy != null}
+              onClick={() =>
+                act(
+                  "reset",
+                  () => miniAppWrite("review", "POST", { id: app.id, decision: "reset", notes }),
+                  `"${app.name}" zurück in die Prüfung gesetzt.`,
+                )
+              }
+            >
+              <RotateCcw className="mr-2 h-4 w-4" /> Zurück in Prüfung
+            </Button>
+          )}
           {app.review_notes && (
             <p className="mt-3 rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground">
               Letzte Notiz: {app.review_notes}
@@ -150,13 +178,17 @@ export default function MiniAppAdminDetail({
               size="sm"
               disabled={busy != null || budget === ""}
               onClick={() =>
-                act("budget", async () => {
-                  await miniAppWrite("reward-budget", "PATCH", {
-                    id: app.id,
-                    budget: Number(budget),
-                  });
-                  setBudget("");
-                })
+                act(
+                  "budget",
+                  async () => {
+                    await miniAppWrite("reward-budget", "PATCH", {
+                      id: app.id,
+                      budget: Number(budget),
+                    });
+                    setBudget("");
+                  },
+                  `Budget auf ${nf.format(Number(budget))} RÖ gesetzt.`,
+                )
               }
             >
               <Coins className="mr-1 h-4 w-4" /> Setzen
@@ -175,8 +207,10 @@ export default function MiniAppAdminDetail({
               className="w-full justify-start"
               disabled={busy != null}
               onClick={() =>
-                act("featured", () =>
-                  miniAppWrite(`${app.id}`, "PATCH", { featured: !app.featured }),
+                act(
+                  "featured",
+                  () => miniAppWrite(`${app.id}`, "PATCH", { featured: !app.featured }),
+                  app.featured ? "Empfehlung entfernt." : "Als empfohlen markiert.",
                 )
               }
             >
@@ -192,8 +226,10 @@ export default function MiniAppAdminDetail({
                 className="w-full justify-start border-red-300 text-red-700 hover:bg-red-50"
                 disabled={busy != null}
                 onClick={() =>
-                  act("suspend", () =>
-                    miniAppWrite(`${app.id}`, "PATCH", { status: "suspended" }),
+                  act(
+                    "suspend",
+                    () => miniAppWrite(`${app.id}`, "PATCH", { status: "suspended" }),
+                    `"${app.name}" gesperrt — sofort aus Store und Host entfernt.`,
                   )
                 }
               >
@@ -206,7 +242,11 @@ export default function MiniAppAdminDetail({
                 className="w-full justify-start"
                 disabled={busy != null}
                 onClick={() =>
-                  act("unsuspend", () => miniAppWrite(`${app.id}`, "PATCH", { status: "live" }))
+                  act(
+                    "unsuspend",
+                    () => miniAppWrite(`${app.id}`, "PATCH", { status: "live" }),
+                    `"${app.name}" wieder freigeschaltet.`,
+                  )
                 }
               >
                 <Check className="mr-2 h-4 w-4" /> Wieder freischalten
@@ -253,10 +293,14 @@ export default function MiniAppAdminDetail({
       {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
       <NotificationsSection app={app} wallet={null} />
 
-      {/* Playground */}
+      {/* Playground — single-file apps render their stored HTML directly, so the
+          preview works for pending AND rejected apps (home_url tombstones 410). */}
       <div>
         <h2 className="mb-3 text-sm font-semibold tracking-tight">Playground</h2>
-        <Playground app={app} />
+        <Playground
+          app={app}
+          html={data?.versions?.find((v) => typeof v.html === "string" && v.html)?.html ?? null}
+        />
       </div>
 
       {/* Per-app analytics */}
