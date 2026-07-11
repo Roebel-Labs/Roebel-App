@@ -29,6 +29,7 @@ const config: ExpoConfig = {
     EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     IRYS_UPLOAD_PRIVATE_KEY: process.env.IRYS_UPLOAD_PRIVATE_KEY || '',
     EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '',
+    MINIAPP_API_BASE: process.env.EXPO_PUBLIC_MINIAPP_API_BASE || 'https://www.roebel.app',
     posthogApiKey: process.env.EXPO_PUBLIC_POSTHOG_KEY || '',
     posthogHost: process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com',
     sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || ''

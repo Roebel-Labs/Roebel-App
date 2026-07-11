@@ -12,7 +12,7 @@
  * FS at runtime, which breaks on Vercel lambdas. Keep in sync on contract bumps.
  */
 
-export const SDK_VERSION = "0.3.0";
+export const SDK_VERSION = "0.3.1";
 // Self-hosted build of @netizen-labs/miniapp-sdk (synced from packages/miniapp-sdk
 // via `pnpm sync-web`, served with ACAO:*). Absolute URL so the document also works
 // when saved/hosted outside roebel.app. v0.2 adds mock mode: outside the Röbel

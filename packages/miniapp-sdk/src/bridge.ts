@@ -25,7 +25,11 @@ const REQUEST_TIMEOUT_MS = 30_000;
 /** How long `bridge.hello` may go unanswered before we fall back to mock mode.
  * Real hosts (Expo WebView / web iframe) answer in single-digit ms; a foreign
  * embedder (external editor preview) or a plain browser tab never answers. */
-const HELLO_TIMEOUT_MS = 1_500;
+const HELLO_TIMEOUT_MS = 2_000;
+/** Hello is re-sent on this cadence until answered: a host whose message
+ * listener attaches a beat after the WebView/iframe starts executing us would
+ * otherwise miss the one-shot hello and strand the app in mock mode. */
+const HELLO_RETRY_MS = 400;
 
 export type BridgeMode = 'unknown' | 'host' | 'mock';
 
@@ -83,18 +87,25 @@ export class ClientBridge {
       params: { sdkVersion },
     };
     return new Promise<void>((resolve) => {
+      let retry: ReturnType<typeof setInterval> | undefined;
+      const stopRetry = () => {
+        if (retry !== undefined) clearInterval(retry);
+      };
       const timer = setTimeout(() => {
+        stopRetry();
         this.pending.delete(id);
         this.settle('mock');
         resolve();
       }, HELLO_TIMEOUT_MS);
       this.pending.set(id, {
         resolve: () => {
+          stopRetry();
           this.settle('host');
           resolve();
         },
         reject: () => {
           // A host that answers hello with an error is still a host.
+          stopRetry();
           this.settle('host');
           resolve();
         },
@@ -102,6 +113,14 @@ export class ClientBridge {
       });
       try {
         post(envelope);
+        // Re-send until answered — covers hosts whose listener attaches late.
+        retry = setInterval(() => {
+          try {
+            post(envelope);
+          } catch {
+            /* transport gone — the timeout will settle mock */
+          }
+        }, HELLO_RETRY_MS);
       } catch {
         clearTimeout(timer);
         this.pending.delete(id);

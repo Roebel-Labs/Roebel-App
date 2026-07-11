@@ -16,7 +16,7 @@ import type {
   WalletAccount,
 } from './types';
 
-const SDK_VERSION = '0.3.0';
+const SDK_VERSION = '0.3.1';
 
 export function createClient(): NetizenSDK {
   const bridge = new ClientBridge();

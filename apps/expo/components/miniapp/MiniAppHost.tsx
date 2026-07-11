@@ -120,6 +120,8 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
 
   const webViewRef = useRef<WebView>(null);
   const bridgeRef = useRef<ReturnType<typeof createHostBridge> | null>(null);
+  // WebView messages that arrive before the bridge is constructed (raced hello).
+  const earlyMessagesRef = useRef<string[]>([]);
   const sessionIdRef = useRef<string>(newMiniAppSessionId());
   const walletConnectFiredRef = useRef(false);
   const appOpenFiredRef = useRef(false);
@@ -422,6 +424,14 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       handlers,
       grantedPermissions: app.permissions,
     });
+    // Drain WebView messages that raced ahead of the bridge (typically the
+    // SDK's `bridge.hello` on a fast first paint) — dropping the hello would
+    // strand the app in mock mode with its built-in fallback content.
+    const queued = earlyMessagesRef.current;
+    if (queued.length) {
+      earlyMessagesRef.current = [];
+      for (const raw of queued) bridgeRef.current.handleMessage(raw);
+    }
   }, [post, handlers, app.permissions]);
 
   // Emit walletChanged whenever the active account changes while open.
@@ -435,7 +445,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   }, [account?.address, visible]);
 
   const onMessage = useCallback((e: WebViewMessageEvent) => {
-    bridgeRef.current?.handleMessage(e.nativeEvent.data);
+    const bridge = bridgeRef.current;
+    if (bridge) bridge.handleMessage(e.nativeEvent.data);
+    else earlyMessagesRef.current.push(e.nativeEvent.data);
   }, []);
 
   const handleClose = useCallback(() => {

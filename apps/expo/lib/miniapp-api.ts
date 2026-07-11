@@ -4,8 +4,12 @@
  *   - server-authorized reward → POST {base}/api/mini-apps/rewards
  *   - gated notification send  → POST {base}/api/mini-apps/notifications
  *
- * The base URL comes from `EXPO_PUBLIC_MINIAPP_API_BASE` (INTEGRATION NEED). If
- * unset, these host handlers reply `unsupported` rather than hitting a bad URL.
+ * The base URL comes from `expo.extra.MINIAPP_API_BASE` / `EXPO_PUBLIC_MINIAPP_API_BASE`,
+ * falling back to the production origin. The env vars only existed in the local
+ * dev `.env` — device builds shipped WITHOUT a base and every data/reward/balance
+ * handler answered `unsupported`, so CMS-backed apps silently rendered their
+ * built-in fallback content. The hardcoded production fallback ends that class
+ * of failure; the env override remains for pointing dev at a local web app.
  *
  * These are SERVER-authorized surfaces (spec §4.3): the host merely relays the
  * request + identity; budget/rate-limit/idempotency are enforced server-side.
@@ -17,10 +21,12 @@ import type {
   MuenzenBalance,
 } from '@netizen-labs/miniapp-sdk';
 
+const PROD_API_BASE = 'https://www.roebel.app';
+
 const API_BASE: string | undefined =
-  (Constants.expoConfig?.extra as { MINIAPP_API_BASE?: string } | undefined)?.MINIAPP_API_BASE ??
-  process.env.EXPO_PUBLIC_MINIAPP_API_BASE ??
-  undefined;
+  (Constants.expoConfig?.extra as { MINIAPP_API_BASE?: string } | undefined)?.MINIAPP_API_BASE ||
+  process.env.EXPO_PUBLIC_MINIAPP_API_BASE ||
+  PROD_API_BASE;
 
 export function hasMiniAppApi(): boolean {
   return !!API_BASE;
