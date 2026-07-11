@@ -225,7 +225,7 @@ export async function POST(request: Request) {
           }
           // Why the stream ended — 'length' = output budget hit (doc truncated);
           // the client turns that into a precise error instead of a broken app.
-          const finish = await result.finishReason.catch(() => "unknown");
+          const finish = await Promise.resolve(result.finishReason).catch(() => "unknown");
           frame("done", String(finish));
           if (job) {
             job.status = "done";

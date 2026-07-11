@@ -28,10 +28,15 @@ import { cn } from "@/lib/utils";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
 import { AutoStoreImages } from "./components/AutoStoreImages";
 import { CanvasView } from "./components/CanvasView";
+import { ChatSwitcher } from "./components/ChatSwitcher";
+import { CmsImagePicker } from "./components/CmsImagePicker";
+import { CmsPanel } from "./components/CmsPanel";
 import { CmsSetupCard } from "./components/CmsSetupCard";
 import { CodePane } from "./components/CodePane";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
+import { fetchChat, schedulePush } from "./lib/chatSync";
+import { uploadContentImage } from "./lib/cmsData";
 import {
   buildCmsPromptBlock,
   fetchCmsPlan,
@@ -97,8 +102,14 @@ export default function NewMiniAppBuilderPage() {
   const [checkingCms, setCheckingCms] = useState(false);
   const [cmsKeys, setCmsKeys] = useState<CmsKeyPlan[] | null>(null);
   const pendingBuildRef = useRef<{ text: string; images: string[] } | null>(null);
-  const [tab, setTab] = useState<"preview" | "canvas" | "code">("preview");
+  const [tab, setTab] = useState<"preview" | "canvas" | "code" | "cms">("preview");
   const [complexity, setComplexity] = useState<Complexity>("default");
+  // Server-side chat row this session syncs into (mini_app_editor_chats).
+  const [chatId, setChatId] = useState<string | null>(null);
+  const chatLoadedRef = useRef(false);
+  // Sidebar-wide image drop target state (visible overlay while dragging).
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
   const [input, setInput] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState<PublishSuccess | null>(null);
@@ -156,13 +167,16 @@ export default function NewMiniAppBuilderPage() {
     setPublished(s.published);
     setPendingJob(s.pendingJob ?? null);
     setCmsKeys(s.cmsKeys ?? null);
+    setChatId(s.chatId ?? null);
   }, []);
 
   // Re-open an existing AI-built app (?app=<slug|id>) or restore the last
   // unpublished draft session. Saved sessions carry the FULL chat + version
   // history; the registry is only the fallback when no session exists locally.
   useEffect(() => {
-    const param = new URLSearchParams(window.location.search).get("app");
+    const search = new URLSearchParams(window.location.search);
+    if (search.get("chat")) return; // server-chat restore effect handles this
+    const param = search.get("app");
     if (!param) {
       const draft = loadSession(DRAFT_KEY);
       if (draft && draft.messages.length > 0) restoreSession(draft);
@@ -254,8 +268,40 @@ export default function NewMiniAppBuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Open a server-side chat (?chat=<id>[&invite=<token>]) — cross-device
+  // history and the invite flow. Waits for the wallet (the chats API needs it);
+  // a valid invite token adds this wallet as collaborator before loading.
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const chatParam = search.get("chat");
+    if (!chatParam || !wallet || chatLoadedRef.current) return;
+    chatLoadedRef.current = true;
+    setLoadingApp(true);
+    void (async () => {
+      const remote = await fetchChat(chatParam, wallet, search.get("invite"));
+      if (remote && Array.isArray(remote.session?.messages)) {
+        restoreSession({ ...remote.session, chatId: remote.id });
+        setChatId(remote.id);
+        window.history.replaceState(null, "", `/editor?chat=${remote.id}`);
+      } else {
+        setMessages([
+          {
+            id: uid(),
+            role: "assistant",
+            content:
+              "Der Chat konnte nicht geladen werden — kein Zugriff, gelöscht oder der Einladungslink ist ungültig.",
+            error: true,
+          },
+        ]);
+      }
+      setLoadingApp(false);
+    })();
+  }, [wallet, restoreSession]);
+
   // Auto-save the session (debounced). Published apps save under their slug —
   // re-opening restores the full chat; unpublished work lives in the draft slot.
+  // A connected wallet additionally mirrors the session to the server
+  // (mini_app_editor_chats) so chats survive devices and power the dashboard.
   useEffect(() => {
     if (!started || loadingApp) return;
     const t = setTimeout(() => {
@@ -267,6 +313,7 @@ export default function NewMiniAppBuilderPage() {
         published,
         pendingJob,
         cmsKeys,
+        chatId,
         savedAt: Date.now(),
       };
       if (published?.slug) {
@@ -275,9 +322,12 @@ export default function NewMiniAppBuilderPage() {
       } else {
         saveSession(DRAFT_KEY, session);
       }
+      if (wallet) {
+        schedulePush(session, wallet, chatId, (id) => setChatId((prev) => prev ?? id));
+      }
     }, 800);
     return () => clearTimeout(t);
-  }, [messages, versions, activeIdx, preset, published, pendingJob, cmsKeys, started, loadingApp]);
+  }, [messages, versions, activeIdx, preset, published, pendingJob, cmsKeys, chatId, wallet, started, loadingApp]);
 
   const newChat = useCallback(() => {
     if (
@@ -295,6 +345,8 @@ export default function NewMiniAppBuilderPage() {
     pendingBuildRef.current = null;
     // The per-app session (if any) stays saved — only the draft slot resets.
     clearSession(DRAFT_KEY);
+    setChatId(null);
+    chatLoadedRef.current = true; // don't re-load a ?chat= session after reset
     setMessages([]);
     setVersions([]);
     setActiveIdx(-1);
@@ -555,11 +607,30 @@ export default function NewMiniAppBuilderPage() {
         if (attachments.length === 0) return;
         trimmed = "Setze die angehängte Vorlage als Mini-App um.";
       }
+      // Published app + attachments: persist the full-size images as content
+      // assets first. The model gets the public URLs (usable directly in the
+      // document or as CMS values) and the bubble offers "In CMS übernehmen".
+      let imageUrls: string[] = [];
+      if (attachments.length > 0 && published?.slug && wallet) {
+        const uploaded = await Promise.all(
+          attachments.map(async (a) => {
+            try {
+              const blob = await (await fetch(a.dataUrl)).blob();
+              return await uploadContentImage(published.slug, wallet, blob, a.name);
+            } catch {
+              return null;
+            }
+          }),
+        );
+        imageUrls = uploaded.filter((u): u is string => Boolean(u));
+      }
+
       const userMsg: ChatMsg = {
         id: uid(),
         role: "user",
         content: trimmed,
         images: attachments.length > 0 ? attachments.map((a) => a.thumb) : undefined,
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
         elementLabel: inspected ? elementLabel(inspected) : undefined,
       };
       // Assistant history goes to the model as its short notes, not full code —
@@ -569,10 +640,14 @@ export default function NewMiniAppBuilderPage() {
         .filter((m) => !m.error && !m.cmsPlan)
         .map((m, i, arr) => {
           const isLast = i === arr.length - 1;
-          const content =
+          let content =
             isLast && inspected
-              ? (buildElementContext(inspected) + m.content).slice(0, 12000)
-              : m.content.slice(0, 12000);
+              ? buildElementContext(inspected) + m.content
+              : m.content;
+          if (isLast && imageUrls.length > 0) {
+            content += `\n\n[Die angehängten Bilder liegen als öffentliche URLs vor — nutze sie direkt (z. B. in <img src>) statt Platzhaltern: ${imageUrls.join(" ")}]`;
+          }
+          content = content.slice(0, 12000);
           return isLast && attachments.length > 0
             ? { role: m.role, content, images: attachments.map((a) => a.dataUrl) }
             : { role: m.role, content };
@@ -605,7 +680,7 @@ export default function NewMiniAppBuilderPage() {
 
       void runGeneration(convo, hadImages);
     },
-    [messages, versions.length, streaming, checkingCms, attachments, inspected, runGeneration],
+    [messages, versions.length, streaming, checkingCms, attachments, inspected, published, wallet, runGeneration],
   );
 
   /** Decision on the CMS setup card: build with the confirmed keys or without. */
@@ -798,6 +873,15 @@ export default function NewMiniAppBuilderPage() {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <ChatSwitcher
+            wallet={wallet ?? null}
+            activeChatId={chatId}
+            onOpenChat={(id) => {
+              // Full navigation: resets all builder state and loads the chat.
+              window.location.href = `/editor?chat=${id}`;
+            }}
+            onNewChat={newChat}
+          />
           <button
             type="button"
             onClick={newChat}
@@ -838,8 +922,43 @@ export default function NewMiniAppBuilderPage() {
 
       {/* workspace */}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {/* chat panel */}
-        <aside className="flex h-[45dvh] w-full shrink-0 flex-col border-b border-border md:h-auto md:w-[380px] md:border-b-0 md:border-r">
+        {/* chat panel — the whole sidebar accepts image drops */}
+        <aside
+          className="relative flex h-[45dvh] w-full shrink-0 flex-col border-b border-border md:h-auto md:w-[380px] md:border-b-0 md:border-r"
+          onDragEnter={(e) => {
+            if (Array.from(e.dataTransfer?.items ?? []).some((i) => i.type.startsWith("image/"))) {
+              dragDepth.current += 1;
+              setDragActive(true);
+            }
+          }}
+          onDragLeave={() => {
+            dragDepth.current = Math.max(0, dragDepth.current - 1);
+            if (dragDepth.current === 0) setDragActive(false);
+          }}
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer?.items ?? []).some((i) => i.type.startsWith("image/"))) {
+              e.preventDefault();
+            }
+          }}
+          onDrop={(e) => {
+            dragDepth.current = 0;
+            setDragActive(false);
+            const files = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
+              f.type.startsWith("image/"),
+            );
+            if (files.length > 0) {
+              e.preventDefault();
+              void addFiles(files);
+            }
+          }}
+        >
+          {dragActive && (
+            <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[10px] border-2 border-dashed border-primary bg-primary/5">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium text-primary shadow-sm">
+                <ImagePlus className="h-3.5 w-3.5" /> Bilder hier ablegen
+              </span>
+            </div>
+          )}
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
             {messages.map((m) => (
               <MessageBubble
@@ -854,6 +973,8 @@ export default function NewMiniAppBuilderPage() {
                   setTab("preview");
                 }}
                 onCmsBuild={confirmCms}
+                appSlug={published?.slug ?? null}
+                wallet={wallet}
               />
             ))}
             {checkingCms ? (
@@ -953,6 +1074,9 @@ export default function NewMiniAppBuilderPage() {
             <StageTab active={tab === "code"} onClick={() => setTab("code")}>
               Code
             </StageTab>
+            <StageTab active={tab === "cms"} onClick={() => setTab("cms")}>
+              Inhalte
+            </StageTab>
             {published ? (
               <a
                 href={published.homeUrl}
@@ -980,6 +1104,14 @@ export default function NewMiniAppBuilderPage() {
               streaming={streaming}
               appName={published?.slug ?? "Mini-App"}
             />
+          ) : tab === "cms" ? (
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[10px] border border-border bg-background">
+              <CmsPanel
+                appSlug={published?.slug ?? null}
+                wallet={wallet ?? null}
+                plannedKeys={cmsKeys}
+              />
+            </div>
           ) : (
             <CodePane text={streaming ? stream : activeHtml ?? stream} streaming={streaming} />
           )}
@@ -1025,6 +1157,8 @@ function MessageBubble({
   restorable,
   onRestore,
   onCmsBuild,
+  appSlug,
+  wallet,
 }: {
   msg: ChatMsg;
   activeIdx: number;
@@ -1032,7 +1166,11 @@ function MessageBubble({
   restorable: boolean;
   onRestore: (i: number) => void;
   onCmsBuild: (withCms: boolean, keys: CmsKeyPlan[], userKeys: CmsUserKeyPlan[]) => void;
+  /** Published app + wallet enable "In CMS übernehmen" on uploaded images. */
+  appSlug?: string | null;
+  wallet?: string | null;
 }) {
+  const [pickerUrl, setPickerUrl] = useState<string | null>(null);
   if (msg.cmsPlan) {
     return (
       <div className="flex items-start gap-2">
@@ -1063,6 +1201,28 @@ function MessageBubble({
                 />
               ))}
             </div>
+          ) : null}
+          {msg.imageUrls && msg.imageUrls.length > 0 && appSlug && wallet ? (
+            <div className="flex flex-wrap justify-end gap-1">
+              {msg.imageUrls.map((url, i) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setPickerUrl((cur) => (cur === url ? null : url))}
+                  className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {msg.imageUrls!.length > 1 ? `Bild ${i + 1} ` : "Bild "}→ In CMS übernehmen
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {pickerUrl && appSlug && wallet ? (
+            <CmsImagePicker
+              imageUrl={pickerUrl}
+              appSlug={appSlug}
+              wallet={wallet}
+              onClose={() => setPickerUrl(null)}
+            />
           ) : null}
           {msg.elementLabel ? (
             <p className="text-right font-mono text-[10px] text-muted-foreground">

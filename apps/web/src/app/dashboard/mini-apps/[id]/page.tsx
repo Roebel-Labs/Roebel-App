@@ -185,10 +185,10 @@ export default function BuilderMiniAppDetail({
       <ContentSection app={app} wallet={wallet} />
 
       {/* Icon + Store-Artwork + Store-Vorschau — Upload, KI-Generierung, Screenshots */}
-      <ImagesSection app={app} wallet={wallet} onChanged={refresh} />
+      <ImagesSection app={app} wallet={wallet ?? null} onChanged={refresh} />
 
       {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
-      <NotificationsSection app={app} wallet={wallet} />
+      <NotificationsSection app={app} wallet={wallet ?? null} />
 
       {/* Analytics (developer reads their own app via wallet header) */}
       <AnalyticsPanel appId={app.id} wallet={wallet} />

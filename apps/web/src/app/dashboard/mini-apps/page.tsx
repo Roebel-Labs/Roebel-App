@@ -41,6 +41,7 @@ import {
   type SettingsSection,
 } from "@/components/mini-apps/dashboard/SettingsDialog";
 import { InboxDialog, deriveTasks } from "@/components/mini-apps/dashboard/InboxDialog";
+import { LatestChatCard } from "@/components/mini-apps/dashboard/LatestChatCard";
 import type { AnalyticsRange, MiniAppRow } from "@/lib/miniapp/types";
 
 const SELECTED_KEY = "miniapp-dash-selected";
@@ -122,7 +123,7 @@ function MetricCard({
   );
 }
 
-function MiniArea({ data, dataKey }: { data: Record<string, unknown>[]; dataKey: string }) {
+function MiniArea({ data, dataKey }: { data: object[]; dataKey: string }) {
   return (
     <div className="mt-auto h-14 pt-3">
       <ResponsiveContainer width="100%" height="100%">
@@ -331,6 +332,7 @@ export default function MiniAppDashboard() {
         </div>
 
         {!listLoading && apps.length === 0 ? (
+          <>
           <Card className="mt-8 flex flex-col items-center gap-4 p-12 text-center">
             <Image src="/logo.png" alt="" width={48} height={48} className="h-12 w-12 object-contain" />
             <div>
@@ -352,6 +354,8 @@ export default function MiniAppDashboard() {
               </Link>
             </div>
           </Card>
+          <LatestChatCard wallet={wallet ?? null} />
+          </>
         ) : (
           <>
             {/* Hero stat + big chart */}
@@ -398,6 +402,9 @@ export default function MiniAppDashboard() {
                 </Button>
               </Link>
             </Card>
+
+            {/* Latest editor chat — jump back into the builder */}
+            <LatestChatCard wallet={wallet ?? null} />
 
             {/* Platform chips */}
             <div className="mt-10 inline-flex items-center gap-1 rounded-full border border-border p-1">
