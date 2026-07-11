@@ -18,6 +18,9 @@ export interface ChatMsg {
   /** Attachment thumbnails (~160px JPEG data URLs) — display only; the
    * full-size images go to the API once and are not persisted. */
   images?: string[];
+  /** Public storage URLs of the uploaded attachments (published apps only) —
+   * enables "In CMS übernehmen" and lets the model reference real URLs. */
+  imageUrls?: string[];
   /** Label of the preview element this edit targeted ("Bearbeiten" mode). */
   elementLabel?: string;
   /** Model reasoning ("Stark" mode), trimmed — collapsible in the bubble. */
@@ -54,6 +57,8 @@ export interface StoredSession {
   pendingJob?: { id: string; startedAt: number } | null;
   /** Confirmed Mini-CMS keys — seeded as initial content after a fresh publish. */
   cmsKeys?: import("./cms").CmsKeyPlan[] | null;
+  /** Server-side chat row (mini_app_editor_chats) this session syncs into. */
+  chatId?: string | null;
   savedAt: number;
 }
 

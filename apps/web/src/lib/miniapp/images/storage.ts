@@ -8,13 +8,23 @@ import { MiniAppError, type MiniAppRow } from "../types";
 const BUCKET = "images";
 export const MAX_PREVIEWS = 5;
 
-export type ImageKind = "icon" | "preview" | "feature" | "shot";
+export type ImageKind = "icon" | "preview" | "feature" | "shot" | "content";
 
-function pathFor(appId: string, kind: ImageKind, slot?: number): string {
+function extFor(contentType: string): string {
+  if (contentType.includes("jpeg")) return "jpg";
+  if (contentType.includes("webp")) return "webp";
+  return "png";
+}
+
+function pathFor(appId: string, kind: ImageKind, slot?: number, contentType?: string): string {
   const ts = Date.now();
   if (kind === "icon") return `mini-apps/${appId}/icon_${ts}.png`;
   if (kind === "preview") return `mini-apps/${appId}/preview-${slot ?? 0}_${ts}.png`;
   if (kind === "feature") return `mini-apps/${appId}/feature_${ts}.png`;
+  // Content images (Mini-CMS values, chat attachments): not tied to the app
+  // row — the URL lands in mini_app_data values / the generated document.
+  if (kind === "content")
+    return `mini-apps/${appId}/content/${ts}.${extFor(contentType ?? "image/png")}`;
   return `mini-apps/${appId}/shots/${ts}.png`;
 }
 
@@ -39,7 +49,7 @@ export async function saveImageBytes(
   contentType: string,
   slot?: number,
 ): Promise<string> {
-  return uploadToBucket(pathFor(appId, kind, slot), bytes, contentType);
+  return uploadToBucket(pathFor(appId, kind, slot, contentType), bytes, contentType);
 }
 
 /** Download a generated image from KIE's CDN and store it in our bucket. */

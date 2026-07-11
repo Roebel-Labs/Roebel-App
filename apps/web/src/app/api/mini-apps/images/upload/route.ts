@@ -27,10 +27,10 @@ export async function POST(req: Request) {
     const slotRaw = form.get("slot");
     const file = form.get("file");
 
-    if (!appId || !["icon", "preview", "feature", "shot"].includes(kind)) {
+    if (!appId || !["icon", "preview", "feature", "shot", "content"].includes(kind)) {
       throw new MiniAppError(
         "invalid_params",
-        "appId und kind (icon|preview|feature|shot) erforderlich.",
+        "appId und kind (icon|preview|feature|shot|content) erforderlich.",
       );
     }
     if (!(file instanceof File)) {
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const app = await requireAppAccess(req, appId);
     const url = await saveImageBytes(
       app.id,
-      kind as "icon" | "preview" | "feature" | "shot",
+      kind as "icon" | "preview" | "feature" | "shot" | "content",
       await file.arrayBuffer(),
       file.type,
       slot,
