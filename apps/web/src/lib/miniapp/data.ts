@@ -717,20 +717,34 @@ export async function queryAnalytics(
     dailyRewards.set(day, (dailyRewards.get(day) ?? 0) + Number(r.amount ?? 0));
   }
 
-  // Build the daily series across the union of day keys.
-  const days = new Set<string>([
-    ...dailyOpens.keys(),
-    ...dailyWallets.keys(),
-    ...dailyRewards.keys(),
-  ]);
-  const series = [...days]
-    .sort()
-    .map((date) => ({
+  // Build a CONTINUOUS daily series (zero-filled) across the whole range.
+  // Only emitting days that had events left young/sparse apps with 1–2
+  // isolated points, which recharts renders as dots instead of a graph.
+  const eventDays = [
+    ...new Set<string>([
+      ...dailyOpens.keys(),
+      ...dailyWallets.keys(),
+      ...dailyRewards.keys(),
+    ]),
+  ].sort();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const firstDayIso = windowMs
+    ? new Date(now - windowMs).toISOString().slice(0, 10)
+    : (eventDays[0] ?? new Date(now).toISOString().slice(0, 10));
+  const series: AnalyticsSummary["series"] = [];
+  for (
+    let t = Date.parse(`${firstDayIso}T00:00:00Z`);
+    t <= now;
+    t += DAY_MS
+  ) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    series.push({
       date,
       opens: dailyOpens.get(date) ?? 0,
       uniqueWallets: dailyWallets.get(date)?.size ?? 0,
       rewards: dailyRewards.get(date) ?? 0,
-    }));
+    });
+  }
 
   const topEvents = [...eventCounts.entries()]
     .map(([event, count]) => ({ event, count }))
