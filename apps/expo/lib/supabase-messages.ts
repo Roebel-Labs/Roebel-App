@@ -467,6 +467,47 @@ export async function fetchAccountOwnerWallets(accountId: string): Promise<strin
   );
 }
 
+/**
+ * Resolves an arbitrary wallet address to a messageable personal account,
+ * creating a minimal extern shadow account ("Externer Kontakt") when the
+ * wallet is unknown to Röbel. Powers the hidden address-paste flow in the
+ * new-message search — the raw address is never rendered anywhere.
+ */
+export async function getOrCreateExternAccountForWallet(
+  walletAddress: string
+): Promise<string | null> {
+  const normalized = walletAddress.toLowerCase();
+
+  const existing = await fetchPersonalAccountIdByWallet(normalized);
+  if (existing) return existing;
+
+  const { data: account, error: accountError } = await supabase
+    .from('accounts' as any)
+    .insert({
+      account_type: 'personal',
+      name: 'Externer Kontakt',
+      is_extern: true,
+    })
+    .select('id')
+    .single();
+  if (accountError || !account) {
+    console.error('Failed to create extern account:', accountError);
+    return null;
+  }
+
+  const accountId = (account as { id: string }).id;
+  const { error: ownerError } = await supabase.from('account_owners' as any).insert({
+    account_id: accountId,
+    wallet_address: normalized,
+    role: 'owner',
+  });
+  if (ownerError) {
+    console.error('Failed to link extern wallet:', ownerError);
+    return null;
+  }
+  return accountId;
+}
+
 // Hydrate a Message row (e.g. from a realtime payload) with its joined
 // sticker reward when applicable. Exposed so useConversation can call it
 // from the realtime handler.

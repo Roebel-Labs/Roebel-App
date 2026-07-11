@@ -15,12 +15,15 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
+import { useXmtp } from '@/context/XmtpContext';
 import { useAccountSearch } from '@/hooks/useAccountSearch';
 import {
   findOrCreateConversation,
   sendMessage,
   fetchPersonalAccountIdByWallet,
+  getOrCreateExternAccountForWallet,
 } from '@/lib/supabase-messages';
+import { canMessageCached } from '@/lib/xmtp/transport';
 import type {
   AccountSearchResult,
   AccountSearchScope,
@@ -70,6 +73,14 @@ export default function NewConversationScreen() {
   const [isOpening, setIsOpening] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const autoTriggered = useRef(false);
+  const { handle: xmtpHandle } = useXmtp();
+
+  // Hidden power flow: a full wallet address pasted into the search opens a
+  // direct chat with that wallet. Deliberately unadvertised — no placeholder
+  // hint, and the raw address is never rendered anywhere.
+  const walletQuery = /^0x[a-fA-F0-9]{40}$/.test(query.trim())
+    ? query.trim().toLowerCase()
+    : null;
 
   const { results, isLoading, hasQuery } = useAccountSearch(
     query,
@@ -110,6 +121,53 @@ export default function NewConversationScreen() {
       router.replace(`/messages/${convo.id}` as any);
     } catch (err) {
       console.error('Failed to start conversation:', err);
+      setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
+    } finally {
+      setIsOpening(null);
+    }
+  };
+
+  const openWalletConversation = async (wallet: string) => {
+    if (!activeAccount?.id) {
+      requireAuth(() => {});
+      return;
+    }
+    if (isOpening) return;
+    setErrorMessage(null);
+
+    // Known Röbel user? Open under their real identity.
+    const knownId = await fetchPersonalAccountIdByWallet(wallet);
+    if (knownId === activeAccount.id) {
+      setErrorMessage('Du kannst dir nicht selbst schreiben.');
+      return;
+    }
+    if (knownId) {
+      openConversation(knownId);
+      return;
+    }
+
+    // Unknown wallet → external XMTP contact. Requires the XMTP rail and a
+    // reachable peer, otherwise messages would land in a dead conversation.
+    if (!xmtpHandle) {
+      setErrorMessage('Aktiviere zuerst private Nachrichten in deinem Posteingang.');
+      return;
+    }
+    setIsOpening(wallet);
+    try {
+      const reachable = await canMessageCached(xmtpHandle, wallet);
+      if (!reachable) {
+        setErrorMessage('Diese Adresse ist über private Nachrichten nicht erreichbar.');
+        return;
+      }
+      const externId = await getOrCreateExternAccountForWallet(wallet);
+      if (!externId) {
+        setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
+        return;
+      }
+      setIsOpening(null);
+      await openConversation(externId);
+    } catch (err) {
+      console.error('Failed to open wallet conversation:', err);
       setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
     } finally {
       setIsOpening(null);
@@ -238,7 +296,31 @@ export default function NewConversationScreen() {
         </Animated.View>
       )}
 
-      {showEmpty && (
+      {walletQuery && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.externRow,
+            { borderBottomColor: colors.border },
+            pressed && { backgroundColor: colors.pressedOverlay },
+          ]}
+          onPress={() => openWalletConversation(walletQuery)}
+          disabled={!!isOpening}
+        >
+          <View style={[styles.externAvatar, { backgroundColor: colors.surfaceSecondary }]}>
+            <Text style={[styles.externAvatarText, { color: colors.textSecondary }]}>E</Text>
+          </View>
+          <View style={styles.externContent}>
+            <Text style={[styles.externName, { color: colors.textPrimary }]}>
+              Externer Kontakt
+            </Text>
+            <Text style={[styles.externSubtitle, { color: colors.textSecondary }]}>
+              {isOpening ? 'Wird geöffnet…' : 'Direktnachricht senden'}
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
+      {showEmpty && !walletQuery && (
         <View style={styles.emptyState}>
           <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
             Keine Ergebnisse
@@ -334,6 +416,37 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  externRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  externAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  externAvatarText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+  },
+  externContent: {
+    flex: 1,
+    gap: 2,
+  },
+  externName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  externSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
   },
   errorBanner: {
     marginHorizontal: 16,

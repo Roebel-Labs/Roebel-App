@@ -52,6 +52,9 @@ export function isXmtpRailEligible(
     accountType: string;
     ownerWallet: string | null;
     xmtpRegisteredAt: string | null;
+    /** Extern shadow contacts (wallet-only, no Röbel user row) skip the
+     *  registered-flag check — canMessage alone decides reachability. */
+    isExtern?: boolean;
   },
   myAccountType: string | undefined | null
 ): boolean {
@@ -59,7 +62,7 @@ export function isXmtpRailEligible(
     myAccountType === 'personal' &&
     peer.accountType === 'personal' &&
     !!peer.ownerWallet &&
-    !!peer.xmtpRegisteredAt
+    (!!peer.xmtpRegisteredAt || peer.isExtern === true)
   );
 }
 

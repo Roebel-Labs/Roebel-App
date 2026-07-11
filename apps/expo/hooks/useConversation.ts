@@ -54,6 +54,8 @@ export type PeerAccount = {
   /** Lowercased owner wallet (personal accounts; null for orgs). */
   ownerWallet: string | null;
   xmtpRegisteredAt: string | null;
+  /** Extern shadow contact (wallet-only peer without a Röbel user). */
+  isExtern: boolean;
 };
 
 export type ConversationRail = 'supabase' | 'xmtp';
@@ -141,7 +143,7 @@ export function useConversation(conversationId: string) {
         const { data: acc } = await supabase
           .from('accounts' as any)
           .select(
-            'id, account_type, sub_type, name, avatar_url, is_verified, account_owners(wallet_address, users:wallet_address(username, profile_picture_url, equipped_frame_asset_url, xmtp_registered_at))'
+            'id, account_type, sub_type, name, avatar_url, is_verified, is_extern, account_owners(wallet_address, users:wallet_address(username, profile_picture_url, equipped_frame_asset_url, xmtp_registered_at))'
           )
           .eq('id', peerId)
           .single();
@@ -172,6 +174,7 @@ export function useConversation(conversationId: string) {
             ? String(owner.wallet_address).toLowerCase()
             : null,
           xmtpRegisteredAt: isPersonal ? ownerUser?.xmtp_registered_at ?? null : null,
+          isExtern: row.is_extern === true,
         });
       } catch (err) {
         console.error('Failed to hydrate peer:', err);
