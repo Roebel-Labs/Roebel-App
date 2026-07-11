@@ -1,10 +1,10 @@
 /**
  * XMTP client bootstrap.
  *
- * Identity = the user's Gnosis smart account (same deterministic address as
- * Base; the app-wide user key in `users.wallet_address`). Registered as an
- * XMTP SCW identity verified via ERC-1271 against Gnosis (chainId 100) — the
- * chain where every account already transacts gaslessly (Münzen, MACI).
+ * Identity = the user's smart account (same deterministic address on Base and
+ * Gnosis; the app-wide user key in `users.wallet_address`). Registered as an
+ * XMTP SCW identity verified via ERC-1271 on BASE (chainId 8453) — legacy
+ * XMTP-era associations are chain-bound to Base, see XMTP_SIGNER_CHAIN_ID.
  *
  * Native modules (@xmtp/react-native-sdk, expo-secure-store) are only loaded
  * lazily inside functions: builds older than 2026-07-10 lack them, and this
@@ -21,8 +21,7 @@ import type {
   XMTPEnvironment,
 } from '@xmtp/react-native-sdk';
 
-import { client as thirdwebClient } from '@/constants/thirdweb';
-import { gnosis } from '@/constants/gnosis';
+import { client as thirdwebClient, chain as baseChain } from '@/constants/thirdweb';
 import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
 import { markUserXmtpRegistered } from '@/lib/supabase-users';
 import { loadXmtp, type XmtpSdk } from './native';
@@ -90,24 +89,36 @@ async function getOrCreateDbKey(wallet: string): Promise<Uint8Array> {
 }
 
 /**
- * ERC-1271 verification requires deployed code at the account address on the
- * verification chain. Thirdweb smart accounts deploy on their first
- * transaction — brand-new users may still be counterfactual on Gnosis, so we
- * deploy with a sponsored no-op self-transfer before registering with XMTP.
+ * XMTP binds an SCW identity to the chain it was FIRST registered from and
+ * rejects signatures from any other chain forever after ("Wrong chain id.
+ * Initially added with 8453 but now signing from 100" — captured live
+ * 2026-07-12). This app's wallets were first associated during the old
+ * XMTP era on Base, so the signer chain is Base (8453) permanently — the
+ * smart-account ADDRESS is identical on Base and Gnosis, so nothing else
+ * changes. Do NOT switch this to Gnosis.
  */
-async function ensureDeployedOnGnosis(account: Account): Promise<void> {
+export const XMTP_SIGNER_CHAIN_ID = 8453;
+
+/**
+ * ERC-1271 verification requires deployed code at the account address on the
+ * verification chain (Base). Thirdweb smart accounts deploy on their first
+ * transaction — brand-new users may still be counterfactual on Base (they
+ * transact on Gnosis these days), so we deploy with a sponsored no-op
+ * self-transfer before registering with XMTP.
+ */
+async function ensureDeployedOnBase(account: Account): Promise<void> {
   const deployed = await isContractDeployed(
-    getContract({ client: thirdwebClient, chain: gnosis, address: account.address })
+    getContract({ client: thirdwebClient, chain: baseChain, address: account.address })
   );
   if (deployed) return;
 
-  console.log('[xmtp] deploying smart account on gnosis before registration');
+  console.log('[xmtp] deploying smart account on base before registration');
   await sendTransaction({
     account,
     transaction: prepareTransaction({
       to: account.address,
       value: 0n,
-      chain: gnosis,
+      chain: baseChain,
       client: thirdwebClient,
     }),
   });
@@ -116,12 +127,12 @@ async function ensureDeployedOnGnosis(account: Account): Promise<void> {
 function makeScwSigner(sdk: XmtpSdk, account: Account): XmtpSigner {
   return {
     getIdentifier: async () => new sdk.PublicIdentity(account.address, 'ETHEREUM'),
-    getChainId: () => 100,
+    getChainId: () => XMTP_SIGNER_CHAIN_ID,
     getBlockNumber: () => undefined,
     signerType: () => 'SCW',
     signMessage: async (message: string) => ({
       // inAppWallet smart accounts sign silently (no user prompt) and return
-      // a hex signature verifiable via isValidSignature on Gnosis.
+      // a hex signature verifiable via isValidSignature on Base.
       signature: await account.signMessage({ message }),
     }),
   };
@@ -201,7 +212,7 @@ export async function bootXmtpClient(
       }
 
       if (!xmtpClient) {
-        await ensureDeployedOnGnosis(account);
+        await ensureDeployedOnBase(account);
         xmtpClient = await sdk.Client.create(makeScwSigner(sdk, account), options);
         await AsyncStorage.setItem(flagKey, new Date().toISOString());
         // Rail-selection signal for peers; safe to fire-and-forget.

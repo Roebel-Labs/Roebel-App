@@ -10,8 +10,9 @@ import React, {
 import { AppState } from 'react-native';
 import type { DecodedMessage } from '@xmtp/react-native-sdk';
 
+import { useActiveAccount } from 'thirdweb/react';
+
 import { useWalletBoot } from '@/context/WalletBootContext';
-import { useGnosisWallet } from '@/context/GnosisWalletContext';
 import {
   bootXmtpClient,
   dropXmtpClient,
@@ -63,7 +64,10 @@ export function useXmtp(): XmtpContextValue {
  */
 export function XmtpProvider({ children }: { children: React.ReactNode }) {
   const { autoConnectFinished } = useWalletBoot();
-  const { gnosisAccount, ready: gnosisReady } = useGnosisWallet();
+  // XMTP signs with the BASE smart account: identity associations from the
+  // old XMTP era are chain-bound to Base (8453) — see XMTP_SIGNER_CHAIN_ID.
+  // Same address as the Gnosis account, so peer addressing is unchanged.
+  const baseAccount = useActiveAccount();
 
   const [handle, setHandle] = useState<XmtpClientHandle | null>(() => getXmtpClient());
   const [ready, setReady] = useState(false);
@@ -77,8 +81,8 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!autoConnectFinished || !gnosisReady) return; // still reconnecting — do nothing
-    if (!gnosisAccount) {
+    if (!autoConnectFinished) return; // still reconnecting — do nothing
+    if (!baseAccount) {
       // Real logout: settle as ready-without-client and drop any old client.
       setReady(true);
       setActivationAvailable(false);
@@ -89,7 +93,7 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       }
       return;
     }
-    if (handle?.wallet === gnosisAccount.address.toLowerCase()) {
+    if (handle?.wallet === baseAccount.address.toLowerCase()) {
       setReady(true);
       return;
     }
@@ -97,7 +101,7 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       // Silent boot only resumes an existing registration (Client.build, no
       // signature). First-time registration is user-triggered via activate().
-      const booted = await bootXmtpClient(gnosisAccount, { allowRegister: false });
+      const booted = await bootXmtpClient(baseAccount, { allowRegister: false });
       if (cancelled) return;
       setHandle(booted);
       setReady(true);
@@ -113,15 +117,15 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnectFinished, gnosisReady, gnosisAccount?.address]);
+  }, [autoConnectFinished, baseAccount?.address]);
 
   // ── Explicit activation ("Private Nachrichten aktivieren") ─────
   const activate = useCallback(async (): Promise<boolean> => {
-    if (!gnosisAccount || activating) return false;
+    if (!baseAccount || activating) return false;
     setActivating(true);
     setActivationError(null);
     try {
-      const booted = await bootXmtpClient(gnosisAccount, {
+      const booted = await bootXmtpClient(baseAccount, {
         allowRegister: true,
         rethrow: true,
       });
@@ -139,7 +143,7 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setActivating(false);
     }
-  }, [gnosisAccount, activating]);
+  }, [baseAccount, activating]);
 
   // ── Message stream (re-armed on app foreground) ────────────────
   const startStream = useCallback(async (h: XmtpClientHandle) => {
