@@ -16,6 +16,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
+import XmtpActivationCard from '@/components/messages/XmtpActivationCard';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -120,7 +121,12 @@ export default function MessagesScreen() {
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderConversation}
-          ListHeaderComponent={<MeckyRow />}
+          ListHeaderComponent={
+            <>
+              <XmtpActivationCard />
+              <MeckyRow />
+            </>
+          }
           refreshControl={
             <RefreshControl
               refreshing={isLoading && conversations.length > 0}

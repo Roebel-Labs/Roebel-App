@@ -140,13 +140,28 @@ function buildCodecs(sdk: XmtpSdk) {
   ];
 }
 
+export interface BootXmtpOptions {
+  /**
+   * Allow first-time inbox registration (deploy guard + SCW signature +
+   * Client.create). Silent app-start boot passes false so registration only
+   * ever happens through the explicit "Private Nachrichten aktivieren" flow.
+   */
+  allowRegister?: boolean;
+  /** Rethrow boot errors instead of settling null (activation UI shows them). */
+  rethrow?: boolean;
+}
+
 /**
  * Boots (or returns the cached) XMTP client for the given Gnosis smart
- * account. Returns null when the rail is unavailable for any reason — kill
- * switch off, native module missing (old build), or boot failure — in which
- * case DMs stay on the Supabase rail. Never throws.
+ * account. Returns null when the rail is unavailable — kill switch off,
+ * native module missing (old build), not yet activated on this device, or
+ * boot failure — in which case DMs stay on the Supabase rail. Only throws
+ * when opts.rethrow is set.
  */
-export async function bootXmtpClient(account: Account): Promise<XmtpClientHandle | null> {
+export async function bootXmtpClient(
+  account: Account,
+  opts?: BootXmtpOptions
+): Promise<XmtpClientHandle | null> {
   const wallet = account.address.toLowerCase();
   if (handleCache?.wallet === wallet) return handleCache;
   if (bootPromise) return bootPromise;
@@ -165,6 +180,11 @@ export async function bootXmtpClient(account: Account): Promise<XmtpClientHandle
       const flagKey = `${REGISTERED_FLAG_PREFIX}${wallet}`;
       const registered = await AsyncStorage.getItem(flagKey);
 
+      if (!registered && !opts?.allowRegister) {
+        console.log('[xmtp] not yet activated on this device — Supabase rail until user activates');
+        return null;
+      }
+
       let xmtpClient: Client<any> | null = null;
 
       if (registered) {
@@ -176,6 +196,7 @@ export async function bootXmtpClient(account: Account): Promise<XmtpClientHandle
           );
         } catch (err) {
           console.warn('[xmtp] build failed (db/key lost?) — re-creating', err);
+          if (!opts?.allowRegister) throw err;
         }
       }
 
@@ -198,6 +219,7 @@ export async function bootXmtpClient(account: Account): Promise<XmtpClientHandle
       return handleCache;
     } catch (err) {
       console.error('[xmtp] boot failed — staying on Supabase rail', err);
+      if (opts?.rethrow) throw err;
       return null;
     } finally {
       bootPromise = null;

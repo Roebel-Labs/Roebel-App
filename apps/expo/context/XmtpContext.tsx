@@ -18,12 +18,22 @@ import {
   getXmtpClient,
   type XmtpClientHandle,
 } from '@/lib/xmtp/client';
+import { loadXmtp } from '@/lib/xmtp/native';
+import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
 
 interface XmtpContextValue {
   /** Null until boot succeeds (or forever on old builds / kill switch). */
   handle: XmtpClientHandle | null;
   /** True once the boot attempt has settled (success OR failure). */
   ready: boolean;
+  /** Registration is possible but hasn't happened on this device yet. */
+  activationAvailable: boolean;
+  /** An explicit activation is in flight. */
+  activating: boolean;
+  /** German user-facing error from the last activation attempt. */
+  activationError: string | null;
+  /** Explicit first-time registration ("Private Nachrichten aktivieren"). */
+  activate: () => Promise<boolean>;
   /** Subscribe to every inbound/outbound streamed message. Returns unsubscribe. */
   subscribeMessages: (cb: (message: DecodedMessage<any>) => void) => () => void;
 }
@@ -31,6 +41,10 @@ interface XmtpContextValue {
 const XmtpContext = createContext<XmtpContextValue>({
   handle: null,
   ready: false,
+  activationAvailable: false,
+  activating: false,
+  activationError: null,
+  activate: async () => false,
   subscribeMessages: () => () => {},
 });
 
@@ -53,6 +67,9 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
 
   const [handle, setHandle] = useState<XmtpClientHandle | null>(() => getXmtpClient());
   const [ready, setReady] = useState(false);
+  const [activationAvailable, setActivationAvailable] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState<string | null>(null);
   const subscribersRef = useRef<Set<(m: DecodedMessage<any>) => void>>(new Set());
   const streamingForRef = useRef<string | null>(null);
 
@@ -64,6 +81,7 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     if (!gnosisAccount) {
       // Real logout: settle as ready-without-client and drop any old client.
       setReady(true);
+      setActivationAvailable(false);
       if (handle) {
         setHandle(null);
         streamingForRef.current = null;
@@ -77,10 +95,17 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     }
 
     (async () => {
-      const booted = await bootXmtpClient(gnosisAccount);
-      if (!cancelled) {
-        setHandle(booted);
-        setReady(true);
+      // Silent boot only resumes an existing registration (Client.build, no
+      // signature). First-time registration is user-triggered via activate().
+      const booted = await bootXmtpClient(gnosisAccount, { allowRegister: false });
+      if (cancelled) return;
+      setHandle(booted);
+      setReady(true);
+      if (booted) {
+        setActivationAvailable(false);
+      } else {
+        const [sdk, enabled] = await Promise.all([loadXmtp(), fetchXmtpDmsEnabled()]);
+        if (!cancelled) setActivationAvailable(sdk != null && enabled);
       }
     })();
 
@@ -89,6 +114,32 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoConnectFinished, gnosisReady, gnosisAccount?.address]);
+
+  // ── Explicit activation ("Private Nachrichten aktivieren") ─────
+  const activate = useCallback(async (): Promise<boolean> => {
+    if (!gnosisAccount || activating) return false;
+    setActivating(true);
+    setActivationError(null);
+    try {
+      const booted = await bootXmtpClient(gnosisAccount, {
+        allowRegister: true,
+        rethrow: true,
+      });
+      if (booted) {
+        setHandle(booted);
+        setActivationAvailable(false);
+        return true;
+      }
+      setActivationError('Aktivierung derzeit nicht möglich.');
+      return false;
+    } catch (err) {
+      console.error('[xmtp] activation failed', err);
+      setActivationError('Aktivierung fehlgeschlagen. Bitte versuche es erneut.');
+      return false;
+    } finally {
+      setActivating(false);
+    }
+  }, [gnosisAccount, activating]);
 
   // ── Message stream (re-armed on app foreground) ────────────────
   const startStream = useCallback(async (h: XmtpClientHandle) => {
@@ -150,8 +201,16 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<XmtpContextValue>(
-    () => ({ handle, ready, subscribeMessages }),
-    [handle, ready, subscribeMessages]
+    () => ({
+      handle,
+      ready,
+      activationAvailable,
+      activating,
+      activationError,
+      activate,
+      subscribeMessages,
+    }),
+    [handle, ready, activationAvailable, activating, activationError, activate, subscribeMessages]
   );
 
   return <XmtpContext.Provider value={value}>{children}</XmtpContext.Provider>;
