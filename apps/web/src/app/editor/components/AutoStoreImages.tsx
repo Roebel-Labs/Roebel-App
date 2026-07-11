@@ -26,10 +26,13 @@ export function AutoStoreImages({
   html,
   slug,
   wallet,
+  force,
 }: {
   html: string;
   slug: string;
   wallet: string;
+  /** Regenerate everything (fresh captures, existing images replaced). */
+  force?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
@@ -46,6 +49,7 @@ export function AutoStoreImages({
       html,
       slug,
       wallet,
+      force,
       container: containerRef.current,
       onProgress: (next) => {
         if (alive) setItems(next);
@@ -62,7 +66,7 @@ export function AutoStoreImages({
     return () => {
       alive = false;
     };
-  }, [html, slug, wallet]);
+  }, [html, slug, wallet, force]);
 
   useEffect(() => {
     if (phase !== "done") return;

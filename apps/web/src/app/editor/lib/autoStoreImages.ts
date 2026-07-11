@@ -164,6 +164,8 @@ export interface AutoRunInput {
   container: HTMLElement;
   onProgress: AutoImagesProgress;
   isCancelled?: () => boolean;
+  /** Regenerate everything: fresh captures, existing images are replaced. */
+  force?: boolean;
 }
 
 /**
@@ -179,9 +181,12 @@ export async function runAutoStoreImages(input: AutoRunInput): Promise<AutoImage
   const app = detail.app as MiniAppRow | undefined;
   if (!app) throw new Error("App nicht gefunden.");
 
-  const needIcon = !app.icon_url || app.icon_url.startsWith("data:");
-  const needFeature = !app.feature_image_url;
-  const usedSlots = (app.screenshots ?? []).length;
+  const force = input.force ?? false;
+  const needIcon = force || !app.icon_url || app.icon_url.startsWith("data:");
+  const needFeature = force || !app.feature_image_url;
+  // force: previews are rebuilt from slot 0 (overwriting); normally only the
+  // empty slots after the existing ones get filled.
+  const usedSlots = force ? 0 : (app.screenshots ?? []).length;
   const freeSlots = Math.max(0, MAX_PREVIEWS - usedSlots);
 
   const parsed = parseScreens(input.html);

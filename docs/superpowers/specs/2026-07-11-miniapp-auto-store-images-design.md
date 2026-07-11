@@ -102,6 +102,23 @@ erstellt…").
 - Closing the tab mid-run loses only the not-yet-persisted images (each
   poll persists its image as soon as KIE finishes).
 
+## v2 additions (same day)
+
+- **AI edit mode** — `POST /api/mini-apps/images` accepts `mode: "edit"`:
+  `referenceUrl` is the CURRENT image, `prompt` the requested change;
+  `buildEditPrompt` keeps per-kind constraints (icon stays an icon, hero
+  stays 16:9 text-free, preview stays 1:1 store-look). The dashboard
+  "Bilder" section gets "Mit KI bearbeiten" on the filled icon/hero (and a
+  pencil overlay on filled preview slots); the shared "Wunsch" field is the
+  edit instruction and the buttons stay disabled until it has text.
+  `data:`-URI icons (the SVG draft) can't be edited — KIE needs an https
+  reference — so the button only shows for stored raster images.
+- **Manual regenerate-all** — the auto-run gained `force` (icon + hero
+  regenerated regardless, previews rebuilt from slot 0, fresh captures).
+  Editor toolbar shows a "Store-Bilder" button for published apps behind a
+  confirm dialog (it replaces existing images). `quickUpdate` (one-click
+  republish) now also triggers the normal fill-missing run.
+
 ## Testing
 
 - Lint + scoped typecheck on the changed files (repo has known pre-existing

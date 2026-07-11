@@ -24,6 +24,28 @@ export function buildFeaturePrompt(app: MiniAppRow, userPrompt?: string): string
   return parts.filter(Boolean).join(" ");
 }
 
+/**
+ * Edit mode: the current image goes in as the NB2 reference, the user's wish
+ * is the instruction. Per-kind constraints keep the result usable in its slot.
+ */
+export function buildEditPrompt(
+  app: MiniAppRow,
+  opts: { userPrompt: string; kind: "icon" | "feature" | "preview" },
+): string {
+  const constraints =
+    opts.kind === "icon"
+      ? "Es bleibt ein App-Icon: zentriertes Motiv, klare Silhouette, kein Text, kein Rahmen, kein Schlagschatten außerhalb der Fläche."
+      : opts.kind === "feature"
+        ? "Es bleibt ein breites Store-Hero-Artwork (16:9) mit ruhiger Komposition; unten muss Platz für eine Textzeile bleiben, keine Texte oder Logos."
+        : "Es bleibt ein App-Store-Vorschaubild (1:1) im hochwertigen App-Store-Look, keine zusätzlichen Texte oder Logos.";
+  return [
+    `Bearbeite das beigefügte Bild der Mini-App "${app.name}".`,
+    `Gewünschte Änderung: ${opts.userPrompt.trim()}.`,
+    "Übernimm Komposition, Stil und Farbwelt des Originals und ändere nur das Gewünschte.",
+    constraints,
+  ].join(" ");
+}
+
 export function buildPreviewPrompt(
   app: MiniAppRow,
   opts: { userPrompt?: string; hasReference: boolean },

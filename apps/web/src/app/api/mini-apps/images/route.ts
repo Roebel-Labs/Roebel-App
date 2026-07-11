@@ -6,6 +6,7 @@ import { jsonError, getParam } from "@/lib/miniapp/http";
 import { requireAppAccess } from "@/lib/miniapp/images/access";
 import { createImageTask } from "@/lib/miniapp/images/kie";
 import {
+  buildEditPrompt,
   buildFeaturePrompt,
   buildIconPrompt,
   buildPreviewPrompt,
@@ -36,6 +37,8 @@ type Body = {
   slot?: number;
   prompt?: string;
   referenceUrl?: string;
+  /** "edit": referenceUrl is the CURRENT image, prompt the change request. */
+  mode?: string;
   wallet?: string;
 };
 
@@ -65,8 +68,20 @@ export async function POST(req: Request) {
       throw new MiniAppError("invalid_params", "referenceUrl muss eine https-URL sein.");
     }
 
-    const prompt =
-      kind === "icon"
+    const isEdit = body?.mode === "edit";
+    if (isEdit && (!referenceUrl || !body?.prompt?.trim())) {
+      throw new MiniAppError(
+        "invalid_params",
+        "Bearbeiten braucht referenceUrl (aktuelles Bild) und prompt (gewünschte Änderung).",
+      );
+    }
+
+    const prompt = isEdit
+      ? buildEditPrompt(app, {
+          userPrompt: body?.prompt ?? "",
+          kind: kind as "icon" | "feature" | "preview",
+        })
+      : kind === "icon"
         ? buildIconPrompt(app, body?.prompt)
         : kind === "feature"
           ? buildFeaturePrompt(app, body?.prompt)

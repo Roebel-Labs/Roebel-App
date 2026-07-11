@@ -115,10 +115,12 @@ export default function NewMiniAppBuilderPage() {
   const [published, setPublished] = useState<PublishSuccess | null>(null);
   // Post-publish: auto-generate the store images (icon/hero/1:1 previews)
   // once per publish — keyed by runId so a re-publish starts a fresh run.
+  // force=true (Toolbar „Store-Bilder neu erstellen“) replaces existing images.
   const [autoImagesJob, setAutoImagesJob] = useState<{
     html: string;
     slug: string;
     runId: number;
+    force?: boolean;
   } | null>(null);
   // Set when an existing app is re-opened (?app=…): prefills the publish form
   // so re-publishing lands on the SAME slug as a new version.
@@ -770,6 +772,9 @@ export default function NewMiniAppBuilderPage() {
         version: json.version,
         republished: true,
       });
+      if (activeHtml) {
+        setAutoImagesJob({ html: activeHtml, slug: json.slug, runId: Date.now() });
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -895,6 +900,31 @@ export default function NewMiniAppBuilderPage() {
           <ModelToggle value={complexity} onChange={setComplexity} disabled={streaming} />
           {published ? (
             <Badge className="hidden bg-success text-white sm:inline-flex">In Prüfung</Badge>
+          ) : null}
+          {published && activeHtml ? (
+            <button
+              type="button"
+              disabled={streaming || !wallet}
+              title="Alle Store-Bilder (Icon, Artwork, Vorschauen) mit KI neu erstellen — ersetzt vorhandene"
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Alle Store-Bilder (Icon, Artwork, Vorschauen) neu erstellen? Vorhandene Bilder werden ersetzt.",
+                  )
+                )
+                  return;
+                setAutoImagesJob({
+                  html: activeHtml,
+                  slug: published.slug,
+                  runId: Date.now(),
+                  force: true,
+                });
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Store-Bilder</span>
+            </button>
           ) : null}
           <Button
             size="sm"
@@ -1143,6 +1173,7 @@ export default function NewMiniAppBuilderPage() {
           html={autoImagesJob.html}
           slug={autoImagesJob.slug}
           wallet={wallet}
+          force={autoImagesJob.force}
         />
       ) : null}
     </div>

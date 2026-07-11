@@ -8,6 +8,7 @@ import {
   Camera,
   Image as ImageIcon,
   Loader2,
+  Pencil,
   Sparkles,
   Trash2,
   Upload,
@@ -78,10 +79,15 @@ export function ImagesSection({
 
   useEffect(loadShots, [loadShots]);
 
-  async function generate(kind: ImgKind, slot?: number, referenceUrl?: string) {
+  async function generate(
+    kind: ImgKind,
+    slot?: number,
+    referenceUrl?: string,
+    mode?: "edit",
+  ) {
     if (busy) return;
     setError(null);
-    setBusy({ kind, slot, label: "Wird generiert …" });
+    setBusy({ kind, slot, label: mode === "edit" ? "Wird bearbeitet …" : "Wird generiert …" });
     try {
       const { taskId } = (await apiJson(`/api/mini-apps/images`, wallet, {
         method: "POST",
@@ -92,6 +98,7 @@ export function ImagesSection({
           slot,
           prompt: wish || undefined,
           referenceUrl,
+          mode,
         }),
       })) as { taskId: string };
 
@@ -180,13 +187,14 @@ export function ImagesSection({
 
       <label className="mb-4 block">
         <span className="text-xs font-medium text-muted-foreground">
-          Optionaler Wunsch für die KI (Stil, Motiv, Stimmung)
+          Wunsch für die KI — beim Generieren optional (Stil, Motiv, Stimmung), für „Mit KI
+          bearbeiten“ die gewünschte Änderung
         </span>
         <input
           type="text"
           value={wish}
           onChange={(e) => setWish(e.target.value)}
-          placeholder="z. B. verspielt, mit Leuchtturm-Motiv"
+          placeholder="z. B. verspielt, mit Leuchtturm-Motiv — oder: Hintergrund heller machen"
           className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
         />
       </label>
@@ -215,6 +223,17 @@ export function ImagesSection({
           <Button size="sm" disabled={!!busy} onClick={() => generate("icon")}>
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Mit KI generieren
           </Button>
+          {app.icon_url?.startsWith("https://") ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!!busy || !wish.trim()}
+              title={wish.trim() ? undefined : "Beschreibe oben im Wunsch-Feld, was geändert werden soll"}
+              onClick={() => app.icon_url && generate("icon", undefined, app.icon_url, "edit")}
+            >
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Mit KI bearbeiten
+            </Button>
+          ) : null}
           {app.icon_url ? (
             <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => remove("icon")}>
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Entfernen
@@ -255,6 +274,20 @@ export function ImagesSection({
           <Button size="sm" disabled={!!busy} onClick={() => generate("feature")}>
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Mit KI generieren
           </Button>
+          {app.feature_image_url?.startsWith("https://") ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!!busy || !wish.trim()}
+              title={wish.trim() ? undefined : "Beschreibe oben im Wunsch-Feld, was geändert werden soll"}
+              onClick={() =>
+                app.feature_image_url &&
+                generate("feature", undefined, app.feature_image_url, "edit")
+              }
+            >
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Mit KI bearbeiten
+            </Button>
+          ) : null}
           {app.feature_image_url ? (
             <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => remove("feature")}>
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Entfernen
@@ -293,6 +326,22 @@ export function ImagesSection({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                  {url.startsWith("https://") ? (
+                    <button
+                      type="button"
+                      aria-label={`Vorschau ${slot + 1} mit KI bearbeiten`}
+                      disabled={!!busy || !wish.trim()}
+                      title={
+                        wish.trim()
+                          ? "Mit KI bearbeiten"
+                          : "Beschreibe oben im Wunsch-Feld, was geändert werden soll"
+                      }
+                      onClick={() => generate("preview", slot, url, "edit")}
+                      className="absolute left-1.5 top-1.5 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition-opacity hover:bg-black/80 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 [div:hover>&]:opacity-100 [div:hover>&]:disabled:opacity-40"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
                 </>
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-1 p-1">
