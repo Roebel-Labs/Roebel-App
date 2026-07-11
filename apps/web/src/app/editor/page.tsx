@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useWalletAddress } from "@/components/mini-apps/useWallet";
+import { AutoStoreImages } from "./components/AutoStoreImages";
 import { CanvasView } from "./components/CanvasView";
 import { CmsSetupCard } from "./components/CmsSetupCard";
 import { CodePane } from "./components/CodePane";
@@ -101,6 +102,13 @@ export default function NewMiniAppBuilderPage() {
   const [input, setInput] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState<PublishSuccess | null>(null);
+  // Post-publish: auto-generate the store images (icon/hero/1:1 previews)
+  // once per publish — keyed by runId so a re-publish starts a fresh run.
+  const [autoImagesJob, setAutoImagesJob] = useState<{
+    html: string;
+    slug: string;
+    runId: number;
+  } | null>(null);
   // Set when an existing app is re-opened (?app=…): prefills the publish form
   // so re-publishing lands on the SAME slug as a new version.
   const [preset, setPreset] = useState<ManifestDraft | null>(null);
@@ -990,7 +998,19 @@ export default function NewMiniAppBuilderPage() {
           onPublished={(result, manifest) => {
             setPublished(result);
             if (manifest) setPreset(manifest); // enables one-click updates
+            if (activeHtml) {
+              setAutoImagesJob({ html: activeHtml, slug: result.slug, runId: Date.now() });
+            }
           }}
+        />
+      ) : null}
+
+      {autoImagesJob && wallet ? (
+        <AutoStoreImages
+          key={autoImagesJob.runId}
+          html={autoImagesJob.html}
+          slug={autoImagesJob.slug}
+          wallet={wallet}
         />
       ) : null}
     </div>

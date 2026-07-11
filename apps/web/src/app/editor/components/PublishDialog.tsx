@@ -198,6 +198,10 @@ export function PublishDialog({
                 Nach der Freigabe erscheint sie im Mini-App-Store der Röbel App. Du kannst hier
                 weiterbauen — erneutes Veröffentlichen reicht eine neue Version ein.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Die Store-Bilder (Icon, Artwork und Vorschauen) werden gerade automatisch mit KI
+                erstellt — den Fortschritt zeigt die Karte unten rechts.
+              </p>
               <Button className="w-full" onClick={() => onOpenChange(false)}>
                 Weiter bauen
               </Button>
