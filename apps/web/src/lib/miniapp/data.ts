@@ -194,7 +194,11 @@ export async function submitApp(input: SubmitAppInput): Promise<MiniAppRow> {
 export async function updateAppManifest(
   id: string,
   manifest: unknown,
-  opts?: { newVersion?: string },
+  opts?: {
+    newVersion?: string;
+    /** Admin edits: apply without resetting the app into review. */
+    keepStatus?: boolean;
+  },
 ): Promise<MiniAppRow> {
   const app = await getApp(id);
   if (!app) throw new MiniAppError("not_found", "App nicht gefunden.");
@@ -227,7 +231,7 @@ export async function updateAppManifest(
       screenshots: m.screenshots.length > 0 ? m.screenshots : app.screenshots ?? [],
       permissions: m.permissions,
       primary_color: m.primaryColor ?? DEFAULT_PRIMARY_COLOR,
-      status: "pending",
+      ...(opts?.keepStatus ? {} : { status: "pending" as const }),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

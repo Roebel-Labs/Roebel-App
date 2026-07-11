@@ -11,6 +11,7 @@ import {
   Star,
   Coins,
   ExternalLink,
+  Pencil,
   RotateCcw,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -28,7 +29,9 @@ import {
   MiniAppPreviewRow,
 } from "@/components/mini-apps/ui";
 import { AnalyticsPanel } from "@/components/mini-apps/AnalyticsPanel";
+import { ContentSection } from "@/components/mini-apps/ContentSection";
 import { ImagesSection } from "@/components/mini-apps/ImagesSection";
+import { ManifestForm } from "@/components/mini-apps/ManifestForm";
 import { NotificationsSection } from "@/components/mini-apps/NotificationsSection";
 import { Playground } from "@/components/mini-apps/Playground";
 import { useMiniAppApi, miniAppWrite } from "@/components/mini-apps/client";
@@ -54,6 +57,7 @@ export default function MiniAppAdminDetail({
   const [budget, setBudget] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editingManifest, setEditingManifest] = useState(false);
 
   async function act(label: string, fn: () => Promise<unknown>, successMessage?: string) {
     setBusy(label);
@@ -256,8 +260,42 @@ export default function MiniAppAdminDetail({
         </DetailCard>
       </div>
 
-      {/* Manifest / metadata */}
+      {/* Manifest / metadata — admin edits apply immediately (no re-review) */}
+      {editingManifest ? (
+        <DetailCard title="Manifest bearbeiten">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Admin-Änderungen gehen sofort live — die App bleibt im aktuellen Status.
+              Icon und Vorschaubilder verwaltest du im Bereich „Bilder“ darunter.
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => setEditingManifest(false)}>
+              Abbrechen
+            </Button>
+          </div>
+          <ManifestForm
+            app={app}
+            submitLabel="Speichern (sofort live)"
+            busy={busy === "manifest"}
+            hideImageFields
+            onSubmit={(manifest) =>
+              act(
+                "manifest",
+                async () => {
+                  await miniAppWrite(`${app.id}`, "PATCH", { manifest });
+                  setEditingManifest(false);
+                },
+                "Manifest gespeichert.",
+              )
+            }
+          />
+        </DetailCard>
+      ) : (
       <DetailCard title="Manifest">
+        <div className="mb-2 flex justify-end">
+          <Button size="sm" variant="outline" onClick={() => setEditingManifest(true)}>
+            <Pencil className="mr-1 h-3.5 w-3.5" /> Bearbeiten
+          </Button>
+        </div>
         <div className="flex items-start gap-3">
           <AppIcon name={app.name} iconUrl={app.icon_url} color={app.primary_color} size={56} />
           <div className="min-w-0 flex-1 divide-y divide-border">
@@ -286,9 +324,13 @@ export default function MiniAppAdminDetail({
         </div>
         <MiniAppPreviewRow images={app.screenshots} className="mt-3" />
       </DetailCard>
+      )}
 
       {/* Icon + Store-Artwork + Store-Vorschau (Admin verwaltet via Session) */}
       <ImagesSection app={app} wallet={null} onChanged={refresh} />
+
+      {/* Inhalte (Mini-CMS) — live editierbar ohne Republish */}
+      <ContentSection app={app} wallet={null} />
 
       {/* Broadcast an alle Nutzer:innen mit aktivierten Benachrichtigungen */}
       <NotificationsSection app={app} wallet={null} />

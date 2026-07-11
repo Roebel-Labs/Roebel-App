@@ -54,6 +54,8 @@ export async function PATCH(
       }
       const updated = await updateAppManifest(app.id, body.manifest, {
         newVersion: body.version,
+        // Admin edits go live directly — developer edits re-enter review.
+        keepStatus: isAdmin,
       });
       return NextResponse.json({ app: updated });
     }
