@@ -78,3 +78,27 @@ route already exist), same SCW signer via thirdweb, same
 8GB OOM rules (`serverExternalPackages` — but the browser SDK is client-side
 anyway). The RN `lib/xmtp/transport.ts` mapping logic is the reference
 implementation to mirror.
+
+## Incident 2026-07-11: crash loop on pre-XMTP builds (RESOLVED in code)
+
+A preview OTA of XMTP-era JS onto the 3.4.0-runtime build crash-looped
+logged-in devices: `Error: Cannot find native module 'XMTP'` as a FATAL.
+Root cause: a try/catch around `await import('@xmtp/react-native-sdk')`
+CANNOT contain a module-factory throw — Metro's guardedLoadModule routes it
+to `ErrorUtils.reportFatalError` (hard release crash). The SDK's factory
+calls `requireNativeModule('XMTP')` at evaluation time.
+
+Fixes:
+1. `lib/xmtp/native.ts` now probes `requireOptionalNativeModule('XMTP')`
+   (returns null instead of throwing) BEFORE importing the SDK — the SDK
+   bundle is never evaluated on builds without the native module.
+   Regression test: `lib/xmtp/__tests__/native.test.ts`.
+2. App version fenced to 3.5.0 (`runtimeVersion = appVersion`), so
+   XMTP-era JS can never OTA onto 3.4.0 builds again.
+3. Devices stuck on the bad preview bundle are healed by republishing the
+   last 3.4.0 preview update:
+   `npx eas-cli update:republish --group e4d05192-c416-4342-86c8-a6588803646d`
+
+Rule for all future native modules: NEVER trust try/catch around a dynamic
+import of a package whose module scope touches native — always probe with
+`requireOptionalNativeModule` first.
