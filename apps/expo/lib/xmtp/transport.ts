@@ -43,17 +43,16 @@ export interface XmtpThreadPage {
 // ── Rail selection ─────────────────────────────────────────────────
 
 /**
- * XMTP rail = personal↔personal where the peer's app has registered.
- * Org-involved conversations stay on the Supabase rail (multi-admin org
- * inboxes become XMTP groups in phase 2).
+ * Personal↔personal chats are XMTP-ONLY (2026-07-12 policy: no Supabase
+ * transport for them anymore) — canMessage() alone decides reachability;
+ * `users.xmtp_registered_at` remains a UI hint, not a gate. Org-involved
+ * conversations stay on the Supabase rail until XMTP groups (phase 2).
  */
 export function isXmtpRailEligible(
   peer: {
     accountType: string;
     ownerWallet: string | null;
     xmtpRegisteredAt: string | null;
-    /** Extern shadow contacts (wallet-only, no Röbel user row) skip the
-     *  registered-flag check — canMessage alone decides reachability. */
     isExtern?: boolean;
   },
   myAccountType: string | undefined | null
@@ -61,8 +60,7 @@ export function isXmtpRailEligible(
   return (
     myAccountType === 'personal' &&
     peer.accountType === 'personal' &&
-    !!peer.ownerWallet &&
-    (!!peer.xmtpRegisteredAt || peer.isExtern === true)
+    !!peer.ownerWallet
   );
 }
 

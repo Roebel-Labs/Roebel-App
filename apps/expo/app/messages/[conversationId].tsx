@@ -70,6 +70,7 @@ export default function ChatScreen() {
     unblockPeer,
     consent,
     rail,
+    sendBlocked,
     peerReadAt,
     loadMore,
     peerAccount,
@@ -210,7 +211,17 @@ export default function ChatScreen() {
           />
         )}
 
-        {!isBlocked && (
+        {sendBlocked ? (
+          <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+            <View style={[styles.sendBlockedNotice, { borderTopColor: colors.border }]}>
+              <Text style={[styles.sendBlockedText, { color: colors.textSecondary }]}>
+                {sendBlocked === 'self'
+                  ? 'Aktiviere private Nachrichten in deinem Posteingang, um hier zu schreiben.'
+                  : `${peerDisplayName || 'Dieser Kontakt'} hat private Nachrichten noch nicht aktiviert.`}
+              </Text>
+            </View>
+          </SafeAreaView>
+        ) : !isBlocked && (
           <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
             <ChatInput
               onSend={(text, stickerRewardId) => {
@@ -378,6 +389,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputSafe: {},
+  sendBlockedNotice: {
+    borderTopWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  sendBlockedText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   reactionBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
-import XmtpActivationCard from '@/components/messages/XmtpActivationCard';
+import XmtpActivationSheet from '@/components/messages/XmtpActivationSheet';
+import { useXmtp } from '@/context/XmtpContext';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -65,6 +66,14 @@ export default function MessagesScreen() {
   } = useMessaging();
 
   const isConnected = !!account;
+
+  // Auto-present the one-time "Private Nachrichten aktivieren" sheet while
+  // this device hasn't registered its XMTP inbox yet.
+  const { activationAvailable } = useXmtp();
+  const [showActivationSheet, setShowActivationSheet] = useState(false);
+  useEffect(() => {
+    if (activationAvailable && isConnected) setShowActivationSheet(true);
+  }, [activationAvailable, isConnected]);
 
   const renderConversation = ({ item }: { item: ConversationWithLastMessage }) => (
     <ConversationListItem
@@ -121,12 +130,7 @@ export default function MessagesScreen() {
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderConversation}
-          ListHeaderComponent={
-            <>
-              <XmtpActivationCard />
-              <MeckyRow />
-            </>
-          }
+          ListHeaderComponent={<MeckyRow />}
           refreshControl={
             <RefreshControl
               refreshing={isLoading && conversations.length > 0}
@@ -158,6 +162,11 @@ export default function MessagesScreen() {
           ListFooterComponent={<View style={styles.bottomPadding} />}
         />
       )}
+
+      <XmtpActivationSheet
+        visible={showActivationSheet}
+        onClose={() => setShowActivationSheet(false)}
+      />
     </SafeAreaView>
   );
 }

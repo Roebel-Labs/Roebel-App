@@ -476,36 +476,17 @@ export async function fetchAccountOwnerWallets(accountId: string): Promise<strin
 export async function getOrCreateExternAccountForWallet(
   walletAddress: string
 ): Promise<string | null> {
-  const normalized = walletAddress.toLowerCase();
-
-  const existing = await fetchPersonalAccountIdByWallet(normalized);
-  if (existing) return existing;
-
-  const { data: account, error: accountError } = await supabase
-    .from('accounts' as any)
-    .insert({
-      account_type: 'personal',
-      name: 'Externer Kontakt',
-      is_extern: true,
-    })
-    .select('id')
-    .single();
-  if (accountError || !account) {
-    console.error('Failed to create extern account:', accountError);
-    return null;
-  }
-
-  const accountId = (account as { id: string }).id;
-  const { error: ownerError } = await supabase.from('account_owners' as any).insert({
-    account_id: accountId,
-    wallet_address: normalized,
-    role: 'owner',
+  // Single SECURITY DEFINER RPC: account_owners.wallet_address has an FK into
+  // users, so external wallets need a stub users row first — the RPC does all
+  // three inserts atomically (migration 20260712_extern_contact_rpc.sql).
+  const { data, error } = await supabase.rpc('create_extern_contact' as any, {
+    p_wallet: walletAddress.toLowerCase(),
   });
-  if (ownerError) {
-    console.error('Failed to link extern wallet:', ownerError);
+  if (error || !data) {
+    console.error('create_extern_contact failed:', error);
     return null;
   }
-  return accountId;
+  return data as string;
 }
 
 // Hydrate a Message row (e.g. from a realtime payload) with its joined

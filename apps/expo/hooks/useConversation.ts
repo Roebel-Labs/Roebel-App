@@ -76,6 +76,7 @@ export function useConversation(conversationId: string) {
   const [isSending, setIsSending] = useState(false);
   const [peerAccount, setPeerAccount] = useState<PeerAccount | null>(null);
   const [rail, setRail] = useState<ConversationRail>('supabase');
+  const [peerUnreachable, setPeerUnreachable] = useState(false);
   const [peerReadAt, setPeerReadAt] = useState<string | null>(null);
   const [consent, setConsent] = useState<'allowed' | 'denied' | 'unknown'>('allowed');
 
@@ -101,6 +102,7 @@ export function useConversation(conversationId: string) {
     setXmtpMessages([]);
     setPeerAccount(null);
     setRail('supabase');
+    setPeerUnreachable(false);
     setPeerReadAt(null);
     dmRef.current = null;
     xmtpOldestNsRef.current = null;
@@ -196,7 +198,10 @@ export function useConversation(conversationId: string) {
 
     (async () => {
       try {
-        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) return;
+        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) {
+          if (!cancelled) setPeerUnreachable(true);
+          return;
+        }
         const dm = await getDmForWallet(xmtp, peerAccount.ownerWallet!);
         if (cancelled) return;
         dmRef.current = dm;
@@ -330,6 +335,25 @@ export function useConversation(conversationId: string) {
     [peerAccount?.ownerWallet, myAccountName, conversationId]
   );
 
+  // Personal↔personal chats are XMTP-only — never fall back to Supabase for
+  // them (2026-07-12 policy). Orgs/support keep the Supabase transport until
+  // XMTP groups land.
+  const isPersonalPair =
+    !!peerAccount &&
+    peerAccount.accountType === 'personal' &&
+    myAccountType === 'personal' &&
+    !!peerAccount.ownerWallet;
+
+  const sendBlocked: 'self' | 'peer' | null = !isPersonalPair
+    ? null
+    : rail === 'xmtp'
+      ? null
+      : xmtpReady && !xmtp
+        ? 'self'
+        : peerUnreachable
+          ? 'peer'
+          : null;
+
   const sendMessage = useCallback(
     async (text: string, stickerRewardId: string | null = null) => {
       if (!conversationId || !myAccountId) return;
@@ -344,6 +368,9 @@ export function useConversation(conversationId: string) {
           firePush(
             pushBodyForMessage({ content: text.trim(), sticker_reward_id: stickerRewardId })
           );
+        } else if (isPersonalPair) {
+          // XMTP-only: no Supabase writes for personal chats.
+          console.warn('[xmtp] send blocked — personal chats are XMTP-only');
         } else {
           await sendMsg(conversationId, myAccountId, text.trim(), stickerRewardId);
         }
@@ -353,7 +380,7 @@ export function useConversation(conversationId: string) {
         setIsSending(false);
       }
     },
-    [conversationId, myAccountId, rail, refreshXmtpThread, firePush]
+    [conversationId, myAccountId, rail, isPersonalPair, refreshXmtpThread, firePush]
   );
 
   /**
@@ -479,6 +506,9 @@ export function useConversation(conversationId: string) {
     unblockPeer,
     consent,
     rail,
+    /** Non-null when sending is blocked: 'self' = user must activate XMTP,
+     *  'peer' = peer hasn't activated yet (personal chats are XMTP-only). */
+    sendBlocked,
     peerReadAt,
     loadMore,
     peerAccount,
