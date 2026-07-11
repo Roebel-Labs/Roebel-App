@@ -94,13 +94,19 @@ async function flush(onChatId: (id: string) => void): Promise<void> {
   }
 }
 
-export async function listChats(wallet: string, limit = 30): Promise<ChatMeta[]> {
-  const res = await fetch(`/api/mini-apps/chats?limit=${limit}`, {
-    headers: { "x-wallet-address": wallet },
-  });
-  if (!res.ok) return [];
-  const data = (await res.json()) as { chats?: ChatMeta[] };
-  return data.chats ?? [];
+/** null = request failed (distinguish from a genuinely empty history). */
+export async function listChats(wallet: string, limit = 30): Promise<ChatMeta[] | null> {
+  try {
+    const res = await fetch(`/api/mini-apps/chats?limit=${limit}`, {
+      headers: { "x-wallet-address": wallet },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { chats?: ChatMeta[] };
+    return data.chats ?? [];
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchChat(

@@ -282,7 +282,13 @@ export default function NewMiniAppBuilderPage() {
     void (async () => {
       const remote = await fetchChat(chatParam, wallet, search.get("invite"));
       if (remote && Array.isArray(remote.session?.messages)) {
-        restoreSession({ ...remote.session, chatId: remote.id });
+        const s: StoredSession = { ...remote.session, chatId: remote.id };
+        // Server copies keep only the newest version HTMLs — never restore
+        // pointing at a trimmed (html-less) version (mirrors loadSession).
+        if (s.activeIdx >= 0 && !s.versions?.[s.activeIdx]?.html) {
+          s.activeIdx = (s.versions ?? []).reduce((acc, v, i) => (v.html ? i : acc), -1);
+        }
+        restoreSession(s);
         setChatId(remote.id);
         window.history.replaceState(null, "", `/editor?chat=${remote.id}`);
       } else {

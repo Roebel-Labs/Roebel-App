@@ -31,6 +31,7 @@ function timeLabel(iso: string): string {
 
 export function LatestChatCard({ wallet }: { wallet: string | null }) {
   const [chat, setChat] = useState<ChatMeta | null>(null);
+  const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
     if (!wallet) return;
@@ -41,7 +42,9 @@ export function LatestChatCard({ wallet }: { wallet: string | null }) {
     })
       .then(async (res) => (res.ok ? ((await res.json()) as { chats?: ChatMeta[] }) : null))
       .then((data) => {
-        if (!cancelled && data?.chats?.length) setChat(data.chats[0]);
+        if (cancelled || !data) return;
+        if (data.chats?.length) setChat(data.chats[0]);
+        else setEmpty(true);
       })
       .catch(() => {});
     return () => {
@@ -49,7 +52,31 @@ export function LatestChatCard({ wallet }: { wallet: string | null }) {
     };
   }, [wallet]);
 
-  if (!chat) return null;
+  if (!chat && !empty) return null;
+
+  // No synced chats yet: show where the history will live instead of nothing —
+  // it fills up as soon as the editor is opened (backfill + live sync).
+  if (!chat) {
+    return (
+      <Card className="mt-4 flex items-center gap-3 border-dashed p-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-muted text-muted-foreground">
+          <MessageSquare className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">Letzter KI-Chat</p>
+          <p className="text-xs text-muted-foreground">
+            Deine Baukasten-Chats erscheinen hier, sobald du den KI-Baukasten öffnest — auch die
+            bisherigen Sitzungen dieses Browsers werden dabei übernommen.
+          </p>
+        </div>
+        <Link href="/editor" className="shrink-0">
+          <Button size="sm" variant="outline">
+            Zum Baukasten <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </Card>
+    );
+  }
 
   return (
     <Card className="mt-4 flex items-center gap-3 p-4">

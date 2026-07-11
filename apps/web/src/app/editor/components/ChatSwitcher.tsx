@@ -41,13 +41,15 @@ export function ChatSwitcher({
   onNewChat: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [chats, setChats] = useState<ChatMeta[] | null>(null);
+  // undefined = loading, null = request failed, [] = genuinely no chats yet.
+  const [chats, setChats] = useState<ChatMeta[] | null | undefined>(undefined);
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open || !wallet) return;
     let cancelled = false;
+    setChats(undefined);
     void listChats(wallet).then((list) => {
       if (!cancelled) setChats(list);
     });
@@ -115,10 +117,14 @@ export function ChatSwitcher({
             <Plus className="h-3.5 w-3.5" /> Neuer Chat
           </button>
           <div className="my-1 h-px bg-border" />
-          {chats === null ? (
+          {chats === undefined ? (
             <div className="flex items-center gap-1.5 px-2 py-3 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" /> Chats werden geladen…
             </div>
+          ) : chats === null ? (
+            <p className="px-2 py-3 text-xs text-red-600">
+              Chats konnten nicht geladen werden — kurz warten und erneut öffnen.
+            </p>
           ) : chats.length === 0 ? (
             <p className="px-2 py-3 text-xs text-muted-foreground">
               Noch keine gespeicherten Chats — sie erscheinen hier automatisch beim Bauen.
