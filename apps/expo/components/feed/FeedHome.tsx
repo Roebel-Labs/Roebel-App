@@ -27,6 +27,7 @@ import { useRequireAuth } from '@/context/AuthGateContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import { useMessaging } from '@/context/MessagingContext';
+import { useXmtp } from '@/context/XmtpContext';
 import { deletePost, pinPost, DuplicateReportError } from '@/lib/supabase-posts';
 import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
@@ -202,6 +203,9 @@ export default function FeedHome() {
   const { showSnackbar } = useSnackbar();
   const { totalUnreadCount } = useNotificationsContext();
   const { unreadCount: unreadMessages } = useMessaging();
+  // Nudge every not-yet-activated user into the DM tab, where the
+  // "Private Nachrichten aktivieren" sheet auto-presents.
+  const { activationAvailable: xmtpActivationPending } = useXmtp();
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -513,7 +517,7 @@ export default function FeedHome() {
             onPress={() => router.push('/messages' as any)}
           >
             <MailIcon width={22} height={22} color={colors.textPrimary} />
-            {unreadMessages > 0 && <View style={styles.dot} />}
+            {(unreadMessages > 0 || xmtpActivationPending) && <View style={styles.dot} />}
           </Pressable>
           <Pressable
             style={styles.headerIconBtn}

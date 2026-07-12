@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Dm } from '@xmtp/react-native-sdk';
 import { supabase } from '@/lib/supabase';
 import { useAccount } from '@/context/AccountContext';
+import { useUser } from '@/context/UserContext';
 import { useXmtp } from '@/context/XmtpContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import {
@@ -68,6 +69,7 @@ export function useConversation(conversationId: string) {
 
   const { handle: xmtp, ready: xmtpReady, subscribeMessages } = useXmtp();
   const { send: sendTaler } = useRoebelTaler();
+  const { user: userRecord } = useUser();
 
   const [supabaseMessages, setSupabaseMessages] = useState<Message[]>([]);
   const [xmtpMessages, setXmtpMessages] = useState<Message[]>([]);
@@ -341,17 +343,24 @@ export function useConversation(conversationId: string) {
   }, [supabaseMessages, xmtpMessages, pendingPayments, isPersonalPair]);
 
   // ── Sends ────────────────────────────────────────────────────────
+  // Push title = the sender's in-app profile name (display name/username),
+  // not the sometimes-stale accounts.name.
+  const pushSenderName = safeDisplayName(
+    userRecord?.display_name ?? myAccountName ?? null,
+    userRecord?.username ?? null
+  );
+
   const firePush = useCallback(
     (body: string) => {
       if (!peerAccount?.ownerWallet) return;
       notifyDmPush({
-        senderName: safeDisplayName(myAccountName, null),
+        senderName: pushSenderName,
         body,
         recipientWallets: [peerAccount.ownerWallet],
         conversationId,
       });
     },
-    [peerAccount?.ownerWallet, myAccountName, conversationId]
+    [peerAccount?.ownerWallet, pushSenderName, conversationId]
   );
 
   const sendBlocked: 'self' | 'peer' | null = !isPersonalPair
