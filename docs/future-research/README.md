@@ -13,7 +13,8 @@
 | [`README.md`](README.md) | This index + the intellectual arc of the session | — |
 | [`../SOVEREIGN_AI_COMMUNITY_WEALTH_STUDY.md`](../SOVEREIGN_AI_COMMUNITY_WEALTH_STUDY.md) | The field-study working paper (v0.2) | Committed |
 | [`COORDINATION_PROTOCOL_THESIS.md`](COORDINATION_PROTOCOL_THESIS.md) | The generalization: the org-substrate thesis | Durable copy of artifact |
-| [`LEGAL_MASTERPLAN.md`](LEGAL_MASTERPLAN.md) | Germany/EU, Röbel-first phased legal path | **Scaffold — cited research not yet run** |
+| [`LEGAL_MASTERPLAN.md`](LEGAL_MASTERPLAN.md) | Germany/EU, Röbel-first phased legal path | Partial — 3 clusters verified & cited |
+| [`DECADE_STRATEGY.md`](DECADE_STRATEGY.md) | 2026–2036 plan: fork → merge (Decidim path) + fiscal-constitution reframe | Current |
 
 **Interactive artifacts (private, on claude.ai):**
 - Field study (v0.2, 🌱): https://claude.ai/code/artifact/d95a5973-09f1-4fd3-a2f9-ee57aa6e9363
