@@ -99,6 +99,23 @@ export async function getDmForWallet(
   );
 }
 
+/**
+ * Local-only DM lookup (no network, never creates). Lets existing threads
+ * paint instantly from the local db before any reachability check or sync.
+ */
+export async function findDmForWallet(
+  handle: XmtpClientHandle,
+  peerWallet: string
+): Promise<Dm<any> | undefined> {
+  try {
+    return await handle.client.conversations.findDmByIdentity(
+      new handle.sdk.PublicIdentity(peerWallet.toLowerCase(), 'ETHEREUM')
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 export async function syncDm(dm: Dm<any>): Promise<void> {
   try {
     await dm.sync();

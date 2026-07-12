@@ -28,6 +28,7 @@ import {
   canMessageCached,
   fetchXmtpThread,
   getDmForWallet,
+  findDmForWallet,
   getXmtpConsentState,
   blockXmtpConversation,
   unblockXmtpConversation,
@@ -81,6 +82,9 @@ export function useConversation(conversationId: string) {
   const [peerUnreachable, setPeerUnreachable] = useState(false);
   const [peerReadAt, setPeerReadAt] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<Message[]>([]);
+  // True once the XMTP side of the thread has painted (or decided there is
+  // nothing to paint). Keeps skeletons up so chats never flash empty.
+  const [xmtpThreadLoaded, setXmtpThreadLoaded] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [consent, setConsent] = useState<'allowed' | 'denied' | 'unknown'>('allowed');
 
@@ -109,6 +113,7 @@ export function useConversation(conversationId: string) {
     setPeerUnreachable(false);
     setPeerReadAt(null);
     setPendingPayments([]);
+    setXmtpThreadLoaded(false);
     dmRef.current = null;
     xmtpOldestNsRef.current = null;
     setIsLoadingMessages(true);
@@ -196,44 +201,88 @@ export function useConversation(conversationId: string) {
   }, [conversationId, myAccountId]);
 
   // ── Rail decision + XMTP thread load ─────────────────────────────
+  // First paint comes from the LOCAL XMTP db (instant); network sync and the
+  // reachability check run afterwards so users never stare at an empty chat
+  // wondering where their messages went.
   useEffect(() => {
-    if (!xmtp || !xmtpReady || !peerAccount || !threadIds) return;
-    if (!isXmtpRailEligible(peerAccount, myAccountType)) return;
+    if (!peerAccount || !threadIds) return; // peer still hydrating → skeletons stay
+    if (!isXmtpRailEligible(peerAccount, myAccountType)) {
+      setXmtpThreadLoaded(true); // Supabase-rail thread: nothing to load here
+      return;
+    }
+    if (!xmtpReady) return; // XMTP still booting → skeletons stay
+    if (!xmtp) {
+      setXmtpThreadLoaded(true); // no client: sendBlocked notice takes over
+      return;
+    }
     let cancelled = false;
+
+    const applyPage = (page: Awaited<ReturnType<typeof fetchXmtpThread>>, dm: Dm<any>) => {
+      if (cancelled) return;
+      setXmtpMessages(page.messages);
+      xmtpOldestNsRef.current = page.oldestNs;
+      if (page.peerReadAtNs) {
+        setPeerReadAt(new Date(page.peerReadAtNs / 1e6).toISOString());
+      }
+      // Tell the peer we've seen the thread (their "Gelesen" indicator).
+      const newestPeerNs = page.messages.length
+        ? Date.parse(page.messages[0].created_at) * 1e6
+        : 0;
+      if (newestPeerNs > lastReceiptNsRef.current) {
+        lastReceiptNsRef.current = newestPeerNs;
+        sendXmtpReadReceipt(dm);
+      }
+    };
 
     (async () => {
       try {
-        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) {
-          if (!cancelled) setPeerUnreachable(true);
+        // Fast path: the DM already exists locally → paint immediately,
+        // then freshen from the network in the background.
+        let dm = await findDmForWallet(xmtp, peerAccount.ownerWallet!);
+        if (cancelled) return;
+
+        if (dm) {
+          dmRef.current = dm;
+          setRail('xmtp');
+          getXmtpConsentState(dm).then((state) => {
+            if (!cancelled) setConsent(state);
+          });
+          const localPage = await fetchXmtpThread(xmtp, dm, threadIds, { limit: 50 });
+          applyPage(localPage, dm);
+          setXmtpThreadLoaded(true);
+
+          // Background freshen — new messages appear via setXmtpMessages.
+          (async () => {
+            await syncDm(dm!);
+            if (cancelled) return;
+            const freshPage = await fetchXmtpThread(xmtp, dm!, threadIds, { limit: 50 });
+            applyPage(freshPage, dm!);
+          })().catch((err) => console.warn('[xmtp] background thread sync failed', err));
           return;
         }
-        const dm = await getDmForWallet(xmtp, peerAccount.ownerWallet!);
+
+        // No local DM yet: reachability decides whether we may create one.
+        if (!(await canMessageCached(xmtp, peerAccount.ownerWallet!))) {
+          if (!cancelled) {
+            setPeerUnreachable(true);
+            setXmtpThreadLoaded(true);
+          }
+          return;
+        }
+        dm = await getDmForWallet(xmtp, peerAccount.ownerWallet!);
         if (cancelled) return;
         dmRef.current = dm;
         setRail('xmtp');
         getXmtpConsentState(dm).then((state) => {
           if (!cancelled) setConsent(state);
         });
-
         await syncDm(dm);
         const page = await fetchXmtpThread(xmtp, dm, threadIds, { limit: 50 });
-        if (cancelled) return;
-        setXmtpMessages(page.messages);
-        xmtpOldestNsRef.current = page.oldestNs;
-        if (page.peerReadAtNs) {
-          setPeerReadAt(new Date(page.peerReadAtNs / 1e6).toISOString());
-        }
-
-        // Tell the peer we've seen the thread (their "Gelesen" indicator).
-        const newestPeerNs = page.messages.length
-          ? Date.parse(page.messages[0].created_at) * 1e6
-          : 0;
-        if (newestPeerNs > lastReceiptNsRef.current) {
-          lastReceiptNsRef.current = newestPeerNs;
-          sendXmtpReadReceipt(dm);
-        }
+        applyPage(page, dm);
+        setXmtpThreadLoaded(true);
       } catch (err) {
-        console.warn('[xmtp] thread load failed — staying on Supabase rail', err);
+        console.warn('[xmtp] thread load failed', err);
+        if (!cancelled) setXmtpThreadLoaded(true);
       }
     })();
 
@@ -545,12 +594,18 @@ export function useConversation(conversationId: string) {
     }
   }, [conversationId, supabaseMessages, xmtp, threadIds]);
 
+  // Personal (XMTP) threads count as loading until the XMTP side painted —
+  // the Supabase fetch finishing early must not flash an empty chat. While
+  // the peer is still hydrating, isPersonalPair is false and the Supabase
+  // flag (initially true) keeps the skeletons up.
+  const effectiveLoadingMessages = isPersonalPair ? !xmtpThreadLoaded : isLoadingMessages;
+
   return {
     messages,
-    isLoadingMessages,
+    isLoadingMessages: effectiveLoadingMessages,
     isLoadingPeer,
     // Back-compat for callers that still read `isLoading`.
-    isLoading: isLoadingMessages,
+    isLoading: effectiveLoadingMessages,
     isSending,
     sendMessage,
     sendPayment,
