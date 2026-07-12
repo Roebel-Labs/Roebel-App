@@ -1,0 +1,56 @@
+# Fly.io app for the Röbel XMTP push notification server.
+#
+# This is the self-hosted `xmtp/example-notification-server-go` (v3/MLS-capable)
+# that watches the XMTP network and forwards APNs/FCM pushes so inbound DMs —
+# including from external wallets (Base App, Converse, any XMTP client) — reach
+# the Röbel app even when it's backgrounded or killed.
+#
+# HOW TO USE: fork github.com/xmtp/example-notification-server-go, drop this
+# fly.toml at its root, then follow README.md in this directory.
+#
+# Region fra (Frankfurt) for latency to German users.
+#
+# Two processes share one Postgres:
+#   api    — the Connect/gRPC+JSON registration endpoint (public HTTPS)
+#   worker — subscribes to the XMTP network and sends pushes (no HTTP)
+#
+# Secrets to set with `fly secrets set <KEY>=<VALUE>` BEFORE first deploy
+# (see .env.example + README.md):
+#   DB_CONNECTION_STRING   — Postgres URL (fly postgres attach sets DATABASE_URL; mirror it here)
+#   APNS_KEY_ID            — Apple push key id (from the .p8 key)
+#   APNS_TEAM_ID           — Apple team id
+#   APNS_TOPIC             — iOS bundle id (e.g. com.roebel.app — confirm in apps/expo/app.config.ts)
+#   APNS_P8                — contents of the Apple .p8 auth key (multiline secret)
+#   FCM_PROJECT_ID         — Firebase project id (same project as apps/expo/keys/google-services.json)
+#   FCM_CREDENTIALS_JSON   — Firebase service-account JSON (single-line)
+#
+# XMTP env MUST be production to match the app (EXPO_PUBLIC_XMTP_ENV=production).
+# A dev/prod mismatch (network OR apns-mode) = silently zero delivery.
+
+app = "roebel-xmtp-push"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"   # provided by the upstream repo
+
+# The APNs .p8 is written to disk from the APNS_P8 secret at boot via the
+# release_command so both processes can read it (--apns-p8-certificate-file-path).
+[deploy]
+  release_command = "/bin/sh -c 'mkdir -p /secrets && printf %s \"$APNS_P8\" > /secrets/apns.p8'"
+
+[processes]
+  api = "--api --api-port 8080 -d $DB_CONNECTION_STRING"
+  worker = "--xmtp-listener --xmtp-listener-tls -x grpc.production.xmtp.network:443 -d $DB_CONNECTION_STRING --apns-enabled --apns-p8-certificate-file-path /secrets/apns.p8 --apns-key-id $APNS_KEY_ID --apns-team-id $APNS_TEAM_ID --apns-topic $APNS_TOPIC --apns-mode production --fcm-enabled --fcm-project-id $FCM_PROJECT_ID --fcm-credentials-json $FCM_CREDENTIALS_JSON"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["api"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
