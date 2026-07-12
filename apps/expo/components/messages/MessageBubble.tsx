@@ -104,7 +104,13 @@ export default function MessageBubble({
           </>
         ) : (
           <>
-            {hasPayment && <PaymentBubble payment={message.payment!} isOwn={isOwn} />}
+            {hasPayment && (
+              <PaymentBubble
+                payment={message.payment!}
+                isOwn={isOwn}
+                pending={message.delivery === 'sending'}
+              />
+            )}
             {!hasPayment && hasText && (
               <View
                 style={[

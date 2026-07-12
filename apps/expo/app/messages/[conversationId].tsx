@@ -71,11 +71,23 @@ export default function ChatScreen() {
     consent,
     rail,
     sendBlocked,
+    paymentError,
+    clearPaymentError,
     peerReadAt,
     loadMore,
     peerAccount,
     myAccountId,
   } = useConversation(conversationId || '');
+
+  // Background payment failures surface as a snackbar (the optimistic
+  // bubble has already been removed by the hook).
+  useEffect(() => {
+    if (paymentError) {
+      showSnackbar({ message: paymentError });
+      clearPaymentError();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentError]);
 
   const peerDisplayName = peerAccount
     ? safeDisplayName(peerAccount.name, peerAccount.username)

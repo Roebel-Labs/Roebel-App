@@ -78,6 +78,8 @@ export function useConversation(conversationId: string) {
   const [rail, setRail] = useState<ConversationRail>('supabase');
   const [peerUnreachable, setPeerUnreachable] = useState(false);
   const [peerReadAt, setPeerReadAt] = useState<string | null>(null);
+  const [pendingPayments, setPendingPayments] = useState<Message[]>([]);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [consent, setConsent] = useState<'allowed' | 'denied' | 'unknown'>('allowed');
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -104,6 +106,7 @@ export function useConversation(conversationId: string) {
     setRail('supabase');
     setPeerUnreachable(false);
     setPeerReadAt(null);
+    setPendingPayments([]);
     dmRef.current = null;
     xmtpOldestNsRef.current = null;
     setIsLoadingMessages(true);
@@ -325,12 +328,17 @@ export function useConversation(conversationId: string) {
   // ── Merged view ──────────────────────────────────────────────────
   const messages = useMemo(() => {
     // XMTP-only threads: legacy Supabase history is not rendered anymore.
-    if (isPersonalPair) return xmtpMessages;
+    // Optimistic (still-settling) payments render at the top.
+    if (isPersonalPair) {
+      return pendingPayments.length > 0
+        ? [...pendingPayments, ...xmtpMessages]
+        : xmtpMessages;
+    }
     if (xmtpMessages.length === 0) return supabaseMessages;
     const merged = [...xmtpMessages, ...supabaseMessages];
     merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     return merged;
-  }, [supabaseMessages, xmtpMessages, isPersonalPair]);
+  }, [supabaseMessages, xmtpMessages, pendingPayments, isPersonalPair]);
 
   // ── Sends ────────────────────────────────────────────────────────
   const firePush = useCallback(
@@ -386,8 +394,10 @@ export function useConversation(conversationId: string) {
   );
 
   /**
-   * In-chat Röbel Münzen payment: gasless on-chain transfer to the peer's
-   * wallet, then a transactionReference receipt message on the XMTP rail.
+   * In-chat Röbel Münzen payment — OPTIMISTIC: the bubble appears after a
+   * beat ("Wird gesendet…"), while the gasless transfer + transactionReference
+   * receipt settle in the background. On failure the bubble disappears and
+   * paymentError surfaces a snackbar.
    */
   const sendPayment = useCallback(
     async (amountRaw: bigint, amountDecimal: number) => {
@@ -395,35 +405,67 @@ export function useConversation(conversationId: string) {
       if (rail !== 'xmtp' || !dm || !peerAccount?.ownerWallet || !xmtp) {
         throw new Error('Zahlungen sind in diesem Chat noch nicht verfügbar');
       }
-      setIsSending(true);
-      try {
-        const txHash = await sendTaler(peerAccount.ownerWallet, amountRaw);
+      const peerWallet = peerAccount.ownerWallet;
+      const optimisticId = `pending-payment-${Date.now()}`;
+      const optimistic: Message = {
+        id: optimisticId,
+        conversation_id: conversationId,
+        sender_account_id: myAccountId ?? '',
+        content: '',
+        sticker_reward_id: null,
+        created_at: new Date().toISOString(),
+        source: 'xmtp',
+        delivery: 'sending',
+        payment: { txHash: '', networkId: 'eip155:100', amount: amountDecimal },
+      };
+      setPendingPayments((prev) => [optimistic, ...prev]);
+
+      // Background settle — the UI is already done at this point.
+      (async () => {
         try {
-          await sendXmtpTransactionReference(dm, {
-            namespace: 'eip155',
-            networkId: 'eip155:100',
-            reference: txHash || '',
-            metadata: {
-              transactionType: 'transfer',
-              currency: 'Röbel Münzen',
-              amount: amountDecimal,
-              decimals: 18,
-              fromAddress: xmtp.wallet,
-              toAddress: peerAccount.ownerWallet,
-            },
-          });
-          await refreshXmtpThread();
-          firePush('hat dir Röbel Münzen gesendet');
-        } catch (msgErr) {
-          // Funds moved; only the receipt bubble failed. The recipient's
-          // balance updates regardless — log loudly, don't re-throw.
-          console.error('[xmtp] payment sent but receipt message failed', msgErr);
+          const txHash = await sendTaler(peerWallet, amountRaw);
+          try {
+            await sendXmtpTransactionReference(dm, {
+              namespace: 'eip155',
+              networkId: 'eip155:100',
+              reference: txHash || '',
+              metadata: {
+                transactionType: 'transfer',
+                currency: 'Röbel Münzen',
+                amount: amountDecimal,
+                decimals: 18,
+                fromAddress: xmtp.wallet,
+                toAddress: peerWallet,
+              },
+            });
+            await refreshXmtpThread();
+            firePush('hat dir Röbel Münzen gesendet');
+          } catch (msgErr) {
+            // Funds moved; only the receipt bubble failed. The recipient's
+            // balance updates regardless — log loudly, don't surface as error.
+            console.error('[xmtp] payment sent but receipt message failed', msgErr);
+          }
+        } catch (err) {
+          console.error('[xmtp] payment failed', err);
+          setPaymentError('Senden fehlgeschlagen — es wurden keine Münzen übertragen.');
+        } finally {
+          setPendingPayments((prev) => prev.filter((m) => m.id !== optimisticId));
         }
-      } finally {
-        setIsSending(false);
-      }
+      })();
+
+      // Brief beat so the sheet shows a short spinner before closing.
+      await new Promise((resolve) => setTimeout(resolve, 450));
     },
-    [rail, peerAccount?.ownerWallet, xmtp, sendTaler, refreshXmtpThread, firePush]
+    [
+      rail,
+      peerAccount?.ownerWallet,
+      xmtp,
+      conversationId,
+      myAccountId,
+      sendTaler,
+      refreshXmtpThread,
+      firePush,
+    ]
   );
 
   const sendReaction = useCallback(
@@ -511,6 +553,9 @@ export function useConversation(conversationId: string) {
     /** Non-null when sending is blocked: 'self' = user must activate XMTP,
      *  'peer' = peer hasn't activated yet (personal chats are XMTP-only). */
     sendBlocked,
+    /** German error from a failed background payment; clear after showing. */
+    paymentError,
+    clearPaymentError: () => setPaymentError(null),
     peerReadAt,
     loadMore,
     peerAccount,

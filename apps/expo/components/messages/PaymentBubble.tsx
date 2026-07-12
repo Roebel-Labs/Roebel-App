@@ -7,6 +7,8 @@ import type { MessagePayment } from '@/lib/supabase-messages';
 type Props = {
   payment: MessagePayment;
   isOwn: boolean;
+  /** Optimistic bubble while the transfer settles in the background. */
+  pending?: boolean;
 };
 
 /**
@@ -14,7 +16,7 @@ type Props = {
  * never the tx hash or any chain jargon (the transfer is already gasless and
  * settled when this bubble exists).
  */
-export default function PaymentBubble({ payment, isOwn }: Props) {
+export default function PaymentBubble({ payment, isOwn, pending }: Props) {
   const { colors } = useTheme();
 
   const amountLabel = payment.amount.toLocaleString('de-DE', {
@@ -44,7 +46,7 @@ export default function PaymentBubble({ payment, isOwn }: Props) {
           {amountLabel} Röbel Münzen
         </Text>
         <Text style={[styles.direction, { color: isOwn ? colors.onPrimary : colors.textSecondary }]}>
-          {isOwn ? 'Gesendet' : 'Empfangen'}
+          {pending ? 'Wird gesendet…' : isOwn ? 'Gesendet' : 'Empfangen'}
         </Text>
       </View>
     </View>

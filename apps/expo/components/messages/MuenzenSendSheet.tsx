@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -35,6 +35,22 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Track the keyboard so the sheet rides above it (KeyboardAvoidingView is
+  // unreliable inside Android modals) and drops back down when it closes.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) =>
+      setKeyboardHeight(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const reset = () => {
     setAmount('');
@@ -82,9 +98,8 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
       <Pressable style={styles.backdrop} onPress={handleClose}>
         <View />
       </Pressable>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheetWrap}
+      <View
+        style={[styles.sheetWrap, { paddingBottom: keyboardHeight }]}
         pointerEvents="box-none"
       >
         <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
@@ -151,7 +166,7 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
