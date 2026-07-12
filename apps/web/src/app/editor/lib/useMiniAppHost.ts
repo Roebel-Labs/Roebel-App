@@ -84,6 +84,19 @@ export function useMiniAppHost(
       confirmSign: async (req) =>
         window.confirm(`Die Mini-App möchte signieren:\n${req.method}\n\nBestätigen?`),
       overrides: {
+        // The preview poses as a phone: report the iPhone home-indicator
+        // inset so safe-area handling is visible while building (the real
+        // Expo host reports its true inset the same way).
+        getContext: () => ({
+          user: {
+            id: account?.address ?? "builder-preview",
+            displayName: "Test-Bürger:in",
+            isCitizen: true,
+          },
+          host: { name: "Röbel (Vorschau)", platform: "ios" as const, version: "1.0.0" },
+          safeAreaInsets: { top: 0, bottom: 34, left: 0, right: 0 },
+          launch: { entry: "preview", referrer: "editor" },
+        }),
         grantReward: (p: { amount: number; idempotencyKey: string }) => {
           if (budgetRef.current < p.amount) {
             throw { code: "budget_exceeded", message: "Vorschau-Budget aufgebraucht." };

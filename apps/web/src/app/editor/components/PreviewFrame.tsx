@@ -150,6 +150,15 @@ export function PreviewFrame({
                 sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                 className="h-full w-full rounded-[20px] border-0 bg-white"
               />
+              {/* Home-indicator overlay: the preview host reports a 34px bottom
+                  inset — this pill sits inside it, so unpadded bottom bars are
+                  visibly covered (exactly like on a real device). */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-1.5 bottom-1.5 z-10 flex h-[34px] items-center justify-center rounded-b-[20px]"
+              >
+                <span className="h-[5px] w-[120px] rounded-full bg-foreground/25" />
+              </div>
               {inspecting && (
                 <div className="pointer-events-none absolute inset-x-1.5 top-1.5 z-10 rounded-t-[20px] bg-primary/90 px-3 py-1.5 text-center text-[11px] font-medium text-primary-foreground">
                   Element anklicken, das geändert werden soll

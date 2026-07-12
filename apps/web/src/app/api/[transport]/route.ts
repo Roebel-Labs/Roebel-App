@@ -115,6 +115,18 @@ function validateHtmlDocument(html: string): { ok: boolean; errors: string[]; wa
       'No <section data-screen="…"> structure found — the editor canvas and store previews work better with it (see get_docs section "screens").',
     );
   }
+  // Bottom safe area: the host WebView extends under the phone's home
+  // indicator / gesture bar — fixed bottom bars must pad for it.
+  const hasFixedBottom = /class="[^"]*\b(?:fixed|sticky)\b[^"]*\bbottom-0\b|class="[^"]*\bbottom-0\b[^"]*\b(?:fixed|sticky)\b/.test(
+    html,
+  );
+  const usesSafeBottom =
+    /class="[^"]*\bpb-safe\b/.test(html) || /pb-\[calc\([^\]]*--safe-bottom/.test(html);
+  if (hasFixedBottom && !usesSafeBottom) {
+    warnings.push(
+      'Fixed bottom element without safe-area padding — on phones it sits under the home indicator / gesture bar. Add the boilerplate class "pb-safe" to the bar (and end scrollable content with pb-[calc(5rem+var(--safe-bottom))]).',
+    );
+  }
   if (!html.includes("miniapp-sdk")) {
     warnings.push(`Netizen SDK import not detected — expected: import { sdk } from "${SDK_ESM_URL}".`);
   }

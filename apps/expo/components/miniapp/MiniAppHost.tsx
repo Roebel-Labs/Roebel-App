@@ -273,7 +273,13 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         version: Constants.expoConfig?.version ?? '0.0.0',
       },
       safeAreaInsets: {
-        top: insets.top,
+        // The host header sits below the status bar (SafeAreaView edges=['top'])
+        // and fully consumes the top inset — the app's viewport starts safe.
+        // Reporting the raw top would make apps double-pad their headers.
+        top: 0,
+        // The WebView DOES extend under the home indicator / gesture bar:
+        // apps must pad their bottom by this (the generated boilerplate keeps
+        // --safe-bottom in sync from exactly this value).
         bottom: insets.bottom,
         left: insets.left,
         right: insets.right,

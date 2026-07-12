@@ -66,6 +66,9 @@ tailwind.config = {
   --background: #FFFFFF; --card: #F7F7F7; --foreground: #000000;
   --muted-foreground: #6B7280; --border: #B4B8C1;
   --primary: #00498B; --primary-foreground: #FFFFFF;
+  /* Untere Safe-Area (Home-Indicator/Gesten-Leiste). env() als Fallback —
+     das Boilerplate-Script unten überschreibt mit dem echten Host-Inset. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -76,11 +79,24 @@ tailwind.config = {
 }
 html { -webkit-text-size-adjust: 100%; }
 body { font-family: "Mona Sans", system-ui, sans-serif; background: var(--background); color: var(--foreground); }
+/* Für fixierte Bottom-Elemente (Nav, Sticky-CTA): verlängert die Leiste unter
+   die System-Geste, damit Buttons über dem Home-Indicator liegen. */
+.pb-safe { padding-bottom: var(--safe-bottom); }
 main > section[data-screen] { display: none; }
 main > section[data-screen].active { display: block; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
 </style>
 <script type="module">
+// Safe-Area unten: env() liefert nicht in jedem WebView einen Wert — der Host
+// kennt den echten Inset (Home-Indicator/Gesten-Leiste) und meldet ihn über
+// getContext(). Der größere Wert gewinnt; ohne Host bleibt der env()-Fallback.
+import { sdk } from "${SDK_ESM_URL}";
+sdk.getContext().then(({ safeAreaInsets }) => {
+  const b = Number(safeAreaInsets?.bottom) || 0;
+  const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
+  if (b > cur) document.documentElement.style.setProperty("--safe-bottom", b + "px");
+}).catch(() => {});
+
 // Host-Screenshot-Bridge: der Editor/Playground sendet {type:"netizen:capture"},
 // die App antwortet mit einem PNG-DataURL ihres aktuellen Zustands.
 window.addEventListener("message", async (e) => {
@@ -193,7 +209,13 @@ Komponenten-Idiome:
 
 Diagramme: NUR die Röbel-Rampe — ink #051433, navy #00498B / #679AC8 / #E5ECF3, sky #7ABBF2 / #BCDDF9, gold #FDC705 / #FEE382. Serienreihenfolge: navy, sky, gold, navy-mid #679AC8, grau #6B7280. Als leichtgewichtige Inline-SVGs bauen (keine Chart-Bibliothek laden). Flächenfüllungen: Deckkraft 0.28 oben → 0.02 unten.
 
-Layout: Mobile-first für ~360 px Breite (die App läuft in einem telefonbreiten WebView). Eine Spalte, keine festen Breiten, max-width 100% auf Medien, KEIN horizontales Scrollen. safeAreaInsets aus getContext() als padding-top/-bottom übernehmen. Touch-Ziele ≥ 44 px, sichtbarer :focus-visible-Ring.`;
+Layout: Mobile-first für ~360 px Breite (die App läuft in einem telefonbreiten WebView). Eine Spalte, keine festen Breiten, max-width 100% auf Medien, KEIN horizontales Scrollen. Touch-Ziele ≥ 44 px, sichtbarer :focus-visible-Ring.
+
+Safe-Area unten (PFLICHT — der WebView reicht auf Smartphones bis UNTER den Home-Indicator bzw. die Gesten-Leiste):
+- Das Boilerplate pflegt die CSS-Variable --safe-bottom automatisch (env()-Fallback + echter Host-Inset per SDK). Dafür keinen eigenen getContext-Code schreiben.
+- JEDES fixierte/sticky Bottom-Element (Bottom-Nav, Sticky-CTA, Bottom-Sheet) bekommt ZUSÄTZLICH die Boilerplate-Klasse "pb-safe" — sonst liegen die Buttons unter der Systemleiste und sind kaum antippbar.
+- Scrollender Inhalt endet mit Freiraum über der Systemleiste: mit Bottom-Nav z. B. pb-[calc(5rem+var(--safe-bottom))] auf <main>, ohne Bottom-Nav pb-[calc(1.5rem+var(--safe-bottom))].
+- KEIN padding-top aus safeAreaInsets ableiten — die Kopfzeile des Röbel-Hosts deckt die obere Safe-Area bereits ab.`;
 
 export const COPY_RULES = `## Text-Regeln (STRIKT)
 
@@ -218,7 +240,7 @@ const SKELETON = `## Minimal-Beispiel (Struktur-Referenz — so sieht eine korre
 
 ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
 <body class="min-h-screen bg-background">
-  <main class="mx-auto max-w-md p-4 pb-20">
+  <main class="mx-auto max-w-md p-4 pb-[calc(5rem+var(--safe-bottom))]">
     <section data-screen="stand" data-title="Stand" data-states="geladen,fehler" class="active">
       <h1 class="font-heading text-xl font-bold">Münz-Stand</h1>
       <div class="mt-3 rounded border border-border bg-card p-4">
@@ -233,7 +255,7 @@ ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
       <p class="mt-3 text-sm text-muted-foreground">Röbel-Münzen verdienst du durch Mitmachen in der Röbel App.</p>
     </section>
   </main>
-  <nav class="fixed inset-x-0 bottom-0 border-t border-border bg-card">
+  <nav class="pb-safe fixed inset-x-0 bottom-0 border-t border-border bg-card">
     <div class="mx-auto flex max-w-md">
       <button data-goto="stand" class="flex-1 px-3 py-3 text-xs font-medium">Stand</button>
       <button data-goto="hilfe" class="flex-1 px-3 py-3 text-xs font-medium text-muted-foreground">Hilfe</button>
@@ -283,10 +305,8 @@ ${BOILERPLATE.replace("{APP_NAME}", "Münz-Stand")}
         return;
       }
       try {
+        // Safe-Area unten macht das Boilerplate (--safe-bottom) — hier nichts nötig.
         const ctx = await sdk.getContext();
-        const pad = ctx.safeAreaInsets;
-        document.body.style.paddingTop = pad.top + "px";
-        document.body.style.paddingBottom = pad.bottom + "px";
         $("hello").textContent = "Hallo, " + (ctx.user?.displayName ?? "Jemand") + "!";
       } catch { /* läuft auch ohne Host */ }
       await loadBalance();
