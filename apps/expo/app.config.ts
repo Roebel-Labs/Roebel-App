@@ -108,6 +108,9 @@ const config: ExpoConfig = {
     ],
     './plugins/withExcludeBouncyCastle',
     './plugins/withRemoveJcenter',
+    // XMTP pulls SQLCipher — switch expo-updates off the system SQLite3
+    // module or the iOS build fails (see plugin header).
+    './plugins/withXmtpThirdPartySQLite',
     // Strips `audio` from UIBackgroundModes that expo-audio adds by default.
     // Story audio is foreground-only — Apple review 2.5.4 rejects the entry
     // otherwise. MUST run after expo-audio above.
