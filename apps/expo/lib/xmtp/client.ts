@@ -22,6 +22,7 @@ import type {
 } from '@xmtp/react-native-sdk';
 
 import { client as thirdwebClient, chain as baseChain } from '@/constants/thirdweb';
+import { supabase } from '@/lib/supabase';
 import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
 import { markUserXmtpRegistered } from '@/lib/supabase-users';
 import { loadXmtp, type XmtpSdk } from './native';
@@ -189,16 +190,35 @@ export async function bootXmtpClient(
       const dbEncryptionKey = await getOrCreateDbKey(wallet);
       const options = { env: XMTP_ENV, dbEncryptionKey, codecs: buildCodecs(sdk) };
       const flagKey = `${REGISTERED_FLAG_PREFIX}${wallet}`;
-      const registered = await AsyncStorage.getItem(flagKey);
+      const locallyRegistered = await AsyncStorage.getItem(flagKey);
 
-      if (!registered && !opts?.allowRegister) {
-        console.log('[xmtp] not yet activated on this device — Supabase rail until user activates');
+      // Activation is PERMANENT: consent is proven by the local flag, an
+      // explicit activation tap, or — cross-device/reinstall-proof — the
+      // wallet's users.xmtp_registered_at set by ANY earlier activation.
+      // With consent, boots may silently (re-)create the client; inAppWallet
+      // signatures never prompt the user.
+      let consented = !!locallyRegistered || !!opts?.allowRegister;
+      if (!consented) {
+        try {
+          const { data } = await supabase
+            .from('users')
+            .select('xmtp_registered_at')
+            .eq('wallet_address', wallet)
+            .maybeSingle();
+          consented = !!(data as { xmtp_registered_at: string | null } | null)
+            ?.xmtp_registered_at;
+        } catch {
+          consented = false;
+        }
+      }
+      if (!consented) {
+        console.log('[xmtp] not yet activated — Supabase rail until user activates');
         return null;
       }
 
       let xmtpClient: Client<any> | null = null;
 
-      if (registered) {
+      if (locallyRegistered) {
         try {
           // Already registered on this device: build without any signature.
           xmtpClient = await sdk.Client.build(
@@ -206,8 +226,7 @@ export async function bootXmtpClient(
             options
           );
         } catch (err) {
-          console.warn('[xmtp] build failed (db/key lost?) — re-creating', err);
-          if (!opts?.allowRegister) throw err;
+          console.warn('[xmtp] build failed (db/key lost?) — re-creating silently', err);
         }
       }
 
