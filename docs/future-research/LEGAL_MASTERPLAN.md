@@ -1,13 +1,48 @@
 # Legal & Regulatory Masterplan — Germany/EU, Röbel-first
 
-> ⚠️ **STATUS: SCAFFOLD — cited research not yet completed.** A deep, source-cited research pass across these 15
-> areas was launched and then stopped before finishing. The per-area notes below are **preliminary, unverified
-> orientation** captured from the session — *not* legal conclusions and *not* legal advice. Every item must be
-> confirmed by the cited research pass **and** reviewed by a German **Steuerberater + Rechtsanwalt** before any
-> action. Where a position is stated, treat it as "the hypothesis to verify," not "the answer."
+> ⚠️ **STATUS: PARTIAL.** A deep, source-cited research pass ran and was **stopped early to conserve tokens**;
+> adversarial verification completed for **3 topic clusters** (see "Verified findings" below) — those carry
+> primary-source citations at high confidence. **Everything else on this page is still preliminary, unverified
+> orientation** — *not* legal conclusions and *not* legal advice. Every item must be confirmed by a fuller research
+> pass **and** reviewed by a German **Steuerberater + Rechtsanwalt** before any action.
 
 **Scope:** German law, EU overlay (MiCA, AI Act, GDPR, Data Act, ECSP). **Anchor:** the Röbel genesis node. **Shape:**
 a phased critical path from "buildable now, legally clean" → "frontier questions."
+
+---
+
+## ✅ Verified findings (partial cited pass, 2026-07-12 — high confidence, adversarially verified)
+
+### 1. Self-custody of your own treasury needs **no crypto license**
+- **BaFin Merkblatt "Kryptowerte-Dienstleistungen nach MiCAR"** (mb_250103, 3 Jan 2025), §II.1: *"Ebenso ist die
+  Verwahrung und Verwaltung eigener Kryptowerte durch den Inhaber selbst … nicht erfasst, da diese nicht 'für Kunden'
+  erfolgt."* — self-custody of one's **own** crypto is outside the CASP/custody perimeter.
+- **MiCAR Art. 3(1)(17)** defines custody as a service "on behalf of clients"; third-party provision is definitional
+  (corroborated by CMS Law). **Clean path:** the community self-custodies its **own** Safe → no CASP/Kryptoverwahr license.
+- **⚠️ Design nuance:** the exemption is for "*own*" assets. Holding assets *for legally-separate members* could raise
+  a "für Kunden" argument → keep the treasury the entity's own property; don't custody *for* members.
+
+### 2. A gemeinnütziger Verein may **hold and even rebalance crypto** within Vermögensverwaltung
+- **Solidaris** ("Steuerliche Einordnung von Spenden in Kryptowährungen", 17.05.2022): *"das bloße An- und Verkaufen –
+  auch in wiederholtem Umfang – [stellt] keinen Tatbestand für das Überschreiten der Grenzen der Vermögensverwaltung
+  dar."* The tests for *gewerblicher Wertpapier-/Devisenhandel* apply by analogy.
+- **Settled BFH case law** (X R 7/99, X R 14/07, X R 26/18; H 15.3 EStR): repeated buying/selling **for one's own
+  account** = private asset management; commercial status needs added factors (trading for foreign account,
+  bank/dealer-typical activity, office, professional exploitation of price spreads).
+- **Clean path:** the treasury can hold and rebalance crypto **without losing gemeinnützigkeit**, as long as activity
+  stays asset-management-like, not händlertypisch.
+
+### 3. Crypto donations = **Sachspende**; anonymous ones aren't deductible + issuer liability
+- Crypto donations are treated as **Sachspenden**, governed by **§10b Abs. 3 EStG** (Solidaris; WINHELLER). Valuation:
+  from **Betriebsvermögen** → Teilwert/Entnahmewert per **§6 Abs. 1 Nr. 4 S. 1 EStG**; private held **<1 yr** →
+  acquisition cost; private **>1 yr** → gemeiner Wert (FMV at donation).
+- **Anonymous donations:** a Spendenbescheinigung **cannot be issued** (§50 EStDV needs donor name/address + Steuer-ID),
+  so the donor gets **no Spendenabzug**; issuing a wrong receipt grossly negligently/intentionally triggers **issuer
+  liability at a flat 30% of the donation** (**§10b Abs. 4 S. 2 EStG**).
+- **Clean path:** you *can accept* anonymous multichain/crypto donations, but **tax-deductible** ones require donor
+  identity + careful due diligence before issuing any receipt.
+
+*(Verification stopped here — the remaining 12 areas below did not complete the cited pass.)*
 
 ---
 
