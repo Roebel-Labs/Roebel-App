@@ -7,6 +7,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Check, Copy } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { QuickStartCard } from "@/components/mini-apps/QuickStartCard";
 import {
   LOVABLE_PROMPT,
   MCP_SNIPPET,
@@ -124,17 +125,30 @@ const OPTIONS = [
   },
 ] as const;
 
-export function BuildOptions({ className = "mt-10" }: { className?: string }) {
+export function BuildOptions({
+  className = "mt-10",
+  wallet,
+}: {
+  className?: string;
+  wallet?: string | null;
+}) {
   return (
     <section className={className}>
       <h2 className="text-base font-semibold">Mit deinen eigenen Tools bauen</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Kein Zwang zum KI-Baukasten — drei Wege, von außen zu bauen. Snippet
-        kopieren, loslegen.
+        Am schnellsten mit Claude Code — ein Befehl genügt. Oder bau mit Lovable/v0 oder direkt
+        gegen das SDK.
       </p>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+
+      {/* Zero-setup fast path: one command with the API key already inlined. */}
+      <div className="mt-4">
+        <QuickStartCard wallet={wallet ?? null} />
+      </div>
+
+      {/* Reference paths — stacked rows so they fit the narrow settings pane. */}
+      <div className="mt-4 flex flex-col gap-3">
         {OPTIONS.map((o) => (
-          <Card key={o.key} className="flex flex-col p-4">
+          <Card key={o.key} className="p-4">
             <div className="flex items-center gap-3">
               {o.logo}
               <div className="min-w-0 flex-1">
@@ -143,13 +157,18 @@ export function BuildOptions({ className = "mt-10" }: { className?: string }) {
               </div>
               <CopyButton text={o.snippet} label={`${o.title}-Snippet kopieren`} />
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{o.text}</p>
-            <pre className="mt-3 max-h-44 flex-1 overflow-auto rounded-[10px] border border-border bg-muted/50 p-2.5 font-mono text-[11px] leading-relaxed">
-              {o.snippet}
-            </pre>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{o.text}</p>
+            <details className="group mt-2">
+              <summary className="cursor-pointer list-none text-xs font-medium text-primary hover:underline">
+                Snippet anzeigen
+              </summary>
+              <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[10px] border border-border bg-muted/50 p-2.5 font-mono text-[11px] leading-relaxed">
+                {o.snippet}
+              </pre>
+            </details>
             <Link
               href={o.link.href}
-              className="mt-3 text-xs font-medium text-primary hover:underline"
+              className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
             >
               {o.link.label}
             </Link>

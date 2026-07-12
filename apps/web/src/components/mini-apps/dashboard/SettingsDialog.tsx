@@ -273,7 +273,7 @@ export function SettingsDialog({
               </div>
             ) : null}
 
-            {section === "tools" ? <BuildOptions className="" /> : null}
+            {section === "tools" ? <BuildOptions className="" wallet={wallet} /> : null}
 
             {section === "import" ? (
               <div className="space-y-4">
