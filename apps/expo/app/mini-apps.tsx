@@ -21,7 +21,6 @@ import {
   Pressable,
   Alert,
   RefreshControl,
-  ActivityIndicator,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -33,13 +32,14 @@ import { fontFamily } from '@/constants/theme';
 import { ChevronLeft, InfoIcon } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
 import { useInstalledMiniApps } from '@/lib/miniapp-installs';
-import { MiniAppHeroCard, MiniAppRowCard } from '@/components/miniapp/MiniAppCard';
+import { MiniAppHeroCard } from '@/components/miniapp/MiniAppCard';
+import MiniAppColumnRail from '@/components/miniapp/MiniAppColumnRail';
+import MiniAppStoreSkeleton from '@/components/miniapp/MiniAppSkeleton';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 import { useGoBack } from '@/hooks/useGoBack';
 
 const HERO_GAP = 12;
-const TOP_APPS_PREVIEW = 5;
-const NEW_APPS_COUNT = 5;
+const NEW_APPS_COUNT = 6;
 
 export default function MiniAppsStoreScreen() {
   const { colors } = useTheme();
@@ -52,7 +52,6 @@ export default function MiniAppsStoreScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
-  const [topExpanded, setTopExpanded] = useState(false);
 
   // Installed apps open in-place (skip the preview page).
   const [runningApp, setRunningApp] = useState<MiniApp | null>(null);
@@ -120,8 +119,6 @@ export default function MiniAppsStoreScreen() {
     [apps],
   );
 
-  const topApps = topExpanded ? apps : apps.slice(0, TOP_APPS_PREVIEW);
-
   const heroW = width - 32;
   const onHeroScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -150,9 +147,7 @@ export default function MiniAppsStoreScreen() {
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Apps</Text>
 
       {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <MiniAppStoreSkeleton />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -213,26 +208,12 @@ export default function MiniAppsStoreScreen() {
                 </View>
               )}
 
-              {/* Top-Apps */}
+              {/* Top-Apps — 3 per column, swiped horizontally */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Top-Apps</Text>
-                  {apps.length > TOP_APPS_PREVIEW && (
-                    <Pressable onPress={() => setTopExpanded((v) => !v)} hitSlop={8}>
-                      <Text style={[styles.seeAll, { color: colors.textSecondary }]}>
-                        {topExpanded ? 'Weniger anzeigen' : 'Alle anzeigen'}
-                      </Text>
-                    </Pressable>
-                  )}
                 </View>
-                {topApps.map((app) => (
-                  <MiniAppRowCard
-                    key={app.id}
-                    app={app}
-                    installed={isInstalled(app.slug)}
-                    onPress={() => openApp(app)}
-                  />
-                ))}
+                <MiniAppColumnRail apps={apps} isInstalled={isInstalled} onOpen={openApp} />
               </View>
 
               {/* Neu & bemerkenswert */}
@@ -243,14 +224,7 @@ export default function MiniAppsStoreScreen() {
                       Neu & bemerkenswert
                     </Text>
                   </View>
-                  {newApps.map((app) => (
-                    <MiniAppRowCard
-                      key={app.id}
-                      app={app}
-                      installed={isInstalled(app.slug)}
-                      onPress={() => openApp(app)}
-                    />
-                  ))}
+                  <MiniAppColumnRail apps={newApps} isInstalled={isInstalled} onOpen={openApp} />
                 </View>
               )}
             </>
@@ -293,7 +267,6 @@ const styles = StyleSheet.create({
     fontSize: 34,
     marginBottom: 12,
   },
-  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroSection: { marginTop: 4 },
   heroRow: { paddingHorizontal: 16, gap: HERO_GAP },
   dots: {
@@ -314,10 +287,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: fontFamily.heading,
     fontSize: 20,
-  },
-  seeAll: {
-    fontFamily: fontFamily.medium,
-    fontSize: 14,
   },
   emptyBox: {
     paddingHorizontal: 32,

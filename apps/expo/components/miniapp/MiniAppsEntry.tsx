@@ -7,17 +7,19 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
-import { ChevronRight, GridIcon } from '@/components/miniapp/hostIcons';
+import { ChevronRight } from '@/components/miniapp/hostIcons';
 import { fetchLiveMiniApps, type MiniApp } from '@/lib/miniapps';
 import { useInstalledMiniApps } from '@/lib/miniapp-installs';
-import { AppIcon, MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
+import { MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 
 const GRID_GAP = 12;
 const MAX_TILES = 7;
+const STORE_ICON = require('@/assets/illustration/mini-app-store.png');
 
 export default function MiniAppsEntry() {
   const { colors } = useTheme();
@@ -65,7 +67,6 @@ export default function MiniAppsEntry() {
   const tileW = Math.floor((width - 32 - 3 * GRID_GAP) / 4);
   const iconSize = Math.min(tileW, 64);
   const shown = apps.slice(0, MAX_TILES);
-  const overflow = apps.slice(MAX_TILES, MAX_TILES + 4);
 
   return (
     <View style={styles.section}>
@@ -103,35 +104,19 @@ export default function MiniAppsEntry() {
             />
           ))}
 
-          {/* "Alle ansehen" tile — mini icons of the next apps */}
+          {/* "Alle" tile — Mini-App-Store icon */}
           <Pressable
             onPress={goStore}
             style={({ pressed }) => [styles.tile, { width: tileW }, pressed && { opacity: 0.7 }]}
             accessibilityLabel="Alle Mini-Apps ansehen"
           >
-            <View
-              style={[
-                styles.seeAllIcon,
-                {
-                  width: iconSize,
-                  height: iconSize,
-                  borderRadius: iconSize * 0.24,
-                  backgroundColor: colors.surfaceSecondary,
-                },
-              ]}
-            >
-              {overflow.length > 0 ? (
-                <View style={styles.miniGrid}>
-                  {overflow.map((app) => (
-                    <AppIcon key={app.id} app={app} size={iconSize * 0.32} />
-                  ))}
-                </View>
-              ) : (
-                <GridIcon size={iconSize * 0.4} color={colors.textSecondary} />
-              )}
-            </View>
+            <Image
+              source={STORE_ICON}
+              style={{ width: iconSize, height: iconSize }}
+              contentFit="contain"
+            />
             <Text style={[styles.tileName, { color: colors.textPrimary }]} numberOfLines={1}>
-              Alle ansehen
+              Alle
             </Text>
           </Pressable>
         </View>
@@ -168,18 +153,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     maxWidth: '100%',
-  },
-  seeAllIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '76%',
-    gap: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   banner: {
     marginHorizontal: 16,

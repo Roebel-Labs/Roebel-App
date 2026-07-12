@@ -22,7 +22,7 @@ import { fontFamily } from '@/constants/theme';
 import type { MiniApp } from '@/lib/miniapps';
 import { CATEGORY_LABELS } from '@/lib/miniapp-categories';
 
-const BTN_RADIUS = 10;
+const BTN_RADIUS = 100; // fully-rounded pill (World-App Get/Open style)
 
 /** German Get/Open pair (App-Store convention). */
 export function installLabel(installed: boolean): string {
@@ -178,16 +178,23 @@ export function MiniAppRowCard({
   app,
   installed = false,
   onPress,
+  columnMode = false,
 }: {
   app: MiniApp;
   installed?: boolean;
   onPress: () => void;
+  /** Inside a fixed-width carousel column: drop the row's own side padding. */
+  columnMode?: boolean;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [
+        styles.row,
+        columnMode && styles.rowColumn,
+        pressed && { opacity: 0.7 },
+      ]}
     >
       <AppIcon app={app} size={56} />
       <View style={styles.rowBody}>
@@ -296,6 +303,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     gap: 14,
+  },
+  rowColumn: {
+    paddingHorizontal: 0,
   },
   rowBody: { flex: 1 },
   rowName: {
