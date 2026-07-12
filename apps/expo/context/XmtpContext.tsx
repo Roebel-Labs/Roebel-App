@@ -20,6 +20,7 @@ import {
   type XmtpClientHandle,
 } from '@/lib/xmtp/client';
 import { loadXmtp } from '@/lib/xmtp/native';
+import { registerForXmtpPush } from '@/lib/xmtp/pushRegistration';
 import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
 
 interface XmtpContextValue {
@@ -187,6 +188,9 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!handle) return;
     startStream(handle);
+    // Register with the notification server so inbound DMs (incl. external
+    // wallets) push while the app is closed. No-op until the server URL is set.
+    void registerForXmtpPush(handle);
 
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && handle && !streamingForRef.current) {
@@ -194,6 +198,8 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
           .syncAllConversations(['allowed', 'unknown'])
           .catch(() => {});
         startStream(handle);
+        // Re-subscribe on foreground to cover conversations created while away.
+        void registerForXmtpPush(handle);
       }
     });
 
