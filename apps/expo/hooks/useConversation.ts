@@ -378,6 +378,11 @@ export function useConversation(conversationId: string) {
 
   // ── Merged view ──────────────────────────────────────────────────
   const messages = useMemo(() => {
+    // Rail still undecided (peer hasn't hydrated) → render NOTHING. Until we
+    // know whether this is a personal XMTP pair we must not paint the legacy
+    // Supabase history; the Supabase fetch finishes before peer hydration and
+    // would otherwise flash old messages before XMTP takes over.
+    if (isLoadingPeer && !peerAccount) return [];
     // XMTP-only threads: legacy Supabase history is not rendered anymore.
     // Optimistic (still-settling) payments render at the top.
     if (isPersonalPair) {
@@ -389,7 +394,7 @@ export function useConversation(conversationId: string) {
     const merged = [...xmtpMessages, ...supabaseMessages];
     merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     return merged;
-  }, [supabaseMessages, xmtpMessages, pendingPayments, isPersonalPair]);
+  }, [supabaseMessages, xmtpMessages, pendingPayments, isPersonalPair, isLoadingPeer, peerAccount]);
 
   // ── Sends ────────────────────────────────────────────────────────
   // Push title = the sender's in-app profile name (display name/username),
@@ -594,11 +599,16 @@ export function useConversation(conversationId: string) {
     }
   }, [conversationId, supabaseMessages, xmtp, threadIds]);
 
-  // Personal (XMTP) threads count as loading until the XMTP side painted —
-  // the Supabase fetch finishing early must not flash an empty chat. While
-  // the peer is still hydrating, isPersonalPair is false and the Supabase
-  // flag (initially true) keeps the skeletons up.
-  const effectiveLoadingMessages = isPersonalPair ? !xmtpThreadLoaded : isLoadingMessages;
+  // Keep skeletons up until the rail is actually decided:
+  //  • peer still hydrating → we don't yet know if it's an XMTP pair, so never
+  //    reveal the (fast-loading) Supabase history or the empty-chat state;
+  //  • personal XMTP pair → wait for the XMTP thread to paint;
+  //  • Supabase-rail chat → the Supabase loading flag governs.
+  const effectiveLoadingMessages = isLoadingPeer
+    ? true
+    : isPersonalPair
+      ? !xmtpThreadLoaded
+      : isLoadingMessages;
 
   return {
     messages,

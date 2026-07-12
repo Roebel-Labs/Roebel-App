@@ -16,6 +16,7 @@ import {
   mapXmtpMessage,
   type XmtpInboxEntry,
 } from '@/lib/xmtp/transport';
+import { maybeNotifyInboundXmtp } from '@/lib/xmtp/inboundNotify';
 import type { XmtpClientHandle } from '@/lib/xmtp/client';
 
 interface MessagingContextValue {
@@ -300,10 +301,13 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeAccountId, loadConversations, loadUnreadCount]);
 
-  // Realtime (XMTP rail): stream events debounce into an inbox refresh.
+  // Realtime (XMTP rail): stream events debounce into an inbox refresh, and
+  // inbound messages from external wallets (which have no sender-triggered
+  // remote push) fire a local notification.
   useEffect(() => {
     if (!xmtp) return;
-    const unsubscribe = subscribeMessages(() => {
+    const unsubscribe = subscribeMessages((message) => {
+      void maybeNotifyInboundXmtp(xmtp, message);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(() => {
         const current = accountIdRef.current;

@@ -368,6 +368,30 @@ export async function listXmtpInbox(handle: XmtpClientHandle): Promise<XmtpInbox
 }
 
 /**
+ * Resolve a single sender inboxId → lowercased ETH wallet, reusing the
+ * session cache. Used by the inbound-notification path to tell whether a
+ * streamed message came from a Röbel user or a totally external wallet.
+ */
+export async function resolveSenderWallet(
+  handle: XmtpClientHandle,
+  inboxId: string
+): Promise<string | null> {
+  if (!inboxId) return null;
+  const cached = walletByInboxId.get(inboxId);
+  if (cached) return cached;
+  try {
+    const states = await handle.sdk.Client.inboxStatesForInboxIds(handle.env, [inboxId] as any);
+    for (const state of states) {
+      const eth = state.identities?.find((i) => i.kind === 'ETHEREUM');
+      if (eth) walletByInboxId.set(String(state.inboxId), eth.identifier.toLowerCase());
+    }
+  } catch (err) {
+    console.warn('[xmtp] resolveSenderWallet failed', err);
+  }
+  return walletByInboxId.get(inboxId) ?? null;
+}
+
+/**
  * Message-level unread count for one XMTP dm (parity with the Supabase
  * get_unread_count semantics). Bounded at 99 per conversation.
  */

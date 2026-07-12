@@ -6,10 +6,10 @@ import {
   StyleSheet,
   Pressable,
   Modal,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useConversation } from '@/hooks/useConversation';
 import { useMessaging } from '@/context/MessagingContext';
@@ -42,6 +42,26 @@ export default function ChatScreen() {
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
   const [reactionTarget, setReactionTarget] = useState<Message | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+
+  // Keep the input bar riding just above the keyboard (and above the home
+  // indicator when it's closed). Tracking the keyboard height ourselves is
+  // more reliable across iOS/Android than KeyboardAvoidingView, which left a
+  // residual gap after dismissal on Android.
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) =>
+      setKeyboardHeight(e.endCoordinates?.height ?? 0)
+    );
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  const inputBottomPad = keyboardHeight > 0 ? keyboardHeight : insets.bottom;
 
   // Mark conversation as read when opened
   useEffect(() => {
@@ -209,14 +229,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Android already resizes the window on keyboard show (softwareKeyboard
-          LayoutMode defaults to "resize"); adding behavior="height" on top
-          double-adjusts and leaves the input floating above the safe area after
-          the keyboard closes. Let the OS handle Android; pad on iOS. */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
+      <View style={styles.flex}>
         {isLoadingMessages && messages.length === 0 ? (
           <ChatLoadingSkeletons />
         ) : (
@@ -225,6 +238,7 @@ export default function ChatScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
             inverted
+            style={styles.flex}
             contentContainerStyle={styles.messageList}
             ListEmptyComponent={
               <View style={styles.emptyChat}>
@@ -239,7 +253,7 @@ export default function ChatScreen() {
         )}
 
         {sendBlocked ? (
-          <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+          <View style={[styles.inputSafe, { paddingBottom: inputBottomPad, backgroundColor: colors.background }]}>
             <View style={[styles.sendBlockedNotice, { borderTopColor: colors.border }]}>
               <Text style={[styles.sendBlockedText, { color: colors.textSecondary }]}>
                 {sendBlocked === 'self'
@@ -247,9 +261,9 @@ export default function ChatScreen() {
                   : `${peerDisplayName || 'Dieser Kontakt'} hat private Nachrichten noch nicht aktiviert.`}
               </Text>
             </View>
-          </SafeAreaView>
+          </View>
         ) : !isBlocked && (
-          <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+          <View style={[styles.inputSafe, { paddingBottom: inputBottomPad, backgroundColor: colors.background }]}>
             <ChatInput
               onSend={(text, stickerRewardId) => {
                 if (!myAccountId) {
@@ -261,9 +275,9 @@ export default function ChatScreen() {
               isSending={isSending}
               onOpenPayment={xmtpActive ? () => setShowPaymentSheet(true) : undefined}
             />
-          </SafeAreaView>
+          </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
 
       {/* Röbel Münzen senden */}
       <MuenzenSendSheet
