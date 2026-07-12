@@ -66,9 +66,9 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 - **Shared tokens**: `packages/design-tokens/` — consumed differently by each app
 
 ### Blockchain
-- Base L2 + Thirdweb Smart Wallets (invisible Web3)
+- **Gnosis Chain (chain id 100)** + Thirdweb Smart Wallets (invisible Web3) — full Base→Gnosis consolidation **LIVE 2026-06-25**. Identity + governance + Circles currency all run on Gnosis; the Base stack is **archived** (`legacyBase*` in `packages/blockchain/`, `deployments/base.json`).
 - `inAppWallet` + `smartAccount` (gasless ERC-4337)
-- Contract ABIs and addresses in `packages/blockchain/`
+- Contract ABIs and addresses in `packages/blockchain/` — **`packages/blockchain/src/index.ts` (`CHAIN_ID = 100`) is the source of truth for the active chain and address set.**
 
 ### Backend
 - Supabase (Postgres, Auth, Realtime, Edge Functions)
@@ -82,7 +82,7 @@ npx thirdweb deploy -k YOUR_SECRET_KEY
 - **SimpleHomeTownGovernor.sol** - DAO governance (public voting)
 - **HomeTownMaciGovernor.sol** - MACI-integrated governance (private voting)
 
-### Deployed Contract Addresses (Base Mainnet, clean-slate rotation 2026-06-08)
+### Deployed Contract Addresses — Base Mainnet ⚠️ ARCHIVED (superseded 2026-06-25 by the Gnosis v2 set below; kept for historical proposal/revocation lookups only — NOT the live stack)
 - AttesterNFT: `0x79B837b269f3EB3FB1c5856fE1E21675F05a3aFb` (governance-mutable thresholds)
 - CitizenNFT: `0x7eF8308129C47E31415BEfC210aCEbD8ae6861BB` (1 Attester + 1 Citizen for BOTH attestation and revocation; governance-mutable)
 - SignUpTokenGatekeeper: `0xc767fa3bbd9f0934Fb419137d7b6506E44105f74` (FRESH — empty `registeredTokenIds`; bound to CitizenNFT + the MACI core below. Replaces `0xcf12E8da…`.)

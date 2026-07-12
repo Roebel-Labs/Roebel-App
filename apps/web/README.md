@@ -33,7 +33,9 @@ Create a `.env.local` file:
 ```env
 NEXT_PUBLIC_TEMPLATE_CLIENT_ID=your_thirdweb_client_id
 
-# Deployed Contract Addresses (base)
+# Contract addresses — the LIVE stack runs on Gnosis Chain (chain id 100), NOT Base.
+# Source of truth: packages/blockchain/src/index.ts (CHAIN_ID = 100). The two values
+# below are stale template leftovers from the original Base build — do not rely on them.
 NEXT_PUBLIC_NFT_CONTRACT=0x976966e2669b3bF3c99B38cA4259a864f85191A1
 NEXT_PUBLIC_GOVERNOR_CONTRACT=0x767f7b996E54248F88944DAc344Ab74e93E21cdB
 ```
