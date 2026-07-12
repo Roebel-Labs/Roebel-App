@@ -33,6 +33,15 @@ export default function MiniAppColumnRail({
   const colW = width - RAIL_PADDING - PEEK;
   const columns = useMemo(() => chunk(apps, COLUMN_SIZE), [apps]);
 
+  // Explicit per-column snap points: column i rests exactly at offset
+  // i·(colW + gap), so its left edge always lands on the RAIL_PADDING gutter —
+  // i.e. aligned with the section headline in every rested position. (Relying
+  // on snapToInterval + snapToAlignment lands imprecisely on Android.)
+  const snapOffsets = useMemo(
+    () => columns.map((_, i) => i * (colW + COL_GAP)),
+    [columns, colW],
+  );
+
   // A single column doesn't need a carousel — render it inline full-width.
   if (columns.length <= 1) {
     return (
@@ -55,10 +64,9 @@ export default function MiniAppColumnRail({
       data={columns}
       keyExtractor={(_, i) => `col-${i}`}
       showsHorizontalScrollIndicator={false}
-      snapToInterval={colW + COL_GAP}
-      snapToAlignment="start"
-      decelerationRate="fast"
-      disableIntervalMomentum
+      snapToOffsets={snapOffsets}
+      // "normal" (vs "fast") gives the swipe a softer, slower settle.
+      decelerationRate="normal"
       contentContainerStyle={styles.railContent}
       renderItem={({ item, index }) => (
         <View
@@ -83,6 +91,9 @@ export default function MiniAppColumnRail({
 }
 
 const styles = StyleSheet.create({
-  railContent: { paddingHorizontal: RAIL_PADDING },
+  // Trailing padding must equal PEEK so the last column can scroll all the way
+  // to the left gutter (otherwise it rests short and its icons miss the
+  // headline). Leading padding is the normal gutter.
+  railContent: { paddingLeft: RAIL_PADDING, paddingRight: PEEK },
   singleColumn: { paddingHorizontal: RAIL_PADDING },
 });
