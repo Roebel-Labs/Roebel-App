@@ -14,6 +14,7 @@ import {
   Bar,
   BarChart,
   ResponsiveContainer,
+  XAxis,
 } from "recharts";
 import {
   Award,
@@ -41,7 +42,7 @@ import {
   type SettingsSection,
 } from "@/components/mini-apps/dashboard/SettingsDialog";
 import { InboxDialog, deriveTasks } from "@/components/mini-apps/dashboard/InboxDialog";
-import { LatestChatCard } from "@/components/mini-apps/dashboard/LatestChatCard";
+import { AppBuilderBanner } from "@/components/mini-apps/dashboard/AppBuilderBanner";
 import type { AnalyticsRange, MiniAppRow } from "@/lib/miniapp/types";
 
 const SELECTED_KEY = "miniapp-dash-selected";
@@ -332,7 +333,6 @@ export default function MiniAppDashboard() {
         </div>
 
         {!listLoading && apps.length === 0 ? (
-          <>
           <Card className="mt-8 flex flex-col items-center gap-4 p-12 text-center">
             <Image src="/logo.png" alt="" width={48} height={48} className="h-12 w-12 object-contain" />
             <div>
@@ -354,25 +354,30 @@ export default function MiniAppDashboard() {
               </Link>
             </div>
           </Card>
-          <LatestChatCard wallet={wallet ?? null} />
-          </>
         ) : (
           <>
             {/* Hero stat + big chart */}
             <div className="mt-8">
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                Aktive Nutzer gesamt{" "}
-                <InfoTip text="Eindeutige Nutzer mit mindestens einem Ereignis im Zeitraum" />
+                Öffnungen gesamt{" "}
+                <InfoTip text="app_open-Ereignisse im Zeitraum" />
               </p>
               <p className="mt-1 font-heading text-4xl font-bold tracking-tight">
-                {nf.format(stats?.uniqueWallets ?? 0)}
+                {nf.format(stats?.opens ?? 0)}
               </p>
-              <div className="relative mt-4 h-56 overflow-hidden">
+              <div className="mt-4 h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={series} margin={{ top: 8, right: 0, bottom: 2, left: 0 }}>
+                  <AreaChart data={series} margin={{ top: 8, right: 4, bottom: 0, left: -8 }}>
+                    <XAxis
+                      dataKey="date"
+                      tickLine={false}
+                      axisLine={{ stroke: "hsl(var(--border))" }}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      minTickGap={28}
+                    />
                     <Area
                       type="monotone"
-                      dataKey="uniqueWallets"
+                      dataKey="opens"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       fill="hsl(var(--primary))"
@@ -381,30 +386,12 @@ export default function MiniAppDashboard() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
-                <div aria-hidden className="absolute inset-x-0 bottom-0 h-[3px] bg-primary/80" />
               </div>
             </div>
 
-            {/* Build with AI CTA */}
-            <Card className="mt-10 flex flex-col items-start gap-4 bg-primary p-6 text-primary-foreground sm:flex-row sm:items-center">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-white">
-                <Image src="/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-heading text-lg font-bold">Bau die nächste Mini-App mit KI</p>
-                <p className="text-sm text-primary-foreground/80">
-                  Idee beschreiben, live testen, veröffentlichen — direkt im Browser.
-                </p>
-              </div>
-              <Link href="/editor" className="shrink-0">
-                <Button variant="secondary" className="rounded-full font-bold">
-                  <Sparkles className="mr-1.5 h-4 w-4" /> Mit KI erstellen
-                </Button>
-              </Link>
-            </Card>
-
-            {/* Latest editor chat — jump back into the builder */}
-            <LatestChatCard wallet={wallet ?? null} />
+            {/* Build/continue with AI — morphs into "Weiterbauen" (latest chat)
+                once this specific mini app already has an AI chat. */}
+            <AppBuilderBanner app={app} wallet={wallet ?? null} />
 
             {/* Platform chips */}
             <div className="mt-10 inline-flex items-center gap-1 rounded-full border border-border p-1">
@@ -430,11 +417,11 @@ export default function MiniAppDashboard() {
                 <MiniArea data={series} dataKey="uniqueWallets" />
               </MetricCard>
               <MetricCard
-                title="Öffnungen"
-                tip="app_open-Ereignisse im Zeitraum"
-                value={nf.format(stats?.opens ?? 0)}
+                title="Aktive Nutzer gesamt"
+                tip="Eindeutige Nutzer mit mindestens einem Ereignis im Zeitraum"
+                value={nf.format(stats?.uniqueWallets ?? 0)}
               >
-                <MiniArea data={series} dataKey="opens" />
+                <MiniArea data={series} dataKey="uniqueWallets" />
               </MetricCard>
               <MetricCard
                 title="Münzen ausgeschüttet"
