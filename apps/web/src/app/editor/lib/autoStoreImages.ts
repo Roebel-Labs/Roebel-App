@@ -78,8 +78,16 @@ function captureDoc(container: HTMLElement, doc: string): Promise<string> {
         const dataUrl = e.data.dataUrl as string;
         finish(() => resolve(dataUrl));
       } else if (e.data.type === "netizen:capture:error") {
+        // Alte Apps melden CORS-Fehler als "[object Event]" — übersetzen.
+        const raw = String(e.data.error ?? "");
         finish(() =>
-          reject(new Error(String(e.data.error ?? "Screenshot fehlgeschlagen."))),
+          reject(
+            new Error(
+              !raw || raw.includes("[object")
+                ? "Die App blockiert die Aufnahme (externe Bilder)."
+                : raw,
+            ),
+          ),
         );
       }
     }
@@ -167,6 +175,8 @@ export interface AutoRunInput {
   isCancelled?: () => boolean;
   /** Regenerate everything: fresh captures, existing images are replaced. */
   force?: boolean;
+  /** Update of an existing app: never top up a curated preview set. */
+  republished?: boolean;
 }
 
 /**
@@ -186,9 +196,13 @@ export async function runAutoStoreImages(input: AutoRunInput): Promise<AutoImage
   const needIcon = force || !app.icon_url || app.icon_url.startsWith("data:");
   const needFeature = force || !app.feature_image_url;
   // force: previews are rebuilt from slot 0 (overwriting); normally only the
-  // empty slots after the existing ones get filled.
-  const usedSlots = force ? 0 : (app.screenshots ?? []).length;
-  const freeSlots = Math.max(0, MAX_PREVIEWS - usedSlots);
+  // empty slots after the existing ones get filled. On a REPUBLISH an already
+  // curated preview set (≥1 image) is never touched — nur ein komplett leeres
+  // Set wird gefüllt; Nachbessern geht über das KI-Studio / „Store-Bilder“.
+  const existingPreviews = (app.screenshots ?? []).length;
+  const usedSlots = force ? 0 : existingPreviews;
+  const previewsAllowed = force || existingPreviews === 0 || !input.republished;
+  const freeSlots = previewsAllowed ? Math.max(0, MAX_PREVIEWS - usedSlots) : 0;
 
   const parsed = parseScreens(input.html);
   const screens = (
@@ -271,13 +285,27 @@ export async function runAutoStoreImages(input: AutoRunInput): Promise<AutoImage
   }
 
   // Previews: Screen für Screen aufnehmen, dann Slot für Slot generieren.
+  // Eine gescheiterte Aufnahme (z. B. externe Bilder, die die Capture-Bridge
+  // blockieren) überspringt den Screen freundlich statt rot zu fehlschlagen.
   const previews = (async () => {
     for (let i = 0; i < screens.length; i++) {
       if (cancelled()) throw new Cancelled();
       const key = `preview-${i}`;
-      await runSlot(key, async () => {
-        const dataUrl = await captureDoc(input.container, screens[i].doc);
-        if (cancelled()) throw new Cancelled();
+      set(key, "running");
+      let dataUrl: string;
+      try {
+        dataUrl = await captureDoc(input.container, screens[i].doc);
+      } catch (e) {
+        if (e instanceof Cancelled) throw e;
+        set(
+          key,
+          "skipped",
+          `Screenshot nicht möglich (${e instanceof Error ? e.message : String(e)}) — im KI-Studio manuell erstellen`,
+        );
+        continue;
+      }
+      if (cancelled()) throw new Cancelled();
+      try {
         const shotUrl = await uploadShot(
           input.slug,
           input.wallet,
@@ -292,7 +320,11 @@ export async function runAutoStoreImages(input: AutoRunInput): Promise<AutoImage
           referenceUrl: shotUrl,
           isCancelled: cancelled,
         });
-      });
+        set(key, "done");
+      } catch (e) {
+        if (e instanceof Cancelled) throw e;
+        set(key, "error", e instanceof Error ? e.message : String(e));
+      }
     }
   })();
 

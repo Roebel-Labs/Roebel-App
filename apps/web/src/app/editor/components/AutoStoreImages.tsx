@@ -27,12 +27,15 @@ export function AutoStoreImages({
   slug,
   wallet,
   force,
+  republished,
 }: {
   html: string;
   slug: string;
   wallet: string;
   /** Regenerate everything (fresh captures, existing images replaced). */
   force?: boolean;
+  /** Update of an existing app — never top up a curated preview set. */
+  republished?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
@@ -50,6 +53,7 @@ export function AutoStoreImages({
       slug,
       wallet,
       force,
+      republished,
       container: containerRef.current,
       onProgress: (next) => {
         if (alive) setItems(next);
@@ -66,7 +70,7 @@ export function AutoStoreImages({
     return () => {
       alive = false;
     };
-  }, [html, slug, wallet, force]);
+  }, [html, slug, wallet, force, republished]);
 
   useEffect(() => {
     if (phase !== "done") return;
@@ -76,7 +80,11 @@ export function AutoStoreImages({
     return () => clearTimeout(t);
   }, [phase, items]);
 
-  const nothingToDo = items.length > 0 && items.every((it) => it.status === "skipped");
+  // Fully covered already → no card at all. Skips with a reason (e.g. capture
+  // not possible) stay visible so the user knows why nothing was generated.
+  const nothingToDo =
+    items.length > 0 &&
+    items.every((it) => it.status === "skipped" && it.detail === "bereits vorhanden");
 
   return (
     <>

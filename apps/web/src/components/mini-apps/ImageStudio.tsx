@@ -6,7 +6,7 @@
 // explicitly ("Übernehmen"). Base options: fresh prompt, edit of the current
 // image, or (previews) an editor screenshot as reference.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
+import { Check, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageCompareSlider } from "@/components/dashboard/speisekarte/image-compare-slider";
@@ -30,6 +30,25 @@ type Base = { mode: "fresh" } | { mode: "current" } | { mode: "shot"; url: strin
 
 const variantsKey = (appId: string, kind: StudioKind, slot?: number) =>
   `roebel:miniapp-variants:${appId}:${kind}:${slot ?? 0}`;
+const refsKey = (appId: string) => `roebel:miniapp-refs:${appId}`;
+const REFS_LIMIT = 4;
+
+/** Collect image URLs out of arbitrary Mini-CMS values (strings/arrays/objects). */
+function collectImageUrls(value: unknown, into: Set<string>): void {
+  if (typeof value === "string") {
+    if (
+      /^https:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(value) ||
+      (value.startsWith("https://") &&
+        value.includes("/storage/v1/object/public/images/mini-apps/"))
+    ) {
+      into.add(value);
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach((v) => collectImageUrls(v, into));
+  } else if (value && typeof value === "object") {
+    Object.values(value).forEach((v) => collectImageUrls(v, into));
+  }
+}
 
 async function apiJson(
   url: string,
@@ -80,10 +99,14 @@ export function ImageStudio({
   const [variants, setVariants] = useState<string[]>([]);
   const [compareUrl, setCompareUrl] = useState<string | null>(null);
   const [shots, setShots] = useState<string[]>([]);
+  const [cmsImages, setCmsImages] = useState<string[]>([]);
+  const [refs, setRefs] = useState<string[]>([]);
+  const [uploadingRef, setUploadingRef] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const refInput = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -125,6 +148,67 @@ export function ImageStudio({
       })
       .catch(() => {});
   }, [app.id, kind, wallet]);
+
+  // Mini-CMS content images (Inhalte) as reference candidates — the app's
+  // real photos (e.g. Produktbilder) usually live there. Fails soft.
+  useEffect(() => {
+    apiJson(`/api/mini-apps/data?app=${app.id}&scope=app`, wallet)
+      .then((j) => {
+        if (cancelled.current || !Array.isArray(j.items)) return;
+        const urls = new Set<string>();
+        (j.items as { value?: unknown }[]).forEach((it) => collectImageUrls(it.value, urls));
+        setCmsImages([...urls].slice(0, 12));
+      })
+      .catch(() => {});
+  }, [app.id, wallet]);
+
+  // Own uploaded reference images (device-local list, app-wide).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(refsKey(app.id));
+      setRefs(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      setRefs([]);
+    }
+  }, [app.id]);
+
+  const persistRefs = useCallback(
+    (next: string[]) => {
+      setRefs(next);
+      try {
+        window.localStorage.setItem(refsKey(app.id), JSON.stringify(next));
+      } catch {
+        // localStorage unavailable — silent
+      }
+    },
+    [app.id],
+  );
+
+  async function uploadReference(file: File) {
+    setError(null);
+    setUploadingRef(true);
+    try {
+      const form = new FormData();
+      form.set("appId", app.id);
+      form.set("kind", "shot");
+      form.set("file", file);
+      const res = await fetch(`/api/mini-apps/images/upload`, {
+        method: "POST",
+        headers: wallet ? { "x-wallet-address": wallet } : undefined,
+        body: form,
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok || typeof json.url !== "string") {
+        throw new Error(typeof json.error === "string" ? json.error : `HTTP ${res.status}`);
+      }
+      persistRefs([json.url, ...refs.filter((r) => r !== json.url)].slice(0, REFS_LIMIT));
+      setBase({ mode: "shot", url: json.url });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploadingRef(false);
+    }
+  }
 
   // Paced progress while a variant generates (capped at 95%).
   useEffect(() => {
@@ -353,14 +437,23 @@ export function ImageStudio({
             </div>
           </div>
 
-          {/* Screenshot references (previews only) */}
-          {kind === "preview" && shots.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                Screenshot als Vorlage (empfohlen — kurze Bildunterschrift kommt automatisch)
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {shots.slice(0, 8).map((s) => {
+          {/* Vorlagen: eigene Referenzbilder + CMS-Inhalte + Editor-Screenshots */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">
+              {kind === "preview"
+                ? "Vorlage wählen — Referenzbild, CMS-Bild oder Screenshot (kurze Bildunterschrift kommt automatisch)"
+                : "Vorlage wählen (optional) — eigenes Referenzbild oder Bild aus den Inhalten"}
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                ...refs,
+                ...cmsImages.filter((u) => !refs.includes(u)),
+                ...(kind === "preview"
+                  ? shots.filter((u) => !refs.includes(u) && !cmsImages.includes(u))
+                  : []),
+              ]
+                .slice(0, 11)
+                .map((s) => {
                   const active = base.mode === "shot" && base.url === s;
                   return (
                     <button
@@ -375,13 +468,37 @@ export function ImageStudio({
                       }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s} alt="Editor-Screenshot" className="h-full w-full object-cover" />
+                      <img src={s} alt="Vorlage" className="h-full w-full object-cover" />
                     </button>
                   );
                 })}
-              </div>
+              <button
+                type="button"
+                disabled={busy || uploadingRef}
+                onClick={() => refInput.current?.click()}
+                aria-label="Referenzbild hochladen"
+                title="Eigenes Referenzbild hochladen"
+                className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/60 hover:text-foreground disabled:opacity-50"
+              >
+                {uploadingRef ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ImagePlus className="h-4 w-4" />
+                )}
+              </button>
             </div>
-          ) : null}
+            <input
+              ref={refInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadReference(file);
+              }}
+            />
+          </div>
 
           {/* Prompt */}
           <div className="space-y-1.5">
@@ -415,7 +532,7 @@ export function ImageStudio({
               : base.mode === "current"
                 ? "Bearbeitete Variante erstellen"
                 : base.mode === "shot"
-                  ? "Variante aus Screenshot erstellen"
+                  ? "Variante aus Vorlage erstellen"
                   : "Variante generieren"}
           </Button>
 

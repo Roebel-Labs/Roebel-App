@@ -103,7 +103,8 @@ window.addEventListener("message", async (e) => {
   if (!e.data || e.data.type !== "netizen:capture") return;
   try {
     const { toPng } = await import("https://esm.sh/html-to-image@1.11.11");
-    const dataUrl = await toPng(document.body, { pixelRatio: 2, backgroundColor: getComputedStyle(document.body).backgroundColor });
+    // imagePlaceholder: CORS-blockierte externe Bilder dürfen die Aufnahme nicht scheitern lassen.
+    const dataUrl = await toPng(document.body, { pixelRatio: 2, backgroundColor: getComputedStyle(document.body).backgroundColor, imagePlaceholder: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" });
     (e.source || parent).postMessage({ type: "netizen:capture:result", dataUrl }, "*");
   } catch (err) {
     (e.source || parent).postMessage({ type: "netizen:capture:error", error: String(err) }, "*");

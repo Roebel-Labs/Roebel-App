@@ -128,6 +128,7 @@ export default function NewMiniAppBuilderPage() {
     slug: string;
     runId: number;
     force?: boolean;
+    republished?: boolean;
   } | null>(null);
   // Set when an existing app is re-opened (?app=…): prefills the publish form
   // so re-publishing lands on the SAME slug as a new version.
@@ -891,7 +892,12 @@ export default function NewMiniAppBuilderPage() {
         republished: true,
       });
       if (activeHtml) {
-        setAutoImagesJob({ html: activeHtml, slug: json.slug, runId: Date.now() });
+        setAutoImagesJob({
+          html: activeHtml,
+          slug: json.slug,
+          runId: Date.now(),
+          republished: true,
+        });
       }
       setMessages((prev) => [
         ...prev,
@@ -1291,7 +1297,12 @@ export default function NewMiniAppBuilderPage() {
             setPublished(result);
             if (manifest) setPreset(manifest); // enables one-click updates
             if (activeHtml) {
-              setAutoImagesJob({ html: activeHtml, slug: result.slug, runId: Date.now() });
+              setAutoImagesJob({
+                html: activeHtml,
+                slug: result.slug,
+                runId: Date.now(),
+                republished: !!result.republished,
+              });
             }
           }}
         />
@@ -1304,6 +1315,7 @@ export default function NewMiniAppBuilderPage() {
           slug={autoImagesJob.slug}
           wallet={wallet}
           force={autoImagesJob.force}
+          republished={autoImagesJob.republished}
         />
       ) : null}
     </div>
