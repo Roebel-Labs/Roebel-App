@@ -5,6 +5,9 @@
 > integrates the field study (prosperity engine), the coordination-protocol thesis, and the legal masterplan into a
 > single dated arc. Research/strategy record — not product, not legal advice.
 
+> 🗺️ **Visual roadmap (interactive artifact):** https://claude.ai/code/artifact/34d5e690-eef6-4f45-b1e7-8f41acd3f5d7
+> — the three horizons, merge vectors, two products, scorecard, and next-90-days as a one-page timeline.
+
 Companions: [`../SOVEREIGN_AI_COMMUNITY_WEALTH_STUDY.md`](../SOVEREIGN_AI_COMMUNITY_WEALTH_STUDY.md) ·
 [`COORDINATION_PROTOCOL_THESIS.md`](COORDINATION_PROTOCOL_THESIS.md) · [`LEGAL_MASTERPLAN.md`](LEGAL_MASTERPLAN.md)
 

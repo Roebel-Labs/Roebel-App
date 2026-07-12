@@ -19,6 +19,7 @@
 **Interactive artifacts (private, on claude.ai):**
 - Field study (v0.2, 🌱): https://claude.ai/code/artifact/d95a5973-09f1-4fd3-a2f9-ee57aa6e9363
 - Coordination Protocol thesis (v0.1, 🧩): https://claude.ai/code/artifact/5d2307c7-8f75-4fb8-aa7e-dabe21886209
+- Decade Plan roadmap (v0.1, 🗺️): https://claude.ai/code/artifact/34d5e690-eef6-4f45-b1e7-8f41acd3f5d7
 
 ---
 
