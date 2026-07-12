@@ -8,6 +8,8 @@ interface ImageCompareSliderProps {
   oldUrl: string;
   /** Newly generated image — shown on the left, revealed by dragging right. */
   newUrl: string;
+  /** Tailwind aspect class of the stage (default 16:9; mini-app icons use aspect-square). */
+  aspectClass?: string;
 }
 
 /**
@@ -16,7 +18,11 @@ interface ImageCompareSliderProps {
  * (current) image, drag right to reveal more of the new one. Works with mouse
  * and touch via pointer events.
  */
-export function ImageCompareSlider({ oldUrl, newUrl }: ImageCompareSliderProps) {
+export function ImageCompareSlider({
+  oldUrl,
+  newUrl,
+  aspectClass = "aspect-[16/9]",
+}: ImageCompareSliderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(50);
   const [dragging, setDragging] = useState(false);
@@ -31,7 +37,7 @@ export function ImageCompareSlider({ oldUrl, newUrl }: ImageCompareSliderProps) 
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[16/9] rounded-md overflow-hidden border border-border bg-muted select-none touch-none"
+      className={`relative w-full ${aspectClass} rounded-md overflow-hidden border border-border bg-muted select-none touch-none`}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         setDragging(true);

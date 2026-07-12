@@ -8,7 +8,7 @@ import { MiniAppError, type MiniAppRow } from "../types";
 const BUCKET = "images";
 export const MAX_PREVIEWS = 5;
 
-export type ImageKind = "icon" | "preview" | "feature" | "shot" | "content";
+export type ImageKind = "icon" | "preview" | "feature" | "shot" | "content" | "variant";
 
 function extFor(contentType: string): string {
   if (contentType.includes("jpeg")) return "jpg";
@@ -25,6 +25,8 @@ function pathFor(appId: string, kind: ImageKind, slot?: number, contentType?: st
   // row — the URL lands in mini_app_data values / the generated document.
   if (kind === "content")
     return `mini-apps/${appId}/content/${ts}.${extFor(contentType ?? "image/png")}`;
+  // Uncommitted KI-Studio variants — applied to the app row only via commit.
+  if (kind === "variant") return `mini-apps/${appId}/variants/${ts}.png`;
   return `mini-apps/${appId}/shots/${ts}.png`;
 }
 
@@ -71,7 +73,7 @@ export async function saveImageFromUrl(
 /** Write the stored URL onto the app row (icon_url or screenshots[slot]). */
 export async function applyImageToApp(
   app: MiniAppRow,
-  kind: Exclude<ImageKind, "shot">,
+  kind: Exclude<ImageKind, "shot" | "content" | "variant">,
   publicUrl: string,
   slot?: number,
 ): Promise<void> {
@@ -100,7 +102,7 @@ export async function applyImageToApp(
 /** Remove a preview slot (or clear the icon). */
 export async function removeImageFromApp(
   app: MiniAppRow,
-  kind: Exclude<ImageKind, "shot">,
+  kind: Exclude<ImageKind, "shot" | "content" | "variant">,
   slot?: number,
 ): Promise<void> {
   const supabase = createAdminClient();

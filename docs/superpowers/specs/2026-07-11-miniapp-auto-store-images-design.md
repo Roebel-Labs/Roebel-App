@@ -119,6 +119,23 @@ erstellt…").
   confirm dialog (it replaces existing images). `quickUpdate` (one-click
   republish) now also triggers the normal fill-missing run.
 
+## v3 additions (2026-07-12) — KI-Studio + text rules
+
+- **KI-Studio sidebar** (`components/mini-apps/ImageStudio.tsx`) for every
+  target (icon / hero / each preview slot), mirroring the Speisekarte
+  AiImageEditor: variants generate as PREVIEWS (`/status?preview=1` stores
+  them under `mini-apps/<id>/variants/` without touching the row), compare
+  slider vs. the current image, explicit commit via new
+  `POST /api/mini-apps/images/commit` (URL must live in the app's own
+  storage folder). Variants persist in localStorage per target (limit 6).
+  Base options: fresh prompt / edit current image / screenshot reference
+  (previews). ImagesSection keeps upload+delete inline; all AI goes through
+  the studio.
+- **Text rules:** hero artwork prompts carry a hard "NO TEXT" instruction
+  (generation + edit); previews built FROM a screenshot explicitly get a
+  short German caption (2–6 words) describing the screen — all other
+  preview/icon prompts stay text-free.
+
 ## Testing
 
 - Lint + scoped typecheck on the changed files (repo has known pre-existing

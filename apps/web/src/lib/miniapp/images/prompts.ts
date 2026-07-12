@@ -19,7 +19,7 @@ export function buildFeaturePrompt(app: MiniAppRow, userPrompt?: string): string
     `Erstelle ein breites Hero-Artwork (16:9) für die Mini-App "${app.name}" im App-Store.`,
     app.description ? `Die App: ${app.description}.` : "",
     `Stimmungsvolle, moderne Illustration der App-Idee mit ruhiger Komposition und der Farbwelt um ${app.primary_color ?? "#00498B"}; unten muss Platz für eine Textzeile bleiben.`,
-    "Keine Texte, keine Logos, keine UI-Screenshots.",
+    "NO TEXT — absolut kein Text im Bild: keine Wörter, keine Buchstaben, keine Schriftzüge, keine Logos. Keine UI-Screenshots.",
     userPrompt?.trim() ? `Zusätzlicher Wunsch: ${userPrompt.trim()}.` : "",
   ];
   return parts.filter(Boolean).join(" ");
@@ -37,8 +37,8 @@ export function buildEditPrompt(
     opts.kind === "icon"
       ? "Es bleibt ein App-Icon: zentriertes Motiv, klare Silhouette, kein Text, kein Rahmen, kein Schlagschatten außerhalb der Fläche."
       : opts.kind === "feature"
-        ? "Es bleibt ein breites Store-Hero-Artwork (16:9) mit ruhiger Komposition; unten muss Platz für eine Textzeile bleiben, keine Texte oder Logos."
-        : "Es bleibt ein App-Store-Vorschaubild (1:1) im hochwertigen App-Store-Look, keine zusätzlichen Texte oder Logos.";
+        ? "Es bleibt ein breites Store-Hero-Artwork (16:9) mit ruhiger Komposition; unten muss Platz für eine Textzeile bleiben. NO TEXT — absolut kein Text im Bild, keine Wörter, Buchstaben oder Logos."
+        : "Es bleibt ein App-Store-Vorschaubild (1:1) im hochwertigen App-Store-Look; eine kurze deutsche Bildunterschrift (2–6 Wörter) ist erlaubt, sonst kein Text und keine Logos.";
   return [
     `Bearbeite das beigefügte Bild der Mini-App "${app.name}".`,
     `Gewünschte Änderung: ${opts.userPrompt.trim()}.`,
@@ -54,8 +54,10 @@ export function buildPreviewPrompt(
   const base = opts.hasReference
     ? `Erstelle ein App-Store-Vorschaubild für die Mini-App "${app.name}". Zeige den beigefügten Screenshot in einem modernen, leicht geneigten Smartphone-Rahmen auf einem ruhigen Verlaufshintergrund in ${app.primary_color ?? "#00498B"}. Der Screenshot muss klar erkennbar und unverändert bleiben.`
     : `Erstelle ein App-Store-Vorschaubild für die Mini-App "${app.name}"${app.description ? ` (${app.description})` : ""}. Moderne, freundliche Illustration der App-Idee auf ruhigem Verlaufshintergrund in ${app.primary_color ?? "#00498B"}.`;
-  const style =
-    "Viel Luft, keine zusätzlichen Texte oder Logos, hochwertiger App-Store-Look.";
+  // Screenshot previews may carry a short caption; pure illustrations stay text-free.
+  const style = opts.hasReference
+    ? "Dazu eine kurze deutsche Bildunterschrift mit 2–6 Wörtern, die den gezeigten Screen beschreibt (z. B. über oder unter dem Smartphone). Sonst kein weiterer Text, keine Logos. Viel Luft, hochwertiger App-Store-Look."
+    : "Viel Luft, keine Texte, keine Logos, hochwertiger App-Store-Look.";
   const extra = opts.userPrompt?.trim() ? `Zusätzlicher Wunsch: ${opts.userPrompt.trim()}.` : "";
   return [base, style, extra].filter(Boolean).join(" ");
 }

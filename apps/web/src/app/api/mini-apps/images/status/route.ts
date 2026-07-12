@@ -42,6 +42,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: "error", error: task.error });
     }
 
+    // KI-Studio preview mode: store the result as an uncommitted variant
+    // (KIE CDN URLs expire) and do NOT touch the app row — committing
+    // happens explicitly via /api/mini-apps/images/commit.
+    if (getParam(req, "preview") === "1") {
+      const url = await saveImageFromUrl(app.id, "variant", task.url);
+      return NextResponse.json({ status: "done", url });
+    }
+
     const url = await saveImageFromUrl(app.id, kind, task.url, slot);
     await applyImageToApp(app, kind, url, slot);
     return NextResponse.json({ status: "done", url });
