@@ -48,6 +48,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { fontFamily } from '@/constants/theme';
 import { CloseIcon, ShareIcon } from '@/components/miniapp/hostIcons';
+import MuenzenRewardOverlay from '@/components/rewards/MuenzenRewardOverlay';
 
 import { createHostBridge, type HostHandlers } from '@netizen-labs/miniapp-sdk/host';
 import type {
@@ -122,6 +123,16 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const bridgeRef = useRef<ReturnType<typeof createHostBridge> | null>(null);
   // WebView messages that arrive before the bridge is constructed (raced hello).
   const earlyMessagesRef = useRef<string[]>([]);
+  // Host-owned reward celebration: EVERY successful grantReward from ANY mini
+  // app presents the same native Münzen screen the rest of the app uses
+  // (daily mint, tasks, event scans) — apps don't build their own.
+  const [rewardShow, setRewardShow] = useState<{
+    visible: boolean;
+    loading: boolean;
+    amount: number;
+    subtitle?: string;
+    replayKey: number;
+  }>({ visible: false, loading: false, amount: 0, replayKey: 0 });
   const sessionIdRef = useRef<string>(newMiniAppSessionId());
   const walletConnectFiredRef = useRef(false);
   const appOpenFiredRef = useRef(false);
@@ -392,9 +403,33 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       },
       grantReward: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
-        const res = await apiGrantReward(apiId, p);
-        if (res.granted) track('reward_granted', { amount: p.amount, reason: p.reason });
-        return res;
+        // Native celebration is host-owned: the SAME MuenzenRewardView as the
+        // daily mint / task rewards, in loading state while the server
+        // authorizes and mints. The bridge promise resolves independently.
+        const reason = typeof p.reason === 'string' ? p.reason.trim() : '';
+        setRewardShow((c) => ({
+          visible: true,
+          loading: true,
+          amount: 0,
+          subtitle: reason.length >= 4 && reason.length <= 120 ? reason : undefined,
+          replayKey: c.replayKey + 1,
+        }));
+        try {
+          const res = await apiGrantReward(apiId, p);
+          if (res.granted) {
+            track('reward_granted', { amount: p.amount, reason: p.reason });
+            const granted = Number(res.amount ?? p.amount ?? 1) || 1;
+            setRewardShow((c) => ({ ...c, loading: false, amount: granted }));
+          } else {
+            // Not granted (daily cap / budget) — no celebration; the app
+            // explains it (the bridge result/error carries the code).
+            setRewardShow((c) => ({ ...c, visible: false, loading: false }));
+          }
+          return res;
+        } catch (e) {
+          setRewardShow((c) => ({ ...c, visible: false, loading: false }));
+          throw e;
+        }
       },
       notificationsSend: async (p) => {
         if (!hasMiniAppApi()) throw { code: 'unsupported', message: 'API nicht konfiguriert.' };
@@ -581,6 +616,24 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           busy={notifBusy}
           onEnable={handleNotifEnable}
           onDismiss={handleNotifDismiss}
+        />
+
+        {/* Host-owned reward celebration — the same native Münzen screen as
+            the daily mint / tasks / event scans, for EVERY mini-app grant. */}
+        <MuenzenRewardOverlay
+          visible={rewardShow.visible}
+          loading={rewardShow.loading}
+          loadingLabel={[
+            'Münzen werden abgeholt…',
+            'Einen Moment noch…',
+            'Fast geschafft…',
+            'Gleich ist es soweit…',
+          ]}
+          amount={rewardShow.amount}
+          subtitle={rewardShow.subtitle}
+          unit="Münzen"
+          replayKey={rewardShow.replayKey}
+          onClose={() => setRewardShow((c) => ({ ...c, visible: false }))}
         />
       </SafeAreaView>
     </Modal>
