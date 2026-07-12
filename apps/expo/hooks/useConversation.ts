@@ -313,13 +313,24 @@ export function useConversation(conversationId: string) {
     return unsubscribe;
   }, [xmtp, subscribeMessages, refreshXmtpThread]);
 
+  // Personal↔personal chats are XMTP-only — never fall back to Supabase for
+  // them (2026-07-12 policy). Orgs/support keep the Supabase transport until
+  // XMTP groups land.
+  const isPersonalPair =
+    !!peerAccount &&
+    peerAccount.accountType === 'personal' &&
+    myAccountType === 'personal' &&
+    !!peerAccount.ownerWallet;
+
   // ── Merged view ──────────────────────────────────────────────────
   const messages = useMemo(() => {
+    // XMTP-only threads: legacy Supabase history is not rendered anymore.
+    if (isPersonalPair) return xmtpMessages;
     if (xmtpMessages.length === 0) return supabaseMessages;
     const merged = [...xmtpMessages, ...supabaseMessages];
     merged.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     return merged;
-  }, [supabaseMessages, xmtpMessages]);
+  }, [supabaseMessages, xmtpMessages, isPersonalPair]);
 
   // ── Sends ────────────────────────────────────────────────────────
   const firePush = useCallback(
@@ -334,15 +345,6 @@ export function useConversation(conversationId: string) {
     },
     [peerAccount?.ownerWallet, myAccountName, conversationId]
   );
-
-  // Personal↔personal chats are XMTP-only — never fall back to Supabase for
-  // them (2026-07-12 policy). Orgs/support keep the Supabase transport until
-  // XMTP groups land.
-  const isPersonalPair =
-    !!peerAccount &&
-    peerAccount.accountType === 'personal' &&
-    myAccountType === 'personal' &&
-    !!peerAccount.ownerWallet;
 
   const sendBlocked: 'self' | 'peer' | null = !isPersonalPair
     ? null

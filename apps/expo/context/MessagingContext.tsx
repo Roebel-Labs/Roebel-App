@@ -39,10 +39,11 @@ export function useMessaging() {
 }
 
 /**
- * Merges the XMTP rail into the Supabase-backed inbox rows: newer XMTP last
- * messages override previews/unread dots, per-conversation XMTP unread counts
- * add to the badge, and inbound XMTP DMs without a registry row get one
- * created (Röbel peers only — external XMTP wallets are ignored in v1).
+ * XMTP-only inbox for personal chats (2026-07-12 policy): personal-peer rows
+ * show ONLY XMTP previews/unread and rows without an XMTP conversation are
+ * hidden entirely — legacy Supabase-only chats no longer appear. Org rows
+ * keep their Supabase previews. Inbound XMTP DMs without a registry row get
+ * one created (Röbel peers only — unknown external wallets are ignored).
  */
 async function mergeXmtpInbox(
   handle: XmtpClientHandle,
@@ -63,6 +64,7 @@ async function mergeXmtpInbox(
   let xmtpUnread = 0;
   let adopted = false;
   const merged = rows.map((r) => ({ ...r }));
+  const matchedWallets = new Set<string>();
 
   for (const entry of entries) {
     const rowIndex = merged.findIndex((r) => r.peerOwnerWallet === entry.peerWallet);
@@ -87,8 +89,12 @@ async function mergeXmtpInbox(
     }
 
     const row = merged[rowIndex];
+    matchedWallets.add(entry.peerWallet);
 
-    // Preview: override when the XMTP side is newer.
+    // Personal chats are XMTP-only: preview comes from the XMTP side alone
+    // (legacy Supabase previews are discarded).
+    row.lastMessage = null;
+    row.hasUnread = false;
     if (entry.lastMessage) {
       const mapped = mapXmtpMessage(
         entry.lastMessage,
@@ -97,15 +103,12 @@ async function mergeXmtpInbox(
       );
       if (mapped) {
         if (mapped.payment) mapped.content = '💰 Röbel Münzen';
-        const newer =
-          !row.lastMessage ||
-          Date.parse(mapped.created_at) > Date.parse(row.lastMessage.created_at);
-        if (newer) row.lastMessage = mapped;
+        row.lastMessage = mapped;
       }
     }
 
-    // Unread: message-level parity with get_unread_count. Skip the local-db
-    // count when the newest XMTP message can't be unread anyway.
+    // Unread: XMTP-only. Skip the local-db count when the newest XMTP
+    // message can't be unread anyway.
     const last = entry.lastMessage;
     const lastFromPeer = last && last.senderInboxId !== handle.inboxId;
     const lastIsNew =
@@ -120,13 +123,21 @@ async function mergeXmtpInbox(
     }
   }
 
-  merged.sort((a, b) => {
+  // Hide personal-peer rows without an XMTP conversation — legacy
+  // Supabase-only chats are gone from the inbox. Org rows always stay.
+  const visible = merged.filter(
+    (r) =>
+      r.peerAccountType !== 'personal' ||
+      (r.peerOwnerWallet != null && matchedWallets.has(r.peerOwnerWallet))
+  );
+
+  visible.sort((a, b) => {
     const ta = a.lastMessage?.created_at ?? a.created_at;
     const tb = b.lastMessage?.created_at ?? b.created_at;
     return Date.parse(tb) - Date.parse(ta);
   });
 
-  return { rows: merged, xmtpUnread, adopted };
+  return { rows: visible, xmtpUnread, adopted };
 }
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
@@ -177,8 +188,23 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         }
         convos = result.rows;
         if (accountIdRef.current === accountId) setXmtpUnread(result.xmtpUnread);
-      } else if (accountIdRef.current === accountId) {
-        setXmtpUnread(0);
+      } else {
+        // No XMTP client (not activated / org account without personal rail):
+        // personal chats are XMTP-only, so a personal active account without
+        // a client shows no personal-peer rows at all.
+        if (accountTypeRef.current === 'personal') {
+          convos = convos.filter((r) => r.peerAccountType !== 'personal');
+        }
+        if (accountIdRef.current === accountId) setXmtpUnread(0);
+      }
+
+      // Personal accounts: the get_unread_count RPC also counts hidden
+      // legacy Supabase messages — derive the org-side badge from the
+      // visible rows instead (conversation-level).
+      if (accountTypeRef.current === 'personal' && accountIdRef.current === accountId) {
+        setBaseUnread(
+          convos.filter((r) => r.peerAccountType !== 'personal' && r.hasUnread).length
+        );
       }
 
       // Guard against stale loads after an account switch.
@@ -195,6 +221,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUnreadCount = useCallback(async (accountId: string) => {
+    // Personal accounts derive their badge in loadConversations (XMTP +
+    // visible org rows) — the RPC would count hidden legacy messages.
+    if (accountTypeRef.current === 'personal') return;
     try {
       const count = await fetchUnread(accountId);
       if (accountIdRef.current === accountId) {
