@@ -1,8 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import type { MessagePayment } from '@/lib/supabase-messages';
+
+// Standard Röbel Münzen coin from the Belohnungen screens. require()'d and
+// rendered with RN's Image so the receipt bubble shows the coin immediately
+// (no late fade-in).
+const COIN = require('@/assets/illustration/gamification/single.png');
 
 type Props = {
   payment: MessagePayment;
@@ -33,11 +37,7 @@ export default function PaymentBubble({ payment, isOwn, pending }: Props) {
           : [styles.cardOther, { backgroundColor: colors.surface, borderColor: colors.border }],
       ]}
     >
-      <Image
-        source={require('@/assets/illustration/taler/single.png')}
-        style={styles.coin}
-        contentFit="contain"
-      />
+      <Image source={COIN} style={styles.coin} resizeMode="contain" />
       <View style={styles.textCol}>
         <Text
           style={[styles.amount, { color: isOwn ? colors.onPrimary : colors.textPrimary }]}

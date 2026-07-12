@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
 import PaymentBubble from './PaymentBubble';
+import DecryptText from './DecryptText';
 import type { Message } from '@/lib/supabase-messages';
 
 type Props = {
@@ -120,14 +121,14 @@ export default function MessageBubble({
                     : [styles.bubbleOther, { backgroundColor: colors.surface }],
                 ]}
               >
-                <Text
+                <DecryptText
+                  id={message.id}
+                  text={message.content}
                   style={[
                     styles.text,
                     { color: isOwn ? colors.onPrimary : colors.textPrimary },
                   ]}
-                >
-                  {message.content}
-                </Text>
+                />
               </View>
             )}
             {hasSticker && (

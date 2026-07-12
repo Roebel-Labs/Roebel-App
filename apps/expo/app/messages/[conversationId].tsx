@@ -27,6 +27,7 @@ import { setActiveConversationId } from '@/lib/active-conversation';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import LockIcon from '@/assets/icons/square-lock-02.svg';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -182,6 +183,16 @@ export default function ChatScreen() {
         )}
       </View>
 
+      {/* Encryption notice — XMTP-rail chats are end-to-end encrypted */}
+      {xmtpActive && (
+        <View style={styles.encryptionNotice}>
+          <LockIcon width={12} height={12} color={colors.textTertiary} />
+          <Text style={[styles.encryptionNoticeText, { color: colors.textTertiary }]}>
+            Nachrichten sind mit XMTP verschlüsselt
+          </Text>
+        </View>
+      )}
+
       {/* Blocked banner */}
       {isBlocked && (
         <View style={[styles.blockedBanner, { backgroundColor: colors.errorBackground }]}>
@@ -198,8 +209,12 @@ export default function ChatScreen() {
         </View>
       )}
 
+      {/* Android already resizes the window on keyboard show (softwareKeyboard
+          LayoutMode defaults to "resize"); adding behavior="height" on top
+          double-adjusts and leaves the input floating above the safe area after
+          the keyboard closes. Let the OS handle Android; pad on iOS. */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
         {isLoadingMessages && messages.length === 0 ? (
@@ -360,6 +375,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: 'Inter-SemiBold',
     lineHeight: 26,
+  },
+  encryptionNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  encryptionNoticeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
   },
   blockedBanner: {
     flexDirection: 'row',

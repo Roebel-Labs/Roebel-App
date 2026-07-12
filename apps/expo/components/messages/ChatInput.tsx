@@ -6,8 +6,14 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
+
+// Standard Röbel Münzen coin used across the Belohnungen screens (balance
+// badge, tasks, Schatzkammer). require()'d + rendered with RN's Image so it
+// paints on the first frame instead of fading in late like expo-image.
+const COIN = require('@/assets/illustration/gamification/single.png');
 import { Ionicons } from '@expo/vector-icons';
 import ArrowRightIcon from '@/assets/icons/arrow-right.svg';
 import EmojiIcon from '@/assets/icons/emoji.svg';
@@ -76,11 +82,7 @@ export default function ChatInput({ onSend, isSending, onOpenPayment }: Props) {
             onPress={onOpenPayment}
             accessibilityLabel="Röbel Münzen senden"
           >
-            <Image
-              source={require('@/assets/illustration/taler/single.png')}
-              style={styles.coinButtonImage}
-              contentFit="contain"
-            />
+            <RNImage source={COIN} style={styles.coinButtonImage} resizeMode="contain" />
           </Pressable>
         )}
         <Pressable
