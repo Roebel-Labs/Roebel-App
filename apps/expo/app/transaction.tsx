@@ -11,6 +11,8 @@ import { useTheme } from '@/context/ThemeContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CircleArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
 import CircleArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
+import ExternalLinkIcon from '@/assets/icons/external-link.svg';
+import DecryptText from '@/components/DecryptText';
 
 const first = (v: string | string[] | undefined): string => (Array.isArray(v) ? v[0] ?? '' : v ?? '');
 
@@ -95,11 +97,12 @@ export default function TransactionScreen() {
         {!!txHash && (
           <Pressable
             onPress={() => Linking.openURL(`https://gnosisscan.io/tx/${txHash}`).catch(() => {})}
-            style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [styles.linkBtn, { opacity: pressed ? 0.7 : 1 }]}
             accessibilityRole="button"
             accessibilityLabel="Digitalen Beweis öffnen"
           >
-            <Text style={styles.linkText}>Digitaler Beweis ↗</Text>
+            <DecryptText text="Digitaler Beweis" style={styles.linkText} once={false} numberOfLines={1} />
+            <ExternalLinkIcon width={18} height={18} color="#FFFFFF" />
           </Pressable>
         )}
       </ScrollView>
@@ -145,10 +148,14 @@ function makeStyles(colors: any, isDark: boolean) {
       marginTop: 24,
       height: 54,
       borderRadius: 999,
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDark ? colors.surface : '#F2F2F2',
+      gap: 8,
+      backgroundColor: '#000000',
+      borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+      borderColor: colors.border,
     },
-    linkText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.primary },
+    linkText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#FFFFFF' },
   });
 }

@@ -1,16 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 
 // Pixel-block glyphs the text "decrypts" out of, character by character — the
-// same monospace-decode motion the Röbel Münzen reward screen uses for its
-// loading label, reused here so every DM message reveals as if it's being
-// decrypted on arrival.
+// same monospace-decode motion the Röbel Münzen reward loading label uses,
+// reused across DMs (every message reveals as if decrypted on arrival), the
+// reward CTA, and the transaction-proof button.
 const PIXEL_GLYPHS = '░▒▓█▚▞▙▟▛▜'.split('');
 
-// A message only plays the decrypt reveal the FIRST time it appears this
-// session. Scrolling a bubble off- and back on-screen (FlatList remount) shows
-// its text instantly instead of re-scrambling.
+// Ids that have already played their reveal in the current run. Used only when
+// `once` is set (message bubbles): scrolling a bubble off- and back on-screen
+// shows its text instantly instead of re-scrambling.
 const revealed = new Set<string>();
+
+/**
+ * Clear the once-per-id memory so the reveal replays. Called when a chat is
+ * (re)opened so every message decrypts on load, in all chats.
+ */
+export function resetDecrypted(): void {
+  revealed.clear();
+}
 
 function scramble(text: string): string {
   let out = '';
@@ -22,44 +30,57 @@ function scramble(text: string): string {
 }
 
 type Props = {
-  /** Stable id (message id) used to play the reveal only once per session. */
-  id: string;
   text: string;
   style?: StyleProp<TextStyle>;
+  /**
+   * true (default): play only the first time this `id` is seen (per run) — for
+   * message bubbles. false: play on every mount — for buttons/labels that
+   * should re-decrypt each time they appear.
+   */
+  once?: boolean;
+  /** Dedup key when `once` is true (e.g. the message id). */
+  id?: string;
 } & Pick<TextProps, 'numberOfLines' | 'accessibilityLabel'>;
 
 /**
- * Text that "decrypts" out of pixel-block glyphs the first time it mounts —
- * a short (~0.4s), fixed-duration reveal regardless of message length. Falls
- * back to plain text when Reduce Motion is on or the message was already
- * revealed earlier this session.
+ * Text that "decrypts" out of pixel-block glyphs — a short (~0.4s), fixed-
+ * duration reveal regardless of length. Falls back to plain text under Reduce
+ * Motion.
  */
-export default function DecryptText({ id, text, style, numberOfLines, accessibilityLabel }: Props) {
-  const [display, setDisplay] = useState(() => (revealed.has(id) ? text : scramble(text)));
-  const startedFor = useRef<string | null>(null);
+export default function DecryptText({
+  id,
+  text,
+  style,
+  numberOfLines,
+  accessibilityLabel,
+  once = true,
+}: Props) {
+  const alreadyRevealed = once && !!id && revealed.has(id);
+  const [display, setDisplay] = useState(() => (alreadyRevealed ? text : scramble(text)));
 
   useEffect(() => {
-    // Already shown once, or same run already animating this id → nothing to do.
-    if (revealed.has(id)) {
+    if (once && id && revealed.has(id)) {
       setDisplay(text);
       return;
     }
-    if (startedFor.current === id) return;
-    startedFor.current = id;
 
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
+    const finish = () => {
+      if (once && id) revealed.add(id);
+      if (!cancelled) setDisplay(text);
+    };
+
     const run = (reduceMotion: boolean) => {
       if (cancelled) return;
       if (reduceMotion || text.length === 0) {
-        revealed.add(id);
-        setDisplay(text);
+        finish();
         return;
       }
       const total = text.length;
-      // Fixed-ish duration: reveal several chars per frame for long messages so
-      // a paragraph decodes in ~0.4s just like a short "hi".
+      // Reveal several chars per frame for long text so a paragraph decodes in
+      // ~0.4s just like a short label.
       const framesToReveal = Math.min(Math.max(6, Math.ceil(total * 0.7)), 16);
       let frame = 0;
       interval = setInterval(() => {
@@ -67,8 +88,7 @@ export default function DecryptText({ id, text, style, numberOfLines, accessibil
         const count = Math.floor((frame / framesToReveal) * total);
         if (count >= total) {
           if (interval) clearInterval(interval);
-          revealed.add(id);
-          setDisplay(text);
+          finish();
           return;
         }
         let out = '';
@@ -79,10 +99,11 @@ export default function DecryptText({ id, text, style, numberOfLines, accessibil
               ? ch
               : PIXEL_GLYPHS[Math.floor(Math.random() * PIXEL_GLYPHS.length)];
         }
-        setDisplay(out);
+        if (!cancelled) setDisplay(out);
       }, 30);
     };
 
+    setDisplay(scramble(text));
     AccessibilityInfo.isReduceMotionEnabled()
       .then(run)
       .catch(() => run(false));
@@ -91,7 +112,7 @@ export default function DecryptText({ id, text, style, numberOfLines, accessibil
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [id, text]);
+  }, [id, text, once]);
 
   return (
     <Text style={style} numberOfLines={numberOfLines} accessibilityLabel={accessibilityLabel ?? text}>

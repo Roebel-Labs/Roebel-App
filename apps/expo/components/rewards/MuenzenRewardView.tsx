@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import DecryptText from '@/components/DecryptText';
 
 const SINGLE = require('../../assets/illustration/muenzen/single-reward.png');
 const MANY = require('../../assets/illustration/muenzen/many-reward.png');
@@ -216,7 +217,7 @@ export default function MuenzenRewardView({
               <ScrambleText text={currentLabel} style={styles.loadingLabel} reduceMotion={reduceMotion} />
             </View>
           ) : (
-            <Text style={styles.ctaText}>{buttonLabel}</Text>
+            <DecryptText text={buttonLabel} style={styles.ctaText} once={false} numberOfLines={1} />
           )}
         </Pressable>
       </SafeAreaView>

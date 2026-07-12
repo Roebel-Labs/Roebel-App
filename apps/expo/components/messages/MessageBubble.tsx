@@ -5,7 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import ListingCard, { type ListingInquiry } from './ListingCard';
 import PaymentBubble from './PaymentBubble';
-import DecryptText from './DecryptText';
+import DecryptText from '@/components/DecryptText';
 import type { Message } from '@/lib/supabase-messages';
 
 type Props = {
@@ -19,6 +19,8 @@ type Props = {
   onToggleReaction?: (message: Message, emoji: string, add: boolean) => void;
   /** "Gelesen" indicator under the newest own message. */
   showRead?: boolean;
+  /** Tap a Röbel-Münzen payment bubble → open its transaction details. */
+  onPressPayment?: (message: Message) => void;
 };
 
 function formatTime(isoDate: string): string {
@@ -61,6 +63,7 @@ export default function MessageBubble({
   onLongPress,
   onToggleReaction,
   showRead,
+  onPressPayment,
 }: Props) {
   const { colors } = useTheme();
 
@@ -93,6 +96,7 @@ export default function MessageBubble({
 
       <Pressable
         style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}
+        onPress={hasPayment && onPressPayment ? () => onPressPayment(message) : undefined}
         onLongPress={onLongPress ? () => onLongPress(message) : undefined}
         delayLongPress={300}
       >

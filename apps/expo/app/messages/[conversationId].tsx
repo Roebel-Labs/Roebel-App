@@ -23,6 +23,7 @@ import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import { Skeleton } from '@/components/SkeletonLoader';
 import { ChatLoadingSkeletons } from '@/components/messages/MessageBubbleSkeleton';
 import { safeDisplayName, type Message } from '@/lib/supabase-messages';
+import { resetDecrypted } from '@/components/DecryptText';
 import { setActiveConversationId } from '@/lib/active-conversation';
 import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 
@@ -69,6 +70,12 @@ export default function ChatScreen() {
       markConversationRead(conversationId);
     }
   }, [conversationId, markConversationRead]);
+
+  // Replay the "decrypt" reveal for every message each time a chat is opened,
+  // so the load reads as if the messages are being decrypted.
+  useEffect(() => {
+    resetDecrypted();
+  }, [conversationId]);
 
   // Tell the push handler this conversation is on screen so it suppresses
   // foreground DM banners for it. Cleared when the screen loses focus.
@@ -148,6 +155,31 @@ export default function ChatScreen() {
     sendReaction(target.id, emoji, !already);
   };
 
+  // Tap a Röbel-Münzen payment bubble → the shared transaction-detail screen
+  // (same one the Belohnungen "Verlauf" opens). Counterparty is the resolved
+  // peer name; amount keeps 2 decimals since chat payments are often < 1.
+  const handleOpenPaymentDetails = (message: Message) => {
+    const payment = message.payment;
+    if (!payment) return;
+    const sent = !!myAccountId && message.sender_account_id === myAccountId;
+    const amountText = `${sent ? '− ' : '+ '}${payment.amount.toLocaleString('de-DE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+    router.push({
+      pathname: '/transaction',
+      params: {
+        direction: sent ? 'out' : 'in',
+        title: peerDisplayName || (sent ? 'Gesendet' : 'Erhalten'),
+        amountText,
+        currency: 'muenzen',
+        timestamp: String(Date.parse(message.created_at)),
+        ...(payment.txHash ? { txHash: payment.txHash } : {}),
+        ...(peerDisplayName ? { name: peerDisplayName } : {}),
+      },
+    } as any);
+  };
+
   const renderMessage = ({ item }: { item: Message }) => (
     <MessageBubble
       message={item}
@@ -156,6 +188,7 @@ export default function ChatScreen() {
       peerFrameUrl={peerAccount?.equippedFrameUrl ?? null}
       onLongPress={xmtpActive && item.source === 'xmtp' ? setReactionTarget : undefined}
       onToggleReaction={xmtpActive ? handleToggleReaction : undefined}
+      onPressPayment={handleOpenPaymentDetails}
       showRead={item.id === readMessageId}
     />
   );
