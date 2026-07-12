@@ -88,12 +88,15 @@ export default function NewConversationScreen() {
     activeAccount?.id ?? null
   );
 
-  const openConversation = async (peerAccountId: string) => {
+  const openConversation = async (peerAccountId: string, force = false) => {
     if (!activeAccount?.id) {
       requireAuth(() => {});
       return;
     }
-    if (isOpening) return;
+    // `force` bypasses the re-entrancy guard for callers that already hold it
+    // (openWalletConversation) — setState is async, so the closure still sees
+    // the old isOpening value.
+    if (isOpening && !force) return;
     setIsOpening(peerAccountId);
     setErrorMessage(null);
     Keyboard.dismiss();
@@ -164,8 +167,7 @@ export default function NewConversationScreen() {
         setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
         return;
       }
-      setIsOpening(null);
-      await openConversation(externId);
+      await openConversation(externId, true);
     } catch (err) {
       console.error('Failed to open wallet conversation:', err);
       setErrorMessage('Konversation konnte nicht gestartet werden. Bitte versuche es erneut.');
