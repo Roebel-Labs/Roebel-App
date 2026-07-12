@@ -30,6 +30,7 @@ import {
   updateAppManifest,
 } from "@/lib/miniapp/data";
 import { deleteData, listData, setData } from "@/lib/miniapp/dataStore";
+import { importImagesFromWebsite } from "@/lib/miniapp/images/importFromWebsite";
 import { getDocsSection, buildLlmsFullTxt, DOCS_BASE_URL } from "@/lib/miniapp/devdocs";
 import { MINI_APPS_SITE_DOMAIN } from "@/lib/miniapp/siteDomain";
 import { verifyApiKey } from "@/lib/miniapp/keys";
@@ -328,6 +329,26 @@ const handler = createMcpHandler(
         }
         const item = await setData(row.id, "app", key, value, null);
         return json({ ok: true, item });
+      },
+    );
+
+    server.tool(
+      "import_images_from_url",
+      "Import images from an external website into one of your apps' Mini-CMS: fetches the page, stores its images on the Röbel platform (no hotlinking) and writes [{url, alt}] into the content key (default 'bilder'). The app reads them at runtime via sdk.data.get(key).",
+      {
+        app: z.string().min(1).describe("slug or uuid"),
+        url: z.string().url().describe("website (or direct image URL) to import from"),
+        key: z.string().min(1).max(64).optional().describe("content key, default 'bilder'"),
+        limit: z.number().int().min(1).max(16).optional().describe("max images, default 8"),
+      },
+      async ({ app, url, key, limit }, extra) => {
+        const { developerId } = requireDev(extra);
+        const row = await getApp(app);
+        if (!row || row.developer_id !== developerId) {
+          throw new Error(`App "${app}" not found for this account.`);
+        }
+        const result = await importImagesFromWebsite({ appId: row.id, pageUrl: url, key, limit });
+        return json({ ok: true, ...result });
       },
     );
 

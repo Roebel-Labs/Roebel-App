@@ -38,6 +38,11 @@ import { PublishDialog, type PublishSuccess } from "./components/PublishDialog";
 import { fetchChat, schedulePush, trimForServer } from "./lib/chatSync";
 import { uploadContentImage } from "./lib/cmsData";
 import {
+  buildImportPromptBlock,
+  detectImageImportIntent,
+  runImageImport,
+} from "./lib/cmsImport";
+import {
   buildCmsPromptBlock,
   fetchCmsPlan,
   type CmsKeyPlan,
@@ -110,6 +115,8 @@ export default function NewMiniAppBuilderPage() {
   // Sidebar-wide image drop target state (visible overlay while dragging).
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
+  // Website→CMS image import in progress (hostname shown in the chat strip).
+  const [importingFrom, setImportingFrom] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState<PublishSuccess | null>(null);
@@ -659,7 +666,7 @@ export default function NewMiniAppBuilderPage() {
   const send = useCallback(
     async (text: string) => {
       let trimmed = text.trim();
-      if (streaming || checkingCms) return;
+      if (streaming || checkingCms || importingFrom) return;
       if (trimmed.length < 3) {
         if (attachments.length === 0) return;
         trimmed = "Setze die angehängte Vorlage als Mini-App um.";
@@ -690,6 +697,69 @@ export default function NewMiniAppBuilderPage() {
         imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
         elementLabel: inspected ? elementLabel(inspected) : undefined,
       };
+      const hadImages = attachments.length > 0;
+      const fullImages = attachments.map((a) => a.dataUrl);
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setAttachments([]);
+      setInspected(null);
+      setRuntimeErrors([]);
+
+      // German "Bilder von <Website> übernehmen" intent: pull the images into
+      // the Mini-CMS FIRST (server-side fetch → content storage → data key),
+      // then let this same turn wire the display against sdk.data.
+      let importBlock = "";
+      const importIntent = detectImageImportIntent(trimmed);
+      if (importIntent) {
+        if (!published?.slug || !wallet) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content:
+                "Hinweis: Website-Bilder kann ich erst fest in die Inhalte (Mini-CMS) übernehmen, wenn die App veröffentlicht ist. Ich baue jetzt erst einmal — veröffentliche die App danach und schick mir die Import-Anfrage noch einmal.",
+            },
+          ]);
+        } else {
+          let host = importIntent.url;
+          try {
+            host = new URL(importIntent.url).hostname;
+          } catch {
+            /* raw match stays */
+          }
+          setImportingFrom(host);
+          const imported = await runImageImport(
+            published.slug,
+            wallet,
+            importIntent.url,
+            importIntent.key,
+          );
+          setImportingFrom(null);
+          if (!imported.ok) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uid(),
+                role: "assistant",
+                content: `Bild-Import von ${host} fehlgeschlagen: ${imported.error}`,
+                error: true,
+              },
+            ]);
+            return;
+          }
+          importBlock = buildImportPromptBlock(imported.result);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: `${imported.result.images.length} Bilder von ${imported.result.sourceHost} übernommen — sie liegen jetzt in den Inhalten unter „${imported.result.key}“ (Tab „Inhalte“, dort auch austauschbar). Ich baue die Anzeige jetzt ein…`,
+            },
+          ]);
+        }
+      }
+
       // Assistant history goes to the model as its short notes, not full code —
       // the current document is attached separately server-side. The newest turn
       // carries the element context ("Bearbeiten" mode) + full-size attachments.
@@ -704,19 +774,12 @@ export default function NewMiniAppBuilderPage() {
           if (isLast && imageUrls.length > 0) {
             content += `\n\n[Die angehängten Bilder liegen als öffentliche URLs vor — nutze sie direkt (z. B. in <img src>) statt Platzhaltern: ${imageUrls.join(" ")}]`;
           }
+          if (isLast && importBlock) content += importBlock;
           content = content.slice(0, 12000);
           return isLast && attachments.length > 0
             ? { role: m.role, content, images: attachments.map((a) => a.dataUrl) }
             : { role: m.role, content };
         });
-
-      const hadImages = attachments.length > 0;
-      const fullImages = attachments.map((a) => a.dataUrl);
-      setMessages((prev) => [...prev, userMsg]);
-      setInput("");
-      setAttachments([]);
-      setInspected(null);
-      setRuntimeErrors([]);
 
       // FIRST build: quick pre-flight — would this app benefit from the
       // Mini-CMS? If yes, show the setup card and defer the generation until
@@ -737,7 +800,7 @@ export default function NewMiniAppBuilderPage() {
 
       void runGeneration(convo, hadImages);
     },
-    [messages, versions.length, streaming, checkingCms, attachments, inspected, published, wallet, runGeneration],
+    [messages, versions.length, streaming, checkingCms, importingFrom, attachments, inspected, published, wallet, runGeneration],
   );
 
   /** Decision on the CMS setup card: build with the confirmed keys or without. */
@@ -1071,6 +1134,14 @@ export default function NewMiniAppBuilderPage() {
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
                 <p className="font-mono text-[11px] text-muted-foreground">
                   ⌁ Prüfe, ob ein Mini-CMS für diese App sinnvoll ist…
+                </p>
+              </div>
+            ) : null}
+            {importingFrom ? (
+              <div className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  ⌁ Bilder von {importingFrom} werden in die Inhalte übernommen…
                 </p>
               </div>
             ) : null}
