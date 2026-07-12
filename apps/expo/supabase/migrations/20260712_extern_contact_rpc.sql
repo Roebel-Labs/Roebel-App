@@ -28,8 +28,10 @@ begin
     return v_account;
   end if;
 
-  insert into users (wallet_address)
-  values (v_wallet)
+  -- Explicit tier: the column default ('resident') predates the current
+  -- users_tier_check (guest|tourist|citizen) and would fail the insert.
+  insert into users (wallet_address, tier)
+  values (v_wallet, 'guest')
   on conflict (wallet_address) do nothing;
 
   insert into accounts (account_type, name, is_extern)

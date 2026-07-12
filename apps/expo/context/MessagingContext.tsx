@@ -52,14 +52,20 @@ async function mergeXmtpInbox(
   adoptedWallets: Set<string>,
   allowAdoption: boolean
 ): Promise<{ rows: ConversationWithLastMessage[]; xmtpUnread: number; adopted: boolean }> {
+  // Personal chats are XMTP-only: even when the XMTP side is empty or
+  // errors, legacy Supabase-only personal rows must never surface.
+  const withoutPersonal = () => rows.filter((r) => r.peerAccountType !== 'personal');
+
   let entries: XmtpInboxEntry[] = [];
   try {
     entries = await listXmtpInbox(handle);
   } catch (err) {
     console.warn('[xmtp] inbox list failed', err);
-    return { rows, xmtpUnread: 0, adopted: false };
+    return { rows: withoutPersonal(), xmtpUnread: 0, adopted: false };
   }
-  if (entries.length === 0) return { rows, xmtpUnread: 0, adopted: false };
+  if (entries.length === 0) {
+    return { rows: withoutPersonal(), xmtpUnread: 0, adopted: false };
+  }
 
   let xmtpUnread = 0;
   let adopted = false;
