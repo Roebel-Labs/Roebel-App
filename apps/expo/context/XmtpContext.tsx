@@ -145,10 +145,24 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
     }
   }, [baseAccount, activating]);
 
-  // ── Message stream (re-armed on app foreground) ────────────────
+  // ── Message stream (re-armed on foreground AND after mid-session drops) ──
   const startStream = useCallback(async (h: XmtpClientHandle) => {
     const streamKey = `${h.wallet}:${Date.now()}`;
     streamingForRef.current = streamKey;
+
+    // Network blips kill the gRPC stream without an app-state change (seen
+    // live: "h2 protocol error" on SubscribeGroupMessages). Re-arm after a
+    // short pause instead of waiting for the next foreground.
+    const scheduleRearm = () => {
+      if (streamingForRef.current !== streamKey) return;
+      streamingForRef.current = null;
+      setTimeout(() => {
+        if (!streamingForRef.current && AppState.currentState === 'active') {
+          startStream(h);
+        }
+      }, 3000);
+    };
+
     try {
       await h.client.conversations.streamAllMessages(
         async (message) => {
@@ -162,14 +176,11 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
         },
         'dms',
         ['allowed', 'unknown'],
-        () => {
-          // Stream closed (backgrounding, network). Foreground handler re-arms.
-          if (streamingForRef.current === streamKey) streamingForRef.current = null;
-        }
+        scheduleRearm
       );
     } catch (err) {
       console.warn('[xmtp] streamAllMessages failed', err);
-      if (streamingForRef.current === streamKey) streamingForRef.current = null;
+      scheduleRearm();
     }
   }, []);
 
