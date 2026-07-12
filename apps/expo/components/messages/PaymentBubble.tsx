@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import type { MessagePayment } from '@/lib/supabase-messages';
 
@@ -30,7 +31,11 @@ export default function PaymentBubble({ payment, isOwn }: Props) {
           : [styles.cardOther, { backgroundColor: colors.surface, borderColor: colors.border }],
       ]}
     >
-      <Text style={styles.coin}>🪙</Text>
+      <Image
+        source={require('@/assets/illustration/taler/single.png')}
+        style={styles.coin}
+        contentFit="contain"
+      />
       <View style={styles.textCol}>
         <Text
           style={[styles.amount, { color: isOwn ? colors.onPrimary : colors.textPrimary }]}
@@ -64,7 +69,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   coin: {
-    fontSize: 26,
+    width: 34,
+    height: 34,
   },
   textCol: {
     flexShrink: 1,

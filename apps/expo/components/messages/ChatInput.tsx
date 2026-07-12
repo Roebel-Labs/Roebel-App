@@ -76,7 +76,11 @@ export default function ChatInput({ onSend, isSending, onOpenPayment }: Props) {
             onPress={onOpenPayment}
             accessibilityLabel="Röbel Münzen senden"
           >
-            <Text style={styles.coinButtonText}>🪙</Text>
+            <Image
+              source={require('@/assets/illustration/taler/single.png')}
+              style={styles.coinButtonImage}
+              contentFit="contain"
+            />
           </Pressable>
         )}
         <Pressable
@@ -134,8 +138,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  coinButtonText: {
-    fontSize: 22,
+  coinButtonImage: {
+    width: 28,
+    height: 28,
   },
   input: {
     flex: 1,

@@ -52,19 +52,19 @@ async function mergeXmtpInbox(
   adoptedWallets: Set<string>,
   allowAdoption: boolean
 ): Promise<{ rows: ConversationWithLastMessage[]; xmtpUnread: number; adopted: boolean }> {
-  // Personal chats are XMTP-only: even when the XMTP side is empty or
-  // errors, legacy Supabase-only personal rows must never surface.
-  const withoutPersonal = () => rows.filter((r) => r.peerAccountType !== 'personal');
-
+  // The personal inbox is PURE XMTP (2026-07-12): only conversations with an
+  // XMTP counterpart appear — legacy Supabase chats AND org chats are hidden.
+  // (Org threads still open via marketplace/support deep links; they return
+  // to the inbox once org accounts move to XMTP groups.)
   let entries: XmtpInboxEntry[] = [];
   try {
     entries = await listXmtpInbox(handle);
   } catch (err) {
     console.warn('[xmtp] inbox list failed', err);
-    return { rows: withoutPersonal(), xmtpUnread: 0, adopted: false };
+    return { rows: [], xmtpUnread: 0, adopted: false };
   }
   if (entries.length === 0) {
-    return { rows: withoutPersonal(), xmtpUnread: 0, adopted: false };
+    return { rows: [], xmtpUnread: 0, adopted: false };
   }
 
   let xmtpUnread = 0;
@@ -129,12 +129,10 @@ async function mergeXmtpInbox(
     }
   }
 
-  // Hide personal-peer rows without an XMTP conversation — legacy
-  // Supabase-only chats are gone from the inbox. Org rows always stay.
+  // Only rows with an XMTP counterpart survive — everything else (legacy
+  // Supabase personal chats, org chats) is hidden from the inbox.
   const visible = merged.filter(
-    (r) =>
-      r.peerAccountType !== 'personal' ||
-      (r.peerOwnerWallet != null && matchedWallets.has(r.peerOwnerWallet))
+    (r) => r.peerOwnerWallet != null && matchedWallets.has(r.peerOwnerWallet)
   );
 
   visible.sort((a, b) => {
@@ -195,22 +193,18 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         convos = result.rows;
         if (accountIdRef.current === accountId) setXmtpUnread(result.xmtpUnread);
       } else {
-        // No XMTP client (not activated / org account without personal rail):
-        // personal chats are XMTP-only, so a personal active account without
-        // a client shows no personal-peer rows at all.
+        // No XMTP client (not yet activated): the personal inbox is pure
+        // XMTP, so nothing is listed until activation.
         if (accountTypeRef.current === 'personal') {
-          convos = convos.filter((r) => r.peerAccountType !== 'personal');
+          convos = [];
         }
         if (accountIdRef.current === accountId) setXmtpUnread(0);
       }
 
-      // Personal accounts: the get_unread_count RPC also counts hidden
-      // legacy Supabase messages — derive the org-side badge from the
-      // visible rows instead (conversation-level).
+      // Personal accounts: the badge is XMTP-only (the get_unread_count RPC
+      // would count hidden legacy Supabase messages).
       if (accountTypeRef.current === 'personal' && accountIdRef.current === accountId) {
-        setBaseUnread(
-          convos.filter((r) => r.peerAccountType !== 'personal' && r.hasUnread).length
-        );
+        setBaseUnread(0);
       }
 
       // Guard against stale loads after an account switch.
