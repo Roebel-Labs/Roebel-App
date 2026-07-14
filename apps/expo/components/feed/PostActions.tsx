@@ -26,10 +26,8 @@ type Props = {
   repostsCount?: number;
   isReposted?: boolean;
   onRepost?: () => void;
-  /** Views: rendered right-most, muted; hidden when 0/undefined or iconOnly. */
+  /** Views: muted count; hidden when 0/undefined or iconOnly. Non-interactive — nobody sees who viewed. */
   viewsCount?: number;
-  /** When set, the views element is pressable (creator-only viewer list). */
-  onViewsPress?: () => void;
 };
 
 export default function PostActions({
@@ -44,9 +42,10 @@ export default function PostActions({
   isReposted = false,
   onRepost,
   viewsCount,
-  onViewsPress,
 }: Props) {
   const { colors } = useTheme();
+
+  const showViews = !iconOnly && typeof viewsCount === 'number' && viewsCount > 0;
 
   const pngScale = useRef(new Animated.Value(0)).current;
   const pngRotate = useRef(new Animated.Value(0)).current;
@@ -166,7 +165,22 @@ export default function PostActions({
         <ShareIcon width={22} height={22} color={colors.textPrimary} />
       </Pressable>
 
-      <Pressable onPress={handleLikePress} style={[styles.action, styles.heartAction]}>
+      {showViews && (
+        <View
+          style={[styles.action, styles.viewsAction]}
+          accessibilityLabel={`${viewsCount ?? 0} Aufrufe`}
+        >
+          <Text style={[styles.count, { color: colors.textTertiary }]}>
+            {formatCompactCount(viewsCount ?? 0)}
+          </Text>
+          <ViewIcon width={18} height={18} color={colors.textTertiary} />
+        </View>
+      )}
+
+      <Pressable
+        onPress={handleLikePress}
+        style={[styles.action, !showViews && styles.heartAction]}
+      >
         {!iconOnly && likesCount > 0 && (
           <Text
             style={[
@@ -205,20 +219,6 @@ export default function PostActions({
           </Animated.View>
         </View>
       </Pressable>
-
-      {!iconOnly && typeof viewsCount === 'number' && viewsCount > 0 && (
-        <Pressable
-          onPress={onViewsPress}
-          disabled={!onViewsPress}
-          style={styles.action}
-          accessibilityLabel={`${viewsCount} Aufrufe`}
-        >
-          <ViewIcon width={18} height={18} color={colors.textTertiary} />
-          <Text style={[styles.count, { color: colors.textTertiary }]}>
-            {formatCompactCount(viewsCount)}
-          </Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -240,6 +240,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   heartAction: {
+    marginLeft: 'auto',
+  },
+  viewsAction: {
     marginLeft: 'auto',
   },
   count: {

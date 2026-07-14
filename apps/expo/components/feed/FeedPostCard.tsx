@@ -17,7 +17,6 @@ import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from './StadtkasseSnapshotCard';
 import PostActions from './PostActions';
-import PostViewersDrawer from './PostViewersDrawer';
 import QuotedPostPreview from './QuotedPostPreview';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import RepostIcon from '@/assets/icons/repost.svg';
@@ -59,7 +58,6 @@ export default function FeedPostCard({
   const router = useRouter();
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [viewersVisible, setViewersVisible] = useState(false);
 
   // Repost rows render the ORIGINAL post's body; every interaction
   // (like/comment/share/views/repost) binds to that original too. Only the
@@ -72,9 +70,6 @@ export default function FeedPostCard({
     (post.author?.account?.account_type === 'organisation'
       ? post.author?.account?.name
       : post.author?.username) || 'Jemand';
-
-  const isOwnDisplayPost =
-    !!walletAddress && display.wallet_address?.toLowerCase() === walletAddress.toLowerCase();
 
   const handlePress = () => {
     router.push(`/post/${display.id}` as any);
@@ -223,13 +218,6 @@ export default function FeedPostCard({
         isReposted={isReposted}
         onRepost={canRepost ? () => onRepost!(display) : undefined}
         viewsCount={display.views_count ?? 0}
-        onViewsPress={isOwnDisplayPost ? () => setViewersVisible(true) : undefined}
-      />
-
-      <PostViewersDrawer
-        visible={viewersVisible}
-        onClose={() => setViewersVisible(false)}
-        postId={display.id}
       />
 
       <ImageZoomModal

@@ -56,7 +56,6 @@ import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
-import PostViewersDrawer from '@/components/feed/PostViewersDrawer';
 import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import RepostDrawer from '@/components/feed/RepostDrawer';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
@@ -102,7 +101,6 @@ export default function PostDetailScreen() {
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [commentFocused, setCommentFocused] = useState(false);
   const [likers, setLikers] = useState<PostLiker[]>([]);
-  const [viewersDrawerVisible, setViewersDrawerVisible] = useState(false);
   const [repostDrawerVisible, setRepostDrawerVisible] = useState(false);
 
   const {
@@ -641,7 +639,6 @@ export default function PostDetailScreen() {
         isReposted={isReposted(post.id)}
         onRepost={post.feed_type === 'app' ? () => setRepostDrawerVisible(true) : undefined}
         viewsCount={post.views_count ?? 0}
-        onViewsPress={isOwnPost ? () => setViewersDrawerVisible(true) : undefined}
       />
 
       {/* Who liked this — stacked avatars, tappable for the full list */}
@@ -796,12 +793,6 @@ export default function PostDetailScreen() {
         visible={reportDrawerVisible}
         onClose={() => setReportDrawerVisible(false)}
         onReport={handleSubmitReport}
-      />
-
-      <PostViewersDrawer
-        visible={viewersDrawerVisible}
-        onClose={() => setViewersDrawerVisible(false)}
-        postId={post.id}
       />
 
       <RepostDrawer

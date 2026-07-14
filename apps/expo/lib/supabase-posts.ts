@@ -500,47 +500,6 @@ export async function getUserRepostedPostIds(
   return new Set(data.map((r: any) => r.quoted_post_id).filter(Boolean));
 }
 
-// ─── Views ──────────────────────────────────────────────────
-
-export type PostViewer = {
-  wallet_address: string;
-  view_count: number;
-  username: string | null;
-  display_name: string | null;
-  profile_picture_url: string | null;
-};
-
-/** Everyone who viewed a post, with per-user counts — for the creator-only drawer. */
-export async function getPostViewers(postId: string): Promise<PostViewer[]> {
-  const { data: views, error } = await supabase
-    .from('post_views')
-    .select('wallet_address, view_count')
-    .eq('post_id', postId)
-    .order('view_count', { ascending: false })
-    .limit(200);
-  if (error || !views || views.length === 0) return [];
-
-  const wallets = views.map((v: any) => v.wallet_address);
-  const { data: users } = await supabase
-    .from('users')
-    .select('wallet_address, username, display_name, profile_picture_url')
-    .in('wallet_address', wallets);
-
-  const byWallet = new Map<string, any>(
-    (users ?? []).map((u: any) => [u.wallet_address.toLowerCase(), u]),
-  );
-  return views.map((v: any) => {
-    const u = byWallet.get(v.wallet_address.toLowerCase());
-    return {
-      wallet_address: v.wallet_address,
-      view_count: v.view_count,
-      username: u?.username ?? null,
-      display_name: u?.display_name ?? null,
-      profile_picture_url: u?.profile_picture_url ?? null,
-    };
-  });
-}
-
 // ─── Likes ──────────────────────────────────────────────────
 
 /**
