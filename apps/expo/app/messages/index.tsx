@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
-import XmtpActivationSheet from '@/components/messages/XmtpActivationSheet';
+import XmtpActivationView from '@/components/messages/XmtpActivationView';
 import { useXmtp } from '@/context/XmtpContext';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
@@ -67,13 +67,9 @@ export default function MessagesScreen() {
 
   const isConnected = !!account;
 
-  // Auto-present the one-time "Private Nachrichten aktivieren" sheet while
-  // this device hasn't registered its XMTP inbox yet.
+  // While this device hasn't registered its XMTP inbox yet, the screen shows
+  // the one-time "Private Nachrichten aktivieren" view instead of the inbox.
   const { activationAvailable } = useXmtp();
-  const [showActivationSheet, setShowActivationSheet] = useState(false);
-  useEffect(() => {
-    if (activationAvailable && isConnected) setShowActivationSheet(true);
-  }, [activationAvailable, isConnected]);
 
   const renderConversation = ({ item }: { item: ConversationWithLastMessage }) => (
     <ConversationListItem
@@ -125,6 +121,11 @@ export default function MessagesScreen() {
             </Pressable>
           </View>
         </View>
+      ) : activationAvailable ? (
+        <View style={styles.notConnectedContent}>
+          <MeckyRow />
+          <XmtpActivationView />
+        </View>
       ) : (
         <FlatList
           data={conversations}
@@ -162,11 +163,6 @@ export default function MessagesScreen() {
           ListFooterComponent={<View style={styles.bottomPadding} />}
         />
       )}
-
-      <XmtpActivationSheet
-        visible={showActivationSheet}
-        onClose={() => setShowActivationSheet(false)}
-      />
     </SafeAreaView>
   );
 }
