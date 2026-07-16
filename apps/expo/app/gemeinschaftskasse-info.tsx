@@ -74,6 +74,13 @@ export default function GemeinschaftskasseInfoScreen() {
           von wenigen.
         </Section>
 
+        <Pressable
+          onPress={() => router.push("/donate" as any)}
+          style={({ pressed }) => [styles.donateCta, { opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={styles.donateCtaText}>Gemeinschaftskasse unterstützen</Text>
+        </Pressable>
+
         <View style={styles.note}>
           <Text style={styles.noteText}>
             Hinweis: Die Gemeinschaftskasse ist ein offenes Experiment. Der angezeigte Euro-Betrag
@@ -134,6 +141,14 @@ function makeStyles(colors: any) {
     },
     cardTitle: { fontFamily: "Inter-SemiBold", fontSize: 16, color: colors.textPrimary, marginBottom: 6 },
     cardBody: { fontFamily: "Inter-Regular", fontSize: 14, lineHeight: 21, color: colors.textSecondary },
+    donateCta: {
+      backgroundColor: colors.primary,
+      borderRadius: 999,
+      paddingVertical: 14,
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    donateCtaText: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
     note: { marginTop: 4, padding: 14, borderRadius: 12, backgroundColor: colors.surface },
     noteText: { fontFamily: "Inter-Regular", fontSize: 12, lineHeight: 18, color: colors.textTertiary },
   });

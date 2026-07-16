@@ -98,6 +98,12 @@ export default function TreasuryScreen() {
 								{fmtEurUnit(euroFiat)}
 							</Text>
 						)}
+						<Pressable
+							onPress={() => router.push("/donate" as any)}
+							style={({ pressed }) => [styles.donateBtn, { opacity: pressed ? 0.8 : 1 }]}
+						>
+							<Text style={styles.donateBtnText}>Unterstützen</Text>
+						</Pressable>
 					</View>
 
 					{/* White sheet — balance + history */}
@@ -179,6 +185,14 @@ function makeStyles(colors: any, isDark: boolean) {
 		scroll: { flex: 1 },
 		content: { flexGrow: 1 },
 		hero: { alignItems: "center", paddingTop: 28, paddingBottom: 36, paddingHorizontal: 24 },
+		donateBtn: {
+			marginTop: 18,
+			backgroundColor: colors.primary,
+			borderRadius: 999,
+			paddingHorizontal: 28,
+			paddingVertical: 12,
+		},
+		donateBtnText: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
 		heroLabel: { fontFamily: "Inter-Medium", fontSize: 16, color: colors.textSecondary },
 		heroValue: {
 			fontFamily: "Inter-SemiBold",
