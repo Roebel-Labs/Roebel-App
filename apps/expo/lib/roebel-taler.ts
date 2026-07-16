@@ -163,7 +163,8 @@ async function getXdaiEurRate(): Promise<number> {
 	return xdaiEurCache?.rate ?? XDAI_EUR_FALLBACK;
 }
 
-const EURE_ADDRESS = "0xcB444e90D8198415266c6a2724b7900fb12FC56E";
+// Monerium EURe V2 on Gnosis (V1 0xcB444e90… is deprecated; IBAN mints target V2).
+const EURE_ADDRESS = "0x420CA0f9B9b604cE0fd9C18EF134C705e5Fa3430";
 
 /**
  * Historical xDAI→€ rate for the UTC day of `tsMs`.

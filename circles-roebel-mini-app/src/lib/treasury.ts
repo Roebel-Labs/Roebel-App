@@ -10,8 +10,8 @@ import { HUB, ROEBEL_GROUP, GNOSIS_RPC } from "./circles";
 
 // Stadtkasse / Gemeinschaftskasse multisig (group owner, funds the Funder).
 export const TREASURY_SAFE = "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa" as const;
-// Regulated euro stablecoin (Monerium EURe) on Gnosis — 18 decimals.
-export const EURE = "0xcB444e90D8198415266c6a2724b7900fb12FC56E" as const;
+// Regulated euro stablecoin (Monerium EURe V2) on Gnosis — 18 decimals. V1 0xcB444e90… is deprecated.
+export const EURE = "0x420CA0f9B9b604cE0fd9C18EF134C705e5Fa3430" as const;
 // xDAI is ~USD-pegged; indicative € conversion (matches apps/web + apps/expo XDAI_EUR).
 const XDAI_EUR = 0.92;
 // The group's ERC-1155 token id on the Hub is uint256(group address).

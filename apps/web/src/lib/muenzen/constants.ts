@@ -59,7 +59,7 @@ export const ADDR = {
   attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82", // AttesterNFTv2 (Gnosis; v1 0x7bD6Fd97385BCCf6000380ADd3BF19737c6063C4)
   membershipCondition: "0x10644F137cDBE9Af5651C8607A6FBa8AfA5276f6", // CitizenMembershipCondition (mint gate)
   nameRegistry: "0xA27566fD89162cC3D40Cb59c87AAaA49B85F3474", // NameRegistry (avatar profiles)
-  eure: "0xcB444e90D8198415266c6a2724b7900fb12FC56E", // EURe (regulated euro) on Gnosis
+  eure: "0x420CA0f9B9b604cE0fd9C18EF134C705e5Fa3430", // EURe V2 (regulated euro, Monerium) on Gnosis — V1 0xcB444e90… deprecated
   metri: "0x1f14C82926227d948b9a756Db9aEB77fe51273c3", // town Metri wallet (holder)
 } as const;
 
