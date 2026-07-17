@@ -216,9 +216,6 @@ export default function ExploreScreen() {
             {/* Movies */}
             <MovieSection movies={movies} />
 
-            {/* Deals */}
-            <DealsGridSection deals={deals} />
-
             {/* Mini Apps store entry */}
             <MiniAppsEntry />
 
@@ -227,6 +224,9 @@ export default function ExploreScreen() {
 
             {/* News */}
             <NewsSection articles={newsArticles} />
+
+            {/* Deals */}
+            <DealsGridSection deals={deals} />
 
             {/* Restaurants */}
             <RestaurantSection restaurants={restaurants} />
