@@ -15,6 +15,7 @@ import PostYouTubePreview from './PostYouTubePreview';
 import PostPollView from './PostPollView';
 import PostLinkedEventCard from './PostLinkedEventCard';
 import PostLinkedMarketplaceCard from './PostLinkedMarketplaceCard';
+import PostLinkedMiniAppCard from './PostLinkedMiniAppCard';
 import StadtkasseSnapshotCard from './StadtkasseSnapshotCard';
 import PostActions from './PostActions';
 import QuotedPostPreview from './QuotedPostPreview';
@@ -155,6 +156,10 @@ export default function FeedPostCard({
 
         {display.linked_marketplace && (
           <PostLinkedMarketplaceCard listing={display.linked_marketplace} />
+        )}
+
+        {display.linked_mini_app && (
+          <PostLinkedMiniAppCard miniApp={display.linked_mini_app} />
         )}
 
         {display.stadtkasse_snapshot && (

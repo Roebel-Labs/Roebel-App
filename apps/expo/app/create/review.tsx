@@ -22,6 +22,7 @@ import { createPost, createPoll, PostingDeniedError } from '@/lib/supabase-posts
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import PostLinkedMiniAppCard from '@/components/feed/PostLinkedMiniAppCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostVideoPlayer from '@/components/feed/PostVideoPlayer';
 import PostImageGrid from '@/components/feed/PostImageGrid';
@@ -51,7 +52,8 @@ export default function ReviewScreen() {
   const walletAddress = user?.wallet_address || '';
 
   const handlePost = async () => {
-    const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
+    const hasLinkedItem =
+      !!draft.linkedEventId || !!draft.linkedMarketplaceId || !!draft.linkedMiniAppId;
     const hasSticker = !!draft.sticker;
     const hasStadtkasse = !!draft.stadtkasseSnapshot;
     const hasQuote = !!draft.quotedPostId;
@@ -59,7 +61,7 @@ export default function ReviewScreen() {
     setIsSubmitting(true);
 
     try {
-      const content = draft.content.trim() || (draft.linkedEventId ? 'Schaut euch dieses Event an!' : draft.linkedMarketplaceId ? 'Schaut euch diese Anzeige an!' : '');
+      const content = draft.content.trim() || (draft.linkedEventId ? 'Schaut euch dieses Event an!' : draft.linkedMarketplaceId ? 'Schaut euch diese Anzeige an!' : draft.linkedMiniAppId ? 'Schaut euch diese Mini-App an!' : '');
       const post = await createPost({
         wallet_address: walletAddress,
         account_id: activeAccount?.id,
@@ -72,6 +74,7 @@ export default function ReviewScreen() {
         video_url: draft.videoUrl || undefined,
         linked_event_id: draft.linkedEventId || undefined,
         linked_marketplace_id: draft.linkedMarketplaceId || undefined,
+        linked_mini_app_id: draft.linkedMiniAppId || undefined,
         sticker_reward_id: draft.sticker?.id ?? null,
         stadtkasse_snapshot: draft.stadtkasseSnapshot ?? undefined,
       });
@@ -176,6 +179,10 @@ export default function ReviewScreen() {
 
           {draft.linkedMarketplaceData && (
             <PostLinkedMarketplaceCard listing={draft.linkedMarketplaceData} />
+          )}
+
+          {draft.linkedMiniAppData && (
+            <PostLinkedMiniAppCard miniApp={draft.linkedMiniAppData} />
           )}
 
           {draft.stadtkasseSnapshot && (

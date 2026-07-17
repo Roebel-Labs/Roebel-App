@@ -11,7 +11,22 @@ export type PostCategory =
   | 'generell';
 
 export type FeedType = 'main' | 'rathaus' | 'app';
-export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share' | 'event_experience' | 'repost' | 'quote';
+export type PostType = 'user' | 'mecky' | 'event_share' | 'marketplace_share' | 'event_experience' | 'repost' | 'quote' | 'mini_app_share';
+
+/**
+ * A mini app referenced by a post (raw `mini_apps` columns). Hydrated
+ * client-side in `attachLinkedMiniApps()` — not a PostgREST embed — so feeds
+ * keep loading before the add_mini_app_share migration is applied.
+ */
+export type LinkedMiniAppRef = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon_url: string | null;
+  primary_color: string | null;
+  category: string | null;
+};
 
 export type PostAuthor = Pick<
   UserRecord,
@@ -78,6 +93,8 @@ export type PostRecord = {
   post_type: PostType;
   linked_event_id: string | null;
   linked_marketplace_id: string | null;
+  /** Undefined until the add_mini_app_share migration is applied. */
+  linked_mini_app_id?: string | null;
   linked_mecky_draft_id: string | null;
   linked_experience_id: string | null;
   sticker_reward_id: string | null;
@@ -101,6 +118,7 @@ export type PostRecord = {
   quoted_post?: PostRecord | null;
   linked_event?: Pick<EventRecord, 'id' | 'title' | 'date' | 'time' | 'location' | 'image_url' | 'category'>;
   linked_marketplace?: Pick<MarketplaceListingRecord, 'id' | 'title' | 'price' | 'price_type' | 'category' | 'condition' | 'media_urls' | 'neighborhood'>;
+  linked_mini_app?: LinkedMiniAppRef | null;
 };
 
 export type PostCommentRecord = {
@@ -170,6 +188,7 @@ export type CreatePostInput = {
   video_url?: string;
   linked_event_id?: string;
   linked_marketplace_id?: string;
+  linked_mini_app_id?: string;
   linked_mecky_draft_id?: string;
   linked_experience_id?: string;
   quoted_post_id?: string;

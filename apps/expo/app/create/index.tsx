@@ -28,6 +28,7 @@ import type { PostCategory, FeedType } from '@/lib/types/feed';
 import { isOrgAccount } from '@/lib/types';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import PostLinkedMiniAppCard from '@/components/feed/PostLinkedMiniAppCard';
 import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import AtMentionSheet from '@/components/feed/AtMentionSheet';
@@ -94,6 +95,13 @@ export default function CreateScreen() {
     linkedListingCondition?: string;
     linkedListingMediaUrls?: string;
     linkedListingNeighborhood?: string;
+    linkedMiniAppId?: string;
+    linkedMiniAppSlug?: string;
+    linkedMiniAppName?: string;
+    linkedMiniAppDescription?: string;
+    linkedMiniAppIconUrl?: string;
+    linkedMiniAppPrimaryColor?: string;
+    linkedMiniAppCategory?: string;
     quotedPostId?: string;
   }>();
   const { user, isCitizen, updateProfile } = useUser();
@@ -153,6 +161,21 @@ export default function CreateScreen() {
     }
   }, [params.linkedListingId]);
 
+  // Initialize linked mini app from route params (coming from the store detail page)
+  useEffect(() => {
+    if (params.linkedMiniAppId && params.linkedMiniAppSlug && !draft.linkedMiniAppId) {
+      draft.setLinkedMiniApp(params.linkedMiniAppId, {
+        id: params.linkedMiniAppId,
+        slug: params.linkedMiniAppSlug,
+        name: params.linkedMiniAppName || '',
+        description: params.linkedMiniAppDescription || null,
+        icon_url: params.linkedMiniAppIconUrl || null,
+        primary_color: params.linkedMiniAppPrimaryColor || null,
+        category: params.linkedMiniAppCategory || null,
+      });
+    }
+  }, [params.linkedMiniAppId]);
+
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
@@ -189,7 +212,8 @@ export default function CreateScreen() {
     }
   }, [isCitizen, draft.feedType]);
 
-  const hasLinkedItem = !!draft.linkedEventId || !!draft.linkedMarketplaceId;
+  const hasLinkedItem =
+    !!draft.linkedEventId || !!draft.linkedMarketplaceId || !!draft.linkedMiniAppId;
 
   const canProceed =
     postingAllowed &&
@@ -463,6 +487,18 @@ export default function CreateScreen() {
           {draft.linkedMarketplaceData && (
             <View style={styles.linkedItemWrapper}>
               <PostLinkedMarketplaceCard listing={draft.linkedMarketplaceData} />
+              <Pressable
+                onPress={draft.clearLinkedItem}
+                style={[styles.linkedItemRemove, { backgroundColor: colors.error }]}
+              >
+                <Ionicons name="close" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+
+          {draft.linkedMiniAppData && (
+            <View style={styles.linkedItemWrapper}>
+              <PostLinkedMiniAppCard miniApp={draft.linkedMiniAppData} />
               <Pressable
                 onPress={draft.clearLinkedItem}
                 style={[styles.linkedItemRemove, { backgroundColor: colors.error }]}

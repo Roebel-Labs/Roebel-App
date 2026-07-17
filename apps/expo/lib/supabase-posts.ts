@@ -9,6 +9,7 @@ import type {
   CreatePollInput,
   CreatePostLinkInput,
   PollVoteRecord,
+  LinkedMiniAppRef,
 } from './types/feed';
 
 const PAGE_SIZE = 15;
@@ -71,6 +72,36 @@ async function attachQuotedPosts<T extends PostRecord>(rows: T[]): Promise<T[]> 
   return rows;
 }
 
+/**
+ * Hydrate `linked_mini_app` onto mini-app-share rows (and their quoted
+ * originals) in one batched query. Client-side instead of a PostgREST embed so
+ * every feed keeps loading before the add_mini_app_share migration is applied
+ * (an unknown embed would fail the whole select). RLS only exposes live apps —
+ * shares of delisted apps simply render without the card.
+ */
+async function attachLinkedMiniApps<T extends PostRecord>(rows: T[]): Promise<T[]> {
+  const targets = rows.flatMap((r) => [r, ...(r.quoted_post ? [r.quoted_post] : [])]);
+  const ids = Array.from(
+    new Set(targets.map((r) => r.linked_mini_app_id).filter(Boolean)),
+  ) as string[];
+  if (ids.length === 0) return rows;
+
+  const { data, error } = await supabase
+    .from('mini_apps')
+    .select('id, slug, name, description, icon_url, primary_color, category')
+    .in('id', ids)
+    .eq('status', 'live');
+  if (error || !data) return rows;
+
+  const byId = new Map(
+    (data as LinkedMiniAppRef[]).map((a) => [a.id, a]),
+  );
+  targets.forEach((r) => {
+    if (r.linked_mini_app_id) r.linked_mini_app = byId.get(r.linked_mini_app_id) ?? null;
+  });
+  return rows;
+}
+
 export async function fetchFeedPosts(options: {
   feedType: FeedType;
   page: number;
@@ -121,7 +152,7 @@ export async function fetchFeedPosts(options: {
   }
 
   return {
-    data: await attachQuotedPosts(rows),
+    data: await attachLinkedMiniApps(await attachQuotedPosts(rows)),
     hasMore: data.length === size,
   };
 }
@@ -191,7 +222,7 @@ export async function fetchUserPosts(
   }
 
   return {
-    data: await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor)),
+    data: await attachLinkedMiniApps(await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor))),
     hasMore: data.length === size,
   };
 }
@@ -233,7 +264,7 @@ export async function fetchAccountPosts(
   }
 
   return {
-    data: await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor)),
+    data: await attachLinkedMiniApps(await attachQuotedPosts((data as PostRecord[]).map(mergeAccountIntoAuthor))),
     hasMore: data.length === size,
   };
 }
@@ -264,7 +295,9 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
     return null;
   }
 
-  const [row] = await attachQuotedPosts([mergeAccountIntoAuthor(data as PostRecord)]);
+  const [row] = await attachLinkedMiniApps(
+    await attachQuotedPosts([mergeAccountIntoAuthor(data as PostRecord)]),
+  );
   return row;
 }
 
@@ -333,6 +366,9 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       // keeps working even before the stadtkasse_snapshot migration is applied.
       ...(input.stadtkasse_snapshot ? { stadtkasse_snapshot: input.stadtkasse_snapshot } : {}),
       ...(input.quoted_post_id ? { quoted_post_id: input.quoted_post_id } : {}),
+      // Only reference the column when set — normal posting keeps working
+      // before the add_mini_app_share migration is applied.
+      ...(input.linked_mini_app_id ? { linked_mini_app_id: input.linked_mini_app_id } : {}),
       status: 'published',
     })
     .select(`

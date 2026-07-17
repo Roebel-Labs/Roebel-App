@@ -54,6 +54,7 @@ import PostYouTubePreview from '@/components/feed/PostYouTubePreview';
 import PostPollView from '@/components/feed/PostPollView';
 import PostLinkedEventCard from '@/components/feed/PostLinkedEventCard';
 import PostLinkedMarketplaceCard from '@/components/feed/PostLinkedMarketplaceCard';
+import PostLinkedMiniAppCard from '@/components/feed/PostLinkedMiniAppCard';
 import StadtkasseSnapshotCard from '@/components/feed/StadtkasseSnapshotCard';
 import PostActions from '@/components/feed/PostActions';
 import QuotedPostPreview from '@/components/feed/QuotedPostPreview';
@@ -582,6 +583,7 @@ export default function PostDetailScreen() {
 
       {post.linked_event && <PostLinkedEventCard event={post.linked_event} />}
       {post.linked_marketplace && <PostLinkedMarketplaceCard listing={post.linked_marketplace} />}
+      {post.linked_mini_app && <PostLinkedMiniAppCard miniApp={post.linked_mini_app} />}
       {post.stadtkasse_snapshot && (
         <StadtkasseSnapshotCard
           euro={post.stadtkasse_snapshot.euro}

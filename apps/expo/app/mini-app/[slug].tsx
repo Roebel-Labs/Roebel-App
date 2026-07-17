@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import {
@@ -62,6 +62,7 @@ const BTN_RADIUS = 10;
 export default function MiniAppDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { colors } = useTheme();
+  const router = useRouter();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -106,6 +107,23 @@ export default function MiniAppDetailScreen() {
   const openWebsite = useCallback(() => {
     if (app?.homeUrl) void Linking.openURL(app.homeUrl);
   }, [app?.homeUrl]);
+
+  // "Im Feed teilen" → composer with this app attached as a mini_app_share.
+  const shareToFeed = useCallback(() => {
+    if (!app) return;
+    router.push({
+      pathname: '/create',
+      params: {
+        linkedMiniAppId: app.id,
+        linkedMiniAppSlug: app.slug,
+        linkedMiniAppName: app.name,
+        linkedMiniAppDescription: app.description ?? '',
+        linkedMiniAppIconUrl: app.iconUrl ?? '',
+        linkedMiniAppPrimaryColor: app.primaryColor,
+        linkedMiniAppCategory: app.category,
+      },
+    } as any);
+  }, [app, router]);
 
   // Square (1:1) preview images: the first fills the viewport, the next one
   // peeks in from the right so swiping is discoverable.
@@ -322,6 +340,19 @@ export default function MiniAppDetailScreen() {
                   >
                     <ShareIcon size={16} color={colors.textPrimary} />
                     <Text style={[styles.linkChipText, { color: colors.textPrimary }]}>Teilen</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={shareToFeed}
+                    style={({ pressed }) => [
+                      styles.linkChip,
+                      { backgroundColor: colors.surfaceSecondary },
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <UsersIcon size={16} color={colors.textPrimary} />
+                    <Text style={[styles.linkChipText, { color: colors.textPrimary }]}>
+                      Im Feed teilen
+                    </Text>
                   </Pressable>
                 </View>
               </View>

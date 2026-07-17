@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { probeStreamConfigured, uploadVideoToStream } from '@/lib/stream-upload';
-import type { PostCategory, FeedType, PostType, StadtkasseSnapshot, PostRecord } from '@/lib/types/feed';
+import type { PostCategory, FeedType, PostType, StadtkasseSnapshot, PostRecord, LinkedMiniAppRef } from '@/lib/types/feed';
 import type { EventRecord, MarketplaceListingRecord } from '@/lib/types';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
@@ -28,6 +28,8 @@ type CreatePostState = {
   linkedEventData: LinkedEventData | null;
   linkedMarketplaceId: string | null;
   linkedMarketplaceData: LinkedMarketplaceData | null;
+  linkedMiniAppId: string | null;
+  linkedMiniAppData: LinkedMiniAppRef | null;
   sticker: LootboxReward | null;
   stadtkasseSnapshot: StadtkasseSnapshot | null;
   /** Quote mode: id + preview data of the post being quoted. */
@@ -48,6 +50,7 @@ type CreatePostActions = {
   setPollType: (type: 'single' | 'multi') => void;
   setLinkedEvent: (id: string, data: LinkedEventData) => void;
   setLinkedMarketplace: (id: string, data: LinkedMarketplaceData) => void;
+  setLinkedMiniApp: (id: string, data: LinkedMiniAppRef) => void;
   clearLinkedItem: () => void;
   setSticker: (reward: LootboxReward | null) => void;
   setStadtkasseSnapshot: (snapshot: StadtkasseSnapshot | null) => void;
@@ -76,6 +79,8 @@ const initialState: CreatePostState = {
   linkedEventData: null,
   linkedMarketplaceId: null,
   linkedMarketplaceData: null,
+  linkedMiniAppId: null,
+  linkedMiniAppData: null,
   sticker: null,
   stadtkasseSnapshot: null,
   quotedPostId: null,
@@ -193,6 +198,8 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
       postType: 'event_share',
       linkedMarketplaceId: null,
       linkedMarketplaceData: null,
+      linkedMiniAppId: null,
+      linkedMiniAppData: null,
     }));
   }, []);
 
@@ -204,6 +211,21 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
       postType: 'marketplace_share',
       linkedEventId: null,
       linkedEventData: null,
+      linkedMiniAppId: null,
+      linkedMiniAppData: null,
+    }));
+  }, []);
+
+  const setLinkedMiniApp = useCallback((id: string, data: LinkedMiniAppRef) => {
+    setState((prev) => ({
+      ...prev,
+      linkedMiniAppId: id,
+      linkedMiniAppData: data,
+      postType: 'mini_app_share',
+      linkedEventId: null,
+      linkedEventData: null,
+      linkedMarketplaceId: null,
+      linkedMarketplaceData: null,
     }));
   }, []);
 
@@ -214,6 +236,8 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
       linkedEventData: null,
       linkedMarketplaceId: null,
       linkedMarketplaceData: null,
+      linkedMiniAppId: null,
+      linkedMiniAppData: null,
       postType: 'user',
     }));
   }, []);
@@ -252,6 +276,7 @@ export function CreatePostProvider({ children }: { children: React.ReactNode }) 
         setPollType,
         setLinkedEvent,
         setLinkedMarketplace,
+        setLinkedMiniApp,
         clearLinkedItem,
         setSticker,
         setStadtkasseSnapshot,
