@@ -90,6 +90,8 @@ import {
 } from '@/lib/miniapp-api';
 
 const HEARTBEAT_MS = 25_000;
+/** Failsafe: reveal the WebView if the app never calls actions.ready(). */
+const READY_TIMEOUT_MS = 10_000;
 
 /**
  * Host chrome is always dark (independent of the app theme), so the mini app
@@ -138,6 +140,14 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   const appOpenFiredRef = useRef(false);
 
   const [splashVisible, setSplashVisible] = useState(true);
+  // Bumped on every open: keys the WebView so each open mounts a FRESH page
+  // (fresh hello/ready handshake). Without this, iOS keeps the Modal's
+  // children mounted after the first open+close (Modal.isRendered only clears
+  // via the native onDismiss, which is unreliable on the new architecture) —
+  // the stale, already-ready page never re-sends `ready`, so the reset splash
+  // spins forever on every reopen.
+  const [openCount, setOpenCount] = useState(0);
+  const hasOpenedRef = useRef(false);
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [notifVisible, setNotifVisible] = useState(false);
@@ -170,8 +180,28 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       notifCheckedRef.current = false;
       setNotifVisible(false);
       setSplashVisible(true);
+      // Remount the WebView on RE-opens only — the first open already mounts
+      // fresh, and bumping the key there would load the page twice.
+      if (hasOpenedRef.current) setOpenCount((c) => c + 1);
+      hasOpenedRef.current = true;
+    } else {
+      // Pre-arm the splash so the first frame of the next open never flashes
+      // the previous page before the reset effect runs.
+      setSplashVisible(true);
     }
   }, [visible]);
+
+  // Splash failsafe: if `ready` never arrives (app-side error, dropped
+  // message), reveal the page instead of spinning forever. Tracked so broken
+  // apps stay visible in mini_app_events.
+  useEffect(() => {
+    if (!visible || !splashVisible) return;
+    const id = setTimeout(() => {
+      setSplashVisible(false);
+      track('ready_timeout');
+    }, READY_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [visible, splashVisible, track]);
 
   // Opening the host IS the install (World-App Get→Open): persist the slug so
   // store buttons flip to "Öffnen" and skip the preview page next time.
@@ -551,6 +581,7 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
         {/* WebView sheet — rounded top corners on the dark stage */}
         <View style={[styles.webWrap, { backgroundColor: colors.background }]}>
           <WebView
+            key={`open-${openCount}`}
             ref={webViewRef}
             source={{ uri: app.homeUrl }}
             onMessage={onMessage}
