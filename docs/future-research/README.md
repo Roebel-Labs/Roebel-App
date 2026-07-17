@@ -22,6 +22,17 @@
 - Coordination Protocol thesis (v0.1, 🧩): https://claude.ai/code/artifact/5d2307c7-8f75-4fb8-aa7e-dabe21886209
 - Decade Plan roadmap (v0.1, 🗺️): https://claude.ai/code/artifact/34d5e690-eef6-4f45-b1e7-8f41acd3f5d7
 
+## Future research (2026-07-17 session)
+
+A follow-up strategy session extended this corpus with three documents plus an index. All three are explicitly downstream of the 2026-07-12 conclusion (found the e.V., recruit seven founding members) — they preserve options, they are not commitments.
+
+| File | One-line summary |
+|---|---|
+| [`2026-07-17_STRATEGY_SESSION_INDEX.md`](2026-07-17_STRATEGY_SESSION_INDEX.md) | Session index: core thesis (software wrapped around owned atoms), standing caveats, housekeeping-flag resolution |
+| [`BUSINESS_GOVERNANCE_PRODUCT.md`](BUSINESS_GOVERNANCE_PRODUCT.md) | B2B spin-out of the civic stack: verified-member governance for organizations; AI agents propose, humans decide. Beachhead: Genossenschaften + Vereine, not GmbHs |
+| [`SOVEREIGN_AI_FUTARCHY.md`](SOVEREIGN_AI_FUTARCHY.md) | Sovereign local inference (LiteLLM routing tiers) + agent prediction markets as a scored, advisory forecasting layer feeding the binding MACI vote |
+| [`PHYSICAL_INFRA_ENERGY_SHARING.md`](PHYSICAL_INFRA_ENERGY_SHARING.md) | Atoms layer: § 42c EnWG Energy Sharing, Bürgerenergie eG, batteries, sovereign compute container with heat reuse, robots |
+
 ---
 
 ## The intellectual arc (what was explored, in order)
