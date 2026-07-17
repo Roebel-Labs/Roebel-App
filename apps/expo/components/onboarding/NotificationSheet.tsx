@@ -8,12 +8,15 @@ import {
   Dimensions,
   Modal,
   Image,
+  Linking,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { useTheme } from '@/context/ThemeContext';
+import { useConsent } from '@/context/ConsentContext';
+import { registerDevicePushToken } from '@/hooks/useNotifications';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -24,6 +27,7 @@ type NotificationSheetProps = {
 
 export default function NotificationSheet({ visible, onDismiss }: NotificationSheetProps) {
   const { colors } = useTheme();
+  const { setPreference } = useConsent();
   const insets = useSafeAreaInsets();
   const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -53,18 +57,29 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
     if (submitting) return;
     setSubmitting(true);
     try {
+      // Tapping "Ja, benachrichtigen" is the explicit push opt-in, so grant
+      // the DSGVO consent category before touching the OS permission.
+      await setPreference('push', true, 'banner');
+
       if (Device.isDevice) {
         const existing = await Notifications.getPermissionsAsync();
-        if (existing.status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
+        let status = existing.status;
+        if (status !== 'granted' && existing.canAskAgain) {
+          ({ status } = await Notifications.requestPermissionsAsync());
         }
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'Default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#00498B',
-          });
+
+        if (status === 'granted') {
+          // Register right away so pushes work without waiting for the next
+          // cold start.
+          await registerDevicePushToken();
+        } else if (!existing.canAskAgain) {
+          // The OS won't show the prompt again — permission has to be granted
+          // in the system settings.
+          if (Platform.OS === 'ios') {
+            Linking.openURL('app-settings:').catch(() => {});
+          } else {
+            Linking.openSettings().catch(() => {});
+          }
         }
       }
     } catch (err) {

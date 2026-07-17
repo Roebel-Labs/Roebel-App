@@ -30,26 +30,59 @@ import LivestreamBanner from '@/components/LivestreamBanner';
 import AnnouncementModal from '@/components/AnnouncementModal';
 import NotificationSheet from '@/components/onboarding/NotificationSheet';
 import { isNotificationPromptPending, clearNotificationPromptPending } from '@/lib/onboarding-storage';
+import { isNotificationPromptDue, markNotificationPromptDismissed } from '@/lib/notification-prompt';
+import { useConsent } from '@/context/ConsentContext';
 import { useDebouncedValue as useDebounced } from '@/hooks/useDebouncedValue';
 
 export default function HomeScreen() {
   // Feed is the home screen for ALL modes (spec section 2)
   // Content adapts per mode via the feed algorithm
   const [showNotificationSheet, setShowNotificationSheet] = useState(false);
+  const promptedThisSession = useRef(false);
+
+  const { permissionStatus, isLoading: notificationsLoading } = useNotificationsContext();
+  const {
+    preferences: consentPrefs,
+    ready: consentReady,
+    needsConsent,
+    needsReconsent,
+  } = useConsent();
+
+  // Push counts as activated only when the OS permission AND the consent
+  // category are both granted — otherwise no token is registered and the
+  // device receives nothing.
+  const pushActive = permissionStatus === 'granted' && consentPrefs.push;
 
   useEffect(() => {
+    // Wait until permission + consent state are known, and never fight the
+    // full-screen consent modal or the re-consent sheet for attention.
+    if (promptedThisSession.current) return;
+    if (notificationsLoading || !consentReady || needsConsent || needsReconsent) return;
+    if (pushActive) return;
+
     let cancelled = false;
-    isNotificationPromptPending().then((pending) => {
-      if (!cancelled && pending) setShowNotificationSheet(true);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    (async () => {
+      const pending = await isNotificationPromptPending();
+      const due = pending || (await isNotificationPromptDue());
+      if (cancelled || !due || promptedThisSession.current) return;
+      promptedThisSession.current = true;
+      if (pending) {
+        setShowNotificationSheet(true);
+      } else {
+        // Re-engagement path: give the feed a moment to render first.
+        timer = setTimeout(() => setShowNotificationSheet(true), 1500);
+      }
+    })();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [notificationsLoading, consentReady, needsConsent, needsReconsent, pushActive]);
 
   const handleNotificationDismiss = async () => {
-    await clearNotificationPromptPending();
     setShowNotificationSheet(false);
+    await Promise.all([clearNotificationPromptPending(), markNotificationPromptDismissed()]);
   };
 
   return (

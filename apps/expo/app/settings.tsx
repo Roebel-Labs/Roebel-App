@@ -130,6 +130,23 @@ export default function SettingsScreen() {
           ))}
         </Section>
 
+        <Section title="BENACHRICHTIGUNGEN" colors={colors}>
+          <Pressable
+            style={styles.themeOptionRow}
+            onPress={() => router.push('/notifications/settings' as any)}
+          >
+            <View style={styles.themeOptionTextContainer}>
+              <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                Pushnachrichten
+              </Text>
+              <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                Benachrichtigungen zu Veranstaltungen, Nachrichten und Beiträgen verwalten.
+              </Text>
+            </View>
+            <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+          </Pressable>
+        </Section>
+
         <Section title="WALLET" colors={colors}>
           <Pressable
             style={[
