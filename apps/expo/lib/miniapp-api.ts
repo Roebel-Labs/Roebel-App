@@ -32,6 +32,15 @@ export function hasMiniAppApi(): boolean {
   return !!API_BASE;
 }
 
+/**
+ * The apps/web origin — also serves every AI-built mini app at /mini/<slug>.
+ * MiniAppHost uses it as the load fallback when an app's dedicated
+ * <slug>.roebel.site origin fails (e.g. wildcard-cert outage).
+ */
+export function miniAppApiBase(): string | undefined {
+  return API_BASE;
+}
+
 function unsupported(): never {
   throw {
     code: 'unsupported',

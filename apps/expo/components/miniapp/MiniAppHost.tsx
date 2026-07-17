@@ -87,6 +87,7 @@ import {
   apiGrantReward,
   apiSendNotification,
   hasMiniAppApi,
+  miniAppApiBase,
 } from '@/lib/miniapp-api';
 
 const HEARTBEAT_MS = 25_000;
@@ -148,6 +149,13 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
   // spins forever on every reopen.
   const [openCount, setOpenCount] = useState(0);
   const hasOpenedRef = useRef(false);
+  // Load failure handling: dedicated <slug>.roebel.site origins have failed
+  // before (wildcard-cert outage → net::ERR_CONNECTION_RESET), so a failed
+  // load first retries on the always-available /mini/<slug> path of the web
+  // app (same HTML, CSP-sandboxed there). Only when that also fails do we
+  // show a themed error state with retry.
+  const [useFallback, setUseFallback] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [notifVisible, setNotifVisible] = useState(false);
@@ -171,6 +179,45 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
     [app.id, app.slug, walletLc],
   );
 
+  // Fallback target for apps published on a dedicated <slug>.roebel.site
+  // origin: the same HTML served from the web app's /mini/<slug> route.
+  const fallbackUrl = useMemo(() => {
+    try {
+      const host = new URL(app.homeUrl).hostname.toLowerCase();
+      const m = host.match(/^([a-z0-9-]+)\.roebel\.site$/);
+      const base = miniAppApiBase();
+      if (!m || !base) return null;
+      const candidate = `${base}/mini/${m[1]}`;
+      return candidate === app.homeUrl ? null : candidate;
+    } catch {
+      return null;
+    }
+  }, [app.homeUrl]);
+  const sourceUrl = useFallback && fallbackUrl ? fallbackUrl : app.homeUrl;
+
+  const handleLoadError = useCallback(
+    (e: { nativeEvent: { description?: string; code?: number } }) => {
+      const desc = e.nativeEvent.description ?? '';
+      if (!useFallback && fallbackUrl) {
+        setUseFallback(true);
+        setOpenCount((c) => c + 1);
+        track('load_fallback', { description: desc });
+        return;
+      }
+      setSplashVisible(false);
+      setLoadError(desc || 'Verbindung fehlgeschlagen');
+      track('load_error', { description: desc, fallback: useFallback });
+    },
+    [useFallback, fallbackUrl, track],
+  );
+
+  const handleRetry = useCallback(() => {
+    setLoadError(null);
+    setSplashVisible(true);
+    setUseFallback(false);
+    setOpenCount((c) => c + 1);
+  }, []);
+
   // Reset per-open session state.
   useEffect(() => {
     if (visible) {
@@ -180,6 +227,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
       notifCheckedRef.current = false;
       setNotifVisible(false);
       setSplashVisible(true);
+      setLoadError(null);
+      // Give the primary origin a fresh chance each open (a healed wildcard
+      // cert should win again; a still-broken one fails fast into fallback).
+      setUseFallback(false);
       // Remount the WebView on RE-opens only — the first open already mounts
       // fresh, and bumping the key there would load the page twice.
       if (hasOpenedRef.current) setOpenCount((c) => c + 1);
@@ -583,8 +634,9 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
           <WebView
             key={`open-${openCount}`}
             ref={webViewRef}
-            source={{ uri: app.homeUrl }}
+            source={{ uri: sourceUrl }}
             onMessage={onMessage}
+            onError={handleLoadError}
             originWhitelist={['*']}
             javaScriptEnabled
             domStorageEnabled
@@ -597,7 +649,10 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
             // External links open in the host browser, never in-app.
             onShouldStartLoadWithRequest={(req) => {
               try {
-                const home = new URL(app.homeUrl);
+                // Compare against the URL actually loaded (primary OR
+                // fallback origin) — else the fallback's own first load
+                // would be kicked out to the external browser on iOS.
+                const home = new URL(sourceUrl);
                 const target = new URL(req.url);
                 if (target.origin === home.origin) return true;
                 if (req.url.startsWith('about:') || req.url.startsWith('data:')) return true;
@@ -608,6 +663,35 @@ export default function MiniAppHost({ app, visible, onClose }: Props) {
               }
             }}
           />
+
+          {/* Load-failure state: covers the WebView's default error page. */}
+          {loadError && (
+            <View style={[styles.splash, { backgroundColor: colors.background }]}>
+              <View style={[styles.splashIcon, { backgroundColor: app.primaryColor || colors.primary }]}>
+                {app.iconUrl ? (
+                  <Image source={{ uri: app.iconUrl }} style={styles.splashIconImg} contentFit="cover" />
+                ) : (
+                  <Text style={styles.splashIconLetter}>{app.name.slice(0, 1).toUpperCase()}</Text>
+                )}
+              </View>
+              <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>
+                Mini-App konnte nicht geladen werden
+              </Text>
+              <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+                Bitte überprüfe deine Verbindung und versuch es erneut.
+              </Text>
+              <Pressable
+                onPress={handleRetry}
+                style={({ pressed }) => [
+                  styles.errorRetry,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.errorRetryText}>Erneut versuchen</Text>
+              </Pressable>
+            </View>
+          )}
 
           {/* Splash overlay until actions.ready(): centered icon, spinner low */}
           {splashVisible && (
@@ -741,4 +825,32 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   splashSpinner: { position: 'absolute' },
+  errorTitle: {
+    marginTop: 24,
+    paddingHorizontal: 40,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 6,
+    paddingHorizontal: 40,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  errorRetry: {
+    marginTop: 20,
+    height: 44,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorRetryText: {
+    color: '#fff',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+  },
 });
