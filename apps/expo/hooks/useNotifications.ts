@@ -129,8 +129,15 @@ export type RegisteredPushDevice = {
  *
  * Callers are responsible for checking push consent first.
  * Returns null on simulators/emulators. Throws on configuration errors.
+ *
+ * Pass the logged-in wallet when known: a row created HERE for a fresh
+ * install would otherwise stay unlinked until the next cold start (the
+ * hook's wallet-link UPDATE matches zero rows before the row exists) and
+ * targeted DM pushes would miss the device.
  */
-export async function registerDevicePushToken(): Promise<RegisteredPushDevice | null> {
+export async function registerDevicePushToken(
+  walletAddress?: string
+): Promise<RegisteredPushDevice | null> {
   if (!Device.isDevice) {
     console.log('Push notifications not available on simulator/emulator');
     return null;
@@ -158,7 +165,8 @@ export async function registerDevicePushToken(): Promise<RegisteredPushDevice | 
     deviceId,
     token,
     Platform.OS as 'ios' | 'android',
-    Constants.expoConfig?.version
+    Constants.expoConfig?.version,
+    walletAddress
   );
   if (!result.success) {
     console.error('Failed to save push token to Supabase:', result.error);
@@ -207,6 +215,38 @@ export function useNotifications(): UseNotificationsReturn {
     if (status === 'denied') return 'denied';
     return 'undetermined';
   }, []);
+
+  /**
+   * Register push token with Expo and save to Supabase.
+   * Deps matter: with `[]` this captured the mount-time pushConsent (false —
+   * consent hydrates async from SecureStore), silently skipping registration
+   * for the whole session.
+   */
+  const registerToken = useCallback(async () => {
+    console.log('=== REGISTER TOKEN ===');
+
+    if (!pushConsent) {
+      console.log('Push consent not granted; skipping token registration');
+      return;
+    }
+
+    try {
+      const registered = await registerDevicePushToken(walletAddress ?? undefined);
+      if (!registered) return;
+
+      setExpoPushToken(registered.token);
+      setDeviceId(registered.deviceId);
+      setPreferences(registered.preferences);
+      if (registered.saveError) {
+        setError(registered.saveError);
+      }
+
+      console.log('=== TOKEN REGISTRATION COMPLETE ===');
+    } catch (err) {
+      console.error('Error registering push token:', err);
+      setError('Failed to register for push notifications');
+    }
+  }, [pushConsent, walletAddress]);
 
   /**
    * Request notification permission
@@ -258,36 +298,19 @@ export function useNotifications(): UseNotificationsReturn {
       setError('Failed to request notification permission');
       return false;
     }
-  }, []);
+  }, [pushConsent, registerToken]);
 
   /**
-   * Register push token with Expo and save to Supabase
+   * Self-heal: register whenever both gates are open and no token has been
+   * registered this session. Covers consent hydrating after the mount-time
+   * initialize (which read pushConsent=false), the opt-in sheet granting the
+   * OS permission mid-session, and returning from the system settings (the
+   * AppState listener refreshes permissionStatus on foreground).
    */
-  const registerToken = useCallback(async () => {
-    console.log('=== REGISTER TOKEN ===');
-
-    if (!pushConsent) {
-      console.log('Push consent not granted; skipping token registration');
-      return;
-    }
-
-    try {
-      const registered = await registerDevicePushToken();
-      if (!registered) return;
-
-      setExpoPushToken(registered.token);
-      setDeviceId(registered.deviceId);
-      setPreferences(registered.preferences);
-      if (registered.saveError) {
-        setError(registered.saveError);
-      }
-
-      console.log('=== TOKEN REGISTRATION COMPLETE ===');
-    } catch (err) {
-      console.error('Error registering push token:', err);
-      setError('Failed to register for push notifications');
-    }
-  }, []);
+  useEffect(() => {
+    if (!pushConsent || permissionStatus !== 'granted' || expoPushToken) return;
+    void registerToken();
+  }, [pushConsent, permissionStatus, expoPushToken, registerToken]);
 
   /**
    * Keep the device's push token linked to the logged-in wallet so it can

@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useConsent } from '@/context/ConsentContext';
 import { registerDevicePushToken } from '@/hooks/useNotifications';
@@ -28,6 +29,7 @@ type NotificationSheetProps = {
 export default function NotificationSheet({ visible, onDismiss }: NotificationSheetProps) {
   const { colors } = useTheme();
   const { setPreference } = useConsent();
+  const activeAccount = useActiveAccount();
   const insets = useSafeAreaInsets();
   const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -70,8 +72,10 @@ export default function NotificationSheet({ visible, onDismiss }: NotificationSh
 
         if (status === 'granted') {
           // Register right away so pushes work without waiting for the next
-          // cold start.
-          await registerDevicePushToken();
+          // cold start. Pass the wallet: a fresh install's row is created
+          // right here, and without it targeted DM pushes would miss this
+          // device until the next cold start.
+          await registerDevicePushToken(activeAccount?.address);
         } else if (!existing.canAskAgain) {
           // The OS won't show the prompt again — permission has to be granted
           // in the system settings.
