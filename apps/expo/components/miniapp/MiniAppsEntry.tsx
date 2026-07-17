@@ -128,7 +128,9 @@ export default function MiniAppsEntry() {
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: 8, marginBottom: 8 },
+  // Same vertical rhythm as the other Explore sections (they all use
+  // marginTop 24 / marginBottom 8 — see MovieSection, MarketplaceSection).
+  section: { marginTop: 24, marginBottom: 8 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
