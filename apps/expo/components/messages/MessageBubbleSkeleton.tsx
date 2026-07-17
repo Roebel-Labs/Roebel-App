@@ -60,6 +60,9 @@ export function ChatLoadingSkeletons() {
 
 const styles = StyleSheet.create({
   stack: {
+    // Fill the message area so the sibling input bar stays pinned to the
+    // bottom of the screen while the thread is still loading.
+    flex: 1,
     paddingVertical: 12,
     gap: 8,
   },

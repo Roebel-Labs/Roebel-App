@@ -67,21 +67,13 @@ if (Platform.OS !== 'web') {
     });
 }
 
-// Native-only: lock orientation and configure notifications
+// Native-only: lock orientation. The notification foreground handler is set
+// in hooks/useNotifications.ts — do NOT set another one here: this module
+// evaluates after its imports, so a handler here would silently override the
+// suppression logic (no banner for the chat you're currently reading).
 if (Platform.OS !== 'web') {
   const ScreenOrientation = require('expo-screen-orientation');
   ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-
-  const Notifications = require('expo-notifications');
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
 }
 
 /**

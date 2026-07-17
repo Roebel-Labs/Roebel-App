@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Pressable,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
 import XmtpActivationView from '@/components/messages/XmtpActivationView';
 import { useXmtp } from '@/context/XmtpContext';
+import { useNotificationsContext } from '@/context/NotificationsContext';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -70,6 +72,23 @@ export default function MessagesScreen() {
   // While this device hasn't registered its XMTP inbox yet, the screen shows
   // the one-time "Private Nachrichten aktivieren" view instead of the inbox.
   const { activationAvailable } = useXmtp();
+
+  // DM pushes die silently when the OS permission is missing (e.g. a fresh
+  // install leaves a stale token linked to the wallet). Opening the inbox is
+  // the natural moment to (re-)ask — one OS prompt per visit at most, plus a
+  // persistent banner that falls back to the system settings.
+  const { permissionStatus, requestPermission } = useNotificationsContext();
+  const askedRef = useRef(false);
+  useEffect(() => {
+    if (!isConnected || permissionStatus === 'granted' || askedRef.current) return;
+    askedRef.current = true;
+    void requestPermission();
+  }, [isConnected, permissionStatus, requestPermission]);
+
+  const handleEnablePush = async () => {
+    const ok = await requestPermission();
+    if (!ok) Linking.openSettings().catch(() => {});
+  };
 
   const renderConversation = ({ item }: { item: ConversationWithLastMessage }) => (
     <ConversationListItem
@@ -127,7 +146,25 @@ export default function MessagesScreen() {
           <XmtpActivationView />
         </View>
       ) : (
-        <FlatList
+        <>
+          {permissionStatus !== 'granted' && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.pushBanner,
+                { backgroundColor: colors.surfaceSecondary, borderBottomColor: colors.border },
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={handleEnablePush}
+            >
+              <Text style={[styles.pushBannerText, { color: colors.textPrimary }]}>
+                Push-Benachrichtigungen sind aus
+              </Text>
+              <Text style={[styles.pushBannerAction, { color: colors.primary }]}>
+                Aktivieren
+              </Text>
+            </Pressable>
+          )}
+          <FlatList
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderConversation}
@@ -161,7 +198,8 @@ export default function MessagesScreen() {
             conversations.length === 0 && !isLoading ? styles.emptyContainer : undefined
           }
           ListFooterComponent={<View style={styles.bottomPadding} />}
-        />
+          />
+        </>
       )}
     </SafeAreaView>
   );
@@ -272,5 +310,23 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 100,
+  },
+  pushBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  pushBannerText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    flexShrink: 1,
+  },
+  pushBannerAction: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    marginLeft: 12,
   },
 });

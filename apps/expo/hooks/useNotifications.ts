@@ -25,6 +25,7 @@ import {
 import { EventCategory, EVENT_CATEGORIES } from '@/lib/categories';
 import { getActiveConversationId } from '@/lib/active-conversation';
 import { useConsent } from '@/context/ConsentContext';
+import { useWalletBoot } from '@/context/WalletBootContext';
 
 // AsyncStorage keys for prompt tracking
 const PROMPT_SEEN_KEY = '@notification_prompt_seen';
@@ -112,9 +113,71 @@ function getDeviceId(): string {
   return `device_${Math.abs(hash).toString(36)}`;
 }
 
+export type RegisteredPushDevice = {
+  deviceId: string;
+  token: string;
+  preferences: NotificationPreferences;
+  /** Non-null if the token could not be persisted to Supabase. */
+  saveError: string | null;
+};
+
+/**
+ * Register this device's Expo push token with Supabase and ensure notification
+ * preferences exist. Standalone (no hook state) so opt-in surfaces like the
+ * notification bottom sheet can register immediately after the OS grant,
+ * without waiting for the hook's consent state to re-render.
+ *
+ * Callers are responsible for checking push consent first.
+ * Returns null on simulators/emulators. Throws on configuration errors.
+ */
+export async function registerDevicePushToken(): Promise<RegisteredPushDevice | null> {
+  if (!Device.isDevice) {
+    console.log('Push notifications not available on simulator/emulator');
+    return null;
+  }
+
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) {
+    throw new Error('EAS Project ID not found in app.config.ts');
+  }
+
+  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+  const token = tokenData.data;
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#00498B',
+    });
+  }
+
+  const deviceId = getDeviceId();
+  const result = await registerPushToken(
+    deviceId,
+    token,
+    Platform.OS as 'ios' | 'android',
+    Constants.expoConfig?.version
+  );
+  if (!result.success) {
+    console.error('Failed to save push token to Supabase:', result.error);
+  }
+
+  const preferences = await initializePreferences(deviceId);
+
+  return {
+    deviceId,
+    token,
+    preferences,
+    saveError: result.success ? null : result.error || 'Failed to save push token',
+  };
+}
+
 export function useNotifications(): UseNotificationsReturn {
   const { preferences: consentPrefs } = useConsent();
   const pushConsent = consentPrefs.push;
+  const { autoConnectFinished } = useWalletBoot();
   const activeAccount = useActiveAccount();
   const walletAddress = activeAccount?.address ?? null;
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
@@ -208,84 +271,18 @@ export function useNotifications(): UseNotificationsReturn {
       return;
     }
 
-    if (!Device.isDevice) {
-      console.log('Push notifications not available on simulator/emulator');
-      return;
-    }
-
     try {
-      // Get project ID from config
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-      console.log('EAS Project ID:', projectId);
+      const registered = await registerDevicePushToken();
+      if (!registered) return;
 
-      if (!projectId) {
-        console.error('EAS Project ID not found in app.config.ts');
-        setError('Push notification configuration error');
-        return;
+      setExpoPushToken(registered.token);
+      setDeviceId(registered.deviceId);
+      setPreferences(registered.preferences);
+      if (registered.saveError) {
+        setError(registered.saveError);
       }
-
-      // Get Expo push token (this wraps FCM/APNs)
-      console.log('Getting Expo push token...');
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId,
-      });
-
-      const token = tokenData.data;
-      console.log('=== EXPO PUSH TOKEN ===');
-      console.log(token);
-      console.log('========================');
-      setExpoPushToken(token);
-
-      // Also get the native device token (FCM for Android, APNs for iOS)
-      try {
-        const nativeToken = await Notifications.getDevicePushTokenAsync();
-        console.log('=== NATIVE DEVICE TOKEN (FCM/APNs) ===');
-        console.log('Type:', nativeToken.type);
-        console.log('Token:', nativeToken.data);
-        console.log('=======================================');
-      } catch (nativeErr) {
-        console.log('Could not get native token:', nativeErr);
-      }
-
-      // Configure Android notification channel
-      if (Platform.OS === 'android') {
-        console.log('Setting up Android notification channel...');
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'Default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#00498B',
-        });
-      }
-
-      // Save token to Supabase
-      const id = getDeviceId();
-      console.log('Device ID for Supabase:', id);
-      setDeviceId(id);
-
-      console.log('Saving token to Supabase...');
-      const result = await registerPushToken(
-        id,
-        token,
-        Platform.OS as 'ios' | 'android',
-        Constants.expoConfig?.version
-      );
-
-      if (!result.success) {
-        console.error('Failed to save push token to Supabase:', result.error);
-        setError(result.error || 'Failed to save push token');
-      } else {
-        console.log('Token saved to Supabase successfully');
-      }
-
-      // Initialize preferences if needed
-      console.log('Initializing preferences...');
-      const prefs = await initializePreferences(id);
-      console.log('Preferences:', prefs);
-      setPreferences(prefs);
 
       console.log('=== TOKEN REGISTRATION COMPLETE ===');
-
     } catch (err) {
       console.error('Error registering push token:', err);
       setError('Failed to register for push notifications');
@@ -300,8 +297,13 @@ export function useNotifications(): UseNotificationsReturn {
    */
   useEffect(() => {
     if (!deviceId) return;
+    // During the cold-start reconnect window the wallet is transiently null.
+    // Writing that null would unlink the device until the next full app start
+    // — a killed app then misses every targeted DM push. Only a real logout
+    // (null AFTER autoConnect settled) may clear the link.
+    if (walletAddress === null && !autoConnectFinished) return;
     linkPushTokenWallet(deviceId, walletAddress);
-  }, [deviceId, walletAddress]);
+  }, [deviceId, walletAddress, autoConnectFinished]);
 
   /**
    * Refresh preferences from Supabase

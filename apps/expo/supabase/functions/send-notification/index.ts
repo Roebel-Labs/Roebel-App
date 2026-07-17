@@ -320,6 +320,52 @@ serve(async (req: Request) => {
       }
     }
 
+    // Receipt-level cleanup: Expo frequently ACCEPTS a message for a token
+    // whose FCM/APNs registration is dead (stale install) and only reports
+    // DeviceNotRegistered in the delivery receipt seconds later. Without this
+    // check such zombie tokens count as "sent" forever while the recipient
+    // gets nothing. Runs after the response via waitUntil.
+    const receiptToDevice = new Map<string, string>();
+    allTickets.forEach((ticket, index) => {
+      if (ticket.status === 'ok' && ticket.id && eligibleTokens[index]) {
+        receiptToDevice.set(ticket.id, eligibleTokens[index].device_id);
+      }
+    });
+    if (receiptToDevice.size > 0) {
+      const checkReceipts = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15000));
+        try {
+          const res = await fetch('https://exp.host/--/api/v2/push/getReceipts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [...receiptToDevice.keys()] }),
+          });
+          const { data: receipts } = await res.json();
+          const deadDeviceIds = Object.entries(receipts ?? {})
+            .filter(
+              ([, r]) =>
+                (r as ExpoPushTicket)?.status === 'error' &&
+                (r as ExpoPushTicket)?.details?.error === 'DeviceNotRegistered'
+            )
+            .map(([id]) => receiptToDevice.get(id))
+            .filter(Boolean) as string[];
+          if (deadDeviceIds.length > 0) {
+            await supabase
+              .from('push_tokens')
+              .update({ is_active: false })
+              .in('device_id', deadDeviceIds);
+            console.log(
+              `Deactivated ${deadDeviceIds.length} dead tokens (receipt DeviceNotRegistered)`
+            );
+          }
+        } catch (err) {
+          console.error('Receipt check failed:', err);
+        }
+      };
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil?.(checkReceipts());
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
@@ -42,9 +43,16 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, (e) =>
-      setKeyboardHeight(e.endCoordinates?.height ?? 0)
-    );
+    const show = Keyboard.addListener(showEvt, (e) => {
+      // Same as the chat screen: height under-reports on Android edge-to-edge;
+      // derive the true overlap from the keyboard's absolute top edge.
+      const screenY = e.endCoordinates?.screenY;
+      const overlap =
+        typeof screenY === 'number'
+          ? Math.max(0, Dimensions.get('screen').height - screenY)
+          : e.endCoordinates?.height ?? 0;
+      setKeyboardHeight(overlap);
+    });
     const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
     return () => {
       show.remove();

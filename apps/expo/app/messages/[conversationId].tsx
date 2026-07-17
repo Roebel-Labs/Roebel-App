@@ -8,6 +8,7 @@ import {
   Modal,
   Keyboard,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -53,9 +54,18 @@ export default function ChatScreen() {
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvt, (e) =>
-      setKeyboardHeight(e.endCoordinates?.height ?? 0)
-    );
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      // Don't trust endCoordinates.height: on Android with edge-to-edge it
+      // under-reports by the nav-bar inset, leaving the input bar slightly
+      // under the keyboard. screenY is the keyboard's absolute top edge, so
+      // screen height minus screenY is the exact overlap on both platforms.
+      const screenY = e.endCoordinates?.screenY;
+      const overlap =
+        typeof screenY === 'number'
+          ? Math.max(0, Dimensions.get('screen').height - screenY)
+          : e.endCoordinates?.height ?? 0;
+      setKeyboardHeight(overlap);
+    });
     const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
     return () => {
       showSub.remove();

@@ -71,12 +71,24 @@ async function mergeXmtpInbox(
   let xmtpUnread = 0;
   let adopted = false;
   const merged = rows.map((r) => ({ ...r }));
-  const matchedWallets = new Set<string>();
+  const matchedRowIds = new Set<string>();
 
   for (const entry of entries) {
-    const rowIndex = merged.findIndex((r) => r.peerOwnerWallet === entry.peerWallet);
+    // Some legacy pairs have MORE THAN ONE registry row (duplicate
+    // `conversations` rows). Attach the XMTP thread to the OLDEST row — the
+    // one findOrCreateConversation returns — so navigation and the inbox
+    // agree; every other row for the same wallet stays unmatched and is
+    // filtered out below (this is what used to show a second, stale
+    // "Supabase" chat next to the XMTP one).
+    const candidates = merged.filter((r) => r.peerOwnerWallet === entry.peerWallet);
+    const row =
+      candidates.length > 1
+        ? candidates.reduce((a, b) =>
+            Date.parse(a.created_at) <= Date.parse(b.created_at) ? a : b
+          )
+        : candidates[0];
 
-    if (rowIndex === -1) {
+    if (!row) {
       // Inbound XMTP DM with no registry row (peer started the chat, possibly
       // from another XMTP app). Adopt it once per wallet per session — but
       // only for wallets that belong to a Röbel personal account.
@@ -95,8 +107,7 @@ async function mergeXmtpInbox(
       continue;
     }
 
-    const row = merged[rowIndex];
-    matchedWallets.add(entry.peerWallet);
+    matchedRowIds.add(row.id);
 
     // Personal chats are XMTP-only: preview comes from the XMTP side alone
     // (legacy Supabase previews are discarded).
@@ -130,11 +141,10 @@ async function mergeXmtpInbox(
     }
   }
 
-  // Only rows with an XMTP counterpart survive — everything else (legacy
-  // Supabase personal chats, org chats) is hidden from the inbox.
-  const visible = merged.filter(
-    (r) => r.peerOwnerWallet != null && matchedWallets.has(r.peerOwnerWallet)
-  );
+  // Only the rows an XMTP thread was attached to survive — everything else
+  // (legacy Supabase personal chats, duplicate registry rows for the same
+  // peer, org chats) is hidden from the inbox.
+  const visible = merged.filter((r) => matchedRowIds.has(r.id));
 
   visible.sort((a, b) => {
     const ta = a.lastMessage?.created_at ?? a.created_at;
