@@ -13,11 +13,14 @@ const PLAY_STORE_URL =
 const DISMISS_KEY = "roebel-app-sheet-dismissed-at"
 const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
-// Routes that already run their own app-open/download flow (/app, /e, /r,
-// /order, event/news details), are rendered inside the Röbel app's WebView
-// (/mini), or are tool/legal surfaces where an install prompt is noise.
+// Routes that already run their own app-open/download flow (/e, /r, /order,
+// event/news details incl. the /app/* ones with DeepLinkRedirect), are
+// rendered inside the Röbel app's WebView (/mini), or are tool/legal
+// surfaces where an install prompt is noise. The /app section itself DOES
+// show the sheet — mobile web-app visitors are the main install audience.
 const SUPPRESSED_PREFIXES = [
-  "/app",
+  "/app/news/",
+  "/app/events/",
   "/e/",
   "/r/",
   "/order",
