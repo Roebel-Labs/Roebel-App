@@ -14,29 +14,33 @@ const ILLUSTRATION = require('@/assets/illustration/buergerumfragen-cropped.png'
 /** How long the ended/calculating/results card lingers after the deadline. */
 const RESULTS_WINDOW_SEC = 24 * 3600;
 
-/** Picks the single proposal to feature: the active one, else the newest. */
-function useTopProposal(): SupabaseProposal | null {
-  const [proposal, setProposal] = useState<SupabaseProposal | null>(null);
+/**
+ * All open proposals (Pending or Active), newest first. Falls back to the
+ * newest proposal when none are open so a just-ended card can linger through
+ * its results window — each card still gates itself on the on-chain deadline.
+ */
+function useOpenProposals(): SupabaseProposal[] {
+  const [proposals, setProposals] = useState<SupabaseProposal[]>([]);
   useEffect(() => {
     let cancelled = false;
     fetchProposals()
       .then((list) => {
         if (cancelled) return;
         if (!list || list.length === 0) {
-          setProposal(null);
+          setProposals([]);
           return;
         }
-        const active = list.find((p) => p.state === 1);
-        setProposal(active ?? list[0]);
+        const open = list.filter((p) => p.state === 0 || p.state === 1);
+        setProposals(open.length > 0 ? open : [list[0]]);
       })
       .catch(() => {
-        if (!cancelled) setProposal(null);
+        if (!cancelled) setProposals([]);
       });
     return () => {
       cancelled = true;
     };
   }, []);
-  return proposal;
+  return proposals;
 }
 
 function parseIdSafe(raw: string | number | null | undefined): bigint {
@@ -67,28 +71,46 @@ function formatDate(dateString: string): string {
 }
 
 export default function FeedProposalHeroCard() {
-  const { colors } = useTheme();
-  const router = useRouter();
+  const proposals = useOpenProposals();
 
-  const proposal = useTopProposal();
-  const proposalIdBig = useMemo(
-    () => parseIdSafe(proposal?.blockchain_proposal_id),
-    [proposal?.blockchain_proposal_id],
-  );
-  const tally = useProposalTally(proposalIdBig);
-
-  // 1 Hz local tick for the live countdown.
+  // 1 Hz local tick shared by all cards so countdowns stay in sync.
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
   }, []);
 
+  if (proposals.length === 0) return null;
+
+  return (
+    <>
+      {proposals.map((p) => (
+        <HeroProposalCard key={p.proposal_id} proposal={p} nowSec={nowSec} />
+      ))}
+    </>
+  );
+}
+
+function HeroProposalCard({
+  proposal,
+  nowSec,
+}: {
+  proposal: SupabaseProposal;
+  nowSec: number;
+}) {
+  const { colors } = useTheme();
+  const router = useRouter();
+
+  const proposalIdBig = useMemo(
+    () => parseIdSafe(proposal.blockchain_proposal_id),
+    [proposal.blockchain_proposal_id],
+  );
+  const tally = useProposalTally(proposalIdBig);
+
   const deadlineSec = tally.deadlineSec;
   const isActive = deadlineSec !== null && nowSec < deadlineSec;
 
   // ── Visibility gating ──────────────────────────────────────────────
-  if (!proposal) return null;
   if (tally.orphan) return null;
   if (deadlineSec === null) return null; // chain state not loaded yet
 
