@@ -105,9 +105,6 @@ type Props = {
 };
 
 const PROPOSAL_HERO_ID = '__proposal_hero';
-// How far the proposal hero may drift down as new posts arrive before it stops
-// sinking (so it always stays reachable near the top of the feed).
-const PROPOSAL_HERO_MAX_SINK = 5;
 
 const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
   {
@@ -404,12 +401,10 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);
 
-  // The animated proposal hero ("Bürgerumfrage") starts at the top of the feed
-  // but is NOT sticky: posts that arrive after the feed first loaded stack above
-  // it, so it drifts down as fresh content comes in (capped so it stays
-  // reachable). The card self-gates, so the injected sentinel renders nothing
-  // when there's no eligible proposal.
-  const heroAnchorIds = useRef<Set<string> | null>(null);
+  // The animated proposal hero ("Bürgerumfrage") is pinned at the very top of
+  // the feed, above all posts — new arrivals stack below it. The card
+  // self-gates, so the injected sentinel renders nothing when there's no
+  // eligible proposal.
   const displayData = React.useMemo(() => {
     // Repost rows whose original was deleted (quoted_post hydrated to null)
     // render nothing — drop them so they don't leave empty separator gaps.
@@ -422,20 +417,8 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         ),
     );
     if (!showProposalHero) return visible;
-    // Snapshot the posts present when the hero first has a feed to anchor to.
-    if (heroAnchorIds.current === null && visible.length > 0) {
-      heroAnchorIds.current = new Set(visible.map((it) => it.id));
-    }
     const hero: FeedItem = { type: 'proposal_hero', id: PROPOSAL_HERO_ID };
-    // Insert after the freshly-arrived posts — the leading items that weren't in
-    // the initial snapshot — capped so the card never sinks out of view.
-    const seen = heroAnchorIds.current;
-    let at = 0;
-    if (seen) {
-      while (at < visible.length && !seen.has(visible[at].id)) at++;
-      at = Math.min(at, PROPOSAL_HERO_MAX_SINK);
-    }
-    return [...visible.slice(0, at), hero, ...visible.slice(at)];
+    return [hero, ...visible];
   }, [items, showProposalHero]);
 
   // Direction-aware chrome visibility: hide on scroll down, reveal on scroll up.
