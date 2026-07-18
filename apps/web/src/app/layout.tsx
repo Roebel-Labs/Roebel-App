@@ -7,6 +7,7 @@ import { Toaster as Sonner } from "sonner";
 import { ConditionalFooter } from "@/components/layout/ConditionalFooter";
 import { GlobalWalletRedirect } from "@/components/app/GlobalWalletRedirect";
 import { GlobalAutoConnect } from "@/components/app/GlobalAutoConnect";
+import { GlobalAppDownloadSheet } from "@/components/app/GlobalAppDownloadSheet";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AccountProvider } from "@/lib/context/AccountContext";
 import { Analytics } from "@vercel/analytics/react";
@@ -43,6 +44,7 @@ export default function RootLayout({
               <GlobalWalletRedirect />
               <div className="flex-1">{children}</div>
               <ConditionalFooter />
+              <GlobalAppDownloadSheet />
               <Toaster />
               <Sonner position="top-right" richColors />
               <Analytics />
