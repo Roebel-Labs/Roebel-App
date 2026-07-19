@@ -84,3 +84,24 @@ const { transactions } = await farm.generateInvites(inviter, [invitee]); // 2 tx
 ```
 
 Contacts and the mini-app we use to drive invites (runs inside the Circles/Metri miniapp iframe) can be shared on request. Thank you — happy to jump on a call.
+
+---
+
+## Follow-up 2026-07-19 — quota IS fundable now, but `generateInvites` structurally cannot invite our wallets
+
+Thanks for the pointer on the outdated funding gate — confirmed and fixed on our side: we replaced the `farmBal + approved-funder` capacity check with an `eth_call` simulation of `claimInvites(n)`. That simulation passes cleanly today (`inviterQuota = 30`, `claimInvites(30)` succeeds; bot `0x360345eEf7aF50F3F1CfA91190FBE36558B5bd9E` holds ~3,984 CRC).
+
+**But the actual `generateInvites` send still reverts**, and we've root-caused it to the deployed `InvitationModule` (`0x00738aca013B7B2e6cfE1690F0021C3182Fa40B5`, verified source):
+
+1. The SDK builds `[claimInvites(n), Hub.safeBatchTransferFrom(inviter → InvitationModule, ids = bot-token ×n, 96 CRC ×n, data = abi.encode(address[] invitees))]`.
+2. Chain-simulating both txs via `eth_simulateV1` (as one state chain): the **claim leg succeeds** — and as a side effect correctly creates the bot→inviter trust — but the **module leg always reverts** with a bare revert that the Hub wraps as `ERC1155InvalidReceiver` (`0x57f447ce`), which surfaces to users as `UserOperation reverted during simulation with reason: 0x`.
+3. The failing link is in the batch hook's per-invitee path: `proxyInvite → enforceHumanRegistered(invitee)` does `validateModuleEnabled(invitee)` and then `_callHubFromSafe(invitee, registerHuman(proxyInviter, 0))` — i.e. it **registers the invitee in-line by executing `registerHuman` from the invitee's own account via Safe-module exec**.
+4. Our invitees are **thirdweb ERC-4337 smart accounts** (the Röbel app's embedded wallets; 24 deployed, 6 still counterfactual), not Safes — they have no `isModuleEnabled` and can never have this module enabled. We verified every other precondition individually (inviter human ✓, inviter Safe has module enabled ✓, bot human ✓, bot Safe has module enabled ✓, bot→inviter trust after claim ✓): the invitee-side module exec is the only impossible link, for single (`onERC1155Received`) and batch alike.
+
+So for wallets that aren't Circles-native Safes, the farm quota is currently unusable regardless of funding — no readiness gate can fix that client-side.
+
+**Ask:** what is (or could be) the supported path to spend farm quota on **existing non-Safe smart accounts**? Two shapes that would work for us:
+- a **trust-only escrow variant**: the bot/proxy-inviter trusts the invitee with a durable expiry (not `uint96(block.timestamp)`), so the invitee later calls `registerHuman(proxyInviter)` **from their own wallet** — that call path works for any ERC-4337 account (our whole town onboarded that way via self-funding), and the 96-CRC burn still falls on the bot exactly as in the in-line flow; or
+- the module skipping `enforceHumanRegistered` when the invitee is not a module-enabled Safe, leaving the durable proxy trust in place instead.
+
+Happy to test any candidate on Gnosis within hours — we have 30 real invitees waiting and a reproducible `eth_simulateV1` harness for the full flow.
