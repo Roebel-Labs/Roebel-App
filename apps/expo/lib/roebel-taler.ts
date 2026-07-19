@@ -69,11 +69,15 @@ export async function findInviter(addr: string): Promise<string | null> {
 		const candidates = rows
 			.map((r) => String(r.truster ?? ""))
 			.filter((t) => t && t.toLowerCase() !== lower && t.toLowerCase() !== group);
-		// Prefer a candidate that is a registered human (a real inviter, e.g. Metri).
+		// Only a registered HUMAN counts as an inviter. Non-human trusters exist for
+		// every citizen (e.g. the group's mint-handler ORGANIZATION trusts members as
+		// minting plumbing) and registerHuman(nonHuman) always reverts on-chain with
+		// CirclesErrorOneAddressArg(inviter, 160) — so never fall back to them:
+		// no human truster ⇒ null ⇒ the app shows the proper "not invited yet" sheet.
 		for (const c of candidates) {
 			try { if (await isOnboarded(c)) return c; } catch { /* keep looking */ }
 		}
-		return candidates[0] ?? null;
+		return null;
 	} catch {
 		return null;
 	}
