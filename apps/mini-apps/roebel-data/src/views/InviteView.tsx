@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
-import { inviteFarm, getQuota, getQuotaFunding, isHuman, isTrusted, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
+import { inviteFarm, getQuota, getQuotaFunding, preflightInviteTxs, isHuman, isTrusted, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
 import { sendTransactions } from "../lib/wallet";
 import { grantCitizenReward } from "../lib/rewards";
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar, explorerTx, type Citizen } from "../lib/citizens";
@@ -119,6 +119,16 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
     setMsg({ kind: "info", text: `Einladungen für ${list.length} Person(en) werden vorbereitet…` });
     try {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
+      // Dry-run the exact txs on-chain BEFORE the wallet sheet — the module leg
+      // reverts for wallets the Circles invite system can't register (see lib).
+      const pf = await preflightInviteTxs(inviter, transactions as { to: string; data: string; value?: bigint }[]);
+      if (!pf.ok) {
+        setMsg({
+          kind: "err",
+          text: "Die Kontingent-Einladung würde auf der Blockchain fehlschlagen: Das Circles-Einladungssystem kann bisher nur Circles-eigene Konten einladen, noch keine Röbel-Konten. Das Circles-Team ist informiert — nutze bis dahin unten Selbst bezahlen.",
+        });
+        return;
+      }
       setMsg({ kind: "info", text: "Bitte bestätigen…" });
       const hashes = await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
       if (!hashes || hashes.length === 0) {

@@ -116,6 +116,39 @@ export async function getQuotaFunding(inviter: Address): Promise<QuotaFunding | 
   }
 }
 
+// ── Invite pre-flight ────────────────────────────────────────────────────────
+// The claim leg above only proves the QUOTA is fundable. The second SDK tx
+// (forwarding the claimed CRC to the InvitationModule with the invitee list)
+// can still revert: the deployed module registers each invitee in-line via
+// Safe-module exec (`validateModuleEnabled(invitee)` + registerHuman from the
+// invitee's Safe), which only works for Circles-native (Metri/Safe) wallets —
+// thirdweb smart accounts revert bare → ERC1155InvalidReceiver (0x57f447ce).
+// Chain-simulate the EXACT txs (eth_simulateV1) before opening the wallet
+// sheet so the user gets a clear message instead of a hex revert.
+export type InvitePreflight = { ok: true } | { ok: false; failedIndex: number; reason: string };
+
+export async function preflightInviteTxs(
+  inviter: Address,
+  transactions: { to: string; data: string; value?: bigint | string }[],
+): Promise<InvitePreflight> {
+  try {
+    const sim = await publicClient.simulateCalls({
+      account: inviter,
+      calls: transactions.map((t) => ({
+        to: t.to as Address,
+        data: t.data as `0x${string}`,
+        value: t.value ? BigInt(t.value) : 0n,
+      })),
+    });
+    const idx = sim.results.findIndex((r) => r.status !== "success");
+    if (idx === -1) return { ok: true };
+    const err = (sim.results[idx] as { error?: { shortMessage?: string } }).error;
+    return { ok: false, failedIndex: idx, reason: String(err?.shortMessage ?? "reverted").slice(0, 200) };
+  } catch {
+    return { ok: true }; // preflight unavailable (RPC without eth_simulateV1) → let the wallet decide
+  }
+}
+
 /** True once `addr` is a registered Circles human (skip — don't waste quota on it). */
 export async function isHuman(addr: Address): Promise<boolean> {
   return publicClient.readContract({ address: HUB, abi: hubAbi, functionName: "isHuman", args: [addr] });

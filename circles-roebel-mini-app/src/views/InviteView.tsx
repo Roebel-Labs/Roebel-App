@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sendTransactions } from "@aboutcircles/miniapp-sdk";
 import { getAddress, isAddress, type Address } from "viem";
-import { inviteFarm, getQuota, getQuotaFunding, isHuman, isTrusted, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
+import { inviteFarm, getQuota, getQuotaFunding, preflightInviteTxs, isHuman, isTrusted, toHostTxs, getSelfFundInfo, buildSelfFundTxs, type SelfFundInfo, type QuotaFunding } from "../lib/circles";
 import { ROEBEL_CITIZENS, shortAddr, explorerAvatar, explorerTx, type Citizen } from "../lib/citizens";
 import { fetchRoebelCitizens } from "../lib/citizens-onchain";
 import { getProfiles, type Profile } from "../lib/circlesData";
@@ -118,6 +118,16 @@ export default function InviteView({ inviter }: { inviter: Address | null }) {
     setMsg({ kind: "info", text: `Building invitations for ${list.length} address(es)…` });
     try {
       const { transactions } = await inviteFarm.generateInvites(inviter, list);
+      // Dry-run the exact txs on-chain BEFORE the wallet sheet — the module leg
+      // reverts for wallets the Circles invite system can't register (see lib).
+      const pf = await preflightInviteTxs(inviter, transactions as { to: string; data: string; value?: bigint }[]);
+      if (!pf.ok) {
+        setMsg({
+          kind: "err",
+          text: "This quota invite would revert on-chain: the Circles invitation system can currently only invite Circles-native accounts, not Röbel accounts yet. The Circles team has been notified — use Self-fund below for now.",
+        });
+        return;
+      }
       setMsg({ kind: "info", text: "Please confirm in your wallet…" });
       const hashes = await sendTransactions(toHostTxs(transactions as { to: string; data: string; value?: bigint }[]));
       if (!hashes || hashes.length === 0) {
