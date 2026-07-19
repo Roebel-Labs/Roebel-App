@@ -17,6 +17,7 @@ export function formatDate(value: string | null): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("de-DE", {
+    timeZone: "Europe/Berlin",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -114,9 +115,15 @@ export function UsersTableView({
                               r.display_name ||
                               formatWalletAddress(r.wallet_address)}
                           </span>
-                          {r.is_verified_citizen && (
+                          {r.verified_effective && (
                             <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#00498B]" />
                           )}
+                          {r.is_verified_citizen &&
+                            r.holds_citizen_nft === false && (
+                              <span className="inline-flex shrink-0 rounded-full border border-amber-300 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                NFT fehlt
+                              </span>
+                            )}
                         </div>
                         <span className="font-mono text-xs text-muted-foreground">
                           {formatWalletAddress(r.wallet_address)}

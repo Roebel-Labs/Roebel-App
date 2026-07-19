@@ -1,6 +1,10 @@
 "use server"
 
 import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  getCitizenRegistry,
+  type CitizenRegistry,
+} from "@/lib/citizen-registry"
 
 /**
  * A single user row for the admin dashboard — the `users` table merged with
@@ -25,6 +29,18 @@ export interface AdminUserRow {
   // Classification
   tier: string // guest | tourist | citizen
   is_verified_citizen: boolean
+  /**
+   * Whether the wallet currently holds the CitizenNFTv2 on-chain (Gnosis).
+   * `null` when the chain scan was unavailable. This is the ground truth —
+   * `is_verified_citizen` is client-synced and can lag it by hours/days.
+   */
+  holds_citizen_nft: boolean | null
+  /** ISO timestamp of the on-chain CitizenNFT mint (= verification moment). */
+  verified_onchain_at: string | null
+  /** App-side verification date (`users.citizen_verification_date`). */
+  citizen_verification_date: string | null
+  /** DB flag OR on-chain holder — what the dashboard treats as "verified". */
+  verified_effective: boolean
   verification_status: string // pending | approved | rejected
   verification_notes: string | null
   is_extern: boolean
@@ -67,7 +83,12 @@ export interface DailyPoint {
 
 export interface UsersAdminMetrics {
   totalUsers: number
+  /** Effectively verified citizens (DB flag ∪ on-chain NFT holders). */
   verifiedCitizens: number
+  /** CitizenNFTs currently on-chain — null when the chain scan failed. */
+  citizensOnChain: number | null
+  /** Citizens verified (NFT minted) in the last rolling 7 days. */
+  verifiedLast7Days: number
   newLast7Days: number
   newLast30Days: number
   activeLast30Days: number
@@ -152,6 +173,19 @@ function asPlatform(value: unknown): Platform | null {
   return PLATFORM_VALUES.includes(value as Platform) ? (value as Platform) : null
 }
 
+// Daily buckets use Europe/Berlin calendar days, not UTC — a registration at
+// So. 00:30 local time must count as Sunday, not Saturday. ("sv-SE" formats
+// as YYYY-MM-DD.)
+const berlinDayFmt = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Berlin",
+})
+
+function berlinDay(value: string | number | Date): string | null {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return berlinDayFmt.format(d)
+}
+
 export async function getUsersAdminData(): Promise<{
   success: boolean
   rows?: AdminUserRow[]
@@ -163,26 +197,41 @@ export async function getUsersAdminData(): Promise<{
     const supabase = createAdminClient()
     const since60 = new Date(Date.now() - 60 * DAY_MS).toISOString()
 
-    const [usersResult, cardsResult, pushResult, activityResult, ledgerResult] =
-      await Promise.all([
-        supabase.from("users").select("*").order("created_at", { ascending: false }),
-        supabase.from("roebel_points_card").select("*"),
-        supabase
-          .from("push_tokens")
-          .select("wallet_address, platform, last_used_at")
-          .eq("is_active", true),
-        supabase
-          .from("app_activity")
-          .select("wallet_address, platform, activity_date, last_seen_at"),
-        supabase
-          .from("roebel_points_ledger")
-          .select("wallet_address, created_at")
-          .gte("created_at", since60),
-      ])
+    const [
+      usersResult,
+      cardsResult,
+      pushResult,
+      activityResult,
+      ledgerResult,
+      registry,
+    ] = await Promise.all([
+      supabase.from("users").select("*").order("created_at", { ascending: false }),
+      supabase.from("roebel_points_card").select("*"),
+      supabase
+        .from("push_tokens")
+        .select("wallet_address, platform, last_used_at")
+        .eq("is_active", true),
+      supabase
+        .from("app_activity")
+        .select("wallet_address, platform, activity_date, last_seen_at"),
+      supabase
+        .from("roebel_points_ledger")
+        .select("wallet_address, created_at")
+        .gte("created_at", since60),
+      // On-chain ground truth; the dashboard must not die when the RPC does.
+      getCitizenRegistry().catch((error): CitizenRegistry | null => {
+        console.error("[users-admin] CitizenNFT chain scan failed:", error)
+        return null
+      }),
+    ])
 
     if (usersResult.error) {
       return { success: false, error: usersResult.error.message }
     }
+
+    const holderByWallet = registry
+      ? new Map(registry.holders.map((h) => [h.wallet, h]))
+      : null
 
     const cardsByWallet = new Map<string, Record<string, unknown>>()
     for (const card of cardsResult.data ?? []) {
@@ -224,6 +273,7 @@ export async function getUsersAdminData(): Promise<{
       const u = raw as Record<string, unknown>
       const wallet = String(u.wallet_address ?? "")
       const card = cardsByWallet.get(wallet.toLowerCase())
+      const holder = holderByWallet?.get(wallet.toLowerCase()) ?? null
 
       return {
         wallet_address: wallet,
@@ -240,6 +290,11 @@ export async function getUsersAdminData(): Promise<{
 
         tier: (u.tier as string) || "guest",
         is_verified_citizen: !!u.is_verified_citizen,
+        holds_citizen_nft: holderByWallet ? !!holder : null,
+        verified_onchain_at: holder?.verifiedAt ?? null,
+        citizen_verification_date:
+          (u.citizen_verification_date as string) ?? null,
+        verified_effective: !!u.is_verified_citizen || !!holder,
         verification_status: (u.verification_status as string) || "pending",
         verification_notes: (u.verification_notes as string) ?? null,
         is_extern: !!u.is_extern,
@@ -269,6 +324,46 @@ export async function getUsersAdminData(): Promise<{
       }
     })
 
+    // Self-heal DB drift: a wallet that verifiably holds the CitizenNFT IS a
+    // verified citizen. Mirror the app's own sync (UserContext sets tier,
+    // is_verified_citizen, verification_status when it sees the NFT) server-side,
+    // so fresh verifications count everywhere without waiting for that user to
+    // reopen the app. Strictly one-directional — never downgrades anyone.
+    if (holderByWallet) {
+      const drifted = rows.filter(
+        (r) => r.holds_citizen_nft && !r.is_verified_citizen
+      )
+      if (drifted.length > 0) {
+        try {
+          await Promise.all(
+            drifted.map(async (r) => {
+              const { error } = await supabase
+                .from("users")
+                .update({
+                  tier: "citizen",
+                  is_verified_citizen: true,
+                  verification_status: "approved",
+                  citizen_verification_date:
+                    r.citizen_verification_date ?? r.verified_onchain_at,
+                })
+                .eq("wallet_address", r.wallet_address)
+              if (error) throw error
+              r.tier = "citizen"
+              r.is_verified_citizen = true
+              r.verification_status = "approved"
+              r.citizen_verification_date =
+                r.citizen_verification_date ?? r.verified_onchain_at
+            })
+          )
+          console.log(
+            `[users-admin] Synced ${drifted.length} on-chain-verified citizen(s) into the users table`
+          )
+        } catch (error) {
+          console.error("[users-admin] Citizen drift self-heal failed:", error)
+        }
+      }
+    }
+
     const signupRows: SignupRow[] = rows.map((r) => ({
       created_at: r.created_at,
       platform: r.platform,
@@ -289,7 +384,7 @@ export async function getUsersAdminData(): Promise<{
       }
     })
 
-    const metrics = buildMetrics(rows, ledgerRows, activityRows)
+    const metrics = buildMetrics(rows, ledgerRows, activityRows, registry)
 
     return { success: true, rows, signupRows, metrics }
   } catch (error) {
@@ -319,27 +414,39 @@ function dailyDistinctSeries(
   }))
 }
 
-/** Returns the last `days` calendar dates (UTC) as YYYY-MM-DD, oldest first. */
+/** Returns the last `days` Europe/Berlin calendar dates as YYYY-MM-DD, oldest first. */
 function lastNDays(days: number): string[] {
   const out: string[] = []
   const today = Date.now()
   for (let i = days - 1; i >= 0; i--) {
-    out.push(new Date(today - i * DAY_MS).toISOString().slice(0, 10))
+    out.push(berlinDayFmt.format(new Date(today - i * DAY_MS)))
   }
-  return out
+  // 24h steps can duplicate a local date across a DST switch — keys must be unique
+  return [...new Set(out)]
 }
 
 function buildMetrics(
   rows: AdminUserRow[],
   ledgerRows: { wallet: string; created_at: string }[],
-  activityRows: { wallet: string; date: string }[]
+  activityRows: { wallet: string; date: string }[],
+  registry: CitizenRegistry | null
 ): UsersAdminMetrics {
   const now = Date.now()
   const cutoff7 = now - 7 * DAY_MS
   const cutoff30 = now - 30 * DAY_MS
 
   const totalUsers = rows.length
-  const verifiedCitizens = rows.filter((r) => r.is_verified_citizen).length
+  const verifiedCitizens = rows.filter((r) => r.verified_effective).length
+  const citizensOnChain = registry ? registry.totalOnChain : null
+  const verifiedLast7Days = registry
+    ? registry.holders.filter(
+        (h) => new Date(h.verifiedAt).getTime() >= cutoff7
+      ).length
+    : rows.filter(
+        (r) =>
+          r.citizen_verification_date &&
+          new Date(r.citizen_verification_date).getTime() >= cutoff7
+      ).length
   const newLast7Days = rows.filter(
     (r) => new Date(r.created_at).getTime() >= cutoff7
   ).length
@@ -365,12 +472,11 @@ function buildMetrics(
     }))
     .filter((d) => d.count > 0)
 
-  // Daily registrations (new users/day) over last 60 days
+  // Daily registrations (new users/day, Berlin days) over last 60 days
   const regByDay = new Map<string, number>()
   for (const r of rows) {
-    const ms = new Date(r.created_at).getTime()
-    if (!Number.isFinite(ms)) continue
-    const day = new Date(ms).toISOString().slice(0, 10)
+    const day = berlinDay(r.created_at)
+    if (!day) continue
     regByDay.set(day, (regByDay.get(day) ?? 0) + 1)
   }
   const dailyRegistrations: DailyPoint[] = lastNDays(60).map((date) => ({
@@ -382,7 +488,7 @@ function buildMetrics(
   const dailyActiveProxy = dailyDistinctSeries(
     ledgerRows.map((l) => ({
       wallet: l.wallet,
-      day: new Date(l.created_at).toISOString().slice(0, 10),
+      day: berlinDay(l.created_at) ?? "",
     })),
     60
   )
@@ -415,6 +521,8 @@ function buildMetrics(
   return {
     totalUsers,
     verifiedCitizens,
+    citizensOnChain,
+    verifiedLast7Days,
     newLast7Days,
     newLast30Days,
     activeLast30Days,

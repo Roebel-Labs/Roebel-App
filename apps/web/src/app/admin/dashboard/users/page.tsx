@@ -30,6 +30,7 @@ import { getOrgAccountsAdminData } from "@/app/actions/orgs-admin";
 import { UsersTable } from "./_components/users-table";
 import { UsersByVerification } from "./_components/users-by-verification";
 import { RegisteredThisWeek } from "./_components/registered-this-week";
+import { VerifiedThisWeek } from "./_components/verified-this-week";
 import { VerificationRequestsPanel } from "./_components/verification-requests-panel";
 import { AttestersPanel } from "./_components/attesters-panel";
 import { OrgAccountsPanel } from "./_components/org-accounts-panel";
@@ -98,9 +99,11 @@ export default async function UsersAdminPage() {
         <KpiCard
           label="Verifizierte Bürger"
           value={numberFmt.format(metrics.verifiedCitizens)}
-          hint={`${Math.round(
-            (metrics.verifiedCitizens / Math.max(1, metrics.totalUsers)) * 100
-          )} % aller Nutzer`}
+          hint={
+            metrics.citizensOnChain === null
+              ? "on-chain Prüfung nicht erreichbar"
+              : `${numberFmt.format(metrics.citizensOnChain)} NFTs on-chain · +${numberFmt.format(metrics.verifiedLast7Days)} in 7 Tagen`
+          }
           icon={ShieldCheck}
         />
         <OpenVerificationsKpi />
@@ -304,18 +307,33 @@ export default async function UsersAdminPage() {
         </CardContent>
       </Card>
 
-      {/* Registered this week */}
-      <Card className="bg-card border border-border shadow-none">
-        <CardHeader>
-          <CardTitle>Diese Woche registriert</CardTitle>
-          <CardDescription>
-            Nutzer, die in den letzten 7 Tagen beigetreten sind.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RegisteredThisWeek rows={rows} />
-        </CardContent>
-      </Card>
+      {/* Verified + registered this week */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="bg-card border border-border shadow-none">
+          <CardHeader>
+            <CardTitle>Diese Woche verifiziert</CardTitle>
+            <CardDescription>
+              Bürger-Verifizierungen der letzten 7 Tage — Zeitpunkt des
+              On-Chain-NFT-Mints (live von Gnosis gelesen).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VerifiedThisWeek rows={rows} />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border border-border shadow-none">
+          <CardHeader>
+            <CardTitle>Diese Woche registriert</CardTitle>
+            <CardDescription>
+              Nutzer, die in den letzten 7 Tagen beigetreten sind.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RegisteredThisWeek rows={rows} />
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Users grouped by verification status */}
       <Card className="bg-card border border-border shadow-none">

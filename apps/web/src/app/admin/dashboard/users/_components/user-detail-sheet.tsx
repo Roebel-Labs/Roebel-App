@@ -42,6 +42,7 @@ function formatDateTime(value: string | null): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("de-DE", {
+    timeZone: "Europe/Berlin",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -127,7 +128,7 @@ export function UserDetailSheet({
                         user.display_name ||
                         formatWalletAddress(user.wallet_address)}
                     </span>
-                    {user.is_verified_citizen && (
+                    {user.verified_effective && (
                       <ShieldCheck className="h-4 w-4 shrink-0 text-[#00498B]" />
                     )}
                   </SheetTitle>
@@ -204,6 +205,22 @@ export function UserDetailSheet({
               </Section>
 
               <Section title="Engagement & Governance">
+                <Field
+                  label="Bürger-NFT (on-chain)"
+                  value={
+                    user.holds_citizen_nft === null
+                      ? "nicht geprüft"
+                      : user.holds_citizen_nft
+                        ? "Ja"
+                        : "Nein"
+                  }
+                />
+                {user.verified_onchain_at && (
+                  <Field
+                    label="Verifiziert am (on-chain)"
+                    value={formatDateTime(user.verified_onchain_at)}
+                  />
+                )}
                 <Field
                   label="Stimmen gesamt"
                   value={numberFmt.format(user.total_votes_cast)}

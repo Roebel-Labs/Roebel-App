@@ -76,7 +76,9 @@ function GroupSection({
 
 /**
  * Splits all users into three verification-based groups (separate tables):
- *  1. Verifizierte Bürger — hold the Citizen NFT on-chain.
+ *  1. Verifizierte Bürger — hold the Citizen NFT on-chain (live-geprüft) or
+ *     carry the app-side verified flag. `verified_effective` is the union of
+ *     both, so freshly minted citizens count even before their app re-syncs.
  *  2. Bürger – nicht verifiziert — picked "Bürger" in the app onboarding
  *     (tier=citizen) but have not completed on-chain verification yet. Those who
  *     already created a request appear in "Offene Verifizierungsanträge".
@@ -91,7 +93,7 @@ export function UsersByVerification({ rows }: { rows: AdminUserRow[] }) {
     const guests: AdminUserRow[] = [];
 
     for (const r of rows) {
-      if (r.is_verified_citizen) {
+      if (r.verified_effective) {
         verified.push(r);
       } else if (r.tier === "citizen") {
         aspiring.push(r);
@@ -100,11 +102,18 @@ export function UsersByVerification({ rows }: { rows: AdminUserRow[] }) {
       }
     }
 
+    const missingNft = verified.filter(
+      (r) => r.holds_citizen_nft === false
+    ).length;
+
     return [
       {
         key: "verified",
         label: "Verifizierte Bürger",
-        description: "Halten das Bürger-NFT (on-chain verifiziert).",
+        description:
+          missingNft > 0
+            ? `Bürger-NFT on-chain live geprüft. ⚠ ${missingNft} als verifiziert markiert, aber ohne NFT on-chain (widerrufen?).`
+            : "Halten das Bürger-NFT (on-chain live geprüft).",
         icon: ShieldCheck,
         accent: "text-[#00498B]",
         rows: verified,
