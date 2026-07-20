@@ -146,7 +146,7 @@ const listingsQuery = useQuery({ queryKey: ['explore', 'listings'], queryFn: () 
 ```
 
 Derived consts keep their existing names (`events = eventsQuery.data ?? []`, etc.).
-**Progressive gate:** `loading` becomes `popularQuery.isPending && eventsQuery.isPending` (the top-of-page sections) — the rest of the sections render as their data arrives (empty sections render nothing/skeleton as they already do for empty arrays).
+**Progressive gate — USER DIRECTIVE (2026-07-20): loading states must ALWAYS be skeleton loaders.** Remove the page-level `loading` gate entirely. Each section renders: its content when its query has data; a **section skeleton** while its query `isPending` (first load with no cache); nothing when resolved-but-empty (existing behavior). Inspect the CURRENT loading UI in explore.tsx (whatever renders while `loading` is true today) and reuse/split those skeleton pieces per section — the repo's skeleton primitive is `components/SkeletonLoader.tsx` (`Skeleton`), already used by PostImageGrid. Keep skeleton shapes roughly matching each section's card rail (e.g., a horizontal row of 2-3 card-shaped skeletons). Do not introduce spinners/ActivityIndicator anywhere.
 `onRefresh` refetches ALL seven in parallel:
 ```ts
 const onRefresh = async () => {
@@ -188,6 +188,27 @@ git push
 ```bash
 git add apps/expo/components/miniapp/MiniAppsEntry.tsx apps/expo/components/NearbyOrgAccountsSection.tsx apps/expo/components/RestaurantSection.tsx
 git commit -m "feat(expo): Entdecken independent sections render from persisted cache (mini-apps, orgs, ratings)"
+git push
+```
+
+---
+
+### Task E4: Skeleton loading state on the main feed
+
+**Files:**
+- Modify: `components/feed/FeedList.tsx` (or `FeedHome.tsx` — wherever the `isLoading` empty-state renders)
+- Possibly create: `components/feed/FeedPostSkeleton.tsx` (only if no post skeleton exists yet)
+
+**Interfaces:** none external.
+
+USER DIRECTIVE (2026-07-20): loading states must always be skeleton loaders — the main feed included.
+
+- [ ] **Step 1:** Find what the feed renders while `isLoading && items.length === 0` (grep FeedList/FeedHome for ActivityIndicator/loading branches). If it is anything other than skeleton cards, replace it with a column of 4 post-shaped skeletons built from the `Skeleton` primitive (`components/SkeletonLoader.tsx`): avatar circle (40px) + two text lines + a media rectangle (16:10), roughly matching `FeedPostCard` layout paddings/tokens (StyleSheet + useTheme, match surrounding code). If a post skeleton component already exists anywhere, reuse it instead of creating a new one.
+- [ ] **Step 2:** Keep pull-to-refresh and load-more indicators as they are (refresh spinner in RefreshControl is platform-native and stays; the footer load-more indicator may stay a small spinner — the directive targets the initial loading state).
+- [ ] **Step 3:** Commit + push immediately:
+```bash
+git add <exact files touched>
+git commit -m "feat(expo): skeleton loaders for main feed initial load"
 git push
 ```
 
