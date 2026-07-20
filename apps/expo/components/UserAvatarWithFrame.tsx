@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useEquippedRewards } from '@/hooks/useEquippedRewards';
 import { useTheme } from '@/context/ThemeContext';
+import { transformedImageUrl } from '@/lib/image-url';
 
 /**
  * Frame PNGs are designed to overflow the avatar's circle so they read as a
@@ -75,7 +76,7 @@ export default function UserAvatarWithFrame({
           // disk. Repeat appearances across the DM list and chat then render
           // instantly instead of re-fetching over the network every time.
           <ExpoImage
-            source={{ uri }}
+            source={{ uri: transformedImageUrl(uri, { width: 160 }) ?? undefined }}
             style={{ width: size, height: size }}
             contentFit="cover"
             cachePolicy="memory-disk"

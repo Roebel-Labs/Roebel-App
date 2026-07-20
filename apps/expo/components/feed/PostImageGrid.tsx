@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Skeleton } from '@/components/SkeletonLoader';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   imageUrls: string[];
@@ -39,9 +40,11 @@ export default function PostImageGrid({ imageUrls, onPress, renderOverlay, pendi
       <View style={[styles.slot, style]}>
         <Pressable onPress={() => onPress?.(index)} style={styles.fill}>
           <Image
-            source={{ uri: imageUrls[index] }}
+            source={{ uri: transformedImageUrl(imageUrls[index], { width: 640 }) ?? undefined }}
             style={styles.fillImage}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={imageUrls[index]}
             accessibilityIgnoresInvertColors
           />
         </Pressable>
@@ -60,9 +63,11 @@ export default function PostImageGrid({ imageUrls, onPress, renderOverlay, pendi
         ) : (
           <Pressable onPress={() => onPress?.(0)} style={styles.fill}>
             <Image
-              source={{ uri: imageUrls[0] }}
+              source={{ uri: transformedImageUrl(imageUrls[0], { width: 1080 }) ?? undefined }}
               style={styles.fillImage}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={imageUrls[0]}
               onLoad={(e) => {
                 const w = e.source?.width;
                 const h = e.source?.height;
