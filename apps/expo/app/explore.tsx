@@ -13,7 +13,6 @@ import type {
   NewsArticle,
   MovieRecord,
   RestaurantRecord,
-  BusinessDealWithBusiness,
 } from '@/lib/types';
 
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
@@ -34,63 +33,75 @@ import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 
-async function fetchExploreData() {
-  const [
-    eventsResult,
-    popularEventsResult,
-    newsResult,
-    moviesResult,
-    restaurantsResult,
-    dealsResult,
-    listingsResult,
-  ] = await Promise.all([
-    supabase
-      .from('events')
-      .select('*')
-      .eq('status', 'approved')
-      .gte('date', new Date().toISOString().split('T')[0]) // LIMIT: only today+future
-      .order('date', { ascending: true })
-      .order('time', { ascending: true, nullsFirst: true })
-      .limit(60), // LIMIT
-    supabase
-      .from('events')
-      .select('*')
-      .eq('status', 'approved')
-      .eq('is_popular', true)
-      .order('date', { ascending: true })
-      .order('time', { ascending: true, nullsFirst: true })
-      .limit(3),
-    supabase
-      .from('news_articles')
-      .select('*')
-      .eq('status', 'published')
-      .order('published_at', { ascending: false })
-      .limit(20), // LIMIT
-    supabase
-      .from('movies')
-      .select('id, title, description, date, time, cover_image_url, trailer_youtube_url, fsk, status, created_at, updated_at')
-      .eq('status', 'published')
-      .order('date', { ascending: true }),
-    supabase
-      .from('restaurants')
-      .select('*')
-      .eq('status', 'published')
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true })
-      .limit(50), // LIMIT
-    fetchActiveDeals(),
-    fetchMarketplaceListings({ limit: 10 }),
-  ]);
+const EVENT_CARD_COLUMNS =
+  'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name';
 
-  return {
-    events: (eventsResult.data ?? []) as EventRecord[],
-    popularEvents: (popularEventsResult.data ?? []) as EventRecord[],
-    newsArticles: (newsResult.data ?? []) as NewsArticle[],
-    movies: (moviesResult.data ?? []) as MovieRecord[],
-    restaurants: (restaurantsResult.data ?? []) as RestaurantRecord[],
-    deals: dealsResult as BusinessDealWithBusiness[],
-    listings: listingsResult,
-  };
+async function fetchExploreEvents() {
+  const { data } = await supabase
+    .from('events')
+    .select(EVENT_CARD_COLUMNS)
+    .eq('status', 'approved')
+    .gte('date', new Date().toISOString().split('T')[0]) // LIMIT: only today+future
+    .order('date', { ascending: true })
+    .order('time', { ascending: true, nullsFirst: true })
+    .limit(60); // LIMIT
+  return (data ?? []) as EventRecord[];
+}
+
+async function fetchExplorePopularEvents() {
+  const { data } = await supabase
+    .from('events')
+    .select(EVENT_CARD_COLUMNS)
+    .eq('status', 'approved')
+    .eq('is_popular', true)
+    .order('date', { ascending: true })
+    .order('time', { ascending: true, nullsFirst: true })
+    .limit(3);
+  return (data ?? []) as EventRecord[];
+}
+
+async function fetchExploreNews() {
+  const { data } = await supabase
+    .from('news_articles')
+    .select('id, slug, title, cover_image_url, author_name, published_at, excerpt')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(20); // LIMIT
+  return (data ?? []) as NewsArticle[];
+}
+
+async function fetchExploreMovies() {
+  const { data } = await supabase
+    .from('movies')
+    .select('id, title, date, cover_image_url, fsk, status')
+    .eq('status', 'published')
+    .order('date', { ascending: true });
+  return (data ?? []) as MovieRecord[];
+}
+
+async function fetchExploreRestaurants() {
+  const { data } = await supabase
+    .from('restaurants')
+    .select('id, slug, name, cover_image_url, logo_url, background_color, opening_hours, account_id')
+    .eq('status', 'published')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+    .limit(50); // LIMIT
+  return (data ?? []) as RestaurantRecord[];
+}
+
+// Section skeleton: title bar + horizontal row of card-shaped placeholders,
+// mirroring the horizontal-rail layout every explore section uses.
+function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | number }) {
+  return (
+    <View style={styles.skeletonSection}>
+      <Skeleton width={titleWidth} height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
+      <View style={styles.skeletonRow}>
+        <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 16 }} />
+        <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 12 }} />
+      </View>
+    </View>
+  );
 }
 
 export default function ExploreScreen() {
@@ -116,24 +127,61 @@ export default function ExploreScreen() {
     }, [])
   );
 
-  const exploreQuery = useQuery({
-    queryKey: ['explore', 'all'],
-    queryFn: fetchExploreData,
+  const eventsQuery = useQuery({
+    queryKey: ['explore', 'events'],
+    queryFn: fetchExploreEvents,
+    meta: { persist: true },
+  });
+  const popularQuery = useQuery({
+    queryKey: ['explore', 'popular-events'],
+    queryFn: fetchExplorePopularEvents,
+    meta: { persist: true },
+  });
+  const newsQuery = useQuery({
+    queryKey: ['explore', 'news'],
+    queryFn: fetchExploreNews,
+    meta: { persist: true },
+  });
+  const moviesQuery = useQuery({
+    queryKey: ['explore', 'movies'],
+    queryFn: fetchExploreMovies,
+    meta: { persist: true },
+  });
+  const restaurantsQuery = useQuery({
+    queryKey: ['explore', 'restaurants'],
+    queryFn: fetchExploreRestaurants,
+    meta: { persist: true },
+  });
+  const dealsQuery = useQuery({
+    queryKey: ['explore', 'deals'],
+    queryFn: () => fetchActiveDeals(),
+    meta: { persist: true },
+  });
+  const listingsQuery = useQuery({
+    queryKey: ['explore', 'listings'],
+    queryFn: () => fetchMarketplaceListings({ limit: 10 }),
     meta: { persist: true },
   });
 
-  const events = exploreQuery.data?.events ?? [];
-  const popularEvents = exploreQuery.data?.popularEvents ?? [];
-  const newsArticles = exploreQuery.data?.newsArticles ?? [];
-  const movies = exploreQuery.data?.movies ?? [];
-  const restaurants = exploreQuery.data?.restaurants ?? [];
-  const deals = exploreQuery.data?.deals ?? [];
-  const listings = exploreQuery.data?.listings ?? [];
-  const loading = exploreQuery.isPending;
+  const events = eventsQuery.data ?? [];
+  const popularEvents = popularQuery.data ?? [];
+  const newsArticles = newsQuery.data ?? [];
+  const movies = moviesQuery.data ?? [];
+  const restaurants = restaurantsQuery.data ?? [];
+  const deals = dealsQuery.data ?? [];
+  const listings = listingsQuery.data ?? [];
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await exploreQuery.refetch();
+    await Promise.all([
+      eventsQuery.refetch(),
+      popularQuery.refetch(),
+      newsQuery.refetch(),
+      moviesQuery.refetch(),
+      restaurantsQuery.refetch(),
+      dealsQuery.refetch(),
+      listingsQuery.refetch(),
+    ]);
     setRefreshing(false);
   };
 
@@ -179,64 +227,78 @@ export default function ExploreScreen() {
         {/* Category tiles */}
         <ExploreCategoryChips />
 
-        {loading ? (
-          <View style={styles.skeletonContainer}>
-            <HeroCardSkeleton />
-            <View style={styles.skeletonSection}>
-              <Skeleton width="40%" height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
-              <View style={styles.skeletonRow}>
-                <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 16 }} />
-                <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 12 }} />
-              </View>
-            </View>
-            <View style={styles.skeletonSection}>
-              <Skeleton width="40%" height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
-              <View style={styles.skeletonRow}>
-                <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 16 }} />
-                <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 12 }} />
-              </View>
-            </View>
-          </View>
+        {/* Hero Swiper */}
+        {popularQuery.isPending ? (
+          <HeroCardSkeleton />
         ) : (
-          <>
-            {/* Hero Swiper */}
-            <SwipeableCardStack
-              events={futurePopularEvents}
-              showPagination
-              loop
-              containerStyle={{ paddingTop: 8, paddingBottom: 16, marginBottom: 0 }}
-            />
+          <SwipeableCardStack
+            events={futurePopularEvents}
+            showPagination
+            loop
+            containerStyle={{ paddingTop: 8, paddingBottom: 16, marginBottom: 0 }}
+          />
+        )}
 
-            {/* This Week Events - Horizontal */}
-            <ThisWeekEventsHorizontal events={futureEvents} />
+        {/* This Week Events - Horizontal */}
+        {eventsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="35%" />
+        ) : (
+          <ThisWeekEventsHorizontal events={futureEvents} />
+        )}
 
-            {/* Movies */}
-            <MovieSection movies={movies} />
+        {/* Movies */}
+        {moviesQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="25%" />
+        ) : (
+          <MovieSection movies={movies} />
+        )}
 
-            {/* Mini Apps store entry */}
-            <MiniAppsEntry />
+        {/* Mini Apps store entry */}
+        <MiniAppsEntry />
 
-            {/* Marketplace */}
-            <MarketplaceSection listings={listings} />
+        {/* Marketplace */}
+        {listingsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="35%" />
+        ) : (
+          <MarketplaceSection listings={listings} />
+        )}
 
-            {/* News */}
-            <NewsSection articles={newsArticles} />
+        {/* News */}
+        {newsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="40%" />
+        ) : (
+          <NewsSection articles={newsArticles} />
+        )}
 
-            {/* Deals */}
-            <DealsGridSection deals={deals} />
+        {/* Deals */}
+        {dealsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="45%" />
+        ) : (
+          <DealsGridSection deals={deals} />
+        )}
 
-            {/* Restaurants */}
-            <RestaurantSection restaurants={restaurants} />
+        {/* Restaurants */}
+        {restaurantsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="40%" />
+        ) : (
+          <RestaurantSection restaurants={restaurants} />
+        )}
 
-            {/* Nearby Events */}
-            <NearbyEventsSection events={nearbyEvents} />
+        {/* Nearby Events */}
+        {eventsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="30%" />
+        ) : (
+          <NearbyEventsSection events={nearbyEvents} />
+        )}
 
-            {/* Nearby Org Accounts (Unternehmen) */}
-            <NearbyOrgAccountsSection />
+        {/* Nearby Org Accounts (Unternehmen) */}
+        <NearbyOrgAccountsSection />
 
-            {/* All Events - Horizontal */}
-            <AllEventsHorizontal events={futureEvents} />
-          </>
+        {/* All Events - Horizontal */}
+        {eventsQuery.isPending ? (
+          <SectionRailSkeleton titleWidth="50%" />
+        ) : (
+          <AllEventsHorizontal events={futureEvents} />
         )}
 
         {/* Bottom padding for BottomNavigation */}
@@ -265,9 +327,6 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  skeletonContainer: {
-    marginTop: 24,
   },
   skeletonSection: {
     marginBottom: 32,

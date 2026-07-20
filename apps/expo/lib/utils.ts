@@ -166,7 +166,8 @@ export function formatRelativeTimestamp(dateISO: string): string {
 }
 
 // Estimate reading time based on content length
-export function calculateReadTime(content: string): string {
+export function calculateReadTime(content: string | null | undefined): string | null {
+  if (!content) return null;
   const wordsPerMinute = 200;
   const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
   const minutes = Math.ceil(words / wordsPerMinute);

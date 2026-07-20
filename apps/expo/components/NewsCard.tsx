@@ -59,8 +59,12 @@ export default function NewsCard({ article, compact = false }: Props) {
 
         <View style={styles.metaRow}>
           <Text style={[styles.metaText, { color: colors.textTertiary }]}>{article.author_name}</Text>
-          <Text style={[styles.metaDot, { color: colors.textTertiary }]}>•</Text>
-          <Text style={[styles.metaText, { color: colors.textTertiary }]}>{readTime}</Text>
+          {readTime && (
+            <>
+              <Text style={[styles.metaDot, { color: colors.textTertiary }]}>•</Text>
+              <Text style={[styles.metaText, { color: colors.textTertiary }]}>{readTime}</Text>
+            </>
+          )}
         </View>
 
         <Text style={[styles.dateText, { color: colors.textTertiary }]}>{publishDate}</Text>
