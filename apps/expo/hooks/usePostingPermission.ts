@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
+import { loadCachedPostingStatus, saveCachedPostingStatus } from '@/lib/posting-permission-cache';
 
 export type PostingStatus =
   | { kind: 'loading' }
@@ -94,7 +95,38 @@ export function usePostingPermission(options?: { bypass?: boolean }): {
       setStatus({ kind: 'unknown_user' });
       return;
     }
-    setStatus(mapStatus(data as RawStatus | null));
+    const mapped = mapStatus(data as RawStatus | null);
+    setStatus(mapped);
+    void saveCachedPostingStatus(wallet, mapped);
+  }, [wallet, bypass]);
+
+  // Hydrate from the on-disk cache instantly on mount so the composer's
+  // PostingGate doesn't show its "Lade…" gate on every open for returning
+  // tourists (citizens/orgs never reach here — they're bypassed above).
+  // Applied only while still `loading` (prev-guard) — if the RPC below has
+  // already resolved by the time this lands, its result always wins.
+  //
+  // Stale-cooldown guard: `account_too_young`/`rate_limited` carry an
+  // `unlockAt` timestamp. If the cached unlock time is already in the past,
+  // the cooldown may well be over — never show a stale cooldown screen, just
+  // skip the cache entirely and let the RPC decide.
+  useEffect(() => {
+    if (bypass || !wallet) return;
+    let cancelled = false;
+    (async () => {
+      const cached = await loadCachedPostingStatus(wallet);
+      if (cancelled || !cached) return;
+      if (
+        (cached.kind === 'account_too_young' || cached.kind === 'rate_limited') &&
+        cached.unlockAt.getTime() <= Date.now()
+      ) {
+        return;
+      }
+      setStatus((prev) => (prev.kind === 'loading' ? cached : prev));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [wallet, bypass]);
 
   useEffect(() => {
