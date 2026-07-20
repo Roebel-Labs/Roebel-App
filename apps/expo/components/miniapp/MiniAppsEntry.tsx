@@ -5,10 +5,11 @@
  * a "Mini-Apps · Mehr entdecken ›" header. Falls back to a promo banner when
  * no live apps exist.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { ChevronRight } from '@/components/miniapp/hostIcons';
@@ -26,24 +27,16 @@ export default function MiniAppsEntry() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { isInstalled } = useInstalledMiniApps();
-  const [apps, setApps] = useState<MiniApp[]>([]);
-  const [loaded, setLoaded] = useState(false);
   // Installed apps launch straight into the host from the grid.
   const [runningApp, setRunningApp] = useState<MiniApp | null>(null);
   const [hostVisible, setHostVisible] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchLiveMiniApps().then((data) => {
-      if (!cancelled) {
-        setApps(data);
-        setLoaded(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, isPending } = useQuery({
+    queryKey: ['explore', 'mini-apps'],
+    queryFn: fetchLiveMiniApps,
+    meta: { persist: true },
+  });
+  const apps = data ?? [];
 
   const goStore = () => router.push('/mini-apps' as any);
 
@@ -62,7 +55,7 @@ export default function MiniAppsEntry() {
   const closeHost = useCallback(() => setHostVisible(false), []);
 
   // Until we know, render nothing (avoids layout flash).
-  if (!loaded) return null;
+  if (isPending) return null;
 
   const tileW = Math.floor((width - 32 - 3 * GRID_GAP) / 4);
   const iconSize = Math.min(tileW, 64);

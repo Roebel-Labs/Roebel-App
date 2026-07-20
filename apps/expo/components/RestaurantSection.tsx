@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
-import { RestaurantRecord, AccountRatingSummary } from '@/lib/types';
+import { useQuery } from '@tanstack/react-query';
+import { RestaurantRecord } from '@/lib/types';
 import GastroCard from './GastroCard';
 import { fetchAccountRatingSummaries } from '@/lib/supabase-ratings';
 import { useRouter } from 'expo-router';
@@ -14,24 +15,20 @@ type Props = {
 export default function RestaurantSection({ restaurants }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
-  const [summaries, setSummaries] = useState<Record<string, AccountRatingSummary>>({});
 
-  // Star ratings live on the linked org account.
-  const accountIds = restaurants
-    .map((r) => r.account_id)
-    .filter((id): id is string => !!id);
-  const accountIdsKey = accountIds.join(',');
+  // Star ratings live on the linked org account. Sorted (and de-duped) so the
+  // query key is stable across re-renders regardless of restaurant order.
+  const accountIds = [
+    ...new Set(restaurants.map((r) => r.account_id).filter((id): id is string => !!id)),
+  ].sort();
 
-  useEffect(() => {
-    if (!accountIdsKey) return;
-    let cancelled = false;
-    fetchAccountRatingSummaries(accountIdsKey.split(',')).then((sums) => {
-      if (!cancelled) setSummaries(sums);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountIdsKey]);
+  const ratingsQuery = useQuery({
+    queryKey: ['explore', 'restaurant-ratings', accountIds],
+    queryFn: () => fetchAccountRatingSummaries(accountIds),
+    meta: { persist: true },
+    enabled: accountIds.length > 0,
+  });
+  const summaries = ratingsQuery.data ?? {};
 
   if (restaurants.length === 0) {
     return null;

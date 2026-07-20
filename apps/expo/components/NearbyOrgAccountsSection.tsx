@@ -1,10 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchOrgAccountsBySubType } from '@/lib/supabase-accounts';
 import { fetchAccountVoteSummaries } from '@/lib/supabase-ratings';
 import OrgAccountCard from '@/components/OrgAccountCard';
 import type { Account, AccountVoteSummary } from '@/lib/types';
+
+type OrgAccountsSection = {
+  accounts: Account[];
+  summaries: Record<string, AccountVoteSummary>;
+};
+
+async function fetchOrgAccountsSection(): Promise<OrgAccountsSection> {
+  const data = await fetchOrgAccountsBySubType('unternehmen');
+  const summaries = await fetchAccountVoteSummaries(data.map((a) => a.id));
+  const accounts = [...data].sort((a, b) => {
+    const ua = summaries[a.id]?.up_count ?? 0;
+    const ub = summaries[b.id]?.up_count ?? 0;
+    if (ub !== ua) return ub - ua;
+    return a.name.localeCompare(b.name);
+  });
+  return { accounts, summaries };
+}
 
 /**
  * Horizontal row of org accounts (sub_type 'unternehmen') shown under the
@@ -12,27 +30,14 @@ import type { Account, AccountVoteSummary } from '@/lib/types';
  */
 export default function NearbyOrgAccountsSection() {
   const { colors } = useTheme();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [summaries, setSummaries] = useState<Record<string, AccountVoteSummary>>({});
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const data = await fetchOrgAccountsBySubType('unternehmen');
-      if (cancelled) return;
-      const sums = await fetchAccountVoteSummaries(data.map((a) => a.id));
-      if (cancelled) return;
-      const sorted = [...data].sort((a, b) => {
-        const ua = sums[a.id]?.up_count ?? 0;
-        const ub = sums[b.id]?.up_count ?? 0;
-        if (ub !== ua) return ub - ua;
-        return a.name.localeCompare(b.name);
-      });
-      setSummaries(sums);
-      setAccounts(sorted);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  const { data } = useQuery({
+    queryKey: ['explore', 'org-accounts'],
+    queryFn: fetchOrgAccountsSection,
+    meta: { persist: true },
+  });
+  const accounts = data?.accounts ?? [];
+  const summaries = data?.summaries ?? {};
 
   if (accounts.length === 0) return null;
 
