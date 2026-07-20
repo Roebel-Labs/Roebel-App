@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { PRICE_TYPE_LABELS, CONDITION_LABELS } from '@/lib/map/constants';
 import type { MarketplaceListingRecord } from '@/lib/types';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   listing: MarketplaceListingRecord;
@@ -37,9 +38,11 @@ export default function MarketplaceCard({ listing, compact = true, style }: Prop
         <View style={[styles.imageContainerCompact, { backgroundColor: colors.cardPlaceholder }]}>
           {firstImage ? (
             <Image
-              source={{ uri: firstImage }}
+              source={{ uri: transformedImageUrl(firstImage, { width: 640 }) ?? undefined }}
               style={styles.imageCompact}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={firstImage ?? undefined}
               accessibilityIgnoresInvertColors
             />
           ) : (
@@ -70,9 +73,11 @@ export default function MarketplaceCard({ listing, compact = true, style }: Prop
       <View style={[styles.imageContainer, { backgroundColor: colors.cardPlaceholder }]}>
         {firstImage ? (
           <Image
-            source={{ uri: firstImage }}
+            source={{ uri: transformedImageUrl(firstImage, { width: 640 }) ?? undefined }}
             style={styles.image}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={firstImage ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (

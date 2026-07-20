@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { NewsArticle } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { formatPublishDate, calculateReadTime } from '@/lib/utils';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   article: NewsArticle;
@@ -31,9 +32,11 @@ export default function NewsCard({ article, compact = false }: Props) {
       <View style={compact ? styles.imageContainerCompact : styles.imageContainer}>
         {article.cover_image_url ? (
           <Image
-            source={{ uri: article.cover_image_url }}
+            source={{ uri: transformedImageUrl(article.cover_image_url, { width: 640 }) ?? undefined }}
             style={compact ? styles.imageCompact : styles.image}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={article.cover_image_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (

@@ -8,6 +8,7 @@ import { LocationSmallIcon } from './Icons';
 import { useTheme } from '@/context/ThemeContext';
 import InterestButton from './InterestButton';
 import EventCancelledScrim from './EventCancelledScrim';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   event: EventRecord;
@@ -40,9 +41,11 @@ export default function HorizontalEventCard({ event, fullWidth = false }: Props)
       <View style={[styles.imageContainer, fullWidth && { height: undefined, aspectRatio }]}>
         {event.image_url ? (
           <Image
-            source={{ uri: event.image_url }}
+            source={{ uri: transformedImageUrl(event.image_url, { width: 640 }) ?? undefined }}
             style={[styles.image, { backgroundColor: colors.cardPlaceholder }]}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={event.image_url ?? undefined}
             accessibilityIgnoresInvertColors
             onLoad={
               fullWidth

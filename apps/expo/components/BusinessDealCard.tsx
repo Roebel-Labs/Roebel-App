@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { DEAL_TYPE_LABELS } from '@/lib/map/constants';
 import type { BusinessDealWithBusiness } from '@/lib/types';
 import StarIcon from '@/assets/icons/star.svg';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   deal: BusinessDealWithBusiness;
@@ -30,9 +31,11 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
         <View style={styles.imageContainerCompact}>
           {deal.image_url ? (
             <Image
-              source={{ uri: deal.image_url }}
+              source={{ uri: transformedImageUrl(deal.image_url, { width: 640 }) ?? undefined }}
               style={styles.imageCompact}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={deal.image_url ?? undefined}
               accessibilityIgnoresInvertColors
             />
           ) : (
@@ -78,9 +81,11 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
       <View style={styles.imageContainer}>
         {deal.image_url ? (
           <Image
-            source={{ uri: deal.image_url }}
+            source={{ uri: transformedImageUrl(deal.image_url, { width: 640 }) ?? undefined }}
             style={styles.image}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={deal.image_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (

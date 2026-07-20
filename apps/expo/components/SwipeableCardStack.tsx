@@ -19,6 +19,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { formatTime, formatLocation } from '@/lib/utils';
 import { softShadow } from '@/lib/shadow';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
+import { transformedImageUrl } from '@/lib/image-url';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -314,18 +315,20 @@ function SwiperSlide({
               <>
                 {/* Blurred background */}
                 <Image
-                  source={{ uri: event.image_url }}
+                  source={{ uri: transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ?? undefined }}
                   style={styles.blurredBg}
                   contentFit="cover"
+                  cachePolicy="memory-disk"
                   blurRadius={20}
                 />
                 {/* 20% white overlay */}
                 <View style={styles.whiteOverlay} />
                 {/* Sharp event image */}
                 <Image
-                  source={{ uri: event.image_url }}
+                  source={{ uri: transformedImageUrl(event.image_url, { width: 1080 }) ?? undefined }}
                   style={styles.sharpImage}
                   contentFit="contain"
+                  cachePolicy="memory-disk"
                 />
               </>
             ) : (

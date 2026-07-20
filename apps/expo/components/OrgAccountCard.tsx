@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import ThumbsVote from '@/components/ThumbsVote';
 import type { Account } from '@/lib/types';
+import { transformedImageUrl } from '@/lib/image-url';
 
 const CARD_WIDTH = 168;
 const COVER_HEIGHT = 100;
@@ -38,9 +39,11 @@ export default function OrgAccountCard({ account, upCount }: Props) {
       <View style={[styles.coverWrap, { backgroundColor: colors.cardPlaceholder }]}>
         {account.cover_url ? (
           <Image
-            source={{ uri: account.cover_url }}
+            source={{ uri: transformedImageUrl(account.cover_url, { width: 640 }) ?? undefined }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={account.cover_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : null}
@@ -49,9 +52,11 @@ export default function OrgAccountCard({ account, upCount }: Props) {
       <View style={[styles.avatarWrap, { borderColor: colors.background }]}>
         {account.avatar_url ? (
           <Image
-            source={{ uri: account.avatar_url }}
+            source={{ uri: transformedImageUrl(account.avatar_url, { width: 160 }) ?? undefined }}
             style={styles.avatarImage}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={account.avatar_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (

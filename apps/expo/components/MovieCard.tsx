@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { MovieRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
+import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
   movie: MovieRecord;
@@ -28,9 +29,11 @@ export default function MovieCard({ movie, compact = false }: Props) {
       <View style={compact ? styles.imageContainerCompact : styles.imageContainer}>
         {movie.cover_image_url ? (
           <Image
-            source={{ uri: movie.cover_image_url }}
+            source={{ uri: transformedImageUrl(movie.cover_image_url, { width: 640 }) ?? undefined }}
             style={compact ? styles.imageCompact : styles.image}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={movie.cover_image_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (

@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { StarIcon } from '@/components/Icons';
 import { isRestaurantOpen } from '@/lib/utils';
 import type { AccountRatingSummary, RestaurantRecord } from '@/lib/types';
+import { transformedImageUrl } from '@/lib/image-url';
 
 const CARD_WIDTH = 168;
 const COVER_HEIGHT = 100;
@@ -51,9 +52,11 @@ export default function GastroCard({ restaurant, ratingSummary }: Props) {
       >
         {restaurant.cover_image_url ? (
           <Image
-            source={{ uri: restaurant.cover_image_url }}
+            source={{ uri: transformedImageUrl(restaurant.cover_image_url, { width: 640 }) ?? undefined }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={restaurant.cover_image_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : null}
@@ -62,9 +65,11 @@ export default function GastroCard({ restaurant, ratingSummary }: Props) {
       <View style={[styles.avatarWrap, { borderColor: colors.background }]}>
         {restaurant.logo_url ? (
           <Image
-            source={{ uri: restaurant.logo_url }}
+            source={{ uri: transformedImageUrl(restaurant.logo_url, { width: 160 }) ?? undefined }}
             style={styles.avatarImage}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={restaurant.logo_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (
