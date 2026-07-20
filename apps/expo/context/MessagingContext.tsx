@@ -10,6 +10,7 @@ import {
   findOrCreateConversation,
   type ConversationWithLastMessage,
 } from '@/lib/supabase-messages';
+import { loadCachedInbox, saveCachedInbox } from '@/lib/inbox-cache';
 import {
   countXmtpUnread,
   listXmtpInbox,
@@ -171,6 +172,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const xmtpRef = useRef<XmtpClientHandle | null>(null);
   const adoptedWalletsRef = useRef<Set<string>>(new Set());
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const supabaseReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   accountTypeRef.current = activeAccountType;
   xmtpRef.current = xmtp;
@@ -221,6 +223,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       // Guard against stale loads after an account switch.
       if (accountIdRef.current === accountId) {
         setConversations(convos);
+        void saveCachedInbox(accountId, convos);
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -275,6 +278,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     accountIdRef.current = activeAccountId;
+    // Cold-start hydration: show the last-known inbox instantly while the
+    // real load (network + XMTP merge) runs. Never overwrites fresher data.
+    void loadCachedInbox(activeAccountId).then((cached) => {
+      if (!cached || accountIdRef.current !== activeAccountId) return;
+      setConversations((prev) => (prev.length > 0 ? prev : cached));
+    });
     loadConversations(activeAccountId);
     loadUnreadCount(activeAccountId);
   }, [activeAccountId, loadConversations, loadUnreadCount]);
@@ -296,18 +305,51 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'direct_messages' },
-        () => {
+        (payload) => {
           const current = accountIdRef.current;
-          if (current) {
-            loadConversations(current);
-            loadUnreadCount(current);
+          if (!current) return;
+
+          // Instant optimistic patch when the conversation is already
+          // visible — no network needed to show the new preview/badge.
+          const row = payload.new as any;
+          if (row?.conversation_id) {
+            setConversations((prev) => {
+              const idx = prev.findIndex((c) => c.id === row.conversation_id);
+              if (idx === -1) return prev;
+              const updated = {
+                ...prev[idx],
+                lastMessage: row,
+                hasUnread:
+                  row.sender_account_id !== current ? true : prev[idx].hasUnread,
+              };
+              const next = [...prev];
+              next[idx] = updated;
+              next.sort((a, b) => {
+                const ta = a.lastMessage?.created_at ?? a.created_at;
+                const tb = b.lastMessage?.created_at ?? b.created_at;
+                return new Date(tb).getTime() - new Date(ta).getTime();
+              });
+              return next;
+            });
           }
+
+          // Authoritative reload, coalesced: a burst of inserts triggers ONE
+          // refetch instead of one per message.
+          if (supabaseReloadTimerRef.current) clearTimeout(supabaseReloadTimerRef.current);
+          supabaseReloadTimerRef.current = setTimeout(() => {
+            const id = accountIdRef.current;
+            if (id) {
+              loadConversations(id);
+              loadUnreadCount(id);
+            }
+          }, 1200);
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      if (supabaseReloadTimerRef.current) clearTimeout(supabaseReloadTimerRef.current);
     };
   }, [activeAccountId, loadConversations, loadUnreadCount]);
 
