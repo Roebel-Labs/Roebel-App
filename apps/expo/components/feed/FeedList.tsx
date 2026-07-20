@@ -128,7 +128,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 ) {
   const { colors } = useTheme();
 
-  const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost } =
+  const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost, likedPostIds, repostedPostIds } =
     useFeed(feedType, enabled);
 
   // Surface the newest content timestamp so FeedHome can flag unseen content
@@ -179,13 +179,21 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       repostCounts[t.id] = t.reposts_count ?? 0;
     });
 
-    getUserLikedPostIds(postIds, walletAddress).then((likedIds) => {
-      initLikes(likedIds, counts);
-    });
-    getUserRepostedPostIds(postIds, walletAddress).then((ids) => {
-      initReposts(ids, repostCounts);
-    });
-  }, [items, walletAddress]);
+    if (likedPostIds) {
+      initLikes(likedPostIds, counts);
+    } else {
+      getUserLikedPostIds(postIds, walletAddress).then((likedIds) => {
+        initLikes(likedIds, counts);
+      });
+    }
+    if (repostedPostIds) {
+      initReposts(repostedPostIds, repostCounts);
+    } else {
+      getUserRepostedPostIds(postIds, walletAddress).then((ids) => {
+        initReposts(ids, repostCounts);
+      });
+    }
+  }, [items, walletAddress, likedPostIds, repostedPostIds]);
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {

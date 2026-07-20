@@ -102,6 +102,11 @@ async function attachLinkedMiniApps<T extends PostRecord>(rows: T[]): Promise<T[
   return rows;
 }
 
+// Session-level feature detection: null = untested, true = RPC serving,
+// false = function missing (migration not applied) → use the legacy path
+// without re-probing on every page.
+let feedRpcAvailable: boolean | null = null;
+
 export async function fetchFeedPosts(options: {
   feedType: FeedType;
   page: number;
@@ -109,6 +114,34 @@ export async function fetchFeedPosts(options: {
   walletAddress?: string;
 }): Promise<{ data: PostRecord[]; hasMore: boolean; likedPostIds?: string[] | null; repostedPostIds?: string[] | null }> {
   const size = options.pageSize || PAGE_SIZE;
+
+  if (feedRpcAvailable !== false) {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_feed_page', {
+      p_feed_type: options.feedType,
+      p_page: options.page,
+      p_page_size: size,
+      p_wallet: options.walletAddress ?? null,
+    });
+    const payload = rpcData as any;
+    if (!rpcError && payload && Array.isArray(payload.posts)) {
+      feedRpcAvailable = true;
+      return {
+        data: (payload.posts as PostRecord[]).map(mergeAccountIntoAuthor),
+        hasMore: !!payload.has_more,
+        likedPostIds: payload.liked_post_ids ?? null,
+        repostedPostIds: payload.reposted_post_ids ?? null,
+      };
+    }
+    // PGRST202 = function not found → migration not applied yet. Any other
+    // error (network blip, transient 5xx) falls through to the legacy path
+    // for THIS call but keeps probing on later calls.
+    if (rpcError?.code === 'PGRST202') {
+      feedRpcAvailable = false;
+    }
+  }
+
+  // Legacy multi-request path (kept verbatim from before): wide select →
+  // pinned query → attachQuotedPosts → attachLinkedMiniApps.
   const from = options.page * size;
   const to = from + size - 1;
 
