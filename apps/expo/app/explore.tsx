@@ -63,7 +63,7 @@ async function fetchExplorePopularEvents() {
 async function fetchExploreNews() {
   const { data } = await supabase
     .from('news_articles')
-    .select('id, slug, title, cover_image_url, author_name, published_at, excerpt')
+    .select('id, slug, title, cover_image_url, author_name, published_at, created_at, excerpt, status')
     .eq('status', 'published')
     .order('published_at', { ascending: false })
     .limit(20); // LIMIT
