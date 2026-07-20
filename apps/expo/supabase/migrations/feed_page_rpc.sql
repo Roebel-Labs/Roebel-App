@@ -143,9 +143,11 @@ declare
   v_liked jsonb := '[]'::jsonb;
   v_reposted jsonb := '[]'::jsonb;
 begin
-  select coalesce(array_agg(id), '{}') into v_page_ids
+  -- array_agg has no implicit input order — the subquery's ORDER BY is not
+  -- guaranteed to survive into the aggregate, so order explicitly inside it.
+  select coalesce(array_agg(id order by created_at desc), '{}') into v_page_ids
   from (
-    select id from public.posts
+    select id, created_at from public.posts
     where feed_type = p_feed_type and status = 'published'
     order by created_at desc
     offset v_from limit p_page_size
@@ -154,9 +156,9 @@ begin
   -- Page 0 surfaces currently-pinned posts first (pins expire by time),
   -- mirroring the legacy client logic.
   if p_page = 0 then
-    select coalesce(array_agg(id), '{}') into v_pinned_ids
+    select coalesce(array_agg(id order by pinned_until desc), '{}') into v_pinned_ids
     from (
-      select id from public.posts
+      select id, pinned_until from public.posts
       where feed_type = p_feed_type and status = 'published'
         and pinned_until > now()
       order by pinned_until desc
@@ -176,7 +178,8 @@ begin
     join public.posts p on p.id = t.id;
 
     -- Like/repost state binds to the TARGET post: the original on reposts.
-    select coalesce(array_agg(distinct x), '{}') into v_target_ids
+    -- UNION (not UNION ALL) already dedupes, so array_agg needs no DISTINCT.
+    select coalesce(array_agg(x), '{}') into v_target_ids
     from (
       select unnest(v_ids) as x
       union
