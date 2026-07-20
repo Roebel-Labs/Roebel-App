@@ -12,6 +12,7 @@ import {
   type CreateOrgAccountOptions,
 } from '@/lib/supabase-accounts';
 import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
+import { loadCachedAccounts, saveCachedAccounts, clearCachedAccounts } from '@/lib/account-cache';
 import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
@@ -66,6 +67,24 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
+  // Optimistic hydration: restore the last-known accounts for THIS wallet so
+  // activeAccount (and everything gated on it — chat, org UI) is available
+  // before the fetchOwnedAccounts round-trip completes. `prev ?? cached`
+  // ensures a fast real load is never clobbered.
+  useEffect(() => {
+    if (!walletAddress) return;
+    let cancelled = false;
+    loadCachedAccounts().then((cached) => {
+      if (cancelled || !cached) return;
+      if (cached.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) return;
+      setOwnedAccounts((prev) => (prev.length > 0 ? prev : cached.ownedAccounts));
+      setActiveAccount((prev) => prev ?? cached.activeAccount);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress]);
+
   // Load accounts when user connects
   const refreshAccounts = useCallback(async () => {
     if (!walletAddress) {
@@ -80,20 +99,28 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setOwnedAccounts(accounts);
 
       // Determine active account
+      let resolved: Account | null = null;
       if (user?.active_account_id) {
         const active = accounts.find((a) => a.id === user.active_account_id);
         if (active) {
-          setActiveAccount(active);
+          resolved = active;
         } else {
           // Fallback: try fetching directly (might be an account not yet in local list)
           const fetched = await fetchAccountById(user.active_account_id);
-          setActiveAccount(fetched || accounts.find((a: Account) => a.account_type === 'personal') || null);
+          resolved =
+            fetched || accounts.find((a: Account) => a.account_type === 'personal') || null;
         }
       } else {
         // Default to personal account
-        const personal = accounts.find((a) => a.account_type === 'personal');
-        setActiveAccount(personal || null);
+        resolved = accounts.find((a) => a.account_type === 'personal') || null;
       }
+      setActiveAccount(resolved);
+      void saveCachedAccounts({
+        walletAddress,
+        activeAccount: resolved,
+        ownedAccounts: accounts,
+        savedAt: Date.now(),
+      });
     } catch (error) {
       console.error('Failed to load accounts:', error);
     } finally {
@@ -122,6 +149,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setRoleInActiveAccount(null);
       setRecentAccountIds([]);
       AsyncStorage.removeItem(RECENT_ACCOUNT_IDS_KEY).catch(() => {});
+      void clearCachedAccounts();
     }
   }, [walletAddress]);
 

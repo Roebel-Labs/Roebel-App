@@ -99,22 +99,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         let email: string | undefined;
         let authProvider: string | undefined;
         if (wallet && wallet.id === 'inApp') {
-          try {
-            email = await getUserEmail({ client });
-          } catch {
-            // Email retrieval may fail
-          }
-          try {
-            const profiles = await getProfiles({ client });
+          // Two independent thirdweb round-trips — run them in parallel;
+          // each failure stays non-fatal, matching the old behavior.
+          const [emailRes, profilesRes] = await Promise.allSettled([
+            getUserEmail({ client }),
+            getProfiles({ client }),
+          ]);
+          if (emailRes.status === 'fulfilled') email = emailRes.value;
+          if (profilesRes.status === 'fulfilled') {
             // thirdweb returns one profile per linked auth method
             // (apple, google, email, facebook, ...). We treat the first
             // matching social provider as the primary one.
-            const primary = profiles?.find((p: { type?: string }) =>
-              p.type && p.type !== 'guest',
+            const primary = profilesRes.value?.find(
+              (p: { type?: string }) => p.type && p.type !== 'guest'
             );
             authProvider = primary?.type;
-          } catch {
-            // Profile lookup may fail (e.g. session expired) — non-fatal.
           }
         }
 
