@@ -58,7 +58,7 @@ export default function NewsCard({ article, compact = false }: Props) {
         )}
 
         <View style={styles.metaRow}>
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+          <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
             {article.author_name} · {publishDate}
           </Text>
           {readTime && (
