@@ -28,7 +28,12 @@ export function transformedImageUrl(
   if (opts.width) params.set('width', String(Math.round(opts.width)));
   if (opts.height) params.set('height', String(Math.round(opts.height)));
   params.set('quality', String(opts.quality ?? 75));
-  params.set('resize', 'cover');
+  // The render endpoint treats a MISSING dimension as "original size", so
+  // resize=cover with only a width crops the source to a width×originalHeight
+  // strip instead of scaling it (verified live: 460×460 avatar → 160×460).
+  // contain preserves aspect ratio when one dimension is given; cover is only
+  // safe when both are set.
+  params.set('resize', opts.width && opts.height ? 'cover' : 'contain');
 
   return `${base.replace(OBJECT_PUBLIC, RENDER_PUBLIC)}?${params.toString()}`;
 }

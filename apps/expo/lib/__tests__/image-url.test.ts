@@ -4,9 +4,19 @@ const SB = 'https://wwbeqhkslxdxhktqzqti.supabase.co/storage/v1/object/public/im
 
 describe('transformedImageUrl', () => {
   it('rewrites a Supabase public object URL to the render endpoint with width and quality', () => {
+    // Width-only requests MUST use resize=contain: the endpoint treats a
+    // missing height as "original height", so cover would crop a strip.
     expect(transformedImageUrl(SB, { width: 1080 })).toBe(
-      'https://wwbeqhkslxdxhktqzqti.supabase.co/storage/v1/render/image/public/images/posts/foo.jpg?width=1080&quality=75&resize=cover'
+      'https://wwbeqhkslxdxhktqzqti.supabase.co/storage/v1/render/image/public/images/posts/foo.jpg?width=1080&quality=75&resize=contain'
     );
+  });
+
+  it('uses resize=cover only when both dimensions are given', () => {
+    const both = transformedImageUrl(SB, { width: 320, height: 320 })!;
+    expect(both).toContain('resize=cover');
+    expect(both).toContain('width=320');
+    expect(both).toContain('height=320');
+    expect(transformedImageUrl(SB, { height: 400 })).toContain('resize=contain');
   });
 
   it('respects an explicit quality', () => {
