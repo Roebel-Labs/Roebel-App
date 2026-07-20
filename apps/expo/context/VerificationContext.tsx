@@ -130,7 +130,8 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
 
   // Check NFT status
   const refreshNFTStatus = useCallback(async () => {
-    if (!account?.address) {
+    const address = account?.address;
+    if (!address) {
       setNftStatus({
         hasCitizenNFT: false,
         hasAttesterNFT: false,
@@ -150,14 +151,20 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
         readContract({
           contract: citizenNFTReadContract,
           method: 'function hasCitizenNFT(address account) view returns (bool)',
-          params: [account.address],
+          params: [address],
         }),
         readContract({
           contract: attesterNFTReadContract,
           method: 'function hasAttesterNFT(address account) view returns (bool)',
-          params: [account.address],
+          params: [address],
         }),
       ]);
+
+      // Stale-promise guard: the wallet may have switched or logged out while
+      // this read was in flight. A resolve-after-switch must not redisplay or
+      // persist this read's result — the new (or cleared) wallet owns
+      // nftStatus/chainResolved/the cache now.
+      if (latestAddressRef.current?.toLowerCase() !== address.toLowerCase()) return;
 
       const resolved: NFTStatus = {
         hasCitizenNFT: hasCitizen,
@@ -171,7 +178,7 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
       setChainResolved(true);
 
       void saveCachedVerification({
-        walletAddress: account.address,
+        walletAddress: address,
         hasCitizenNFT: hasCitizen,
         hasAttesterNFT: hasAttester,
         userRequests: userRequestsRef.current,
@@ -181,19 +188,31 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
       console.log('✅ NFT Status:', { hasCitizen, hasAttester });
     } catch (error) {
       console.error('❌ Failed to check NFT status:', error);
-      const resolved: NFTStatus = {
-        hasCitizenNFT: false,
-        hasAttesterNFT: false,
-        isLoading: false,
-      };
-      setNftStatus(resolved);
-      nftStatusRef.current = resolved;
+
+      // Same stale-promise guard for the failure path — this belongs to a
+      // wallet that's no longer live; leave its (now-irrelevant) state alone.
+      if (latestAddressRef.current?.toLowerCase() !== address.toLowerCase()) return;
+
+      // A failed read is UNCONFIRMED, not a confirmed "no NFT". Keep the
+      // last-known flags (prev-guard: never overwrite with false on error)
+      // and only flip isLoading off, and close the downgrade gate
+      // (chainResolved -> false) until a read actually succeeds again.
+      // Without this, a transient RPC hiccup on any later refresh (pull-to-
+      // refresh on profile, post-mint refresh, etc. all re-invoke this) would
+      // flip hasCitizenNFT to false while chainResolved stayed true from an
+      // earlier successful read, and UserContext's downgrade gate would fire
+      // a real DB write against a still-valid citizen.
+      setNftStatus(prev => ({ ...prev, isLoading: false }));
+      nftStatusRef.current = { ...nftStatusRef.current, isLoading: false };
+      chainResolvedRef.current = false;
+      setChainResolved(false);
     }
   }, [account?.address]);
 
   // Fetch user's requests
   const refreshRequests = useCallback(async () => {
-    if (!account?.address) {
+    const address = account?.address;
+    if (!address) {
       setUserRequests([]);
       userRequestsRef.current = [];
       return;
@@ -201,7 +220,13 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
 
     try {
       setIsLoadingRequests(true);
-      const requests = await fetchUserRequests(account.address);
+      const requests = await fetchUserRequests(address);
+
+      // Stale-promise guard: bail if the wallet switched/logged out while
+      // this fetch was in flight — never redisplay or persist a different
+      // (no-longer-live) wallet's requests.
+      if (latestAddressRef.current?.toLowerCase() !== address.toLowerCase()) return;
+
       setUserRequests(requests);
       userRequestsRef.current = requests;
       console.log(`✅ Fetched ${requests.length} user requests`);
@@ -212,7 +237,7 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
       // before the on-chain read for this address has actually landed.
       if (chainResolvedRef.current) {
         void saveCachedVerification({
-          walletAddress: account.address,
+          walletAddress: address,
           hasCitizenNFT: nftStatusRef.current.hasCitizenNFT,
           hasAttesterNFT: nftStatusRef.current.hasAttesterNFT,
           userRequests: requests,
@@ -221,10 +246,13 @@ export function VerificationProvider({ children }: { children: React.ReactNode }
       }
     } catch (error) {
       console.error('❌ Failed to fetch user requests:', error);
+      if (latestAddressRef.current?.toLowerCase() !== address.toLowerCase()) return;
       setUserRequests([]);
       userRequestsRef.current = [];
     } finally {
-      setIsLoadingRequests(false);
+      if (latestAddressRef.current?.toLowerCase() === address.toLowerCase()) {
+        setIsLoadingRequests(false);
+      }
     }
   }, [account?.address]);
 
