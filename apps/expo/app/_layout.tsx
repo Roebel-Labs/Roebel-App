@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { queryClient, persistOptions } from '@/lib/query-client';
 import {
   checkClipboardForReferral,
   extractReferralCode,
@@ -287,6 +289,7 @@ function Layout() {
   }
 
   return (
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
@@ -350,6 +353,7 @@ function Layout() {
         {!splashDone && <AnimatedSplash onFinish={() => setSplashDone(true)} />}
       </GestureHandlerRootView>
     </ErrorBoundary>
+    </PersistQueryClientProvider>
   );
 }
 
