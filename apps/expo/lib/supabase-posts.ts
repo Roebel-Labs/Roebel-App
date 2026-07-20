@@ -106,7 +106,8 @@ export async function fetchFeedPosts(options: {
   feedType: FeedType;
   page: number;
   pageSize?: number;
-}): Promise<{ data: PostRecord[]; hasMore: boolean }> {
+  walletAddress?: string;
+}): Promise<{ data: PostRecord[]; hasMore: boolean; likedPostIds?: string[] | null; repostedPostIds?: string[] | null }> {
   const size = options.pageSize || PAGE_SIZE;
   const from = options.page * size;
   const to = from + size - 1;

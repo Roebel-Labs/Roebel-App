@@ -1,28 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   FeedItem,
   FeedType,
   PostRecord,
-  ServiceAlertRecord,
-  BusinessDealWithBusiness,
   GovernanceNudgeData,
   MeckyTipData,
   ProposalFeedRecord,
-  ProposalCommentFeedRecord,
 } from '@/lib/types/feed';
-import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from '@/lib/types';
-import { fetchFeedPosts, fetchActiveServiceAlerts, fetchUpcomingEventsForFeed } from '@/lib/supabase-posts';
-import { fetchActiveDeals } from '@/lib/supabase-deals';
-import { fetchMarketplaceListings } from '@/lib/supabase-marketplace';
-import { fetchRecentNews } from '@/lib/supabase-news';
-import { fetchUpcomingMovies } from '@/lib/supabase-cinema';
-import { fetchFeaturedRestaurants, fetchActiveSpecialMenus } from '@/lib/supabase-restaurants';
-import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
-import {
-  fetchRecentProposalComments,
-  type ProposalCommentWithPreview,
-} from '@/lib/supabase-proposal-comments';
+import { fetchFeedPosts } from '@/lib/supabase-posts';
+import { fetchFeedSections } from '@/lib/feed-sections';
 import { assembleFeed } from '@/lib/feed-assembler';
+import { useUser } from '@/context/UserContext';
+import type { SupabaseProposal } from '@/lib/supabase-proposals';
 
 function buildGovernanceNudges(proposals: SupabaseProposal[]): GovernanceNudgeData[] {
   // Filter to active proposals (state === 1)
@@ -59,180 +49,135 @@ function generateMeckyTips(): MeckyTipData[] {
 }
 
 export function useFeed(feedType: FeedType, enabled: boolean = true) {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useUser();
+  const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const pageRef = useRef(0);
-  // Fetch exactly once, the first time this list becomes enabled. Lists that
-  // are never enabled (e.g. rathaus/app tabs for non-citizens) never query.
-  const hasFetchedRef = useRef(false);
 
-  // Cache non-paginated data across loadMore calls
-  const alertsRef = useRef<ServiceAlertRecord[]>([]);
-  const dealsRef = useRef<BusinessDealWithBusiness[]>([]);
-  const marketplaceRef = useRef<MarketplaceListingRecord[]>([]);
-  const eventsRef = useRef<EventRecord[]>([]);
-  const newsRef = useRef<NewsArticle[]>([]);
-  const moviesRef = useRef<MovieRecord[]>([]);
-  const restaurantsRef = useRef<RestaurantRecord[]>([]);
-  const specialMenusRef = useRef<SpecialMenuRecord[]>([]);
-  const governanceRef = useRef<GovernanceNudgeData[]>([]);
-  const meckyTipsRef = useRef<MeckyTipData[]>([]);
-  const proposalsRef = useRef<ProposalFeedRecord[]>([]);
-  const proposalCommentsRef = useRef<ProposalCommentFeedRecord[]>([]);
-  const allPostsRef = useRef<PostRecord[]>([]);
+  // Latest wallet without putting it in the query key: the feed CONTENT is
+  // wallet-independent, so keying on the wallet would refetch the whole feed
+  // when the cached user hydrates a tick after mount.
+  const walletRef = useRef<string | null>(null);
+  walletRef.current = user?.wallet_address ?? null;
 
-  const buildFeed = useCallback(
-    (posts: PostRecord[]) =>
-      assembleFeed({
-        posts,
-        alerts: alertsRef.current,
-        deals: dealsRef.current,
-        marketplaceListings: marketplaceRef.current,
-        upcomingEvents: eventsRef.current,
-        newsArticles: newsRef.current,
-        movies: moviesRef.current,
-        restaurants: restaurantsRef.current,
-        specialMenus: specialMenusRef.current,
-        governanceNudges: governanceRef.current,
-        meckyTips: meckyTipsRef.current,
-        proposals: proposalsRef.current,
-        proposalComments: proposalCommentsRef.current,
+  const postsKey = ['feed', 'posts', feedType] as const;
+
+  const postsQuery = useInfiniteQuery({
+    queryKey: postsKey,
+    enabled,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      fetchFeedPosts({
         feedType,
+        page: pageParam as number,
+        walletAddress: walletRef.current ?? undefined,
       }),
-    [feedType]
-  );
+    getNextPageParam: (last, _pages, lastPageParam) =>
+      last.hasMore ? (lastPageParam as number) + 1 : undefined,
+    // Bounds both memory and the size of the persisted cache entry.
+    maxPages: 3,
+    staleTime: 30_000,
+    meta: { persist: true },
+  });
 
-  const fetchAllData = useCallback(async () => {
-    const isMain = feedType === 'main';
-    const isRathaus = feedType === 'rathaus';
-    const emptyArr = Promise.resolve([] as any[]);
+  const sectionsQuery = useQuery({
+    queryKey: ['feed', 'sections', feedType],
+    enabled,
+    queryFn: () => fetchFeedSections(feedType),
+    meta: { persist: true },
+  });
 
-    const [
-      postsResult,
-      alerts,
-      deals,
-      marketplace,
-      events,
-      news,
-      movies,
-      restaurants,
-      specialMenus,
-      proposals,
-      proposalComments,
-    ] = await Promise.all([
-      fetchFeedPosts({ feedType, page: 0 }),
-      fetchActiveServiceAlerts(),
-      isMain ? fetchActiveDeals() : emptyArr,
-      isMain ? fetchMarketplaceListings({ limit: 5 }) : emptyArr,
-      isMain ? fetchUpcomingEventsForFeed(5) : emptyArr,
-      isMain ? fetchRecentNews(5) : emptyArr,
-      isMain ? fetchUpcomingMovies(6) : emptyArr,
-      isMain ? fetchFeaturedRestaurants() : emptyArr,
-      isMain ? fetchActiveSpecialMenus(3) : emptyArr,
-      isMain || isRathaus ? fetchProposals().catch(() => []) : emptyArr,
-      isRathaus ? fetchRecentProposalComments(50).catch(() => []) : emptyArr,
-    ]);
+  const posts = useMemo(() => {
+    // De-dupe by id: a pinned post prepended on page 0 can reappear at its
+    // natural chronological position on a later page.
+    const seen = new Set<string>();
+    return (postsQuery.data?.pages ?? [])
+      .flatMap((p) => p.data)
+      .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+  }, [postsQuery.data]);
 
-    alertsRef.current = alerts;
-    dealsRef.current = deals as BusinessDealWithBusiness[];
-    marketplaceRef.current = marketplace as MarketplaceListingRecord[];
-    eventsRef.current = events as EventRecord[];
-    newsRef.current = news as NewsArticle[];
-    moviesRef.current = movies as MovieRecord[];
-    restaurantsRef.current = restaurants as RestaurantRecord[];
-    specialMenusRef.current = specialMenus as SpecialMenuRecord[];
-    governanceRef.current = buildGovernanceNudges(proposals as SupabaseProposal[]);
-    meckyTipsRef.current = generateMeckyTips();
-    proposalsRef.current = proposals as ProposalFeedRecord[];
-    proposalCommentsRef.current = proposalComments as ProposalCommentFeedRecord[];
-    allPostsRef.current = postsResult.data;
+  const items: FeedItem[] = useMemo(() => {
+    const s = sectionsQuery.data;
+    return assembleFeed({
+      posts,
+      alerts: s?.alerts ?? [],
+      deals: s?.deals ?? [],
+      marketplaceListings: s?.marketplace ?? [],
+      upcomingEvents: s?.events ?? [],
+      newsArticles: s?.news ?? [],
+      movies: s?.movies ?? [],
+      restaurants: s?.restaurants ?? [],
+      specialMenus: s?.specialMenus ?? [],
+      governanceNudges: s ? buildGovernanceNudges(s.proposals) : [],
+      meckyTips: generateMeckyTips(),
+      proposals: (s?.proposals ?? []) as unknown as ProposalFeedRecord[],
+      proposalComments: s?.proposalComments ?? [],
+      feedType,
+    });
+  }, [posts, sectionsQuery.data, feedType]);
 
-    return postsResult;
-  }, [feedType]);
+  // Union of the per-page liked/reposted id arrays returned by the
+  // get_feed_page RPC. null (not empty) when the RPC isn't serving yet, so
+  // FeedList knows to fall back to its own queries.
+  const likedPostIds = useMemo(() => {
+    const pages = postsQuery.data?.pages ?? [];
+    if (!pages.some((p) => p.likedPostIds != null)) return null;
+    const set = new Set<string>();
+    pages.forEach((p) => p.likedPostIds?.forEach((id) => set.add(id)));
+    return set;
+  }, [postsQuery.data]);
 
-  const fetchInitial = useCallback(async () => {
-    setIsLoading(true);
-    pageRef.current = 0;
-
-    try {
-      const postsResult = await fetchAllData();
-      setItems(buildFeed(postsResult.data));
-      setHasMore(postsResult.hasMore);
-    } catch (err) {
-      console.error('Error fetching feed:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchAllData, buildFeed]);
+  const repostedPostIds = useMemo(() => {
+    const pages = postsQuery.data?.pages ?? [];
+    if (!pages.some((p) => p.repostedPostIds != null)) return null;
+    const set = new Set<string>();
+    pages.forEach((p) => p.repostedPostIds?.forEach((id) => set.add(id)));
+    return set;
+  }, [postsQuery.data]);
 
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
-    pageRef.current = 0;
-
     try {
-      const postsResult = await fetchAllData();
-      setItems(buildFeed(postsResult.data));
-      setHasMore(postsResult.hasMore);
-    } catch (err) {
-      console.error('Error refreshing feed:', err);
+      await Promise.all([postsQuery.refetch(), sectionsQuery.refetch()]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [fetchAllData, buildFeed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postsQuery.refetch, sectionsQuery.refetch]);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
+    if (postsQuery.isFetchingNextPage || !postsQuery.hasNextPage) return;
+    await postsQuery.fetchNextPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postsQuery.isFetchingNextPage, postsQuery.hasNextPage, postsQuery.fetchNextPage]);
 
-    try {
-      const nextPage = pageRef.current + 1;
-      const postsResult = await fetchFeedPosts({ feedType, page: nextPage });
-      pageRef.current = nextPage;
-
-      // De-dupe by id: a pinned post prepended on page 0 can reappear at its
-      // natural chronological position on a later page.
-      const seen = new Set<string>();
-      const updatedPosts = [...allPostsRef.current, ...postsResult.data].filter(
-        (p) => (seen.has(p.id) ? false : (seen.add(p.id), true)),
-      );
-      allPostsRef.current = updatedPosts;
-
-      setItems(buildFeed(updatedPosts));
-      setHasMore(postsResult.hasMore);
-    } catch (err) {
-      console.error('Error loading more:', err);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [feedType, isLoadingMore, hasMore, buildFeed]);
-
-  useEffect(() => {
-    if (enabled && !hasFetchedRef.current) {
-      hasFetchedRef.current = true;
-      fetchInitial();
-    }
-  }, [enabled, fetchInitial]);
-
-  const removePost = useCallback((postId: string) => {
-    setItems((prev) =>
-      prev.filter((item) => {
-        if (item.type !== 'post' && item.type !== 'mecky') return true;
-        return (item.data as PostRecord).id !== postId;
-      }),
-    );
-  }, []);
+  const removePost = useCallback(
+    (postId: string) => {
+      queryClient.setQueryData(postsKey, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: page.data.filter((p: PostRecord) => p.id !== postId),
+          })),
+        };
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryClient, feedType]
+  );
 
   return {
     items,
-    isLoading,
+    // Progressive: only the posts gate first paint; sections stream in.
+    isLoading: postsQuery.isPending,
     isRefreshing,
-    isLoadingMore,
-    hasMore,
+    isLoadingMore: postsQuery.isFetchingNextPage,
+    hasMore: postsQuery.hasNextPage ?? false,
     refresh,
     loadMore,
     removePost,
+    likedPostIds,
+    repostedPostIds,
   };
 }
