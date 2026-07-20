@@ -13,6 +13,7 @@ import {
 } from '@/lib/supabase-accounts';
 import { getAccountRole, type AccountRole } from '@/lib/supabase-account-roles';
 import { loadCachedAccounts, saveCachedAccounts, clearCachedAccounts } from '@/lib/account-cache';
+import { loadCachedRole, saveCachedRole } from '@/lib/role-cache';
 import type { Account, OrgSubType } from '@/lib/types';
 
 const ACTIVE_ACCOUNT_KEY = '@active_account_id';
@@ -132,13 +133,37 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     refreshAccounts();
   }, [refreshAccounts]);
 
-  // Fetch role when active account changes
+  // Fetch role when active account changes. Hydrate from cache first so org
+  // screens (which treat roleInActiveAccount === null as "not allowed") don't
+  // flash the blocked state on cold start while getAccountRole's round-trip
+  // resolves. `resolved` ensures the cache can never clobber an
+  // already-landed fetch result (including a legitimate null/"not a member"
+  // answer); `cancelled` guards against the account switching mid-flight.
   useEffect(() => {
-    if (activeAccount && walletAddress) {
-      getAccountRole(activeAccount.id, walletAddress).then(setRoleInActiveAccount);
-    } else {
+    if (!activeAccount || !walletAddress) {
       setRoleInActiveAccount(null);
+      return;
     }
+
+    const accountId = activeAccount.id;
+    let cancelled = false;
+    let resolved = false;
+
+    loadCachedRole(accountId, walletAddress).then((cached) => {
+      if (cancelled || resolved) return;
+      setRoleInActiveAccount((prev) => (prev === null ? cached : prev));
+    });
+
+    getAccountRole(accountId, walletAddress).then((role) => {
+      resolved = true;
+      if (cancelled) return;
+      setRoleInActiveAccount(role);
+      void saveCachedRole(accountId, walletAddress, role);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeAccount?.id, walletAddress]);
 
   // Reset on disconnect
