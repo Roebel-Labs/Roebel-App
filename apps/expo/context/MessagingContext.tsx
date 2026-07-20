@@ -222,8 +222,18 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
       // Guard against stale loads after an account switch.
       if (accountIdRef.current === accountId) {
-        setConversations(convos);
-        void saveCachedInbox(accountId, convos);
+        // Personal inbox before XMTP has booted is a placeholder [] (forced
+        // above), not authoritative data. Applying it would blank the
+        // cache-hydrated snapshot on screen and persist an empty list over
+        // the last-known-good cache on every cold start (XMTP boot lags the
+        // Supabase fetch). Skip both — the "XMTP ready" effect re-runs
+        // loadConversations with the real merged list moments later.
+        const isPersonalAwaitingXmtp =
+          accountTypeRef.current === 'personal' && !handle;
+        if (!isPersonalAwaitingXmtp) {
+          setConversations(convos);
+          void saveCachedInbox(accountId, convos);
+        }
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -333,23 +343,30 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
             });
           }
 
-          // Authoritative reload, coalesced: a burst of inserts triggers ONE
-          // refetch instead of one per message.
-          if (supabaseReloadTimerRef.current) clearTimeout(supabaseReloadTimerRef.current);
-          supabaseReloadTimerRef.current = setTimeout(() => {
-            const id = accountIdRef.current;
-            if (id) {
-              loadConversations(id);
-              loadUnreadCount(id);
-            }
-          }, 1200);
+          // Authoritative reload, coalesced WITHOUT re-arming: a burst of
+          // inserts triggers ONE refetch, at most 1.2s after the first
+          // insert of the burst (bounded staleness) — a steady insert stream
+          // must not postpone the reload indefinitely.
+          if (!supabaseReloadTimerRef.current) {
+            supabaseReloadTimerRef.current = setTimeout(() => {
+              supabaseReloadTimerRef.current = null;
+              const id = accountIdRef.current;
+              if (id) {
+                loadConversations(id);
+                loadUnreadCount(id);
+              }
+            }, 1200);
+          }
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      if (supabaseReloadTimerRef.current) clearTimeout(supabaseReloadTimerRef.current);
+      if (supabaseReloadTimerRef.current) {
+        clearTimeout(supabaseReloadTimerRef.current);
+        supabaseReloadTimerRef.current = null;
+      }
     };
   }, [activeAccountId, loadConversations, loadUnreadCount]);
 
