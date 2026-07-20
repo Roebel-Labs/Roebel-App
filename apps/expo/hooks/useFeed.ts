@@ -73,8 +73,6 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
       }),
     getNextPageParam: (last, _pages, lastPageParam) =>
       last.hasMore ? (lastPageParam as number) + 1 : undefined,
-    // Bounds both memory and the size of the persisted cache entry.
-    maxPages: 3,
     staleTime: 30_000,
     meta: { persist: true },
   });
@@ -137,12 +135,29 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([postsQuery.refetch(), sectionsQuery.refetch()]);
+      // Fresh page 0 + fresh sections in parallel. The cache is replaced with
+      // just the new first page — mirroring the old hook's refresh, bounding
+      // how many pages accumulate (and persist), and keeping pageParams
+      // anchored at 0 so background refetches always include the newest posts.
+      const [firstPage] = await Promise.all([
+        fetchFeedPosts({
+          feedType,
+          page: 0,
+          walletAddress: walletRef.current ?? undefined,
+        }),
+        sectionsQuery.refetch(),
+      ]);
+      queryClient.setQueryData(postsKey, {
+        pages: [firstPage],
+        pageParams: [0],
+      });
+    } catch (err) {
+      console.error('Error refreshing feed:', err);
     } finally {
       setIsRefreshing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postsQuery.refetch, sectionsQuery.refetch]);
+  }, [feedType, queryClient, sectionsQuery.refetch]);
 
   const loadMore = useCallback(async () => {
     if (postsQuery.isFetchingNextPage || !postsQuery.hasNextPage) return;
