@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { fetchActiveDeals } from '@/lib/supabase-deals';
@@ -13,7 +14,6 @@ import type {
   MovieRecord,
   RestaurantRecord,
   BusinessDealWithBusiness,
-  MarketplaceListingRecord,
 } from '@/lib/types';
 
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
@@ -34,20 +34,70 @@ import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
 import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
 
+async function fetchExploreData() {
+  const [
+    eventsResult,
+    popularEventsResult,
+    newsResult,
+    moviesResult,
+    restaurantsResult,
+    dealsResult,
+    listingsResult,
+  ] = await Promise.all([
+    supabase
+      .from('events')
+      .select('*')
+      .eq('status', 'approved')
+      .gte('date', new Date().toISOString().split('T')[0]) // LIMIT: only today+future
+      .order('date', { ascending: true })
+      .order('time', { ascending: true, nullsFirst: true })
+      .limit(60), // LIMIT
+    supabase
+      .from('events')
+      .select('*')
+      .eq('status', 'approved')
+      .eq('is_popular', true)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true, nullsFirst: true })
+      .limit(3),
+    supabase
+      .from('news_articles')
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
+      .limit(20), // LIMIT
+    supabase
+      .from('movies')
+      .select('id, title, description, date, time, cover_image_url, trailer_youtube_url, fsk, status, created_at, updated_at')
+      .eq('status', 'published')
+      .order('date', { ascending: true }),
+    supabase
+      .from('restaurants')
+      .select('*')
+      .eq('status', 'published')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .limit(50), // LIMIT
+    fetchActiveDeals(),
+    fetchMarketplaceListings({ limit: 10 }),
+  ]);
+
+  return {
+    events: (eventsResult.data ?? []) as EventRecord[],
+    popularEvents: (popularEventsResult.data ?? []) as EventRecord[],
+    newsArticles: (newsResult.data ?? []) as NewsArticle[],
+    movies: (moviesResult.data ?? []) as MovieRecord[],
+    restaurants: (restaurantsResult.data ?? []) as RestaurantRecord[],
+    deals: dealsResult as BusinessDealWithBusiness[],
+    listings: listingsResult,
+  };
+}
+
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
-  const [events, setEvents] = useState<EventRecord[]>([]);
-  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
-  const [movies, setMovies] = useState<MovieRecord[]>([]);
-  const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
-  const [deals, setDeals] = useState<BusinessDealWithBusiness[]>([]);
-  const [popularEvents, setPopularEvents] = useState<EventRecord[]>([]);
-  const [listings, setListings] = useState<MarketplaceListingRecord[]>([]);
-
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [fabVisible, setFabVisible] = useState(true);
@@ -66,77 +116,24 @@ export default function ExploreScreen() {
     }, [])
   );
 
-  const fetchAllData = useCallback(async () => {
-    try {
-      const [
-        eventsResult,
-        popularEventsResult,
-        newsResult,
-        moviesResult,
-        restaurantsResult,
-        dealsResult,
-        listingsResult,
-      ] = await Promise.all([
-        supabase
-          .from('events')
-          .select('*')
-          .eq('status', 'approved')
-          .order('date', { ascending: true })
-          .order('time', { ascending: true, nullsFirst: true }),
-        supabase
-          .from('events')
-          .select('*')
-          .eq('status', 'approved')
-          .eq('is_popular', true)
-          .order('date', { ascending: true })
-          .order('time', { ascending: true, nullsFirst: true })
-          .limit(3),
-        supabase
-          .from('news_articles')
-          .select('*')
-          .eq('status', 'published')
-          .order('published_at', { ascending: false }),
-        supabase
-          .from('movies')
-          .select('id, title, description, date, time, cover_image_url, trailer_youtube_url, fsk, status, created_at, updated_at')
-          .eq('status', 'published')
-          .order('date', { ascending: true }),
-        supabase
-          .from('restaurants')
-          .select('*')
-          .eq('status', 'published')
-          .order('sort_order', { ascending: true })
-          .order('name', { ascending: true }),
-        fetchActiveDeals(),
-        fetchMarketplaceListings({ limit: 10 }),
-      ]);
+  const exploreQuery = useQuery({
+    queryKey: ['explore', 'all'],
+    queryFn: fetchExploreData,
+    meta: { persist: true },
+  });
 
-      if (eventsResult.data) setEvents(eventsResult.data as EventRecord[]);
-      if (popularEventsResult.data) setPopularEvents(popularEventsResult.data as EventRecord[]);
-      if (newsResult.data) setNewsArticles(newsResult.data as NewsArticle[]);
-      if (moviesResult.data) setMovies(moviesResult.data as MovieRecord[]);
-      if (restaurantsResult.data) setRestaurants(restaurantsResult.data as RestaurantRecord[]);
-      setDeals(dealsResult as BusinessDealWithBusiness[]);
-      setListings(listingsResult);
-    } catch (error) {
-      console.error('Error fetching explore data:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    let isCancelled = false;
-    async function load() {
-      setLoading(true);
-      await fetchAllData();
-      if (!isCancelled) setLoading(false);
-    }
-    load();
-    return () => { isCancelled = true; };
-  }, [fetchAllData]);
+  const events = exploreQuery.data?.events ?? [];
+  const popularEvents = exploreQuery.data?.popularEvents ?? [];
+  const newsArticles = exploreQuery.data?.newsArticles ?? [];
+  const movies = exploreQuery.data?.movies ?? [];
+  const restaurants = exploreQuery.data?.restaurants ?? [];
+  const deals = exploreQuery.data?.deals ?? [];
+  const listings = exploreQuery.data?.listings ?? [];
+  const loading = exploreQuery.isPending;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAllData();
+    await exploreQuery.refetch();
     setRefreshing(false);
   };
 
