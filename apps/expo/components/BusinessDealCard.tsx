@@ -21,6 +21,9 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
   const dealTypeLabel = DEAL_TYPE_LABELS[deal.deal_type] || deal.deal_type;
 
   if (compact) {
+    // Styled to look like a MarketplaceCard product item: square 1:1 image,
+    // same corner radius/dimensions/typography — the only visual difference
+    // is the price chip overlaid on the image (no type badge, no grid tag).
     return (
       <Pressable
         onPress={() => router.push(`/deals/${deal.id}` as any)}
@@ -28,7 +31,7 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
         accessibilityRole="button"
         accessibilityLabel={deal.title}
       >
-        <View style={styles.imageContainerCompact}>
+        <View style={[styles.imageContainerCompact, { backgroundColor: colors.cardPlaceholder }]}>
           {deal.image_url ? (
             <Image
               source={{ uri: transformedImageUrl(deal.image_url, { width: 640 }) ?? undefined }}
@@ -44,13 +47,8 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
             </View>
           )}
           {deal.deal_value && (
-            <View style={styles.dealBadge}>
-              <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
-            </View>
-          )}
-          {deal.is_boosted && (
-            <View style={[styles.boostedBadge, { backgroundColor: '#FFA500' }]}>
-              <StarIcon width={12} height={12} color="#fff" />
+            <View style={[styles.priceTag, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.priceTagText, { color: colors.onPrimary }]}>{deal.deal_value}</Text>
             </View>
           )}
         </View>
@@ -59,13 +57,10 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
             {deal.title}
           </Text>
           {deal.business?.name && (
-            <Text style={[styles.businessName, { color: colors.textSecondary }]} numberOfLines={1}>
+            <Text style={[styles.businessNameCompact, { color: colors.textSecondary }]} numberOfLines={1}>
               {deal.business.name}
             </Text>
           )}
-          <View style={[styles.typeBadge, { backgroundColor: colors.surfaceSecondary }]}>
-            <Text style={[styles.typeBadgeText, { color: colors.textSecondary }]}>{dealTypeLabel}</Text>
-          </View>
         </View>
       </Pressable>
     );
@@ -130,7 +125,7 @@ export default function BusinessDealCard({ deal, compact = true, style }: Props)
 
 const styles = StyleSheet.create({
   cardCompact: {
-    width: 260,
+    width: 150,
     marginRight: 12,
   },
   card: {
@@ -144,7 +139,7 @@ const styles = StyleSheet.create({
   },
   imageContainerCompact: {
     width: '100%',
-    height: 140,
+    aspectRatio: 1,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -200,16 +195,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  priceTag: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  priceTagText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   contentCompact: {
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 0,
   },
   content: {
     padding: 14,
   },
   titleCompact: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    lineHeight: 20,
+    lineHeight: 19,
     marginBottom: 4,
   },
   title: {
@@ -226,6 +234,11 @@ const styles = StyleSheet.create({
   businessName: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
+    marginBottom: 6,
+  },
+  businessNameCompact: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
     marginBottom: 6,
   },
   footer: {

@@ -9,6 +9,7 @@ import { transformedImageUrl } from '@/lib/image-url';
 
 const CARD_WIDTH = 168;
 const COVER_HEIGHT = 100;
+const COVER_RADIUS = 16;
 const AVATAR_SIZE = 56;
 
 type Props = {
@@ -17,9 +18,10 @@ type Props = {
 };
 
 /**
- * Uber-Eats-style org-account card: a cover image with the account's logo as a
- * circular avatar (thick white border) overlapping the bottom, the name below
- * (medium weight) and a read-only thumbs-up count.
+ * Uber-Eats-style org-account card, shaped like GastroCard: a borderless,
+ * fully-rounded banner cover image with the account's logo as a circular
+ * avatar (thick background-color border) overlapping the bottom, the name
+ * below (medium weight) and a read-only thumbs-up count.
  */
 export default function OrgAccountCard({ account, upCount }: Props) {
   const router = useRouter();
@@ -28,11 +30,7 @@ export default function OrgAccountCard({ account, upCount }: Props) {
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/account/[id]' as any, params: { id: account.id } })}
-      style={({ pressed }) => [
-        styles.card,
-        { borderColor: colors.border },
-        pressed && { opacity: 0.9 },
-      ]}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
       accessibilityRole="button"
       accessibilityLabel={`${account.name} ansehen`}
     >
@@ -82,14 +80,13 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     marginRight: 12,
-    borderWidth: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
     paddingBottom: 12,
   },
   coverWrap: {
     width: '100%',
     height: COVER_HEIGHT,
+    borderRadius: COVER_RADIUS,
+    overflow: 'hidden',
   },
   avatarWrap: {
     position: 'absolute',

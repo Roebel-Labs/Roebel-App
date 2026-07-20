@@ -21,7 +21,6 @@ import ExploreCategoryChips from '@/components/ExploreCategoryChips';
 import SwipeableCardStack from '@/components/SwipeableCardStack';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
-import DealsGridSection from '@/components/DealsGridSection';
 import NewsSection from '@/components/NewsSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
@@ -259,11 +258,11 @@ export default function ExploreScreen() {
         {/* Mini Apps store entry */}
         <MiniAppsEntry />
 
-        {/* Marketplace */}
-        {listingsQuery.isPending ? (
+        {/* Marketplace (listings + promotional deals in one rail) */}
+        {listingsQuery.isPending || dealsQuery.isPending ? (
           <SectionRailSkeleton titleWidth="35%" />
         ) : (
-          <MarketplaceSection listings={listings} />
+          <MarketplaceSection listings={listings} deals={deals} />
         )}
 
         {/* News */}
@@ -271,13 +270,6 @@ export default function ExploreScreen() {
           <SectionRailSkeleton titleWidth="40%" />
         ) : (
           <NewsSection articles={newsArticles} />
-        )}
-
-        {/* Deals */}
-        {dealsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="45%" />
-        ) : (
-          <DealsGridSection deals={deals} />
         )}
 
         {/* Restaurants */}

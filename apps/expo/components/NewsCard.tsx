@@ -58,7 +58,9 @@ export default function NewsCard({ article, compact = false }: Props) {
         )}
 
         <View style={styles.metaRow}>
-          <Text style={[styles.metaText, { color: colors.textTertiary }]}>{article.author_name}</Text>
+          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+            {article.author_name} · {publishDate}
+          </Text>
           {readTime && (
             <>
               <Text style={[styles.metaDot, { color: colors.textTertiary }]}>•</Text>
@@ -66,8 +68,6 @@ export default function NewsCard({ article, compact = false }: Props) {
             </>
           )}
         </View>
-
-        <Text style={[styles.dateText, { color: colors.textTertiary }]}>{publishDate}</Text>
       </View>
     </Pressable>
   );
@@ -160,8 +160,5 @@ const styles = StyleSheet.create({
   metaDot: {
     fontSize: 13,
     marginHorizontal: 6,
-  },
-  dateText: {
-    fontSize: 12,
   },
 });

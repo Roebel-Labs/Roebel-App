@@ -4,21 +4,35 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { ArrowRight02Icon } from './Icons';
 import MarketplaceCard from './MarketplaceCard';
-import type { MarketplaceListingRecord } from '@/lib/types';
+import BusinessDealCard from './BusinessDealCard';
+import type { MarketplaceListingRecord, BusinessDealWithBusiness } from '@/lib/types';
 
 type Props = {
   listings: MarketplaceListingRecord[];
+  deals?: BusinessDealWithBusiness[];
 };
 
-export default function MarketplaceSection({ listings }: Props) {
+type RailItem =
+  | { kind: 'deal'; id: string; data: BusinessDealWithBusiness }
+  | { kind: 'listing'; id: string; data: MarketplaceListingRecord };
+
+export default function MarketplaceSection({ listings, deals }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const displayListings = useMemo(() => {
-    return listings.slice(0, 6);
-  }, [listings]);
+  const displayDeals = useMemo(() => (deals ?? []).slice(0, 4), [deals]);
+  const displayListings = useMemo(() => listings.slice(0, 6), [listings]);
 
-  if (displayListings.length === 0) {
+  // Deals are promotional, so they lead the rail; listings follow.
+  const railItems: RailItem[] = useMemo(
+    () => [
+      ...displayDeals.map((d) => ({ kind: 'deal' as const, id: `deal-${d.id}`, data: d })),
+      ...displayListings.map((l) => ({ kind: 'listing' as const, id: `listing-${l.id}`, data: l })),
+    ],
+    [displayDeals, displayListings]
+  );
+
+  if (railItems.length === 0) {
     return null;
   }
 
@@ -37,8 +51,14 @@ export default function MarketplaceSection({ listings }: Props) {
       </View>
       <FlatList
         horizontal
-        data={displayListings}
-        renderItem={({ item }) => <MarketplaceCard listing={item} compact />}
+        data={railItems}
+        renderItem={({ item }) =>
+          item.kind === 'deal' ? (
+            <BusinessDealCard deal={item.data} compact />
+          ) : (
+            <MarketplaceCard listing={item.data} compact />
+          )
+        }
         keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
