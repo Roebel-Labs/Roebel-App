@@ -191,10 +191,91 @@ type UserFields = {
   xmtp_registered_at: string | null;
 };
 
+// Session-level feature detection: null = untested, true = RPC serving,
+// false = function missing (migration not applied) → use the legacy path
+// without re-probing on every call. Mirrors `feedRpcAvailable` in
+// lib/supabase-posts.ts.
+let inboxRpcAvailable: boolean | null = null;
+
+type InboxRpcRow = {
+  conversation: Conversation;
+  peer_account: AccountFields | null;
+  peer_user: UserFields | null;
+  peer_wallet: string | null;
+  last_message: Message | null;
+  last_read_at: string | null;
+};
+
+function mapInboxRpcRow(
+  row: InboxRpcRow,
+  myAccountId: string
+): ConversationWithLastMessage | null {
+  const convo = row.conversation;
+  const peerId =
+    convo.participant_one_account_id === myAccountId
+      ? convo.participant_two_account_id
+      : convo.participant_one_account_id;
+  if (!peerId || !row.peer_account) return null;
+
+  const peerAccount = row.peer_account;
+  const peerUser = row.peer_user;
+  const lastMessage = row.last_message;
+  const lastReadAt = row.last_read_at;
+
+  const hasUnread =
+    !!lastMessage &&
+    lastMessage.sender_account_id !== myAccountId &&
+    (!lastReadAt || new Date(lastMessage.created_at) > new Date(lastReadAt));
+
+  return {
+    ...convo,
+    peerAccountId: peerId,
+    peerAccountType: peerAccount.account_type,
+    peerSubType: peerAccount.sub_type,
+    peerName: peerAccount.name,
+    peerSlug: peerAccount.slug,
+    peerUsername: peerUser?.username ?? null,
+    peerIsVerified: peerAccount.is_verified,
+    peerAvatarUrl: peerUser?.profile_picture_url ?? peerAccount.avatar_url,
+    peerEquippedFrameUrl: peerUser?.equipped_frame_asset_url ?? null,
+    peerAddress: peerId,
+    peerProfilePictureUrl: peerUser?.profile_picture_url ?? peerAccount.avatar_url,
+    lastMessage,
+    lastReadAt,
+    hasUnread,
+    peerOwnerWallet: row.peer_wallet?.toLowerCase() ?? null,
+    peerXmtpRegisteredAt: peerUser?.xmtp_registered_at ?? null,
+  } satisfies ConversationWithLastMessage;
+}
+
 export async function fetchConversations(
   myAccountId: string
 ): Promise<ConversationWithLastMessage[]> {
   if (!myAccountId) return [];
+
+  if (inboxRpcAvailable !== false) {
+    const { data, error: rpcError } = await supabase.rpc('get_conversations_inbox', {
+      p_account_id: myAccountId,
+    });
+    if (!rpcError && Array.isArray(data)) {
+      inboxRpcAvailable = true;
+      const rows = (data as InboxRpcRow[])
+        .map((r) => mapInboxRpcRow(r, myAccountId))
+        .filter((r): r is ConversationWithLastMessage => r !== null);
+      rows.sort((a, b) => {
+        const ta = a.lastMessage?.created_at ?? a.created_at;
+        const tb = b.lastMessage?.created_at ?? b.created_at;
+        return new Date(tb).getTime() - new Date(ta).getTime();
+      });
+      return rows;
+    }
+    // PGRST202 = function not found → migration not applied yet. Any other
+    // error (network blip, transient 5xx) falls through to the legacy path
+    // for THIS call but keeps probing on later calls.
+    if (rpcError?.code === 'PGRST202') {
+      inboxRpcAvailable = false;
+    }
+  }
 
   const { data: rawConvos, error } = await supabase
     .from('conversations' as any)
