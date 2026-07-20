@@ -47,7 +47,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const account = useActiveAccount();
   const wallet = useActiveWallet();
   const router = useRouter();
-  const { hasCitizenNFT } = useVerificationContext();
+  const { hasCitizenNFT, chainResolved } = useVerificationContext();
   const consent = useConsent();
   const { autoConnectFinished } = useWalletBoot();
 
@@ -214,8 +214,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(err => console.error('Failed to upgrade tier:', err));
     }
-    // Auto-downgrade if NFT lost
-    if (user && !hasCitizenNFT && user.tier === 'citizen' && user.is_verified_citizen) {
+    // Auto-downgrade if NFT lost. Gated on chainResolved: hasCitizenNFT starts
+    // false on every cold start (before autoConnect + the on-chain read
+    // finish), and without this guard a citizen would be spuriously
+    // downgraded — and the DB write reversed seconds later once the real
+    // read lands — on every single app launch. Downgrades require a
+    // confirmed on-chain read for the current wallet; the upgrade branch
+    // above stays ungated since upgrading on a cached/optimistic true is
+    // harmless.
+    if (user && !hasCitizenNFT && user.tier === 'citizen' && user.is_verified_citizen && chainResolved) {
       updateUserTier(user.wallet_address, 'tourist', false)
         .then(() => {
           setUser(prev =>
@@ -224,7 +231,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(err => console.error('Failed to downgrade tier:', err));
     }
-  }, [hasCitizenNFT, user?.tier, user?.wallet_address, user?.is_verified_citizen]);
+  }, [hasCitizenNFT, chainResolved, user?.tier, user?.wallet_address, user?.is_verified_citizen]);
 
   const refreshUser = useCallback(async () => {
     if (!account?.address) return;

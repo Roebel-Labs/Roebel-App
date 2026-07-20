@@ -6,7 +6,7 @@
 
 import { getContract } from 'thirdweb';
 import { client } from '@/constants/thirdweb';
-import { gnosis } from '@/constants/gnosis';
+import { gnosis, gnosisRead } from '@/constants/gnosis';
 
 // Deployed contract addresses on Gnosis v2 Mainnet (chainId 100, Sybil-hardening
 // rotation 2026-06). CitizenNFTv2 / AttesterNFTv2 use dynamic percentage-band
@@ -34,6 +34,24 @@ export const governorContract = getContract({
   client,
   address: VERIFICATION_CONTRACTS.governor,
   chain: gnosis,
+});
+
+// Read-only handles pinned to the public Gnosis RPC (gnosisRead) rather than
+// the hosted thirdweb RPC, which is intermittently rate-limited on preview
+// builds (see constants/gnosis.ts / constants/thirdweb.ts). Used ONLY for the
+// hasCitizenNFT/hasAttesterNFT checks in VerificationContext — the two reads
+// that run on every cold start and gate the whole app. Writes and every other
+// read keep using the hosted-chain handles above.
+export const citizenNFTReadContract = getContract({
+  client,
+  address: VERIFICATION_CONTRACTS.citizenNFT,
+  chain: gnosisRead,
+});
+
+export const attesterNFTReadContract = getContract({
+  client,
+  address: VERIFICATION_CONTRACTS.attesterNFT,
+  chain: gnosisRead,
 });
 
 // DEPRECATED on Gnosis v2: thresholds are now dynamic percentage-bands, not a
