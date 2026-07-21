@@ -235,6 +235,16 @@ paydown for Röbel itself).
 5. **Coordinator-as-a-service posture:** run one shared coordinator for all early nodes (pragmatic,
    centralizing) vs. per-node from the start (pure, heavy)?
 
+## 10. Decision log
+
+- **2026-07-21 — Safe infrastructure: use, don't self-host (Max).** Netizen builds on Safe's
+  trusted hosted infrastructure (transaction service, client gateway, official deployments) rather
+  than running its own. Netizen's contribution at this layer is **scaling it and owning the UX** in
+  our own products and services (Gemeinschaftskasse dashboard, Fiscal Constitution modules, agent
+  budget tooling) — plus upstream contributions where Safe's infra needs them. Self-hosting
+  `safe-transaction-service` stays a *documented fallback only*, kept warm as a vendor-risk hedge
+  (Safe's client-gateway uses a time-delayed license — terms can shift), not a roadmap item.
+
 ---
 
 *Next step after approval: superpowers writing-plans for Phase 0 (spec drafts + schema inventory) —
