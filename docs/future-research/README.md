@@ -33,6 +33,14 @@ A follow-up strategy session extended this corpus with three documents plus an i
 | [`SOVEREIGN_AI_FUTARCHY.md`](SOVEREIGN_AI_FUTARCHY.md) | Sovereign local inference (LiteLLM routing tiers) + agent prediction markets as a scored, advisory forecasting layer feeding the binding MACI vote |
 | [`PHYSICAL_INFRA_ENERGY_SHARING.md`](PHYSICAL_INFRA_ENERGY_SHARING.md) | Atoms layer: § 42c EnWG Energy Sharing, Bürgerenergie eG, batteries, sovereign compute container with heat reuse, robots |
 
+## Technical blueprint (2026-07-21 session)
+
+The strategy corpus above answers *why* and *when*; a follow-up design session answered *what, as
+software*. [`../superpowers/specs/2026-07-21-netizen-stack-design.md`](../superpowers/specs/2026-07-21-netizen-stack-design.md)
+is the **Netizen Stack technical blueprint**: thin protocol specs (NSP-0…6) + a self-hostable
+Netizen Node + SDKs, adopt-vs-build decided per layer, and a strangler-fig migration plan where
+every phase ships Röbel value. Draft, pending review.
+
 ---
 
 ## The intellectual arc (what was explored, in order)
