@@ -237,6 +237,17 @@ paydown for Röbel itself).
 
 ## 10. Decision log
 
+- **2026-07-22 — Vendor-independence research completed.** The adopt-vs-build table in §3 is now
+  backed by an adversarially verified research report:
+  [`docs/future-research/2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md`](../../future-research/2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md).
+  Headline confirmations: thirdweb is replaceable vendor-free (Safe + passkey module +
+  react-native-passkeys PRF + Alto/Voltaire + self-run paymaster; Gnosis has EIP-7702 since
+  2025-04 and native P-256 since 2026-04); every MPC/TSS vendor route failed the openness test;
+  Semaphore v4 is canonically live on Gnosis; EAS is not; MACI v3 (2026-06) is the upgrade
+  candidate pending audit/migration answers; sovereign-AI entry costs €232–€1,197/mo net on
+  Hetzner behind self-hosted LiteLLM; sovereign data adopts the compute-to-data pattern (Ocean
+  Node plumbing, never the OCEAN token).
+
 - **2026-07-21 — Safe infrastructure: use, don't self-host (Max).** Netizen builds on Safe's
   trusted hosted infrastructure (transaction service, client gateway, official deployments) rather
   than running its own. Netizen's contribution at this layer is **scaling it and owning the UX** in

@@ -41,6 +41,14 @@ is the **Netizen Stack technical blueprint**: thin protocol specs (NSP-0…6) + 
 Netizen Node + SDKs, adopt-vs-build decided per layer, and a strangler-fig migration plan where
 every phase ships Röbel value. Draft, pending review.
 
+The blueprint's vendor-independence questions were then answered by an adversarially verified
+deep-research campaign (4 passes + 1 focused agent, ~93 confirmed claims):
+[`2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md`](2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md)
+— thirdweb replacement architecture (Safe + passkeys + self-hosted 4337 rails), Safe/Zodiac
+licensing reality, Monerium/EURe verification, Semaphore-v4-on-Gnosis, MACI v3, sovereign-AI
+models + verified Hetzner prices, and the Ocean Protocol / compute-to-data assessment, with a
+consolidated recommended-stack table and an honest refuted/open-questions ledger.
+
 ---
 
 ## The intellectual arc (what was explored, in order)
