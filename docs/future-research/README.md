@@ -16,6 +16,8 @@
 | [`LEGAL_MASTERPLAN.md`](LEGAL_MASTERPLAN.md) | Germany/EU, Röbel-first phased legal path | Partial — 3 clusters verified & cited |
 | [`DECADE_STRATEGY.md`](DECADE_STRATEGY.md) | 2026–2036 plan: fork → merge (Decidim path) + fiscal-constitution reframe | Current |
 | [`PRODUCT_B_MARKET_SCAN.md`](PRODUCT_B_MARKET_SCAN.md) | Treasury/Identity/Agentic-Commerce market + competitive landscape | Partial — focused pass, cited |
+| [`2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md`](2026-07-22_NETIZEN_SOVEREIGN_STACK_RESEARCH.md) | **Verified research report**: vendor-independence per layer (thirdweb replacement, Safe/Zodiac, EURe, Semaphore/MACI, sovereign AI, Ocean/C2D) — 93 adversarially verified claims + refuted-claims ledger | Current — verified 2026-07-21/22 |
+| [`2026-07-22_NETIZEN_BUSINESS_PLAN.md`](2026-07-22_NETIZEN_BUSINESS_PLAN.md) | **Business plan v0.1**: mission, products (Cloud / Fiscal Constitution / verified-member governance / sovereign AI / services), local→global ladder, roadmap + unit economics + kill conditions | Draft — pending review |
 
 **Interactive artifacts (private, on claude.ai):**
 - Field study (v0.2, 🌱): https://claude.ai/code/artifact/d95a5973-09f1-4fd3-a2f9-ee57aa6e9363
