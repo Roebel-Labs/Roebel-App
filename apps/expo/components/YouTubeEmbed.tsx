@@ -15,16 +15,16 @@ export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 
   const { colors } = useTheme();
   const [error, setError] = useState(false);
 
+  const onError = useCallback(() => {
+    setError(true);
+  }, []);
+
   const videoId = extractYouTubeVideoId(youtubeUrl);
   if (!videoId) return null;
 
   const handleOpenInYouTube = () => {
     Linking.openURL(youtubeUrl).catch(console.error);
   };
-
-  const onError = useCallback(() => {
-    setError(true);
-  }, []);
 
   if (error) {
     return (

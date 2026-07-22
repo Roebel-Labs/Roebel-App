@@ -63,8 +63,6 @@ export default function EnhancedTinderCards({ events }: Props) {
     setActiveIndex(0);
   }, [heroEvents.length]);
 
-  if (heroEvents.length === 0) return null;
-
   const rotateCards = useCallback((direction: 'forward' | 'backward' = 'forward') => {
     setCardOrder(prev => {
       const next = [...prev];
@@ -85,6 +83,8 @@ export default function EnhancedTinderCards({ events }: Props) {
       }
     });
   }, [heroEvents.length]);
+
+  if (heroEvents.length === 0) return null;
 
   return (
     <View style={styles.container}>
