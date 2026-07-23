@@ -47,8 +47,7 @@ export const inviteFarm = new InviteFarm({
   invitationFarmAddress: INVITATION_FARM,
   referralsModuleAddress: "0x12105a9b291af2abb0591001155a75949b062ce5",
   invitationModuleAddress: "0x00738aca013B7B2e6cfE1690F0021C3182Fa40B5",
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any);
+} as ConstructorParameters<typeof InviteFarm>[0]);
 
 const publicClient = createPublicClient({ chain: gnosis, transport: http(GNOSIS_RPC) });
 

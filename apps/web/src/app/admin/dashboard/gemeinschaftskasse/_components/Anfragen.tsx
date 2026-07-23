@@ -93,7 +93,7 @@ function AnfragenCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold">{message.app}</p>
-          <p className="text-sm text-muted-foreground">„{message.text}"</p>
+          <p className="text-sm text-muted-foreground">„{message.text}“</p>
           <p className="text-xs text-muted-foreground">
             {approvalLabel(message.confirmations, message.required)}
           </p>

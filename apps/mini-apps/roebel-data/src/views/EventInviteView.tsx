@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { PDFDocument } from "pdf-lib";
 import type { Address } from "viem";
@@ -101,7 +101,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
 
   // Stamp the QR into the real event-poster.pdf white square (with padding) and
   // return a blob URL for the resulting PDF. Built once, then reused.
-  const buildPdf = useCallback(async (): Promise<string> => {
+  const buildPdf = async (): Promise<string> => {
     if (pdfUrlRef.current) return pdfUrlRef.current;
     const canvas = qrCanvasRef.current;
     if (!canvas) throw new Error("Der QR-Code ist noch nicht bereit.");
@@ -133,7 +133,7 @@ export default function EventInviteView({ inviter }: { inviter: Address | null }
     const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
     pdfUrlRef.current = url;
     return url;
-  }, []);
+  };
 
   const downloadPdf = (url: string) => {
     const a = document.createElement("a");

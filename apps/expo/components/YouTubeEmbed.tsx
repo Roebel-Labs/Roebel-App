@@ -16,7 +16,6 @@ export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 
   const [error, setError] = useState(false);
 
   const videoId = extractYouTubeVideoId(youtubeUrl);
-  if (!videoId) return null;
 
   const handleOpenInYouTube = () => {
     Linking.openURL(youtubeUrl).catch(console.error);
@@ -25,6 +24,8 @@ export default function YouTubeEmbed({ youtubeUrl, height = 220, borderRadius = 
   const onError = useCallback(() => {
     setError(true);
   }, []);
+
+  if (!videoId) return null;
 
   if (error) {
     return (

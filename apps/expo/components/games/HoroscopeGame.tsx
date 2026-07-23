@@ -363,7 +363,7 @@ export default function HoroscopeGame() {
     opacity: instructionOpacity.value,
   }));
 
-  const makeParticleStyle = (angleValue: Animated.SharedValue<number>, radius: number) =>
+  const useParticleStyle = (angleValue: Animated.SharedValue<number>, radius: number) =>
     useAnimatedStyle(() => ({
       position: 'absolute' as const,
       left: CIRCLE_RADIUS + Math.cos(angleValue.value) * radius - 4,
@@ -378,10 +378,10 @@ export default function HoroscopeGame() {
       shadowRadius: 6,
     }));
 
-  const p1Style = makeParticleStyle(particle1Angle, CIRCLE_RADIUS + 30);
-  const p2Style = makeParticleStyle(particle2Angle, CIRCLE_RADIUS + 40);
-  const p3Style = makeParticleStyle(particle3Angle, CIRCLE_RADIUS + 25);
-  const p4Style = makeParticleStyle(particle4Angle, CIRCLE_RADIUS + 35);
+  const p1Style = useParticleStyle(particle1Angle, CIRCLE_RADIUS + 30);
+  const p2Style = useParticleStyle(particle2Angle, CIRCLE_RADIUS + 40);
+  const p3Style = useParticleStyle(particle3Angle, CIRCLE_RADIUS + 25);
+  const p4Style = useParticleStyle(particle4Angle, CIRCLE_RADIUS + 35);
 
   const resultStyle = useAnimatedStyle(() => ({
     opacity: resultOpacity.value,
