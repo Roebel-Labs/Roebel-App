@@ -68,7 +68,6 @@
     "hls.js": "^1.6.0",
     "jose": "^6.2.3",
     "lucide-react": "^0.546.0",
-    "maci-crypto": "2.5.0",
     "maci-domainobjs": "2.5.0",
     "mapbox-gl": "^3.18.1",
     "mcp-handler": "^1.1.0",

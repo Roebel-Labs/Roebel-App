@@ -36,6 +36,14 @@ pnpm lint       # Lint all packages
 pnpm build      # Build all packages
 ```
 
+## Dependency Changes
+
+- Add and remove dependencies with pnpm from the workspace root, using
+  `--filter <package>` when the dependency belongs to a specific app.
+- Run `pnpm dedupe` after dependency changes.
+- Commit the single root `pnpm-lock.yaml`; do not create lockfiles inside
+  individual workspace apps.
+
 ## Commit Convention
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
