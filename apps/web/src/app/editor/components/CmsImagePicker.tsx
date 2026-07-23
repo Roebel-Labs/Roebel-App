@@ -79,7 +79,7 @@ export function CmsImagePicker({
         </div>
       ) : targets.length === 0 ? (
         <p className="px-1 py-1 text-xs text-muted-foreground">
-          Kein Bild-Feld im CMS gefunden. Lege im Tab „Inhalte" ein Feld wie „bild" an.
+          Kein Bild-Feld im CMS gefunden. Lege im Tab „Inhalte“ ein Feld wie „bild“ an.
         </p>
       ) : (
         <div className="max-h-40 space-y-0.5 overflow-y-auto">

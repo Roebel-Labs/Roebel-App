@@ -21,7 +21,7 @@ export default function NewsletterPage() {
           <NewsletterSignupForm />
         </div>
         <p className="mt-6 text-xs text-gray-400">
-          Details zur Verarbeitung deiner Daten findest du im Abschnitt „Newsletter" unserer{" "}
+          Details zur Verarbeitung deiner Daten findest du im Abschnitt „Newsletter“ unserer{" "}
           <a href="/datenschutz" className="underline">Datenschutzerklärung</a>.
         </p>
       </main>

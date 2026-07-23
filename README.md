@@ -49,7 +49,7 @@ See [Smart Contracts & Governance](#smart-contracts--governance) below for the f
 git clone https://github.com/Roebel-Labs/Roebel-App.git
 cd Roebel-App
 
-# Install dependencies
+# Install the complete workspace (web, mobile, mini-apps, and contracts)
 pnpm install
 
 # Copy environment variables
@@ -63,6 +63,15 @@ pnpm dev:web
 
 # Start mobile app
 pnpm dev:expo
+```
+
+A complete install includes the Next.js app, Expo/React Native, mini-apps, and
+the smart-contract toolchain. If you only need one app, install its dependency
+graph instead:
+
+```bash
+pnpm install --filter @roebel/web...
+pnpm install --filter @roebel/expo...
 ```
 
 ## Architecture
