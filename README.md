@@ -74,6 +74,15 @@ pnpm install --filter @roebel/web...
 pnpm install --filter @roebel/expo...
 ```
 
+### Testing against staging
+
+You don't need to provision anything to contribute — there's a **shared staging
+environment**. Open **[staging.roebel.app](https://staging.roebel.app)** to click
+through the app with zero setup, or run the app locally against the staging backend
+with just the staging Supabase URL + anon key (both safe to share). Full instructions:
+**[docs/FORKING_GUIDE.md](docs/FORKING_GUIDE.md)**. Maintainers provisioning staging:
+**[docs/STAGING_ENVIRONMENT.md](docs/STAGING_ENVIRONMENT.md)**.
+
 ## Architecture
 
 - **Chain**: **Gnosis Mainnet (chain id 100)** + Thirdweb Smart Wallets — invisible Web3, gasless ERC-4337 (users never see a wallet or pay gas). Identity, governance, and currency all live on one chain.
