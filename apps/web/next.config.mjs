@@ -65,6 +65,16 @@ const nextConfig = {
         canvas: false,
       };
     }
+    // The Vercel build container is 4 cores / 8GB and this app already sits at
+    // the memory ceiling (thirdweb + viem + snarkjs/ffjavascript + maci crypto,
+    // most bundled because they run in client pages and can't be externalized).
+    // Any marginal dependency growth tips the webpack compile into exit 137
+    // (container OOM / SIGKILL) — e.g. the viem 2.47→2.53 dedupe in #18.
+    // Serializing module processing (parallelism = 1) trades a slower build for
+    // a much lower peak RSS, reclaiming the headroom the heap cap + memory
+    // optimizations alone no longer cover. If OOM recurs, enable Vercel Enhanced
+    // Builds (larger machine) — code levers are exhausted at this point.
+    config.parallelism = 1;
     return config;
   },
   async rewrites() {
