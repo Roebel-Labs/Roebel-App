@@ -466,8 +466,11 @@ importers:
         specifier: ^0.1.25
         version: 0.1.51(typescript@5.8.3)(zod@4.3.6)
       '@netizen-labs/miniapp-sdk':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../../../packages/miniapp-sdk
+      '@roebel/stadtstack-federation-client':
+        specifier: workspace:*
+        version: link:../../../packages/stadtstack-federation-client
       '@visx/curve':
         specifier: ^4.0.0
         version: 4.0.0
@@ -918,6 +921,22 @@ importers:
       tsup:
         specifier: ^8.3.5
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@5.8.3)(yaml@2.8.3)
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.8.3
+
+  packages/stadtstack-federation-client:
+    dependencies:
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: ^5.7.0
         version: 5.8.3
