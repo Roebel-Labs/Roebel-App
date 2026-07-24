@@ -28,7 +28,17 @@
       },
       "ios": {
         "simulator": false
+      }
+    },
+    "staging": {
+      "channel": "staging",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       },
+      "ios": {
+        "simulator": false
+      }
     },
     "production": {
       "channel": "production",
