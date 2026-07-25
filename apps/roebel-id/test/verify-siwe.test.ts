@@ -41,6 +41,13 @@ describe('verifySiwe', () => {
       .rejects.toThrow(/chain/i)
   })
 
+  it('rejects a domain mismatch', async () => {
+    const nonce = store.issue()
+    const message = buildMessage(nonce)
+    await expect(verifySiwe({ message, signature: '0xsig', nonceStore: store, expectedDomain: 'evil.example', expectedChainId: 100, verifier: okVerifier }))
+      .rejects.toThrow(/domain/i)
+  })
+
   it('rejects a bad signature', async () => {
     const nonce = store.issue()
     const message = buildMessage(nonce)
