@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createClaimsResolver } from '../src/claims/resolver.js'
 
-const ADDR = '0x3333333333333333333333333333333333333333'
+const ADDR = '0xAbC3333333333333333333333333333333333333'
 
 describe('claims resolver', () => {
   it('assembles sub, profile, chain status and org groups', async () => {

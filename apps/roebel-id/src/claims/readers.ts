@@ -17,13 +17,21 @@ export function createReaders(config: Config): { profile: ProfileReader; orgs: O
 
   return {
     profile: async (address) => {
-      const { data } = await supabase.from('users')
-        .select('email, display_name, avatar_url, tier').eq('wallet_address', address).maybeSingle()
+      const { data, error } = await supabase.from('users')
+        .select('email, display_name, profile_picture_url, tier').eq('wallet_address', address).maybeSingle()
+      if (error) {
+        console.error('claims readers: profile query failed', error)
+        throw error
+      }
       if (!data) return null
-      return { email: data.email ?? undefined, name: data.display_name ?? undefined, picture: data.avatar_url ?? undefined, tier: data.tier ?? undefined }
+      return { email: data.email ?? undefined, name: data.display_name ?? undefined, picture: data.profile_picture_url ?? undefined, tier: data.tier ?? undefined }
     },
     orgs: async (address) => {
-      const { data } = await supabase.from('account_owners').select('account_id, role').eq('wallet_address', address)
+      const { data, error } = await supabase.from('account_owners').select('account_id, role').eq('wallet_address', address)
+      if (error) {
+        console.error('claims readers: orgs query failed', error)
+        throw error
+      }
       return (data ?? []).map((r) => ({ accountId: r.account_id, role: r.role }))
     },
     chain: async (address) => {
