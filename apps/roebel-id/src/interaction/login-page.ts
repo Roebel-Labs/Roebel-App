@@ -25,22 +25,35 @@ button{background:#00498B;color:#fff;border:0;border-radius:12px;padding:14px 22
   import { SiweMessage } from 'https://esm.sh/siwe@3'
   const client = createThirdwebClient({ clientId: '${thirdwebClientId}' })
   const status = document.getElementById('status')
-  document.getElementById('login').onclick = async () => {
-    try {
-      status.textContent = 'Verbinde…'
-      const wallet = inAppWallet({ smartAccount: { chain: { id: ${chainId} }, sponsorGas: true } })
-      const account = await wallet.connect({ client, strategy: 'iframe' })
-      const nonce = await (await fetch('/interaction/${uid}/nonce')).text()
-      const message = new SiweMessage({ domain: location.host, address: account.address, uri: location.origin,
-        version: '1', chainId: ${chainId}, nonce, statement: '${SIWE_STATEMENT}',
-        expirationTime: new Date(Date.now()+120000).toISOString() }).prepareMessage()
-      const signature = await account.signMessage({ message })
-      const res = await fetch('/interaction/${uid}/login', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message, signature }) })
-      if (res.redirected) location.href = res.url
-      else { const j = await res.json(); location.href = j.redirectTo }
-    } catch (e) { status.textContent = 'Anmeldung fehlgeschlagen: ' + e.message }
+  const btn = document.getElementById('login')
+  const wallet = inAppWallet({ smartAccount: { chain: { id: ${chainId} }, sponsorGas: true } })
+
+  async function runLogin(account) {
+    status.textContent = 'Anmeldung läuft…'
+    const nonce = await (await fetch('/interaction/${uid}/nonce')).text()
+    const message = new SiweMessage({ domain: location.host, address: account.address, uri: location.origin,
+      version: '1', chainId: ${chainId}, nonce, statement: '${SIWE_STATEMENT}',
+      expirationTime: new Date(Date.now()+120000).toISOString() }).prepareMessage()
+    const signature = await account.signMessage({ message })
+    const res = await fetch('/interaction/${uid}/login', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message, signature }) })
+    if (res.redirected) location.href = res.url
+    else { const j = await res.json(); location.href = j.redirectTo }
   }
+
+  btn.onclick = async () => {
+    try { status.textContent = 'Verbinde…'; const account = await wallet.connect({ client, strategy: 'iframe' }); await runLogin(account) }
+    catch (e) { status.textContent = 'Anmeldung fehlgeschlagen: ' + e.message }
+  }
+
+  // Seamless path: if a wallet session is already warm on this origin, sign in with no click.
+  ;(async () => {
+    try {
+      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))
+      const account = await Promise.race([wallet.autoConnect({ client }), timeout])
+      if (account) await runLogin(account)
+    } catch { /* cold origin — the user taps the button */ }
+  })()
 </script>
 </body></html>`
 }
