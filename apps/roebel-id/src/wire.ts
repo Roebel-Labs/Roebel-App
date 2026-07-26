@@ -25,7 +25,7 @@ export function wireApp(config: Config = loadConfig()) {
   const agentReader = createAgentReader(supabase)
   const resolveClaims = createClaimsResolver({ ...readers, agent: agentReader })
   const adapterFactory = makeSupabaseAdapterFactory({ client: supabase })
-  const provider = buildProvider({ config, adapterFactory, resolveClaims })
+  const provider = buildProvider({ config, adapterFactory, resolveClaims, agentReader })
 
   const interactionRouter = createInteractionRouter({
     provider, bridge, thirdwebClientId: config.thirdwebClientId, chainId: config.chainId,
