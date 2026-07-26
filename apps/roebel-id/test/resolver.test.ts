@@ -9,6 +9,7 @@ describe('claims resolver', () => {
       profile: async () => ({ email: 'a@b.de', name: 'Anna', tier: 'citizen' }),
       orgs: async () => [{ accountId: 'org-1', role: 'admin' }],
       chain: async () => ({ citizen: true, attester: false }),
+      agent: async () => null,
     })
     const claims = await resolve(ADDR)
     expect(claims.sub).toBe(ADDR.toLowerCase())
@@ -26,6 +27,7 @@ describe('claims resolver', () => {
       profile: async () => null,
       orgs: async () => [],
       chain: async () => ({ citizen: false, attester: true }),
+      agent: async () => null,
     })
     const claims = await resolve(ADDR)
     expect(claims.email).toBeUndefined()
