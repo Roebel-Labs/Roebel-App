@@ -177,10 +177,22 @@ export function buildProvider(deps: {
   // is needed (or correct) here.
   if (agentReader && auditWriter) {
     provider.on('client_credentials.issued', async (token: { clientId?: string; jti?: string }) => {
-      if (!token.clientId) return
-      const agent = await agentReader(token.clientId.toLowerCase())
-      if (!agent) return
-      await auditWriter({ agent: agent.address, actSub: agent.ownerSub, scopes: agent.scopes, jti: token.jti })
+      // The token has already been minted and handed back to the caller by the time this
+      // fire-and-forget listener runs — Node's EventEmitter does not await async listeners, and
+      // there is no process-wide `unhandledRejection` handler in this app. Without this try/catch,
+      // ANY rejection here (most notably `agentReader` — `createAgentReader` in ../agents/reader.js
+      // THROWS on a Supabase query error, unlike `auditWriter`, which already swallows its own
+      // errors) would surface as an unhandled promise rejection and crash the whole roebel-id
+      // process, taking down unrelated Nextcloud logins with it. The audit path must never be able
+      // to do that, so every await between here and the write is inside a single blanket catch.
+      try {
+        if (!token.clientId) return
+        const agent = await agentReader(token.clientId.toLowerCase())
+        if (!agent) return
+        await auditWriter({ agent: agent.address, actSub: agent.ownerSub, scopes: agent.scopes, jti: token.jti })
+      } catch (err) {
+        console.error('agent audit: listener failed', err)
+      }
     })
   }
 
