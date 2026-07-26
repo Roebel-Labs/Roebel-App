@@ -116,6 +116,33 @@ export function buildProvider(deps: {
       roebel: ['groups', 'roebel:citizen', 'roebel:attester', 'roebel:tier', 'roebel:actor_type'],
     },
     scopes: ['openid', 'email', 'profile', 'roebel', ...(agentReader ? ['roebel:agent'] : [])],
+    // Delegation claims (RFC 8693) on the agent's JWT access token. In panva v8 the ResourceServer
+    // `jwt` config only carries signing/encryption keys — it has NO `extraTokenClaims` hook (the
+    // brief's `jwt.{ sign, extraTokenClaims }` sketch does not exist in 8.8.1). The mechanism that
+    // lands arbitrary claims on an access token is the TOP-LEVEL `extraTokenClaims(ctx, token)`:
+    // `opaque.getValueAndPayload` writes its return into `payload.extra` for tokens whose kind is in
+    // `{ AccessToken, ClientCredentials }`, and the JWT formatter spreads `...extra` into the signed
+    // payload (`lib/models/formats/jwt.js`). The gate is `token.kind === 'ClientCredentials'` — NOT
+    // the brief's `token.gty`: the client_credentials grant never sets `gty` (only refresh_token /
+    // access_token apply the has_grant_type mixin), so a `gty` check would drop every agent token.
+    // For every other token kind (Nextcloud's authorization_code access tokens) this returns
+    // undefined, leaving that flow untouched. `sub` is intentionally not emitted here: the JWT
+    // formatter forces `sub = accountId || clientId`, and a client_credentials token has no account,
+    // so `sub` is already the lowercased agent client_id (the agent address).
+    ...(agentReader
+      ? {
+          extraTokenClaims: async (_ctx, token): Promise<Record<string, unknown> | undefined> => {
+            if (token.kind !== 'ClientCredentials' || !token.clientId) return undefined
+            const agent = await agentReader(token.clientId.toLowerCase())
+            if (!agent || !agent.enabled) return undefined
+            return {
+              'roebel:actor_type': 'agent',
+              act: { sub: agent.ownerSub.toLowerCase() },
+              'roebel:scopes': agent.scopes,
+            }
+          },
+        }
+      : {}),
     async findAccount(_ctx, id) {
       const claims = await resolveClaims(id)
       return { accountId: id, claims: async () => ({ ...claims, sub: id }) }
