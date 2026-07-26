@@ -26,21 +26,29 @@ export function createInteractionRouter(deps: {
 
       // Röbel ID is a first-party IdP for its own clients (Nextcloud etc.) — there is no
       // separate end-user consent screen. Grant the requested scopes as part of the same
-      // login submission (reusing an existing grant for this account+client when the
-      // interaction already carries one, e.g. a re-login within an active session) so the
-      // provider's consent prompt is satisfied without a second round trip.
+      // login submission so the provider's consent prompt is satisfied without a second round
+      // trip. Only reuse the grant the interaction already carries when it belongs to the wallet
+      // that just authenticated; otherwise (no grant, OR a lingering grant for a different
+      // account — e.g. re-authenticating with a different wallet on a consent re-prompt) mint a
+      // fresh grant for this account. Reusing a mismatched grant would make panva's load_grant
+      // throw 'accountId mismatch' and break the legitimate switch-wallet path.
       const clientId = details.params.client_id as string
-      const grant = details.grantId
-        ? await provider.Grant.find(details.grantId)
+      const existing = details.grantId ? await provider.Grant.find(details.grantId) : undefined
+      const grant = existing && existing.accountId === address
+        ? existing
         : new provider.Grant({ accountId: address, clientId })
-      if (!grant) throw new Error('grant not found')
       grant.addOIDCScope(String(details.params.scope ?? ''))
       const grantId = await grant.save()
 
       const loginResult = { login: { accountId: address }, consent: { grantId } }
       const redirectTo = await provider.interactionResult(req, res, loginResult, { mergeWithLastSubmission: false })
       res.json({ redirectTo })
-    } catch (e: any) { res.status(401).json({ error: e.message }) }
+    } catch (e: any) {
+      // Do not echo the raw exception to the client — an IdP must not leak internal/upstream
+      // detail. Log it server-side and return a generic failure.
+      console.error('[interaction] login failed', e)
+      res.status(401).json({ error: 'login_failed' })
+    }
   })
 
   return router
