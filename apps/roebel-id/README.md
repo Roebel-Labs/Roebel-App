@@ -40,6 +40,10 @@ fly deploy -c apps/roebel-id/fly.toml
 fly secrets list -a roebel-id
 ```
 
+## Deploy (verify the container build first)
+
+The container build was NOT run/verified in-session. On first `fly deploy`, verify that the image builds successfully. If pnpm errors because workspace packages are missing, the fallback is to use `turbo prune --docker @roebel/roebel-id` to produce a pruned build context, or copy all workspace `package.json` files before the install step.
+
 ## Why `min_machines_running = 1`?
 
 Sessions and signing keys are stored in-memory. Scaling to 0 machines (auto-stop) would lose them, breaking login sessions in progress. The `min_machines_running = 1` setting keeps one machine always running on Fly.
