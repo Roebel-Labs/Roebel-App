@@ -1,4 +1,4 @@
-import Provider, { type Adapter, type AdapterPayload, type Configuration } from 'oidc-provider'
+import Provider, { errors, type Adapter, type AdapterPayload, type Configuration } from 'oidc-provider'
 import type { Config } from '../config.js'
 import type { RoebelClaims } from '../claims/types.js'
 import type { AgentReader } from '../agents/types.js'
@@ -73,15 +73,27 @@ export function buildProvider(deps: {
                 (ctx.oidc.params as { grant_type?: string }).grant_type === 'client_credentials'
                   ? AGENT_RESOURCE
                   : (undefined as unknown as string),
-              getResourceServerInfo: async (_ctx, _resourceIndicator, client) => {
+              getResourceServerInfo: async (ctx, _resourceIndicator, client) => {
+                // Defence-in-depth gate. `defaultResource` only gates the DEFAULT resource on the
+                // client_credentials grant; an EXPLICIT `resource=${issuer}/agent` param would
+                // otherwise reach here for ANY client. Because `roebel:agent` is a global scope and
+                // Nextcloud declares no per-client scope allow-list, an unguarded resolver would let
+                // Nextcloud (or any non-agent client) mint a JWT with `aud=${issuer}/agent` +
+                // `scope=roebel:agent` through the authorization_code flow — a privilege escalation.
+                // So the agent resource + JWT format is vended ONLY when the caller is an ENABLED
+                // agent on the client_credentials grant; every other caller is rejected with
+                // invalid_target and gets no agent-audience token.
+                const grantType = (ctx.oidc.params as { grant_type?: string }).grant_type
+                const agent = await agentReader(client.clientId)
+                if (grantType !== 'client_credentials' || !agent || !agent.enabled) {
+                  throw new errors.InvalidTarget('resource is not available to this client')
+                }
                 // The resource server exposes exactly the agent's granted scopes; the grant
                 // intersects the requested scope against this set, so an agent can only mint a token
-                // for scopes it actually holds in the registry. `roebel:agent` (the global AS scope)
-                // is always included. Re-reading the agent here keeps the registry the single source
-                // of truth for scopes (the client metadata only carries the global allow-list).
-                const agent = await agentReader(client.clientId)
+                // for scopes it actually holds in the registry. Re-reading the agent here keeps the
+                // registry the single source of truth for scopes.
                 return {
-                  scope: ['roebel:agent', ...(agent?.scopes ?? [])].join(' '),
+                  scope: ['roebel:agent', ...agent.scopes].join(' '),
                   accessTokenFormat: 'jwt' as const,
                 }
               },

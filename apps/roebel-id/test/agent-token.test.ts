@@ -59,4 +59,34 @@ describe('agent client_credentials grant', () => {
     expect(body.access_token).toBeUndefined()
     expect(body.error).toBe('invalid_client')
   })
+
+  // Security guard (Fix round 1): the agent JWT resource must not be reachable by a non-agent
+  // client. `roebel:agent` is a global scope and the Nextcloud static client declares no per-client
+  // scope allow-list, so without this guard Nextcloud could drive an authorization_code request
+  // with scope=roebel:agent + resource=${issuer}/agent and mint a JWT with aud=${issuer}/agent.
+  // getResourceServerInfo now rejects any caller that is not an enabled agent on the
+  // client_credentials grant with invalid_target — so the request is refused before any
+  // authorization code / agent-audience token can be produced.
+  it('rejects a non-agent client requesting the agent resource (no privilege escalation)', async () => {
+    const params = new URLSearchParams({
+      client_id: 'nextcloud',
+      response_type: 'code',
+      scope: 'openid roebel:agent',
+      redirect_uri: `${issuer}/cb`,
+      resource: `${issuer}/agent`,
+      // Any well-formed S256 challenge — PKCE is verified at token exchange, which is never reached.
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+      state: 'guard-xyz',
+    })
+    const res = await fetch(`${issuer}/auth?${params.toString()}`, { redirect: 'manual' })
+    const location = res.headers.get('location') ?? ''
+    const bodyText = res.status >= 400 ? await res.text() : ''
+    // Refused (invalid_target), whether surfaced as an error redirect to the RP or a 4xx body.
+    expect(
+      location.includes('error=invalid_target') || bodyText.includes('invalid_target'),
+    ).toBe(true)
+    // No authorization code is ever issued, so no agent-audience JWT can follow.
+    expect(location).not.toContain('code=')
+  })
 })
