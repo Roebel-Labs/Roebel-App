@@ -98,7 +98,7 @@ indicator — panva's default `client_credentials` token is opaque). Its claims:
 - `sub` — the agent's address (the client_id itself; there is no separate account)
 - `roebel:actor_type` — `'agent'`, so downstream services can tell an agent-issued token apart from a human's
 - `act.sub` — the owning human/org principal (`owner_sub`), per RFC 8693 delegation semantics — "this agent is acting on behalf of `act.sub`"
-- `roebel:scopes` — the agent's granted scopes from the registry, intersected against what was requested
+- `roebel:scopes` — the agent's full granted scope list from the `id_agents.scopes` registry row (not filtered/intersected against the request's `scope` param — that request-vs-registry narrowing is not implemented yet)
 
 ### Kill switch
 
