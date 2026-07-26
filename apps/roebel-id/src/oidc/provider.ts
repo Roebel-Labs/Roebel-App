@@ -1,7 +1,7 @@
 import Provider, { errors, type Adapter, type AdapterPayload, type Configuration } from 'oidc-provider'
 import type { Config } from '../config.js'
 import type { RoebelClaims } from '../claims/types.js'
-import type { AgentReader } from '../agents/types.js'
+import type { AgentReader, AuditWriter } from '../agents/types.js'
 import { agentClientFind } from '../agents/client-source.js'
 import { loadJwks } from './jwks.js'
 
@@ -10,8 +10,9 @@ export function buildProvider(deps: {
   adapterFactory: (name: string) => Adapter
   resolveClaims: (address: string) => Promise<RoebelClaims>
   agentReader?: AgentReader
+  auditWriter?: AuditWriter
 }): Provider {
-  const { config, adapterFactory, resolveClaims, agentReader } = deps
+  const { config, adapterFactory, resolveClaims, agentReader, auditWriter } = deps
   const jwks = loadJwks()
 
   // Resource indicator that binds an agent's client_credentials access token to a JWT-format
@@ -151,5 +152,37 @@ export function buildProvider(deps: {
 
   const provider = new Provider(config.issuer, configuration)
   provider.proxy = true // behind Fly's TLS terminator
+
+  // Audit trail: one id_agent_audit row per agent client_credentials token issuance.
+  //
+  // Event name, verified against the installed oidc-provider@8.8.1 source (not the panva docs
+  // prose, which are ambiguous here): every token model's `save()` (lib/models/base_model.js)
+  // calls `getValueAndPayload()` and then emits `${snakeCase(this.kind)}.saved` if that call
+  // returned a `payload` (the token was persisted through the adapter — true for opaque tokens),
+  // or `${snakeCase(this.kind)}.issued` if it did not (true for JWT-formatted tokens, which are
+  // self-contained and never written to the adapter — lib/models/formats/jwt.js's
+  // `getValueAndPayload` returns only `{ value: signed }`, no `payload` key). The agent access
+  // token is forced to JWT format above via `getResourceServerInfo`'s `accessTokenFormat: 'jwt'`,
+  // so for THIS token the branch that actually fires is `.issued`, not `.saved` (the brief's
+  // guessed `access_token.saved` fires for neither: it's also the wrong kind — see next
+  // paragraph — and JWT tokens never hit the `.saved` branch at all).
+  //
+  // Kind: the client_credentials grant handler (lib/actions/grants/client_credentials.js)
+  // constructs `new ClientCredentials({ client, scope })` — a model class literally named
+  // `ClientCredentials` (lib/models/client_credentials.js) — not `AccessToken`. `emit()` snake_cases
+  // the model's `kind`, so the event is `client_credentials.issued`. Subscribing to this exact,
+  // fully-qualified event name IS the "agent client_credentials token" gate: no other grant type or
+  // token kind in this provider ever fires it, and (per the `extraTokenClaims` comment above) the
+  // client_credentials grant never sets `gty` — so, unlike the brief's sketch, no `token.gty` check
+  // is needed (or correct) here.
+  if (agentReader && auditWriter) {
+    provider.on('client_credentials.issued', async (token: { clientId?: string; jti?: string }) => {
+      if (!token.clientId) return
+      const agent = await agentReader(token.clientId.toLowerCase())
+      if (!agent) return
+      await auditWriter({ agent: agent.address, actSub: agent.ownerSub, scopes: agent.scopes, jti: token.jti })
+    })
+  }
+
   return provider
 }

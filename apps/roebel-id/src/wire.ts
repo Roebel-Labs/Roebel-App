@@ -7,6 +7,7 @@ import { createThirdwebAuthBridge } from './auth-bridge/thirdweb-bridge.js'
 import { createReaders } from './claims/readers.js'
 import { createClaimsResolver } from './claims/resolver.js'
 import { createAgentReader } from './agents/reader.js'
+import { createAuditWriter } from './agents/audit.js'
 import { makeSupabaseAdapterFactory } from './store/supabase-adapter.js'
 import { buildProvider } from './oidc/provider.js'
 import { createInteractionRouter } from './interaction/router.js'
@@ -23,9 +24,10 @@ export function wireApp(config: Config = loadConfig()) {
   const readers = createReaders(config)
   const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey)
   const agentReader = createAgentReader(supabase)
+  const auditWriter = createAuditWriter(supabase)
   const resolveClaims = createClaimsResolver({ ...readers, agent: agentReader })
   const adapterFactory = makeSupabaseAdapterFactory({ client: supabase })
-  const provider = buildProvider({ config, adapterFactory, resolveClaims, agentReader })
+  const provider = buildProvider({ config, adapterFactory, resolveClaims, agentReader, auditWriter })
 
   const interactionRouter = createInteractionRouter({
     provider, bridge, thirdwebClientId: config.thirdwebClientId, chainId: config.chainId,
