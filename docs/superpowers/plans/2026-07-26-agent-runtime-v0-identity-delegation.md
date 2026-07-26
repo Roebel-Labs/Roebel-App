@@ -549,3 +549,18 @@ git commit -m "feat(roebel-id): kill-switch e2e + agent-principal docs"
 - **Placeholder scan:** every code/test step has real content; the only "verify against panva v8" items are explicit doc-checks with the tests as the behavioural contract (legitimate, not placeholders).
 - **Type consistency:** `Agent` shape identical across Tasks 1→6; `agentReader: AgentReader`, `auditWriter: AuditWriter` names consistent in `buildProvider` deps and `wire.ts`; token claim keys (`roebel:actor_type`, `act`, `roebel:scopes`) identical in producer (Task 4) and assertions (Task 4/5/6); `id_agents` columns match `createAgentReader`'s `select`.
 ```
+
+---
+
+## Follow-up / hardening backlog (from the final whole-branch review · 2026-07-26)
+
+Feature is **ready-to-merge** (final review: no Critical/Important; 32 tests green, build clean). Deferred items to fold into P3b / a hardening pass:
+
+- **Deploy step:** apply `migrations/2026-07-26-id-agents.sql` (`id_agents` + `id_agent_audit`) to the target DB via the Supabase MCP before agents run for real (MCP was unavailable at build time). No in-plan code path needs the live tables; the human/Nextcloud flow is unaffected.
+- **Resource `aud` selection:** `getResourceServerInfo` ignores the requested resource id, so an agent can pick its own token `aud` — constrain to the canonical `${issuer}/agent` audience.
+- **Token-scope narrowing:** `roebel:scopes` carries the agent's full registry scopes, not the requested subset — intersect requested ∩ granted once consumers enforce per-token scope.
+- **Audit is best-effort:** a DB blip drops the audit row while the token still issues (by design — audit must not block issuance). Add retry/dead-letter if audit must be lossless.
+- **Consistency nit:** `act.sub` is lowercased in the JWT but stored raw in the audit row — lowercase in the audit insert too.
+- **No pre-TTL revocation:** disabling an agent stops new tokens, but outstanding JWTs live to their 1h TTL — add introspection / shorter TTL if immediate revocation is required.
+
+**Next planned slices:** P3b (Zodiac Roles on-chain budget enforcement) · P3c (MCP tool-execution runtime).
