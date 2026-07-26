@@ -1,3 +1,4 @@
+import type express from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { loadConfig, type Config } from './config.js'
 import { createGnosisVerifier } from './lib/gnosis.js'
@@ -28,6 +29,20 @@ export function wireApp(config: Config = loadConfig()) {
     provider, bridge, thirdwebClientId: config.thirdwebClientId, chainId: config.chainId,
   })
   const app = createApp({ provider, interactionRouter })
+
+  // Final error handler, mounted after the interaction router and provider.callback() (both
+  // wired inside createApp above). Express recognizes a 4-arg middleware as an error handler
+  // regardless of mount order relative to non-error middleware, but it only catches errors
+  // from handlers registered before it — so this must stay last. Never leak the raw
+  // err.stack/message to the client (stack traces reveal internals to callers of a public
+  // IdP); log server-side and respond with a generic message. This only fires for errors
+  // passed to next(e) — e.g. the GET /interaction/:uid path in the interaction router — it
+  // does not intercept the provider's own (non-error) responses.
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[wire] unhandled request error', err)
+    if (res.headersSent) return
+    res.status(500).json({ error: 'internal_error' })
+  })
 
   return { app, provider, bridge }
 }

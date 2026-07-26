@@ -28,13 +28,15 @@ export function createInteractionRouter(deps: {
       // separate end-user consent screen. Grant the requested scopes as part of the same
       // login submission so the provider's consent prompt is satisfied without a second round
       // trip. Only reuse the grant the interaction already carries when it belongs to the wallet
-      // that just authenticated; otherwise (no grant, OR a lingering grant for a different
-      // account — e.g. re-authenticating with a different wallet on a consent re-prompt) mint a
-      // fresh grant for this account. Reusing a mismatched grant would make panva's load_grant
-      // throw 'accountId mismatch' and break the legitimate switch-wallet path.
+      // that just authenticated AND was issued to the same client as the current interaction;
+      // otherwise (no grant, a lingering grant for a different account — e.g. re-authenticating
+      // with a different wallet on a consent re-prompt — or a grant issued to a different client)
+      // mint a fresh grant. Reusing a mismatched grant would either make panva's load_grant throw
+      // 'accountId mismatch' (different account) or silently hand this client scopes/consent that
+      // were actually granted to a different client (different clientId) — both must mint fresh.
       const clientId = details.params.client_id as string
       const existing = details.grantId ? await provider.Grant.find(details.grantId) : undefined
-      const grant = existing && existing.accountId === address
+      const grant = existing && existing.accountId === address && existing.clientId === clientId
         ? existing
         : new provider.Grant({ accountId: address, clientId })
       grant.addOIDCScope(String(details.params.scope ?? ''))
