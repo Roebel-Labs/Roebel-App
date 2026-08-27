@@ -9,7 +9,13 @@ const config: ExpoConfig = {
   // bump FENCES old 3.4.0 builds from ever receiving XMTP-era JS via OTA
   // (2026-07-10: a main-tip preview update onto the 3.4.0 runtime crash-looped
   // a device — never publish post-XMTP JS to pre-XMTP builds).
-  version: '3.5.0',
+  //
+  // 3.6.0 = first EAS-Observe runtime, same fence for the same reason. The root
+  // layout now imports `expo-observe`, whose module resolves through
+  // requireNativeModule() at import time and THROWS on a runtime that lacks the
+  // native module. OTA-ing this JS onto a 3.5.0 build would white-screen it on
+  // launch, and expo-updates does not roll a crashing update back.
+  version: '3.6.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',

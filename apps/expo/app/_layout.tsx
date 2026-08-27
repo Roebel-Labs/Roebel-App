@@ -38,6 +38,7 @@ import { StatusBar, View, StyleSheet, Text, Platform, InteractionManager } from 
 import '@/lib/patch-text';
 import useAppFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
+import { AppMetrics, AppMetricsRoot } from 'expo-observe';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ThirdwebProvider } from 'thirdweb/react';
 import { useScreenTracking } from '@/hooks/useAnalytics';
@@ -46,6 +47,7 @@ import { GnosisWalletProvider } from '@/context/GnosisWalletContext';
 import { ConsentProvider } from '@/context/ConsentContext';
 import { ConditionalPostHogProvider } from '@/components/consent/ConditionalPostHogProvider';
 import { ConsentGate } from '@/components/consent/ConsentGate';
+import { ObserveConsentGate } from '@/components/consent/ObserveConsentGate';
 import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
 import AnimatedSplash from '@/components/AnimatedSplash';
@@ -341,6 +343,18 @@ function ThemedLayout() {
 function Layout() {
   const { fontsLoaded, fontError } = useAppFonts();
   const [splashDone, setSplashDone] = React.useState(false);
+  const markedInteractiveRef = React.useRef(false);
+
+  // Time-to-interactive for EAS Observe. AnimatedSplash covers the whole app
+  // until its exit fade completes, so this is the first moment the user can
+  // actually touch anything — fonts are loaded and the provider tree is mounted
+  // by then. Ref-guarded: a second call would overwrite TTI with a later value.
+  const handleSplashFinish = React.useCallback(() => {
+    setSplashDone(true);
+    if (markedInteractiveRef.current) return;
+    markedInteractiveRef.current = true;
+    AppMetrics.markInteractive();
+  }, []);
 
   React.useEffect(() => {
     if (fontsLoaded) {
@@ -409,6 +423,7 @@ function Layout() {
                             <PendingPostFeedbackProvider>
                               <ExploreDotProvider>
                                 <ConsentGate />
+                                <ObserveConsentGate />
                                 <AppUpdateGate />
                                 <ThemedLayout />
                                 {/* <DebugLogOverlay /> — debug-log FAB disabled; re-enable here + in index.js */}
@@ -439,7 +454,7 @@ function Layout() {
             </ConsentProvider>
           </ThemeProvider>
         </SafeAreaProvider>
-        {!splashDone && <AnimatedSplash onFinish={() => setSplashDone(true)} />}
+        {!splashDone && <AnimatedSplash onFinish={handleSplashFinish} />}
       </GestureHandlerRootView>
     </ErrorBoundary>
     </PersistQueryClientProvider>
@@ -448,7 +463,11 @@ function Layout() {
 
 // Sentry is initialized manually inside ConsentGate when the user opts in to
 // crash reporting. See lib/sentry-init.ts.
-export default Layout;
+//
+// AppMetricsRoot.wrap marks time-to-first-render for EAS Observe (SDK 55 name;
+// SDK 56+ renames it to ObserveRoot). Dispatch of anything it collects stays
+// gated on `analytics` consent via <ObserveConsentGate /> above.
+export default AppMetricsRoot.wrap(Layout);
 
 const styles = StyleSheet.create({
   gradientContainer: {
