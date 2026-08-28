@@ -15,9 +15,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
-  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
@@ -211,7 +209,12 @@ export default function FeedHome() {
   const insets = useSafeAreaInsets();
 
   const [headerHeight, setHeaderHeight] = useState(0);
-  const headerTranslateY = useSharedValue(0);
+  // Raw scroll offset of the feed lists. The header does NOT move (no
+  // parallax): the feed body slides ABOVE it instead. Once scrolled, the
+  // list layer (zIndex 5) paints over the header (zIndex drops to 2); at
+  // the top the header sits above the list's transparent top padding so
+  // its buttons stay tappable.
+  const listScrollY = useSharedValue(0);
 
   const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
     const next = e.nativeEvent.layout.height;
@@ -219,28 +222,11 @@ export default function FeedHome() {
   }, []);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: headerTranslateY.value }],
+    zIndex: listScrollY.value <= 8 ? 10 : 2,
   }));
 
-  // Bottom nav slides off only when the header is fully collapsed.
-  const bottomNavTranslateY = useDerivedValue(() => {
-    if (headerHeight === 0) return 0;
-    const collapsed = headerTranslateY.value <= -headerHeight + 1;
-    return withTiming(collapsed ? BOTTOM_NAV_HEIGHT + insets.bottom + 16 : 0, {
-      duration: 180,
-    });
-  });
-  const bottomNavAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bottomNavTranslateY.value }],
-  }));
-
-  // FAB shrinks away alongside the bottom nav so it doesn't float in
-  // empty space when the chrome is hidden.
-  const fabVisibilityScale = useDerivedValue(() => {
-    if (headerHeight === 0) return 1;
-    const collapsed = headerTranslateY.value <= -headerHeight + 1;
-    return withTiming(collapsed ? 0 : 1, { duration: 180 });
-  });
+  // Chrome no longer hides on scroll — the FAB keeps a constant scale.
+  const fabVisibilityScale = useSharedValue(1);
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
@@ -556,8 +542,7 @@ export default function FeedHome() {
 
   const bottomPadding = BOTTOM_NAV_HEIGHT + insets.bottom;
   const feedListProps = {
-    headerTranslateY,
-    headerHeight,
+    scrollY: listScrollY,
     topPadding: headerHeight,
     bottomPadding,
     onRepost: handleRepostPress,
@@ -588,7 +573,7 @@ export default function FeedHome() {
       {/* GlassBackdrop is the surface Android's frosted chrome samples
           from (BlurTargetView) — the glass bars below must stay OUTSIDE
           it and render after it. Plain passthrough View on iOS. */}
-      <GlassBackdrop style={styles.pager}>
+      <GlassBackdrop style={styles.listLayer}>
       <Pager
         ref={pagerRef}
         initialPage={0}
@@ -709,7 +694,7 @@ export default function FeedHome() {
       )}
 
       <Animated.View
-        style={[styles.bottomFloating, bottomNavAnimatedStyle]}
+        style={styles.bottomFloating}
       >
         <GlassSurface edge="top" />
         {/* BottomNavigation now owns its own safe-area bottom padding
@@ -780,6 +765,12 @@ const styles = StyleSheet.create({
   },
   pager: {
     flex: 1,
+  },
+  // The feed layer sits between the header's two z-states (10 at top,
+  // 2 when scrolled) so scrolled content paints ABOVE the static chrome.
+  listLayer: {
+    flex: 1,
+    zIndex: 5,
   },
   page: {
     flex: 1,
