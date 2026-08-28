@@ -17,8 +17,7 @@
   "pnpm": {
     "overrides": {
       "@types/react": "^19.1.0",
-      "@types/react-dom": "^19.1.0",
-      "expo-updates-interface": "55.1.6"
+      "@types/react-dom": "^19.1.0"
     }
   },
   "devDependencies": {
