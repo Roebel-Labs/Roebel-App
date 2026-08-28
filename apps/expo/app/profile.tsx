@@ -1,7 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Platform } from 'react-native';
-// TEMPORARY BLUR DIAGNOSTIC (2026-08-28) — see the QR FAB below.
-import { BlurView, BlurTargetView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
@@ -64,9 +62,7 @@ export default function ProfileScreen() {
   const { isBusinessOwner, businesses } = useIsBusinessOwner();
   const businessRecord = businesses.find(b => b.status === 'published') || businesses[0] || null;
   const userBusiness = businessRecord;
-  const { colors, isDark } = useTheme();
-  // TEMPORARY BLUR DIAGNOSTIC: the Android frost samples this target.
-  const blurTestTargetRef = useRef<View>(null);
+  const { colors } = useTheme();
 
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
@@ -149,11 +145,6 @@ const handleRefresh = async () => {
         )}
       </View>
 
-      {/* TEMPORARY BLUR DIAGNOSTIC wrapper: BlurTargetView is a plain
-          View on iOS; on Android it is the RenderNode surface the QR FAB
-          frost samples. Isolates whether backdrop blur alone crashes
-          physical devices (vs. blur-over-the-media-heavy feed). */}
-      <BlurTargetView ref={blurTestTargetRef} style={styles.content}>
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
@@ -474,41 +465,16 @@ const handleRefresh = async () => {
         )}
 
       </ScrollView>
-      </BlurTargetView>
 
-      {/* QR Code Scanner FAB - only for verified users.
-          TEMPORARY BLUR DIAGNOSTIC (2026-08-28): the FAB background is a
-          real backdrop blur ON ANDROID TOO (the feed's Android blur stays
-          disabled). What this tells us on the Pixel:
-          - FAB still solid navy  -> the new bundle never arrived; the old
-            crashing bundle is stuck (expo-updates does not roll back) —
-            reinstall the app.
-          - FAB frosted, no crash -> blur itself is fine on this device;
-            the feed crash has another cause.
-          - Profile crashes       -> backdrop blur confirmed as the crash
-            class; keep it off Android everywhere.
-          Revert to the solid-primary FAB once the diagnosis is done. */}
+      {/* QR Code Scanner FAB - only for verified users */}
       {hasAnyNFT && (
         <Pressable
           onPress={() => router.push('/verification/scan' as any)}
-          style={styles.qrFab}
+          style={[styles.qrFab, { backgroundColor: colors.primary }]}
           accessibilityRole="button"
           accessibilityLabel="QR-Code scannen"
         >
-          <BlurView
-            style={StyleSheet.absoluteFill}
-            intensity={100}
-            tint={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
-            blurMethod="dimezisBlurViewSdk31Plus"
-            blurTarget={blurTestTargetRef}
-          />
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: 'rgba(0, 73, 139, 0.35)' },
-            ]}
-          />
-          <QrCodeIcon width={24} height={24} color="#ffffff" />
+          <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
         </Pressable>
       )}
 
@@ -686,9 +652,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
-    // Clips the diagnostic BlurView to the round shape (expo-blur docs:
-    // borderRadius needs overflow hidden on both platforms).
-    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',

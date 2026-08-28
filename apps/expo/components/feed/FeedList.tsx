@@ -7,6 +7,8 @@ import {
 } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
+  useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
@@ -68,9 +70,10 @@ type Props = {
    */
   onRepost?: (target: PostRecord, isReposted: boolean) => void;
   listHeader?: React.ReactNode;
-  /** Shared value receiving the raw scroll offset — FeedHome flips the
-   * header z-order on it so the feed body slides above the static chrome. */
-  scrollY?: SharedValue<number>;
+  /** Shared value tracking the floating header translateY. Updated on scroll. */
+  headerTranslateY?: SharedValue<number>;
+  /** Total height of the floating header — used as the upper clamp for the translate. */
+  headerHeight?: number;
   /** Additional top inset (e.g. status bar) added to the header padding. */
   topPadding?: number;
   /** Additional bottom inset (e.g. bottom nav) added to the footer padding. */
@@ -170,7 +173,8 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     onMore,
     onRepost,
     listHeader,
-    scrollY,
+    headerTranslateY,
+    headerHeight = 0,
     topPadding = 0,
     bottomPadding = 0,
     active = true,
@@ -605,12 +609,62 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     return [hero, ...visible];
   }, [items, showProposalHero]);
 
-  // No parallax: the header stays put. The list just reports its raw
-  // scroll offset — FeedHome flips the z-order so the feed body slides
-  // ABOVE the static header/post-bar/tabs once the user scrolls.
+  // X-style parallax chrome: the header physically tracks the scroll instead
+  // of flipping between shown/hidden. Collapsing runs at PARALLAX_RATE (< 1)
+  // so the feed body visibly overtakes and slides above the retreating
+  // header; revealing runs at full finger speed so chrome comes back
+  // instantly on scroll-up. When the gesture ends mid-way the header snaps
+  // to the nearest edge so it never parks half-visible.
+  const PARALLAX_RATE = 0.55;
+  const prevScrollY = useSharedValue(0);
+  // Guards the reset-at-top timing so bounce frames don't restart it.
+  const resettingAtTop = useSharedValue(false);
+
+  const snapToNearestEdge = () => {
+    'worklet';
+    if (!headerTranslateY || headerHeight <= 0) return;
+    const v = headerTranslateY.value;
+    if (v > -headerHeight && v < 0) {
+      headerTranslateY.value = withTiming(v < -headerHeight / 2 ? -headerHeight : 0, {
+        duration: 180,
+      });
+    }
+  };
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
-      if (scrollY) scrollY.value = e.contentOffset.y;
+      if (!headerTranslateY || headerHeight <= 0) return;
+      const y = e.contentOffset.y;
+      const dy = y - prevScrollY.value;
+      prevScrollY.value = y;
+
+      if (y <= 0) {
+        // At the top / overscroll: chrome always fully visible.
+        if (headerTranslateY.value !== 0 && !resettingAtTop.value) {
+          resettingAtTop.value = true;
+          headerTranslateY.value = withTiming(0, { duration: 160 });
+        }
+        return;
+      }
+      resettingAtTop.value = false;
+
+      if (dy > 0) {
+        // Never collapse further than the content above the fold allows —
+        // prevents the header vanishing on a tiny first scroll.
+        const limit = Math.min(headerHeight, y);
+        headerTranslateY.value = Math.max(
+          -limit,
+          headerTranslateY.value - dy * PARALLAX_RATE,
+        );
+      } else if (dy < 0) {
+        headerTranslateY.value = Math.min(0, headerTranslateY.value - dy);
+      }
+    },
+    onEndDrag: () => {
+      snapToNearestEdge();
+    },
+    onMomentumEnd: () => {
+      snapToNearestEdge();
     },
   });
 
