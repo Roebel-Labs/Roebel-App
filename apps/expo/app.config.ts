@@ -156,7 +156,13 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_PLIST ?? './keys/GoogleService-Info.plist',
-    buildNumber: '31',
+    // Bump BY HAND every release, like versionCode below. eas.json no longer
+    // auto-increments this: with a dynamic config EAS can only write back to
+    // app.json, which this file overrides, so it re-incremented from the same
+    // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
+    // builds sharing one number, and App Store Connect rejects duplicates.
+    // Last submitted: 32 (v3.5.0).
+    buildNumber: '33',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -174,7 +180,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 37,
+    versionCode: 38,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
