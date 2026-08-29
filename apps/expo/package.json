@@ -168,5 +168,14 @@
       "react": "$react"
     }
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "@coinbase/wallet-mobile-sdk"
+        ]
+      }
+    }
+  }
 }
