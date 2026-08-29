@@ -39,13 +39,25 @@ export default function FeedTabBar({ activeTab, onTabChange, scrollProgress, unr
 
   const allMeasured = Object.keys(layouts).length === TABS.length;
 
+  // Interpolation tables are built in RENDER scope, not inside the worklet.
+  // Two reasons: (1) they only change when tab layouts change, so per-frame
+  // recomputation was waste; (2) CRASH — with React Compiler enabled the
+  // compiler hoists the static `(_, i) => i` arrow into a module-level
+  // `_temp` function, reanimated captures it in the worklet closure, and a
+  // plain function does not survive serialization to the UI runtime:
+  // "Array.prototype.map() requires a callable argument" on feed open
+  // (Pixel, 2026-08-29). Plain arrays serialize fine. Keep function calls
+  // out of auto-workletized hook callbacks, or give them an explicit
+  // 'worklet' directive so the compiler bails on the body.
+  const input = TABS.map((_, i) => i);
+  const xOutput = TABS.map((_, i) => layouts[i]?.x ?? 0);
+  const wOutput = TABS.map((_, i) => layouts[i]?.width ?? 0);
+
   const underlineStyle = useAnimatedStyle(() => {
+    'worklet';
     if (!scrollProgress || !allMeasured) {
       return { opacity: 0 };
     }
-    const input = TABS.map((_, i) => i);
-    const xOutput = TABS.map((_, i) => layouts[i]?.x ?? 0);
-    const wOutput = TABS.map((_, i) => layouts[i]?.width ?? 0);
     return {
       opacity: 1,
       transform: [{ translateX: interpolate(scrollProgress.value, input, xOutput) }],
