@@ -69,7 +69,7 @@ export default function ExploreCategoryChips() {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 12,
+    marginBottom: 4,
   },
   listContent: {
     paddingHorizontal: 16,

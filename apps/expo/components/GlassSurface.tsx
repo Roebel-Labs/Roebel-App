@@ -121,7 +121,18 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
       />
     );
 
-  const tint = isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial';
+  // iOS: authentic chrome material. Android: full blur radius but a LIGHTER
+  // overlay — the tint's base alpha is the knob that's independent of radius
+  // (chrome material = 75% overlay at intensity 100; 'default' = 44% white,
+  // ultraThinDark = 55% dark). Max's call 2026-08-29: strong blur, light frost.
+  const tint =
+    Platform.OS === 'android'
+      ? isDark
+        ? 'systemUltraThinMaterialDark'
+        : 'default'
+      : isDark
+        ? 'systemChromeMaterialDark'
+        : 'systemChromeMaterial';
 
   // iOS always; Android only for the single opted-in surface per screen
   // (bottom nav) with a mounted target — see the GlassBackdrop comment.
@@ -134,11 +145,7 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <BlurView
           style={StyleSheet.absoluteFill}
-          // Android overlay alpha scales with intensity (0.75 × i/100 for the
-          // chrome material): 100 buries the blur under 75% white. 45 ≈ 34%
-          // overlay — content visibly frosts through. iOS keeps the true
-          // system material at full intensity.
-          intensity={Platform.OS === 'android' ? 45 : intensity}
+          intensity={intensity}
           tint={tint}
           // Android-only props; ignored on iOS. Blurs the GlassBackdrop
           // beneath via RenderNode on Android 12+, tinted fill below that.
