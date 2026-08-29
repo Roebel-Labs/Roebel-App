@@ -67,5 +67,16 @@ export {
 } from "./org";
 export type { OrgIdentity } from "./org";
 
+export {
+  KIND_FORUM_CATEGORY,
+  KIND_FORUM_REPLY,
+  KIND_FORUM_THREAD,
+  buildForumCategoryEvent,
+  buildForumReplyEvent,
+  buildForumThreadEvent,
+  forumCategoryAddress,
+} from "./forum";
+export type { ForumCategoryInput, ForumEventRef, ForumThreadInput } from "./forum";
+
 export { RelayClient } from "./relay";
 export type { Filter, PublishResult, RelayOptions } from "./relay";
