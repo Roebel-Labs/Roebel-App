@@ -175,7 +175,9 @@ export default function CommentInput({
       {/* Floating fully-rounded pill. Glass background, hairline border,
           content scrolls beneath it in the screen. */}
       <View style={[styles.pill, { borderColor: glassEdgeColor(isDark) }]}>
-        <GlassSurface />
+        {/* Post detail has no bottom nav, so the pill is that screen's ONE
+            Android blur sampler (single-sampler rule — GlassSurface.tsx). */}
+        <GlassSurface androidExperimentalBlur />
         <View style={styles.pillRow}>
           {isEditMode ? (
             <Pressable onPress={onCancel} style={styles.cancelButton} hitSlop={8}>

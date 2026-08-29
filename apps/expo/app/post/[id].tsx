@@ -62,7 +62,7 @@ import RepostDrawer from '@/components/feed/RepostDrawer';
 import { resolveYouTubeUrl, removeYouTubeUrls } from '@/lib/utils/youtube';
 import CommentInput from '@/components/feed/CommentInput';
 import CommentComposerModal from '@/components/feed/CommentComposerModal';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import CommentScrim from '@/components/feed/CommentScrim';
 import FeedPostSkeleton, { CommentSkeleton } from '@/components/feed/FeedPostSkeleton';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
@@ -715,6 +715,7 @@ export default function PostDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <GlassProvider>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -806,6 +807,7 @@ export default function PostDetailScreen() {
           </Pressable>
         )}
       </KeyboardAvoidingView>
+      </GlassProvider>
 
       <PostOptionsDrawer
         visible={optionsDrawerVisible}

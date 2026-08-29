@@ -720,7 +720,9 @@ export default function FeedHome() {
       <Animated.View
         style={[styles.bottomFloating, bottomNavAnimatedStyle]}
       >
-        <GlassSurface edge="top" />
+        {/* The feed screen's ONE Android blur sampler (single-sampler rule —
+            see GlassSurface.tsx). All other feed bars stay on the tint. */}
+        <GlassSurface edge="top" androidExperimentalBlur />
         {/* BottomNavigation now owns its own safe-area bottom padding
             (Task 7) — no extra paddingBottom here, or the home-indicator
             inset would be applied twice and the glass overlay would grow

@@ -152,6 +152,23 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
           blurMethod="dimezisBlurViewSdk31Plus"
           blurTarget={target ?? undefined}
         />
+        {Platform.OS === 'android' && (
+          // Brightening wash over the blur — expo-blur's tint table reads
+          // dark on device; this is our own knob, independent of radius
+          // (Max 2026-08-29: "much lighter"). Dark mode gets a soft
+          // surface-colored wash instead.
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(24, 25, 27, 0.45)'
+                  : 'rgba(255, 255, 255, 0.55)',
+              },
+            ]}
+          />
+        )}
         {edgeLine}
       </View>
     );
