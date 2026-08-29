@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
