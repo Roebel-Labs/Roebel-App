@@ -1,0 +1,170 @@
+diff --git a/android/src/main/java/expo/modules/xmtpreactnativesdk/XMTPModule.kt b/android/src/main/java/expo/modules/xmtpreactnativesdk/XMTPModule.kt
+index 53a9353..17eb7d5 100644
+--- a/android/src/main/java/expo/modules/xmtpreactnativesdk/XMTPModule.kt
++++ b/android/src/main/java/expo/modules/xmtpreactnativesdk/XMTPModule.kt
+@@ -12,6 +12,7 @@ import expo.modules.kotlin.exception.Exceptions
+ import expo.modules.kotlin.functions.Coroutine
+ import expo.modules.kotlin.modules.Module
+ import expo.modules.kotlin.modules.ModuleDefinition
++import expo.modules.kotlin.modules.ModuleDefinitionBuilder
+ import expo.modules.xmtpreactnativesdk.wrappers.ArchiveMetadataWrapper
+ import expo.modules.xmtpreactnativesdk.wrappers.AvailableArchiveWrapper
+ import expo.modules.xmtpreactnativesdk.wrappers.AuthParamsWrapper
+@@ -253,7 +254,27 @@ class XMTPModule : Module() {
+         mutableMapOf()
+ 
+ 
++    // definition() is split into defineChunkN() helpers: Kotlin 2.1.20 +
++    // expo-modules-core 56's inline DSL otherwise expands this single method
++    // past the JVM 64KB bytecode limit (MethodTooLargeException on SDK 56).
+     override fun definition() = ModuleDefinition {
++        defineChunk0()
++        defineChunk1()
++        defineChunk2()
++        defineChunk3()
++        defineChunk4()
++        defineChunk5()
++        defineChunk6()
++        defineChunk7()
++        defineChunk8()
++        defineChunk9()
++        defineChunk10()
++        defineChunk11()
++        defineChunk12()
++        defineChunk13()
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk0() {
+         Name("XMTP")
+ 
+         OnCreate {
+@@ -350,6 +371,9 @@ class XMTPModule : Module() {
+             signer?.handle(id = requestID, signature = signature)
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk1() {
+         AsyncFunction("createRandom") Coroutine { hasPreAuthenticateToInboxCallback: Boolean?, dbEncryptionKey: List<Int>, authParams: String ->
+             withContext(Dispatchers.IO) {
+                 logV("createRandom")
+@@ -568,6 +592,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk2() {
+         AsyncFunction("ffiRevokeInstallationsSignatureText") Coroutine { installationId: String, installationIds: List<String> ->
+             withContext(Dispatchers.IO) {
+                 logV("ffiRevokeInstallationsSignatureText")
+@@ -719,6 +746,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk3() {
+         AsyncFunction("ffiStaticRevokeInstallationsSignatureText") Coroutine { environment: String, publicIdentity: String, inboxId: String, installationIds: List<String> ->
+             withContext(Dispatchers.IO) {
+                 logV("ffiStaticRevokeInstallationsSignatureText")
+@@ -847,6 +877,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk4() {
+         Function("unsubscribeFromConsent") { installationId: String ->
+             logV("unsubscribeFromConsent")
+             subscriptions[getConsentKey(installationId)]?.cancel()
+@@ -1051,6 +1084,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk5() {
+         AsyncFunction("conversationEnrichedMessages") Coroutine { installationId: String, conversationId: String, queryParamsJson: String? ->
+             withContext(Dispatchers.IO) {
+                 logV("conversationEnrichedMessages")
+@@ -1224,6 +1260,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk6() {
+         AsyncFunction("prepareEncodedMessage") Coroutine { installationId: String, conversationId: String, encodedContentData: List<Int>, shouldPush: Boolean, noSend: Boolean ->
+             withContext(Dispatchers.IO) {
+                 logV("prepareEncodedMessage")
+@@ -1430,6 +1469,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk7() {
+         AsyncFunction("sendSyncRequest") Coroutine { installationId: String ->
+             withContext(Dispatchers.IO) {
+                 logV("sendSyncRequest")
+@@ -1552,6 +1594,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk8() {
+         AsyncFunction("updateGroupDescription") Coroutine { installationId: String, groupId: String, groupDescription: String ->
+             withContext(Dispatchers.IO) {
+                 logV("updateGroupDescription")
+@@ -1678,6 +1723,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk9() {
+         AsyncFunction("listAdmins") Coroutine { installationId: String, groupId: String ->
+             withContext(Dispatchers.IO) {
+                 logV("listAdmins")
+@@ -1798,6 +1846,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk10() {
+         AsyncFunction("updateGroupDescriptionPermission") Coroutine { clientInstallationId: String, groupId: String, newPermission: String ->
+             withContext(Dispatchers.IO) {
+                 logV("updateGroupDescriptionPermission")
+@@ -1923,6 +1974,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk11() {
+         AsyncFunction("pausedForVersion") Coroutine { installationId: String, conversationId: String ->
+             withContext(Dispatchers.IO) {
+                 logV("pausedForVersion")
+@@ -2031,6 +2085,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk12() {
+         Function("unsubscribeFromPreferenceUpdates") { installationId: String ->
+             logV("unsubscribeFromPreferenceUpdates")
+             subscriptions[getPreferenceUpdatesKey(installationId)]?.cancel()
+@@ -2160,6 +2217,9 @@ class XMTPModule : Module() {
+             }
+         }
+ 
++    }
++
++    private fun ModuleDefinitionBuilder.defineChunk13() {
+         AsyncFunction("archiveMetadata") Coroutine { installationId: String, path: String, encryptionKey: List<Int> ->
+             withContext(Dispatchers.IO) {
+                 val client = clients[installationId] ?: throw XMTPException("No client")
