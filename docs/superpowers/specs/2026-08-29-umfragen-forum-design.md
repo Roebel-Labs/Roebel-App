@@ -100,7 +100,7 @@ Dual-write, same as posts today: app inserts the Supabase row, then best-effort 
 
 ## 8. Moderation
 
-Post-hoc and form-based ("editors judge form, never merit"): existing report/hide affordances extended to thread and reply cards; author deletion = row soft-delete + kind-5 publish (existing path); NIP-62 vanish already covers full-identity erasure. No pre-approval of threads.
+Post-hoc and form-based ("editors judge form, never merit"): author deletion = row soft-delete + kind-5 publish (existing path); NIP-62 vanish already covers full-identity erasure. No pre-approval of threads. The report/hide affordance on thread and reply cards is a fast-follow after slice A (the tables carry moderation columns from day one).
 
 ## 9. Server rail — separate slice B
 
