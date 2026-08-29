@@ -24,6 +24,22 @@ import { useEffect, useRef } from 'react';
 import { Observe } from 'expo-observe';
 import { useConsent } from '@/context/ConsentContext';
 
+// The expo-router integration (per-route cold_ttr/warm_ttr/tti) must be
+// enabled ONCE, before any screen mounts — expo-observe throws a fatal if it
+// is toggled during a screen's lifecycle (first SDK 56 OTA, update 5d370d2f).
+// Module scope runs at import time, ahead of the first render. Dispatch
+// starts OFF here — consent is unknown until the effect below reads it back,
+// matching the gate's "unknown = denied" rule.
+try {
+  Observe.configure({
+    dispatchingEnabled: false,
+    dispatchInDebug: false,
+    integrations: { 'expo-router': true },
+  });
+} catch {
+  // Native module absent (Expo Go, or a runtime built before expo-observe).
+}
+
 export function ObserveConsentGate() {
   const { preferences, ready } = useConsent();
   const lastValueRef = useRef<boolean | null>(null);
@@ -35,11 +51,10 @@ export function ObserveConsentGate() {
     lastValueRef.current = dispatchingEnabled;
 
     try {
-      // The expo-router integration records the per-route navigation metrics
-      // (cold_ttr / warm_ttr / tti) — it is opt-in and defaults to OFF, so it
-      // must be restated here on every call (configure() is a full replacement).
-      // Recording is local; whether anything leaves the device stays governed
-      // by `dispatchingEnabled` above.
+      // configure() is a FULL REPLACEMENT, so the router integration must be
+      // restated with the exact value set at module scope above — same value,
+      // so it does not count as a lifecycle toggle. Recording is local; what
+      // leaves the device is governed by `dispatchingEnabled`.
       Observe.configure({
         dispatchingEnabled,
         dispatchInDebug: false,
