@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heroImg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   heroScrim: {
     position: 'absolute',

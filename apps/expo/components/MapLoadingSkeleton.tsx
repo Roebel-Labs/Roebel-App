@@ -59,7 +59,7 @@ export default function MapLoadingSkeleton() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <View style={StyleSheet.absoluteFillObject}>
+      <View style={StyleSheet.absoluteFill}>
         <View style={[styles.hLine, { top: '25%', backgroundColor: colors.borderSecondary }]} />
         <View style={[styles.hLine, { top: '50%', backgroundColor: colors.borderSecondary }]} />
         <View style={[styles.hLine, { top: '75%', backgroundColor: colors.borderSecondary }]} />
@@ -81,7 +81,7 @@ export default function MapLoadingSkeleton() {
         </View>
       </View>
 
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: markersOpacity }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: markersOpacity }]}>
         {MARKER_POSITIONS.map((pos, index) => (
           <View key={index} style={[styles.marker, { backgroundColor: colors.disabled }, pos as any]} />
         ))}

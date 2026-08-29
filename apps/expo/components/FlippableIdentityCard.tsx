@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   coverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
 

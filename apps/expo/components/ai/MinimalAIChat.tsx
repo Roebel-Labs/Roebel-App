@@ -1409,7 +1409,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   imageLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1417,14 +1417,14 @@ const styles = StyleSheet.create({
   },
   // New styles for redesigned chat
   chatContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   safeArea: {
     flex: 1,
   },
   // Submission screen (loading + success)
   submissionScreen: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,

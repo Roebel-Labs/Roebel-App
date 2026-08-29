@@ -99,7 +99,7 @@ export default function UserAvatarWithFrame({
       {showFrame && (
         <ExpoImage
           source={{ uri: resolvedFrame! }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           contentFit="contain"
           pointerEvents="none"
           accessibilityIgnoresInvertColors

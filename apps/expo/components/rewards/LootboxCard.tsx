@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   lockedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

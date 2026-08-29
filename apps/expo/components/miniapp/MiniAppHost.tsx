@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   splash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

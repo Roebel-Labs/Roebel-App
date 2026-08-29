@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
 
   // Death Overlay
   deathOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(180, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
 
   // Level Complete & Pause overlays
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',

@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   logoOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 40,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',

@@ -121,7 +121,7 @@ export default function FrameCarousel({
               {!isPlaceholder && reward.asset_url && (
                 <Image
                   source={{ uri: reward.asset_url }}
-                  style={StyleSheet.absoluteFillObject as any}
+                  style={StyleSheet.absoluteFill as any}
                   contentFit="contain"
                   pointerEvents="none"
                 />

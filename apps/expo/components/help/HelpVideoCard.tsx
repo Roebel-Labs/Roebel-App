@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   thumbnail: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   playButton: {
     position: 'absolute',

@@ -97,8 +97,13 @@ const config: ExpoConfig = {
     [
       'expo-splash-screen',
       {
-        image: './assets/images/splash.png',
-        resizeMode: 'contain',
+        // Android-12-style splash = small centered icon on backgroundColor.
+        // The adaptive-icon foreground (white windmill on TRANSPARENT) reads
+        // as the bare mark on navy — splash.png (full artwork) rendered as a
+        // shrunken white disc in the icon slot. AnimatedSplash.tsx picks up
+        // from this icon and grows it into the full-size logo.
+        image: './assets/images/adaptive-icon.png',
+        imageWidth: 200,
         backgroundColor: '#00498B',
       },
     ],

@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 24,
   },
   kicker: {

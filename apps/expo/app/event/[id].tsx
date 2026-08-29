@@ -602,10 +602,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heroBlurred: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   hero: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   heroPlaceholder: {
     width: '100%',

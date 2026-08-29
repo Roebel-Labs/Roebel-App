@@ -501,14 +501,14 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   blurredBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   whiteOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   sharpImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   imagePlaceholder: {
     width: '100%',

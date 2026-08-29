@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   placeholderOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
   },

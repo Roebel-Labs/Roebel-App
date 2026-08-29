@@ -26,8 +26,11 @@ const LOGO_SIZE = Math.round(SCREEN_W * 0.5);
  * `onFinish` fires once the exit fade completes so the parent can unmount it.
  */
 export default function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
-  // Start at 1.0 so the logo matches the native splash size at mount, then grow.
-  const logoScale = useRef(new Animated.Value(1)).current;
+  // SDK 56: the native splash is an Android-12-style small centered icon (the
+  // legacy full-screen splash layer is gone), so start near that size and GROW
+  // into the full logo — starting at 1.0 made the logo jump from tiny icon to
+  // half-screen instantly.
+  const logoScale = useRef(new Animated.Value(0.6)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const textShift = useRef(new Animated.Value(8)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
@@ -92,7 +95,7 @@ export default function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: NAVY,
     alignItems: 'center',
     justifyContent: 'center',

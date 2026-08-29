@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     height: PLATE_SIZE,
   },
   buttonOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

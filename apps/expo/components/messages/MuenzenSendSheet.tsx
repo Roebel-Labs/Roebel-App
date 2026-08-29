@@ -181,7 +181,7 @@ export default function MuenzenSendSheet({ visible, onClose, peerName, onSend }:
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheetWrap: {

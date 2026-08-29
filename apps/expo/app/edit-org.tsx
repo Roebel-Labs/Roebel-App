@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   coverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   logoOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 48,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',

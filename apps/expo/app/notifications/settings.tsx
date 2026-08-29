@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   deniedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
