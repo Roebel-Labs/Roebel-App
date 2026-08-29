@@ -5,9 +5,12 @@ import {
   RelayClient,
   buildDeletionEvent,
   buildEvent,
+  buildForumReplyEvent,
+  buildForumThreadEvent,
   buildVanishEvent,
   buildNoteEvent,
   buildProfileEvent,
+  KIND_FORUM_REPLY,
 } from '@netizen-labs/nostr';
 import { supabase } from '../supabase';
 import { type NostrIdentity, loadStoredIdentity } from './identity';
@@ -154,6 +157,78 @@ async function publishedEventIdOf(sourceType: string, sourceId: string): Promise
   } catch {
     return null;
   }
+}
+
+/** Like publishedEventIdOf, but also returns the signing pubkey from the ledger. */
+async function publishedEventOf(
+  sourceType: string,
+  sourceId: string,
+): Promise<{ eventId: string; pubkey: string } | null> {
+  try {
+    const { data } = await supabase
+      .from('nostr_publications')
+      .select('event_id, pubkey_hex')
+      .eq('source_type', sourceType)
+      .eq('source_id', sourceId)
+      .eq('status', 'published')
+      .maybeSingle();
+    if (!data?.event_id || !data?.pubkey_hex) return null;
+    return { eventId: data.event_id as string, pubkey: data.pubkey_hex as string };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mirror a forum thread (Thema) as a kind 11 NIP-7D thread. Same fire-and-forget
+ * contract as publishPost: called AFTER the Supabase insert, never awaited in
+ * the UI path. The original wall-clock is preserved so retried mirrors keep
+ * their true date.
+ */
+export async function publishForumThread(
+  threadId: string,
+  title: string,
+  body: string,
+  categorySlug?: string,
+  createdAtSec?: number,
+): Promise<PublicationStatus> {
+  const identity = await loadStoredIdentity();
+  if (!identity) return 'pending';
+  const event = buildForumThreadEvent(
+    identity.secretKey,
+    { title, content: body, categorySlug },
+    createdAtSec ? { createdAt: createdAtSec } : {},
+  );
+  return publish(event, 'forum_thread', threadId);
+}
+
+/**
+ * Mirror a forum reply (Antwort) as a kind 1111 NIP-22 comment. Only possible
+ * once the thread itself is on the relay; a nested reply whose parent never
+ * mirrored falls back to targeting the root (still a valid NIP-22 comment).
+ */
+export async function publishForumReply(
+  replyId: string,
+  threadId: string,
+  content: string,
+  parentReplyId?: string | null,
+): Promise<PublicationStatus> {
+  const identity = await loadStoredIdentity();
+  if (!identity) return 'pending';
+  const root = await publishedEventOf('forum_thread', threadId);
+  if (!root) return 'pending';
+  let parent: { id: string; pubkey: string; kind: number } | undefined;
+  if (parentReplyId) {
+    const parentPub = await publishedEventOf('forum_reply', parentReplyId);
+    if (parentPub) parent = { id: parentPub.eventId, pubkey: parentPub.pubkey, kind: KIND_FORUM_REPLY };
+  }
+  const event = buildForumReplyEvent(
+    identity.secretKey,
+    content,
+    { id: root.eventId, pubkey: root.pubkey },
+    parent,
+  );
+  return publish(event, 'forum_reply', replyId);
 }
 
 /**
