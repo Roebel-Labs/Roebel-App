@@ -49,12 +49,16 @@ export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
   const ownRef = useRef<View>(null);
   const shared = useContext(GlassTargetContext);
   const ref = shared ?? ownRef;
-  // Web has no BlurTargetView; native (iOS + Android 12+) uses the real
-  // RenderNode capture surface. Android blur re-enabled 2026-08-29: the
-  // 08-23 crash class (expo/expo#24572) is the HardwareRenderer snapshot
-  // hitting a SurfaceView — feed videos now render into a TextureView
-  // (PostVideoPlayer surfaceType), which snapshots safely.
-  if (Platform.OS === 'web' || !BLUR_AVAILABLE) {
+  // iOS only. Android backdrop blur is DEAD on this hardware class — final
+  // verdict 2026-08-29 after two independent failures: (1) 08-23 crash,
+  // HardwareRenderer snapshot vs SurfaceView (expo/expo#24572); (2) 08-29,
+  // with TextureView videos and correct screen-level targets, BlurTargetView
+  // rendered its children into the capture layer WITHOUT compositing them —
+  // invisible screen content, bars sampling flat gray (Pixel 7). Do NOT
+  // retry expo-blur's Android path; real Android glass waits for RN core
+  // backdrop-filter (SDK 56+). Android renders children in a plain View and
+  // GlassSurface falls through to the tinted fill.
+  if (Platform.OS !== 'ios' || !BLUR_AVAILABLE) {
     return (
       <View style={style} {...rest}>
         {children}
@@ -103,12 +107,10 @@ export default function GlassSurface({ intensity = 100, edge = 'none' }: Props) 
 
   const tint = isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial';
 
-  // Android real blur re-enabled 2026-08-29 (Max: real frosted glass on the
-  // bottom nav, all screens). The 08-23 Pixel crash (expo/expo#24572) was the
-  // RenderNode snapshot hitting a SurfaceView — feed videos are TextureView
-  // now (PostVideoPlayer). Android still requires a GlassBackdrop target;
-  // without one it falls through to the tinted fill below.
-  if (BLUR_AVAILABLE && (Platform.OS === 'ios' || (Platform.OS === 'android' && target))) {
+  // iOS only — see the GlassBackdrop comment: Android's expo-blur backdrop
+  // path failed on real hardware in two independent ways (08-23 crash, 08-29
+  // non-compositing capture layer). Android keeps the tinted fill below.
+  if (BLUR_AVAILABLE && Platform.OS === 'ios') {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <BlurView
