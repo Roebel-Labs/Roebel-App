@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import ExpandIcon from '@/assets/icons/expand.svg';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/context/ThemeContext';
 import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
@@ -261,7 +262,7 @@ export default function CommentInput({
                 hitSlop={6}
                 accessibilityLabel="Kommentar im Vollbild schreiben"
               >
-                <Ionicons name="expand-outline" size={20} color={colors.textSecondary} />
+                <ExpandIcon width={20} height={20} color={colors.textSecondary} />
               </Pressable>
             )
           )}

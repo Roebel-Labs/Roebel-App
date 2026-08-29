@@ -22,6 +22,12 @@ type Props = {
   onShare: () => void;
   /** When true, hides numeric counts and the top divider for a cleaner row. */
   iconOnly?: boolean;
+  /**
+   * Threads-style feed layout: the whole bar hugs the left edge of the
+   * content column — no separator border, no pushing views/heart to the
+   * right. Icons and counts themselves are unchanged.
+   */
+  leftAligned?: boolean;
   /** 🔁 shown between comment and share when provided. */
   repostsCount?: number;
   isReposted?: boolean;
@@ -38,6 +44,7 @@ export default function PostActions({
   onComment,
   onShare,
   iconOnly = false,
+  leftAligned = false,
   repostsCount = 0,
   isReposted = false,
   onRepost,
@@ -134,7 +141,9 @@ export default function PostActions({
         styles.container,
         iconOnly
           ? styles.containerIconOnly
-          : { borderTopColor: colors.border, borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+          : leftAligned
+            ? styles.containerLeftAligned
+            : { borderTopColor: colors.border, borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
       ]}
     >
       <Pressable onPress={onComment} style={styles.action}>
@@ -167,7 +176,7 @@ export default function PostActions({
 
       {showViews && (
         <View
-          style={[styles.action, styles.viewsAction]}
+          style={[styles.action, !leftAligned && styles.viewsAction]}
           accessibilityLabel={`${viewsCount ?? 0} Aufrufe`}
         >
           <Text style={[styles.count, { color: colors.textTertiary }]}>
@@ -179,7 +188,7 @@ export default function PostActions({
 
       <Pressable
         onPress={handleLikePress}
-        style={[styles.action, !showViews && styles.heartAction]}
+        style={[styles.action, !leftAligned && !showViews && styles.heartAction]}
       >
         {!iconOnly && likesCount > 0 && (
           <Text
@@ -231,6 +240,9 @@ const styles = StyleSheet.create({
   },
   containerIconOnly: {
     paddingTop: 4,
+  },
+  containerLeftAligned: {
+    marginTop: 2,
   },
   action: {
     flexDirection: 'row',

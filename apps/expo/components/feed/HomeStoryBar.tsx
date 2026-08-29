@@ -301,7 +301,7 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
   const collectionsGroupStart = hasEvents ? 1 : 0;
 
   return (
-    <View style={[styles.wrapper, { borderBottomColor: colors.border }]}>
+    <View style={styles.wrapper}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -453,9 +453,7 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  wrapper: {},
   scroll: {
     // FeedList's contentContainer already supplies an 8px horizontal gutter;
     // 8 + 8 = 16px from the phone edge for the first/last card.

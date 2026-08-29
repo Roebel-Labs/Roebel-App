@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { Share } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
@@ -11,22 +11,70 @@ import type { PostRecord } from '@/lib/types/feed';
 import { useRequireAuth } from '@/context/AuthGateContext';
 
 /**
+ * MODULE-LEVEL interaction registry, shared by every usePostActions instance.
+ *
+ * It used to live in per-component useState, which meant the feed, the post
+ * detail screen, and the profile each held an independent copy: liking a post
+ * on the detail screen updated only that copy, and navigating back showed the
+ * feed's stale one (2026-08-29 bug report). One registry + useSyncExternalStore
+ * keeps like/repost state synchronous across all screens; the server stays the
+ * source of truth via the init* merges on every fetch.
+ */
+type InteractionState = {
+  likedPosts: Set<string>;
+  likeCounts: Record<string, number>;
+  repostedPosts: Set<string>;
+  repostCounts: Record<string, number>;
+};
+
+let state: InteractionState = {
+  likedPosts: new Set(),
+  likeCounts: {},
+  repostedPosts: new Set(),
+  repostCounts: {},
+};
+let version = 0;
+const listeners = new Set<() => void>();
+
+function mutate(update: (prev: InteractionState) => InteractionState) {
+  state = update(state);
+  version++;
+  listeners.forEach((l) => l());
+}
+
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+};
+const getVersion = () => version;
+
+/**
  * Hook for post interactions: like, repost, share, report
  */
 export function usePostActions(walletAddress: string | undefined) {
   const requireAuth = useRequireAuth();
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
-  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set());
-  const [repostCounts, setRepostCounts] = useState<Record<string, number>>({});
+  // Subscribes this component to the shared registry — any mutation
+  // re-renders every mounted consumer, which is the whole point.
+  useSyncExternalStore(subscribe, getVersion, getVersion);
 
   /**
-   * Initialize like state from batch-checked data
+   * Merge batch-checked like state into the shared registry. The keys of
+   * `counts` define the CHECKED scope: membership is set for exactly those
+   * posts (present in `likedIds` = liked), everything outside the scope is
+   * left untouched so one screen's init can never wipe another's state.
    */
   const initLikes = useCallback(
     (likedIds: Set<string>, counts: Record<string, number>) => {
-      setLikedPosts(likedIds);
-      setLikeCounts(counts);
+      mutate((prev) => {
+        const likedPosts = new Set(prev.likedPosts);
+        for (const id of Object.keys(counts)) {
+          if (likedIds.has(id)) likedPosts.add(id);
+          else likedPosts.delete(id);
+        }
+        return { ...prev, likedPosts, likeCounts: { ...prev.likeCounts, ...counts } };
+      });
     },
     []
   );
@@ -43,78 +91,71 @@ export function usePostActions(walletAddress: string | undefined) {
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-      const wasLiked = likedPosts.has(postId);
-      const newCount = wasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
+      // Read from the live registry, not a render closure — no stale toggles.
+      const wasLiked = state.likedPosts.has(postId);
+      const baseCount = state.likeCounts[postId] ?? currentCount;
+      const newCount = wasLiked ? Math.max(0, baseCount - 1) : baseCount + 1;
 
       // Optimistic update
-      setLikedPosts((prev) => {
-        const next = new Set(prev);
-        if (wasLiked) {
-          next.delete(postId);
-        } else {
-          next.add(postId);
-        }
-        return next;
+      mutate((prev) => {
+        const likedPosts = new Set(prev.likedPosts);
+        if (wasLiked) likedPosts.delete(postId);
+        else likedPosts.add(postId);
+        return { ...prev, likedPosts, likeCounts: { ...prev.likeCounts, [postId]: newCount } };
       });
-      setLikeCounts((prev) => ({ ...prev, [postId]: newCount }));
 
       try {
         await togglePostLike(postId, walletAddress);
       } catch (err) {
         // Revert on error
         console.error('Error toggling like:', err);
-        setLikedPosts((prev) => {
-          const next = new Set(prev);
-          if (wasLiked) {
-            next.add(postId);
-          } else {
-            next.delete(postId);
-          }
-          return next;
+        mutate((prev) => {
+          const likedPosts = new Set(prev.likedPosts);
+          if (wasLiked) likedPosts.add(postId);
+          else likedPosts.delete(postId);
+          return { ...prev, likedPosts, likeCounts: { ...prev.likeCounts, [postId]: baseCount } };
         });
-        setLikeCounts((prev) => ({ ...prev, [postId]: currentCount }));
       }
     },
-    [walletAddress, likedPosts, requireAuth]
+    [walletAddress, requireAuth]
   );
 
   /**
    * Check if a post is liked
    */
-  const isLiked = useCallback(
-    (postId: string) => likedPosts.has(postId),
-    [likedPosts]
-  );
+  const isLiked = useCallback((postId: string) => state.likedPosts.has(postId), []);
 
   /**
    * Get current like count (with optimistic updates applied)
    */
   const getLikeCount = useCallback(
-    (postId: string, originalCount: number) => {
-      return likeCounts[postId] ?? originalCount;
-    },
-    [likeCounts]
+    (postId: string, originalCount: number) => state.likeCounts[postId] ?? originalCount,
+    []
   );
 
   /**
-   * Initialize repost state from batch-checked data (ORIGINAL post ids)
+   * Merge batch-checked repost state (ORIGINAL post ids) — same scope
+   * semantics as initLikes.
    */
   const initReposts = useCallback(
     (ids: Set<string>, counts: Record<string, number>) => {
-      setRepostedPosts(ids);
-      setRepostCounts(counts);
+      mutate((prev) => {
+        const repostedPosts = new Set(prev.repostedPosts);
+        for (const id of Object.keys(counts)) {
+          if (ids.has(id)) repostedPosts.add(id);
+          else repostedPosts.delete(id);
+        }
+        return { ...prev, repostedPosts, repostCounts: { ...prev.repostCounts, ...counts } };
+      });
     },
     []
   );
 
-  const isReposted = useCallback(
-    (postId: string) => repostedPosts.has(postId),
-    [repostedPosts]
-  );
+  const isReposted = useCallback((postId: string) => state.repostedPosts.has(postId), []);
 
   const getRepostCount = useCallback(
-    (postId: string, originalCount: number) => repostCounts[postId] ?? originalCount,
-    [repostCounts]
+    (postId: string, originalCount: number) => state.repostCounts[postId] ?? originalCount,
+    []
   );
 
   /**
@@ -126,27 +167,33 @@ export function usePostActions(walletAddress: string | undefined) {
         requireAuth(() => {});
         return;
       }
-      if (repostedPosts.has(post.id)) return;
+      if (state.repostedPosts.has(post.id)) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      setRepostedPosts((prev) => new Set(prev).add(post.id));
-      setRepostCounts((prev) => ({
+      mutate((prev) => ({
         ...prev,
-        [post.id]: (prev[post.id] ?? post.reposts_count ?? 0) + 1,
+        repostedPosts: new Set(prev.repostedPosts).add(post.id),
+        repostCounts: {
+          ...prev.repostCounts,
+          [post.id]: (prev.repostCounts[post.id] ?? post.reposts_count ?? 0) + 1,
+        },
       }));
       try {
         const created = await createRepost(post.id, walletAddress, accountId);
         if (!created) throw new Error('repost failed');
       } catch (err) {
-        setRepostedPosts((prev) => {
-          const next = new Set(prev);
-          next.delete(post.id);
-          return next;
+        mutate((prev) => {
+          const repostedPosts = new Set(prev.repostedPosts);
+          repostedPosts.delete(post.id);
+          return {
+            ...prev,
+            repostedPosts,
+            repostCounts: { ...prev.repostCounts, [post.id]: post.reposts_count ?? 0 },
+          };
         });
-        setRepostCounts((prev) => ({ ...prev, [post.id]: post.reposts_count ?? 0 }));
         throw err;
       }
     },
-    [walletAddress, repostedPosts, requireAuth]
+    [walletAddress, requireAuth]
   );
 
   /**
@@ -159,20 +206,26 @@ export function usePostActions(walletAddress: string | undefined) {
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      setRepostedPosts((prev) => {
-        const next = new Set(prev);
-        next.delete(post.id);
-        return next;
+      mutate((prev) => {
+        const repostedPosts = new Set(prev.repostedPosts);
+        repostedPosts.delete(post.id);
+        return {
+          ...prev,
+          repostedPosts,
+          repostCounts: {
+            ...prev.repostCounts,
+            [post.id]: Math.max(0, (prev.repostCounts[post.id] ?? post.reposts_count ?? 0) - 1),
+          },
+        };
       });
-      setRepostCounts((prev) => ({
-        ...prev,
-        [post.id]: Math.max(0, (prev[post.id] ?? post.reposts_count ?? 0) - 1),
-      }));
       try {
         await undoRepost(post.id, walletAddress);
       } catch (err) {
-        setRepostedPosts((prev) => new Set(prev).add(post.id));
-        setRepostCounts((prev) => ({ ...prev, [post.id]: post.reposts_count ?? 0 }));
+        mutate((prev) => ({
+          ...prev,
+          repostedPosts: new Set(prev.repostedPosts).add(post.id),
+          repostCounts: { ...prev.repostCounts, [post.id]: post.reposts_count ?? 0 },
+        }));
         throw err;
       }
     },
@@ -212,7 +265,7 @@ export function usePostActions(walletAddress: string | undefined) {
   );
 
   return {
-    likedPosts,
+    likedPosts: state.likedPosts,
     initLikes,
     toggleLike,
     isLiked,

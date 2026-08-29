@@ -24,6 +24,11 @@ type Props = {
   badge?: string;
   /** Optional more (dots) button rendered at the right end of the row. */
   onMore?: () => void;
+  /**
+   * Threads-style feed layout: the avatar is rendered by the card in its own
+   * left rail (see PostAuthorAvatar), so the row shows only name + meta.
+   */
+  hideAvatar?: boolean;
 };
 
 export default function PostAuthorRow({
@@ -34,6 +39,7 @@ export default function PostAuthorRow({
   avatarOverride,
   badge,
   onMore,
+  hideAvatar = false,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -67,18 +73,19 @@ export default function PostAuthorRow({
 
   return (
     <View style={styles.container}>
-      {isInteractive ? (
-        <Pressable
-          onPress={handlePress}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`Profil von ${displayName} öffnen`}
-        >
-          {avatarNode}
-        </Pressable>
-      ) : (
-        avatarNode
-      )}
+      {!hideAvatar &&
+        (isInteractive ? (
+          <Pressable
+            onPress={handlePress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Profil von ${displayName} öffnen`}
+          >
+            {avatarNode}
+          </Pressable>
+        ) : (
+          avatarNode
+        ))}
 
       <View style={styles.info}>
         <View style={styles.nameRow}>
@@ -118,6 +125,38 @@ export default function PostAuthorRow({
         </Pressable>
       )}
     </View>
+  );
+}
+
+/**
+ * Standalone author avatar for the Threads-style left rail in FeedPostCard —
+ * same profile-open press behavior, frame, and initial fallback as the row.
+ */
+export function PostAuthorAvatar({ author }: { author: PostAuthor | undefined }) {
+  const router = useRouter();
+  const isOrgPost = author?.account?.account_type === 'organisation';
+  const displayName = (isOrgPost ? author!.account!.name : author?.username) || 'Unbekannt';
+  const profilePic = isOrgPost ? author!.account!.avatar_url : author?.profile_picture_url;
+
+  const node = (
+    <UserAvatarWithFrame
+      size={36}
+      uri={profilePic ?? null}
+      fallbackInitial={displayName.charAt(0).toUpperCase()}
+      frameAssetUrl={isOrgPost ? null : author?.equipped_frame_asset_url ?? null}
+      disabled={isOrgPost}
+    />
+  );
+  if (!canOpenProfile({ author, account: author?.account })) return node;
+  return (
+    <Pressable
+      onPress={() => openAuthorProfile(router, { author, account: author?.account })}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={`Profil von ${displayName} öffnen`}
+    >
+      {node}
+    </Pressable>
   );
 }
 

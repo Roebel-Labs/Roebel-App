@@ -7,7 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import type { PostRecord } from '@/lib/types/feed';
 import { isPostPinned } from '@/lib/utils/pin';
 import LinkifiedText from './LinkifiedText';
-import PostAuthorRow from './PostAuthorRow';
+import PostAuthorRow, { PostAuthorAvatar } from './PostAuthorRow';
 import PostImageGrid from './PostImageGrid';
 import PostVideoPlayer from './PostVideoPlayer';
 import PostLinkPreview from './PostLinkPreview';
@@ -126,11 +126,17 @@ function FeedPostCard({
           </View>
         )}
 
+        <View style={styles.postRow}>
+          <View style={styles.avatarRail}>
+            <PostAuthorAvatar author={display.author} />
+          </View>
+          <View style={[styles.body, isMarketplacePost && styles.bodyMarketplace]}>
         <PostAuthorRow
           author={display.author}
           category={isMarketplacePost ? undefined : display.category}
           createdAt={display.created_at}
           onMore={onMore}
+          hideAvatar
         />
 
         {displayContent ? (
@@ -203,27 +209,40 @@ function FeedPostCard({
         {!youtubeUrl && firstLink ? (
           <PostLinkPreview link={firstLink} />
         ) : null}
+          </View>
+        </View>
       </Pressable>
 
-      {youtubeUrl ? <PostYouTubePreview youtubeUrl={youtubeUrl} /> : null}
+      {youtubeUrl ? (
+        <View style={styles.indented}>
+          <PostYouTubePreview youtubeUrl={youtubeUrl} />
+        </View>
+      ) : null}
 
       {display.poll && (
-        <PostPollView poll={display.poll} walletAddress={walletAddress} />
+        <View style={styles.indented}>
+          <PostPollView poll={display.poll} walletAddress={walletAddress} />
+        </View>
       )}
 
-      <PostActions
-        likesCount={displayLikeCount}
-        commentsCount={display.comments_count}
-        isLiked={isLiked}
-        onLike={onLike}
-        onComment={handleComment}
-        onShare={onShare}
-        iconOnly={isMarketplacePost}
-        repostsCount={displayRepostCount ?? display.reposts_count ?? 0}
-        isReposted={isReposted}
-        onRepost={canRepost ? () => onRepost!(display) : undefined}
-        viewsCount={display.views_count ?? 0}
-      />
+      {/* Icon bar unchanged — left-aligned with the content column (Threads
+          reference, 2026-08-29). */}
+      <View style={styles.indented}>
+        <PostActions
+          likesCount={displayLikeCount}
+          commentsCount={display.comments_count}
+          isLiked={isLiked}
+          onLike={onLike}
+          onComment={handleComment}
+          onShare={onShare}
+          iconOnly={isMarketplacePost}
+          leftAligned={!isMarketplacePost}
+          repostsCount={displayRepostCount ?? display.reposts_count ?? 0}
+          isReposted={isReposted}
+          onRepost={canRepost ? () => onRepost!(display) : undefined}
+          viewsCount={display.views_count ?? 0}
+        />
+      </View>
 
       <ImageZoomModal
         visible={!!zoomImageUrl}
@@ -240,6 +259,10 @@ function FeedPostCard({
 // every mounted card. Default shallow prop compare is intentional — `isVisible`
 // is a plain boolean, so a real visibility flip always passes through.
 export default React.memo(FeedPostCard);
+
+// Threads-style layout: 36px avatar + 10px gutter — the content column,
+// notices, and the action bar all align to this left edge.
+const AVATAR_RAIL_WIDTH = 46;
 
 const styles = StyleSheet.create({
   container: {
@@ -258,11 +281,28 @@ const styles = StyleSheet.create({
   tappableMarketplace: {
     gap: 14,
   },
+  postRow: {
+    flexDirection: 'row',
+  },
+  avatarRail: {
+    width: AVATAR_RAIL_WIDTH,
+  },
+  body: {
+    flex: 1,
+    gap: 10,
+  },
+  bodyMarketplace: {
+    gap: 14,
+  },
+  indented: {
+    marginLeft: AVATAR_RAIL_WIDTH,
+  },
   pinnedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginBottom: -2,
+    marginLeft: AVATAR_RAIL_WIDTH,
   },
   pinnedText: {
     fontSize: 12,
