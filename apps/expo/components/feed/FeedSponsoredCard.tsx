@@ -65,7 +65,8 @@ export default function FeedSponsoredCard({ deal, isVisible }: Props) {
         )}
       </View>
 
-      {/* Deal content */}
+      {/* Deal content — aligned to the shared 46px content column (logo 36 + gap 10) */}
+      <View style={styles.indented}>
       <Text style={[styles.title, { color: colors.textPrimary }]}>{deal.title}</Text>
 
       {deal.description && (
@@ -83,11 +84,16 @@ export default function FeedSponsoredCard({ deal, isVisible }: Props) {
           accessibilityIgnoresInvertColors
         />
       )}
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  indented: {
+    marginLeft: 46,
+    gap: 10,
+  },
   container: {
     paddingHorizontal: 16,
     paddingVertical: 14,

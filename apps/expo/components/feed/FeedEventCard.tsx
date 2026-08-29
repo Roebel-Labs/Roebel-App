@@ -26,6 +26,13 @@ export default function FeedEventCard({ event }: Props) {
   const timeStr = formatTime(event.time);
   const location = formatLocation(event.location);
 
+  // Threads-style feed alignment (2026-08-29): author avatar in the shared
+  // 36px rail, event body in the 46px content column. Org events carry the
+  // account avatar, citizen events the owner's — organizer_name is the
+  // text fallback for legacy rows without an author.
+  const authorName = event.author?.name || event.organizer_name || 'Veranstalter';
+  const authorAvatar = event.author?.avatarUrl || null;
+
   return (
     <Pressable
       onPress={handlePress}
@@ -38,6 +45,30 @@ export default function FeedEventCard({ event }: Props) {
         pressed && { backgroundColor: colors.pressedOverlay },
       ]}
     >
+      <View style={styles.headerRow}>
+        {authorAvatar ? (
+          <Image
+            source={{ uri: authorAvatar }}
+            style={styles.authorAvatar}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : (
+          <View style={[styles.authorAvatarFallback, { backgroundColor: colors.primaryLight }]}>
+            <Text style={[styles.authorInitial, { color: colors.primary }]}>
+              {authorName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={styles.headerInfo}>
+          <Text style={[styles.authorName, { color: colors.textPrimary }]} numberOfLines={1}>
+            {authorName}
+          </Text>
+          <Text style={[styles.eventKindLabel, { color: colors.textTertiary }]}>Veranstaltung</Text>
+        </View>
+      </View>
+
+      <View style={styles.indented}>
       {/* Full-width image with date badge overlay */}
       {event.image_url ? (
         <View style={styles.imageWrapper}>
@@ -94,11 +125,49 @@ export default function FeedEventCard({ event }: Props) {
           </View>
         </View>
       </View>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  authorAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  authorAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authorInitial: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  headerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  authorName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  eventKindLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  indented: {
+    marginLeft: 46,
+  },
   container: {
     borderRadius: 16,
     borderWidth: 4,

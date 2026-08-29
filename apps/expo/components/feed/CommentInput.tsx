@@ -281,7 +281,9 @@ const styles = StyleSheet.create({
   },
   pillRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    // Center controls against a single-line input (X-style); with multiline
+    // growth the row still reads balanced.
+    alignItems: 'center',
     gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -294,7 +296,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 3,
   },
   avatarImg: {
     ...StyleSheet.absoluteFillObject,
