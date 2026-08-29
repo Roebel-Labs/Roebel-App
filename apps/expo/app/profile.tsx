@@ -12,7 +12,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
 import AvatarStack from '@/components/AvatarStack';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import BottomDrawer from '@/components/BottomDrawer';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
@@ -127,6 +127,7 @@ const handleRefresh = async () => {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
+      <GlassProvider>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Mein Röbel</Text>
@@ -567,6 +568,7 @@ const handleRefresh = async () => {
           <Text style={accountSheetStyles.logoutText}>Ausloggen</Text>
         </Pressable>
       </BottomDrawer>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

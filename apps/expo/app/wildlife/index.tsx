@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -95,6 +95,7 @@ export default function WildlifeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <GlassProvider>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -212,6 +213,7 @@ export default function WildlifeScreen() {
             else if (t === 'profile') router.replace('/profile');
           }} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

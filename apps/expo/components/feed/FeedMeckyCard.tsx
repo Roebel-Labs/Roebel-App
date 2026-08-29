@@ -69,6 +69,9 @@ export default function FeedMeckyCard({
         onMore={onMore}
       />
 
+      {/* Threads-style alignment: everything below the author row shares the
+          content column's left edge (avatar 36 + gap 10). */}
+      <View style={styles.indented}>
       <Text style={[styles.content, { color: colors.textPrimary }]}>{post.content}</Text>
 
       {mediaUrls.length > 0 && (
@@ -89,6 +92,7 @@ export default function FeedMeckyCard({
         onComment={handleComment}
         onShare={onShare}
       />
+      </View>
 
       <ImageZoomModal
         visible={!!zoomImageUrl}
@@ -101,6 +105,10 @@ export default function FeedMeckyCard({
 }
 
 const styles = StyleSheet.create({
+  indented: {
+    marginLeft: 46,
+    gap: 10,
+  },
   container: {
     paddingHorizontal: 16,
     paddingVertical: 14,

@@ -45,6 +45,7 @@ export default function FeedProposalCommentCard({ comment }: Props) {
         </View>
       </View>
 
+      <View style={styles.indented}>
       {comment.emoji ? (
         <Text style={styles.emoji}>{comment.emoji}</Text>
       ) : null}
@@ -73,6 +74,7 @@ export default function FeedProposalCommentCard({ comment }: Props) {
       )}
 
       {comment.proposal && <ProposalPreviewCard proposal={comment.proposal} />}
+      </View>
 
       <ImageZoomModal
         visible={!!zoomImageUrl}
@@ -85,6 +87,10 @@ export default function FeedProposalCommentCard({ comment }: Props) {
 }
 
 const styles = StyleSheet.create({
+  indented: {
+    marginLeft: 46,
+    gap: 10,
+  },
   container: {
     paddingHorizontal: 16,
     paddingVertical: 14,

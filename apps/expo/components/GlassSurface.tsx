@@ -25,14 +25,30 @@ const BLUR_AVAILABLE = (() => {
 const GlassTargetContext = createContext<RefObject<View | null> | null>(null);
 
 /**
+ * Provides the shared blur-target ref for one screen. MUST wrap BOTH the
+ * <GlassBackdrop> and every <GlassSurface> bar: the bars deliberately sit
+ * OUTSIDE the backdrop in JSX, so a provider inside GlassBackdrop could
+ * never reach them — which left Android bars with a null target, silently
+ * falling back to the tinted fill (2026-08-29 bug: "still no frosted
+ * glass"). One provider per screen; screens kept mounted by the router each
+ * get their own.
+ */
+export function GlassProvider({ children }: { children: React.ReactNode }) {
+  const ref = useRef<View>(null);
+  return <GlassTargetContext.Provider value={ref}>{children}</GlassTargetContext.Provider>;
+}
+
+/**
  * Wraps the scrollable content that glass chrome floats over. On Android
  * this is the surface the frost samples its pixels from; on iOS and web
  * it's a plain View passthrough. Every screen using <GlassSurface /> must
  * render its content inside one of these — and the glass bars OUTSIDE it,
- * after it in JSX order.
+ * after it in JSX order, with a <GlassProvider> around both.
  */
 export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
-  const ref = useRef<View>(null);
+  const ownRef = useRef<View>(null);
+  const shared = useContext(GlassTargetContext);
+  const ref = shared ?? ownRef;
   // Web has no BlurTargetView; native (iOS + Android 12+) uses the real
   // RenderNode capture surface. Android blur re-enabled 2026-08-29: the
   // 08-23 crash class (expo/expo#24572) is the HardwareRenderer snapshot
@@ -46,11 +62,9 @@ export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
     );
   }
   return (
-    <GlassTargetContext.Provider value={ref}>
-      <BlurTargetView ref={ref} style={style} {...rest}>
-        {children}
-      </BlurTargetView>
-    </GlassTargetContext.Provider>
+    <BlurTargetView ref={ref} style={style} {...rest}>
+      {children}
+    </BlurTargetView>
   );
 }
 

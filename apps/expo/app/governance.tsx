@@ -7,7 +7,7 @@ import { useRealtimeProposals } from '@/hooks/useRealtimeProposals';
 import ProposalCard from '@/components/ProposalCard';
 import ProposalSkeleton from '@/components/ProposalSkeleton';
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
 
 export default function GovernanceScreen() {
@@ -34,6 +34,7 @@ export default function GovernanceScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
+      <GlassProvider>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -99,6 +100,7 @@ export default function GovernanceScreen() {
       <View style={styles.navOverlay}>
         <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

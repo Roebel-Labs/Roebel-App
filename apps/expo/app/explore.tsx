@@ -17,7 +17,7 @@ import type {
 } from '@/lib/types';
 
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ExploreSearchBar from '@/components/ExploreSearchBar';
 import ExploreCategoryChips from '@/components/ExploreCategoryChips';
@@ -248,6 +248,7 @@ export default function ExploreScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
+      <GlassProvider>
       {/* GlassBackdrop: the surface the frosted bottom nav samples on
           Android. Passthrough View on web; the nav overlay stays OUTSIDE. */}
       <GlassBackdrop style={styles.glassBody}>
@@ -358,7 +359,8 @@ export default function ExploreScreen() {
       {/* Bottom Navigation — frosted glass overlaying the scroll content */}
       <View style={styles.navOverlay}>
         <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
-      </View>
+    </View>
+      </GlassProvider>
     </SafeAreaView>
   );
 }

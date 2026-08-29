@@ -67,6 +67,16 @@ export function usePostActions(walletAddress: string | undefined) {
    */
   const initLikes = useCallback(
     (likedIds: Set<string>, counts: Record<string, number>) => {
+      // No-op guard: FeedList re-inits whenever its data settles, and an
+      // unconditional version bump here re-renders every subscriber, which
+      // re-runs the init effect… (visible as the action row flickering,
+      // 2026-08-29 bug report). Only notify when the scope actually changes.
+      const changed = Object.keys(counts).some(
+        (id) =>
+          state.likeCounts[id] !== counts[id] ||
+          state.likedPosts.has(id) !== likedIds.has(id)
+      );
+      if (!changed) return;
       mutate((prev) => {
         const likedPosts = new Set(prev.likedPosts);
         for (const id of Object.keys(counts)) {
@@ -139,6 +149,12 @@ export function usePostActions(walletAddress: string | undefined) {
    */
   const initReposts = useCallback(
     (ids: Set<string>, counts: Record<string, number>) => {
+      const changed = Object.keys(counts).some(
+        (id) =>
+          state.repostCounts[id] !== counts[id] ||
+          state.repostedPosts.has(id) !== ids.has(id)
+      );
+      if (!changed) return;
       mutate((prev) => {
         const repostedPosts = new Set(prev.repostedPosts);
         for (const id of Object.keys(counts)) {

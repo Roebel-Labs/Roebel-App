@@ -7,7 +7,7 @@ import { NewsArticle } from '@/lib/types';
 import NewsCard from '@/components/NewsCard';
 import { NewsCardSkeleton } from '@/components/SkeletonLoader';
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -48,6 +48,7 @@ export default function NewsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <GlassProvider>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
@@ -111,6 +112,7 @@ export default function NewsScreen() {
             else if (tab === 'profile') router.push('/profile');
           }} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

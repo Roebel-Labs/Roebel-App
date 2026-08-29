@@ -176,7 +176,7 @@ export default function PostActions({
 
       {showViews && (
         <View
-          style={[styles.action, !leftAligned && styles.viewsAction]}
+          style={[styles.action, styles.viewsAction]}
           accessibilityLabel={`${viewsCount ?? 0} Aufrufe`}
         >
           <Text style={[styles.count, { color: colors.textTertiary }]}>
@@ -188,7 +188,7 @@ export default function PostActions({
 
       <Pressable
         onPress={handleLikePress}
-        style={[styles.action, !leftAligned && !showViews && styles.heartAction]}
+        style={[styles.action, !showViews && styles.heartAction]}
       >
         {!iconOnly && likesCount > 0 && (
           <Text

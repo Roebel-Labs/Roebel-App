@@ -8,7 +8,7 @@ import { EventRecord } from '@/lib/types';
 import EventCard from '@/components/EventCard';
 import { EventCardSkeleton } from '@/components/SkeletonLoader';
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
@@ -93,6 +93,7 @@ export default function EventsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <GlassProvider>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -159,6 +160,7 @@ export default function EventsScreen() {
             else if (tab === 'profile') router.push('/profile');
           }} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

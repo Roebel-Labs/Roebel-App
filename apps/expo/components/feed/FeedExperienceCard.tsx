@@ -61,6 +61,8 @@ export default function FeedExperienceCard({
       >
         <PostAuthorRow author={post.author} createdAt={post.created_at} onMore={onMore} />
 
+        <View style={styles.indented}>
+
         {post.content?.trim() ? (
           <Text
             style={[styles.content, { color: colors.textPrimary }]}
@@ -85,6 +87,7 @@ export default function FeedExperienceCard({
           onShare={onShare}
           iconOnly
         />
+        </View>
       </Pressable>
 
       <ImageZoomModal
@@ -98,6 +101,10 @@ export default function FeedExperienceCard({
 }
 
 const styles = StyleSheet.create({
+  indented: {
+    marginLeft: 46,
+    gap: 14,
+  },
   container: {
     paddingHorizontal: 16,
     paddingVertical: 16,

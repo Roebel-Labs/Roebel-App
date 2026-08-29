@@ -18,7 +18,7 @@ import {
 } from '@/lib/supabase-blog-articles';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 
 export default function BlogFeedScreen() {
   const router = useRouter();
@@ -48,6 +48,7 @@ export default function BlogFeedScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
+      <GlassProvider>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
           onPress={() => router.back()}
@@ -162,6 +163,7 @@ export default function BlogFeedScreen() {
             else if (tab === 'profile') router.push('/profile');
           }} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }

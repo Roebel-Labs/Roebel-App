@@ -32,7 +32,7 @@ import { deletePost, pinPost, DuplicateReportError } from '@/lib/supabase-posts'
 import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
 import type { FeedType, PostRecord } from '@/lib/types/feed';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
-import GlassSurface, { GlassBackdrop } from '@/components/GlassSurface';
+import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import FeedTabBar from './FeedTabBar';
 import FeedList, { type FeedListHandle } from './FeedList';
 import PostComposer from './PostComposer';
@@ -248,16 +248,6 @@ export default function FeedHome() {
     return withTiming(chromeHidden.value === 1 ? 0 : 1, { duration: 180 });
   });
 
-  // Slide-over layering: once the header starts retreating, the feed layer
-  // (stories + posts) jumps ABOVE the header/post-bar/tabs (zIndex 15 vs the
-  // header's static 10) so the body visibly slides over the chrome — at the
-  // top it drops back underneath (1) so the header row stays tappable. The
-  // bottom chrome sits above both (zIndex 30/29) and the status-bar band at
-  // 40 stays on top of everything.
-  const listLayerAnimatedStyle = useAnimatedStyle(() => {
-    'worklet';
-    return { zIndex: headerTranslateY.value < -8 ? 15 : 1 };
-  });
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
   const [navTab, setNavTab] = useState<'home' | 'explore' | 'map' | 'profile'>('home');
@@ -586,6 +576,7 @@ export default function FeedHome() {
       edges={['left', 'right']}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
+      <GlassProvider>
       {/* Bottom safe-area band sits beneath the floating bottom nav
           (zIndex 9 < 10) so when the nav slides away on scroll the
           home-indicator area keeps a solid surface fill instead of
@@ -606,7 +597,6 @@ export default function FeedHome() {
       {/* GlassBackdrop is the surface Android's frosted chrome samples
           from (BlurTargetView) — the glass bars below must stay OUTSIDE
           it and render after it. Plain passthrough View on iOS. */}
-      <Animated.View style={[styles.listLayer, listLayerAnimatedStyle]}>
       <GlassBackdrop style={styles.pager}>
       <Pager
         ref={pagerRef}
@@ -661,7 +651,6 @@ export default function FeedHome() {
         </View>
       </Pager>
       </GlassBackdrop>
-      </Animated.View>
 
       {appHeader}
 
@@ -738,6 +727,7 @@ export default function FeedHome() {
             taller than the scroll content's reserved bottomPadding below. */}
         <BottomNavigation activeTab={navTab} onTabPress={handleNavTabPress} transparent />
       </Animated.View>
+      </GlassProvider>
     </SafeAreaView>
   );
 }
@@ -776,9 +766,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 29,
-  },
-  listLayer: {
-    flex: 1,
   },
   header: {
     flexDirection: 'row',

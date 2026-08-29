@@ -7,7 +7,7 @@ import { de } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from '@/components/Icons';
 import EventCard from '@/components/EventCard';
 import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop } from '@/components/GlassSurface';
+import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
@@ -152,6 +152,7 @@ export default function CalendarScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
+      <GlassProvider>
             {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
       <GlassBackdrop style={{ flex: 1 }}>
 <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
@@ -230,6 +231,7 @@ export default function CalendarScreen() {
           activeTab={activeTab}
           onTabPress={handleTabPress} glass />
       </View>
+    </GlassProvider>
     </SafeAreaView>
   );
 }
