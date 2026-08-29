@@ -65,7 +65,7 @@ export default function BottomNavigation({ activeTab, onTabPress, transparent = 
         { paddingBottom: Math.max(insets.bottom, 8) },
       ]}
     >
-      {glass && <GlassSurface edge="top" />}
+      {glass && <GlassSurface edge="top" androidExperimentalBlur />}
       <View style={styles.tabsContainer}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;

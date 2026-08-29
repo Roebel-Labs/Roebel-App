@@ -49,16 +49,15 @@ export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
   const ownRef = useRef<View>(null);
   const shared = useContext(GlassTargetContext);
   const ref = shared ?? ownRef;
-  // iOS only. Android backdrop blur is DEAD on this hardware class — final
-  // verdict 2026-08-29 after two independent failures: (1) 08-23 crash,
-  // HardwareRenderer snapshot vs SurfaceView (expo/expo#24572); (2) 08-29,
-  // with TextureView videos and correct screen-level targets, BlurTargetView
-  // rendered its children into the capture layer WITHOUT compositing them —
-  // invisible screen content, bars sampling flat gray (Pixel 7). Do NOT
-  // retry expo-blur's Android path; real Android glass waits for RN core
-  // backdrop-filter (SDK 56+). Android renders children in a plain View and
-  // GlassSurface falls through to the tinted fill.
-  if (Platform.OS !== 'ios' || !BLUR_AVAILABLE) {
+  // Native only (web has no BlurTargetView). Android history on this
+  // hardware (Pixel 7): 08-23 crash with SurfaceView videos in the target
+  // (expo/expo#24572, fixed via TextureView); 08-29 invisible content when
+  // FIVE GlassSurface bars sampled one target — while the 08-28 diagnostic
+  // (ONE sampler, one target) composited fine. Working rule: a target may
+  // be sampled by AT MOST ONE BlurView per screen — the bottom nav, via
+  // GlassSurface's androidExperimentalBlur flag. All other bars stay on the
+  // tinted fill on Android.
+  if (Platform.OS === 'web' || !BLUR_AVAILABLE) {
     return (
       <View style={style} {...rest}>
         {children}
@@ -82,6 +81,12 @@ type Props = {
   intensity?: number;
   /** Which edge of the bar meets the content — draws the light hairline there. */
   edge?: 'top' | 'bottom' | 'none';
+  /**
+   * Android real backdrop blur for THIS surface. At most ONE surface per
+   * screen may set it (see the GlassBackdrop comment — multiple samplers on
+   * one target ate the screen content on device). Used by the bottom nav.
+   */
+  androidExperimentalBlur?: boolean;
 };
 
 /**
@@ -89,7 +94,7 @@ type Props = {
  * bar/pill (siblings paint above it); the container itself must stay
  * transparent and, for rounded shapes, clip with overflow:'hidden'.
  */
-export default function GlassSurface({ intensity = 100, edge = 'none' }: Props) {
+export default function GlassSurface({ intensity = 100, edge = 'none', androidExperimentalBlur = false }: Props) {
   const { colors, isDark } = useTheme();
   const target = useContext(GlassTargetContext);
 
@@ -107,10 +112,13 @@ export default function GlassSurface({ intensity = 100, edge = 'none' }: Props) 
 
   const tint = isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial';
 
-  // iOS only — see the GlassBackdrop comment: Android's expo-blur backdrop
-  // path failed on real hardware in two independent ways (08-23 crash, 08-29
-  // non-compositing capture layer). Android keeps the tinted fill below.
-  if (BLUR_AVAILABLE && Platform.OS === 'ios') {
+  // iOS always; Android only for the single opted-in surface per screen
+  // (bottom nav) with a mounted target — see the GlassBackdrop comment.
+  if (
+    BLUR_AVAILABLE &&
+    (Platform.OS === 'ios' ||
+      (Platform.OS === 'android' && androidExperimentalBlur && target != null))
+  ) {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <BlurView
