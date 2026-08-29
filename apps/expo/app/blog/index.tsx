@@ -18,6 +18,7 @@ import {
 } from '@/lib/supabase-blog-articles';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 
 export default function BlogFeedScreen() {
   const router = useRouter();
@@ -58,7 +59,9 @@ export default function BlogFeedScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -147,21 +150,29 @@ export default function BlogFeedScreen() {
           ))
         )}
       </ScrollView>
+      </GlassBackdrop>
 
-      <BottomNavigation
-        activeTab="home"
-        onTabPress={(tab) => {
-          if (tab === 'home') router.replace('/');
-          else if (tab === 'explore') router.push('/explore');
-          else if (tab === 'map') router.push('/location');
-          else if (tab === 'profile') router.push('/profile');
-        }}
-      />
+      <View style={styles.navOverlay}>
+        <BottomNavigation
+          activeTab="home"
+          onTabPress={(tab) => {
+            if (tab === 'home') router.replace('/');
+            else if (tab === 'explore') router.push('/explore');
+            else if (tab === 'map') router.push('/location');
+            else if (tab === 'profile') router.push('/profile');
+          }} glass />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -181,7 +192,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontFamily: 'MonaSansSemiCondensed-Medium'},
   headerSpacer: { width: 40 },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120 },
   subheading: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 16 },
   empty: { padding: 40, alignItems: 'center' },
   card: { marginBottom: 24 },

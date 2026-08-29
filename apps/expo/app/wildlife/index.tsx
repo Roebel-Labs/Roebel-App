@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -128,7 +129,9 @@ export default function WildlifeScreen() {
         />
       </View>
 
-      <ScrollView
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
@@ -198,15 +201,17 @@ export default function WildlifeScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      </GlassBackdrop>
 
-      <BottomNavigation
-        activeTab="explore"
-        onTabPress={(t) => {
-          if (t === 'home') router.replace('/');
-          else if (t === 'explore') router.replace('/explore');
-          else if (t === 'profile') router.replace('/profile');
-        }}
-      />
+      <View style={styles.navOverlay}>
+        <BottomNavigation
+          activeTab="explore"
+          onTabPress={(t) => {
+            if (t === 'home') router.replace('/');
+            else if (t === 'explore') router.replace('/explore');
+            else if (t === 'profile') router.replace('/profile');
+          }} glass />
+      </View>
     </SafeAreaView>
   );
 }
@@ -350,6 +355,12 @@ function EventCard({
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -372,7 +383,7 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
   tabPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   tabPillText: { fontSize: 13, fontFamily: 'Inter-Medium' },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 6 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 120 },
   loadingBox: { padding: 40, alignItems: 'center' },
   emptyBox: { padding: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 16, fontFamily: 'Inter-Medium', marginBottom: 4 },

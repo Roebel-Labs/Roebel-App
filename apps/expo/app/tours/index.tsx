@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -192,7 +193,9 @@ export default function ToursScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
@@ -241,15 +244,17 @@ export default function ToursScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      </GlassBackdrop>
 
-      <BottomNavigation
-        activeTab="explore"
-        onTabPress={(t) => {
-          if (t === 'home') router.replace('/');
-          else if (t === 'explore') router.replace('/explore');
-          else if (t === 'profile') router.replace('/profile');
-        }}
-      />
+      <View style={styles.navOverlay}>
+        <BottomNavigation
+          activeTab="explore"
+          onTabPress={(t) => {
+            if (t === 'home') router.replace('/');
+            else if (t === 'explore') router.replace('/explore');
+            else if (t === 'profile') router.replace('/profile');
+          }} glass />
+      </View>
     </SafeAreaView>
   );
 }
@@ -316,6 +321,12 @@ function formatDuration(min: number): string {
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -342,7 +353,7 @@ const styles = StyleSheet.create({
   toggleRow: { paddingHorizontal: 16, paddingVertical: 6 },
   toggle: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, alignSelf: 'flex-start' },
   toggleText: { fontSize: 13, fontFamily: 'Inter-Medium' },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 6 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 120 },
   tippCard: {
     borderRadius: 16,
     borderWidth: 1.5,

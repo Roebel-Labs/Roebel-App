@@ -29,7 +29,7 @@ export default function LocationScreen() {
           Die Karte ist auf Web nicht verfügbar.
         </Text>
       </View>
-      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
+      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
     </SafeAreaView>
   );
 }

@@ -7,6 +7,7 @@ import { de } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from '@/components/Icons';
 import EventCard from '@/components/EventCard';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import { supabase } from '@/lib/supabase';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
@@ -151,7 +152,9 @@ export default function CalendarScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable
@@ -220,16 +223,24 @@ export default function CalendarScreen() {
           </View>
         )}
       </ScrollView>
+      </GlassBackdrop>
 
-      <BottomNavigation
-        activeTab={activeTab}
-        onTabPress={handleTabPress}
-      />
+      <View style={styles.navOverlay}>
+        <BottomNavigation
+          activeTab={activeTab}
+          onTabPress={handleTabPress} glass />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: {
     flex: 1,
   },

@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     right: 16,
-    zIndex: 10,
+    zIndex: 31,
   },
   fab: {
     width: 56,

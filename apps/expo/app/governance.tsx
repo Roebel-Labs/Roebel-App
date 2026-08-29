@@ -7,6 +7,7 @@ import { useRealtimeProposals } from '@/hooks/useRealtimeProposals';
 import ProposalCard from '@/components/ProposalCard';
 import ProposalSkeleton from '@/components/ProposalSkeleton';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import { useTheme } from '@/context/ThemeContext';
 
 export default function GovernanceScreen() {
@@ -43,8 +44,11 @@ export default function GovernanceScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -89,14 +93,23 @@ export default function GovernanceScreen() {
           </View>
         )}
       </ScrollView>
+      </GlassBackdrop>
 
       {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
+      <View style={styles.navOverlay}>
+        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: {
     flex: 1,
   },

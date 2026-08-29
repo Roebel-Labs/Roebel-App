@@ -197,6 +197,12 @@ function PostVideoPlayer({
       onLayout={(e: LayoutChangeEvent) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       <VideoView
+        // Android: render into a TextureView, not a SurfaceView. The frosted
+        // chrome samples the feed via a RenderNode snapshot (GlassBackdrop),
+        // and snapshotting a SurfaceView is the expo/expo#24572 crash that
+        // killed the feed on Pixels (2026-08-23). TextureView composites in
+        // the view hierarchy and snapshots safely. iOS ignores the prop.
+        surfaceType="textureView"
         ref={videoViewRef}
         style={styles.video}
         player={player}

@@ -8,6 +8,7 @@ import { EventRecord } from '@/lib/types';
 import EventCard from '@/components/EventCard';
 import { EventCardSkeleton } from '@/components/SkeletonLoader';
 import BottomNavigation from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
@@ -115,7 +116,9 @@ export default function EventsScreen() {
         style={styles.pillRowContainer}
       />
 
-      <ScrollView
+            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={{ flex: 1 }}>
+<ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -145,20 +148,28 @@ export default function EventsScreen() {
           </View>
         )}
       </ScrollView>
+      </GlassBackdrop>
 
-      <BottomNavigation
-        activeTab="explore"
-        onTabPress={(tab) => {
-          if (tab === 'home') router.replace('/');
-          else if (tab === 'explore') router.replace('/explore');
-          else if (tab === 'profile') router.push('/profile');
-        }}
-      />
+      <View style={styles.navOverlay}>
+        <BottomNavigation
+          activeTab="explore"
+          onTabPress={(tab) => {
+            if (tab === 'home') router.replace('/');
+            else if (tab === 'explore') router.replace('/explore');
+            else if (tab === 'profile') router.push('/profile');
+          }} glass />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   container: {
     flex: 1,
   },
@@ -216,7 +227,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
     paddingTop: 8,
   },
   list: {

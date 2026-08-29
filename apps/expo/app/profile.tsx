@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useActiveAccount, useActiveWallet, useDisconnect } from 'thirdweb/react';
 import { openBrowserAsync } from 'expo-web-browser';
@@ -12,6 +12,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
 import AvatarStack from '@/components/AvatarStack';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
 import BottomDrawer from '@/components/BottomDrawer';
 import LoginDrawer from '@/components/LoginDrawer';
 import LogoutDrawer from '@/components/LogoutDrawer';
@@ -63,6 +64,7 @@ export default function ProfileScreen() {
   const businessRecord = businesses.find(b => b.status === 'published') || businesses[0] || null;
   const userBusiness = businessRecord;
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('profile');
   const [showLoginDrawer, setShowLoginDrawer] = useState(false);
@@ -145,8 +147,11 @@ const handleRefresh = async () => {
         )}
       </View>
 
+      {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
+      <GlassBackdrop style={styles.content}>
       <ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 16 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -465,6 +470,7 @@ const handleRefresh = async () => {
         )}
 
       </ScrollView>
+      </GlassBackdrop>
 
       {/* QR Code Scanner FAB - only for verified users */}
       {hasAnyNFT && (
@@ -478,11 +484,10 @@ const handleRefresh = async () => {
         </Pressable>
       )}
 
-      {/* Bottom Navigation */}
-      <BottomNavigation
-        activeTab={activeTab}
-        onTabPress={handleTabPress}
-      />
+      {/* Bottom Navigation — frosted glass overlaying the scroll content */}
+      <View style={styles.navOverlay}>
+        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
+      </View>
 
       {/* Drawers */}
       <LoginDrawer
@@ -584,6 +589,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   notConnectedContainer: {
     flex: 1,

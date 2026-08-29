@@ -218,28 +218,45 @@ export default function FeedHome() {
     setHeaderHeight((prev) => (prev === next ? prev : next));
   }, []);
 
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: headerTranslateY.value }],
-  }));
-
-  // Bottom nav slides off only when the header is fully collapsed.
-  const bottomNavTranslateY = useDerivedValue(() => {
-    if (headerHeight === 0) return 0;
-    const collapsed = headerTranslateY.value <= -headerHeight + 1;
-    return withTiming(collapsed ? BOTTOM_NAV_HEIGHT + insets.bottom + 16 : 0, {
-      duration: 180,
-    });
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return { transform: [{ translateY: headerTranslateY.value }] };
   });
-  const bottomNavAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bottomNavTranslateY.value }],
-  }));
+
+  // Direction latch written by FeedList's scroll handler: 1 while the user
+  // scrolls down, 0 on any scroll-up or at the top. Nav + FAB follow it —
+  // hide on scroll-down, return on scroll-up (feed only, per spec).
+  const chromeHidden = useSharedValue(0);
+  const navHideDistance = BOTTOM_NAV_HEIGHT + insets.bottom + 16;
+  const bottomNavAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return {
+      transform: [
+        {
+          translateY: withTiming(chromeHidden.value === 1 ? navHideDistance : 0, {
+            duration: 180,
+          }),
+        },
+      ],
+    };
+  });
 
   // FAB shrinks away alongside the bottom nav so it doesn't float in
   // empty space when the chrome is hidden.
   const fabVisibilityScale = useDerivedValue(() => {
-    if (headerHeight === 0) return 1;
-    const collapsed = headerTranslateY.value <= -headerHeight + 1;
-    return withTiming(collapsed ? 0 : 1, { duration: 180 });
+    'worklet';
+    return withTiming(chromeHidden.value === 1 ? 0 : 1, { duration: 180 });
+  });
+
+  // Slide-over layering: once the header starts retreating, the feed layer
+  // (stories + posts) jumps ABOVE the header/post-bar/tabs (zIndex 15 vs the
+  // header's static 10) so the body visibly slides over the chrome — at the
+  // top it drops back underneath (1) so the header row stays tappable. The
+  // bottom chrome sits above both (zIndex 30/29) and the status-bar band at
+  // 40 stays on top of everything.
+  const listLayerAnimatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    return { zIndex: headerTranslateY.value < -8 ? 15 : 1 };
   });
 
   const [activeTab, setActiveTab] = useState<FeedType>('main');
@@ -558,6 +575,7 @@ export default function FeedHome() {
   const feedListProps = {
     headerTranslateY,
     headerHeight,
+    chromeHidden,
     topPadding: headerHeight,
     bottomPadding,
     onRepost: handleRepostPress,
@@ -588,6 +606,7 @@ export default function FeedHome() {
       {/* GlassBackdrop is the surface Android's frosted chrome samples
           from (BlurTargetView) — the glass bars below must stay OUTSIDE
           it and render after it. Plain passthrough View on iOS. */}
+      <Animated.View style={[styles.listLayer, listLayerAnimatedStyle]}>
       <GlassBackdrop style={styles.pager}>
       <Pager
         ref={pagerRef}
@@ -642,6 +661,7 @@ export default function FeedHome() {
         </View>
       </Pager>
       </GlassBackdrop>
+      </Animated.View>
 
       {appHeader}
 
@@ -741,21 +761,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    zIndex: 30,
   },
   topSafeBand: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 20,
+    zIndex: 40,
   },
   bottomSafeBand: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 9,
+    zIndex: 29,
+  },
+  listLayer: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
 import { useExploreDot } from '@/context/ExploreDotContext';
+import GlassSurface from '@/components/GlassSurface';
 import { fontFamily } from '@/constants/theme';
 
 // Import SVG icons
@@ -26,6 +27,12 @@ type Props = {
   onTabPress: (tab: TabKey) => void;
   /** Skip the solid fill — for hosts that paint their own (glass) surface. */
   transparent?: boolean;
+  /**
+   * Self-contained frosted-glass background (systemChromeMaterial + top
+   * hairline). The HOST SCREEN must wrap its scrollable content in
+   * <GlassBackdrop> or Android falls back to the tinted fill.
+   */
+  glass?: boolean;
 };
 
 const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
@@ -34,7 +41,7 @@ const TABS: { key: TabKey; stroke: any; filled: any; label: string }[] = [
   { key: 'profile', stroke: UserStroke, filled: UserFilled, label: 'Profil' },
 ];
 
-export default function BottomNavigation({ activeTab, onTabPress, transparent = false }: Props) {
+export default function BottomNavigation({ activeTab, onTabPress, transparent = false, glass = false }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { visible: exploreDotVisible, dismiss: dismissExploreDot } = useExploreDot();
@@ -54,10 +61,11 @@ export default function BottomNavigation({ activeTab, onTabPress, transparent = 
     <View
       style={[
         styles.container,
-        !transparent && { backgroundColor: colors.background },
+        !transparent && !glass && { backgroundColor: colors.background },
         { paddingBottom: Math.max(insets.bottom, 8) },
       ]}
     >
+      {glass && <GlassSurface edge="top" />}
       <View style={styles.tabsContainer}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;

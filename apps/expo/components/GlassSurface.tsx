@@ -33,9 +33,12 @@ const GlassTargetContext = createContext<RefObject<View | null> | null>(null);
  */
 export function GlassBackdrop({ children, style, ...rest }: ViewProps) {
   const ref = useRef<View>(null);
-  // Android: plain View — no BlurTargetView RenderNode capture while the
-  // backdrop blur is disabled (see the platform branch in GlassSurface).
-  if (Platform.OS !== 'ios') {
+  // Web has no BlurTargetView; native (iOS + Android 12+) uses the real
+  // RenderNode capture surface. Android blur re-enabled 2026-08-29: the
+  // 08-23 crash class (expo/expo#24572) is the HardwareRenderer snapshot
+  // hitting a SurfaceView — feed videos now render into a TextureView
+  // (PostVideoPlayer surfaceType), which snapshots safely.
+  if (Platform.OS === 'web' || !BLUR_AVAILABLE) {
     return (
       <View style={style} {...rest}>
         {children}
@@ -86,12 +89,12 @@ export default function GlassSurface({ intensity = 100, edge = 'none' }: Props) 
 
   const tint = isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterial';
 
-  // Android backdrop blur is disabled: the RenderNode snapshot of a
-  // BlurTargetView full of expo-image/video surfaces crashes the feed on
-  // physical devices (Pixel confirmed 2026-08-23) while emulators render it
-  // fine — same class as expo/expo#24572. Android keeps the tinted fill +
-  // edge line below until the blur can be gated per-device safely.
-  if (BLUR_AVAILABLE && Platform.OS === 'ios') {
+  // Android real blur re-enabled 2026-08-29 (Max: real frosted glass on the
+  // bottom nav, all screens). The 08-23 Pixel crash (expo/expo#24572) was the
+  // RenderNode snapshot hitting a SurfaceView — feed videos are TextureView
+  // now (PostVideoPlayer). Android still requires a GlassBackdrop target;
+  // without one it falls through to the tinted fill below.
+  if (BLUR_AVAILABLE && (Platform.OS === 'ios' || (Platform.OS === 'android' && target))) {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <BlurView

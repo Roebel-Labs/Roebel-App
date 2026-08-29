@@ -17,6 +17,8 @@ import type {
 } from '@/lib/types';
 
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import { GlassBackdrop } from '@/components/GlassSurface';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ExploreSearchBar from '@/components/ExploreSearchBar';
 import ExploreCategoryChips from '@/components/ExploreCategoryChips';
 import DeckCardSwiper from '@/components/DeckCardSwiper';
@@ -114,6 +116,7 @@ function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | num
 export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [refreshing, setRefreshing] = useState(false);
@@ -245,6 +248,9 @@ export default function ExploreScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
+      {/* GlassBackdrop: the surface the frosted bottom nav samples on
+          Android. Passthrough View on web; the nav overlay stays OUTSIDE. */}
+      <GlassBackdrop style={styles.glassBody}>
       <Animated.ScrollView
         // flex:1 is load-bearing on web: react-native-web sizes an unstyled
         // ScrollView to its content, so `overflow-y: auto` never has anything
@@ -331,9 +337,10 @@ export default function ExploreScreen() {
           <AllEventsHorizontal events={futureEvents} />
         )}
 
-        {/* Bottom padding for BottomNavigation */}
-        <View style={{ height: BOTTOM_NAV_HEIGHT + 10 }} />
+        {/* Clearance for the now-overlaying glass BottomNavigation */}
+        <View style={{ height: BOTTOM_NAV_HEIGHT + insets.bottom + 10 }} />
       </Animated.ScrollView>
+      </GlassBackdrop>
 
       {/* Search Modal */}
       <SearchModal
@@ -348,8 +355,10 @@ export default function ExploreScreen() {
       {/* Map FAB */}
       <MapFAB visible={fabVisible} />
 
-      {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
+      {/* Bottom Navigation — frosted glass overlaying the scroll content */}
+      <View style={styles.navOverlay}>
+        <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
+      </View>
     </SafeAreaView>
   );
 }
@@ -360,6 +369,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  glassBody: {
+    flex: 1,
+  },
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   skeletonSection: {
     marginBottom: 32,

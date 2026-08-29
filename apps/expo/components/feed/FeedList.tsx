@@ -74,6 +74,12 @@ type Props = {
   headerTranslateY?: SharedValue<number>;
   /** Total height of the floating header — used as the upper clamp for the translate. */
   headerHeight?: number;
+  /**
+   * Direction latch for the bottom chrome: 1 while the user scrolls DOWN
+   * (nav slides away, FAB shrinks), 0 on any scroll-up or at the top.
+   * Written here on the UI thread; FeedHome animates off it.
+   */
+  chromeHidden?: SharedValue<number>;
   /** Additional top inset (e.g. status bar) added to the header padding. */
   topPadding?: number;
   /** Additional bottom inset (e.g. bottom nav) added to the footer padding. */
@@ -175,6 +181,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     listHeader,
     headerTranslateY,
     headerHeight = 0,
+    chromeHidden,
     topPadding = 0,
     bottomPadding = 0,
     active = true,
@@ -640,6 +647,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
       if (y <= 0) {
         // At the top / overscroll: chrome always fully visible.
+        if (chromeHidden) chromeHidden.value = 0;
         if (headerTranslateY.value !== 0 && !resettingAtTop.value) {
           resettingAtTop.value = true;
           headerTranslateY.value = withTiming(0, { duration: 160 });
@@ -647,6 +655,13 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
         return;
       }
       resettingAtTop.value = false;
+
+      // Direction latch for the bottom nav + FAB (small dead zone so frame
+      // jitter can't flap it): down hides, up shows — Max's spec, feed only.
+      if (chromeHidden) {
+        if (dy > 4 && y > headerHeight) chromeHidden.value = 1;
+        else if (dy < -4) chromeHidden.value = 0;
+      }
 
       if (dy > 0) {
         // Never collapse further than the content above the fold allows —
