@@ -30,6 +30,7 @@ import Skeleton from '@/components/ui/Skeleton';
 import CheckinStreakStrip from '@/components/rewards/CheckinStreakStrip';
 import { useRoebelTalerHistory } from '@/hooks/useRoebelTalerHistory';
 import TxHistoryList, { type TxHistoryItem } from '@/components/rewards/TxHistoryList';
+import MuenzenLeaderboard from '@/components/rewards/MuenzenLeaderboard';
 import TaskCard from '@/components/rewards/TaskCard';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
 import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
@@ -275,7 +276,7 @@ export default function RewardsIndexScreen() {
   }, [onboard, showSnackbar]);
 
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<'missionen' | 'verlauf'>('verlauf');
+  const [tab, setTab] = useState<'missionen' | 'verlauf' | 'rang'>('verlauf');
   const history = useRoebelTalerHistory();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
@@ -605,6 +606,15 @@ export default function RewardsIndexScreen() {
               Verlauf
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => setTab('rang')}
+            style={[styles.tabItem, tab === 'rang' && { backgroundColor: isDark ? colors.background : '#FFFFFF' }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.tabText, { color: tab === 'rang' ? colors.textPrimary : colors.textSecondary }]}>
+              Rang
+            </Text>
+          </Pressable>
         </View>
 
         {tab === 'missionen' ? (
@@ -666,6 +676,8 @@ export default function RewardsIndexScreen() {
               </View>
             </Pressable>
           </>
+        ) : tab === 'rang' ? (
+          <MuenzenLeaderboard />
         ) : (
           <TxHistoryList
             items={history.items.map((tx): TxHistoryItem => ({
