@@ -15,16 +15,14 @@ const config: ExpoConfig = {
   // requireNativeModule() at import time and THROWS on a runtime that lacks the
   // native module. OTA-ing this JS onto a 3.5.0 build would white-screen it on
   // launch, and expo-updates does not roll a crashing update back.
-  version: '3.6.0',
+  //
+  // 3.7.0 = first SDK 56 runtime (RN 0.85, expo-observe 56 API). JS from the
+  // SDK 56 tree must never be published to runtime 3.6.0 — same fence again.
+  version: '3.7.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
   owner: 'max.brych',
-  splash: {
-    image: './assets/images/splash.png',
-    resizeMode: 'contain',
-    backgroundColor: '#00498B'
-  },
   extra: {
     eas: {
       projectId: 'cb460582-e228-4a96-8235-92eb13006239'
@@ -95,6 +93,16 @@ const config: ExpoConfig = {
       }
     ],
     'expo-updates',
+    // SDK 56: the top-level `splash` key is gone from ExpoConfig — the plugin
+    // is the only way to configure the native splash now.
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/images/splash.png',
+        resizeMode: 'contain',
+        backgroundColor: '#00498B',
+      },
+    ],
     '@react-native-community/datetimepicker',
     'expo-image',
     'expo-localization',
@@ -125,22 +133,20 @@ const config: ExpoConfig = {
     [
       'expo-build-properties',
       {
+        // SDK 56: compileSdk/targetSdk/buildTools/AGP/NDK pins removed — take
+        // Expo's defaults (kickoff rule). NDK 28+ aligns 16KB pages by default,
+        // so the FLEXIBLE_PAGE_SIZES CMake arg is gone too.
         android: {
           minSdkVersion: 26,
-          compileSdkVersion: 36,
-          targetSdkVersion: 35,
-          buildToolsVersion: '35.0.0',
           newArchEnabled: true,
           unstable_networkInspector: false,
           useLegacyPackaging: false,
           extraProguardRules: '-keep class androidx.** { *; }',
-          androidGradlePluginVersion: '8.7.3',
-          ndkVersion: '27.1.12297006',
-          extraCMakeArgs: ['-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON']
         },
         ios: {
           newArchEnabled: true,
-          deploymentTarget: '16.0',
+          // SDK 56 / RN 0.85 minimum — expo-build-properties rejects <16.4.
+          deploymentTarget: '16.4',
           extraPods: [
             {
               name: 'OpenSSL-Universal',
@@ -162,7 +168,7 @@ const config: ExpoConfig = {
     // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
     // builds sharing one number, and App Store Connect rejects duplicates.
     // Last submitted: 32 (v3.5.0).
-    buildNumber: '33',
+    buildNumber: '34',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -180,7 +186,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 38,
+    versionCode: 39,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'

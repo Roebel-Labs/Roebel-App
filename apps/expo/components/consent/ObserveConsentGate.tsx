@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import Observe from 'expo-observe';
+import { Observe } from 'expo-observe';
 import { useConsent } from '@/context/ConsentContext';
 
 export function ObserveConsentGate() {
@@ -35,7 +35,16 @@ export function ObserveConsentGate() {
     lastValueRef.current = dispatchingEnabled;
 
     try {
-      Observe.configure({ dispatchingEnabled, dispatchInDebug: false });
+      // The expo-router integration records the per-route navigation metrics
+      // (cold_ttr / warm_ttr / tti) — it is opt-in and defaults to OFF, so it
+      // must be restated here on every call (configure() is a full replacement).
+      // Recording is local; whether anything leaves the device stays governed
+      // by `dispatchingEnabled` above.
+      Observe.configure({
+        dispatchingEnabled,
+        dispatchInDebug: false,
+        integrations: { 'expo-router': true },
+      });
     } catch {
       // Native module absent (Expo Go, or a runtime built before expo-observe
       // was added). Nothing is being collected, so there is nothing to gate.

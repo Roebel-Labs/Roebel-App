@@ -38,7 +38,7 @@ import { StatusBar, View, StyleSheet, Text, Platform, InteractionManager } from 
 import '@/lib/patch-text';
 import useAppFonts from '@/hooks/useFonts';
 import * as SplashScreen from 'expo-splash-screen';
-import { AppMetrics, AppMetricsRoot } from 'expo-observe';
+import { ObserveRoot, useObserve } from 'expo-observe';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ThirdwebProvider } from 'thirdweb/react';
 import { useScreenTracking } from '@/hooks/useAnalytics';
@@ -344,6 +344,9 @@ function Layout() {
   const { fontsLoaded, fontError } = useAppFonts();
   const [splashDone, setSplashDone] = React.useState(false);
   const markedInteractiveRef = React.useRef(false);
+  // SDK 56 API: the hook variant fills in `routeName` from the active route
+  // (the raw Observe.markInteractive() does not).
+  const { markInteractive } = useObserve();
 
   // Time-to-interactive for EAS Observe. AnimatedSplash covers the whole app
   // until its exit fade completes, so this is the first moment the user can
@@ -353,8 +356,8 @@ function Layout() {
     setSplashDone(true);
     if (markedInteractiveRef.current) return;
     markedInteractiveRef.current = true;
-    AppMetrics.markInteractive();
-  }, []);
+    markInteractive();
+  }, [markInteractive]);
 
   React.useEffect(() => {
     if (fontsLoaded) {
@@ -464,10 +467,10 @@ function Layout() {
 // Sentry is initialized manually inside ConsentGate when the user opts in to
 // crash reporting. See lib/sentry-init.ts.
 //
-// AppMetricsRoot.wrap marks time-to-first-render for EAS Observe (SDK 55 name;
-// SDK 56+ renames it to ObserveRoot). Dispatch of anything it collects stays
-// gated on `analytics` consent via <ObserveConsentGate /> above.
-export default AppMetricsRoot.wrap(Layout);
+// ObserveRoot.wrap marks time-to-first-render for EAS Observe. Dispatch of
+// anything it collects stays gated on `analytics` consent via
+// <ObserveConsentGate /> above.
+export default ObserveRoot.wrap(Layout);
 
 const styles = StyleSheet.create({
   gradientContainer: {
