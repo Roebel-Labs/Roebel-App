@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
-import { compressImageForVisionAPI } from './utils/image-compression';
+import { compressImageForUpload } from './utils/image-compression';
 
 /**
  * Upload a media file (image or video) to Supabase Storage.
@@ -12,6 +12,8 @@ import { compressImageForVisionAPI } from './utils/image-compression';
  * @param type     'image' or 'video'
  * @param folder   Storage subfolder (e.g. 'posts', 'experiences')
  * @param mimeType Actual MIME type from the picker (e.g. 'image/heic')
+ * @param bucket   Storage bucket
+ * @param maxWidth Max pixel width for images (default 1600; use 512 for avatars/logos)
  * @returns        Public URL on success, null on failure
  */
 export async function uploadMediaFile(
@@ -20,13 +22,15 @@ export async function uploadMediaFile(
   type: 'image' | 'video',
   folder: string = 'posts',
   mimeType?: string,
-  bucket: string = 'images'
+  bucket: string = 'images',
+  maxWidth: number = 1600
 ): Promise<string | null> {
   try {
-    // Compress images before upload (converts HEIC→JPEG, resizes large photos)
+    // Compress images before upload (converts HEIC→JPEG, resizes to display
+    // size so raw URLs are cheap to serve without image transformations)
     let fileUri = uri;
     if (type === 'image') {
-      fileUri = await compressImageForVisionAPI(uri);
+      fileUri = await compressImageForUpload(uri, maxWidth);
     }
 
     // Read file as base64, then convert to ArrayBuffer for reliable upload
@@ -49,7 +53,8 @@ export async function uploadMediaFile(
 
     const { error } = await supabase.storage.from(bucket).upload(filePath, arrayBuffer, {
       contentType,
-      cacheControl: '3600',
+      // Filenames are timestamped and never reused → cache aggressively
+      cacheControl: '31536000',
       upsert: false,
     });
 

@@ -20,6 +20,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { fetchBusinessBySlug, updateBusiness } from '@/lib/supabase-businesses';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { supabase } from '@/lib/supabase';
+import { compressImageForUpload } from '@/lib/utils/image-compression';
 import type { BusinessRecord, BusinessCategory, OpeningHours } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import CheckIcon from '@/assets/icons/check.svg';
@@ -150,14 +151,15 @@ export default function BusinessEditScreen() {
     setUploading(true);
     try {
       const asset = result.assets[0];
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const ext = asset.uri.split('.').pop() || 'jpg';
-      const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+      // Square picks are logos (render small) → 512px; covers → 1600px
+      const maxWidth = aspect[0] === aspect[1] ? 512 : 1600;
+      const compressedUri = await compressImageForUpload(asset.uri, maxWidth);
+      const base64 = await FileSystem.readAsStringAsync(compressedUri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(fileName, decode(base64), { contentType, cacheControl: '3600' });
+        .upload(fileName, decode(base64), { contentType: 'image/jpeg', cacheControl: '31536000' });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from('images').getPublicUrl(fileName);

@@ -11,6 +11,7 @@ import { useUser } from '@/context/UserContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useCirclesProfileSync } from '@/hooks/useCirclesProfileSync';
 import { supabase } from '@/lib/supabase';
+import { compressImageForUpload } from '@/lib/utils/image-compression';
 import { Events, track } from '@/lib/analytics';
 import {
   equipRewardByType,
@@ -88,14 +89,14 @@ export default function EditProfileScreen() {
     setUploading(true);
     try {
       const asset = result.assets[0];
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const ext = asset.uri.split('.').pop() || 'jpg';
-      const fileName = `profile-pictures/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+      // Avatars render at ≤160px — 512px covers retina; keeps files ~40-80 KB
+      const compressedUri = await compressImageForUpload(asset.uri, 512);
+      const base64 = await FileSystem.readAsStringAsync(compressedUri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileName = `profile-pictures/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('images')
-        .upload(fileName, decode(base64), { contentType, cacheControl: '3600' });
+        .upload(fileName, decode(base64), { contentType: 'image/jpeg', cacheControl: '31536000' });
 
       if (uploadError) throw uploadError;
 

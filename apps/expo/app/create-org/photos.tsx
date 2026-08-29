@@ -41,6 +41,9 @@ export default function CreateOrgPhotosScreen() {
       'image',
       folder,
       result.assets[0].mimeType,
+      'images',
+      // Logos render small (≤160px) → 512px is plenty; covers get 1600px
+      type === 'logo' ? 512 : 1600,
     );
     setUploading(false);
 

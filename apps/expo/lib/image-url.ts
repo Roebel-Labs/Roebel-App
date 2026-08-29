@@ -1,14 +1,18 @@
 /**
- * Rewrites Supabase Storage public-object URLs to the image-transform
- * (render) endpoint so feed images download at display size instead of the
- * full-resolution original (Pro-plan feature). Non-Supabase URLs, videos,
- * gifs and svgs pass through untouched, so callers can apply this to any
- * media URL unconditionally.
+ * Media URL helper for feed/card images.
+ *
+ * HISTORY: this used to rewrite Supabase public-object URLs to the
+ * image-transform (render) endpoint. That endpoint bills per ORIGIN image per
+ * billing cycle (Pro plan includes 100), and with every displayed image going
+ * through it we blew past the quota (2026-08). Since then:
+ *   - every upload path compresses client-side to display size
+ *     (≤1600px JPEG, avatars/logos ≤512px — see lib/utils/image-compression.ts)
+ *   - existing oversized originals were re-encoded in place server-side
+ * so raw storage URLs are already display-sized and the render endpoint is no
+ * longer needed. This function now passes URLs through unchanged; it is kept
+ * so the many call sites stay untouched and we retain a single choke point if
+ * a transform strategy is ever needed again.
  */
-const OBJECT_PUBLIC = '/storage/v1/object/public/';
-const RENDER_PUBLIC = '/storage/v1/render/image/public/';
-const SKIP_EXTENSIONS = /\.(mp4|mov|webm|m3u8|gif|svg)(\?|$)/i;
-
 export type ImageTransformOptions = {
   width?: number;
   height?: number;
@@ -17,23 +21,7 @@ export type ImageTransformOptions = {
 
 export function transformedImageUrl(
   url: string | null | undefined,
-  opts: ImageTransformOptions
+  _opts: ImageTransformOptions
 ): string | null {
-  if (!url) return null;
-  if (!url.includes(OBJECT_PUBLIC)) return url;
-  if (SKIP_EXTENSIONS.test(url)) return url;
-
-  const [base, existingQuery] = url.split('?');
-  const params = new URLSearchParams(existingQuery ?? '');
-  if (opts.width) params.set('width', String(Math.round(opts.width)));
-  if (opts.height) params.set('height', String(Math.round(opts.height)));
-  params.set('quality', String(opts.quality ?? 75));
-  // The render endpoint treats a MISSING dimension as "original size", so
-  // resize=cover with only a width crops the source to a width×originalHeight
-  // strip instead of scaling it (verified live: 460×460 avatar → 160×460).
-  // contain preserves aspect ratio when one dimension is given; cover is only
-  // safe when both are set.
-  params.set('resize', opts.width && opts.height ? 'cover' : 'contain');
-
-  return `${base.replace(OBJECT_PUBLIC, RENDER_PUBLIC)}?${params.toString()}`;
+  return url ?? null;
 }

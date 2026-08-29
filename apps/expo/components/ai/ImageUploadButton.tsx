@@ -3,6 +3,7 @@ import { TouchableOpacity, Text, ActivityIndicator, Alert, StyleSheet } from "re
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 import { supabase } from "@/lib/supabase"
+import { compressImageForUpload } from "@/lib/utils/image-compression"
 import { useTheme } from "@/context/ThemeContext"
 
 interface ImageUploadButtonProps {
@@ -42,21 +43,21 @@ export function ImageUploadButton({ onImageUploaded, disabled }: ImageUploadButt
 
       setUploading(true)
 
-      // Convert to blob for upload
-      const response = await fetch(localUri)
+      // Compress to display size (1600px JPEG) before upload
+      const compressedUri = await compressImageForUpload(localUri, 1600)
+      const response = await fetch(compressedUri)
       const blob = await response.blob()
 
       // Generate unique filename
-      const fileExtension = localUri.split(".").pop() || "jpg"
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`
       const filePath = `event-images/${fileName}`
 
       // Upload directly to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("images")
         .upload(filePath, blob, {
-          contentType: result.assets[0].mimeType || "image/jpeg",
-          cacheControl: "3600",
+          contentType: "image/jpeg",
+          cacheControl: "31536000",
           upsert: false,
         })
 

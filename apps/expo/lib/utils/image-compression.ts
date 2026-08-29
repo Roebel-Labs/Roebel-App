@@ -2,6 +2,33 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 
 /**
+ * Compress and resize an image for storage upload. Produces a display-sized
+ * JPEG so the app can serve the raw storage URL directly — no Supabase image
+ * transformations (billed per origin image) needed at render time.
+ *
+ * Defaults: 1600px max width, 75% quality (≈150-400 KB for photos).
+ * Use maxWidth 512 for avatars/logos.
+ */
+export async function compressImageForUpload(
+  localUri: string,
+  maxWidth: number = 1600,
+  quality: number = 0.75
+): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      localUri,
+      [{ resize: { width: maxWidth } }],
+      { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return result.uri;
+  } catch (error) {
+    console.error('[image-compression] upload compression failed:', error);
+    // Fall back to the original so uploads never hard-fail on compression
+    return localUri;
+  }
+}
+
+/**
  * Compress and resize image to fit within size limit
  * Target: ~3.5 MB raw image = ~4.6 MB base64 (under 5 MB limit)
  */

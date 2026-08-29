@@ -24,6 +24,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import Markdown from 'react-native-markdown-display';
 import { supabase } from '@/lib/supabase';
+import { compressImageForUpload } from '@/lib/utils/image-compression';
 import { geocodeLocation } from '@/lib/utils/geocoding';
 import { formatDate } from '@/lib/utils';
 import PencilIcon from '@/assets/icons/pencil.svg';
@@ -943,23 +944,20 @@ export function MinimalAIChat() {
       // Upload image to Supabase if present
       if (imageUri) {
         console.log('Uploading image to Supabase...');
-        const base64Data = await FileSystem.readAsStringAsync(imageUri, {
+        // Compress to display size (1600px JPEG) — plenty for flyer OCR and
+        // event cards, avoids multi-MB originals piling up in storage
+        const compressedUri = await compressImageForUpload(imageUri, 1600);
+        const base64Data = await FileSystem.readAsStringAsync(compressedUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
 
         const arrayBuffer = decode(base64Data);
-        const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
         const filePath = `event-images/${fileName}`;
-
-        let contentType = 'image/jpeg';
-        if (fileExtension === 'png') contentType = 'image/png';
-        else if (fileExtension === 'webp') contentType = 'image/webp';
-        else if (fileExtension === 'gif') contentType = 'image/gif';
 
         const { error: uploadError } = await supabase.storage
           .from('images')
-          .upload(filePath, arrayBuffer, { contentType, cacheControl: '3600', upsert: false });
+          .upload(filePath, arrayBuffer, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
 
         if (uploadError) throw uploadError;
 
