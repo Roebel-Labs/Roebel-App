@@ -62,6 +62,48 @@ export async function getUnreadNotificationCount(walletAddress: string): Promise
   return count ?? 0;
 }
 
+/** An actor (liker/commenter) resolved to a display profile — never a raw wallet. */
+export type ActorProfile = {
+  wallet_address: string;
+  username: string | null;
+  display_name: string | null;
+  profile_picture_url: string | null;
+};
+
+/**
+ * Batch-resolve actor wallets (from notification metadata) to display
+ * profiles, keyed by lowercased wallet. Missing users are simply absent.
+ */
+export async function fetchActorProfiles(
+  wallets: string[]
+): Promise<Map<string, ActorProfile>> {
+  const unique = [...new Set(wallets.map((w) => w.toLowerCase()))];
+  if (unique.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('wallet_address, username, display_name, profile_picture_url')
+    .in('wallet_address', unique);
+
+  if (error) {
+    console.error('fetchActorProfiles error:', error);
+    return new Map();
+  }
+
+  return new Map(
+    (data ?? []).map((u) => [
+      u.wallet_address.toLowerCase(),
+      {
+        wallet_address: u.wallet_address,
+        username: u.username ?? null,
+        // display_name → username, mirroring the notification-trigger fallback.
+        display_name: u.display_name?.trim() || u.username?.trim() || null,
+        profile_picture_url: u.profile_picture_url ?? null,
+      },
+    ])
+  );
+}
+
 /** Delete a notification. */
 export async function deleteNotification(notificationId: string): Promise<void> {
   await (supabase.from('notifications') as any)

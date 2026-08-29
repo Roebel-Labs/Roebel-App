@@ -10,6 +10,64 @@
  * older rows are already stored — these helpers clean those at render time too.
  */
 
+/** Visual category of an inbox row — selects the avatar badge and filter tab. */
+export type ActivityKind = 'like' | 'comment' | 'invite' | 'news' | 'system';
+
+export function activityKindForType(type: string | null | undefined): ActivityKind {
+  switch (type) {
+    case 'post_like':
+    case 'comment_like':
+      return 'like';
+    case 'post_comment':
+    case 'post_reply':
+      return 'comment';
+    case 'org_invite':
+    case 'story_invite':
+    case 'foerder_invite':
+      return 'invite';
+    default:
+      return 'system';
+  }
+}
+
+/**
+ * Standalone action line shown under the actor name (Threads-style
+ * "Followed you"). Returns null for types whose body carries the message.
+ */
+export function notificationActionLabel(type: string | null | undefined): string | null {
+  switch (type) {
+    case 'post_like':
+      return 'Gefällt dein Beitrag';
+    case 'comment_like':
+      return 'Gefällt dein Kommentar';
+    case 'post_comment':
+      return 'Hat deinen Beitrag kommentiert';
+    case 'post_reply':
+      return 'Hat auf deinen Kommentar geantwortet';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Content excerpt shown under the action line (e.g. the comment text).
+ * Older rows store the action sentence itself as the body ("hat deinen
+ * Beitrag geliked") — those are suppressed so the action line isn't doubled.
+ */
+export function notificationPreview(
+  type: string | null | undefined,
+  body: string | null | undefined
+): string | null {
+  const cleaned = cleanNotificationBody(body);
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower.startsWith('hat ') || lower.startsWith('gefällt ')) return null;
+  if (type === 'post_comment' || type === 'post_reply') return cleaned;
+  // Unknown types: body is the message itself.
+  if (notificationActionLabel(type) === null) return cleaned;
+  return null;
+}
+
 /** Matches a full or truncated 0x wallet address (e.g. "0xdef3ab91…"). */
 const WALLET_RE = /^0x[a-fA-F0-9]{6,}$/i;
 
