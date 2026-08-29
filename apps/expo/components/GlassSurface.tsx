@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, type RefObject } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, type RefObject } from 'react';
 import { Platform, StyleSheet, View, type ViewProps } from 'react-native';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import { requireOptionalNativeModule } from 'expo';
@@ -98,6 +98,17 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
   const { colors, isDark } = useTheme();
   const target = useContext(GlassTargetContext);
 
+  // RACE GUARD (Android): expo-blur's BlurView reads `blurTarget.current`
+  // exactly once in componentDidMount and only re-checks on a re-render —
+  // a ref filling in later never triggers one, so an empty ref at mount
+  // means the native side silently stays on its near-opaque NONE fallback
+  // forever (the "solid gray bar" symptom). Mount the BlurView only after
+  // the target ref is confirmed attached.
+  const [targetReady, setTargetReady] = useState(false);
+  useEffect(() => {
+    if (target?.current) setTargetReady(true);
+  }, [target]);
+
   const edgeLine =
     edge === 'none' ? null : (
       <View
@@ -117,13 +128,17 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
   if (
     BLUR_AVAILABLE &&
     (Platform.OS === 'ios' ||
-      (Platform.OS === 'android' && androidExperimentalBlur && target != null))
+      (Platform.OS === 'android' && androidExperimentalBlur && targetReady))
   ) {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <BlurView
           style={StyleSheet.absoluteFill}
-          intensity={intensity}
+          // Android overlay alpha scales with intensity (0.75 × i/100 for the
+          // chrome material): 100 buries the blur under 75% white. 45 ≈ 34%
+          // overlay — content visibly frosts through. iOS keeps the true
+          // system material at full intensity.
+          intensity={Platform.OS === 'android' ? 45 : intensity}
           tint={tint}
           // Android-only props; ignored on iOS. Blurs the GlassBackdrop
           // beneath via RenderNode on Android 12+, tinted fill below that.
