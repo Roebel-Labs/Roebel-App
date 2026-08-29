@@ -296,6 +296,60 @@ export type ProposalCommentFeedRecord = {
   proposal?: ProposalPreviewRef;
 };
 
+// ─── Forum (Umfragen-Diskussionen) Types ────────────────────
+
+export type ForumCategoryRecord = {
+  slug: string;
+  name: string;
+  about: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type ForumThreadRecord = {
+  id: string;
+  wallet_address: string;
+  account_id: string | null;
+  category_slug: string | null;
+  title: string;
+  body: string;
+  status: 'published' | 'deleted' | 'flagged';
+  reply_count: number;
+  last_activity_at: string;
+  created_at: string;
+  updated_at: string;
+  author?: PostAuthor;
+  category?: Pick<ForumCategoryRecord, 'slug' | 'name'> | null;
+};
+
+export type ForumReplyRecord = {
+  id: string;
+  thread_id: string;
+  parent_reply_id: string | null;
+  wallet_address: string;
+  account_id: string | null;
+  body: string;
+  status: 'published' | 'deleted';
+  created_at: string;
+  author?: PostAuthor;
+};
+
+export type CreateForumThreadInput = {
+  wallet_address: string;
+  account_id?: string;
+  title: string;
+  body: string;
+  category_slug?: string | null;
+};
+
+export type CreateForumReplyInput = {
+  thread_id: string;
+  wallet_address: string;
+  account_id?: string;
+  body: string;
+  parent_reply_id?: string | null;
+};
+
 export type FeedItem =
   | { type: 'post'; data: PostRecord; id: string }
   | { type: 'mecky'; data: PostRecord; id: string }
@@ -312,6 +366,7 @@ export type FeedItem =
   | { type: 'audio_player'; data: AudioPlayerData; id: string }
   | { type: 'proposal'; data: ProposalFeedRecord; id: string }
   | { type: 'proposal_comment'; data: ProposalCommentFeedRecord; id: string }
+  | { type: 'forum_thread'; data: ForumThreadRecord; id: string }
   // UI-only sentinel injected by FeedList (not emitted by the assembler) to
   // render the pinned animated proposal hero card a little down the feed.
   | { type: 'proposal_hero'; id: string };
