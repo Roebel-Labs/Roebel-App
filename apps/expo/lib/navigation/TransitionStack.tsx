@@ -1,35 +1,21 @@
 /**
- * Expo-router-compatible native stack navigator from `react-native-screen-transitions`.
+ * Root stack navigator. Since SDK 56 this is expo-router's own Stack:
+ * the router was decoupled from React Navigation (it now runs on the
+ * `standard-navigation` fork), so the previous navigator built from
+ * `react-native-screen-transitions/native-stack` (a react-navigation
+ * native-stack wrapper) can no longer register — on device it threw
+ * "Couldn't register the navigator" at boot and the app landed on
+ * +not-found (first SDK 56 build, d95566d2).
  *
- * This uses the package's NATIVE-STACK variant (not blank-stack), which:
- *   - Sits on top of `react-native-screens`, so push/pop is off-thread and matches
- *     native platform performance / reliability (no JS-stack blank-frame bugs).
- *   - Supports `headerShown`, `title`, etc. exactly like `@react-navigation/native-stack`.
- *   - Defaults to the platform-native push animation (iOS slide, Android slide-and-fade).
- *   - Lets individual screens opt into custom cross-platform transitions (shared elements,
- *     drag-to-dismiss, snap-point sheets) by setting `enableTransitions: true` and a
- *     `screenStyleInterpolator` / preset.
- *
- * Screens with `enableTransitions: true` implicitly get `headerShown: false` and
- * `presentation: 'containedTransparentModal'` so the custom animation can run over
- * the previous screen.
+ * Nothing in the app used the package's custom transitions
+ * (enableTransitions / screenStyleInterpolator had zero consumers), so
+ * this swap is behavior-neutral: all options in use (headerShown, title,
+ * animation, presentation, gestureEnabled) are plain native-stack options
+ * that expo-router's Stack accepts unchanged. If shared-element /
+ * drag-to-dismiss transitions come back, wait for
+ * react-native-screen-transitions to support the standard-navigation
+ * router before reintroducing a custom navigator here.
  */
-import { withLayoutContext } from 'expo-router';
-import type {
-  ParamListBase,
-  StackNavigationState,
-} from '@react-navigation/native';
-import {
-  createNativeStackNavigator,
-  type NativeStackNavigationEventMap,
-  type NativeStackNavigationOptions,
-} from 'react-native-screen-transitions/native-stack';
+import { Stack } from 'expo-router';
 
-const { Navigator } = createNativeStackNavigator();
-
-export const TransitionStack = withLayoutContext<
-  NativeStackNavigationOptions,
-  typeof Navigator,
-  StackNavigationState<ParamListBase>,
-  NativeStackNavigationEventMap
->(Navigator);
+export const TransitionStack = Stack;
