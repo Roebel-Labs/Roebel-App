@@ -49,12 +49,11 @@ const config: ExpoConfig = {
         asyncRoutes: { android: false, ios: false, default: 'development' }
       }
     ],
-    [
-      '@rnmapbox/maps',
-      {
-        RNMapboxMapsVersion: '11.16.2',
-      }
-    ],
+    // No RNMapboxMapsVersion pin: @rnmapbox/maps compiles against the native
+    // SDK version declared in its own package.json (10.3.5 → 11.23.1). Pinning
+    // an older native SDK made :rnmapbox_maps:compileReleaseKotlin fail with
+    // "Unresolved reference" on newer style APIs (EAS build 280dbb81).
+    '@rnmapbox/maps',
     'expo-secure-store',
     'expo-font',
     'expo-web-browser',
