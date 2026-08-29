@@ -91,9 +91,15 @@ export default class ErrorBoundary extends Component<Props, State> {
       contexts: { react: { componentStack: errorInfo.componentStack ?? undefined } },
     });
 
-    if (__DEV__) {
-      console.error('ErrorBoundary caught an error:', error, errorInfo);
-    }
+    // Release builds too: Sentry init is consent-gated and boundary errors
+    // were invisible in logcat during the 2026-08-29 feed incident — a plain
+    // console.error always reaches `adb logcat` (ReactNativeJS) and costs
+    // nothing. Keep the component stack; it names the throwing component.
+    console.error(
+      'ErrorBoundary caught:',
+      error?.message ?? error,
+      errorInfo?.componentStack ?? ''
+    );
 
     this.setState({
       error,
