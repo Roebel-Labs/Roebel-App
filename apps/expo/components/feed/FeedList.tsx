@@ -52,6 +52,7 @@ import FeedAudioPlayerCard from './FeedAudioPlayerCard';
 import FeedProposalCard from './FeedProposalCard';
 import FeedProposalCommentCard from './FeedProposalCommentCard';
 import FeedProposalHeroCard from './FeedProposalHeroCard';
+import ForumThreadCard from '../forum/ForumThreadCard';
 
 export type FeedListHandle = {
   refresh: () => void;
@@ -562,6 +563,13 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           return (
             <View style={styles.moduleWrap}>
               <FeedProposalCommentCard comment={item.data} />
+            </View>
+          );
+
+        case 'forum_thread':
+          return (
+            <View style={styles.moduleWrap}>
+              <ForumThreadCard thread={item.data} />
             </View>
           );
 

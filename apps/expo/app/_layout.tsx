@@ -88,6 +88,8 @@ function NotificationHandler() {
         router.push(`/news/${data.slug}` as any);
       } else if (data?.type === 'post' && data?.postId) {
         router.push(`/post/${data.postId}` as any);
+      } else if (data?.type === 'forum_thread' && data?.threadId) {
+        router.push(`/forum/thread/${data.threadId}` as any);
       } else if (data?.type === 'direct_message' && data?.conversationId) {
         router.push(`/messages/${data.conversationId}` as any);
       } else if (data?.type === 'org_invite') {
@@ -113,6 +115,10 @@ function NotificationHandler() {
         } else if (data?.type === 'post' && data?.postId) {
           setTimeout(() => {
             router.push(`/post/${data.postId}` as any);
+          }, 100);
+        } else if (data?.type === 'forum_thread' && data?.threadId) {
+          setTimeout(() => {
+            router.push(`/forum/thread/${data.threadId}` as any);
           }, 100);
         } else if (data?.type === 'direct_message' && data?.conversationId) {
           setTimeout(() => {

@@ -46,6 +46,7 @@ import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
+import ForumCategoryChips from '../forum/ForumCategoryChips';
 import { HeaderWeather } from './HeaderWeather';
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { usePostActions } from '@/hooks/usePostActions';
@@ -628,6 +629,7 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
+            listHeader={<ForumCategoryChips activeSlug="alle" />}
             active={screenFocused && effectiveTab === 'rathaus'}
             enabled={canAccessCityTabs}
             onNewestContent={handleNewestContent}
