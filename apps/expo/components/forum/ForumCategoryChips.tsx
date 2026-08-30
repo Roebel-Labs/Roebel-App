@@ -36,6 +36,8 @@ export default function ForumCategoryChips({ activeSlug }: Props) {
         onPress={() =>
           router.push((slug === 'alle' ? '/forum' : `/forum/${slug}`) as any)
         }
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
         style={[
           styles.chip,
           {
@@ -68,6 +70,8 @@ export default function ForumCategoryChips({ activeSlug }: Props) {
         {isCitizen && (
           <Pressable
             onPress={() => router.push('/forum/new' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Neues Forumsthema erstellen"
             style={[styles.chip, styles.newChip, { borderColor: colors.primary }]}
           >
             <Text style={[styles.chipText, { color: colors.primary }]}>+ Neues Thema</Text>
