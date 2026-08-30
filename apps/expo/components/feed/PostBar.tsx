@@ -17,10 +17,12 @@ export default function PostBar({ avatarUrl, onPress, disableFrame, fallbackInit
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.container,
-        { backgroundColor: colors.background, borderBottomColor: colors.border },
-      ]}
+      // Transparent on purpose: this bar lives INSIDE the feed's glass
+      // header (FeedHome's appHeader renders <GlassSurface> as its
+      // absolute-fill first child), so an opaque fill here would paint over
+      // the frost. GlassSurface's own no-blur fallback is a ~96% surface
+      // fill, so non-blur platforms still read as a solid bar.
+      style={[styles.container, { borderBottomColor: colors.border }]}
     >
       {/* Avatar — viewer's own, uses the equipped frame from the rewards hook */}
       <UserAvatarWithFrame
