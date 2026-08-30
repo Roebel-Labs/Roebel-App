@@ -178,8 +178,11 @@ export default function NotificationsInboxScreen() {
 
   const handleUserNotifPress = (notification: UserNotification) => {
     if (!notification.is_read) userNotifs.markAsRead(notification.id);
-    const postId = (notification.metadata as { post_id?: string } | undefined)?.post_id;
+    const metadata = notification.metadata as { post_id?: string; thread_id?: string } | undefined;
+    const postId = metadata?.post_id;
+    const threadId = metadata?.thread_id;
     if (postId) router.push(`/post/${postId}` as any);
+    else if (threadId) router.push(`/forum/thread/${threadId}` as any);
     else if (notification.type === 'story_invite' || notification.type === 'foerder_invite')
       router.push('/messages/mecky' as any);
   };

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
@@ -37,6 +37,13 @@ export default function ForumVoteCluster({
   const { user, isCitizen } = useUser();
   const [local, setLocal] = useState<{ vote: 1 | -1 | null; dUp: number; dDown: number } | null>(null);
   const generation = useRef(0);
+
+  // Fresh server counts already include any reconciled vote — drop the local
+  // overlay so the delta is never applied on top of itself. The myVote overlay
+  // in useForumVotes keeps the arrow highlight through this reset.
+  useEffect(() => {
+    setLocal(null);
+  }, [upvotes, downvotes]);
 
   const vote = local ? local.vote : myVote;
   const score = upvotes + (local?.dUp ?? 0) - (downvotes + (local?.dDown ?? 0));
