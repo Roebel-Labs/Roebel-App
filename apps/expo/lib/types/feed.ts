@@ -315,9 +315,12 @@ export type ForumThreadRecord = {
   body: string;
   status: 'published' | 'deleted' | 'flagged';
   reply_count: number;
+  upvotes_count: number;
+  downvotes_count: number;
   last_activity_at: string;
   created_at: string;
   updated_at: string;
+  edited_at: string | null;
   author?: PostAuthor;
   category?: Pick<ForumCategoryRecord, 'slug' | 'name'> | null;
 };
@@ -330,7 +333,10 @@ export type ForumReplyRecord = {
   account_id: string | null;
   body: string;
   status: 'published' | 'deleted';
+  upvotes_count: number;
+  downvotes_count: number;
   created_at: string;
+  edited_at: string | null;
   author?: PostAuthor;
 };
 

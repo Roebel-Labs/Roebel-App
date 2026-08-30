@@ -222,3 +222,199 @@ export async function deleteForumReply(id: string, walletAddress: string): Promi
   if (error) throw error;
   void mirrorDeletionToNostr('forum_reply', id);
 }
+
+// ─── Votes (spec §A2.2) ─────────────────────────────────────
+
+export type ForumVoteTarget = 'thread' | 'reply';
+
+export function decideVoteTransition(
+  current: 1 | -1 | null,
+  tapped: 1 | -1,
+): { action: 'insert' | 'delete' | 'flip'; value?: 1 | -1 } {
+  if (current === tapped) return { action: 'delete' };
+  if (current === null) return { action: 'insert', value: tapped };
+  return { action: 'flip', value: tapped };
+}
+
+/** Apply a vote tap. Returns the new vote state for optimistic UI. */
+export async function castForumVote(
+  targetType: ForumVoteTarget,
+  targetId: string,
+  walletAddress: string,
+  tapped: 1 | -1,
+  current: 1 | -1 | null,
+): Promise<1 | -1 | null> {
+  const t = decideVoteTransition(current, tapped);
+  if (t.action === 'delete') {
+    const { error } = await supabase
+      .from('forum_votes')
+      .delete()
+      .eq('target_type', targetType)
+      .eq('target_id', targetId)
+      .eq('wallet_address', walletAddress);
+    if (error) throw error;
+    void mirrorUnvote(targetType, targetId);
+    return null;
+  }
+  const { error } = await supabase.from('forum_votes').upsert(
+    {
+      target_type: targetType,
+      target_id: targetId,
+      wallet_address: walletAddress,
+      value: t.value,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'target_type,target_id,wallet_address' },
+  );
+  if (error) throw error;
+  void mirrorVote(targetType, targetId, t.value!, t.action === 'flip');
+  return t.value!;
+}
+
+async function mirrorVote(
+  targetType: ForumVoteTarget,
+  targetId: string,
+  value: 1 | -1,
+  isFlip: boolean,
+): Promise<void> {
+  try {
+    const { publishForumVote, publishForumUnvote } = await import('./nostr/publish');
+    if (isFlip) await publishForumUnvote(targetType, targetId);
+    await publishForumVote(targetType, targetId, value);
+  } catch (err) {
+    console.warn('[nostr] forum vote mirror skipped', (err as Error)?.message);
+  }
+}
+
+async function mirrorUnvote(targetType: ForumVoteTarget, targetId: string): Promise<void> {
+  try {
+    const { publishForumUnvote } = await import('./nostr/publish');
+    await publishForumUnvote(targetType, targetId);
+  } catch (err) {
+    console.warn('[nostr] forum unvote mirror skipped', (err as Error)?.message);
+  }
+}
+
+/** The viewer's own votes for a batch of targets, keyed `${type}:${id}`. */
+export async function fetchMyForumVotes(
+  walletAddress: string,
+  targets: Array<{ type: ForumVoteTarget; id: string }>,
+): Promise<Map<string, 1 | -1>> {
+  const map = new Map<string, 1 | -1>();
+  if (!walletAddress || targets.length === 0) return map;
+  const ids = [...new Set(targets.map((t) => t.id))];
+  const { data, error } = await supabase
+    .from('forum_votes')
+    .select('target_type, target_id, value')
+    .eq('wallet_address', walletAddress)
+    .in('target_id', ids);
+  if (error) {
+    console.error('Error fetching own forum votes:', error);
+    return map;
+  }
+  for (const row of (data ?? []) as Array<{ target_type: string; target_id: string; value: number }>) {
+    map.set(`${row.target_type}:${row.target_id}`, row.value === 1 ? 1 : -1);
+  }
+  return map;
+}
+
+// ─── Edit (owner-checked RPCs — direct-UPDATE policies were removed in the
+// Task 1 review fix; forum_threads_update/forum_replies_update no longer
+// exist, so edits route through the same SECURITY DEFINER pattern as the
+// delete RPCs) ────────────────────────────────────────────────────────────
+
+export async function updateForumThread(
+  id: string,
+  walletAddress: string,
+  updates: { title: string; body: string; category_slug?: string | null },
+): Promise<ForumThreadRecord | null> {
+  const { error } = await supabase.rpc('update_owned_forum_thread', {
+    p_thread_id: id,
+    p_wallet: walletAddress,
+    p_title: updates.title,
+    p_body: updates.body,
+    p_category_slug: updates.category_slug ?? null,
+  });
+  if (error) {
+    console.error('[updateForumThread] rpc error', error);
+    return null;
+  }
+  return fetchForumThread(id);
+}
+
+export async function updateForumReply(
+  id: string,
+  walletAddress: string,
+  body: string,
+): Promise<ForumReplyRecord | null> {
+  const { error } = await supabase.rpc('update_owned_forum_reply', {
+    p_reply_id: id,
+    p_wallet: walletAddress,
+    p_body: body,
+  });
+  if (error) {
+    console.error('[updateForumReply] rpc error', error);
+    return null;
+  }
+  const { data, error: fetchError } = await supabase
+    .from('forum_replies')
+    .select(REPLY_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+  if (fetchError || !data) return null;
+  return mergeAccountIntoAuthor(data as unknown as ForumReplyRecord);
+}
+
+// ─── Subscriptions + reports (spec §A2.5/A2.6) ─────────────────────────────
+
+export async function fetchThreadSubscription(
+  threadId: string,
+  walletAddress: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('forum_thread_subscriptions')
+    .select('id')
+    .eq('thread_id', threadId)
+    .eq('wallet_address', walletAddress)
+    .maybeSingle();
+  return !!data;
+}
+
+export async function toggleThreadSubscription(
+  threadId: string,
+  walletAddress: string,
+  subscribe: boolean,
+): Promise<void> {
+  if (subscribe) {
+    const { error } = await supabase
+      .from('forum_thread_subscriptions')
+      .upsert(
+        { thread_id: threadId, wallet_address: walletAddress },
+        { onConflict: 'thread_id,wallet_address' },
+      );
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('forum_thread_subscriptions')
+      .delete()
+      .eq('thread_id', threadId)
+      .eq('wallet_address', walletAddress);
+    if (error) throw error;
+  }
+}
+
+export async function reportForumContent(
+  targetType: ForumVoteTarget,
+  targetId: string,
+  reporterWallet: string,
+  reason?: string,
+): Promise<void> {
+  const { error } = await supabase.from('forum_reports').insert({
+    target_type: targetType,
+    target_id: targetId,
+    reporter_wallet: reporterWallet,
+    reason: reason || null,
+  });
+  // Unique-reporter constraint: a duplicate report is a no-op, not an error worth surfacing.
+  if (error && !`${error.message}`.includes('duplicate')) throw error;
+}

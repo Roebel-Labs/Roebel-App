@@ -232,6 +232,50 @@ export async function publishForumReply(
 }
 
 /**
+ * Mirror a forum vote as a NIP-25 reaction ('+' / '-') on the target's mirrored
+ * event. Public and attributable by design (spec §A2.2): the relay is the
+ * operator-independent audit trail; the app UI shows aggregates only.
+ */
+export async function publishForumVote(
+  targetType: 'thread' | 'reply',
+  targetId: string,
+  value: 1 | -1,
+): Promise<PublicationStatus> {
+  const identity = await loadStoredIdentity();
+  if (!identity) return 'pending';
+  const target = await publishedEventOf(
+    targetType === 'thread' ? 'forum_thread' : 'forum_reply',
+    targetId,
+  );
+  if (!target) return 'pending';
+  const event = buildEvent(identity.secretKey, 7, value === 1 ? '+' : '-', {
+    tags: [['e', target.eventId], ['p', target.pubkey]],
+  });
+  return publish(event, 'forum_vote', `${targetType}:${targetId}:${identity.publicKey.slice(0, 16)}`);
+}
+
+/** Retract a mirrored vote (NIP-09; advisory like publishUnlike). */
+export async function publishForumUnvote(
+  targetType: 'thread' | 'reply',
+  targetId: string,
+): Promise<void> {
+  const identity = await loadStoredIdentity();
+  if (!identity) return;
+  const voteEventId = await publishedEventIdOf(
+    'forum_vote',
+    `${targetType}:${targetId}:${identity.publicKey.slice(0, 16)}`,
+  );
+  if (!voteEventId) return;
+  try {
+    await relay().publish(
+      buildDeletionEvent(identity.secretKey, [voteEventId], { reason: 'Stimme zurückgenommen' }),
+    );
+  } catch {
+    // Advisory anyway; the app state is authoritative for the UI.
+  }
+}
+
+/**
  * Mirror a comment as a NIP-10 threaded reply.
  *
  * Only possible when the parent post itself is on the relay — a reply to an
