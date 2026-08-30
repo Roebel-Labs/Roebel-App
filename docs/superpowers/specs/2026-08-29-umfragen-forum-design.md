@@ -122,3 +122,48 @@ Federation note: forum kinds are ordinary public-record kinds — peers may opt 
 - **Branch:** `feat/umfragen-forum` off `feat/sdk56-upgrade` (inherits the RN 0.85 fixes; main still carries SDK 55).
 - **Testing:** TDD on event builders (kind 11/1111/32107 construction in packages/nostr / publish helpers) and on data mappers/hooks logic; UI verified on simulator/emulator. Full-repo tsc is skipped per standing preference (~431 pre-existing errors); new files must be individually clean.
 - **Commit discipline:** parallel sessions are active — pathspec-only commits, never `git add .`.
+
+---
+
+# Slice A2 — Reddit-grade interactions (approved 2026-08-30)
+
+Max's feedback round after shipping slice A (Reddit reference screenshots). Decisions settled in-conversation.
+
+## A2.1 FAB morph
+
+On the Umfragen (`rathaus`) tab the `FeedFAB` expands in width into a pill — pencil icon kept, animated label **"Thema starten"** — and navigates to `/forum/new`. Other tabs keep the round compose FAB. The "+ Neues Thema" chip disappears from the feed's category rail (the FAB owns creation there) but stays on the `/forum` list screens, which have no FAB.
+
+## A2.2 Votes — Supabase-first, mirrored to Nostr (Max's decision)
+
+Reddit-style up/downvote on threads AND replies, shown on the feed card, list cards, thread head, and each reply row (icons `circle-arrow-up-02`/`circle-arrow-down-02`, net score between the arrows; active up = primary, active down = `colors.error`).
+
+- **Primary rail: Supabase.** `forum_votes` (`target_type` thread|reply, `target_id`, `wallet_address`, `value` ±1, unique per voter+target) with denormalized `upvotes_count`/`downvotes_count` on both content tables via trigger. Tap semantics: same arrow again removes the vote; opposite arrow flips it. Instant/optimistic UI.
+- **Mirror rail: Nostr.** Every vote best-effort publishes a NIP-25 kind-7 reaction (`+`/`-`, `e`-tag to the mirrored target event) under the citizen's own key; un-voting retracts it with a kind-5 (the `publishLike`/`publishUnlike` idiom, ledger `source_type = 'forum_vote'`). **Votes are therefore publicly attributable on the relay — accepted trade-off for operator-independent verifiability** (Max, after weighing the chill-effect argument). The app UI shows aggregates only and never lists voters.
+- **Documented honestly:** in-app counts remain operator-writable (anon-key model); the relay mirror is the public audit trail. The Semaphore v4 zk vote rail (private + recountable, per-thread nullifiers) stays the named upgrade for making votes both anonymous and verifiable; binding decisions continue to live on the MACI rail regardless.
+
+## A2.3 Share
+
+Native share sheet on thread cards, thread head, and replies: title + deep link `roebel://forum/thread/<id>` (a web URL arrives with the web forum). Mirrors the existing `sharePost` idiom.
+
+## A2.4 Comment bar + single-level nested replies
+
+The thread screen's custom input row is replaced by the **`CommentInput`** component from the post-detail screens (same pill, avatar, reply-chip). `CommentInput` gains a small non-breaking `disableAttachments` prop (forum replies are text-only; sticker/image affordances hidden). Replies gain an "Antworten" affordance: single-level nesting exactly like post comments (`parentId = reply.parent_reply_id ?? reply.id`), children rendered indented under their top-level parent. A reply to a comment notifies that comment's author.
+
+## A2.5 Options sheets (thread + reply)
+
+`ForumOptionsDrawer`, modeled on `PostOptionsDrawer` (BottomDrawer + Ionicons rows):
+
+- Everyone: **Digitaler Nachweis** (when the target is on the relay — ledger lookup, links to index.roebel.app), **Teilen**, **Text kopieren** (expo-clipboard), **Melden** (new `forum_reports` table, unique-reporter idiom, reusing `ReportDrawer`).
+- Thread sheet additionally: **Benachrichtigungen an/aus** (per-thread subscription, A2.6).
+- Own content: **Bearbeiten**, **Löschen** (replaces slice A's bare "Löschen" links).
+- **Edit follows the posts precedent** (`updatePost`): Supabase-only with `edited_at` + "Bearbeitet" badge; the relay keeps the original event (thread event-ids stay stable for future NSP-12 citations). Thread edit reuses `/forum/new` in edit mode; reply edit puts the comment bar into edit mode.
+
+## A2.6 Notification model (Max's spec)
+
+- **Default ON (no setup):** replies to my thread, replies to my comment, and **upvotes** on my thread/reply (type `forum_vote`; never downvotes; body names no actor — votes stay aggregate-anonymous in-app even though the relay mirror is attributable).
+- **Manual opt-in for everything else:** a per-thread subscription (`forum_thread_subscriptions`, bell toggle in the thread header + options sheet). Subscribers get every new reply.
+- `notify_forum_reply` becomes a fanout: thread author ∪ parent-comment author ∪ subscribers, minus the actor, deduplicated. Push hub gains the `forum_vote` type (deep link to the thread).
+
+## A2 out of scope
+
+Media/stickers in replies; vote batching/milestones; Reddit-style Off/Low/Frequent levels (binary toggle only); web forum pages; the Semaphore zk vote rail.
