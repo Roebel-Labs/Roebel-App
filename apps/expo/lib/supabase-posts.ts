@@ -1257,7 +1257,7 @@ export async function fetchThisWeekEvents(): Promise<any[]> {
  * Uses two simple queries rather than a chained `!inner` embed, which is
  * flaky in PostgREST (see note in supabase-roebel-card-partners.ts).
  */
-async function resolveEventAuthors(events: any[]): Promise<void> {
+export async function resolveEventAuthors(events: any[]): Promise<void> {
   const isWalletLike = (s?: string | null) =>
     !!s && /^0x[0-9a-fA-F]{4,}/.test(s.trim());
 

@@ -1,29 +1,48 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, FlatList } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Pressable,
+  FlatList,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { resolveEventAuthors } from '@/lib/supabase-posts';
 import { EventRecord } from '@/lib/types';
-import EventCard from '@/components/EventCard';
-import { EventCardSkeleton } from '@/components/SkeletonLoader';
-import BottomNavigation from '@/components/BottomNavigation';
-import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
+import EventListRow from '@/components/EventListRow';
+import { EventListRowSkeleton } from '@/components/SkeletonLoader';
+import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
+import GlassSurface, { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
+import { fontFamily } from '@/constants/theme';
 import { CATEGORY_METADATA, EVENT_CATEGORIES, EventCategory } from '@/lib/categories';
 
 type PillFilter = 'Alle' | EventCategory;
 
 const PILLS: PillFilter[] = ['Alle', ...EVENT_CATEGORIES];
 
+/** Gutter for the whole screen — header, filter rail and list share it. */
+const GUTTER = 16;
+
 export default function EventsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<PillFilter>('Alle');
+  // Measured, not guessed: the chrome floats over the list, so the scroll
+  // content has to reserve exactly the height the header ends up taking
+  // (the filter rail wraps differently across font scales).
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   useEffect(() => {
     fetchEvents();
@@ -36,7 +55,10 @@ export default function EventsScreen() {
 
     const { data, error } = await supabase
       .from('events')
-      .select('*')
+      // The account embed feeds resolveEventAuthors, which turns the row into
+      // a display identity (org name/avatar, or the owner's user profile) —
+      // never a wallet address.
+      .select('*, account:accounts(id, name, avatar_url, account_type)')
       .eq('status', 'approved')
       .gte('date', todayString)
       .order('date', { ascending: true })
@@ -46,7 +68,9 @@ export default function EventsScreen() {
       console.error('Error fetching events:', error);
       setEvents([]);
     } else {
-      setEvents((data ?? []) as EventRecord[]);
+      const rows = (data ?? []) as any[];
+      await resolveEventAuthors(rows);
+      setEvents(rows as EventRecord[]);
     }
     setLoading(false);
   }
@@ -57,6 +81,10 @@ export default function EventsScreen() {
     setRefreshing(false);
   }
 
+  const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
+    setHeaderHeight(e.nativeEvent.layout.height);
+  }, []);
+
   const filteredEvents =
     activeFilter === 'Alle' ? events : events.filter((e) => e.category === activeFilter);
 
@@ -66,8 +94,8 @@ export default function EventsScreen() {
     const pillBackground = isActive
       ? colors.primary
       : isDark
-      ? '#4a4d52'
-      : colors.surfaceSecondary;
+      ? 'rgba(255,255,255,0.10)'
+      : 'rgba(0,0,0,0.05)';
     const labelColor = isActive ? colors.textInverted : colors.textPrimary;
 
     return (
@@ -79,6 +107,7 @@ export default function EventsScreen() {
           pressed && styles.pillPressed,
         ]}
         accessibilityRole="button"
+        accessibilityState={{ selected: isActive }}
         accessibilityLabel={item}
       >
         {meta && (
@@ -92,107 +121,146 @@ export default function EventsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <GlassProvider>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}
-          accessibilityRole="button"
-          accessibilityLabel="Zurück"
-        >
-          <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <FlatList
-        horizontal
-        data={PILLS}
-        renderItem={renderPill}
-        keyExtractor={(item) => item}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pillRow}
-        style={styles.pillRowContainer}
-      />
-
-            {/* GlassBackdrop: sampling surface for the frosted bottom nav (Android). */}
-      <GlassBackdrop style={{ flex: 1 }}>
-<ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-        }
-      >
-        {loading && (
-          <View style={styles.list}>
-            <EventCardSkeleton />
-            <EventCardSkeleton />
-            <EventCardSkeleton />
-          </View>
-        )}
-
-        {!loading && (
-          <View style={styles.list}>
-            {filteredEvents.length > 0 ? (
-              filteredEvents.map((event) => <EventCard key={event.id} event={event} />)
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  Keine Veranstaltungen gefunden.
-                </Text>
+        {/* GlassBackdrop: the surface Android's frosted chrome samples from.
+            The header and bottom nav deliberately sit OUTSIDE it, after it in
+            JSX order — see GlassSurface.tsx. */}
+        <GlassBackdrop style={styles.flex}>
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                paddingTop: headerHeight + 12,
+                paddingBottom: BOTTOM_NAV_HEIGHT + insets.bottom + 24,
+              },
+            ]}
+            showsVerticalScrollIndicator={false}
+            scrollIndicatorInsets={{ top: headerHeight }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                progressViewOffset={headerHeight}
+              />
+            }
+          >
+            {loading && (
+              <View style={styles.list}>
+                <EventListRowSkeleton />
+                <EventListRowSkeleton />
+                <EventListRowSkeleton />
               </View>
             )}
-          </View>
-        )}
-      </ScrollView>
-      </GlassBackdrop>
 
-      <View style={styles.navOverlay}>
-        <BottomNavigation
-          activeTab="explore"
-          onTabPress={(tab) => {
-            if (tab === 'home') router.replace('/');
-            else if (tab === 'explore') router.replace('/explore');
-            else if (tab === 'profile') router.push('/profile');
-          }} glass />
-      </View>
-    </GlassProvider>
-    </SafeAreaView>
+            {!loading && (
+              <View style={styles.list}>
+                {filteredEvents.length > 0 ? (
+                  filteredEvents.map((event, index) => (
+                    <EventListRow
+                      key={event.id}
+                      event={event}
+                      // One date chip per day: the rail only marks where a new
+                      // day starts, so same-day events hang under it.
+                      showDate={index === 0 || filteredEvents[index - 1].date !== event.date}
+                      showDivider={index < filteredEvents.length - 1}
+                    />
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      Keine Veranstaltungen gefunden.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </GlassBackdrop>
+
+        {/* Frosted chrome: title bar + category rail in one floating pane, the
+            same material the home feed uses. */}
+        <View style={[styles.headerFloating, { paddingTop: insets.top }]} onLayout={onHeaderLayout}>
+          <GlassSurface edge="bottom" androidExperimentalBlur />
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Zurück"
+            >
+              <ArrowLeftIcon size={24} color={colors.textPrimary} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Veranstaltungen</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <FlatList
+            horizontal
+            data={PILLS}
+            renderItem={renderPill}
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+            style={styles.pillRowContainer}
+          />
+        </View>
+
+        <View style={styles.navOverlay}>
+          <BottomNavigation
+            activeTab="explore"
+            glass
+            onTabPress={(tab) => {
+              if (tab === 'home') router.replace('/');
+              else if (tab === 'explore') router.replace('/explore');
+              else if (tab === 'profile') router.push('/profile');
+            }}
+          />
+        </View>
+      </GlassProvider>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  navOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   container: {
     flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  headerFloating: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 5,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 4,
+    minHeight: 48,
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+  },
+  backButtonPressed: {
+    opacity: 0.5,
   },
   headerTitle: {
-    fontSize: 22,
-    fontFamily: 'MonaSansSemiCondensed-Medium',
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 20,
+    fontFamily: fontFamily.headingSemiBold,
   },
   headerSpacer: {
     width: 40,
@@ -201,8 +269,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   pillRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: 4,
+    paddingBottom: 12,
     gap: 8,
   },
   pill: {
@@ -223,26 +292,27 @@ const styles = StyleSheet.create({
   },
   pillLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
-  scrollView: {
-    flex: 1,
+    fontFamily: fontFamily.medium,
   },
   scrollContent: {
-    paddingBottom: 120,
-    paddingTop: 8,
+    flexGrow: 1,
   },
   list: {
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: GUTTER,
   },
   emptyState: {
-    padding: 40,
+    paddingVertical: 48,
     alignItems: 'center',
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: fontFamily.regular,
     textAlign: 'center',
+  },
+  navOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });

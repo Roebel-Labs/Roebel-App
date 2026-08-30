@@ -37,6 +37,19 @@ export function formatEventCardDateSplit(dateISO: string): { day: string; label:
   }
 }
 
+// Date rail chip on the events overview: month over day over weekday, all
+// uppercase German ("OKT" / "10" / "DI"). date-fns abbreviates German months
+// and weekdays with a trailing dot, which the chip does not want.
+export function formatEventRailDate(dateISO: string): { month: string; day: string; weekday: string } {
+  const date = parseISO(dateISO);
+  const strip = (s: string) => s.replace(/\.$/, '').toUpperCase();
+  return {
+    month: strip(format(date, 'MMM', { locale: de })),
+    day: format(date, 'd'),
+    weekday: strip(format(date, 'EE', { locale: de })),
+  };
+}
+
 // Long-form date subtitle for linked event previews: "26. Mai · Montag"
 export function formatEventDateLong(dateISO: string): string {
   const date = parseISO(dateISO);

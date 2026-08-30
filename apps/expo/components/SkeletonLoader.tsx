@@ -42,6 +42,25 @@ export function EventCardSkeleton() {
   );
 }
 
+/** Agenda row shape used by the events overview (see EventListRow). */
+export function EventListRowSkeleton() {
+  return (
+    <View style={styles.eventRowSkeleton}>
+      <Skeleton width={52} height={66} borderRadius={12} />
+      <View style={styles.eventRowContent}>
+        <Skeleton height={140} borderRadius={12} />
+        <View style={styles.eventRowHost}>
+          <Skeleton width={20} height={20} borderRadius={10} />
+          <Skeleton width={110} height={14} />
+        </View>
+        <Skeleton width="85%" height={20} style={{ marginTop: 8 }} />
+        <Skeleton width="55%" height={15} style={{ marginTop: 10 }} />
+        <Skeleton width="40%" height={15} style={{ marginTop: 8 }} />
+      </View>
+    </View>
+  );
+}
+
 export function HeroCardSkeleton() {
   return (
     <View style={styles.heroCardSkeleton}>
@@ -484,6 +503,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+  },
+  eventRowSkeleton: {
+    flexDirection: 'row',
+    marginBottom: 36,
+  },
+  eventRowContent: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  eventRowHost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
   },
   heroCardSkeleton: {
     width: '100%',
