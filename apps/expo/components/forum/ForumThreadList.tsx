@@ -9,6 +9,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import ForumThreadCard from './ForumThreadCard';
 import ForumCategoryChips from './ForumCategoryChips';
 import { fetchRecentForumThreads } from '@/lib/supabase-forum';
+import { useForumVotes } from '@/hooks/useForumVotes';
 
 type Props = {
   /** undefined = all categories */
@@ -25,6 +26,8 @@ export default function ForumThreadList({ categorySlug, title }: Props) {
     queryFn: () => fetchRecentForumThreads(50, categorySlug),
   });
 
+  const { myVote, setLocal } = useForumVotes(threads.map((t) => ({ type: 'thread' as const, id: t.id })));
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
@@ -38,7 +41,13 @@ export default function ForumThreadList({ categorySlug, title }: Props) {
       <FlatList
         data={threads}
         keyExtractor={(t) => t.id}
-        renderItem={({ item }) => <ForumThreadCard thread={item} />}
+        renderItem={({ item }) => (
+          <ForumThreadCard
+            thread={item}
+            myVote={myVote('thread', item.id)}
+            onVoted={(next) => setLocal('thread', item.id, next)}
+          />
+        )}
         ItemSeparatorComponent={() => (
           <View style={[styles.separator, { backgroundColor: colors.borderTertiary }]} />
         )}

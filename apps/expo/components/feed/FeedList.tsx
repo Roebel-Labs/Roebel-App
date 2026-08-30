@@ -24,6 +24,7 @@ import type {
   GovernanceNudgeData,
   MeckyTipData,
   AudioPlayerData,
+  ForumThreadRecord,
 } from '@/lib/types/feed';
 import type {
   EventRecord,
@@ -53,6 +54,7 @@ import FeedProposalCard from './FeedProposalCard';
 import FeedProposalCommentCard from './FeedProposalCommentCard';
 import FeedProposalHeroCard from './FeedProposalHeroCard';
 import ForumThreadCard from '../forum/ForumThreadCard';
+import { useForumVotes } from '@/hooks/useForumVotes';
 
 export type FeedListHandle = {
   refresh: () => void;
@@ -196,6 +198,17 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
 
   const { items, isLoading, isRefreshing, isLoadingMore, hasMore, refresh, loadMore, removePost, likedPostIds, repostedPostIds } =
     useFeed(feedType, enabled);
+
+  // Vote hydration for forum_thread cards (rathaus feed only — the array is
+  // empty everywhere else, and useForumVotes is a no-op with an empty list).
+  const forumThreadTargets = React.useMemo(
+    () =>
+      items
+        .filter((i) => i.type === 'forum_thread')
+        .map((i) => ({ type: 'thread' as const, id: (i.data as ForumThreadRecord).id })),
+    [items],
+  );
+  const { myVote: forumMyVote, setLocal: setForumVoteLocal } = useForumVotes(forumThreadTargets);
 
   // Surface the newest content timestamp so FeedHome can flag unseen content
   // on inactive tabs. Section cards (news/cinema/…) carry no created_at and are
@@ -566,12 +579,18 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
             </View>
           );
 
-        case 'forum_thread':
+        case 'forum_thread': {
+          const forumThread = item.data as ForumThreadRecord;
           return (
             <View style={styles.moduleWrap}>
-              <ForumThreadCard thread={item.data} />
+              <ForumThreadCard
+                thread={forumThread}
+                myVote={forumMyVote('thread', forumThread.id)}
+                onVoted={(next) => setForumVoteLocal('thread', forumThread.id, next)}
+              />
             </View>
           );
+        }
 
         case 'proposal_hero':
           return (
@@ -599,6 +618,8 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       getShareHandler,
       getMoreHandler,
       handleRepost,
+      forumMyVote,
+      setForumVoteLocal,
     ],
   );
 

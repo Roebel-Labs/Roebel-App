@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   FlatList,
   StyleSheet,
@@ -14,21 +13,59 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import ShareIcon from '@/assets/icons/share-02.svg';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import CommentInput from '@/components/feed/CommentInput';
+import ReportDrawer from '@/components/feed/ReportDrawer';
+import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
+import ForumOptionsDrawer from '@/components/forum/ForumOptionsDrawer';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
+import { useForumVotes } from '@/hooks/useForumVotes';
+import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { supabase } from '@/lib/supabase';
+import { shareForumThread, shareForumReply } from '@/lib/forum-share';
 import {
   createForumReply,
   deleteForumReply,
   deleteForumThread,
   fetchForumReplies,
   fetchForumThread,
+  fetchThreadSubscription,
+  toggleThreadSubscription,
+  reportForumContent,
+  updateForumReply,
+  type ForumVoteTarget,
 } from '@/lib/supabase-forum';
 import type { ForumReplyRecord } from '@/lib/types/feed';
+
+type GroupedReply = ForumReplyRecord & { children: ForumReplyRecord[] };
+
+/** Replies are single-level nested (spec §A2.4): a reply's parent_reply_id
+ *  always points directly at a top-level reply, never at another nested
+ *  reply. Group into top-level + their direct children for rendering. */
+function groupReplies(replies: ForumReplyRecord[]): GroupedReply[] {
+  const byId = new Map<string, GroupedReply>();
+  replies.forEach((r) => byId.set(r.id, { ...r, children: [] }));
+  const topLevel: GroupedReply[] = [];
+  replies.forEach((r) => {
+    const node = byId.get(r.id)!;
+    if (r.parent_reply_id && byId.has(r.parent_reply_id)) {
+      byId.get(r.parent_reply_id)!.children.push(r);
+    } else {
+      topLevel.push(node);
+    }
+  });
+  return topLevel;
+}
+
+type ReplyTarget = { id: string; parentId: string; name: string };
+type OptionsTarget = { type: ForumVoteTarget; id: string };
 
 export default function ForumThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,9 +74,15 @@ export default function ForumThreadScreen() {
   const queryClient = useQueryClient();
   const { user, isCitizen } = useUser();
   const { activeAccount } = useAccount();
+  const activeProfileImage = useActiveProfileImage();
 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  const [editingReply, setEditingReply] = useState<ForumReplyRecord | null>(null);
+  const [optionsFor, setOptionsFor] = useState<OptionsTarget | null>(null);
+  const [reportFor, setReportFor] = useState<OptionsTarget | null>(null);
 
   const { data: thread, isPending } = useQuery({
     queryKey: ['forum', 'thread', id],
@@ -51,6 +94,20 @@ export default function ForumThreadScreen() {
     queryFn: () => fetchForumReplies(id!),
     enabled: !!id,
   });
+
+  const { data: isSubscribed = false } = useQuery({
+    queryKey: ['forum', 'subscription', id, user?.wallet_address],
+    queryFn: () => fetchThreadSubscription(id!, user!.wallet_address!),
+    enabled: !!id && !!user?.wallet_address,
+  });
+
+  const groupedReplies = useMemo(() => groupReplies(replies), [replies]);
+
+  const voteTargets = useMemo(() => {
+    if (!id) return [];
+    return [{ type: 'thread' as const, id }, ...replies.map((r) => ({ type: 'reply' as const, id: r.id }))];
+  }, [id, replies]);
+  const { myVote, setLocal } = useForumVotes(voteTargets);
 
   useEffect(() => {
     if (!id) return;
@@ -70,26 +127,48 @@ export default function ForumThreadScreen() {
     };
   }, [id, queryClient]);
 
-  const handleSend = async () => {
-    const body = draft.trim();
+  const handleSubmit = async (content: string) => {
+    const body = content.trim();
     if (!body || sending || !user?.wallet_address || !id) return;
     setSending(true);
-    const reply = await createForumReply({
-      thread_id: id,
-      wallet_address: user.wallet_address,
-      account_id: activeAccount?.id,
-      body,
-    });
+    setSendError(null);
+    const result = editingReply
+      ? await updateForumReply(editingReply.id, user.wallet_address, body)
+      : await createForumReply({
+          thread_id: id,
+          wallet_address: user.wallet_address,
+          account_id: activeAccount?.id,
+          body,
+          parent_reply_id: replyTo?.parentId ?? null,
+        });
     setSending(false);
-    if (reply) {
-      setDraft('');
-      await queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
-      await queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+    if (!result) {
+      setSendError('Antwort konnte nicht gesendet werden.');
+      return;
+    }
+    setDraft('');
+    setReplyTo(null);
+    setEditingReply(null);
+    await queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
+    await queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+  };
+
+  const handleToggleSubscription = async () => {
+    if (!id || !user?.wallet_address) return;
+    try {
+      await toggleThreadSubscription(id, user.wallet_address, !isSubscribed);
+      await queryClient.invalidateQueries({
+        queryKey: ['forum', 'subscription', id, user.wallet_address],
+      });
+    } catch {
+      Alert.alert('Fehler', 'Benachrichtigungen konnten nicht geändert werden.');
     }
   };
 
   const isOwn = (walletAddress: string) =>
     !!user?.wallet_address && walletAddress.toLowerCase() === user.wallet_address.toLowerCase();
+
+  const findReply = (replyId: string) => replies.find((r) => r.id === replyId);
 
   const handleDeleteThread = () => {
     if (!thread || !user?.wallet_address) return;
@@ -131,15 +210,108 @@ export default function ForumThreadScreen() {
     ]);
   };
 
-  const renderReply = ({ item }: { item: ForumReplyRecord }) => (
-    <View style={[styles.reply, { borderColor: colors.borderTertiary }]}>
-      <PostAuthorRow author={item.author} createdAt={item.created_at} />
-      <Text style={[styles.replyBody, { color: colors.textPrimary }]}>{item.body}</Text>
-      {isOwn(item.wallet_address) && (
-        <Pressable onPress={() => handleDeleteReply(item)} hitSlop={8}>
-          <Text style={[styles.deleteLink, { color: colors.textTertiary }]}>Löschen</Text>
+  // ─── Options drawer target resolution ────────────────────────────────────
+  const isOwnerOfTarget = (target: OptionsTarget | null): boolean => {
+    if (!target || !thread) return false;
+    if (target.type === 'thread') return isOwn(thread.wallet_address);
+    const reply = findReply(target.id);
+    return reply ? isOwn(reply.wallet_address) : false;
+  };
+
+  const handleShareTarget = (target: OptionsTarget | null) => {
+    if (!target || !thread) return;
+    if (target.type === 'thread') {
+      void shareForumThread(thread.title, thread.id);
+      return;
+    }
+    const reply = findReply(target.id);
+    if (reply) void shareForumReply(reply.body, thread.id);
+  };
+
+  const handleCopyTarget = async (target: OptionsTarget | null) => {
+    if (!target || !thread) return;
+    const body = target.type === 'thread' ? thread.body : findReply(target.id)?.body;
+    if (body) await Clipboard.setStringAsync(body);
+  };
+
+  const handleEditTarget = (target: OptionsTarget | null) => {
+    if (!target || !thread) return;
+    if (target.type === 'thread') {
+      router.push(`/forum/new?edit=${thread.id}` as any);
+      return;
+    }
+    const reply = findReply(target.id);
+    if (reply) {
+      setReplyTo(null);
+      setEditingReply(reply);
+      setDraft(reply.body);
+    }
+  };
+
+  const handleDeleteTarget = (target: OptionsTarget | null) => {
+    if (!target || !thread) return;
+    if (target.type === 'thread') {
+      handleDeleteThread();
+      return;
+    }
+    const reply = findReply(target.id);
+    if (reply) handleDeleteReply(reply);
+  };
+
+  const handleReport = async (reason: string) => {
+    if (!reportFor || !user?.wallet_address) return;
+    await reportForumContent(reportFor.type, reportFor.id, user.wallet_address, reason);
+  };
+
+  const renderReplyRow = (reply: ForumReplyRecord, isChild: boolean) => (
+    <View key={reply.id} style={isChild ? styles.replyChild : styles.reply}>
+      <PostAuthorRow
+        author={reply.author}
+        createdAt={reply.created_at}
+        onMore={() => setOptionsFor({ type: 'reply', id: reply.id })}
+      />
+      {reply.edited_at ? (
+        <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
+      ) : null}
+      <Text style={[styles.replyBody, { color: colors.textPrimary }]}>{reply.body}</Text>
+      <View style={styles.replyActions}>
+        <ForumVoteCluster
+          targetType="reply"
+          targetId={reply.id}
+          upvotes={reply.upvotes_count ?? 0}
+          downvotes={reply.downvotes_count ?? 0}
+          myVote={myVote('reply', reply.id)}
+          onVoted={(next) => setLocal('reply', reply.id, next)}
+          compact
+        />
+        <Pressable
+          onPress={() =>
+            setReplyTo({
+              id: reply.id,
+              parentId: reply.parent_reply_id ?? reply.id,
+              name: reply.author?.account?.name ?? reply.author?.username ?? 'Unbekannt',
+            })
+          }
+          hitSlop={8}
+        >
+          <Text style={[styles.replyLink, { color: colors.textSecondary }]}>Antworten</Text>
         </Pressable>
-      )}
+        <Pressable
+          onPress={() => void shareForumReply(reply.body, thread!.id)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Teilen"
+        >
+          <ShareIcon width={16} height={16} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const renderReply = ({ item }: { item: GroupedReply }) => (
+    <View style={[styles.replyGroup, { borderColor: colors.borderTertiary }]}>
+      {renderReplyRow(item, false)}
+      {item.children.map((child) => renderReplyRow(child, true))}
     </View>
   );
 
@@ -154,7 +326,24 @@ export default function ForumThreadScreen() {
             <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Diskussion</Text>
-          <View style={{ width: 24 }} />
+          {user?.wallet_address ? (
+            <Pressable
+              onPress={handleToggleSubscription}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isSubscribed ? 'Benachrichtigungen deaktivieren' : 'Benachrichtigungen aktivieren'
+              }
+            >
+              <Ionicons
+                name={isSubscribed ? 'notifications' : 'notifications-outline'}
+                size={22}
+                color={isSubscribed ? colors.primary : colors.textPrimary}
+              />
+            </Pressable>
+          ) : (
+            <View style={{ width: 24 }} />
+          )}
         </View>
 
         {isPending || !thread ? (
@@ -169,7 +358,7 @@ export default function ForumThreadScreen() {
           </View>
         ) : (
           <FlatList
-            data={replies}
+            data={groupedReplies}
             keyExtractor={(r) => r.id}
             renderItem={renderReply}
             contentContainerStyle={styles.listContent}
@@ -181,16 +370,36 @@ export default function ForumThreadScreen() {
                   </Text>
                 ) : null}
                 <Text style={[styles.title, { color: colors.textPrimary }]}>{thread.title}</Text>
-                <PostAuthorRow author={thread.author} createdAt={thread.created_at} />
+                <PostAuthorRow
+                  author={thread.author}
+                  createdAt={thread.created_at}
+                  onMore={() => setOptionsFor({ type: 'thread', id: thread.id })}
+                />
+                {thread.edited_at ? (
+                  <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
+                ) : null}
                 <Text style={[styles.body, { color: colors.textPrimary }]}>{thread.body}</Text>
+                <View style={styles.threadHeadActions}>
+                  <ForumVoteCluster
+                    targetType="thread"
+                    targetId={thread.id}
+                    upvotes={thread.upvotes_count ?? 0}
+                    downvotes={thread.downvotes_count ?? 0}
+                    myVote={myVote('thread', thread.id)}
+                    onVoted={(next) => setLocal('thread', thread.id, next)}
+                  />
+                  <Pressable
+                    onPress={() => void shareForumThread(thread.title, thread.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Teilen"
+                  >
+                    <ShareIcon width={20} height={20} color={colors.textSecondary} />
+                  </Pressable>
+                </View>
                 <Text style={[styles.replyCount, { color: colors.textSecondary }]}>
                   {thread.reply_count === 1 ? '1 Antwort' : `${thread.reply_count} Antworten`}
                 </Text>
-                {isOwn(thread.wallet_address) && (
-                  <Pressable onPress={() => handleDeleteThread()} hitSlop={8}>
-                    <Text style={[styles.deleteLink, { color: colors.textTertiary }]}>Löschen</Text>
-                  </Pressable>
-                )}
               </View>
             }
             ListEmptyComponent={
@@ -202,33 +411,57 @@ export default function ForumThreadScreen() {
         )}
 
         {isCitizen && thread && (
-          <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
-            <TextInput
+          <View style={styles.inputWrap}>
+            {sendError ? (
+              <Text style={[styles.sendError, { color: colors.error }]}>{sendError}</Text>
+            ) : null}
+            <CommentInput
               value={draft}
-              onChangeText={setDraft}
-              placeholder="Antworten …"
-              placeholderTextColor={colors.textTertiary}
-              multiline
-              maxLength={10000}
-              style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.surface }]}
+              onChangeText={(text) => {
+                setDraft(text);
+                setSendError(null);
+              }}
+              isSubmitting={sending}
+              disableAttachments
+              replyingToName={editingReply ? 'Antwort bearbeiten' : (replyTo?.name ?? null)}
+              onCancelReply={() => {
+                setReplyTo(null);
+                setEditingReply(null);
+                setDraft('');
+              }}
+              walletAddress={user?.wallet_address}
+              avatarUrl={activeProfileImage.url}
+              avatarFallbackInitial={activeProfileImage.fallbackInitial}
+              onSubmit={async (content) => {
+                await handleSubmit(content);
+              }}
             />
-            <Pressable onPress={handleSend} disabled={!draft.trim() || sending} hitSlop={8}>
-              {sending ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text
-                  style={[
-                    styles.send,
-                    { color: draft.trim() ? colors.primary : colors.textTertiary },
-                  ]}
-                >
-                  Senden
-                </Text>
-              )}
-            </Pressable>
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <ForumOptionsDrawer
+        visible={!!optionsFor}
+        onClose={() => setOptionsFor(null)}
+        targetType={optionsFor?.type ?? 'thread'}
+        targetId={optionsFor?.id ?? ''}
+        isOwner={isOwnerOfTarget(optionsFor)}
+        onShare={() => handleShareTarget(optionsFor)}
+        onCopy={() => void handleCopyTarget(optionsFor)}
+        onReport={() => {
+          if (optionsFor) setReportFor(optionsFor);
+        }}
+        onEdit={() => handleEditTarget(optionsFor)}
+        onDelete={() => handleDeleteTarget(optionsFor)}
+        isSubscribed={isSubscribed}
+        onToggleSubscription={handleToggleSubscription}
+      />
+
+      <ReportDrawer
+        visible={!!reportFor}
+        onClose={() => setReportFor(null)}
+        onReport={handleReport}
+      />
     </SafeAreaView>
   );
 }
@@ -256,13 +489,26 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: fontFamily.heading, lineHeight: 26 },
   body: { fontSize: 15, fontFamily: fontFamily.regular, lineHeight: 22 },
   replyCount: { fontSize: 12, fontFamily: fontFamily.regular },
-  reply: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 6,
+  threadHeadActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  editedText: { fontSize: 12, fontFamily: fontFamily.regular },
+  replyGroup: {
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  reply: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 6,
+  },
+  replyChild: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    marginLeft: 32,
+    gap: 6,
+  },
   replyBody: { fontSize: 14, fontFamily: fontFamily.regular, lineHeight: 20 },
+  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  replyLink: { fontSize: 12, fontFamily: fontFamily.medium },
   empty: {
     textAlign: 'center',
     marginTop: 32,
@@ -270,23 +516,15 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     paddingHorizontal: 32,
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  inputWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
-  input: {
-    flex: 1,
-    fontSize: 15,
+  sendError: {
+    fontSize: 12,
     fontFamily: fontFamily.regular,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    maxHeight: 120,
+    paddingHorizontal: 4,
+    paddingBottom: 6,
   },
-  send: { fontSize: 15, fontFamily: fontFamily.semiBold, paddingBottom: 8 },
-  deleteLink: { fontSize: 12, fontFamily: fontFamily.regular },
 });
