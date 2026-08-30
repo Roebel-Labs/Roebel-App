@@ -18,21 +18,21 @@ import MapLoadingSkeleton from '@/components/MapLoadingSkeleton';
 import MapboxMapView from '@/components/map/MapboxMapView';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
-import MapFilterChips, { type MapFilter } from '@/components/map/MapFilterChips';
-import MapPreviewCarousel, {
-  type CarouselItem,
-} from '@/components/map/MapPreviewCarousel';
+import MapFilterBar from '@/components/map/MapFilterBar';
+import MapPlaceSheet, { type PlaceItem } from '@/components/map/MapPlaceSheet';
 import VerlorenSheet from '@/components/utilities/VerlorenSheet';
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
+import { fontFamily } from '@/constants/theme';
 import { MAP_PRIVACY_STORAGE_KEY, ROEBEL_CENTER } from '@/lib/map/constants';
 import {
   processEventsWithCoordinates,
   entitiesToGeoJSON,
   type EventWithCoordinates,
 } from '@/lib/map/geojson';
+import { filterOpenNow, type MapFilterState } from '@/lib/map/filters';
 import type {
   EventRecord,
   RestaurantRecord,
@@ -66,8 +66,6 @@ import {
 // which screen loads first. Fails gracefully in Expo Go (Mapbox === null).
 import { isMapboxAvailable } from '@/lib/map/mapbox';
 
-const SHEET_LIFT_PX = 200;
-
 export default function LocationScreen() {
   const router = useRouter();
   const { selectedEventId, focusEntityType, focusEntityId, filterOnly } = useLocalSearchParams<{
@@ -86,8 +84,8 @@ export default function LocationScreen() {
   const [pois, setPois] = useState<PoiRecord[]>([]);
   const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [carousel, setCarousel] = useState<{
-    items: CarouselItem[];
+  const [selection, setSelection] = useState<{
+    items: PlaceItem[];
     selectedId: string;
   } | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
@@ -104,41 +102,64 @@ export default function LocationScreen() {
     ROEBEL_CENTER
   );
 
-  // Slide bottom row up when the carousel is visible
-  const bottomTranslate = useRef(new Animated.Value(0)).current;
+  // Fade the map chrome (bottom row + filter bar) out while the sheet is open
+  const chromeOpacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.timing(bottomTranslate, {
-      toValue: carousel ? -SHEET_LIFT_PX : 0,
-      duration: 320,
+    Animated.timing(chromeOpacity, {
+      toValue: selection ? 0 : 1,
+      duration: 200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [carousel, bottomTranslate]);
+  }, [selection, chromeOpacity]);
 
-  const [mapFilter, setMapFilter] = useState<MapFilter>(
+  const [mapFilter, setMapFilter] = useState<MapFilterState>(
     filterOnly === 'orgs'
-      ? { events: false, restaurants: true, businesses: true, pois: false }
-      : { events: true, restaurants: true, businesses: true, pois: false }
+      ? { events: false, restaurants: true, businesses: true, pois: false, openNow: false }
+      : { events: true, restaurants: true, businesses: true, pois: false, openNow: false }
   );
 
   // Re-apply the filter if the deep-link param changes after mount
   useEffect(() => {
     if (filterOnly === 'orgs') {
-      setMapFilter({ events: false, restaurants: true, businesses: true, pois: false });
+      setMapFilter({
+        events: false,
+        restaurants: true,
+        businesses: true,
+        pois: false,
+        openNow: false,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterOnly]);
+
+  // "Jetzt geöffnet" applies to places with opening hours; a marker tap still
+  // finds its entity because buildPlaceItems uses the unfiltered lists.
+  const visibleRestaurants = useMemo(
+    () => filterOpenNow(restaurants, mapFilter.openNow),
+    [restaurants, mapFilter.openNow]
+  );
+  const visibleBusinesses = useMemo(
+    () => filterOpenNow(businesses, mapFilter.openNow),
+    [businesses, mapFilter.openNow]
+  );
 
   const geojson = useMemo(
     () =>
       entitiesToGeoJSON(
         mapFilter.events ? events : [],
-        mapFilter.restaurants ? restaurants : [],
-        mapFilter.businesses ? businesses : [],
+        mapFilter.restaurants ? visibleRestaurants : [],
+        mapFilter.businesses ? visibleBusinesses : [],
         mapFilter.pois ? pois : []
       ),
-    [events, restaurants, businesses, pois, mapFilter]
+    [events, visibleRestaurants, visibleBusinesses, pois, mapFilter]
   );
+
+  const selectedFeatureId = useMemo(() => {
+    if (!selection) return null;
+    const item = selection.items.find((it) => it.id === selection.selectedId);
+    return item ? `${item.entityType}-${item.id}` : null;
+  }, [selection]);
 
   // Privacy consent
   useEffect(() => {
@@ -198,7 +219,7 @@ export default function LocationScreen() {
     if (selectedEventId && events.length > 0) {
       const event = events.find((e) => e.id === selectedEventId);
       if (event) {
-        openCarouselFor('event', event.id);
+        openSelectionFor('event', event.id);
         setFlyToCoordinate([event.longitude, event.latitude]);
       }
     }
@@ -209,7 +230,7 @@ export default function LocationScreen() {
   useEffect(() => {
     if (!focusEntityType || !focusEntityId) return;
     if (loading) return;
-    openCarouselFor(focusEntityType, focusEntityId);
+    openSelectionFor(focusEntityType, focusEntityId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusEntityType, focusEntityId, loading, events, restaurants, businesses, pois]);
 
@@ -259,8 +280,8 @@ export default function LocationScreen() {
     }
   };
 
-  // Build a CarouselItem list of all entities of the given type
-  const buildCarouselItems = (entityType: MapEntityType): CarouselItem[] => {
+  // Build a PlaceItem list of all entities of the given type
+  const buildPlaceItems = (entityType: MapEntityType): PlaceItem[] => {
     if (entityType === 'event') {
       return events.map((e) => ({
         id: e.id,
@@ -304,21 +325,21 @@ export default function LocationScreen() {
     return [];
   };
 
-  const openCarouselFor = (entityType: MapEntityType, id: string) => {
-    const items = buildCarouselItems(entityType);
+  const openSelectionFor = (entityType: MapEntityType, id: string) => {
+    const items = buildPlaceItems(entityType);
     if (items.length === 0) return;
     const target = items.find((it) => it.id === id);
     if (!target) return;
-    setCarousel({ items, selectedId: id });
+    setSelection({ items, selectedId: id });
     setFlyToCoordinate([target.lon, target.lat]);
   };
 
   const handleMarkerPress = (id: string, entityType: MapEntityType) => {
-    openCarouselFor(entityType, id);
+    openSelectionFor(entityType, id);
   };
 
-  const handleCarouselSelectionChange = (item: CarouselItem) => {
-    setCarousel((prev) => (prev ? { ...prev, selectedId: item.id } : prev));
+  const handleSheetSelectionChange = (item: PlaceItem) => {
+    setSelection((prev) => (prev ? { ...prev, selectedId: item.id } : prev));
     setFlyToCoordinate([item.lon, item.lat]);
   };
 
@@ -361,7 +382,7 @@ export default function LocationScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.mapContainer}>
         {!privacyAccepted ? (
           <MapPrivacyConsent onAccept={handlePrivacyAccept} />
@@ -380,6 +401,7 @@ export default function LocationScreen() {
               geojson={geojson}
               onMarkerPress={handleMarkerPress}
               flyToCoordinate={flyToCoordinate}
+              selectedFeatureId={selectedFeatureId}
               vehiclesGeoJSON={showLiveBuses ? vehiclesGeoJSON : null}
               onVehiclePress={(depId) => {
                 const v = vehicles.find((x) => x.id === depId);
@@ -415,28 +437,19 @@ export default function LocationScreen() {
             <SafeAreaView style={styles.topHeader} edges={['top']} pointerEvents="box-none">
               <Pressable
                 onPress={() => router.back()}
-                style={styles.headerCircle}
+                style={[styles.headerCircle, { backgroundColor: colors.card }]}
                 accessibilityLabel="Zurück"
               >
-                <ArrowLeftIcon size={20} color="#000000" />
+                <ArrowLeftIcon size={20} color={colors.textPrimary} />
               </Pressable>
               <Pressable
                 onPress={() => setShowSearchModal(true)}
-                style={styles.headerCircle}
+                style={[styles.headerCircle, { backgroundColor: colors.card }]}
                 accessibilityLabel="Suchen"
               >
-                <SearchIcon size={20} color="#000000" />
+                <SearchIcon size={20} color={colors.textPrimary} />
               </Pressable>
             </SafeAreaView>
-
-            {/* Filter chips — horizontal scrollable, Live ÖPNV at end */}
-            <MapFilterChips
-              filter={mapFilter}
-              onFilterChange={setMapFilter}
-              liveBuses={showLiveBuses}
-              onToggleLiveBuses={() => setShowLiveBuses((v) => !v)}
-              liveBusCount={vehicles.length}
-            />
 
             {/* Today's advisories — visible when Tipps layer is on */}
             {mapFilter.pois && advisories.length > 0 ? (
@@ -446,7 +459,7 @@ export default function LocationScreen() {
                     key={adv.id}
                     style={[
                       styles.advisoryChip,
-                      { backgroundColor: '#ffffff' },
+                      { backgroundColor: colors.card },
                     ]}
                   >
                     <Text style={styles.advisoryEmoji}>
@@ -465,37 +478,45 @@ export default function LocationScreen() {
               </View>
             ) : null}
 
-            {/* Bottom row — SOS / Erkunden / MyLocation, slides up when sheet visible */}
+            {/* Bottom emoji filter bar — sits above the action row */}
+            <MapFilterBar
+              filter={mapFilter}
+              onFilterChange={setMapFilter}
+              liveBuses={showLiveBuses}
+              onToggleLiveBuses={() => setShowLiveBuses((v) => !v)}
+              liveBusCount={vehicles.length}
+              bottom={bottomBase + 62}
+              opacity={chromeOpacity}
+            />
+
+            {/* Bottom row — SOS / Erkunden / MyLocation, fades behind the sheet */}
             <Animated.View
-              style={[
-                styles.bottomRow,
-                { bottom: bottomBase, transform: [{ translateY: bottomTranslate }] },
-              ]}
-              pointerEvents="box-none"
+              style={[styles.bottomRow, { bottom: bottomBase, opacity: chromeOpacity }]}
+              pointerEvents={selection ? 'none' : 'box-none'}
             >
               <Pressable
                 onPress={() => setShowVerloren(true)}
-                style={[styles.iconButton, { backgroundColor: '#ffffff' }]}
+                style={[styles.iconButton, { backgroundColor: colors.card }]}
                 accessibilityLabel="Wo bin ich verloren"
               >
-                <CallIcon size={20} color="#000000" />
+                <CallIcon size={20} color={colors.textPrimary} />
               </Pressable>
 
               <Pressable
                 onPress={() => router.push('/explore' as any)}
-                style={[styles.erkundenPill, { backgroundColor: '#ffffff' }]}
+                style={[styles.erkundenPill, { backgroundColor: colors.card }]}
                 accessibilityLabel="Erkunden öffnen"
               >
-                <DiscoverStroke width={18} height={18} color="#000000" />
-                <Text style={styles.erkundenText}>Erkunden</Text>
+                <DiscoverStroke width={18} height={18} color={colors.textPrimary} />
+                <Text style={[styles.erkundenText, { color: colors.textPrimary }]}>Erkunden</Text>
               </Pressable>
 
               <Pressable
                 onPress={handleLocateMe}
-                style={[styles.iconButton, { backgroundColor: '#ffffff' }]}
+                style={[styles.iconButton, { backgroundColor: colors.card }]}
                 accessibilityLabel="Mein Standort"
               >
-                <LocationIcon size={20} color="#000000" />
+                <LocationIcon size={20} color={colors.textPrimary} />
               </Pressable>
             </Animated.View>
           </>
@@ -504,13 +525,12 @@ export default function LocationScreen() {
 
       <VerlorenSheet visible={showVerloren} onClose={() => setShowVerloren(false)} />
 
-      {carousel ? (
-        <MapPreviewCarousel
-          items={carousel.items}
-          initialId={carousel.selectedId}
-          onClose={() => setCarousel(null)}
-          onSelectionChange={handleCarouselSelectionChange}
-          bottom={bottomBase}
+      {selection ? (
+        <MapPlaceSheet
+          items={selection.items}
+          selectedId={selection.selectedId}
+          onClose={() => setSelection(null)}
+          onSelectionChange={handleSheetSelectionChange}
         />
       ) : null}
 
@@ -540,7 +560,6 @@ function advisoryEmoji(type: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   mapContainer: {
     flex: 1,
@@ -554,7 +573,7 @@ const styles = StyleSheet.create({
   },
   mapFallbackText: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -573,7 +592,6 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -610,7 +628,7 @@ const styles = StyleSheet.create({
   },
   advisoryText: {
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
   bottomRow: {
     position: 'absolute',
@@ -648,9 +666,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   erkundenText: {
-    color: '#000000',
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
   fallbackContainer: {
     flex: 1,
@@ -664,13 +681,13 @@ const styles = StyleSheet.create({
   },
   fallbackTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: fontFamily.semiBold,
     marginBottom: 8,
     textAlign: 'center',
   },
   fallbackText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
+    fontFamily: fontFamily.regular,
     textAlign: 'center',
     lineHeight: 22,
   },

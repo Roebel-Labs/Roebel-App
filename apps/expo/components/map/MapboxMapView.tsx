@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import {
@@ -6,30 +6,46 @@ import {
   DEFAULT_ZOOM,
   MIN_ZOOM,
   MAX_ZOOM,
+  CLUSTER_RADIUS,
+  CLUSTER_MAX_ZOOM,
 } from '@/lib/map/constants';
 import type { MapGeoJSON } from '@/lib/map/geojson';
+import { MARKER_IMAGES } from '@/lib/map/markers';
 import type { MapEntityType } from '@/lib/types';
-import MakiIcon from './MakiIcon';
 import { Mapbox } from '@/lib/map/mapbox';
 
 type Props = {
   geojson: MapGeoJSON;
   onMarkerPress: (id: string, entityType: MapEntityType) => void;
   flyToCoordinate?: [number, number] | null; // [lng, lat]
-  // Optional live vehicle layer (simulated bus/ferry positions)
+  // fid ("entityType-id") of the currently selected pin — gets an accent ring
+  selectedFeatureId?: string | null;
   vehiclesGeoJSON?: GeoJSON.FeatureCollection<GeoJSON.Point> | null;
   onVehiclePress?: (departureId: string) => void;
 };
+
+// Marker circle radius / emoji text size / PNG icon scale per size class
+const PIN_RADIUS = ['match', ['get', 'size'], 'sm', 11, 'md', 15, 'lg', 21, 15];
+const EMOJI_SIZE = ['match', ['get', 'size'], 'sm', 12, 'md', 17, 'lg', 24, 17];
+const ICON_SCALE = ['match', ['get', 'size'], 'sm', 0.25, 'md', 0.35, 'lg', 0.5, 0.35];
+const LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
+
+const NOT_CLUSTER = ['!', ['has', 'point_count']];
+const IS_CLUSTER = ['has', 'point_count'];
+const HAS_IMAGE = ['has', 'markerImage'];
+const NO_IMAGE = ['!', ['has', 'markerImage']];
 
 export default function MapboxMapView({
   geojson,
   onMarkerPress,
   flyToCoordinate,
+  selectedFeatureId,
   vehiclesGeoJSON,
   onVehiclePress,
 }: Props) {
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const cameraRef = useRef<any>(null);
+  const entitySourceRef = useRef<any>(null);
 
   // Outdoors style is more vibrant for the Müritz Nationalpark setting
   // (terrain, parks, water in color); fall back to Light/Dark for monochrome.
@@ -39,7 +55,6 @@ export default function MapboxMapView({
       : Mapbox.StyleURL.Outdoors || Mapbox.StyleURL.Light
     : '';
 
-  // Fly to a specific coordinate when it changes
   React.useEffect(() => {
     if (flyToCoordinate && cameraRef.current) {
       cameraRef.current.setCamera({
@@ -60,14 +75,45 @@ export default function MapboxMapView({
     [onVehiclePress]
   );
 
-  // Pull entity features once per render. Each becomes a PointAnnotation
-  // — uses MakiIcon (react-native-svg, single-color black) instead of
-  // Mapbox SymbolLayer + Maki sprite, because the Outdoors style ships
-  // colored (non-SDF) Maki icons that ignore iconColor.
-  const entityFeatures = useMemo(() => geojson.features ?? [], [geojson]);
+  const handleEntityPress = useCallback(
+    async (e: any) => {
+      const feat = e.features?.[0];
+      if (!feat) return;
+      const props = feat.properties ?? {};
+      if (props.cluster) {
+        // Cluster tap — zoom to the level where it splits apart
+        const coords = feat.geometry?.coordinates as [number, number] | undefined;
+        if (!coords) return;
+        let zoom = DEFAULT_ZOOM + 2;
+        try {
+          zoom = await entitySourceRef.current?.getClusterExpansionZoom(feat);
+        } catch {
+          // fall back to a fixed step
+        }
+        cameraRef.current?.setCamera({
+          centerCoordinate: coords,
+          zoomLevel: Math.min(zoom ?? MAX_ZOOM, MAX_ZOOM),
+          animationDuration: 500,
+          animationMode: 'easeTo',
+        });
+        return;
+      }
+      if (props.id && props.entityType) {
+        onMarkerPress(props.id, props.entityType as MapEntityType);
+      }
+    },
+    [onMarkerPress]
+  );
 
   // If Mapbox isn't available (Expo Go), render nothing — parent shows fallback
   if (!Mapbox) return null;
+
+  // Theme-aware layer colors (Mapbox styles need literal values, not tokens)
+  const pinBg = isDark ? '#2d2e31' : '#ffffff';
+  const pinStroke = isDark ? '#5f6368' : '#E5E7EB';
+  const labelColor = isDark ? '#e8eaed' : '#111827';
+  const labelHalo = isDark ? '#18191B' : '#ffffff';
+  const accent = colors.primary;
 
   return (
     <View style={styles.container}>
@@ -91,29 +137,127 @@ export default function MapboxMapView({
           animationDuration={1000}
         />
 
-        {/* Per-feature PointAnnotation — white circle + black Maki icon */}
-        {entityFeatures.map((feat: any) => {
-          const props = feat.properties ?? {};
-          const id = props.id as string;
-          const entityType = props.entityType as MapEntityType;
-          const maki = (props.maki as string) || 'marker';
-          const coords = feat.geometry?.coordinates as [number, number] | undefined;
-          if (!id || !coords) return null;
-          return (
-            <Mapbox.PointAnnotation
-              key={`${entityType}-${id}`}
-              id={`${entityType}-${id}`}
-              coordinate={coords}
-              onSelected={() => onMarkerPress(id, entityType)}
-            >
-              <View style={styles.markerWrap}>
-                <View style={styles.markerCircle}>
-                  <MakiIcon name={maki} size={18} color="#000000" />
-                </View>
-              </View>
-            </Mapbox.PointAnnotation>
-          );
-        })}
+        <Mapbox.Images images={MARKER_IMAGES} />
+
+        {/* Entities — one clustered source, Corner-style emoji/PNG pins */}
+        <Mapbox.ShapeSource
+          id="entities-source"
+          ref={entitySourceRef}
+          shape={geojson}
+          cluster
+          clusterRadius={CLUSTER_RADIUS}
+          clusterMaxZoomLevel={CLUSTER_MAX_ZOOM}
+          onPress={handleEntityPress}
+        >
+          {/* Cluster bubbles */}
+          <Mapbox.CircleLayer
+            id="entity-clusters"
+            filter={IS_CLUSTER as any}
+            style={{
+              circleRadius: 20,
+              circleColor: pinBg,
+              circleStrokeWidth: 2,
+              circleStrokeColor: accent,
+              circleOpacity: 0.95,
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="entity-cluster-count"
+            filter={IS_CLUSTER as any}
+            style={{
+              textField: ['get', 'point_count_abbreviated'] as any,
+              textSize: 14,
+              textColor: labelColor,
+              textFont: LABEL_FONT as any,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+
+          {/* Selected pin — accent ring under the pin */}
+          <Mapbox.CircleLayer
+            id="entity-selected-ring"
+            filter={
+              ['all', NOT_CLUSTER, ['==', ['get', 'fid'], selectedFeatureId ?? '']] as any
+            }
+            style={{
+              circleRadius: ['+', PIN_RADIUS, 5] as any,
+              circleColor: 'rgba(0,0,0,0)',
+              circleStrokeWidth: 3,
+              circleStrokeColor: accent,
+            }}
+          />
+
+          {/* Pin background circles (emoji pins only) */}
+          <Mapbox.CircleLayer
+            id="entity-pin-bg"
+            filter={['all', NOT_CLUSTER, NO_IMAGE] as any}
+            style={{
+              circleRadius: PIN_RADIUS as any,
+              circleColor: pinBg,
+              circleStrokeWidth: 1.5,
+              circleStrokeColor: pinStroke,
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="entity-pin-emoji"
+            filter={['all', NOT_CLUSTER, NO_IMAGE] as any}
+            style={{
+              textField: ['get', 'emoji'] as any,
+              textSize: EMOJI_SIZE as any,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+              textHaloWidth: 0,
+            }}
+          />
+
+          {/* Custom PNG pins (Mühle & friends) */}
+          <Mapbox.SymbolLayer
+            id="entity-pin-image"
+            filter={['all', NOT_CLUSTER, HAS_IMAGE] as any}
+            style={{
+              iconImage: ['get', 'markerImage'] as any,
+              iconSize: ICON_SCALE as any,
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
+            }}
+          />
+
+          {/* Name labels — featured always, the rest from zoom 14 */}
+          <Mapbox.SymbolLayer
+            id="entity-label-featured"
+            filter={['all', NOT_CLUSTER, ['==', ['get', 'featured'], true]] as any}
+            style={{
+              textField: ['get', 'title'] as any,
+              textSize: 12,
+              textColor: labelColor,
+              textHaloColor: labelHalo,
+              textHaloWidth: 1.4,
+              textFont: LABEL_FONT as any,
+              textAnchor: 'left',
+              textOffset: [1.6, 0] as any,
+              textMaxWidth: 9,
+              textOptional: true,
+            }}
+          />
+          <Mapbox.SymbolLayer
+            id="entity-label"
+            filter={['all', NOT_CLUSTER, ['!=', ['get', 'featured'], true]] as any}
+            minZoomLevel={14}
+            style={{
+              textField: ['get', 'title'] as any,
+              textSize: 11,
+              textColor: labelColor,
+              textHaloColor: labelHalo,
+              textHaloWidth: 1.4,
+              textFont: LABEL_FONT as any,
+              textAnchor: 'left',
+              textOffset: [1.6, 0] as any,
+              textMaxWidth: 9,
+              textOptional: true,
+            }}
+          />
+        </Mapbox.ShapeSource>
 
         {/* Live vehicles — simulated bus / ferry positions */}
         {vehiclesGeoJSON && vehiclesGeoJSON.features.length > 0 ? (
@@ -152,7 +296,7 @@ export default function MapboxMapView({
                 textHaloWidth: 1.2,
                 textAllowOverlap: true,
                 textIgnorePlacement: true,
-                textFont: ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+                textFont: LABEL_FONT as any,
               }}
             />
           </Mapbox.ShapeSource>
@@ -170,31 +314,6 @@ export default function MapboxMapView({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
-  // The wrap absorbs any layout that PointAnnotation may apply around children;
-  // sized to ~32 px so the centred icon dot has consistent hit-testing.
-  markerWrap: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
 });

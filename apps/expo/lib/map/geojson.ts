@@ -1,30 +1,24 @@
 import type { EventRecord, RestaurantRecord, BusinessRecord, MapEntityType } from '@/lib/types';
 import type { PoiRecord } from '@/lib/supabase-pois';
-import { ROEBEL_CENTER } from './constants';
-
-// --- Event-specific types (kept for backward compat) ---
+import {
+  businessEmoji,
+  eventEmoji,
+  markerImageForSlug,
+  poiEmoji,
+  restaurantEmoji,
+  type MarkerSize,
+} from './markers';
 
 export type EventWithCoordinates = EventRecord & {
   latitude: number;
   longitude: number;
 };
 
-export type EventFeatureProperties = {
-  id: string;
-  title: string;
-  category: string;
-  image_url: string | null;
-  date: string;
-  location: string;
-};
-
-export type EventGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Point, EventFeatureProperties>;
-
-// --- Unified map types ---
-
 export type MapFeatureProperties = {
   id: string;
   entityType: MapEntityType;
+  // Unique feature id across entity types — used for selected-pin styling.
+  fid: string;
   title: string;
   subtitle: string;
   category: string;
@@ -33,115 +27,53 @@ export type MapFeatureProperties = {
   slug: string | null;
   poi_type: string | null;
   poi_status: string | null;
-  // Mapbox Maki icon name (no -15 suffix; SDK appends if needed)
-  maki: string;
+  emoji: string;
+  size: MarkerSize;
+  featured: boolean;
+  // Key into MARKER_IMAGES (lib/map/markers.ts). Omitted (not null) when no
+  // PNG pin is registered, so Mapbox `['has','markerImage']` filters work.
+  markerImage?: string;
 };
-
-// Mapbox Maki icon names (built into Outdoors / Streets style sprites).
-// Icons are rendered black (single-color) and tinted via SymbolLayer iconColor.
-const POI_MAKI: Record<string, string> = {
-  toilet: 'toilet',
-  drinking_water: 'drinking-water',
-  bike_repair: 'bicycle',
-  bike_rental: 'bicycle-share',
-  swim_spot: 'swimming',
-  indoor_alternative: 'monument',
-  tourist_info: 'information',
-  pharmacy: 'pharmacy',
-  observation_stand: 'attraction',
-  viewpoint: 'viewpoint',
-};
-
-const EVENT_CATEGORY_MAKI: Record<string, string> = {
-  Musik: 'music',
-  Kultur: 'theatre',
-  Sport: 'soccer',
-  Fest: 'star',
-  Natur: 'park',
-  Mittelalter: 'castle',
-  Lesung: 'library',
-  Kirchliches: 'religious-christian',
-  Ausstellungen: 'art-gallery',
-  Stadt: 'town-hall',
-  'Essen & Trinken': 'restaurant',
-};
-
-function eventMaki(category: string | null | undefined): string {
-  if (!category) return 'marker';
-  return EVENT_CATEGORY_MAKI[category] || 'marker';
-}
 
 export type MapGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Point, MapFeatureProperties>;
 
 /**
- * Generate random coordinates within a radius (in km) of a center point.
- * Used as fallback for entities without geocoded coordinates.
- */
-export function generateFallbackCoordinates(
-  centerLat: number,
-  centerLng: number,
-  radiusKm: number
-): { lat: number; lng: number } {
-  const radiusDeg = radiusKm / 111; // 1 degree ≈ 111km
-  const angle = Math.random() * Math.PI * 2;
-  const distance = Math.random() * radiusDeg;
-
-  return {
-    lat: centerLat + distance * Math.cos(angle),
-    lng: centerLng + distance * Math.sin(angle),
-  };
-}
-
-/**
- * Ensure all items have non-null lat/lng, using fallback coords for items without.
- */
-function ensureCoordinates<T extends { latitude: number | null; longitude: number | null }>(
-  items: T[]
-): (T & { latitude: number; longitude: number })[] {
-  return items.map((item) => {
-    if (item.latitude !== null && item.longitude !== null) {
-      return item as T & { latitude: number; longitude: number };
-    }
-    const fallback = generateFallbackCoordinates(ROEBEL_CENTER[1], ROEBEL_CENTER[0], 2);
-    return { ...item, latitude: fallback.lat, longitude: fallback.lng };
-  });
-}
-
-/**
- * Process raw events from Supabase into events with guaranteed coordinates.
+ * Keep only events with real coordinates. Entities without geocoding no
+ * longer get fabricated positions — a wrong pin is worse than no pin.
  */
 export function processEventsWithCoordinates(events: EventRecord[]): EventWithCoordinates[] {
-  return ensureCoordinates(events);
+  return events.filter(
+    (e): e is EventWithCoordinates => e.latitude != null && e.longitude != null
+  );
 }
 
-/**
- * Convert events with coordinates into a GeoJSON FeatureCollection for Mapbox ShapeSource.
- */
-export function eventsToGeoJSON(events: EventWithCoordinates[]): EventGeoJSON {
+function hasCoordinates<T extends { latitude: number | null; longitude: number | null }>(
+  item: T
+): item is T & { latitude: number; longitude: number } {
+  return item.latitude != null && item.longitude != null;
+}
+
+function feature(
+  lon: number,
+  lat: number,
+  props: Omit<MapFeatureProperties, 'fid'> & { markerImage?: string }
+): GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties> {
+  const { markerImage, ...rest } = props;
   return {
-    type: 'FeatureCollection',
-    features: events.map((event) => ({
-      type: 'Feature',
-      id: event.id,
-      geometry: {
-        type: 'Point',
-        coordinates: [event.longitude, event.latitude],
-      },
-      properties: {
-        id: event.id,
-        title: event.title,
-        category: event.category || 'Sonstige',
-        image_url: event.image_url,
-        date: event.date,
-        location: event.location,
-      },
-    })),
+    type: 'Feature',
+    id: `${props.entityType}-${props.id}`,
+    geometry: { type: 'Point', coordinates: [lon, lat] },
+    properties: {
+      ...rest,
+      fid: `${props.entityType}-${props.id}`,
+      ...(markerImage ? { markerImage } : {}),
+    },
   };
 }
 
 /**
- * Convert events, restaurants, and businesses into a unified GeoJSON FeatureCollection.
- * GeoJSON uses [longitude, latitude] coordinate order.
+ * Convert events, restaurants, businesses and POIs into a unified GeoJSON
+ * FeatureCollection for the clustered map source. [lng, lat] order.
  */
 export function entitiesToGeoJSON(
   events: EventWithCoordinates[],
@@ -149,40 +81,35 @@ export function entitiesToGeoJSON(
   businesses: BusinessRecord[],
   pois: PoiRecord[] = []
 ): MapGeoJSON {
-  const eventFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = events.map((e) => ({
-    type: 'Feature',
-    id: `event-${e.id}`,
-    geometry: {
-      type: 'Point',
-      coordinates: [e.longitude, e.latitude],
-    },
-    properties: {
-      id: e.id,
-      entityType: 'event' as const,
-      title: e.title,
-      subtitle: e.location || '',
-      category: e.category || 'Sonstige',
-      image_url: e.image_url,
-      date: e.date,
-      slug: null,
-      poi_type: null,
-      poi_status: null,
-      maki: eventMaki(e.category),
-    },
-  }));
+  const features: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = [];
 
-  const restaurantsWithCoords = ensureCoordinates(restaurants);
-  const restaurantFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] =
-    restaurantsWithCoords.map((r) => ({
-      type: 'Feature',
-      id: `restaurant-${r.id}`,
-      geometry: {
-        type: 'Point',
-        coordinates: [r.longitude, r.latitude],
-      },
-      properties: {
+  for (const e of events) {
+    const featured = !!e.is_popular;
+    features.push(
+      feature(e.longitude, e.latitude, {
+        id: e.id,
+        entityType: 'event',
+        title: e.title,
+        subtitle: e.location || '',
+        category: e.category || 'Sonstige',
+        image_url: e.image_url,
+        date: e.date,
+        slug: null,
+        poi_type: null,
+        poi_status: null,
+        emoji: eventEmoji(e.category),
+        size: featured ? 'lg' : 'md',
+        featured,
+      })
+    );
+  }
+
+  for (const r of restaurants.filter(hasCoordinates)) {
+    const featured = !!r.is_featured;
+    features.push(
+      feature(r.longitude, r.latitude, {
         id: r.id,
-        entityType: 'restaurant' as const,
+        entityType: 'restaurant',
         title: r.name,
         subtitle: r.address || '',
         category: 'restaurant',
@@ -191,22 +118,20 @@ export function entitiesToGeoJSON(
         slug: r.slug,
         poi_type: null,
         poi_status: null,
-        maki: 'restaurant',
-      },
-    }));
+        emoji: restaurantEmoji(r.slug),
+        size: featured ? 'lg' : 'md',
+        featured,
+        markerImage: markerImageForSlug(r.slug),
+      })
+    );
+  }
 
-  const businessesWithCoords = ensureCoordinates(businesses);
-  const businessFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] =
-    businessesWithCoords.map((b) => ({
-      type: 'Feature',
-      id: `business-${b.id}`,
-      geometry: {
-        type: 'Point',
-        coordinates: [b.longitude, b.latitude],
-      },
-      properties: {
+  for (const b of businesses.filter(hasCoordinates)) {
+    const featured = !!b.is_featured;
+    features.push(
+      feature(b.longitude, b.latitude, {
         id: b.id,
-        entityType: 'business' as const,
+        entityType: 'business',
         title: b.name,
         subtitle: b.address || '',
         category: b.category || 'sonstiges',
@@ -215,34 +140,33 @@ export function entitiesToGeoJSON(
         slug: b.slug,
         poi_type: null,
         poi_status: null,
-        maki: 'shop',
-      },
-    }));
+        emoji: businessEmoji(b.slug, b.category),
+        size: featured ? 'lg' : 'md',
+        featured,
+        markerImage: markerImageForSlug(b.slug),
+      })
+    );
+  }
 
-  const poiFeatures: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = pois.map((p) => ({
-    type: 'Feature',
-    id: `poi-${p.id}`,
-    geometry: {
-      type: 'Point',
-      coordinates: [p.lon, p.lat],
-    },
-    properties: {
-      id: p.id,
-      entityType: 'poi' as const,
-      title: p.name_de,
-      subtitle: p.address || '',
-      category: p.type,
-      image_url: null,
-      date: null,
-      slug: null,
-      poi_type: p.type,
-      poi_status: p.status,
-      maki: POI_MAKI[p.type] || 'marker',
-    },
-  }));
+  for (const p of pois) {
+    features.push(
+      feature(p.lon, p.lat, {
+        id: p.id,
+        entityType: 'poi',
+        title: p.name_de,
+        subtitle: p.address || '',
+        category: p.type,
+        image_url: null,
+        date: null,
+        slug: null,
+        poi_type: p.type,
+        poi_status: p.status,
+        emoji: poiEmoji(p.type),
+        size: 'sm',
+        featured: false,
+      })
+    );
+  }
 
-  return {
-    type: 'FeatureCollection',
-    features: [...eventFeatures, ...restaurantFeatures, ...businessFeatures, ...poiFeatures],
-  };
+  return { type: 'FeatureCollection', features };
 }

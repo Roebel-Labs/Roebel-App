@@ -8,6 +8,9 @@ type Props = {
   geojson: MapGeoJSON;
   onMarkerPress: (id: string, entityType: MapEntityType) => void;
   flyToCoordinate?: [number, number] | null;
+  selectedFeatureId?: string | null;
+  vehiclesGeoJSON?: GeoJSON.FeatureCollection<GeoJSON.Point> | null;
+  onVehiclePress?: (departureId: string) => void;
 };
 
 export default function MapboxMapView({ geojson }: Props) {
