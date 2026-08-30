@@ -3,8 +3,10 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
-import ArrowUpIcon from '@/assets/icons/circle-arrow-up-02.svg';
-import ArrowDownIcon from '@/assets/icons/circle-arrow-down-02.svg';
+import ArrowUpIcon from '@/assets/icons/arrow-up-big.svg';
+import ArrowUpFilledIcon from '@/assets/icons/arrow-up-big_filled.svg';
+import ArrowDownIcon from '@/assets/icons/arrow-down-big.svg';
+import ArrowDownFilledIcon from '@/assets/icons/arrow-down-big_filled.svg';
 import { castForumVote, type ForumVoteTarget } from '@/lib/supabase-forum';
 
 type Props = {
@@ -65,6 +67,13 @@ export default function ForumVoteCluster({
   };
 
   const size = compact ? 18 : 22;
+  // Filled variants mark the active vote; both variants stroke/fill with
+  // `currentColor`, so the theme colour below is what actually paints them.
+  const UpIcon = vote === 1 ? ArrowUpFilledIcon : ArrowUpIcon;
+  const DownIcon = vote === -1 ? ArrowDownFilledIcon : ArrowDownIcon;
+  const upColor = vote === 1 ? colors.primary : colors.textSecondary;
+  const downColor = vote === -1 ? colors.error : colors.textSecondary;
+
   return (
     <View style={styles.row}>
       <Pressable
@@ -74,9 +83,15 @@ export default function ForumVoteCluster({
         accessibilityLabel="Hochwählen"
         accessibilityState={{ selected: vote === 1 }}
       >
-        <ArrowUpIcon width={size} height={size} color={vote === 1 ? colors.primary : colors.textSecondary} />
+        <UpIcon width={size} height={size} color={upColor} />
       </Pressable>
-      <Text style={[styles.score, compact && styles.scoreCompact, { color: colors.textSecondary }]}>
+      <Text
+        style={[
+          styles.score,
+          compact && styles.scoreCompact,
+          { color: vote === 1 ? colors.primary : vote === -1 ? colors.error : colors.textSecondary },
+        ]}
+      >
         {score}
       </Text>
       <Pressable
@@ -86,7 +101,7 @@ export default function ForumVoteCluster({
         accessibilityLabel="Runterwählen"
         accessibilityState={{ selected: vote === -1 }}
       >
-        <ArrowDownIcon width={size} height={size} color={vote === -1 ? colors.error : colors.textSecondary} />
+        <DownIcon width={size} height={size} color={downColor} />
       </Pressable>
     </View>
   );

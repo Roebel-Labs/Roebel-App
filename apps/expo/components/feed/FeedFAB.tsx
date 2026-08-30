@@ -4,6 +4,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
+  Easing,
   interpolate,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,7 +36,11 @@ export default function FeedFAB({ onPress, visibilityScale, label, accessibility
   const expanded = useSharedValue(label ? 1 : 0);
 
   useEffect(() => {
-    expanded.value = withSpring(label ? 1 : 0, { damping: 18, stiffness: 220 });
+    // Plain width expansion — a spring here overshoots and reads as a bounce.
+    expanded.value = withTiming(label ? 1 : 0, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [label, expanded]);
 
   const animatedStyle = useAnimatedStyle(() => ({
