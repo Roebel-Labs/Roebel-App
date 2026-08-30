@@ -95,12 +95,19 @@ export async function fetchForumReplies(threadId: string): Promise<ForumReplyRec
  *  node's to publish under the org key (same rule as mirrorPostToNostr). */
 async function isOrgAccount(accountId: string | null | undefined): Promise<boolean> {
   if (!accountId) return false;
-  const { data } = await supabase
-    .from('accounts')
-    .select('account_type')
-    .eq('id', accountId)
-    .maybeSingle();
-  return data?.account_type === 'organisation';
+  try {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('account_type')
+      .eq('id', accountId)
+      .maybeSingle();
+    // Fail closed: if we cannot positively confirm a personal account, do not
+    // mirror — a person's key must never sign an organisation's words.
+    if (error || !data) return true;
+    return data.account_type === 'organisation';
+  } catch {
+    return true;
+  }
 }
 
 export async function createForumThread(
