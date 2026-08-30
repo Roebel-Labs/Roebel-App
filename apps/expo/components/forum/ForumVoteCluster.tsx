@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
@@ -36,6 +36,7 @@ export default function ForumVoteCluster({
   const { colors } = useTheme();
   const { user, isCitizen } = useUser();
   const [local, setLocal] = useState<{ vote: 1 | -1 | null; dUp: number; dDown: number } | null>(null);
+  const generation = useRef(0);
 
   const vote = local ? local.vote : myVote;
   const score = upvotes + (local?.dUp ?? 0) - (downvotes + (local?.dDown ?? 0));
@@ -46,9 +47,11 @@ export default function ForumVoteCluster({
     const next = current === tapped ? null : tapped;
     const dUp = (next === 1 ? 1 : 0) - (current === 1 ? 1 : 0) + (local?.dUp ?? 0);
     const dDown = (next === -1 ? 1 : 0) - (current === -1 ? 1 : 0) + (local?.dDown ?? 0);
+    const gen = ++generation.current;
     setLocal({ vote: next, dUp, dDown });
     onVoted?.(next);
     castForumVote(targetType, targetId, user.wallet_address, tapped, current).catch(() => {
+      if (generation.current !== gen) return; // a newer tap owns the state now
       setLocal(null); // reconcile back to server truth on failure
       onVoted?.(myVote);
     });

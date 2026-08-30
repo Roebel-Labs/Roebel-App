@@ -31,14 +31,16 @@ export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
     >
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.primary }]}>DISKUSSION</Text>
-        {thread.category?.name ? (
-          <View style={[styles.categoryChip, { backgroundColor: colors.primaryLight }]}>
-            <Text style={[styles.categoryText, { color: colors.primary }]}>{thread.category.name}</Text>
-          </View>
-        ) : null}
-        {thread.edited_at ? (
-          <Text style={[styles.categoryText, { color: colors.textTertiary }]}>Bearbeitet</Text>
-        ) : null}
+        <View style={styles.headerRight}>
+          {thread.category?.name ? (
+            <View style={[styles.categoryChip, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[styles.categoryText, { color: colors.primary }]}>{thread.category.name}</Text>
+            </View>
+          ) : null}
+          {thread.edited_at ? (
+            <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
+          ) : null}
+        </View>
       </View>
 
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -97,6 +99,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semiBold,
     letterSpacing: 0.6,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   categoryChip: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -105,6 +112,10 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 11,
     fontFamily: fontFamily.medium,
+  },
+  editedText: {
+    fontSize: 11,
+    fontFamily: fontFamily.regular,
   },
   title: {
     fontSize: 16,
