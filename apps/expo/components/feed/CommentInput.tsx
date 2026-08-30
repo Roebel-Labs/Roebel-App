@@ -36,6 +36,8 @@ type Props = {
   avatarFallbackInitial?: string;
   /** Opens the full-screen composer, carrying the current draft along. */
   onExpand?: () => void;
+  /** Text-only mode: hides the sticker and image affordances (forum replies). */
+  disableAttachments?: boolean;
 };
 
 export default function CommentInput({
@@ -51,6 +53,7 @@ export default function CommentInput({
   avatarUrl,
   avatarFallbackInitial,
   onExpand,
+  disableAttachments = false,
 }: Props) {
   const { colors, isDark } = useTheme();
   const inputRef = useRef<TextInput>(null);
@@ -211,7 +214,7 @@ export default function CommentInput({
             autoFocus={isEditMode}
           />
 
-          {!isEditMode && (
+          {!isEditMode && !disableAttachments && (
             <Pressable
               onPress={() => setShowPicker((p) => !p)}
               style={styles.iconButton}
@@ -221,7 +224,7 @@ export default function CommentInput({
               <EmojiIcon width={21} height={21} color={colors.textSecondary} />
             </Pressable>
           )}
-          {showImageIcon && (
+          {showImageIcon && !disableAttachments && (
             <Pressable
               onPress={handlePickImage}
               style={styles.iconButton}
