@@ -34,7 +34,8 @@ import {
   type EventWithCoordinates,
   type OrgWithCoordinates,
 } from '@/lib/map/geojson';
-import { fetchMapOrgAccounts } from '@/lib/supabase-accounts';
+import { fetchAllOrgAccounts } from '@/lib/supabase-accounts';
+import { buildOrgIndex, EMPTY_ORG_INDEX } from '@/lib/map/org-lookup';
 import { filterOpenNow, type MapFilterState } from '@/lib/map/filters';
 import type {
   Account,
@@ -87,6 +88,9 @@ export default function LocationScreen() {
   const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
   const [pois, setPois] = useState<PoiRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgWithCoordinates[]>([]);
+  // All org accounts, geocoded or not — the geocoded ones are the org pins,
+  // the rest are what a restaurant/business pin resolves to. See org-lookup.
+  const [allOrgs, setAllOrgs] = useState<Account[]>([]);
   const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selection, setSelection] = useState<{
@@ -164,6 +168,12 @@ export default function LocationScreen() {
         mapFilter.orgs ? visibleOrgs : []
       ),
     [events, visibleRestaurants, visibleBusinesses, pois, visibleOrgs, mapFilter]
+  );
+
+  const orgIndex = useMemo(
+    () =>
+      allOrgs.length ? buildOrgIndex(allOrgs, restaurants, businesses) : EMPTY_ORG_INDEX,
+    [allOrgs, restaurants, businesses]
   );
 
   const selectedFeatureId = useMemo(() => {
@@ -267,7 +277,7 @@ export default function LocationScreen() {
           supabase.from('businesses').select('*').eq('status', 'published'),
           fetchPois(),
           fetchTodayAdvisories(),
-          fetchMapOrgAccounts(),
+          fetchAllOrgAccounts(),
         ]);
 
       if (eventsResult.data) {
@@ -281,6 +291,7 @@ export default function LocationScreen() {
       }
       setPois(poisResult);
       setAdvisories(advisoriesResult);
+      setAllOrgs(orgsResult);
       setOrgs(processOrgsWithCoordinates(orgsResult));
     } catch (error) {
       console.error('Failed to fetch map data:', error);
@@ -561,6 +572,7 @@ export default function LocationScreen() {
           selectedId={selection.selectedId}
           onClose={() => setSelection(null)}
           onSelectionChange={handleSheetSelectionChange}
+          orgIndex={orgIndex}
         />
       ) : null}
 

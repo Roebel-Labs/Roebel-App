@@ -36,6 +36,8 @@ import {
   type BusinessRecord,
   type OpeningHours,
 } from '@/lib/types';
+import OrgSheetDetail from './OrgSheetDetail';
+import { orgForPin, EMPTY_ORG_INDEX, type OrgIndex } from '@/lib/map/org-lookup';
 import {
   POI_TYPE_LABELS_DE,
   SWIM_STATUS_COLORS,
@@ -55,6 +57,12 @@ type Props = {
   selectedId: string;
   onClose: () => void;
   onSelectionChange: (item: PlaceItem) => void;
+  /**
+   * Pin → org account resolution. When the selected place resolves to an org,
+   * the detail area shows photos, reactions and comments instead of the plain
+   * card body. Defaults to empty so the sheet still works without it.
+   */
+  orgIndex?: OrgIndex;
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -73,7 +81,13 @@ const WEEKDAYS: { key: keyof OpeningHours & string; label: string }[] = [
   { key: 'sunday', label: 'Sonntag' },
 ];
 
-export default function MapPlaceSheet({ items, selectedId, onClose, onSelectionChange }: Props) {
+export default function MapPlaceSheet({
+  items,
+  selectedId,
+  onClose,
+  onSelectionChange,
+  orgIndex = EMPTY_ORG_INDEX,
+}: Props) {
   const { colors } = useTheme();
   const router = useRouter();
   const sheetRef = useRef<BottomSheet>(null);
@@ -87,7 +101,15 @@ export default function MapPlaceSheet({ items, selectedId, onClose, onSelectionC
 
   const scrollX = useRef(new Animated.Value(selectedIndex * SNAP)).current;
 
-  const snapPoints = useMemo(() => [PEEK_HEIGHT, '62%'], []);
+  // The org body carries photos and a comment thread, so it needs more room
+  // than the plain card's detail block.
+  const selectedOrg = selected
+    ? orgForPin(orgIndex, selected.entityType, selected.id)
+    : null;
+  const snapPoints = useMemo(
+    () => [PEEK_HEIGHT, selectedOrg ? '92%' : '62%'],
+    [selectedOrg]
+  );
 
   // Keep the pager in sync when the selection comes from outside (marker tap)
   useEffect(() => {
@@ -164,7 +186,17 @@ export default function MapPlaceSheet({ items, selectedId, onClose, onSelectionC
         />
 
         {/* Revealed by dragging the sheet up */}
-        {selected ? <PlaceDetail item={selected} /> : null}
+        {selected && selectedOrg ? (
+          <OrgSheetDetail
+            accountId={selectedOrg.id}
+            account={selectedOrg}
+            address={getSubtitle(selected) || selectedOrg.address}
+            openingHours={selectedOrg.opening_hours ?? getOpeningHours(selected)}
+            fallbackImageUrls={[getImageUrl(selected), selectedOrg.cover_url, selectedOrg.avatar_url]}
+          />
+        ) : selected ? (
+          <PlaceDetail item={selected} />
+        ) : null}
       </BottomSheetScrollView>
     </BottomSheet>
   );
@@ -471,6 +503,17 @@ function getDescription(item: PlaceItem): string | null {
       return item.data.description_de || null;
     case 'org':
       return item.data.bio || null;
+    default:
+      return null;
+  }
+}
+
+function getOpeningHours(item: PlaceItem): OpeningHours | null {
+  switch (item.entityType) {
+    case 'restaurant':
+    case 'business':
+    case 'org':
+      return item.data.opening_hours;
     default:
       return null;
   }

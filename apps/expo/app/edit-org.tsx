@@ -7,6 +7,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  ScrollView,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,13 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { updateAccount } from '@/lib/supabase-accounts';
 import { uploadMediaFile } from '@/lib/upload-media';
+import {
+  fetchAccountPhotos,
+  addAccountPhoto,
+  deleteAccountPhoto,
+  reorderAccountPhotos,
+} from '@/lib/supabase-account-photos';
+import type { AccountPhoto } from '@/lib/types';
 import { subTypeFeatures, type OpeningHours, type OrgSubType } from '@/lib/types';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -82,6 +90,23 @@ export default function EditOrgScreen() {
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  // Gallery shown in the map bottom sheet. Writes go straight to
+  // account_photos rather than waiting for "Speichern", so an interrupted
+  // edit never loses an upload the user already watched finish.
+  const [photos, setPhotos] = useState<AccountPhoto[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const activeAccountId = activeAccount?.id ?? null;
+  useEffect(() => {
+    if (!activeAccountId) return;
+    let cancelled = false;
+    void fetchAccountPhotos(activeAccountId).then((rows) => {
+      if (!cancelled) setPhotos(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAccountId]);
   const [saving, setSaving] = useState(false);
 
   // Permission guard: only owners of the active org can edit
@@ -104,6 +129,60 @@ export default function EditOrgScreen() {
   }
 
   const showOpeningHours = subTypeFeatures(activeAccount.sub_type).openingHours;
+
+  const addPhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 8,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets.length) return;
+
+    setUploadingPhoto(true);
+    try {
+      for (const asset of result.assets) {
+        const url = await uploadMediaFile(asset.uri, '', 'image', 'org-photos', asset.mimeType);
+        if (!url) {
+          Alert.alert('Fehler', 'Ein Foto konnte nicht hochgeladen werden.');
+          continue;
+        }
+        const saved = await addAccountPhoto({
+          account_id: activeAccount.id,
+          url,
+          uploaded_by: account?.address || '',
+        });
+        if (saved) setPhotos((prev) => [...prev, saved]);
+      }
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const removePhoto = (photo: AccountPhoto) => {
+    Alert.alert('Foto entfernen?', 'Das Foto wird aus dem Profil gelöscht.', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Entfernen',
+        style: 'destructive',
+        onPress: async () => {
+          const before = photos;
+          setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+          const ok = await deleteAccountPhoto(photo.id);
+          if (!ok) setPhotos(before);
+        },
+      },
+    ]);
+  };
+
+  const movePhoto = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= photos.length) return;
+    const next = [...photos];
+    [next[index], next[target]] = [next[target], next[index]];
+    setPhotos(next);
+    await reorderAccountPhotos(next.map((p) => p.id));
+  };
 
   const pickImage = async (type: 'logo' | 'cover') => {
     const aspect: [number, number] = type === 'logo' ? [1, 1] : [16, 9];
@@ -249,6 +328,55 @@ export default function EditOrgScreen() {
           <Pressable onPress={() => pickImage('logo')} disabled={uploadingLogo}>
             <Text style={[styles.changePhotoText, { color: colors.primary }]}>Logo ändern</Text>
           </Pressable>
+        </View>
+
+        {/* Fotos — shown in the map bottom sheet, in this order */}
+        <View style={styles.fieldSection}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>FOTOS</Text>
+          <Text style={[styles.photoHint, { color: colors.textTertiary }]}>
+            Diese Fotos erscheinen auf der Karte, wenn jemand euch antippt.
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+            {photos.map((photo, index) => (
+              <View key={photo.id} style={styles.photoTile}>
+                <Image source={{ uri: photo.url }} style={styles.photoThumb} contentFit="cover" />
+                <View style={styles.photoTileBar}>
+                  <Pressable
+                    onPress={() => movePhoto(index, -1)}
+                    disabled={index === 0}
+                    hitSlop={6}
+                    accessibilityLabel="Foto nach links"
+                  >
+                    <Text style={[styles.photoArrow, { color: index === 0 ? colors.textTertiary : colors.primary }]}>‹</Text>
+                  </Pressable>
+                  <Pressable onPress={() => removePhoto(photo)} hitSlop={6} accessibilityLabel="Foto entfernen">
+                    <Text style={styles.photoRemove}>✕</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => movePhoto(index, 1)}
+                    disabled={index === photos.length - 1}
+                    hitSlop={6}
+                    accessibilityLabel="Foto nach rechts"
+                  >
+                    <Text style={[styles.photoArrow, { color: index === photos.length - 1 ? colors.textTertiary : colors.primary }]}>›</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+            <Pressable
+              onPress={addPhoto}
+              disabled={uploadingPhoto}
+              style={[styles.photoAdd, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              accessibilityRole="button"
+              accessibilityLabel="Fotos hinzufügen"
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Text style={[styles.photoAddPlus, { color: colors.primary }]}>+</Text>
+              )}
+            </Pressable>
+          </ScrollView>
         </View>
 
         {/* Org-Typ (read-only) */}
@@ -468,6 +596,23 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     marginTop: 12,
   },
+  photoHint: { fontSize: 13, marginBottom: 10, lineHeight: 18 },
+  photoRow: { gap: 10, paddingRight: 16 },
+  photoTile: { width: 96, gap: 6 },
+  photoThumb: { width: 96, height: 120, borderRadius: 12 },
+  photoTileBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
+  photoArrow: { fontSize: 20, lineHeight: 22 },
+  photoRemove: { fontSize: 14, color: '#D32F2F' },
+  photoAdd: {
+    width: 96,
+    height: 120,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoAddPlus: { fontSize: 30, lineHeight: 34 },
   fieldSection: {
     paddingHorizontal: 16,
     paddingTop: 16,

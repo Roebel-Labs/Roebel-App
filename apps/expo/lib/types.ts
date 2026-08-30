@@ -281,7 +281,8 @@ export type AccountRatingRecord = {
   id: string;
   account_id: string;
   wallet_address: string;
-  stars: number;
+  /** Null when the user commented without rating. */
+  stars: number | null;
   comment: string | null;
   created_at: string;
   updated_at: string;
@@ -315,6 +316,54 @@ export type AccountVoteRecord = {
   wallet_address: string;
   vote: 1 | -1;
   created_at: string;
+};
+
+/** One photo in an organisation's gallery (map sheet + org profile). */
+export type AccountPhoto = {
+  id: string;
+  account_id: string;
+  url: string;
+  caption: string | null;
+  sort_order: number;
+  uploaded_by: string;
+  created_at: string;
+};
+
+export type AccountCommentAuthor = {
+  wallet_address: string;
+  username: string | null;
+  profile_picture_url: string | null;
+  is_verified_citizen: boolean | null;
+  tier: string | null;
+};
+
+/** Reply to an account comment. Lives in its own table — see the migration. */
+export type AccountCommentReply = {
+  id: string;
+  rating_id: string;
+  wallet_address: string;
+  content: string;
+  created_at: string;
+  author?: AccountCommentAuthor | null;
+};
+
+/**
+ * A comment on an org. Backed by `account_ratings`, so a user holds exactly
+ * one — editing replaces it. `stars` is null when they commented without
+ * rating, which is what the sheet composer writes by default.
+ */
+export type AccountComment = {
+  id: string;
+  account_id: string;
+  wallet_address: string;
+  stars: number | null;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+  author?: AccountCommentAuthor | null;
+  replies: AccountCommentReply[];
+  like_count: number;
+  liked_by_me: boolean;
 };
 
 export type MenuItemWithDetails = MenuItemRecord & {
