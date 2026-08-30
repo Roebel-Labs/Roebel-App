@@ -1,13 +1,26 @@
-import type { EventRecord, RestaurantRecord, BusinessRecord, MapEntityType } from '@/lib/types';
+import type {
+  Account,
+  EventRecord,
+  RestaurantRecord,
+  BusinessRecord,
+  MapEntityType,
+} from '@/lib/types';
 import type { PoiRecord } from '@/lib/supabase-pois';
 import {
   businessEmoji,
   eventEmoji,
   markerImageForSlug,
+  orgEmoji,
   poiEmoji,
   restaurantEmoji,
   type MarkerSize,
 } from './markers';
+
+/** Org account that carries its own coordinates (Verein, Fraktion, Stadt). */
+export type OrgWithCoordinates = Account & {
+  latitude: number;
+  longitude: number;
+};
 
 export type EventWithCoordinates = EventRecord & {
   latitude: number;
@@ -53,6 +66,19 @@ function hasCoordinates<T extends { latitude: number | null; longitude: number |
   return item.latitude != null && item.longitude != null;
 }
 
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Keep only orgs with real coordinates. Orgs that already appear through their
+ * own restaurants/businesses row carry no coordinates by convention, so this
+ * doubles as the "don't draw a second pin" guard.
+ */
+export function processOrgsWithCoordinates(orgs: Account[]): OrgWithCoordinates[] {
+  return orgs.filter(hasCoordinates);
+}
+
 function feature(
   lon: number,
   lat: number,
@@ -79,9 +105,15 @@ export function entitiesToGeoJSON(
   events: EventWithCoordinates[],
   restaurants: RestaurantRecord[],
   businesses: BusinessRecord[],
-  pois: PoiRecord[] = []
+  pois: PoiRecord[] = [],
+  orgs: OrgWithCoordinates[] = []
 ): MapGeoJSON {
   const features: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = [];
+
+  // Several places exist as BOTH a restaurants row and a businesses row (a
+  // gastro business that also runs a menu). Only the restaurant is drawn —
+  // otherwise the place gets two pins sitting on top of each other.
+  const restaurantNames = new Set(restaurants.map((r) => normalizeName(r.name)));
 
   for (const e of events) {
     const featured = !!e.is_popular;
@@ -127,6 +159,7 @@ export function entitiesToGeoJSON(
   }
 
   for (const b of businesses.filter(hasCoordinates)) {
+    if (restaurantNames.has(normalizeName(b.name))) continue;
     const featured = !!b.is_featured;
     features.push(
       feature(b.longitude, b.latitude, {
@@ -163,6 +196,26 @@ export function entitiesToGeoJSON(
         poi_status: p.status,
         emoji: poiEmoji(p.type),
         size: 'sm',
+        featured: false,
+      })
+    );
+  }
+
+  for (const o of orgs) {
+    features.push(
+      feature(o.longitude, o.latitude, {
+        id: o.id,
+        entityType: 'org',
+        title: o.name,
+        subtitle: o.address || '',
+        category: o.sub_type || 'verein',
+        image_url: o.avatar_url,
+        date: null,
+        slug: o.slug,
+        poi_type: null,
+        poi_status: null,
+        emoji: orgEmoji(o.sub_type),
+        size: 'md',
         featured: false,
       })
     );

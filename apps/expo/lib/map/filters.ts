@@ -5,6 +5,7 @@ export type MapFilterState = {
   events: boolean;
   restaurants: boolean;
   businesses: boolean;
+  orgs: boolean;
   pois: boolean;
   openNow: boolean;
 };

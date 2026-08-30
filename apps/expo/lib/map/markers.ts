@@ -36,6 +36,17 @@ const BUSINESS_CATEGORY_EMOJI: Record<string, string> = {
   sonstiges: '🏪',
 };
 
+// Orgs that carry their own coordinates — Vereine, Fraktionen, die Stadt.
+// Restaurants and Unternehmen never reach here: they are already on the map
+// through their own restaurants/businesses row.
+const ORG_SUB_TYPE_EMOJI: Record<string, string> = {
+  verein: '🎗️',
+  stadt: '🏛️',
+  fraktion: '🗳️',
+  unternehmen: '🏪',
+  restaurant: '🍽️',
+};
+
 const POI_TYPE_EMOJI: Record<string, string> = {
   toilet: '🚻',
   drinking_water: '🚰',
@@ -82,6 +93,10 @@ export function businessEmoji(
 ): string {
   if (slug && SLUG_EMOJI_OVERRIDES[slug]) return SLUG_EMOJI_OVERRIDES[slug];
   return (category && BUSINESS_CATEGORY_EMOJI[category]) || '🏪';
+}
+
+export function orgEmoji(subType: string | null | undefined): string {
+  return (subType && ORG_SUB_TYPE_EMOJI[subType]) || '🎗️';
 }
 
 export function poiEmoji(type: string): string {

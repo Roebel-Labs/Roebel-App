@@ -53,6 +53,28 @@ export async function fetchOrgAccountsBySubType(subType: OrgSubType): Promise<Ac
   return (data as Account[]) ?? [];
 }
 
+/**
+ * Org accounts that carry their own map coordinates.
+ *
+ * Only orgs WITHOUT a restaurants/businesses row of their own are geocoded on
+ * `accounts` (see the migration on the columns), so this list never overlaps
+ * with the restaurant/business pins — Vereine, Fraktionen and die Stadt only.
+ */
+export async function fetchMapOrgAccounts(): Promise<Account[]> {
+  const { data, error } = await supabase
+    .from('accounts' as any)
+    .select('*')
+    .eq('account_type', 'organisation')
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null);
+
+  if (error) {
+    console.error('fetchMapOrgAccounts error:', error);
+    return [];
+  }
+  return (data as Account[]) ?? [];
+}
+
 export async function fetchOwnedAccounts(walletAddress: string): Promise<Account[]> {
   const { data, error } = await supabase
     .from('account_owners' as any)

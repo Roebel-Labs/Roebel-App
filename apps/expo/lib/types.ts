@@ -221,7 +221,7 @@ export type BusinessRecord = {
   updated_at: string;
 };
 
-export type MapEntityType = 'event' | 'restaurant' | 'business' | 'poi';
+export type MapEntityType = 'event' | 'restaurant' | 'business' | 'poi' | 'org';
 
 export type MenuCategoryRecord = {
   id: string;
@@ -419,6 +419,15 @@ export type Account = {
   extern_reviewed_at: string | null;
   contact_email: string | null;
   opening_hours: OpeningHours | null;
+  /** Public postal address of the org, as displayed in the app. */
+  address: string | null;
+  /**
+   * Map pin for orgs that have no restaurants/businesses row of their own
+   * (Vereine, Fraktionen, die Stadt). Null when the org is already on the map
+   * through its own place — otherwise it would draw a second pin on top of it.
+   */
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string;
 };

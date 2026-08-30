@@ -29,11 +29,15 @@ import { fontFamily } from '@/constants/theme';
 import { MAP_PRIVACY_STORAGE_KEY, ROEBEL_CENTER } from '@/lib/map/constants';
 import {
   processEventsWithCoordinates,
+  processOrgsWithCoordinates,
   entitiesToGeoJSON,
   type EventWithCoordinates,
+  type OrgWithCoordinates,
 } from '@/lib/map/geojson';
+import { fetchMapOrgAccounts } from '@/lib/supabase-accounts';
 import { filterOpenNow, type MapFilterState } from '@/lib/map/filters';
 import type {
+  Account,
   EventRecord,
   RestaurantRecord,
   BusinessRecord,
@@ -82,6 +86,7 @@ export default function LocationScreen() {
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
   const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
   const [pois, setPois] = useState<PoiRecord[]>([]);
+  const [orgs, setOrgs] = useState<OrgWithCoordinates[]>([]);
   const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selection, setSelection] = useState<{
@@ -115,8 +120,8 @@ export default function LocationScreen() {
 
   const [mapFilter, setMapFilter] = useState<MapFilterState>(
     filterOnly === 'orgs'
-      ? { events: false, restaurants: true, businesses: true, pois: false, openNow: false }
-      : { events: true, restaurants: true, businesses: true, pois: false, openNow: false }
+      ? { events: false, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false }
+      : { events: true, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false }
   );
 
   // Re-apply the filter if the deep-link param changes after mount
@@ -126,6 +131,7 @@ export default function LocationScreen() {
         events: false,
         restaurants: true,
         businesses: true,
+        orgs: true,
         pois: false,
         openNow: false,
       });
@@ -143,6 +149,10 @@ export default function LocationScreen() {
     () => filterOpenNow(businesses, mapFilter.openNow),
     [businesses, mapFilter.openNow]
   );
+  const visibleOrgs = useMemo(
+    () => filterOpenNow(orgs, mapFilter.openNow),
+    [orgs, mapFilter.openNow]
+  );
 
   const geojson = useMemo(
     () =>
@@ -150,9 +160,10 @@ export default function LocationScreen() {
         mapFilter.events ? events : [],
         mapFilter.restaurants ? visibleRestaurants : [],
         mapFilter.businesses ? visibleBusinesses : [],
-        mapFilter.pois ? pois : []
+        mapFilter.pois ? pois : [],
+        mapFilter.orgs ? visibleOrgs : []
       ),
-    [events, visibleRestaurants, visibleBusinesses, pois, mapFilter]
+    [events, visibleRestaurants, visibleBusinesses, pois, visibleOrgs, mapFilter]
   );
 
   const selectedFeatureId = useMemo(() => {
@@ -232,12 +243,19 @@ export default function LocationScreen() {
     if (loading) return;
     openSelectionFor(focusEntityType, focusEntityId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusEntityType, focusEntityId, loading, events, restaurants, businesses, pois]);
+  }, [focusEntityType, focusEntityId, loading, events, restaurants, businesses, pois, orgs]);
 
   const fetchMapData = async () => {
     try {
       setLoading(true);
-      const [eventsResult, restaurantsResult, businessesResult, poisResult, advisoriesResult] =
+      const [
+        eventsResult,
+        restaurantsResult,
+        businessesResult,
+        poisResult,
+        advisoriesResult,
+        orgsResult,
+      ] =
         await Promise.all([
           supabase
             .from('events')
@@ -245,9 +263,11 @@ export default function LocationScreen() {
             .eq('status', 'approved')
             .order('date', { ascending: true }),
           supabase.from('restaurants').select('*').eq('status', 'published'),
-          supabase.from('businesses').select('*').eq('status', 'approved'),
+          // NB: businesses use 'published'/'pending' — never 'approved'.
+          supabase.from('businesses').select('*').eq('status', 'published'),
           fetchPois(),
           fetchTodayAdvisories(),
+          fetchMapOrgAccounts(),
         ]);
 
       if (eventsResult.data) {
@@ -261,6 +281,7 @@ export default function LocationScreen() {
       }
       setPois(poisResult);
       setAdvisories(advisoriesResult);
+      setOrgs(processOrgsWithCoordinates(orgsResult));
     } catch (error) {
       console.error('Failed to fetch map data:', error);
     } finally {
@@ -320,6 +341,15 @@ export default function LocationScreen() {
         lat: p.lat,
         lon: p.lon,
         data: p,
+      }));
+    }
+    if (entityType === 'org') {
+      return orgs.map((o) => ({
+        id: o.id,
+        entityType: 'org',
+        lat: o.latitude,
+        lon: o.longitude,
+        data: o as Account,
       }));
     }
     return [];

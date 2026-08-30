@@ -29,6 +29,7 @@ export const ENTITY_TYPE_COLORS: Record<string, string> = {
   event: '#00498B',
   restaurant: '#E85D04',
   business: '#2B9348',
+  org: '#7048E8',
 };
 
 // German labels for business categories

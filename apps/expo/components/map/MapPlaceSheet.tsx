@@ -23,11 +23,19 @@ import { BUSINESS_CATEGORY_LABELS } from '@/lib/map/constants';
 import {
   businessEmoji,
   eventEmoji,
+  orgEmoji,
   poiEmoji,
   restaurantEmoji,
 } from '@/lib/map/markers';
 import { fontFamily } from '@/constants/theme';
-import type { EventRecord, RestaurantRecord, BusinessRecord, OpeningHours } from '@/lib/types';
+import {
+  SUB_TYPE_LABELS,
+  type Account,
+  type EventRecord,
+  type RestaurantRecord,
+  type BusinessRecord,
+  type OpeningHours,
+} from '@/lib/types';
 import {
   POI_TYPE_LABELS_DE,
   SWIM_STATUS_COLORS,
@@ -39,7 +47,8 @@ export type PlaceItem =
   | { id: string; entityType: 'event'; lat: number; lon: number; data: EventRecord }
   | { id: string; entityType: 'restaurant'; lat: number; lon: number; data: RestaurantRecord }
   | { id: string; entityType: 'business'; lat: number; lon: number; data: BusinessRecord }
-  | { id: string; entityType: 'poi'; lat: number; lon: number; data: PoiRecord };
+  | { id: string; entityType: 'poi'; lat: number; lon: number; data: PoiRecord }
+  | { id: string; entityType: 'org'; lat: number; lon: number; data: Account };
 
 type Props = {
   items: PlaceItem[];
@@ -254,7 +263,11 @@ function PlaceCard({ item, onNavigate }: { item: PlaceItem; onNavigate: () => vo
 
 function StatusBadge({ item }: { item: PlaceItem }) {
   const { colors } = useTheme();
-  if (item.entityType === 'restaurant' || item.entityType === 'business') {
+  if (
+    item.entityType === 'restaurant' ||
+    item.entityType === 'business' ||
+    item.entityType === 'org'
+  ) {
     if (!item.data.opening_hours) return null;
     const status = isRestaurantOpen(item.data.opening_hours);
     const color = status.isOpen ? '#2B9348' : '#D32F2F';
@@ -301,9 +314,12 @@ function StatusBadge({ item }: { item: PlaceItem }) {
 function PlaceDetail({ item }: { item: PlaceItem }) {
   const { colors } = useTheme();
   const description = getDescription(item);
-  const hours = item.entityType === 'restaurant' || item.entityType === 'business'
-    ? item.data.opening_hours
-    : null;
+  const hours =
+    item.entityType === 'restaurant' ||
+    item.entityType === 'business' ||
+    item.entityType === 'org'
+      ? item.data.opening_hours
+      : null;
   const gallery = item.entityType === 'business' ? item.data.gallery_images : null;
   const phone = getPhone(item);
   const website = getWebsite(item);
@@ -401,6 +417,8 @@ function getTitle(item: PlaceItem): string {
       return item.data.name;
     case 'poi':
       return item.data.name_de;
+    case 'org':
+      return item.data.name;
   }
 }
 
@@ -423,6 +441,8 @@ function getEmoji(item: PlaceItem): string {
       return businessEmoji(item.data.slug, item.data.category);
     case 'poi':
       return poiEmoji(item.data.type);
+    case 'org':
+      return orgEmoji(item.data.sub_type);
   }
 }
 
@@ -436,6 +456,8 @@ function getCategoryLabel(item: PlaceItem): string {
       return BUSINESS_CATEGORY_LABELS[item.data.category] || 'Sonstiges';
     case 'poi':
       return POI_TYPE_LABELS_DE[item.data.type] || item.data.type;
+    case 'org':
+      return (item.data.sub_type && SUB_TYPE_LABELS[item.data.sub_type]) || 'Organisation';
   }
 }
 
@@ -447,6 +469,8 @@ function getDescription(item: PlaceItem): string | null {
       return item.data.description || null;
     case 'poi':
       return item.data.description_de || null;
+    case 'org':
+      return item.data.bio || null;
     default:
       return null;
   }
@@ -481,6 +505,8 @@ function getImageUrl(item: PlaceItem): string | null {
     case 'restaurant':
     case 'business':
       return item.data.cover_image_url || item.data.logo_url;
+    case 'org':
+      return item.data.cover_url || item.data.avatar_url;
     case 'poi':
       return null;
   }
@@ -496,6 +522,8 @@ function getButtonLabel(item: PlaceItem): string {
       return 'Mehr erfahren';
     case 'poi':
       return 'Details';
+    case 'org':
+      return 'Zum Profil';
   }
 }
 
@@ -526,6 +554,9 @@ function navigate(item: PlaceItem, router: ReturnType<typeof useRouter>) {
       break;
     case 'poi':
       router.push(`/poi/${item.data.id}` as any);
+      break;
+    case 'org':
+      router.push({ pathname: '/account/[id]' as any, params: { id: item.data.id } });
       break;
   }
 }

@@ -1,5 +1,9 @@
-import { entitiesToGeoJSON, processEventsWithCoordinates } from '@/lib/map/geojson';
-import type { EventRecord, RestaurantRecord, BusinessRecord } from '@/lib/types';
+import {
+  entitiesToGeoJSON,
+  processEventsWithCoordinates,
+  processOrgsWithCoordinates,
+} from '@/lib/map/geojson';
+import type { Account, EventRecord, RestaurantRecord, BusinessRecord } from '@/lib/types';
 import type { PoiRecord } from '@/lib/supabase-pois';
 
 const event = (over: Partial<EventRecord> = {}): EventRecord =>
@@ -59,6 +63,23 @@ const poi = (over: Partial<PoiRecord> = {}): PoiRecord =>
     ...over,
   }) as unknown as PoiRecord;
 
+const org = (over: Partial<Account> = {}): Account =>
+  ({
+    id: 'o1',
+    account_type: 'organisation',
+    sub_type: 'verein',
+    name: 'Männerchor',
+    bio: null,
+    avatar_url: null,
+    cover_url: null,
+    slug: 'maennerchor',
+    address: 'Bahnhofstraße 34',
+    latitude: 53.3732,
+    longitude: 12.6033,
+    opening_hours: null,
+    ...over,
+  }) as unknown as Account;
+
 describe('entitiesToGeoJSON marker properties', () => {
   it('sets fid, emoji, size and featured', () => {
     const fc = entitiesToGeoJSON(
@@ -83,6 +104,43 @@ describe('entitiesToGeoJSON marker properties', () => {
     expect('markerImage' in fc.features[0].properties).toBe(false);
   });
 
+  it('emits org pins with the sub-type emoji and the address as subtitle', () => {
+    const fc = entitiesToGeoJSON([], [], [], [], [
+      org() as any,
+      org({ id: 'o2', name: 'Stadt Röbel', sub_type: 'stadt' }) as any,
+    ]);
+    const byFid = Object.fromEntries(fc.features.map((f) => [f.properties.fid, f.properties]));
+    expect(byFid['org-o1'].emoji).toBe('🎗️');
+    expect(byFid['org-o1'].subtitle).toBe('Bahnhofstraße 34');
+    expect(byFid['org-o1'].category).toBe('verein');
+    expect(byFid['org-o2'].emoji).toBe('🏛️');
+  });
+
+  it('drops a business that duplicates a restaurant of the same name', () => {
+    // Seglerheim exists as both a restaurants row and a businesses row — one
+    // place must not get two pins stacked on top of each other.
+    const fc = entitiesToGeoJSON(
+      [],
+      [restaurant({ id: 'r9', name: 'Seglerheim', slug: 'seglerheim' })],
+      [business({ id: 'b9', name: 'Seglerheim', slug: 'seglerheim-biz' })],
+      []
+    );
+    expect(fc.features.map((f) => f.properties.fid)).toEqual(['restaurant-r9']);
+  });
+
+  it('keeps a business whose name differs from every restaurant', () => {
+    const fc = entitiesToGeoJSON(
+      [],
+      [restaurant({ id: 'r9', name: 'Delizia' })],
+      [business({ id: 'b9', name: 'Antalya Barber' })],
+      []
+    );
+    expect(fc.features.map((f) => f.properties.fid)).toEqual([
+      'restaurant-r9',
+      'business-b9',
+    ]);
+  });
+
   it('drops restaurants/businesses without coordinates instead of faking them', () => {
     const fc = entitiesToGeoJSON(
       [],
@@ -91,6 +149,16 @@ describe('entitiesToGeoJSON marker properties', () => {
       []
     );
     expect(fc.features).toHaveLength(0);
+  });
+});
+
+describe('processOrgsWithCoordinates', () => {
+  it('keeps only orgs that carry their own coordinates', () => {
+    const out = processOrgsWithCoordinates([
+      org(),
+      org({ id: 'o2', latitude: null, longitude: null }),
+    ]);
+    expect(out.map((o) => o.id)).toEqual(['o1']);
   });
 });
 
