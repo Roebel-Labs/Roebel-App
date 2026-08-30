@@ -4,13 +4,19 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
+import { shareForumThread } from '@/lib/forum-share';
+import CommentIcon from '@/assets/icons/comment-02.svg';
+import ShareIcon from '@/assets/icons/share-02.svg';
 import type { ForumThreadRecord } from '@/lib/types/feed';
 
 type Props = {
   thread: ForumThreadRecord;
+  myVote?: 1 | -1 | null;
+  onVoted?: (next: 1 | -1 | null) => void;
 };
 
-export default function ForumThreadCard({ thread }: Props) {
+export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
 
@@ -30,6 +36,9 @@ export default function ForumThreadCard({ thread }: Props) {
             <Text style={[styles.categoryText, { color: colors.primary }]}>{thread.category.name}</Text>
           </View>
         ) : null}
+        {thread.edited_at ? (
+          <Text style={[styles.categoryText, { color: colors.textTertiary }]}>Bearbeitet</Text>
+        ) : null}
       </View>
 
       <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -43,9 +52,29 @@ export default function ForumThreadCard({ thread }: Props) {
 
       <PostAuthorRow author={thread.author} createdAt={thread.created_at} />
 
-      <Text style={[styles.replies, { color: colors.textSecondary }]}>
-        {thread.reply_count === 1 ? '1 Antwort' : `${thread.reply_count} Antworten`}
-      </Text>
+      <View style={styles.actions}>
+        <ForumVoteCluster
+          targetType="thread"
+          targetId={thread.id}
+          upvotes={thread.upvotes_count ?? 0}
+          downvotes={thread.downvotes_count ?? 0}
+          myVote={myVote ?? null}
+          onVoted={onVoted}
+          compact
+        />
+        <View style={styles.actionItem}>
+          <CommentIcon width={18} height={18} color={colors.textSecondary} />
+          <Text style={[styles.actionText, { color: colors.textSecondary }]}>{thread.reply_count}</Text>
+        </View>
+        <Pressable
+          onPress={() => void shareForumThread(thread.title, thread.id)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Teilen"
+        >
+          <ShareIcon width={18} height={18} color={colors.textSecondary} />
+        </Pressable>
+      </View>
     </Pressable>
   );
 }
@@ -87,8 +116,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     lineHeight: 18,
   },
-  replies: {
-    fontSize: 12,
-    fontFamily: fontFamily.regular,
-  },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 2 },
+  actionItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  actionText: { fontSize: 12, fontFamily: fontFamily.regular },
 });
