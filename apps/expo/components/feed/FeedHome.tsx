@@ -511,7 +511,12 @@ export default function FeedHome() {
         headerAnimatedStyle,
       ]}
     >
-      <GlassSurface edge="bottom" />
+      {/* Multi-sampler test (2026-08-29 evening): the morning content-eating
+          failure happened with ONE unguarded sampler too, so the binding
+          race guard — not the sampler count — may be the real fix. Header +
+          status band + nav = 3 guarded samplers on this screen; if content
+          vanishes on device, revert to nav-only. */}
+      <GlassSurface edge="bottom" androidExperimentalBlur />
       <View style={styles.header}>
         <HeaderWeather
           fallbackSource={isDark ? HANDWRITTEN_DARK : HANDWRITTEN_LIGHT}
@@ -660,7 +665,7 @@ export default function FeedHome() {
           solid fill, so mid-scroll the feed body visibly slides beneath the
           clock while staying legible. */}
       <View pointerEvents="none" style={[styles.topSafeBand, { height: insets.top }]}>
-        <GlassSurface />
+        <GlassSurface androidExperimentalBlur />
       </View>
 
       {walletAddress && (

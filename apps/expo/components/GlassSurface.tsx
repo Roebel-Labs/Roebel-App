@@ -82,9 +82,12 @@ type Props = {
   /** Which edge of the bar meets the content — draws the light hairline there. */
   edge?: 'top' | 'bottom' | 'none';
   /**
-   * Android real backdrop blur for THIS surface. At most ONE surface per
-   * screen may set it (see the GlassBackdrop comment — multiple samplers on
-   * one target ate the screen content on device). Used by the bottom nav.
+   * Android real backdrop blur for THIS surface. Every flagged surface MUST
+   * go through the targetReady race guard below — unguarded binding is the
+   * prime suspect for the 08-29 content-eating outage (it hit a ONE-sampler
+   * screen too). Multi-sampler with guarded binding is under device test on
+   * the feed (header + status band + nav); if content ever turns invisible
+   * again, drop back to one sampler per screen (bottom nav).
    */
   androidExperimentalBlur?: boolean;
 };
