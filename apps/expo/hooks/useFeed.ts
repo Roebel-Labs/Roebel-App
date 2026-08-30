@@ -109,6 +109,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
       meckyTips: generateMeckyTips(),
       proposals: (s?.proposals ?? []) as unknown as ProposalFeedRecord[],
       proposalComments: s?.proposalComments ?? [],
+      forumThreads: s?.forumThreads ?? [],
       feedType,
     });
   }, [posts, sectionsQuery.data, feedType]);

@@ -8,6 +8,7 @@ import type {
   MeckyTipData,
   ProposalFeedRecord,
   ProposalCommentFeedRecord,
+  ForumThreadRecord,
 } from './types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from './types';
 
@@ -63,6 +64,7 @@ export function assembleFeed(params: {
   meckyTips?: MeckyTipData[];
   proposals?: ProposalFeedRecord[];
   proposalComments?: ProposalCommentFeedRecord[];
+  forumThreads?: ForumThreadRecord[];
   feedType: FeedType;
 }): FeedItem[] {
   const {
@@ -79,6 +81,7 @@ export function assembleFeed(params: {
     meckyTips = [],
     proposals = [],
     proposalComments = [],
+    forumThreads = [],
     feedType,
   } = params;
   const items: FeedItem[] = [];
@@ -120,6 +123,12 @@ export function assembleFeed(params: {
           id: `proposal-comment-${comment.id}`,
         },
         ts: new Date(comment.created_at).getTime(),
+      });
+    }
+    for (const thread of forumThreads) {
+      sortable.push({
+        item: { type: 'forum_thread', data: thread, id: `forum-thread-${thread.id}` },
+        ts: new Date(thread.created_at).getTime(),
       });
     }
 
