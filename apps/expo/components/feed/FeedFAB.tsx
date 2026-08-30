@@ -86,6 +86,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     zIndex: 31,
+    // Shadow lives on this non-clipped wrapper, not on the pill below — on
+    // iOS, a view with `overflow: 'hidden'` clips its own drop shadow along
+    // with its content, so the FAB would otherwise render shadowless.
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
   fab: {
     height: 56,
@@ -96,11 +105,6 @@ const styles = StyleSheet.create({
     gap: 8,
     overflow: 'hidden',
     paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
   },
   label: {
     fontSize: 15,
