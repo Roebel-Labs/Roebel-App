@@ -1,5 +1,6 @@
 import React, { Component, ReactNode } from 'react';
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
+import { router } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
 
 // Hardcoded fallback colors — ErrorBoundary renders outside ThemeProvider
@@ -109,6 +110,19 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   handleReset = () => {
     this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+
+    // This boundary sits above the navigator, so clearing the error remounts
+    // the whole stack — which restarts at its anchor, the first screen declared
+    // in app/_layout.tsx (`submit`), not the feed. Worse, when the crashing
+    // route is restored the screen throws again immediately. Send the router
+    // home explicitly, once the remounted tree has had a frame to settle.
+    setTimeout(() => {
+      try {
+        router.replace('/');
+      } catch {
+        // Navigator not mounted yet — the remount's own landing stands.
+      }
+    }, 0);
   };
 
   render() {

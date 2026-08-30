@@ -301,7 +301,15 @@ export default function ForumThreadScreen() {
           <Text style={[styles.replyLink, { color: colors.textSecondary }]}>Antworten</Text>
         </Pressable>
         <Pressable
-          onPress={() => void shareForumReply(reply.body, thread!.id)}
+          // The thread must be dereferenced INSIDE the handler, never as
+          // `thread!.id` in the closure's argument list: React Compiler lifts
+          // such a read into this callback's memo-dependency check, which runs
+          // on every render — including the first one, while the thread query
+          // is still pending and `thread` is undefined.
+          onPress={() => {
+            if (!thread) return;
+            void shareForumReply(reply.body, thread.id);
+          }}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Teilen"
