@@ -69,6 +69,7 @@ export async function fetchForumThread(id: string): Promise<ForumThreadRecord | 
     .from('forum_threads')
     .select(THREAD_SELECT)
     .eq('id', id)
+    .eq('status', 'published')
     .maybeSingle();
   if (error || !data) {
     if (error) console.error('Error fetching forum thread:', error);
