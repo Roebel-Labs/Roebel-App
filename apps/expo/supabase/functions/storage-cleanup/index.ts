@@ -8,8 +8,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 //   dry-run  — list orphaned storage objects (per-folder summary)
 //   delete   — delete orphans via the Storage API (SQL deletes would leave
 //              the underlying S3 blobs behind)
-//   reencode — one-shot: shrink oversized originals in place via the render
-//              endpoint (width-capped, format preserved)
+//   reencode — shrink oversized originals in place via the render endpoint
+//              (width-capped, format preserved). Runs weekly via pg_cron so
+//              oversized uploads from any source get compressed within a
+//              week. Processed files are marked with cacheControl
+//              max-age=31536000 (the RPC excludes them), including files
+//              that could not be shrunk, so nothing is re-fetched weekly.
 //
 // Threat model of the shared secret: it only gates actions that (a) list or
 // delete objects the DB provably does not reference anymore (7-day age guard,
@@ -87,6 +91,20 @@ Deno.serve(async (req: Request) => {
     const results: unknown[] = [];
     let ok = 0;
     let skipped = 0;
+
+    // Re-upload the untouched original with the "processed" cacheControl
+    // marker so the RPC stops returning it (used when a shrink isn't possible).
+    const markProcessed = async (t: { bucket_id: string; name: string; mimetype: string }) => {
+      const { data: orig, error: dlErr } = await supabase.storage.from(t.bucket_id).download(t.name);
+      if (dlErr || !orig) return dlErr?.message ?? "download failed";
+      const { error: upErr } = await supabase.storage.from(t.bucket_id).upload(t.name, orig, {
+        upsert: true,
+        contentType: t.mimetype === "image/jpg" ? "image/jpeg" : t.mimetype,
+        cacheControl: "31536000",
+      });
+      return upErr?.message ?? null;
+    };
+
     for (const t of targets) {
       const isAvatar = t.bucket_id === "profile-pictures" || t.name.startsWith("profile-pictures/");
       const width = isAvatar ? 512 : (body.maxWidth ?? 1600);
@@ -94,13 +112,15 @@ Deno.serve(async (req: Request) => {
       try {
         const res = await fetch(url);
         if (!res.ok) {
-          results.push({ name: t.name, error: `render ${res.status}` });
+          const markErr = await markProcessed(t);
+          results.push({ name: t.name, error: `render ${res.status}`, marked: markErr ?? true });
           skipped++;
           continue;
         }
         const buf = new Uint8Array(await res.arrayBuffer());
         if (buf.length === 0 || buf.length >= t.size_bytes) {
-          results.push({ name: t.name, skipped: "not smaller" });
+          const markErr = await markProcessed(t);
+          results.push({ name: t.name, skipped: "not smaller", marked: markErr ?? true });
           skipped++;
           continue;
         }

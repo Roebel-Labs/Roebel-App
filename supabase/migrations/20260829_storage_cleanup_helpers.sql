@@ -100,6 +100,10 @@ where p.fp is null
   );
 $fn$;
 
+-- Candidates for the weekly reencode action. cacheControl max-age=31536000 is
+-- the "already processed" marker: set by the app's compressed uploads and by
+-- the reencode action itself (also on files that could not be shrunk), so the
+-- list self-terminates instead of re-fetching the same files every week.
 create or replace function public.storage_list_large_images(min_bytes bigint default 800000)
 returns table(bucket_id text, name text, size_bytes bigint, mimetype text)
 language sql
@@ -111,6 +115,7 @@ as $fn$
   where (o.metadata->>'mimetype') in ('image/jpeg','image/jpg','image/png','image/webp')
     and (o.metadata->>'size')::bigint > min_bytes
     and o.bucket_id in ('images','news-images','blog-images','profile-pictures')
+    and coalesce(o.metadata->>'cacheControl','') <> 'max-age=31536000'
   order by (o.metadata->>'size')::bigint desc;
 $fn$;
 
@@ -139,6 +144,27 @@ select cron.schedule(
     ),
     body := jsonb_build_object('secret', 'rblclean_7f2d91c4a8e35b06', 'action', 'delete'),
     timeout_milliseconds := 120000
+  );
+  $$
+);
+
+-- Weekly re-encode (Mondays 03:30 UTC): shrinks oversized uploads from
+-- sources without client-side compression (e.g. apps/web /api/upload-image)
+-- to ≤1600px in place. Self-terminating via the cacheControl marker above.
+select cron.unschedule(jobid) from cron.job where jobname = 'storage-reencode-weekly';
+
+select cron.schedule(
+  'storage-reencode-weekly',
+  '30 3 * * 1',
+  $$
+  select net.http_post(
+    url := 'https://wwbeqhkslxdxhktqzqti.supabase.co/functions/v1/storage-cleanup',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YmVxaGtzbHhkeGhrdHF6cXRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxMTUyMTIsImV4cCI6MjA2ODY5MTIxMn0.ETISOumSNns3OVO-FC10FDQAZQVdJnubx3Qu_iHGHGI'
+    ),
+    body := jsonb_build_object('secret', 'rblclean_7f2d91c4a8e35b06', 'action', 'reencode', 'limit', 25),
+    timeout_milliseconds := 300000
   );
   $$
 );
