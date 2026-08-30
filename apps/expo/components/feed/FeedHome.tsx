@@ -629,7 +629,7 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
-            listHeader={<ForumCategoryChips activeSlug="alle" />}
+            listHeader={<ForumCategoryChips activeSlug="alle" showNewCta={false} />}
             active={screenFocused && effectiveTab === 'rathaus'}
             enabled={canAccessCityTabs}
             onNewestContent={handleNewestContent}
@@ -664,7 +664,12 @@ export default function FeedHome() {
       </View>
 
       {walletAddress && (
-        <FeedFAB onPress={handleCompose} visibilityScale={fabVisibilityScale} />
+        <FeedFAB
+          onPress={effectiveTab === 'rathaus' ? () => router.push('/forum/new' as any) : handleCompose}
+          label={effectiveTab === 'rathaus' ? 'Thema starten' : undefined}
+          accessibilityLabel={effectiveTab === 'rathaus' ? 'Neues Thema starten' : 'Neuen Beitrag erstellen'}
+          visibilityScale={fabVisibilityScale}
+        />
       )}
 
       <PostOptionsDrawer

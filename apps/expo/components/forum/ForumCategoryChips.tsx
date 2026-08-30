@@ -10,6 +10,8 @@ import { fetchForumCategories } from '@/lib/supabase-forum';
 type Props = {
   /** Highlighted category slug; 'alle' highlights the all-threads chip. */
   activeSlug?: string;
+  /** Show the trailing "+ Neues Thema" CTA (citizens only). Default true. */
+  showNewCta?: boolean;
 };
 
 /**
@@ -17,7 +19,7 @@ type Props = {
  * Chips navigate to the (filtered) thread list; the trailing CTA opens the
  * composer (citizens only — the button self-hides otherwise).
  */
-export default function ForumCategoryChips({ activeSlug }: Props) {
+export default function ForumCategoryChips({ activeSlug, showNewCta = true }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
   const { isCitizen } = useUser();
@@ -67,7 +69,7 @@ export default function ForumCategoryChips({ activeSlug }: Props) {
       >
         {chip('alle', 'Alle')}
         {categories.map((c) => chip(c.slug, c.name))}
-        {isCitizen && (
+        {showNewCta && isCitizen && (
           <Pressable
             onPress={() => router.push('/forum/new' as any)}
             accessibilityRole="button"
