@@ -145,6 +145,7 @@ export default function NotificationsInboxScreen() {
           eventId?: string;
           slug?: string;
           postId?: string;
+          threadId?: string;
           conversationId?: string;
           [key: string]: unknown;
         }
@@ -161,6 +162,9 @@ export default function NotificationsInboxScreen() {
       case 'post_like':
       case 'post_comment':
         if (data.postId) router.push(`/post/${data.postId}` as any);
+        break;
+      case 'forum_thread':
+        if (data.threadId) router.push(`/forum/thread/${data.threadId}` as any);
         break;
       case 'direct_message':
         if (data.conversationId) router.push(`/messages/${data.conversationId}` as any);
