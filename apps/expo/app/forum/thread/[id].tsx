@@ -143,6 +143,10 @@ export default function ForumThreadScreen() {
         });
     setSending(false);
     if (!result) {
+      // CommentInput already cleared the parent draft optimistically before
+      // this await resolved — restore it so a failed send doesn't lose the
+      // user's typed text.
+      setDraft(content);
       setSendError('Antwort konnte nicht gesendet werden.');
       return;
     }
@@ -415,6 +419,24 @@ export default function ForumThreadScreen() {
             {sendError ? (
               <Text style={[styles.sendError, { color: colors.error }]}>{sendError}</Text>
             ) : null}
+            {editingReply && (
+              <View style={[styles.editBanner, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <Text style={[styles.editBannerText, { color: colors.textSecondary }]}>
+                  Antwort bearbeiten
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setEditingReply(null);
+                    setDraft('');
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Bearbeiten abbrechen"
+                >
+                  <Text style={[styles.editBannerCancel, { color: colors.primary }]}>Abbrechen</Text>
+                </Pressable>
+              </View>
+            )}
             <CommentInput
               value={draft}
               onChangeText={(text) => {
@@ -423,7 +445,7 @@ export default function ForumThreadScreen() {
               }}
               isSubmitting={sending}
               disableAttachments
-              replyingToName={editingReply ? 'Antwort bearbeiten' : (replyTo?.name ?? null)}
+              replyingToName={editingReply ? null : (replyTo?.name ?? null)}
               onCancelReply={() => {
                 setReplyTo(null);
                 setEditingReply(null);
@@ -527,4 +549,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingBottom: 6,
   },
+  editBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  editBannerText: { fontSize: 13, fontFamily: fontFamily.medium },
+  editBannerCancel: { fontSize: 13, fontFamily: fontFamily.medium },
 });
