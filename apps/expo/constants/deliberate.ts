@@ -7,7 +7,7 @@ import { gnosis, gnosisRead } from './gnosis';
 
 export const DELIBERATE_ADDRESS =
 	process.env.EXPO_PUBLIC_DELIBERATE_ADDRESS ||
-	'0xB208C359a206a0c35a7D4D99dEF63d9F6143DE9b';
+	'0xB208C359A206A0C35a7D4D99DEf63d9F6143de9B';
 
 /** CirclesIdentityRegistry anchored on the Röbeltaler group (members-only debates). */
 export const ROEBEL_DEBATE_REGISTRY =
