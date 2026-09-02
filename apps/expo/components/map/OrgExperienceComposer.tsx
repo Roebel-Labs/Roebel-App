@@ -7,7 +7,8 @@
  * commit the text.
  */
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -76,7 +77,7 @@ export default function OrgExperienceComposer({ experiences, myWallet, onSubmit 
 
       {myWallet ? (
         <View style={[styles.composer, { borderColor: colors.border }]}>
-          <TextInput
+          <BottomSheetTextInput
             value={text}
             onChangeText={setText}
             placeholder="Wie war es bei euch?"

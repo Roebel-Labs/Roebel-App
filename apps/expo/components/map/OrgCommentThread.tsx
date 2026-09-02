@@ -6,7 +6,9 @@
  * likes hang off that comment.
  */
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 
 import { useTheme } from '@/context/ThemeContext';
@@ -65,7 +67,7 @@ export default function OrgCommentThread({
             { borderColor: colors.border, backgroundColor: colors.background },
           ]}
         >
-          <TextInput
+          <BottomSheetTextInput
             value={draft}
             onChangeText={setDraft}
             placeholder={myComment ? 'Deinen Beitrag bearbeiten…' : 'Was denkst du?'}
@@ -188,7 +190,7 @@ function ReplyComposer({ onSend }: { onSend: (text: string) => Promise<boolean> 
 
   return (
     <View style={[styles.replyComposer, { borderColor: colors.border }]}>
-      <TextInput
+      <BottomSheetTextInput
         value={text}
         onChangeText={setText}
         placeholder="Antworten…"

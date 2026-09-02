@@ -6,11 +6,15 @@
  * cluster, and the share / directions / site / ig row. This component only
  * fills the detail area, so the container stays readable.
  */
-import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useAccount } from '@/context/AccountContext';
+import { uploadMediaFile } from '@/lib/upload-media';
+import { addAccountPhoto } from '@/lib/supabase-account-photos';
 import { fontFamily } from '@/constants/theme';
 import { useOrgSheetData } from '@/hooks/useOrgSheetData';
 import OrgOpeningHours from './OrgOpeningHours';
@@ -40,6 +44,8 @@ export default function OrgSheetDetail({
 }: Props) {
   const { colors } = useTheme();
   const { user } = useUser();
+  const { isOwnerOf } = useAccount();
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const {
     photos,
     comments,
@@ -57,11 +63,45 @@ export default function OrgSheetDetail({
     postComment,
     postReply,
     likeComment,
+    refresh,
   } = useOrgSheetData(accountId);
 
   const descriptionParts = [address, account?.bio].filter(
     (part): part is string => !!part && !!part.trim()
   );
+
+  const canUpload = isOwnerOf(accountId);
+
+  // Owners add a photo without leaving the map. Reordering and deleting stay
+  // in edit-org.tsx, where there is room for a proper manager.
+  const addPhoto = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 8,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets.length) return;
+
+    setUploadingPhoto(true);
+    try {
+      let added = false;
+      for (const asset of result.assets) {
+        const url = await uploadMediaFile(asset.uri, '', 'image', 'org-photos', asset.mimeType);
+        if (!url) continue;
+        const saved = await addAccountPhoto({
+          account_id: accountId,
+          url,
+          uploaded_by: user?.wallet_address || '',
+        });
+        if (saved) added = true;
+      }
+      if (added) await refresh();
+      else Alert.alert('Fehler', 'Foto konnte nicht hochgeladen werden.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }, [accountId, user?.wallet_address, refresh]);
 
   return (
     <View style={styles.wrap}>
@@ -84,7 +124,13 @@ export default function OrgSheetDetail({
 
       <OrgOpeningHours hours={openingHours} />
 
-      <OrgPhotoCarousel photos={photos} fallbackUrls={fallbackImageUrls} />
+      <OrgPhotoCarousel
+        photos={photos}
+        fallbackUrls={fallbackImageUrls}
+        canUpload={canUpload}
+        uploading={uploadingPhoto}
+        onAddPhoto={addPhoto}
+      />
 
       {descriptionParts.length ? (
         <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={3}>

@@ -136,6 +136,12 @@ export default function MapPlaceSheet({
       ref={sheetRef}
       index={0}
       snapPoints={snapPoints}
+      // Composers inside the sheet must stay visible while typing.
+      // 'interactive' lets the sheet ride the keyboard; a plain
+      // KeyboardAvoidingView fights the sheet's pan gesture on Android.
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       enablePanDownToClose
       onClose={onClose}
       backgroundStyle={{ backgroundColor: colors.background, borderRadius: 24 }}

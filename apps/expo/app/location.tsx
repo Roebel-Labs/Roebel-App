@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -19,6 +19,9 @@ import MapboxMapView from '@/components/map/MapboxMapView';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
 import MapFilterBar from '@/components/map/MapFilterBar';
+import MapCategoryRow from '@/components/map/MapCategoryRow';
+import MapCategorySheet from '@/components/map/MapCategorySheet';
+import { categoryByKey, type MapCategoryKey } from '@/lib/map/categories';
 import MapPlaceSheet, { type PlaceItem } from '@/components/map/MapPlaceSheet';
 import VerlorenSheet from '@/components/utilities/VerlorenSheet';
 
@@ -99,6 +102,7 @@ export default function LocationScreen() {
   } | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<MapCategoryKey | null>(null);
   const [showVerloren, setShowVerloren] = useState(false);
   const [showLiveBuses, setShowLiveBuses] = useState(true);
   const [transitLines, setTransitLines] = useState<TransitLine[]>([]);
@@ -174,6 +178,27 @@ export default function LocationScreen() {
     () =>
       allOrgs.length ? buildOrgIndex(allOrgs, restaurants, businesses) : EMPTY_ORG_INDEX,
     [allOrgs, restaurants, businesses]
+  );
+
+  const onSelectCategory = useCallback(
+    (key: MapCategoryKey) => {
+      if (activeCategory === key) {
+        setActiveCategory(null);
+        setMapFilter((prev) => ({
+          ...prev,
+          events: true,
+          restaurants: true,
+          businesses: true,
+          orgs: true,
+          pois: true,
+        }));
+        return;
+      }
+      setActiveCategory(key);
+      const layers = categoryByKey(key)?.layers;
+      if (layers) setMapFilter((prev) => ({ ...prev, ...layers }));
+    },
+    [activeCategory]
   );
 
   const selectedFeatureId = useMemo(() => {
@@ -526,13 +551,24 @@ export default function LocationScreen() {
               liveBuses={showLiveBuses}
               onToggleLiveBuses={() => setShowLiveBuses((v) => !v)}
               liveBusCount={vehicles.length}
-              bottom={bottomBase + 62}
+              position="top"
+              bottom={insets.top + 64}
               opacity={chromeOpacity}
             />
 
-            {/* Bottom row — SOS / Erkunden / MyLocation, fades behind the sheet */}
+            {/* Browse row — icon above, label beneath, on the map's one
+                frosted pane. Fades behind the place sheet like the rest. */}
+            <MapCategoryRow
+              activeKey={activeCategory}
+              onSelect={onSelectCategory}
+              bottom={bottomBase}
+              opacity={chromeOpacity}
+            />
+
+            {/* SOS + Erkunden move to the top-left: the category row now owns
+                the bottom strip. */}
             <Animated.View
-              style={[styles.bottomRow, { bottom: bottomBase, opacity: chromeOpacity }]}
+              style={[styles.topLeftRow, { top: insets.top + 8, opacity: chromeOpacity }]}
               pointerEvents={selection ? 'none' : 'box-none'}
             >
               <Pressable
@@ -551,7 +587,16 @@ export default function LocationScreen() {
                 <DiscoverStroke width={18} height={18} color={colors.textPrimary} />
                 <Text style={[styles.erkundenText, { color: colors.textPrimary }]}>Erkunden</Text>
               </Pressable>
+            </Animated.View>
 
+            {/* Locate stays bottom-right, floating above the category row. */}
+            <Animated.View
+              style={[
+                styles.locateFloat,
+                { bottom: bottomBase + 84, opacity: chromeOpacity },
+              ]}
+              pointerEvents={selection ? 'none' : 'box-none'}
+            >
               <Pressable
                 onPress={handleLocateMe}
                 style={[styles.iconButton, { backgroundColor: colors.card }]}
@@ -573,6 +618,13 @@ export default function LocationScreen() {
           onClose={() => setSelection(null)}
           onSelectionChange={handleSheetSelectionChange}
           orgIndex={orgIndex}
+        />
+      ) : null}
+
+      {activeCategory && !selection ? (
+        <MapCategorySheet
+          categoryKey={activeCategory}
+          onClose={() => setActiveCategory(null)}
         />
       ) : null}
 
@@ -672,14 +724,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: fontFamily.medium,
   },
-  bottomRow: {
+  topLeftRow: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    gap: 8,
+    zIndex: 2000,
+  },
+  locateFloat: {
+    position: 'absolute',
+    right: 16,
     zIndex: 2000,
   },
   iconButton: {

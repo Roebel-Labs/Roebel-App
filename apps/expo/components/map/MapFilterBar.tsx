@@ -11,7 +11,13 @@ type Props = {
   liveBuses?: boolean;
   onToggleLiveBuses?: () => void;
   liveBusCount?: number;
-  // Absolute offset from the screen bottom (sits above the action row)
+  /**
+   * Where the bar floats. 'bottom' is the historical placement (offset from
+   * the screen bottom); 'top' pins it below the safe-area inset, which is
+   * where the map redesign puts it.
+   */
+  position?: 'top' | 'bottom';
+  /** Absolute offset from the chosen edge. */
   bottom: number;
   opacity?: Animated.Value;
 };
@@ -36,6 +42,7 @@ export default function MapFilterBar({
   liveBuses,
   onToggleLiveBuses,
   liveBusCount = 0,
+  position = 'bottom',
   bottom,
   opacity,
 }: Props) {
@@ -60,7 +67,11 @@ export default function MapFilterBar({
 
   return (
     <Animated.View
-      style={[styles.container, { bottom }, opacity ? { opacity } : null]}
+      style={[
+        styles.container,
+        position === 'top' ? { top: bottom } : { bottom },
+        opacity ? { opacity } : null,
+      ]}
       pointerEvents="box-none"
     >
       <ScrollView

@@ -118,11 +118,17 @@ export default function OrgOpeningHours({ hours }: { hours: OpeningHours | null 
 }
 
 const styles = StyleSheet.create({
-  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
   status: { fontFamily: fontFamily.medium, fontSize: 16 },
   summaryHours: { fontFamily: fontFamily.regular, fontSize: 16 },
   chevron: { fontSize: 16, marginTop: -2 },
-  week: { paddingTop: 4, paddingBottom: 8, gap: 6 },
+  week: { paddingTop: 4, paddingBottom: 8, gap: 6, paddingHorizontal: 16 },
   dayRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dayLabel: { fontFamily: fontFamily.regular, fontSize: 15 },
   dayLabelToday: { fontFamily: fontFamily.semiBold, fontSize: 15 },
