@@ -318,6 +318,49 @@ export type AccountVoteRecord = {
   created_at: string;
 };
 
+/** "Merken" or "Gewesen" — a person holds exactly one per org. */
+export type AccountSaveState = 'to_try' | 'been';
+
+export type AccountSave = {
+  id: string;
+  account_id: string;
+  wallet_address: string;
+  state: AccountSaveState;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AccountSaveSummary = {
+  account_id: string;
+  to_try_count: number;
+  been_count: number;
+  save_count: number;
+};
+
+/** One face in the "Gespeichert von" rail. */
+export type SaverProfile = {
+  wallet_address: string;
+  username: string | null;
+  profile_picture_url: string | null;
+  state: AccountSaveState;
+};
+
+/**
+ * A visitor's photo + text ABOUT an org. Not event_experiences — there
+ * `account_id` means "posted as this org", here the org is the subject.
+ */
+export type AccountExperience = {
+  id: string;
+  account_id: string;
+  wallet_address: string;
+  content: string;
+  media_urls: string[] | null;
+  video_url: string | null;
+  status: 'published' | 'deleted';
+  created_at: string;
+  author?: AccountCommentAuthor | null;
+};
+
 /** One photo in an organisation's gallery (map sheet + org profile). */
 export type AccountPhoto = {
   id: string;

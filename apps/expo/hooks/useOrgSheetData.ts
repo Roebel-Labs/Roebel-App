@@ -15,6 +15,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { fetchAccountPhotos } from '@/lib/supabase-account-photos';
 import {
+  fetchAccountSaveSummary,
+  fetchAccountSavers,
+  fetchMyAccountSave,
+  setAccountSave,
+} from '@/lib/supabase-account-saves';
+import {
+  fetchAccountExperiences,
+  createAccountExperience,
+} from '@/lib/supabase-account-experiences';
+import { nextSaveState, applySaveDelta } from '@/lib/map/save-state';
+import {
   fetchAccountComments,
   submitAccountComment,
   submitCommentReply,
@@ -29,9 +40,13 @@ import {
 } from '@/lib/supabase-ratings';
 import type {
   AccountComment,
+  AccountExperience,
   AccountPhoto,
   AccountRatingSummary,
+  AccountSaveState,
+  AccountSaveSummary,
   AccountVoteSummary,
+  SaverProfile,
 } from '@/lib/types';
 
 export type OrgSheetData = {
@@ -40,9 +55,16 @@ export type OrgSheetData = {
   voteSummary: AccountVoteSummary | null;
   ratingSummary: AccountRatingSummary | null;
   myVote: 1 | -1 | null;
+  saveSummary: AccountSaveSummary | null;
+  savers: SaverProfile[];
+  mySave: AccountSaveState | null;
+  experiences: AccountExperience[];
   loading: boolean;
   /** Optimistically toggles up/down; tapping the active one clears it. */
   setVote: (vote: 1 | -1) => Promise<void>;
+  /** Tapping the state the viewer already holds clears it. */
+  setSave: (state: AccountSaveState) => Promise<void>;
+  postExperience: (content: string, mediaUrls: string[]) => Promise<boolean>;
   postComment: (text: string, stars?: number | null) => Promise<boolean>;
   postReply: (ratingId: string, text: string) => Promise<boolean>;
   likeComment: (ratingId: string) => Promise<void>;
@@ -66,6 +88,10 @@ export function useOrgSheetData(accountId: string | null): OrgSheetData {
   const [voteSummary, setVoteSummary] = useState<AccountVoteSummary | null>(null);
   const [ratingSummary, setRatingSummary] = useState<AccountRatingSummary | null>(null);
   const [myVote, setMyVote] = useState<1 | -1 | null>(null);
+  const [saveSummary, setSaveSummary] = useState<AccountSaveSummary | null>(null);
+  const [savers, setSavers] = useState<SaverProfile[]>([]);
+  const [mySave, setMySave] = useState<AccountSaveState | null>(null);
+  const [experiences, setExperiences] = useState<AccountExperience[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -75,23 +101,45 @@ export function useOrgSheetData(accountId: string | null): OrgSheetData {
       setVoteSummary(null);
       setRatingSummary(null);
       setMyVote(null);
+      setSaveSummary(null);
+      setSavers([]);
+      setMySave(null);
+      setExperiences([]);
       return;
     }
 
     setLoading(true);
     try {
-      const [photoRows, commentRows, votes, ratings, mine] = await Promise.all([
+      const [
+        photoRows,
+        commentRows,
+        votes,
+        ratings,
+        mine,
+        saves,
+        saverRows,
+        mySaveRow,
+        experienceRows,
+      ] = await Promise.all([
         fetchAccountPhotos(accountId),
         fetchAccountComments(accountId, wallet),
         fetchAccountVoteSummary(accountId),
         fetchAccountRatingSummary(accountId),
         wallet ? fetchUserAccountVote(accountId, wallet) : Promise.resolve(null),
+        fetchAccountSaveSummary(accountId),
+        fetchAccountSavers(accountId),
+        wallet ? fetchMyAccountSave(accountId, wallet) : Promise.resolve(null),
+        fetchAccountExperiences(accountId),
       ]);
       setPhotos(photoRows);
       setComments(commentRows);
       setVoteSummary(votes);
       setRatingSummary(ratings);
       setMyVote((mine?.vote as 1 | -1 | undefined) ?? null);
+      setSaveSummary(saves);
+      setSavers(saverRows);
+      setMySave(mySaveRow?.state ?? null);
+      setExperiences(experienceRows);
     } catch (err) {
       console.error('useOrgSheetData load error:', err);
     } finally {
@@ -144,6 +192,53 @@ export function useOrgSheetData(accountId: string | null): OrgSheetData {
       }
     },
     [accountId, wallet, myVote, voteSummary]
+  );
+
+  const setSave = useCallback(
+    async (state: AccountSaveState) => {
+      if (!accountId || !wallet) return;
+
+      const previous = mySave;
+      const next = nextSaveState(previous, state);
+      setMySave(next);
+
+      // Move the counters optimistically; the rail refreshes from the server
+      // afterwards because it needs the viewer's avatar and name.
+      const base = saveSummary ?? {
+        account_id: accountId,
+        to_try_count: 0,
+        been_count: 0,
+        save_count: 0,
+      };
+      setSaveSummary(applySaveDelta(base, previous, next));
+
+      const result = await setAccountSave(accountId, wallet, state);
+      if (result !== next) {
+        // Write disagreed with the optimistic guess — take the server's word.
+        setMySave(result);
+        setSaveSummary(await fetchAccountSaveSummary(accountId));
+      }
+      setSavers(await fetchAccountSavers(accountId));
+    },
+    [accountId, wallet, mySave, saveSummary]
+  );
+
+  const postExperience = useCallback(
+    async (content: string, mediaUrls: string[]) => {
+      if (!accountId || !wallet) return false;
+      if (!content.trim() && !mediaUrls.length) return false;
+
+      const created = await createAccountExperience({
+        account_id: accountId,
+        wallet_address: wallet,
+        content,
+        media_urls: mediaUrls,
+      });
+      if (!created) return false;
+      setExperiences((prev) => [created, ...prev]);
+      return true;
+    },
+    [accountId, wallet]
   );
 
   const postComment = useCallback(
@@ -214,8 +309,14 @@ export function useOrgSheetData(accountId: string | null): OrgSheetData {
     voteSummary,
     ratingSummary,
     myVote,
+    saveSummary,
+    savers,
+    mySave,
+    experiences,
     loading,
     setVote,
+    setSave,
+    postExperience,
     postComment,
     postReply,
     likeComment,

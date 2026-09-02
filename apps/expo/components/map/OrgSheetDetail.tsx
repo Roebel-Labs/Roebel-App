@@ -16,6 +16,8 @@ import { useOrgSheetData } from '@/hooks/useOrgSheetData';
 import OrgOpeningHours from './OrgOpeningHours';
 import OrgPhotoCarousel from './OrgPhotoCarousel';
 import OrgCommentThread from './OrgCommentThread';
+import OrgSavedByRail from './OrgSavedByRail';
+import OrgExperienceComposer from './OrgExperienceComposer';
 import type { Account, OpeningHours } from '@/lib/types';
 
 type Props = {
@@ -44,8 +46,14 @@ export default function OrgSheetDetail({
     voteSummary,
     ratingSummary,
     myVote,
+    saveSummary,
+    savers,
+    mySave,
+    experiences,
     loading,
     setVote,
+    setSave,
+    postExperience,
     postComment,
     postReply,
     likeComment,
@@ -57,6 +65,23 @@ export default function OrgSheetDetail({
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.saveRow}>
+        <SaveButton
+          label="Merken"
+          icon="🔖"
+          active={mySave === 'to_try'}
+          onPress={() => void setSave('to_try')}
+          colors={colors}
+        />
+        <SaveButton
+          label="Gewesen"
+          icon="✅"
+          active={mySave === 'been'}
+          onPress={() => void setSave('been')}
+          colors={colors}
+        />
+      </View>
+
       <OrgOpeningHours hours={openingHours} />
 
       <OrgPhotoCarousel photos={photos} fallbackUrls={fallbackImageUrls} />
@@ -67,12 +92,11 @@ export default function OrgSheetDetail({
         </Text>
       ) : null}
 
-      {/* Reactions. The bookmark figure lands with the saves slice; until then
-          it reads as "—" rather than a fake zero. */}
       <View style={[styles.counts, { borderColor: colors.border }]}>
         <Text style={[styles.countsTitle, { color: colors.textPrimary }]}>STIMMEN</Text>
         <View style={styles.countsRow}>
-          <CountChip icon="🔖" value="—" colors={colors} />
+          <CountChip icon="🔖" value={saveSummary?.to_try_count ?? 0} colors={colors} />
+          <CountChip icon="✅" value={saveSummary?.been_count ?? 0} colors={colors} />
           <CountChip icon="⭐" value={ratingSummary?.rating_count ?? 0} colors={colors} />
           <CountChip
             icon="👍"
@@ -89,21 +113,71 @@ export default function OrgSheetDetail({
             colors={colors}
           />
         </View>
+
+        <OrgSavedByRail savers={savers} />
       </View>
 
       {loading ? (
         <ActivityIndicator style={styles.loader} color={colors.textTertiary} />
       ) : (
-        <OrgCommentThread
-          comments={comments}
-          myWallet={user?.wallet_address ?? null}
-          myAvatarUrl={user?.profile_picture_url}
-          onSubmit={postComment}
-          onReply={postReply}
-          onLike={likeComment}
-        />
+        <>
+          <OrgCommentThread
+            comments={comments}
+            myWallet={user?.wallet_address ?? null}
+            myAvatarUrl={user?.profile_picture_url}
+            onSubmit={postComment}
+            onReply={postReply}
+            onLike={likeComment}
+          />
+          <OrgExperienceComposer
+            experiences={experiences}
+            myWallet={user?.wallet_address ?? null}
+            onSubmit={postExperience}
+          />
+        </>
       )}
     </View>
+  );
+}
+
+function SaveButton({
+  label,
+  icon,
+  active,
+  onPress,
+  colors,
+}: {
+  label: string;
+  icon: string;
+  active: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      style={[
+        styles.saveButton,
+        {
+          backgroundColor: active ? colors.primaryLight : 'transparent',
+          borderColor: active ? colors.primary : colors.border,
+        },
+      ]}
+    >
+      <Text style={styles.saveIcon}>{icon}</Text>
+      <Text
+        style={[
+          styles.saveLabel,
+          { color: active ? colors.primary : colors.textSecondary },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -172,5 +246,17 @@ const styles = StyleSheet.create({
   },
   chipIcon: { fontSize: 14 },
   chipValue: { fontFamily: fontFamily.semiBold, fontSize: 14 },
+  saveRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, justifyContent: 'flex-end' },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  saveIcon: { fontSize: 14 },
+  saveLabel: { fontFamily: fontFamily.semiBold, fontSize: 14 },
   loader: { paddingVertical: 24 },
 });
