@@ -49,11 +49,20 @@ export async function fetchBuzzWorkspaceEnabled(): Promise<boolean> {
 
 /**
  * Pilot gate for Deliberate debates in the Umfragen-Forum. Dev builds always
- * see the feature (that's the test environment); production users only after
- * the key is set to 'true'.
+ * see the feature (that's the test environment). In release/OTA builds the
+ * key gates it: 'true' enables everyone, 'citizens' enables verified
+ * citizens (Max's chosen rollout), any other non-empty value is read as a
+ * comma-separated wallet allowlist; missing or 'false' hides everything.
  */
-export async function isDeliberateDebatesEnabled(): Promise<boolean> {
+export async function isDeliberateDebatesEnabled(opts?: {
+  isCitizen?: boolean;
+  walletAddress?: string | null;
+}): Promise<boolean> {
   if (__DEV__) return true;
   const value = await fetchAppSetting('deliberate_debates_enabled');
-  return value === 'true';
+  if (!value || value === 'false') return false;
+  if (value === 'true') return true;
+  if (value === 'citizens') return opts?.isCitizen === true;
+  if (!opts?.walletAddress) return false;
+  return value.toLowerCase().split(',').includes(opts.walletAddress.toLowerCase());
 }

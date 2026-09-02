@@ -104,8 +104,9 @@ export default function ForumThreadScreen() {
   });
 
   const { data: debatesEnabled = false } = useQuery({
-    queryKey: ['flags', 'deliberate'],
-    queryFn: isDeliberateDebatesEnabled,
+    queryKey: ['flags', 'deliberate', isCitizen, user?.wallet_address],
+    queryFn: () =>
+      isDeliberateDebatesEnabled({ isCitizen, walletAddress: user?.wallet_address }),
     staleTime: 5 * 60 * 1000,
   });
   const isThreadOwner =

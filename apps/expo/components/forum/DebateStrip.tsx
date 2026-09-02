@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
 import { isDeliberateDebatesEnabled } from '@/lib/supabase-app-settings';
 import { readDebate, type DebateSummary } from '@/lib/deliberate/chain';
 import { approvalPercent } from '@/lib/deliberate/protocol';
@@ -39,10 +40,12 @@ function phaseLabel(summary: DebateSummary): string {
 export default function DebateStrip({ debateId }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
+  const { user, isCitizen } = useUser();
 
   const { data: enabled } = useQuery({
-    queryKey: ['flags', 'deliberate'],
-    queryFn: isDeliberateDebatesEnabled,
+    queryKey: ['flags', 'deliberate', isCitizen, user?.wallet_address],
+    queryFn: () =>
+      isDeliberateDebatesEnabled({ isCitizen, walletAddress: user?.wallet_address }),
     staleTime: 5 * 60 * 1000,
   });
 
