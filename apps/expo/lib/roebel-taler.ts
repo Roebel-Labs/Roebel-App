@@ -146,6 +146,27 @@ export async function getMintableTaler(address: string): Promise<bigint> {
 	}
 }
 
+const BLOCKSCOUT = "https://gnosis.blockscout.com";
+
+/**
+ * JSON fetch with a hard timeout. React Native's `fetch` has NO default
+ * timeout (its OkHttp client is configured with 0 = infinite), so an endpoint
+ * that accepts the connection and then never answers hangs the awaiting
+ * promise FOREVER — no rejection, so no `catch` ever runs and the screen sits
+ * on skeletons. Every network read in this module goes through here so a dead
+ * upstream degrades into a normal rejection its caller already handles.
+ */
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = 12_000): Promise<any> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, { ...init, signal: controller.signal });
+		return await res.json();
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 // xDAI is USD-pegged, so its € value moves with EUR/USD. Fetch the live rate
 // (10-min in-memory cache) so treasury figures match what a payout actually
 // costs; fall back to the last known / an approximate rate when offline.
@@ -154,8 +175,7 @@ let xdaiEurCache: { rate: number; at: number } | null = null;
 async function getXdaiEurRate(): Promise<number> {
 	if (xdaiEurCache && Date.now() - xdaiEurCache.at < 10 * 60 * 1000) return xdaiEurCache.rate;
 	try {
-		const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
-		const j = await res.json();
+		const j = await fetchJson("https://api.coingecko.com/api/v3/simple/price?ids=xdai&vs_currencies=eur");
 		const rate = Number(j?.xdai?.eur);
 		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) {
 			xdaiEurCache = { rate, at: Date.now() };
@@ -184,10 +204,9 @@ const histRatePromises = new Map<string, Promise<number>>();
 let histQueue: Promise<unknown> = Promise.resolve();
 async function fetchHistRate(key: string): Promise<number | null> {
 	try {
-		const res = await fetch(
+		const j = await fetchJson(
 			`https://api.coingecko.com/api/v3/coins/xdai/history?date=${key}&localization=false`
 		);
-		const j = await res.json();
 		const rate = Number(j?.market_data?.current_price?.eur);
 		if (Number.isFinite(rate) && rate > 0.5 && rate < 2) return rate;
 	} catch {
@@ -248,14 +267,19 @@ let nativeFlowsCache: { key: string; at: number; promise: Promise<NativeFlow[]> 
 
 async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> {
 	const self = address.toLowerCase();
-	const [natRes, intRes] = await Promise.all([
-		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/transactions`),
-		fetch(`https://gnosis.blockscout.com/api/v2/addresses/${address}/internal-transactions`),
+	// `gnosis.blockscout.com` now 301s to gnosisscan.io, whose v2
+	// `/internal-transactions` route accepts the connection and never responds.
+	// The v1 (Etherscan-style) `txlistinternal` action still serves them. Each
+	// source falls back to empty on its own — with Promise.all a single dead
+	// endpoint took the whole flow list (balance AND history) down with it.
+	const [nat, intl] = await Promise.all([
+		fetchJson(`${BLOCKSCOUT}/api/v2/addresses/${address}/transactions`).catch(() => null),
+		fetchJson(`${BLOCKSCOUT}/api?module=account&action=txlistinternal&address=${address}`).catch(
+			() => null,
+		),
 	]);
-	const nat = await natRes.json();
-	const intl = await intRes.json();
 	const flows: NativeFlow[] = [];
-	const push = (rawValue: string, toHash: string, ts: string | undefined, txHash: string) => {
+	const push = (rawValue: string, toHash: string, tsMs: number, txHash: string) => {
 		let v = 0;
 		try {
 			v = Number(BigInt(rawValue || "0")) / 1e18;
@@ -266,16 +290,20 @@ async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> 
 		flows.push({
 			direction: toHash.toLowerCase() === self ? "in" : "out",
 			xdai: v,
-			timestamp: ts ? Date.parse(ts) : 0,
+			timestamp: Number.isFinite(tsMs) ? tsMs : 0,
 			txHash,
 		});
 	};
 	for (const t of Array.isArray(nat?.items) ? nat.items : []) {
-		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.hash ?? ""));
+		push(t?.value, t?.to?.hash ?? "", t?.timestamp ? Date.parse(t.timestamp) : 0, String(t?.hash ?? ""));
 	}
-	for (const t of Array.isArray(intl?.items) ? intl.items : []) {
-		if ((t?.type ?? "call") !== "call") continue;
-		push(t?.value, t?.to?.hash ?? "", t?.timestamp, String(t?.transaction_hash ?? ""));
+	// v1 rows are flat: `to` is a plain address, `timeStamp` is unix SECONDS, and
+	// the call kind lives in `callType` (v2 put it in `type`). Reverted frames
+	// moved nothing, so drop them too.
+	for (const t of Array.isArray(intl?.result) ? intl.result : []) {
+		if ((t?.callType ?? t?.type ?? "call") !== "call") continue;
+		if ((t?.isError ?? "0") !== "0") continue;
+		push(t?.value, t?.to ?? "", Number(t?.timeStamp ?? 0) * 1000, String(t?.transactionHash ?? ""));
 	}
 	// A direct transfer can appear both as the regular tx and as its top-level
 	// internal frame — keep one.
@@ -321,12 +349,11 @@ async function xdaiLedgerEuro(address: string, onchainXdai: number): Promise<num
 export async function getTreasuryEuro(address: string): Promise<number> {
 	let xdai = 0;
 	try {
-		const res = await fetch("https://rpc.gnosischain.com", {
+		const j = await fetchJson("https://rpc.gnosischain.com", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
 		});
-		const j = await res.json();
 		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
 	} catch {
 		/* ignore */
@@ -362,12 +389,11 @@ export interface TreasuryAssets {
 export async function getTreasuryAssets(address: string): Promise<TreasuryAssets> {
 	let xdai = 0;
 	try {
-		const res = await fetch("https://rpc.gnosischain.com", {
+		const j = await fetchJson("https://rpc.gnosischain.com", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
 		});
-		const j = await res.json();
 		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
 	} catch {
 		/* ignore */
@@ -437,10 +463,9 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 
 	const tokens = (async (): Promise<TreasuryTx[]> => {
 		try {
-			const res = await fetch(
-				`https://gnosis.blockscout.com/api/v2/addresses/${address}/token-transfers?type=ERC-20`
+			const j = await fetchJson(
+				`${BLOCKSCOUT}/api/v2/addresses/${address}/token-transfers?type=ERC-20`
 			);
-			const j = await res.json();
 			const items: any[] = Array.isArray(j?.items) ? j.items : [];
 			return items
 				.filter((t) => (t?.token?.address ?? "").toLowerCase() === eureToken)
