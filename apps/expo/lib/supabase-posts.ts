@@ -35,7 +35,7 @@ const FEED_POST_SELECT = `
   author:users!posts_wallet_address_fkey(
     wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
   ),
-  account:accounts(id, account_type, name, avatar_url),
+  account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
   links:post_links(*),
   poll:post_polls(*),
   linked_event:events(id, title, date, time, location, image_url, category),
@@ -230,7 +230,7 @@ export async function fetchUserPosts(
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url),
+      account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -280,7 +280,7 @@ export async function fetchAccountPosts(
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url),
+      account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -314,7 +314,7 @@ export async function fetchPostById(postId: string): Promise<PostRecord | null> 
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url),
+      account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
@@ -410,7 +410,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord | n
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url),
+      account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
       sticker:lootbox_rewards!sticker_reward_id(id, type, name, asset_url)
     `)
     .single();
@@ -536,7 +536,7 @@ export async function updatePost(
       author:users!posts_wallet_address_fkey(
         wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
       ),
-      account:accounts(id, account_type, name, avatar_url),
+      account:accounts!posts_account_id_fkey(id, account_type, name, avatar_url),
       links:post_links(*),
       poll:post_polls(*),
       linked_event:events(id, title, date, time, location, image_url, category),
