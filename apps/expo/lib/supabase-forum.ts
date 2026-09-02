@@ -223,6 +223,20 @@ export async function deleteForumReply(id: string, walletAddress: string): Promi
   void mirrorDeletionToNostr('forum_reply', id);
 }
 
+/** One-shot link from a thread to its on-chain Deliberate debate (owner only). */
+export async function attachDebateToThread(
+  threadId: string,
+  walletAddress: string,
+  debateId: number,
+): Promise<void> {
+  const { error } = await supabase.rpc('attach_debate_to_thread', {
+    p_thread_id: threadId,
+    p_wallet: walletAddress,
+    p_debate_id: debateId,
+  });
+  if (error) throw error;
+}
+
 // ─── Votes (spec §A2.2) ─────────────────────────────────────
 
 export type ForumVoteTarget = 'thread' | 'reply';

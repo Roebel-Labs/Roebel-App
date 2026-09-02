@@ -321,6 +321,9 @@ export type ForumThreadRecord = {
   created_at: string;
   updated_at: string;
   edited_at: string | null;
+  /** On-chain Deliberate debate this thread graduated into; null while none. */
+  debate_id: number | null;
+  debate_created_by?: string | null;
   author?: PostAuthor;
   category?: Pick<ForumCategoryRecord, 'slug' | 'name'> | null;
 };

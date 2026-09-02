@@ -22,6 +22,7 @@ import ShareIcon from '@/assets/icons/share-02.svg';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import CommentInput from '@/components/feed/CommentInput';
 import ReportDrawer from '@/components/feed/ReportDrawer';
+import DebateStrip from '@/components/forum/DebateStrip';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import ForumOptionsDrawer from '@/components/forum/ForumOptionsDrawer';
 import { useUser } from '@/context/UserContext';
@@ -29,6 +30,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useForumVotes } from '@/hooks/useForumVotes';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { supabase } from '@/lib/supabase';
+import { isDeliberateDebatesEnabled } from '@/lib/supabase-app-settings';
 import { shareForumThread, shareForumReply } from '@/lib/forum-share';
 import {
   createForumReply,
@@ -100,6 +102,16 @@ export default function ForumThreadScreen() {
     queryFn: () => fetchThreadSubscription(id!, user!.wallet_address!),
     enabled: !!id && !!user?.wallet_address,
   });
+
+  const { data: debatesEnabled = false } = useQuery({
+    queryKey: ['flags', 'deliberate'],
+    queryFn: isDeliberateDebatesEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isThreadOwner =
+    !!user?.wallet_address &&
+    !!thread?.wallet_address &&
+    user.wallet_address.toLowerCase() === thread.wallet_address.toLowerCase();
 
   const groupedReplies = useMemo(() => groupReplies(replies), [replies]);
 
@@ -391,6 +403,23 @@ export default function ForumThreadScreen() {
                   <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
                 ) : null}
                 <Text style={[styles.body, { color: colors.textPrimary }]}>{thread.body}</Text>
+                {thread.debate_id != null ? (
+                  <DebateStrip debateId={thread.debate_id} />
+                ) : debatesEnabled && isThreadOwner ? (
+                  <Pressable
+                    onPress={() => router.push(`/forum/debate/new?thread=${thread.id}` as any)}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.startDebate,
+                      { borderColor: colors.primary },
+                      pressed && { backgroundColor: colors.primaryLight },
+                    ]}
+                  >
+                    <Text style={[styles.startDebateText, { color: colors.primary }]}>
+                      Strukturierte Debatte starten
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <View style={styles.threadHeadActions}>
                   <ForumVoteCluster
                     targetType="thread"
@@ -520,6 +549,14 @@ const styles = StyleSheet.create({
   body: { fontSize: 15, fontFamily: fontFamily.regular, lineHeight: 22 },
   replyCount: { fontSize: 12, fontFamily: fontFamily.regular },
   threadHeadActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  startDebate: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  startDebateText: { fontSize: 13, fontFamily: fontFamily.medium },
   editedText: { fontSize: 12, fontFamily: fontFamily.regular },
   replyGroup: {
     paddingBottom: 8,

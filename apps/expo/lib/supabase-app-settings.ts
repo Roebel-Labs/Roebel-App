@@ -46,3 +46,14 @@ export async function fetchBuzzWorkspaceEnabled(): Promise<boolean> {
   const value = await fetchAppSetting('buzz_workspace_enabled');
   return value === 'true';
 }
+
+/**
+ * Pilot gate for Deliberate debates in the Umfragen-Forum. Dev builds always
+ * see the feature (that's the test environment); production users only after
+ * the key is set to 'true'.
+ */
+export async function isDeliberateDebatesEnabled(): Promise<boolean> {
+  if (__DEV__) return true;
+  const value = await fetchAppSetting('deliberate_debates_enabled');
+  return value === 'true';
+}

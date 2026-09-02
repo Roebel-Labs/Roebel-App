@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
+import DebateStrip from '@/components/forum/DebateStrip';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import { shareForumThread } from '@/lib/forum-share';
 import CommentIcon from '@/assets/icons/comment-02.svg';
@@ -51,6 +52,8 @@ export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
           {thread.body}
         </Text>
       ) : null}
+
+      {thread.debate_id != null ? <DebateStrip debateId={thread.debate_id} /> : null}
 
       <PostAuthorRow author={thread.author} createdAt={thread.created_at} />
 
