@@ -113,8 +113,9 @@ export default function DebateScreen() {
         .from('users')
         .select('wallet_address, username')
         .in('wallet_address', wallets);
-      for (const u of users ?? []) {
-        if (u.username) authorNames.set(String(u.wallet_address).toLowerCase(), String(u.username));
+      const userRows = (users ?? []) as { wallet_address: string; username: string | null }[];
+      for (const u of userRows) {
+        if (u.username) authorNames.set(u.wallet_address.toLowerCase(), u.username);
       }
       return { root, byId, contents, authorNames };
     },

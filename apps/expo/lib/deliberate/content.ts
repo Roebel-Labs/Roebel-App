@@ -40,7 +40,8 @@ export function assertValidContent(text: string): void {
 export async function putDebateContent(text: string, impl?: DigestImpl): Promise<string> {
 	assertValidContent(text);
 	const digest = await sha256HexOf(text, impl);
-	const { error } = await supabase.from('debate_contents').insert({ digest, content: text });
+	// debate_contents is not in the generated client types yet — house `as any` idiom.
+	const { error } = await (supabase.from('debate_contents') as any).insert({ digest, content: text });
 	if (error && error.code !== '23505') throw error;
 	return digest;
 }
@@ -61,7 +62,8 @@ export async function fetchDebateContents(
 		.select('digest, content')
 		.in('digest', unique);
 	if (error) throw error;
-	for (const row of data ?? []) {
+	const rows = (data ?? []) as { digest: string; content: string }[];
+	for (const row of rows) {
 		if ((await sha256HexOf(row.content, impl)) === row.digest) {
 			out.set(row.digest, row.content);
 		}

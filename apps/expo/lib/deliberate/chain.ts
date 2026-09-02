@@ -210,9 +210,10 @@ export function prepareCreateDebate(
 			'function createDebate(bytes32, uint48, uint48, uint48, uint8, address, address, uint256) returns (uint256)',
 		params: [
 			contentURI,
-			BigInt(lockingDuration),
-			BigInt(editingDuration),
-			BigInt(ratingDuration),
+			// uint48 maps to number in thirdweb's type-level ABI parsing.
+			lockingDuration,
+			editingDuration,
+			ratingDuration,
 			feePercentage,
 			identityRegistry,
 			'0x0000000000000000000000000000000000000000',
