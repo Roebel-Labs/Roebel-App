@@ -19,6 +19,7 @@ import LogoutDrawer from '@/components/LogoutDrawer';
 const LoginDrawer = lazy(() => import('@/components/LoginDrawer'));
 import GovernanceTestBanner from '@/components/GovernanceTestBanner';
 import VerificationBanner from '@/components/VerificationBanner';
+import TestEnvBanner from '@/components/TestEnvBanner';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import TierBadge from '@/components/RoleBadge';
 import AccountSwitcher from '@/components/AccountSwitcher';
@@ -269,6 +270,7 @@ export default function ProfileContent() {
                     <LogoutCircleIcon width={20} height={20} color={colors.textSecondary} />
                   </Pressable>
                 </View>
+                <TestEnvBanner />
                 <VerificationBanner />
                 <GovernanceTestBanner isTestingEnabled={isGovernanceTestEnabled} onPress={() => toggleGovernanceTesting()} />
                 <View style={styles.bookmarkedSection}>

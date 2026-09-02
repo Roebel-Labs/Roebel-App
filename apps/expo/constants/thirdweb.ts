@@ -67,19 +67,24 @@ export const usdcContract = getContract({
 //    historical proposals. Reads only.
 //  - governorContract       — current MACI v2 privacy-voting governor on GNOSIS.
 //    All new proposals + votes go here.
-export const attesterNFTAddress = process.env.NEXT_PUBLIC_ATTESTER_NFT || "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
-export const citizenNFTAddress = process.env.NEXT_PUBLIC_CITIZEN_NFT || "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+// NOTE: these MUST use the EXPO_PUBLIC_ prefix. Expo's bundler inlines only that
+// prefix; the NEXT_PUBLIC_ names these previously used are a Next.js convention and
+// were never defined here, so the overrides silently did nothing and the hardcoded
+// production addresses were always used. The two NFT vars intentionally share their
+// names with constants/gnosis.ts so one env var points BOTH modules at the same set.
+export const attesterNFTAddress = process.env.EXPO_PUBLIC_ATTESTER_NFT_GNOSIS || "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
+export const citizenNFTAddress = process.env.EXPO_PUBLIC_CITIZEN_NFT_GNOSIS || "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
 
 // Legacy public-vote AttesterGovernor remains on BASE (read-only, historical).
-export const legacyGovernorContractAddress = process.env.NEXT_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
+export const legacyGovernorContractAddress = process.env.EXPO_PUBLIC_LEGACY_GOVERNOR || "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b";
 // MaciAttesterGovernor on Gnosis v2 — binds to the fresh MACI core + gatekeeper.
-export const governorContractAddress = process.env.NEXT_PUBLIC_GOVERNOR || "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3";
+export const governorContractAddress = process.env.EXPO_PUBLIC_GOVERNOR || "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3";
 
 // MACI v2 infrastructure on Gnosis (Sybil-hardening rotation 2026-06).
-export const maciAddress = process.env.NEXT_PUBLIC_MACI || "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D";
-export const maciVerifierAddress = process.env.NEXT_PUBLIC_MACI_VERIFIER || "0xC95359cF5d7391cD239c9476393706a8132406dc";
-export const maciVkRegistryAddress = process.env.NEXT_PUBLIC_MACI_VK_REGISTRY || "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f";
-export const maciCoordinatorAddress = process.env.NEXT_PUBLIC_MACI_COORDINATOR || "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C";
+export const maciAddress = process.env.EXPO_PUBLIC_MACI || "0x6663eDC8650276fe264710B1A2ba46eB8bd0bF1D";
+export const maciVerifierAddress = process.env.EXPO_PUBLIC_MACI_VERIFIER || "0xC95359cF5d7391cD239c9476393706a8132406dc";
+export const maciVkRegistryAddress = process.env.EXPO_PUBLIC_MACI_VK_REGISTRY || "0xB21EAA60DF62b7cf06Eb0a2554D9C4e6BA76658f";
+export const maciCoordinatorAddress = process.env.EXPO_PUBLIC_MACI_COORDINATOR || "0x5e6528D22283Daf1E4340B39d48a4D3CeaDC184C";
 
 /** Block at (or slightly before) the MACI core deployment on Gnosis mainnet.
  *  Used as the lower bound for SignUp event scans when recovering a citizen's

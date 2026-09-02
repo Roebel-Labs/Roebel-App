@@ -18,6 +18,27 @@ export const citizenNFTGnosisAddress =
 export const attesterNFTGnosisAddress =
 	process.env.EXPO_PUBLIC_ATTESTER_NFT_GNOSIS || "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
 
+/**
+ * Production Gnosis v2 identity contracts. Frozen literals, used ONLY to detect
+ * whether this build is pointed somewhere else -- never as the addresses themselves.
+ */
+const PRODUCTION_CITIZEN_NFT = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+const PRODUCTION_ATTESTER_NFT = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
+
+/**
+ * True when this build talks to a NON-production identity contract set -- i.e. the
+ * onchain test environment (see docs/ONCHAIN_TEST_ENVIRONMENT.md).
+ *
+ * The test contracts are burner-owned with migration left open, so anyone holding the
+ * burner key can mint citizenship at will. A build pointed at them must say so
+ * on screen, because the test CitizenNFT is otherwise indistinguishable from the real
+ * one: CitizenNFTv2 hardcodes its ERC721 name, so both are literally called
+ * "Roebel Citizen" and only the address differs.
+ */
+export const isTestContractSet =
+	citizenNFTGnosisAddress.toLowerCase() !== PRODUCTION_CITIZEN_NFT.toLowerCase() ||
+	attesterNFTGnosisAddress.toLowerCase() !== PRODUCTION_ATTESTER_NFT.toLowerCase();
+
 // 3-of-5 Attester Safe on Gnosis — owner of the NFTs and (eventually) the Röbeltaler group.
 export const attesterSafeGnosisAddress =
 	process.env.EXPO_PUBLIC_ATTESTER_SAFE_GNOSIS || "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa";

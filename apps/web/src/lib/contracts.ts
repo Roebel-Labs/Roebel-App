@@ -11,8 +11,23 @@ export const OLD_GOVERNOR_CONTRACT_ADDRESS = "0x767f7b996E54248F88944DAc344Ab74e
 // rotation 2026-06-25: scale-aware %-band thresholds, per-request approval
 // getters, isActive/validUntil/citizenCount/attesterCount views.
 // Source of truth: contracts/governor-contract/deployments/gnosis-v2.json
-export const CITIZEN_NFT_ADDRESS = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
-export const ATTESTER_NFT_ADDRESS = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
+// Frozen production literals. Also used to detect a non-production build below --
+// never edit these to point somewhere else; set the env vars instead.
+export const PRODUCTION_CITIZEN_NFT_ADDRESS = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
+export const PRODUCTION_ATTESTER_NFT_ADDRESS = "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82";
+
+// Overridable so a staging deployment can be pointed at the onchain TEST contract
+// set (burner-owned, migration left open) without a code change.
+// See docs/ONCHAIN_TEST_ENVIRONMENT.md.
+export const CITIZEN_NFT_ADDRESS =
+  process.env.NEXT_PUBLIC_CITIZEN_NFT || PRODUCTION_CITIZEN_NFT_ADDRESS;
+export const ATTESTER_NFT_ADDRESS =
+  process.env.NEXT_PUBLIC_ATTESTER_NFT || PRODUCTION_ATTESTER_NFT_ADDRESS;
+
+/** True when this build talks to a non-production identity contract set. */
+export const isTestContractSet =
+  CITIZEN_NFT_ADDRESS.toLowerCase() !== PRODUCTION_CITIZEN_NFT_ADDRESS.toLowerCase() ||
+  ATTESTER_NFT_ADDRESS.toLowerCase() !== PRODUCTION_ATTESTER_NFT_ADDRESS.toLowerCase();
 
 // Legacy public-vote AttesterGovernor (Base) — kept for historical proposals only.
 // Stays on Base because this contract was never deployed on Gnosis.
