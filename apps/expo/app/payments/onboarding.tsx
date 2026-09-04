@@ -112,13 +112,12 @@ export default function MerchantOnboardingScreen() {
         const signed = await signIn(account);
         jwt = signed.ok ? signed.data : null;
         if (!signed.ok && !cancelled) {
-          // A counterfactual smart account cannot pass ERC-1271 yet; say so in
-          // plain German rather than surfacing the raw vendor message.
-          setError(
-            signed.code === 'UNAUTHORIZED'
-              ? 'Anmeldung bei Gnosis Pay fehlgeschlagen. Bitte einmal eine Zahlung oder Aktion in der App ausführen und erneut versuchen.'
-              : signed.message,
-          );
+          // Surface what the server actually said. An earlier version guessed
+          // "account not deployed", which sent debugging down the wrong path --
+          // the real causes so far have been a text/plain nonce and an
+          // unregistered SIWE domain, neither of which the guess described.
+          console.error('[gnosispay] sign-in failed', signed.code, signed.message);
+          setError(`Anmeldung bei Gnosis Pay fehlgeschlagen (${signed.code}): ${signed.message}`);
         }
       }
       if (cancelled) return;

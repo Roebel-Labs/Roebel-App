@@ -104,3 +104,47 @@ describe('gpFetch', () => {
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 });
+
+describe('gpFetch content types', () => {
+  /**
+   * GET /api/v1/auth/nonce answers `text/plain` with a bare hex string, not
+   * JSON. Calling response.json() on it throws, which used to surface as an
+   * empty object and produced a SIWE message reading "Nonce: undefined".
+   */
+  function stubTyped(status: number, contentType: string, body: unknown) {
+    global.fetch = jest.fn().mockResolvedValue({
+      status,
+      ok: status >= 200 && status < 300,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? contentType : null) },
+      json: async () => {
+        if (!contentType.includes('json')) throw new SyntaxError('Unexpected token');
+        return body;
+      },
+      text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+    }) as unknown as typeof fetch;
+  }
+
+  it('returns a text/plain body as a string', async () => {
+    stubTyped(200, 'text/plain; charset=utf-8', '0f5f3ae8356115936c3fa9');
+    const result = await gpFetch<string>('/api/v1/auth/nonce');
+    expect(result).toEqual({ ok: true, data: '0f5f3ae8356115936c3fa9' });
+  });
+
+  it('still parses application/json normally', async () => {
+    stubTyped(200, 'application/json', { id: 'u1' });
+    const result = await gpFetch<{ id: string }>('/api/v1/user', { token: 'jwt' });
+    expect(result).toEqual({ ok: true, data: { id: 'u1' } });
+  });
+
+  it('uses a text error body as the message', async () => {
+    stubTyped(401, 'text/plain', 'invalid nonce');
+    const result = await gpFetch('/api/v1/auth/challenge', { method: 'POST' });
+    expect(result).toEqual({ ok: false, code: 'UNAUTHORIZED', message: 'invalid nonce' });
+  });
+
+  it('never yields an empty object for a successful text response', async () => {
+    stubTyped(200, 'text/plain', 'abc123');
+    const result = await gpFetch<string>('/api/v1/auth/nonce');
+    expect(result.ok && result.data).not.toEqual({});
+  });
+});

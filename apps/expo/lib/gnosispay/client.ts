@@ -38,6 +38,15 @@ function codeForStatus(status: number): GpErrorCode {
   return 'BAD_REQUEST';
 }
 
+/** Content type, tolerating fetch stubs and responses without headers. */
+function readContentType(response: Response): string {
+  try {
+    return response.headers?.get?.('content-type')?.toLowerCase() ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export async function gpFetch<T>(
   path: string,
   init?: { method?: string; body?: unknown; token?: string | null },
@@ -53,9 +62,19 @@ export async function gpFetch<T>(
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     });
 
+    // Not every endpoint answers JSON: GET /api/v1/auth/nonce returns the nonce
+    // as bare `text/plain`. Calling response.json() on that throws, which would
+    // silently become an empty object and produce a SIWE message reading
+    // "Nonce: undefined" -- rejected by the server as a 401.
+    const contentType = readContentType(response);
     let payload: unknown = null;
     try {
-      payload = await response.json();
+      if (contentType && !contentType.includes('json')) {
+        const text = await response.text();
+        payload = text.length > 0 ? text : null;
+      } else {
+        payload = await response.json();
+      }
     } catch {
       payload = null;
     }
@@ -65,7 +84,9 @@ export async function gpFetch<T>(
     }
 
     const message =
-      (payload as { message?: string } | null)?.message ?? `HTTP ${response.status}`;
+      typeof payload === 'string' && payload.trim().length > 0
+        ? payload.trim()
+        : ((payload as { message?: string } | null)?.message ?? `HTTP ${response.status}`);
     return { ok: false, code: codeForStatus(response.status), message };
   } catch (error) {
     return {
