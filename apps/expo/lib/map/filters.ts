@@ -8,6 +8,8 @@ export type MapFilterState = {
   orgs: boolean;
   pois: boolean;
   openNow: boolean;
+  /** "Stablecoin" chip -- keeps only places with a live merchant Konto. */
+  acceptsStablecoin: boolean;
 };
 
 /**

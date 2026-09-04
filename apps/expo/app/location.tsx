@@ -128,8 +128,8 @@ export default function LocationScreen() {
 
   const [mapFilter, setMapFilter] = useState<MapFilterState>(
     filterOnly === 'orgs'
-      ? { events: false, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false }
-      : { events: true, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false }
+      ? { events: false, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false, acceptsStablecoin: false }
+      : { events: true, restaurants: true, businesses: true, orgs: true, pois: false, openNow: false, acceptsStablecoin: false }
   );
 
   // Re-apply the filter if the deep-link param changes after mount
@@ -142,6 +142,7 @@ export default function LocationScreen() {
         orgs: true,
         pois: false,
         openNow: false,
+        acceptsStablecoin: false,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

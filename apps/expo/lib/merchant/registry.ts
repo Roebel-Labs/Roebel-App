@@ -114,11 +114,25 @@ export function linkEntity(
   return postSigned(account, 'link_entity', params as Record<string, unknown>);
 }
 
+/**
+ * The generated Supabase types predate merchant_account_for_wallet, so
+ * `supabase.rpc` types its argument as `undefined` and rejects the call.
+ * Narrowing the boundary here keeps the cast to one well-named place instead of
+ * sprinkling `as any` at the call site (which is what lib/supabase-invites.ts
+ * does, and which still does not typecheck).
+ */
+type RpcCaller = (
+  fn: string,
+  args: Record<string, unknown>,
+) => Promise<{ data: unknown; error: { message: string } | null }>;
+
+const callRpc = supabase.rpc.bind(supabase) as unknown as RpcCaller;
+
 /** The owner's own Konto, via the security-definer function. */
 export async function fetchMerchantAccount(
   wallet: string,
 ): Promise<MerchantPaymentAccount | null> {
-  const { data, error } = await supabase.rpc('merchant_account_for_wallet', {
+  const { data, error } = await callRpc('merchant_account_for_wallet', {
     p_wallet: wallet.toLowerCase(),
   });
   if (error) {
