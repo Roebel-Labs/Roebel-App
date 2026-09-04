@@ -109,7 +109,7 @@ Only public fields leave the database: id, title, description, date, time, end_t
 
 ### 6.3 Scripts (Claude)
 
-Three functions, each a `generateObject` call with `anthropic("claude-sonnet-5")` and a zod schema, following `lib/newsletter/generate.ts`:
+Three functions, each a `generateObject` call with `anthropic("claude-opus-5")` (constant `SCRIPT_MODEL`; the current Claude API guidance defaults to Opus 5, and the volume here is a few thousand tokens per day) and a zod schema, following `lib/newsletter/generate.ts`:
 
 - `writeIntro(events, todayBerlin)` → `{ script }`, 40 to 60 words.
 - `writeEventSegments(events)` → `{ segments: [{ event_id, script }] }`, 45 to 70 words each. The call fails if any requested id is missing from the answer.
