@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { isAuthenticated } from "@/lib/auth/session"
 
 const EVENT_STORIES_AUDIO_KEY = "event_stories_audio_url"
 
@@ -62,5 +63,31 @@ export async function setEventStoriesAudioUrl(url: string | null) {
   if (result.success) {
     revalidatePath("/admin/dashboard/events")
   }
+  return result
+}
+
+const EVENT_RADIO_VOICE_KEY = "event_radio_voice_id"
+const EVENT_RADIO_ENABLED_KEY = "event_radio_enabled"
+
+/** Wochen-Radio: ElevenLabs voice id + app kill switch (missing = enabled). */
+export async function getEventRadioSettings(): Promise<{ voiceId: string | null; enabled: boolean }> {
+  const [voiceId, enabled] = await Promise.all([
+    getAppSetting(EVENT_RADIO_VOICE_KEY),
+    getAppSetting(EVENT_RADIO_ENABLED_KEY),
+  ])
+  return { voiceId: voiceId?.trim() || null, enabled: enabled !== "false" }
+}
+
+export async function setEventRadioVoiceId(voiceId: string | null) {
+  if (!(await isAuthenticated())) return { success: false as const, error: "Nicht autorisiert" }
+  const result = await setAppSetting(EVENT_RADIO_VOICE_KEY, voiceId?.trim() || null)
+  if (result.success) revalidatePath("/admin/dashboard/events")
+  return result
+}
+
+export async function setEventRadioEnabled(enabled: boolean) {
+  if (!(await isAuthenticated())) return { success: false as const, error: "Nicht autorisiert" }
+  const result = await setAppSetting(EVENT_RADIO_ENABLED_KEY, enabled ? "true" : "false")
+  if (result.success) revalidatePath("/admin/dashboard/events")
   return result
 }
