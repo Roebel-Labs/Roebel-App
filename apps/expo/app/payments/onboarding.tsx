@@ -99,27 +99,33 @@ export default function MerchantOnboardingScreen() {
     return result.data;
   }, []);
 
-  /** Sign in once the wallet is ready; a stored JWT short-circuits the signature. */
+  /**
+   * Sign in to Gnosis Pay; a stored JWT short-circuits the signature. Exposed
+   * as a callback so the first screen can offer a retry when it fails -- the
+   * user should not have to leave and re-enter the wizard.
+   */
+  const establishSession = useCallback(async (): Promise<string | null> => {
+    if (!account) return null;
+    const stored = await getStoredToken(account.address);
+    if (stored) return stored;
+    const signed = await signIn(account);
+    if (signed.ok) return signed.data;
+    // Surface what the server actually said. An earlier version guessed
+    // "account not deployed", which sent debugging down the wrong path --
+    // the real causes so far have been a text/plain nonce and an unregistered
+    // SIWE domain, neither of which the guess described.
+    console.error('[gnosispay] sign-in failed', signed.code, signed.message);
+    setError(`Anmeldung bei Gnosis Pay fehlgeschlagen (${signed.code}): ${signed.message}`);
+    return null;
+  }, [account]);
+
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
 
     (async () => {
       setBusy(true);
-      const stored = await getStoredToken(account.address);
-      let jwt = stored;
-      if (!jwt) {
-        const signed = await signIn(account);
-        jwt = signed.ok ? signed.data : null;
-        if (!signed.ok && !cancelled) {
-          // Surface what the server actually said. An earlier version guessed
-          // "account not deployed", which sent debugging down the wrong path --
-          // the real causes so far have been a text/plain nonce and an
-          // unregistered SIWE domain, neither of which the guess described.
-          console.error('[gnosispay] sign-in failed', signed.code, signed.message);
-          setError(`Anmeldung bei Gnosis Pay fehlgeschlagen (${signed.code}): ${signed.message}`);
-        }
-      }
+      const jwt = await establishSession();
       if (cancelled) return;
       if (jwt) {
         setToken(jwt);
@@ -131,7 +137,7 @@ export default function MerchantOnboardingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [account, refresh]);
+  }, [account, establishSession, refresh]);
 
   /** Poll while Sumsub reviews, as a backstop for the webhook. */
   useEffect(() => {
@@ -192,13 +198,21 @@ export default function MerchantOnboardingScreen() {
           stepTotal={progress.total}
           title="Geld, das sofort auf Ihrer Karte ist"
           body="Sie nehmen Zahlungen in digitalen Euro an. Das Geld liegt auf Ihrem eigenen Konto und lässt sich sofort mit Karte ausgeben."
-          actionLabel="Los geht's"
+          actionLabel={token ? "Los geht's" : 'Anmeldung wiederholen'}
           busy={busy}
           error={error}
-          actionDisabled={!email.includes('@')}
+          actionDisabled={token ? !email.includes('@') : false}
           onAction={() =>
             run(async () => {
-              if (!token) throw new Error('Nicht bei Gnosis Pay angemeldet.');
+              if (!token) {
+                // The sign-in failed earlier (or is still blocked upstream).
+                // Retry it in place; establishSession sets the error itself.
+                const jwt = await establishSession();
+                if (!jwt) return;
+                setToken(jwt);
+                await refresh(jwt);
+                return;
+              }
               const result = await signup(email.trim(), token);
               if (!result.ok && result.code !== 'ALREADY_DONE') {
                 throw new Error(result.message);
