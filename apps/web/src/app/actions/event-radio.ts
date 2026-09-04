@@ -74,19 +74,28 @@ export async function getEventRadioOverview(): Promise<EventRadioOverview> {
   }
 }
 
+export type VoiceListResult = { voices: RadioVoice[]; error: string | null }
+
 /**
  * The account's own ElevenLabs voices, offered as host candidates in the
- * panel. Returns an empty list (never throws) when the key is missing, so the
- * picker simply hides instead of breaking the page.
+ * panel. Never throws: an unreachable list comes back as an `error` string so
+ * the panel can say WHY the picker is empty instead of hiding silently.
  */
-export async function getEventRadioVoices(): Promise<RadioVoice[]> {
+export async function getEventRadioVoices(): Promise<VoiceListResult> {
   if (!(await isAuthenticated())) throw new Error("Nicht autorisiert")
   const apiKey = process.env.ELEVENLABS_API_KEY
-  if (!apiKey) return []
+  if (!apiKey) {
+    return {
+      voices: [],
+      error:
+        "ELEVENLABS_API_KEY fehlt auf diesem Server. Lokal: Dev-Server nach dem Eintragen in .env.local neu starten. Produktion: Variable in Vercel setzen und neu deployen.",
+    }
+  }
   try {
-    return await listOwnVoices(apiKey)
+    return { voices: await listOwnVoices(apiKey), error: null }
   } catch (err) {
-    console.error("[EventRadio] Stimmen laden fehlgeschlagen:", err)
-    return []
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[EventRadio] Stimmen laden fehlgeschlagen:", message)
+    return { voices: [], error: `Stimmen konnten nicht geladen werden: ${message}` }
   }
 }

@@ -80,6 +80,7 @@ export function EventRadioPanel() {
   const [busy, setBusy] = useState<"dry" | "force" | null>(null)
   const [scripts, setScripts] = useState<DryRunScripts | null>(null)
   const [voices, setVoices] = useState<RadioVoice[]>([])
+  const [voicesError, setVoicesError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -98,8 +99,13 @@ export function EventRadioPanel() {
   useEffect(() => {
     void load()
     void getEventRadioVoices()
-      .then(setVoices)
-      .catch(() => setVoices([]))
+      .then((r) => {
+        setVoices(r.voices)
+        setVoicesError(r.error)
+      })
+      .catch((err) =>
+        setVoicesError(err instanceof Error ? err.message : "Stimmen konnten nicht geladen werden."),
+      )
   }, [load])
 
   const saveVoice = async (id?: string) => {
@@ -178,6 +184,12 @@ export function EventRadioPanel() {
         Wird täglich neu erzeugt, nur geänderte Veranstaltungen werden neu eingesprochen.
         Zuletzt generiert: {formatDe(overview?.lastGeneratedAt ?? null)}.
       </p>
+
+      {voicesError ? (
+        <p className="rounded-[10px] border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
+          Stimmen-Auswahl nicht verfügbar. {voicesError}
+        </p>
+      ) : null}
 
       {voices.length > 0 ? (
         <div className="space-y-2">
