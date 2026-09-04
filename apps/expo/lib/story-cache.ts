@@ -4,6 +4,7 @@ import type {
   StoryCollection,
   StorySlide,
 } from '@/lib/supabase-story-collections';
+import type { EventRadioBundle } from '@/lib/event-radio-select';
 
 const CACHED_STORIES_KEY = '@cached_stories';
 
@@ -22,6 +23,8 @@ export type CachedStories = {
   collections: StoryCollection[];
   collectionSlides: Record<string, StorySlide[]>;
   audioUrl: string | null;
+  // Wochen-Radio narration; absent in bundles saved before the feature shipped.
+  radio?: EventRadioBundle;
   savedAt: number; // Date.now() at save time
 };
 

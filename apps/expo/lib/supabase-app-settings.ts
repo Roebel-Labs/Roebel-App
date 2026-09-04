@@ -66,3 +66,13 @@ export async function isDeliberateDebatesEnabled(opts?: {
   if (!opts?.walletAddress) return false;
   return value.toLowerCase().split(',').includes(opts.walletAddress.toLowerCase());
 }
+
+/**
+ * Kill switch for the Wochen-Radio narration in event stories. Missing key
+ * counts as ENABLED; setting it to 'false' silences narration on every client
+ * without an app update (the bed track keeps playing as before).
+ */
+export async function fetchEventRadioEnabled(): Promise<boolean> {
+  const value = await fetchAppSetting('event_radio_enabled');
+  return value !== 'false';
+}
