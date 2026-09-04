@@ -35,10 +35,26 @@ your own console before creating it.
 
 ### 1. Create the box
 
-Ubuntu 24.04 or newer, Falkenstein, Docker installed. Note the IPv4.
+With a Hetzner API token (Console → Security → API tokens, Read & Write):
 
-Add a Hetzner **Cloud Firewall** allowing only 22, 80 and 443. `ufw` is useless
-here — Docker writes its own iptables rules and bypasses it.
+```bash
+export HCLOUD_TOKEN=...
+packages/cli/scripts/provision-hetzner.sh --dry-run          # prints type, price, what it would create
+packages/cli/scripts/provision-hetzner.sh --ssh-key <key-name>
+```
+
+It prints the IPv4 on stdout and nothing else, so `IP=$(...)` works. It creates
+a Cloud Firewall allowing only 22/80/443 and attaches it **at create time** —
+`ufw` is useless here because Docker writes its own iptables rules and bypasses
+it, and attaching a firewall afterwards leaves a window where the box is open.
+
+It refuses to create a second server with the same name: an accidental duplicate
+bills every month until somebody notices. It also asks the API which server
+types exist rather than trusting a constant, because Hetzner retired CX22 in
+favour of CX23 in 2026 and will do it again.
+
+Without a token, do it in the console: Ubuntu 24.04+, Falkenstein, Docker
+installed, firewall 22/80/443, and note the IPv4.
 
 ### 2. DNS at IONOS (not Vercel, not Hetzner)
 
@@ -55,12 +71,23 @@ deleting them costs nothing.
 
 ### 3. Secrets
 
-`SECRETS.md` in the rendered bundle now lists all ten, including the four that
-are compose-interpolated and used to be invisible on this checklist. All of them
-exist in the export's `roebel.env`; only `POSTGRES_PASSWORD` may be freshly
-invented.
+`SECRETS.md` lists ten, but only **six** are consumed by anything that runs on
+the box — the ones the compose file interpolates. All six are in the export's
+`roebel.env`:
 
-Put them in `/opt/netizen/roebel/.env` on the box. Never pass them through the
+```
+ANTHROPIC_API_KEY  GNOSIS_RPC  NODE_AGENT_SECRET
+POSTGRES_PASSWORD  SUPABASE_SERVICE_KEY  SUPABASE_URL
+```
+
+The other four — `COORDINATOR_PUBKEY`, `GNOSIS_BUNDLER_RPC`, `WEB_CLIENT_SECRET`,
+`ROEBEL_ID_JWKS` — appear only in `manifest.json` and `SECRETS.md`. They are
+Vercel and Fly-keystone concerns; nothing on this box reads them. `SECRETS.md`
+lists them because the checklist walks the whole manifest, which is right for a
+node that self-hosts its keystone and over-broad for Röbel, whose keystone lives
+on Fly.
+
+Put the six in `/opt/netizen/roebel/.env` on the box. Never pass them through the
 CLI.
 
 > `SUPABASE_SERVICE_KEY` is the one that silently matters. Without it
