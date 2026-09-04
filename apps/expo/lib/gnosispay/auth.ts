@@ -13,9 +13,19 @@ import * as SecureStore from 'expo-secure-store';
 import { gpFetch } from './client';
 import type { GpResult } from './types';
 
-/** Registered in the Gnosis Pay partner dashboard. Must match exactly. */
-export const GP_SIWE_DOMAIN = 'app.roebel.app';
-const GP_SIWE_URI = 'https://app.roebel.app';
+/**
+ * The domain this app declares in its SIWE message. A native app has no
+ * origin, so this is purely a declaration that Gnosis Pay checks against an
+ * allowlist on their side. Configurable per deployment (each Ortis community
+ * registers its own domain) -- default is the domain registered for Röbel.
+ *
+ * Verified 2026-09-04: the allowlist is real and contains Gnosis Pay's own
+ * domains, but NOT the App Domain entries from the partner dashboard. Until
+ * they provision ours, every sign-in returns 403 "SIWE domain not allowed".
+ */
+export const GP_SIWE_DOMAIN =
+  process.env.EXPO_PUBLIC_GNOSISPAY_SIWE_DOMAIN?.trim() || 'app.roebel.app';
+const GP_SIWE_URI = `https://${GP_SIWE_DOMAIN}`;
 
 /** 24 h is the vendor maximum; we ask for it and re-sign on 401. */
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
