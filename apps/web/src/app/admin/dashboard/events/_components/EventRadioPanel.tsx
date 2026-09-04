@@ -11,7 +11,13 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { setEventRadioEnabled, setEventRadioVoiceId } from "@/app/actions/app-settings"
-import { getEventRadioOverview, type EventRadioOverview, type SegmentView } from "@/app/actions/event-radio"
+import {
+  getEventRadioOverview,
+  getEventRadioVoices,
+  type EventRadioOverview,
+  type RadioVoice,
+  type SegmentView,
+} from "@/app/actions/event-radio"
 
 type DryRunScripts = { intro?: string; outro?: string; events: Record<string, string> }
 
@@ -69,6 +75,7 @@ export function EventRadioPanel() {
   const [voiceInput, setVoiceInput] = useState("")
   const [busy, setBusy] = useState<"dry" | "force" | null>(null)
   const [scripts, setScripts] = useState<DryRunScripts | null>(null)
+  const [voices, setVoices] = useState<RadioVoice[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -86,10 +93,15 @@ export function EventRadioPanel() {
 
   useEffect(() => {
     void load()
+    void getEventRadioVoices()
+      .then(setVoices)
+      .catch(() => setVoices([]))
   }, [load])
 
-  const saveVoice = async () => {
-    const result = await setEventRadioVoiceId(voiceInput || null)
+  const saveVoice = async (id?: string) => {
+    const next = (id ?? voiceInput) || null
+    setVoiceInput(next ?? "")
+    const result = await setEventRadioVoiceId(next)
     if (!result.success) return toast.error("Fehler beim Speichern", { description: result.error })
     toast.success("Stimme gespeichert")
     void load()
@@ -150,12 +162,46 @@ export function EventRadioPanel() {
         Zuletzt generiert: {formatDe(overview?.lastGeneratedAt ?? null)}.
       </p>
 
+      {voices.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Stimme wählen: anhören, übernehmen, dann unten neu generieren, um sie in echten
+            Beiträgen zu hören. Umschalten geht jederzeit.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {voices.map((v) => {
+              const active = v.id === overview?.voiceId
+              return (
+                <div
+                  key={v.id}
+                  className={`rounded-[10px] border p-2 space-y-2 ${active ? "border-primary" : "border-border"}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{v.name}</span>
+                    {active ? (
+                      <Badge variant="secondary">Aktiv</Badge>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => saveVoice(v.id)}>
+                        Übernehmen
+                      </Button>
+                    )}
+                  </div>
+                  {v.previewUrl ? (
+                    <audio controls preload="none" src={v.previewUrl} className="w-full h-8" />
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2">
         <div className="flex-1">
           <label className="text-xs text-muted-foreground">ElevenLabs Voice ID (Mecky)</label>
           <Input value={voiceInput} onChange={(e) => setVoiceInput(e.target.value)} placeholder="z. B. 21m00Tcm4TlvDq8ikWAM" />
         </div>
-        <Button variant="outline" onClick={saveVoice} disabled={loading}>Speichern</Button>
+        <Button variant="outline" onClick={() => saveVoice()} disabled={loading}>Speichern</Button>
       </div>
 
       <div className="flex flex-wrap gap-2">

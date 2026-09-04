@@ -8,7 +8,10 @@ import { planScopes } from "@/lib/event-radio/plan"
 import { pickLatestPerScope, scopeId } from "@/lib/event-radio/select"
 import { TTS_MODEL_ID } from "@/lib/event-radio/tts"
 import { berlinToday, weekWindow } from "@/lib/event-radio/window"
+import { listOwnVoices, type RadioVoice } from "@/lib/event-radio/voices"
 import { getEventRadioSettings } from "./app-settings"
+
+export type { RadioVoice }
 
 export type SegmentView = { audioUrl: string; script: string; durationMs: number; createdAt: string }
 
@@ -66,5 +69,22 @@ export async function getEventRadioOverview(): Promise<EventRadioOverview> {
         status: !row ? "missing" : p.needed ? "stale" : "current",
       }
     }),
+  }
+}
+
+/**
+ * The account's own ElevenLabs voices, offered as host candidates in the
+ * panel. Returns an empty list (never throws) when the key is missing, so the
+ * picker simply hides instead of breaking the page.
+ */
+export async function getEventRadioVoices(): Promise<RadioVoice[]> {
+  if (!(await isAuthenticated())) throw new Error("Nicht autorisiert")
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) return []
+  try {
+    return await listOwnVoices(apiKey)
+  } catch (err) {
+    console.error("[EventRadio] Stimmen laden fehlgeschlagen:", err)
+    return []
   }
 }
