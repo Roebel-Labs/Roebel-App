@@ -15,6 +15,8 @@ import {
   renderMatrixSecretsScript,
   collectSecretRefs,
   backupTargets,
+  composeNeedsPostgres,
+  postgresDatabases,
   renderBackupScript,
   renderRestoreScript,
   renderHardeningScript,
@@ -28,33 +30,14 @@ const roebel = JSON.parse(
   ),
 );
 
-// A node that declares the FULL suite. Röbel's own manifest deliberately declares
-// only what the installer can stand up today, so suite-coverage tests use this.
-const fullNode = {
-  ...roebel,
-  services: {
-    ...roebel.services,
-    workspace: {
-      ...roebel.services.workspace,
-      mail: "https://mail.roebel.app",
-      wiki: "https://wiki.roebel.app",
-      video: "https://meet.roebel.app",
-      project: "https://project.roebel.app",
-      portal: "https://agents.roebel.app",
-    },
-    chat: {
-      ...roebel.services.chat,
-      matrix: {
-        homeserver: "https://matrix.roebel.app",
-        mas: "https://auth.roebel.app",
-        element: "https://chat.roebel.app",
-      },
-    },
-  },
-};
+// A node that declares the FULL suite, kept as its own fixture rather than
+// derived from Röbel's manifest. Röbel declares only what that town actually
+// runs (relay + index); deriving from it would silently drop renderer coverage
+// for the workspace/Matrix/buzz surfaces every time a town's deployment shrinks.
+const fullNode = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./fixtures/full-node.json", import.meta.url)), "utf8"),
+);
 
-// Röbel hosts its keystone on Fly (hosted: "external"). Tests that assert on
-// keystone artifacts use this self-hosting variant.
 const selfHosted = {
   ...roebel,
   identity: { ...roebel.identity, idp: { ...roebel.identity.idp, hosted: "node" } },
@@ -78,12 +61,23 @@ test("web.env carries exactly the two dashboard-tile base URLs", () => {
 test("secrets appear only as references, never resolved values", () => {
   const bundle = renderBundle(fullNode);
   // every secret the manifest names is surfaced as a ref in SECRETS.md
+  // Röbel runs relay + index, so the operator has six secrets to place on the
+  // box — every one of them a reference, none a value.
   assert.deepEqual(
     collectSecretRefs(roebel).sort(),
     [
-      "$BUZZ_GIT_HOOK_HMAC_SECRET", "$BUZZ_POSTGRES_PASSWORD", "$BUZZ_REDIS_PASSWORD",
-      "$BUZZ_RELAY_PRIVATE_KEY", "$BUZZ_S3_ACCESS_KEY", "$BUZZ_S3_SECRET_KEY",
-      "$COORDINATOR_PUBKEY", "$GNOSIS_BUNDLER_RPC", "$GNOSIS_RPC", "$MATRIX_CLIENT_SECRET",
+      "$COORDINATOR_PUBKEY", "$GNOSIS_BUNDLER_RPC", "$GNOSIS_RPC",
+      "$ROEBEL_ID_JWKS", "$SUPABASE_URL", "$WEB_CLIENT_SECRET",
+    ],
+  );
+  // The full suite still surfaces every secret its extra services need.
+  assert.deepEqual(
+    collectSecretRefs(fullNode).sort(),
+    [
+      "$ANTHROPIC_API_KEY", "$BUZZ_GIT_HOOK_HMAC_SECRET", "$BUZZ_MECKY_PRIVATE_KEY",
+      "$BUZZ_POSTGRES_PASSWORD", "$BUZZ_REDIS_PASSWORD", "$BUZZ_RELAY_PRIVATE_KEY",
+      "$BUZZ_S3_ACCESS_KEY", "$BUZZ_S3_SECRET_KEY", "$COORDINATOR_PUBKEY",
+      "$GNOSIS_BUNDLER_RPC", "$GNOSIS_RPC", "$MATRIX_CLIENT_SECRET",
       "$NEXTCLOUD_CLIENT_SECRET", "$ROEBEL_ID_JWKS", "$SUPABASE_URL", "$WEB_CLIENT_SECRET",
     ],
   );
@@ -275,10 +269,10 @@ test("backup targets narrow to what the node actually runs", () => {
   // An include list can filter, but must never invent a target the node lacks —
   // that would render a dump step for a container that does not exist and the
   // nightly run would report an error every night until someone muted it.
-  const noRelay = { ...roebel, services: { ...roebel.services, chat: {} } };
-  assert.deepEqual(backupTargets(roebel), ["postgres", "nextcloud", "strfry"]);
+  const noRelay = { ...fullNode, services: { ...fullNode.services, chat: {} } };
+  assert.deepEqual(backupTargets(fullNode), ["postgres", "nextcloud", "strfry"]);
   assert.deepEqual(backupTargets(noRelay), ["postgres", "nextcloud"]);
-  const narrowed = { ...roebel, operations: { ...roebel.operations, backup: { ...roebel.operations.backup, include: ["postgres"] } } };
+  const narrowed = { ...fullNode, operations: { ...fullNode.operations, backup: { ...fullNode.operations.backup, include: ["postgres"] } } };
   assert.deepEqual(backupTargets(narrowed), ["postgres"]);
 });
 
@@ -292,7 +286,7 @@ test("postgres is dumped with pg_dump, never copied as files", () => {
 });
 
 test("nextcloud files+db are captured in one maintenance window, and the trap always closes it", () => {
-  const s = renderBackupScript(roebel);
+  const s = renderBackupScript(fullNode);
   assert.match(s, /maintenance:mode --on/);
   // Without the trap, a backup that dies mid-run leaves the town's cloud offline
   // until a human notices. This is the single most important line in the script.
@@ -327,7 +321,7 @@ test("offsite is loud when unconfigured — silence would read as safety", () =>
 });
 
 test("restore refuses to overwrite live data without --yes", () => {
-  const s = renderRestoreScript(roebel);
+  const s = renderRestoreScript(fullNode);
   assert.match(s, /Refusing to overwrite live data without --yes/);
   assert.match(s, /pg_restore -U postgres --clean --if-exists/);
   // Restoring files and db must re-enter the same maintenance window.
@@ -658,4 +652,67 @@ test("a vault: secret ref fails at render time, not on the box", () => {
     },
   };
   assert.throws(() => renderComposeYml(vaultNode), /redisPassword/);
+});
+
+// A relay + index node — no Nextcloud, no Matrix — is the schema's own "minimum
+// viable node". It still needs Postgres, because the indexer keeps its derived
+// index there. postgresDatabases() knew that; composeNeedsPostgres() did not,
+// so the renderer emitted an indexer pointing at a postgres host it never
+// created. Röbel ran Nextcloud, which masked it until the node was trimmed.
+const relayOnly = {
+  ...roebel,
+  services: {
+    host: roebel.services.host,
+    chat: { nostr: roebel.services.chat.nostr },
+    backend: roebel.services.backend,
+    indexer: roebel.services.indexer,
+    publisher: roebel.services.publisher,
+  },
+};
+
+test("a node with an indexer but no workspace still gets Postgres", () => {
+  assert.deepEqual(postgresDatabases(relayOnly), ["indexer"]);
+  assert.equal(composeNeedsPostgres(relayOnly), true);
+  const compose = renderComposeYml(relayOnly);
+  assert.match(compose, /^ {2}postgres:/m);
+  // and the indexer's DATABASE_URL must name a host the compose file defines
+  assert.match(compose, /DATABASE_URL: "postgres:\/\/indexer:.*@postgres:5432\/indexer"/);
+});
+
+test("backup covers the indexer database on a relay-only node", () => {
+  // Without Postgres in the target list the nightly run would back up the
+  // events but not the index built from them.
+  assert.deepEqual(backupTargets(relayOnly), ["postgres", "strfry"]);
+});
+
+test("a relay-only node's plan has no workspace steps", () => {
+  // A plan step is an instruction to run something the bundle ships. Röbel keeps
+  // its Nextcloud relying party registered on the external keystone, but no
+  // longer deploys Nextcloud — so the step told the operator to run
+  // nextcloud/setup.sh, a file this bundle does not contain.
+  const ids = plan(relayOnly).map((s) => s.id);
+  assert.equal(ids.includes("nextcloud-oidc"), false);
+  assert.ok(ids.includes("nostr-relay"));
+  assert.ok(ids.includes("indexer"));
+  assert.equal(
+    plan(relayOnly).some((s) => s.phase === "workspace"),
+    false,
+  );
+  // and the bundle really has no such script to run
+  assert.equal(renderBundle(relayOnly).files["nextcloud/setup.sh"], undefined);
+});
+
+test("SECRETS.md names every variable the compose file interpolates", () => {
+  // The manifest walk only sees $REFS written in the manifest. Services get env
+  // vars the manifest never names (the indexer's POSTGRES_PASSWORD, relay-sync's
+  // SUPABASE_SERVICE_KEY), and an operator who follows SECRETS.md and stops
+  // brings the box up with those services crash-looping — which is how the
+  // relay's allow-list stayed empty and nobody could publish.
+  const md = renderBundle(relayOnly).files["SECRETS.md"];
+  const compose = renderComposeYml(relayOnly);
+  const referenced = [...new Set([...compose.matchAll(/\$\{([A-Z0-9_]{4,})\}/g)].map((x) => x[1]))];
+  assert.ok(referenced.includes("SUPABASE_SERVICE_KEY"), "fixture should exercise the gap");
+  for (const name of referenced) {
+    assert.ok(md.includes(name), `SECRETS.md never mentions ${name}`);
+  }
 });

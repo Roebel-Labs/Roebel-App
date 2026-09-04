@@ -44,10 +44,19 @@ export class RecordUnavailableError extends Error {
 export class RecordClient {
   private readonly base: string;
   private readonly fetchFn: typeof fetch;
+  private readonly timeoutMs: number;
 
-  constructor(baseUrl: string, fetchFn: typeof fetch = fetch) {
+  /**
+   * @param timeoutMs Wall-clock bound on each request. A node that is merely *down*
+   * refuses the connection and `fetch` rejects promptly; a node whose host has
+   * been deleted blackholes packets instead, and then `fetch` never settles at
+   * all. Without this bound the caller's own error handling is unreachable — the
+   * read does not fail, it hangs, which is worse than an error for a UI.
+   */
+  constructor(baseUrl: string, fetchFn: typeof fetch = fetch, timeoutMs = 10_000) {
     this.base = baseUrl.replace(/\/+$/, "");
     this.fetchFn = fetchFn;
+    this.timeoutMs = timeoutMs;
   }
 
   async events(filters: EventFilters): Promise<RecordEvent[]> {
@@ -80,10 +89,18 @@ export class RecordClient {
 
   private async get(path: string): Promise<unknown> {
     let res: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      res = await this.fetchFn(`${this.base}${path}`);
+      res = await this.fetchFn(`${this.base}${path}`, { signal: controller.signal });
     } catch (err) {
-      throw new RecordUnavailableError(`index unreachable: ${String(err)}`);
+      throw new RecordUnavailableError(
+        controller.signal.aborted
+          ? `index timed out after ${this.timeoutMs}ms for ${path}`
+          : `index unreachable: ${String(err)}`,
+      );
+    } finally {
+      clearTimeout(timer);
     }
     if (!res.ok) throw new RecordUnavailableError(`index answered ${res.status} for ${path}`);
     try {

@@ -21,10 +21,18 @@ export interface Bundle {
   secretRefs: string[];
 }
 
-/** Does this node's stack need a database? (Matrix, Nextcloud, XWiki, OpenProject) */
+/**
+ * Does this node's stack need a database?
+ *
+ * Derived from `postgresDatabases()` rather than re-listing the services that
+ * use one. The two drifted apart once: `postgresDatabases()` gave the indexer a
+ * database while this function only knew about the workspace and Matrix, so a
+ * relay + index node rendered an indexer whose DATABASE_URL pointed at a
+ * postgres host that was never created. Röbel declared Nextcloud, which hid it
+ * until the node was trimmed to relay + index. One list, one answer.
+ */
 export function composeNeedsPostgres(m: NetizenManifest): boolean {
-  const ws = m.services.workspace;
-  return !!(m.services.chat?.matrix || ws?.nextcloud || ws?.wiki || ws?.project || ws?.mail);
+  return postgresDatabases(m).length > 0;
 }
 
 const rp = (m: NetizenManifest, id: string) =>
@@ -1038,12 +1046,13 @@ ${aliases.map((alias, i) => `      aliasgroup${i + 1}: "${alias}"`).join("\n")}
     }
   }
 
-  // Postgres backs Matrix, Nextcloud, XWiki and OpenProject — include it if any need it.
-  const needsPostgres =
-    hasMatrix || !!ws?.nextcloud || !!ws?.wiki || !!ws?.project || !!ws?.mail;
+  // Postgres backs Matrix, Nextcloud, XWiki, OpenProject and the indexer. Ask the
+  // one function that owns that list, so this cannot drift from the databases
+  // `postgresDatabases()` actually creates (it did: the indexer got a database
+  // but no container).
   // (hasMatrix already emitted postgres above; append it here for the other cases.
   // Order within `services:` is irrelevant to compose — depends_on drives startup.)
-  if (needsPostgres && !hasMatrix) {
+  if (composeNeedsPostgres(m) && !hasMatrix) {
     svc.push(`  postgres:
     image: postgres:16
     restart: unless-stopped
@@ -1054,7 +1063,7 @@ ${aliases.map((alias, i) => `      aliasgroup${i + 1}: "${alias}"`).join("\n")}
   }
 
   const vols = ["caddy_data:"];
-  if (needsPostgres) vols.push("pg_data:");
+  if (composeNeedsPostgres(m)) vols.push("pg_data:");
   // Buzz's state is entirely in named volumes — that is what lets `netizen up`
   // rsync --delete the bundle dir without ever touching workspace data.
   if (buzz) vols.push("buzz_git_data:", "buzz_pg_data:", "buzz_redis_data:", "buzz_minio_data:");
@@ -2172,13 +2181,37 @@ export function collectSecretRefs(m: NetizenManifest): string[] {
   return [...out].sort();
 }
 
+/** What each compose-interpolated secret is for, so the checklist is actionable. */
+const COMPOSE_SECRET_NOTES: Record<string, string> = {
+  POSTGRES_PASSWORD: "invent one; the installer creates every service role with it",
+  SUPABASE_SERVICE_KEY:
+    "Supabase service-role key. Without it relay-sync crash-loops, the CitizenNFT allow-list stays EMPTY and nobody can publish to the relay",
+  NODE_AGENT_SECRET: "seed the node's agent identity is derived from (Mecky's Nostr key)",
+  ANTHROPIC_API_KEY: "only if an agent-watcher is declared; the agent answers @mentions with it",
+};
+
 export function renderSecretsChecklist(m: NetizenManifest): string {
   const refs = collectSecretRefs(m);
   const items = refs.map((r) => `- [ ] \`${r}\``);
-  // Not a manifest field — the settler key is compose-interpolated straight
-  // into docker-compose.yml (never named in the public manifest), so
-  // collectSecretRefs' generic walk over `m` cannot see it. Listed here by hand.
-  if (m.services.metering) {
+  // The walk above only sees refs written in the MANIFEST. Services also read env
+  // vars that are compose-interpolated directly (the indexer's POSTGRES_PASSWORD,
+  // relay-sync's SUPABASE_SERVICE_KEY, the agent's ANTHROPIC_API_KEY). Those are
+  // just as required, and an operator who works this checklist to the end and
+  // stops would bring the node up with those services crash-looping. Read them
+  // off the rendered compose file so this list cannot fall behind the stack.
+  const named = new Set(refs.map((r) => r.replace(/^\$/, "")));
+  const composeOnly = [
+    ...new Set(
+      [...renderComposeYml(m).matchAll(/\$\{([A-Z0-9_]{4,})\}/g)]
+        .map((x) => x[1])
+        .filter((n) => !named.has(n)),
+    ),
+  ].sort();
+  for (const name of composeOnly) {
+    items.push(`- [ ] \`$${name}\`${COMPOSE_SECRET_NOTES[name] ? ` — ${COMPOSE_SECRET_NOTES[name]}` : ""}`);
+  }
+  // Not a manifest field and not compose-interpolated under a plain name.
+  if (m.services.metering && !composeOnly.includes("METERING_SETTLER_PRIV")) {
     items.push(
       "- [ ] `METERING_SETTLER_PRIV` — facilitator settler EOA private key (pays gas only; fund with a few xDAI). Generate fresh; never reuse another service's key.",
     );
@@ -2207,7 +2240,11 @@ export function plan(m: NetizenManifest): Step[] {
         ? { id: "identity", phase: "identity", title: `Keystone hosted externally at ${m.identity.idp.issuer} — verify discovery resolves; nothing to deploy here` }
         : { id: "roebel-id", phase: "identity", title: "Keystone live (roebel-id.env) — the single sign-in for every service below" },
   );
-  if (rp(m, "nextcloud")) steps.push({ id: "nextcloud-oidc", phase: "workspace", title: "Run nextcloud/setup.sh (OIDC provider + group folder per org)" });
+  // Gate on the SERVICE, like every sibling step below — a relying party may stay
+  // registered on an external keystone long after the node stops deploying the
+  // service, and a plan step that names a script the bundle does not ship sends
+  // the operator looking for a missing file on a fresh box.
+  if (ws?.nextcloud && rp(m, "nextcloud")) steps.push({ id: "nextcloud-oidc", phase: "workspace", title: "Run nextcloud/setup.sh (OIDC provider + group folder per org)" });
   if (ws?.mail) steps.push({ id: "mail-oidc", phase: "workspace", title: "Point Open-Xchange at the keystone (OIDC) + its IMAP/SMTP backend" });
   if (ws?.wiki) steps.push({ id: "wiki-oidc", phase: "workspace", title: "Enable the XWiki OIDC provider against the keystone" });
   if (ws?.video) steps.push({ id: "video-auth", phase: "workspace", title: "Jitsi JWT auth from the keystone session (+ prosody/jicofo/jvb, UDP 10000)" });

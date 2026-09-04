@@ -11,22 +11,11 @@ const roebel = JSON.parse(
   ),
 );
 
-// Röbel declares only what the installer can stand up today; endpoint coverage
-// is asserted against a node that declares Matrix too.
-const withMatrix = {
-  ...roebel,
-  services: {
-    ...roebel.services,
-    chat: {
-      ...roebel.services.chat,
-      matrix: {
-        homeserver: "https://matrix.roebel.app",
-        mas: "https://auth.roebel.app",
-        element: "https://chat.roebel.app",
-      },
-    },
-  },
-};
+// Endpoint coverage is asserted against a node that declares the whole suite,
+// including Matrix — see test/fixtures/full-node.json.
+const withMatrix = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./fixtures/full-node.json", import.meta.url)), "utf8"),
+);
 
 test("doctor reports secrets, endpoints, and plan for the node", () => {
   const r = doctor(withMatrix);
@@ -101,9 +90,12 @@ test("sovereignty is measured from the manifest, pessimistically", () => {
   assert.equal(byLayer["data"].provider, "supabase");
   assert.equal(byLayer["data"].sovereign, false);
 
-  // What the node genuinely owns.
-  assert.equal(byLayer["workspace"].sovereign, true);
+  // What the node genuinely owns. Röbel runs relay + index only, so the
+  // workspace layer reads as "none" rather than being omitted — see the
+  // full-suite assertion below for the self-hosted case.
   assert.equal(byLayer["comms"].sovereign, true);
+  assert.equal(byLayer["workspace"].sovereign, false);
+  assert.match(byLayer["workspace"].note, /no workspace declared/);
 
   // Durability counts as a sovereignty layer. Röbel declares restic-sftp, so it
   // reads as sovereign here — but the note points at the runtime check, because
@@ -128,8 +120,13 @@ test("a node with no backups is reported as not durable, loudly", () => {
   assert.ok(doctor(onBox).warnings.some((w) => /never leave the box/.test(w)));
 });
 
+test("a node that declares a workspace scores it as its own", () => {
+  const byLayer = Object.fromEntries(sovereigntyReport(withMatrix).map((l) => [l.layer, l]));
+  assert.equal(byLayer["workspace"].sovereign, true);
+});
+
 test("the human report shows a sovereignty score an operator can watch move", () => {
-  const text = formatDoctorReport(doctor(roebel));
+  const text = formatDoctorReport(doctor(withMatrix));
   assert.match(text, /sovereignty \(\d+\/\d+ layers under own control\)/);
   assert.match(text, /✗ identity-keys: thirdweb/);
   assert.match(text, /✓ workspace: self/);

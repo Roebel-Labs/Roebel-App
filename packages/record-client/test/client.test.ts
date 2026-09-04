@@ -44,3 +44,34 @@ test("a fetch that throws becomes RecordUnavailableError", async () => {
   const c = new RecordClient("https://index.example", fetchFn);
   await assert.rejects(c.events({ kinds: [1] }), RecordUnavailableError);
 });
+
+test("a hung index fails fast instead of blocking forever", async () => {
+  // The failure that motivated this: the node's host was deleted and its IP
+  // blackholed packets — no RST, no response. `fetch` had nothing to reject
+  // with, so every caller's catch/fallback was unreachable and the page hung.
+  // A wall-clock bound is the only thing that turns that into an error.
+  let aborted = false;
+  const hangs = ((_url: string, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    })) as unknown as typeof fetch;
+
+  const c = new RecordClient("https://index.example", hangs, 40);
+  await assert.rejects(
+    () => c.events({ kinds: [1] }),
+    (err: Error) => err.name === "RecordUnavailableError" && /timed out|aborted/i.test(err.message),
+  );
+  assert.equal(aborted, true, "the request must actually be aborted, not just abandoned");
+});
+
+test("a timely response is not cancelled by the timeout", async () => {
+  const c = new RecordClient(
+    "https://index.example",
+    (async () => new Response(JSON.stringify({ events: [] }))) as unknown as typeof fetch,
+    50,
+  );
+  assert.deepEqual(await c.events({ kinds: [1] }), []);
+});

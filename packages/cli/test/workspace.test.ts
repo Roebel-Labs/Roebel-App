@@ -14,7 +14,7 @@ import { doctor } from "../src/doctor.js";
 
 const roebel = JSON.parse(
   readFileSync(
-    fileURLToPath(new URL("../../protocol/examples/roebel.netizen.json", import.meta.url)),
+    fileURLToPath(new URL("./fixtures/full-node.json", import.meta.url)),
     "utf8",
   ),
 );
