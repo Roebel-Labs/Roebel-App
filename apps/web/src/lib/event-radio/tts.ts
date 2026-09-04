@@ -11,8 +11,18 @@ export const VOICE_SETTINGS = {
   similarity_boost: 0.75,
   style: 0,
   use_speaker_boost: true,
-  speed: 1.0,
 } as const;
+
+// ElevenLabs accepts 0.7 to 1.2 for `speed`; anything outside is rejected.
+export const SPEED_MIN = 0.7;
+export const SPEED_MAX = 1.2;
+export const DEFAULT_SPEED = 1.0;
+
+export function clampSpeed(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SPEED;
+  return Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(n * 100) / 100));
+}
 
 const ELEVEN_BASE_URL = "https://api.elevenlabs.io";
 const MAX_RETRIES = 2;
@@ -42,6 +52,7 @@ export async function synthesizeSpeech(input: {
   voiceId: string;
   apiKey: string;
   previousText?: string;
+  speed?: number;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
 }): Promise<TtsResult> {
@@ -52,7 +63,7 @@ export async function synthesizeSpeech(input: {
     text: input.text,
     model_id: TTS_MODEL_ID,
     previous_text: input.previousText,
-    voice_settings: VOICE_SETTINGS,
+    voice_settings: { ...VOICE_SETTINGS, speed: clampSpeed(input.speed ?? DEFAULT_SPEED) },
     seed: TTS_SEED,
     apply_text_normalization: "auto",
   });

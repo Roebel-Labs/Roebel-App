@@ -9,10 +9,11 @@ import { planExpiry, planScopes, staleRowsForScope, type ScopePlan } from "./pla
 import { writeEventSegments, writeIntro, writeOutro } from "./scripts";
 import { scopeId } from "./select";
 import { deleteSegmentAudio, segmentObjectPath, uploadSegmentAudio } from "./storage";
-import { synthesizeSpeech, TTS_MODEL_ID } from "./tts";
+import { clampSpeed, DEFAULT_SPEED, synthesizeSpeech, TTS_MODEL_ID } from "./tts";
 import { berlinToday, previousWeekKey, weekWindow, type WeekWindow } from "./window";
 
 export const SETTING_VOICE_ID = "event_radio_voice_id";
+export const SETTING_SPEED = "event_radio_speed";
 
 export type GenerateOptions = { force?: boolean; dryRun?: boolean };
 
@@ -45,7 +46,8 @@ export async function generateEventRadio(opts: GenerateOptions = {}): Promise<Ge
   const voiceId = await readSetting(supabase, SETTING_VOICE_ID);
   if (!voiceId) return { ...result, skipped_reason: "voice_id_missing" };
 
-  const ctx = { voiceId, modelId: TTS_MODEL_ID };
+  const speed = clampSpeed((await readSetting(supabase, SETTING_SPEED)) ?? DEFAULT_SPEED);
+  const ctx = { voiceId, modelId: TTS_MODEL_ID, speed };
   const events = await gatherWeekEvents(supabase, window);
   const existing = await loadExistingRows(supabase);
   const plan = planScopes({ events, todayKey, weekKey: window.weekKey, existing, ctx, force: Boolean(opts.force) });
@@ -76,7 +78,7 @@ export async function generateEventRadio(opts: GenerateOptions = {}): Promise<Ge
   if (plan.outro.needed && scripts.outro) jobs.push({ plan: plan.outro, text: scripts.outro, previousText: introText });
 
   const settled = await mapWithConcurrency(jobs, concurrencyFromEnv(process.env), async (job) => {
-    const tts = await synthesizeSpeech({ text: job.text, voiceId, apiKey, previousText: job.previousText });
+    const tts = await synthesizeSpeech({ text: job.text, voiceId, apiKey, speed, previousText: job.previousText });
     const path = segmentObjectPath(window.weekKey, job.plan.kind, job.plan.scopeKey, job.plan.hash);
     const audioUrl = await uploadSegmentAudio(supabase, path, tts.audio);
     const { data: saved, error } = await supabase

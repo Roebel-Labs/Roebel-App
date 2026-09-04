@@ -21,7 +21,8 @@ export type PublicEvent = {
   is_cancelled: boolean;
 };
 
-export type HashContext = { voiceId: string; modelId: string };
+// speed belongs here: changing the tempo must re-render every clip.
+export type HashContext = { voiceId: string; modelId: string; speed: number };
 
 function str(row: Record<string, unknown>, key: string): string | null {
   const v = row[key];

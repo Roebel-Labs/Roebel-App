@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { eventContentHash, introContentHash, outroContentHash, type PublicEvent } from "../hash";
 import { planExpiry, planScopes, staleRowsForScope, type ExistingRow } from "../plan";
 
-const ctx = { voiceId: "v", modelId: "m" };
+const ctx = { voiceId: "v", modelId: "m", speed: 1.0 };
 const ev = (id: string, date: string): PublicEvent => ({
   id, title: `Event ${id}`, description: null, date, time: null, end_time: null,
   location: null, organizer_name: null, category: null, ticket_price: null,

@@ -18,6 +18,7 @@ export type SegmentView = { audioUrl: string; script: string; durationMs: number
 export type EventRadioOverview = {
   enabled: boolean
   voiceId: string | null
+  speed: number
   window: { start: string; end: string; weekKey: string }
   lastGeneratedAt: string | null
   intro: SegmentView | null
@@ -44,7 +45,7 @@ export async function getEventRadioOverview(): Promise<EventRadioOverview> {
   ): SegmentView | null =>
     row ? { audioUrl: row.audio_url, script: row.script, durationMs: row.duration_ms, createdAt: row.created_at } : null
 
-  const ctx = { voiceId: settings.voiceId ?? "", modelId: TTS_MODEL_ID }
+  const ctx = { voiceId: settings.voiceId ?? "", modelId: TTS_MODEL_ID, speed: settings.speed }
   const plan = planScopes({ events, todayKey, weekKey: window.weekKey, existing, ctx, force: false })
 
   const lastGeneratedAt = existing.reduce<string | null>(
@@ -55,6 +56,7 @@ export async function getEventRadioOverview(): Promise<EventRadioOverview> {
   return {
     enabled: settings.enabled,
     voiceId: settings.voiceId,
+    speed: settings.speed,
     window,
     lastGeneratedAt,
     intro: view(latest.get(scopeId("intro", todayKey))),

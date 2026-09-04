@@ -10,7 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
-import { setEventRadioEnabled, setEventRadioVoiceId } from "@/app/actions/app-settings"
+import {
+  setEventRadioEnabled,
+  setEventRadioSpeed,
+  setEventRadioVoiceId,
+} from "@/app/actions/app-settings"
 import {
   getEventRadioOverview,
   getEventRadioVoices,
@@ -105,6 +109,19 @@ export function EventRadioPanel() {
     if (!result.success) return toast.error("Fehler beim Speichern", { description: result.error })
     toast.success("Stimme gespeichert")
     void load()
+  }
+
+  const saveSpeed = async (speed: number) => {
+    setOverview((o) => (o ? { ...o, speed } : o))
+    const result = await setEventRadioSpeed(speed)
+    if (!result.success) {
+      toast.error("Fehler beim Speichern", { description: result.error })
+      void load()
+      return
+    }
+    toast.success(`Tempo ${speed.toFixed(2)} gespeichert`, {
+      description: "Neu generieren, damit alle Beiträge das neue Tempo bekommen.",
+    })
   }
 
   const toggleEnabled = async (enabled: boolean) => {
@@ -202,6 +219,29 @@ export function EventRadioPanel() {
           <Input value={voiceInput} onChange={(e) => setVoiceInput(e.target.value)} placeholder="z. B. 21m00Tcm4TlvDq8ikWAM" />
         </div>
         <Button variant="outline" onClick={() => saveVoice()} disabled={loading}>Speichern</Button>
+      </div>
+
+      <div>
+        <label className="text-xs text-muted-foreground">
+          Sprechtempo {overview ? `(aktuell ${overview.speed.toFixed(2)})` : ""}
+        </label>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {[0.9, 1.0, 1.05, 1.1, 1.15, 1.2].map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={overview?.speed === s ? "default" : "outline"}
+              onClick={() => saveSpeed(s)}
+              disabled={loading}
+            >
+              {s.toFixed(2)}
+            </Button>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          ElevenLabs erlaubt 0,70 bis 1,20. Nach einer Änderung neu generieren, sonst bleiben die
+          alten Beiträge im alten Tempo.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">

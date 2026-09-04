@@ -26,7 +26,7 @@ const row = {
   is_cancelled: false,
   status: "approved",
 };
-const ctx = { voiceId: "voice-a", modelId: "eleven_multilingual_v2" };
+const ctx = { voiceId: "voice-a", modelId: "eleven_multilingual_v2", speed: 1.0 };
 
 test("toPublicEvent drops private contact fields", () => {
   const ev = toPublicEvent(row);
@@ -54,6 +54,8 @@ test("eventContentHash changes with content, voice, or model", () => {
   assert.notEqual(eventContentHash({ ...ev, title: "Hafenfest 2" }, ctx), base);
   assert.notEqual(eventContentHash(ev, { ...ctx, voiceId: "voice-b" }), base);
   assert.notEqual(eventContentHash(ev, { ...ctx, modelId: "eleven_v3" }), base);
+  // Tempo is part of the clip's identity, so changing it re-renders.
+  assert.notEqual(eventContentHash(ev, { ...ctx, speed: 1.15 }), base);
 });
 
 test("introContentHash depends on the day and the remaining events", () => {

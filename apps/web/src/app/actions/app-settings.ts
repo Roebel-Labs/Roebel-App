@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { isAuthenticated } from "@/lib/auth/session"
+import { clampSpeed, DEFAULT_SPEED } from "@/lib/event-radio/tts"
 
 const EVENT_STORIES_AUDIO_KEY = "event_stories_audio_url"
 
@@ -68,14 +69,32 @@ export async function setEventStoriesAudioUrl(url: string | null) {
 
 const EVENT_RADIO_VOICE_KEY = "event_radio_voice_id"
 const EVENT_RADIO_ENABLED_KEY = "event_radio_enabled"
+const EVENT_RADIO_SPEED_KEY = "event_radio_speed"
 
 /** Wochen-Radio: ElevenLabs voice id + app kill switch (missing = enabled). */
-export async function getEventRadioSettings(): Promise<{ voiceId: string | null; enabled: boolean }> {
-  const [voiceId, enabled] = await Promise.all([
+export async function getEventRadioSettings(): Promise<{
+  voiceId: string | null
+  enabled: boolean
+  speed: number
+}> {
+  const [voiceId, enabled, speed] = await Promise.all([
     getAppSetting(EVENT_RADIO_VOICE_KEY),
     getAppSetting(EVENT_RADIO_ENABLED_KEY),
+    getAppSetting(EVENT_RADIO_SPEED_KEY),
   ])
-  return { voiceId: voiceId?.trim() || null, enabled: enabled !== "false" }
+  return {
+    voiceId: voiceId?.trim() || null,
+    enabled: enabled !== "false",
+    speed: clampSpeed(speed ?? DEFAULT_SPEED),
+  }
+}
+
+/** Sprechtempo, 0.7 bis 1.2. Änderungen lassen alle Beiträge neu erzeugen. */
+export async function setEventRadioSpeed(speed: number) {
+  if (!(await isAuthenticated())) return { success: false as const, error: "Nicht autorisiert" }
+  const result = await setAppSetting(EVENT_RADIO_SPEED_KEY, String(clampSpeed(speed)))
+  if (result.success) revalidatePath("/admin/dashboard/events")
+  return result
 }
 
 export async function setEventRadioVoiceId(voiceId: string | null) {
