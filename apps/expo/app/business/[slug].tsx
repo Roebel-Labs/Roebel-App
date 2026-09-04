@@ -16,6 +16,8 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
+import { isStablecoinPaymentsEnabled } from '@/lib/supabase-app-settings';
+import { fetchMerchantAccount } from '@/lib/merchant/registry';
 import { useActiveAccount } from 'thirdweb/react';
 import { isRestaurantOpen } from '@/lib/utils';
 import { fetchBusinessBySlug } from '@/lib/supabase-businesses';
@@ -63,6 +65,10 @@ export default function BusinessDetailScreen() {
   const [deals, setDeals] = useState<BusinessDealRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Stablecoin acceptance: the CTA only shows for the owner, only while the
+  // pilot gate is open for them, and only until their Konto is live.
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [merchantLive, setMerchantLive] = useState(false);
 
   const fetchData = async () => {
     if (!slug) return;
@@ -107,6 +113,23 @@ export default function BusinessDetailScreen() {
     const query = encodeURIComponent(business.address);
     Linking.openURL(`https://maps.apple.com/?q=${query}`);
   };
+
+  useEffect(() => {
+    if (!account?.address) return;
+    let cancelled = false;
+    (async () => {
+      const [enabled, merchant] = await Promise.all([
+        isStablecoinPaymentsEnabled({ walletAddress: account.address }),
+        fetchMerchantAccount(account.address),
+      ]);
+      if (cancelled) return;
+      setPaymentsEnabled(enabled);
+      setMerchantLive(merchant?.status === 'live');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.address]);
 
   const openStatus = business ? isRestaurantOpen(business.opening_hours) : null;
   const categoryLabel = business ? (BUSINESS_CATEGORY_LABELS[business.category] || 'Sonstiges') : '';
@@ -370,6 +393,17 @@ export default function BusinessDetailScreen() {
                   <Text style={[styles.ownerButtonText, { color: colors.textPrimary }]}>Statistiken</Text>
                 </Pressable>
               </View>
+              {paymentsEnabled && !merchantLive && (
+                <Pressable
+                  style={({ pressed }) => [styles.paymentsCta, { borderColor: colors.border, backgroundColor: colors.surface }, pressed && { opacity: 0.8 }]}
+                  onPress={() =>
+                    router.push(`/payments/onboarding?entityType=business&entityId=${business.id}` as any)
+                  }
+                >
+                  <Text style={[styles.paymentsCtaTitle, { color: colors.textPrimary }]}>Stablecoin-Zahlungen annehmen</Text>
+                  <Text style={[styles.paymentsCtaBody, { color: colors.textSecondary }]}>Digitale Euro annehmen und sofort mit Karte ausgeben.</Text>
+                </Pressable>
+              )}
             </View>
           )}
 
@@ -592,6 +626,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   // Owner
+  paymentsCta: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 4,
+    marginTop: 12,
+  },
+  paymentsCtaTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+  },
+  paymentsCtaBody: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+  },
   ownerSection: {
     marginBottom: 24,
   },
