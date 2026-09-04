@@ -83,10 +83,17 @@ export async function gpFetch<T>(
       return { ok: true, data: (payload ?? {}) as T };
     }
 
+    // Gnosis Pay is inconsistent: some errors arrive as {message}, the SIWE
+    // challenge as {error: "SIWE domain not allowed"}. Read both so the real
+    // reason reaches the screen instead of a bare status code.
+    const record = payload as { message?: unknown; error?: unknown } | null;
+    const fromJson = [record?.message, record?.error].find(
+      (v): v is string => typeof v === 'string' && v.trim().length > 0,
+    );
     const message =
       typeof payload === 'string' && payload.trim().length > 0
         ? payload.trim()
-        : ((payload as { message?: string } | null)?.message ?? `HTTP ${response.status}`);
+        : (fromJson ?? `HTTP ${response.status}`);
     return { ok: false, code: codeForStatus(response.status), message };
   } catch (error) {
     return {

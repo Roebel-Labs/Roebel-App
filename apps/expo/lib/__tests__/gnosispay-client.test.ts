@@ -148,3 +148,28 @@ describe('gpFetch content types', () => {
     expect(result.ok && result.data).not.toEqual({});
   });
 });
+
+describe('gpFetch error field', () => {
+  it('uses an {error} body as the message (the SIWE challenge shape)', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 403,
+      ok: false,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: 'SIWE domain not allowed' }),
+    }) as unknown as typeof fetch;
+    const result = await gpFetch('/api/v1/auth/challenge', { method: 'POST' });
+    expect(result).toEqual({ ok: false, code: 'UNAUTHORIZED', message: 'SIWE domain not allowed' });
+  });
+
+  it('prefers {message} when both are present', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 400,
+      ok: false,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ message: 'bad input', error: 'x' }),
+    }) as unknown as typeof fetch;
+    const result = await gpFetch('/api/v1/user');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toBe('bad input');
+  });
+});
