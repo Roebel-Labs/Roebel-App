@@ -21,6 +21,12 @@ import {
   type StorySlide,
 } from '@/lib/supabase-story-collections';
 import { loadCachedStories, saveCachedStories } from '@/lib/story-cache';
+import { fetchEventRadio } from '@/lib/supabase-event-radio';
+import {
+  EMPTY_RADIO_BUNDLE,
+  type EventRadioBundle,
+} from '@/lib/event-radio-select';
+import { AUDIO_DISCLOSURE_LABEL } from './story-narration';
 import StoryViewer, {
   type StoryGroup,
   type StorySlideInput,
@@ -57,6 +63,7 @@ let cachedEvents: EventRecord[] = [];
 let cachedCollections: StoryCollection[] = [];
 let cachedCollectionSlides: Record<string, StorySlide[]> = {};
 let cachedAudioUrl: string | null = null;
+let cachedRadio: EventRadioBundle = EMPTY_RADIO_BUNDLE;
 let hasLoadedStories = false;
 // When the module cache was last refreshed from the network. While it's fresh
 // (within the TTL) a remount reuses the in-memory cache and skips re-querying.
@@ -110,6 +117,8 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
   const [eventStoriesAudioUrl, setEventStoriesAudioUrl] = useState<
     string | null
   >(cachedAudioUrl);
+  // Wochen-Radio narration for this week's events (intro, per event, outro).
+  const [radio, setRadio] = useState<EventRadioBundle>(cachedRadio);
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
   // Only show skeletons on the very first load (when nothing is cached yet).
   const [loading, setLoading] = useState(!hasLoadedStories);
@@ -130,6 +139,10 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
           Object.keys(prev).length ? prev : bundle.collectionSlides,
         );
         setEventStoriesAudioUrl((prev) => prev ?? bundle.audioUrl);
+        const cachedBundleRadio = bundle.radio;
+        if (cachedBundleRadio) {
+          setRadio((prev) => (prev.enabled ? prev : cachedBundleRadio));
+        }
         setLoading(false);
         prefetchStoryImages(
           bundle.events,
@@ -155,12 +168,19 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
     let freshCollections: StoryCollection[] = cachedCollections;
     let freshSlides: Record<string, StorySlide[]> = cachedCollectionSlides;
     let freshAudio: string | null = cachedAudioUrl;
+    let freshRadio: EventRadioBundle = cachedRadio;
 
-    const eventsP = fetchThisWeekEvents().then((data) => {
+    const eventsP = fetchThisWeekEvents().then(async (data) => {
       if (cancelled) return;
       freshEvents = data as EventRecord[];
       cachedEvents = freshEvents;
       setEvents(freshEvents);
+      // Narration depends on which events are in the week, so it follows them.
+      const bundle = await fetchEventRadio(freshEvents.map((e) => e.id));
+      if (cancelled) return;
+      freshRadio = bundle;
+      cachedRadio = bundle;
+      setRadio(bundle);
     });
 
     const audioP = fetchEventStoriesAudioUrl().then((url) => {
@@ -194,6 +214,7 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
         collections: freshCollections,
         collectionSlides: freshSlides,
         audioUrl: freshAudio,
+        radio: freshRadio,
         savedAt: lastFetchedAt,
       });
     });
@@ -246,16 +267,27 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
           // shared events background track out and crossfades this one in
           // for the duration of this slide. Null for most events.
           audioUrl: event.audio_url ?? null,
+          // Mecky's clip for this event; drives the slide's timing and ducks
+          // the bed while it plays.
+          narration: radio.enabled ? (radio.byEventId[event.id] ?? null) : null,
         };
       });
+
+      // With narration the tooltip becomes the AI-voice disclosure and has no
+      // link; without it (kill switch, or nothing generated yet) it stays the
+      // song credit that links to the track.
+      const hasNarration =
+        radio.enabled && Object.keys(radio.byEventId).length > 0;
 
       result.push({
         id: 'events',
         // Shared background track for ALL event slides — loops continuously
         // and is ducked under any per-event override track (see StoryViewer).
         audioUrl: eventStoriesAudioUrl,
-        audioTitle: EVENT_STORIES_SONG_TITLE,
-        audioLinkUrl: EVENT_STORIES_SONG_URL,
+        audioTitle: hasNarration ? AUDIO_DISCLOSURE_LABEL : EVENT_STORIES_SONG_TITLE,
+        audioLinkUrl: hasNarration ? null : EVENT_STORIES_SONG_URL,
+        introNarration: radio.enabled ? radio.intro : null,
+        outroNarration: radio.enabled ? radio.outro : null,
         // Event stories linger a little longer than collections (default 6s).
         durationMs: 10000,
         slides: eventSlides,
@@ -292,7 +324,7 @@ export default function HomeStoryBar({ onRailTouchActive }: Props) {
     }
 
     return result;
-  }, [events, collections, collectionSlides, eventStoriesAudioUrl, router]);
+  }, [events, collections, collectionSlides, eventStoriesAudioUrl, radio, router]);
 
   const handleClose = useCallback(() => setOpenTarget(null), []);
 
