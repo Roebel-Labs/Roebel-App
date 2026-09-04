@@ -22,6 +22,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { EventStoryAudioPanel } from "./_components/EventStoryAudioPanel"
+import { EventRadioPanel } from "./_components/EventRadioPanel"
 
 interface Event {
   id: string
@@ -314,6 +315,9 @@ export default function EventsManagementPage() {
 
       {/* Shared background audio for all event stories */}
       <EventStoryAudioPanel />
+
+      {/* Wochen-Radio: Mecky narrates each event story */}
+      <EventRadioPanel />
 
       {/* All Events Section */}
       <div className="space-y-4">
