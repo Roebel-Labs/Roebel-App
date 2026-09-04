@@ -2152,6 +2152,19 @@ if [ -f synapse/homeserver.rendered.yaml ]; then
     sh -c 'chown -R 991:991 /data' >/dev/null 2>&1 || true
 fi
 
+# 2e. Same problem, different uid: strfry runs as 1000 and the image ships
+# /app/strfry-db already owned by it, so the main relay's volume inherits that
+# ownership. The federation mirror mounts at /app/mirror-db — a path the image
+# does NOT contain — so Docker creates that volume fresh and root-owned, and
+# strfry exits with \`mdb_env_open: Permission denied\` in a restart loop while
+# every other container looks healthy.${
+  m.peers?.length
+    ? `
+docker run --rm -v "$(basename "$PWD")_mirror_db:/db" alpine:3 \\
+  sh -c 'chown -R 1000:1000 /db' >/dev/null 2>&1 || true`
+    : ""
+}
+
 # 3. Bring up the stack (idempotent).
 docker compose up -d
 

@@ -716,3 +716,19 @@ test("SECRETS.md names every variable the compose file interpolates", () => {
     assert.ok(md.includes(name), `SECRETS.md never mentions ${name}`);
   }
 });
+
+test("the federation mirror's volume is chowned before strfry starts", () => {
+  // The strfry image ships /app/strfry-db owned by uid 1000, so Docker gives the
+  // main relay's named volume that ownership for free. The mirror mounts at
+  // /app/mirror-db, a path the image does NOT contain, so Docker creates it
+  // fresh and root-owned and strfry dies with `mdb_env_open: Permission denied`.
+  // Observed on the 2026-09-04 rebuild: every container came up except mirror.
+  const sh = renderBootstrap(relayOnly);
+  assert.match(sh, /_mirror_db:\/(data|db)/);
+  assert.match(sh, /chown -R 1000:1000/);
+});
+
+test("a node with no peers has no mirror volume to chown", () => {
+  const noPeers = { ...relayOnly, peers: [] };
+  assert.equal(/chown -R 1000:1000/.test(renderBootstrap(noPeers)), false);
+});
