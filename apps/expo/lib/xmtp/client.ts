@@ -24,7 +24,14 @@ import type {
 import { client as thirdwebClient, chain as signerChain } from '@/constants/thirdweb';
 import { supabase } from '@/lib/supabase';
 import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
-import { markUserXmtpRegistered } from '@/lib/supabase-users';
+import { clearUserXmtpRegistered, markUserXmtpRegistered } from '@/lib/supabase-users';
+import {
+  XmtpChainLockedError,
+  clearXmtpChainLock,
+  getXmtpChainLock,
+  parseForeignChainLock,
+  setXmtpChainLock,
+} from './chain-lock';
 import { loadXmtp, type XmtpSdk } from './native';
 import { RoebelStickerCodec, TransactionReferenceCodec } from './codecs';
 
@@ -107,6 +114,8 @@ async function getOrCreateDbKey(wallet: string): Promise<Uint8Array> {
  * conversations), and direct messages keep working over the Supabase rail, which
  * is why the trade was worth making rather than keeping every other subsystem on
  * an archived chain. New registrations bind to Gnosis and are unaffected.
+ *
+ * Handling of the affected wallets lives in ./chain-lock.ts (2026-09-04).
  */
 export const XMTP_SIGNER_CHAIN_ID = 100;
 
@@ -161,6 +170,9 @@ async function resetLocalStateIfChainChanged(wallet: string): Promise<void> {
   if (previous !== null) {
     console.log(`[xmtp] signer chain ${previous} -> ${current}; clearing local state`);
     await AsyncStorage.removeItem(`${REGISTERED_FLAG_PREFIX}${wallet}`);
+    // A verdict from the network about the OLD signer chain says nothing
+    // about the new one.
+    await clearXmtpChainLock(wallet);
   }
   await AsyncStorage.setItem(markerKey, current);
 }
@@ -231,6 +243,14 @@ export async function bootXmtpClient(
       // that flag refers to an identity this app can no longer sign as.
       await resetLocalStateIfChainChanged(wallet);
 
+      // The network has told us this wallet's identity lives on another chain.
+      // No signature, no RPC, no error: DMs stay on the Supabase rail.
+      const chainLock = await getXmtpChainLock(wallet);
+      if (chainLock !== null) {
+        console.log(`[xmtp] identity bound to chain ${chainLock} on the network — Supabase rail`);
+        throw new XmtpChainLockedError(chainLock);
+      }
+
       const dbEncryptionKey = await getOrCreateDbKey(wallet);
       const options = { env: XMTP_ENV, dbEncryptionKey, codecs: buildCodecs(sdk) };
       const flagKey = `${REGISTERED_FLAG_PREFIX}${wallet}`;
@@ -276,7 +296,21 @@ export async function bootXmtpClient(
 
       if (!xmtpClient) {
         await ensureDeployedForXmtp(account);
-        xmtpClient = await sdk.Client.create(makeScwSigner(sdk, account), options);
+        try {
+          xmtpClient = await sdk.Client.create(makeScwSigner(sdk, account), options);
+        } catch (err) {
+          const lock = parseForeignChainLock(err);
+          if (!lock) throw err;
+          // Permanent per XMTP's identity rules: remember it, stop advertising
+          // this wallet as XMTP-reachable, and never sign for it again.
+          console.warn(
+            `[xmtp] network refuses chain ${lock.signingChainId}: identity was registered on chain ` +
+              `${lock.boundChainId}. Marking chain-locked; DMs stay on the Supabase rail.`
+          );
+          await setXmtpChainLock(wallet, lock.boundChainId);
+          clearUserXmtpRegistered(wallet).catch(() => {});
+          throw new XmtpChainLockedError(lock.boundChainId);
+        }
         await AsyncStorage.setItem(flagKey, new Date().toISOString());
         // Rail-selection signal for peers; safe to fire-and-forget.
         markUserXmtpRegistered(wallet).catch(() => {});
@@ -292,6 +326,10 @@ export async function bootXmtpClient(
       console.log('[xmtp] client ready', { inboxId: xmtpClient.inboxId });
       return handleCache;
     } catch (err) {
+      if (err instanceof XmtpChainLockedError) {
+        if (opts?.rethrow) throw err;
+        return null;
+      }
       console.error('[xmtp] boot failed — staying on Supabase rail', err);
       if (opts?.rethrow) throw err;
       return null;

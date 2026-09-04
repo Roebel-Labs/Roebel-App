@@ -19,6 +19,7 @@ import {
   getXmtpClient,
   type XmtpClientHandle,
 } from '@/lib/xmtp/client';
+import { XmtpChainLockedError, getXmtpChainLock } from '@/lib/xmtp/chain-lock';
 import { loadXmtp } from '@/lib/xmtp/native';
 import { registerForXmtpPush } from '@/lib/xmtp/pushRegistration';
 import { fetchXmtpDmsEnabled } from '@/lib/supabase-app-settings';
@@ -34,6 +35,12 @@ interface XmtpContextValue {
   activating: boolean;
   /** German user-facing error from the last activation attempt. */
   activationError: string | null;
+  /**
+   * This wallet's XMTP identity is bound to another chain on the network
+   * (registered on Base before the Gnosis move). Activation can never succeed;
+   * DMs run on the Supabase rail.
+   */
+  chainLocked: boolean;
   /** Explicit first-time registration ("Private Nachrichten aktivieren"). */
   activate: () => Promise<boolean>;
   /** Subscribe to every inbound/outbound streamed message. Returns unsubscribe. */
@@ -46,6 +53,7 @@ const XmtpContext = createContext<XmtpContextValue>({
   activationAvailable: false,
   activating: false,
   activationError: null,
+  chainLocked: false,
   activate: async () => false,
   subscribeMessages: () => () => {},
 });
@@ -75,6 +83,7 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
   const [activationAvailable, setActivationAvailable] = useState(false);
   const [activating, setActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
+  const [chainLocked, setChainLocked] = useState(false);
   const subscribersRef = useRef<Set<(m: DecodedMessage<any>) => void>>(new Set());
   const streamingForRef = useRef<string | null>(null);
 
@@ -107,10 +116,18 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       setHandle(booted);
       setReady(true);
       if (booted) {
+        setChainLocked(false);
         setActivationAvailable(false);
       } else {
-        const [sdk, enabled] = await Promise.all([loadXmtp(), fetchXmtpDmsEnabled()]);
-        if (!cancelled) setActivationAvailable(sdk != null && enabled);
+        const [sdk, enabled, lock] = await Promise.all([
+          loadXmtp(),
+          fetchXmtpDmsEnabled(),
+          getXmtpChainLock(activeAccount.address),
+        ]);
+        if (!cancelled) {
+          setChainLocked(lock !== null);
+          setActivationAvailable(sdk != null && enabled && lock === null);
+        }
       }
     })();
 
@@ -138,6 +155,13 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       setActivationError('Aktivierung derzeit nicht möglich.');
       return false;
     } catch (err) {
+      if (err instanceof XmtpChainLockedError) {
+        // Not retryable: the network binds this identity to another chain.
+        setChainLocked(true);
+        setActivationAvailable(false);
+        setActivationError(null);
+        return false;
+      }
       console.error('[xmtp] activation failed', err);
       setActivationError('Aktivierung fehlgeschlagen. Bitte versuche es erneut.');
       return false;
@@ -228,10 +252,11 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       activationAvailable,
       activating,
       activationError,
+      chainLocked,
       activate,
       subscribeMessages,
     }),
-    [handle, ready, activationAvailable, activating, activationError, activate, subscribeMessages]
+    [handle, ready, activationAvailable, activating, activationError, chainLocked, activate, subscribeMessages]
   );
 
   return <XmtpContext.Provider value={value}>{children}</XmtpContext.Provider>;

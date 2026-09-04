@@ -33,6 +33,24 @@ of both rails; sends pick exactly one.
 - DB: `users.xmtp_registered_at` (migration `20260710_xmtp_registration.sql`,
   **applied to live Supabase**) — the peer-readiness signal for rail selection.
 
+## Chain-locked identities (2026-09-04)
+
+XMTP binds an SCW identity to the chain it was **first** registered from,
+permanently. Wallets that activated on Base before the 2026-07-27 Gnosis move
+are rejected by the network on every new installation
+(`Wrong chain id. Initially added with 8453 but now signing from 100`). There
+is no re-binding API: `addAccount`/`removeAccount` operate on *other*
+addresses, and the recovery identity cannot be removed. **Decision (Max):**
+stay Gnosis-only; those inboxes and their history are gone.
+
+`lib/xmtp/chain-lock.ts` makes that clean: the first rejection stores a
+per-wallet marker, clears `users.xmtp_registered_at` (so peers stop preferring
+the XMTP rail), and every later boot skips XMTP without signing or logging an
+error. `XmtpContext.chainLocked` hides "Private Nachrichten aktivieren"; if the
+lock is discovered mid-activation the view shows an honest German notice
+instead of "try again". DMs run on the Supabase rail, the documented fallback.
+Affected at the time of the decision: 25 of 38 registered wallets.
+
 ## What it needs from Max (operational gates)
 
 1. **New EAS build** (`eas build`) — the SDK + expo-secure-store are native

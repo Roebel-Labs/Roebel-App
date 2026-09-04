@@ -13,13 +13,35 @@ import { useSnackbar } from '@/context/SnackbarContext';
  */
 export default function XmtpActivationView() {
   const { colors } = useTheme();
-  const { activating, activationError, activate } = useXmtp();
+  const { activating, activationError, activate, chainLocked } = useXmtp();
   const { showSnackbar } = useSnackbar();
 
   const handleActivate = async () => {
     const ok = await activate();
     if (ok) showSnackbar({ message: 'Private Nachrichten aktiviert' });
   };
+
+  // The network binds this identity to the chain it first registered on. A
+  // wallet that registered on Base before the Gnosis move can never activate
+  // again; saying "try again" would be a lie. DMs keep working on the
+  // Supabase rail.
+  if (chainLocked) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.iconCircle, { backgroundColor: colors.surfaceSecondary }]}>
+          <Ionicons name="lock-closed" size={26} color={colors.textSecondary} />
+        </View>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>
+          Private Nachrichten nicht mehr verfügbar
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Dein verschlüsseltes Postfach wurde vor dem Wechsel der App auf Gnosis
+          Chain eingerichtet und lässt sich dort nicht übernehmen. Deine
+          Nachrichten laufen weiter über den normalen Kanal.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

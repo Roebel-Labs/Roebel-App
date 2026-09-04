@@ -215,3 +215,18 @@ export async function markUserXmtpRegistered(walletAddress: string): Promise<voi
     .eq('wallet_address', walletAddress.toLowerCase());
   if (error) console.error('markUserXmtpRegistered error:', error);
 }
+
+/**
+ * Reverse of markUserXmtpRegistered: this wallet is no longer reachable over
+ * XMTP because its identity is bound to a chain the app no longer signs on
+ * (see lib/xmtp/chain-lock.ts). Clearing the flag stops peers from preferring
+ * the XMTP rail for it and stops this device auto-consenting to a registration
+ * the network will refuse.
+ */
+export async function clearUserXmtpRegistered(walletAddress: string): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update({ xmtp_registered_at: null } as any)
+    .eq('wallet_address', walletAddress.toLowerCase());
+  if (error) console.error('clearUserXmtpRegistered error:', error);
+}
