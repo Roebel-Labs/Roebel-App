@@ -76,3 +76,24 @@ export async function fetchEventRadioEnabled(): Promise<boolean> {
   const value = await fetchAppSetting('event_radio_enabled');
   return value !== 'false';
 }
+
+/**
+ * Pilot gate for merchant stablecoin payments (Gnosis Pay Konto + acceptance
+ * map). A NEW surface, so a missing key means OFF: only an explicit 'true' opens
+ * it to everyone, and any other non-empty value is read as a comma-separated
+ * wallet allowlist. Dev builds always see it.
+ */
+export async function isStablecoinPaymentsEnabled(opts?: {
+  walletAddress?: string | null;
+}): Promise<boolean> {
+  if (__DEV__) return true;
+  const value = await fetchAppSetting('stablecoin_payments_enabled');
+  if (!value || value === 'false') return false;
+  if (value === 'true') return true;
+  if (!opts?.walletAddress) return false;
+  return value
+    .toLowerCase()
+    .split(',')
+    .map((entry) => entry.trim())
+    .includes(opts.walletAddress.toLowerCase());
+}
