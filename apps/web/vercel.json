@@ -29,6 +29,10 @@
       "schedule": "0 6 * * 5"
     },
     {
+      "path": "/api/cron/event-radio",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/workspace-sessions-gc",
       "schedule": "0 3 * * *"
     }
