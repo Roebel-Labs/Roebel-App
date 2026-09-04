@@ -44,6 +44,20 @@ import { useEvent } from 'expo';
 import VolumeHighIcon from '@/assets/icons/story/volume-high-filled.svg';
 import VolumeMuteIcon from '@/assets/icons/story/volume-mute-filled.svg';
 import CloseIcon from '@/assets/icons/story/close.svg';
+import type { RadioSegment } from '@/lib/event-radio-select';
+import {
+  BED_DUCK,
+  BED_DUCK_MS,
+  BED_FADE_IN_MS,
+  BED_FADE_OUT_MS,
+  BED_FULL,
+  BED_UNDUCK_MS,
+  buildNarrationQueue,
+  NARRATION_LOAD_TIMEOUT_MS,
+  NARRATION_TAIL_MS,
+  narrationProgress,
+  type NarrationClip,
+} from './story-narration';
 
 // Defensive load of expo-audio. expo-audio is a NATIVE MODULE — its Swift /
 // Kotlin code only exists in binaries built after we added the package. If the
@@ -59,16 +73,39 @@ type StoryAudioPlayer = {
   loop: boolean;
   volume: number;
 } | null;
-type UseAudioPlayerFn = (source: string | null) => StoryAudioPlayer;
+type StoryAudioStatus = {
+  playing?: boolean;
+  currentTime?: number;
+  duration?: number;
+  didJustFinish?: boolean;
+  isLoaded?: boolean;
+};
+type UseAudioPlayerFn = (
+  source: string | null,
+  options?: { updateInterval?: number },
+) => StoryAudioPlayer;
+type UseAudioPlayerStatusFn = (player: StoryAudioPlayer) => StoryAudioStatus;
+type SetAudioModeFn = (mode: Record<string, unknown>) => Promise<void>;
+type PreloadFn = (source: { uri: string }) => Promise<void>;
 
 let useAudioPlayer: UseAudioPlayerFn = () => null;
+let useAudioPlayerStatus: UseAudioPlayerStatusFn = () => ({});
+let setAudioModeAsync: SetAudioModeFn = async () => {};
+let preloadAudio: PreloadFn = async () => {};
+// True only when the real native module loaded; narration needs status events.
+let audioModuleAvailable = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('expo-audio');
   if (mod?.useAudioPlayer) {
     useAudioPlayer = mod.useAudioPlayer as UseAudioPlayerFn;
+    audioModuleAvailable = true;
     console.log('[StoryViewer] expo-audio loaded ✓');
   }
+  if (mod?.useAudioPlayerStatus)
+    useAudioPlayerStatus = mod.useAudioPlayerStatus as UseAudioPlayerStatusFn;
+  if (mod?.setAudioModeAsync) setAudioModeAsync = mod.setAudioModeAsync as SetAudioModeFn;
+  if (mod?.preload) preloadAudio = mod.preload as PreloadFn;
 } catch (err) {
   console.warn(
     '[StoryViewer] expo-audio native module unavailable — audio disabled. ' +
@@ -103,6 +140,9 @@ export type StorySlideInput = {
   header?: StoryHeader;
   onSwipeUp?: () => void;
   audioUrl?: string | null;
+  // Wochen-Radio: Mecky's narration clip for this slide. When set, the clip
+  // drives the slide's timing and ducks the bed track while it speaks.
+  narration?: RadioSegment | null;
 };
 
 export type StoryGroup = {
@@ -118,6 +158,10 @@ export type StoryGroup = {
   // Per-slide auto-advance duration for this group; falls back to the
   // viewer's `durationMs` prop when unset.
   durationMs?: number;
+  // Wochen-Radio: intro plays once when the viewer opens at this group's first
+  // slide; outro plays once after the last slide's clip.
+  introNarration?: RadioSegment | null;
+  outroNarration?: RadioSegment | null;
 };
 
 type Props = {
@@ -133,10 +177,6 @@ const SWIPE_DOWN_THRESHOLD = 120;
 const SWIPE_DOWN_VELOCITY = 800;
 const SWIPE_UP_THRESHOLD = 90;
 const SWIPE_UP_VELOCITY = 700;
-
-// Crossfade duration between the shared background track and a slide's own
-// override track (e.g. a single event with its own audio).
-const CROSSFADE_MS = 600;
 
 /**
  * Ramp one or more players' volumes from their current value to a target over
@@ -258,55 +298,111 @@ export default function StoryViewer({
   const groupAudioUrl = currentGroup?.audioUrl ?? null;
   const slideOverrideUrl =
     currentGroup?.slides[currentSlideIndex]?.audioUrl ?? null;
-  const hasAudio = Boolean(groupAudioUrl || slideOverrideUrl);
 
   const groupPlayer = useAudioPlayer(groupAudioUrl);
   const slidePlayer = useAudioPlayer(slideOverrideUrl);
 
+  // ── Wochen-Radio narration ─────────────────────────────────
+  // One clip queue per slide (intro? + slide + outro?), played on a third
+  // player. While a clip speaks the bed ducks; when the queue ends the slide
+  // advances after a short tail. Anything failing falls back to the timer.
+  const closingRef = useRef(false);
+  const [clipIndex, setClipIndex] = useState(0);
+  const [narrationFailed, setNarrationFailed] = useState(false);
+  // Set the moment the viewer navigates anywhere, so the intro plays once per
+  // open. It deliberately does NOT flip while a slide is playing: the queue is
+  // built from it, and a mid-slide change would reshuffle the clip indices.
+  const [introConsumed, setIntroConsumed] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    closingRef.current = false;
+    setClipIndex(0);
+    setNarrationFailed(false);
+    setIntroConsumed(false);
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+  }, [visible, initialGroupIndex, initialSlideIndex]);
+
+  const currentSlide = currentGroup?.slides[currentSlideIndex];
+  const narrationQueue: NarrationClip[] =
+    audioModuleAvailable && currentGroup && !currentIsVideo
+      ? buildNarrationQueue({
+          slide: currentSlide?.narration,
+          intro: currentGroup.introNarration,
+          outro: currentGroup.outroNarration,
+          slideIndex: currentSlideIndex,
+          slideCount: currentGroup.slides.length,
+          openedAtSlideIndex: initialSlideIndex,
+          introPlayed: introConsumed,
+          // Leaving the last slide closes the viewer, so the outro cannot
+          // repeat within one forward pass.
+          outroPlayed: false,
+        })
+      : [];
+  const narrationActive = narrationQueue.length > 0 && !narrationFailed;
+  const currentClip = narrationActive
+    ? (narrationQueue[clipIndex] ?? narrationQueue[narrationQueue.length - 1])
+    : null;
+  const narrationUrl = currentClip?.audioUrl ?? null;
+  const narrationPlayer = useAudioPlayer(narrationUrl, { updateInterval: 250 });
+  const narrationStatus = useAudioPlayerStatus(narrationPlayer);
+  const narrationSpeaking = narrationActive && narrationStatus.playing === true;
+  // The mute button also appears when only Mecky speaks (no bed configured).
+  const hasAudio = Boolean(groupAudioUrl || slideOverrideUrl || narrationUrl);
+
+  // Declared here (not further down) because the narration effects, the
+  // ducking envelope and requestClose all need them.
+  const progress = useRef(new RNAnimated.Value(0)).current;
+  const fadeRef = useRef<number | null>(null);
+
   // Keep both players alive (loop, mute, play/pause) while the viewer is open.
   useEffect(() => {
-    const apply = (p: StoryAudioPlayer, url: string | null) => {
+    const apply = (p: StoryAudioPlayer, url: string | null, loop: boolean) => {
       if (!p) return;
       try {
-        p.loop = true;
+        p.loop = loop;
         p.muted = muted;
         // Stand down while a video slide is showing — the video owns the sound.
-        if (visible && !paused && url && !currentIsVideo) p.play();
+        if (visible && !paused && url && !currentIsVideo && !closingRef.current) p.play();
         else p.pause();
       } catch (err) {
         // expo-audio occasionally throws on a stale player ref; safe to ignore.
         console.warn('StoryViewer audio control failed:', err);
       }
     };
-    apply(groupPlayer, groupAudioUrl);
-    apply(slidePlayer, slideOverrideUrl);
+    apply(groupPlayer, groupAudioUrl, true);
+    apply(slidePlayer, slideOverrideUrl, true);
+    // Narration never loops: each clip plays once, then the queue advances.
+    apply(narrationPlayer, narrationActive ? narrationUrl : null, false);
     return () => {
-      try {
-        groupPlayer?.pause();
-      } catch {
-        /* noop */
-      }
-      try {
-        slidePlayer?.pause();
-      } catch {
-        /* noop */
+      for (const p of [groupPlayer, slidePlayer, narrationPlayer]) {
+        try {
+          p?.pause();
+        } catch {
+          /* noop */
+        }
       }
     };
   }, [
     groupPlayer,
     slidePlayer,
+    narrationPlayer,
     groupAudioUrl,
     slideOverrideUrl,
+    narrationUrl,
+    narrationActive,
     visible,
     paused,
     muted,
     currentIsVideo,
   ]);
 
-  // Crossfade whenever the active source changes: override wins → duck the
-  // background to 0 and fade the override up; no override → bring it back.
-  const fadeRef = useRef<number | null>(null);
+  // Bed level: full between clips, ducked while Mecky speaks. The override
+  // track (a slide's own audioUrl) takes the bed's place and is ducked the
+  // same way; the group bed sits at 0 underneath so it resumes seamlessly.
+  const bedLevel = narrationSpeaking ? BED_DUCK : BED_FULL;
   useEffect(() => {
+    if (closingRef.current) return;
     const overrideActive = Boolean(slideOverrideUrl);
     // A freshly-created override player defaults to full volume — start it
     // silent so it visibly fades IN rather than blaring.
@@ -320,10 +416,10 @@ export default function StoryViewer({
     fadeVolume(
       fadeRef,
       [
-        { player: groupPlayer, to: overrideActive ? 0 : 1 },
-        { player: slidePlayer, to: overrideActive ? 1 : 0 },
+        { player: groupPlayer, to: overrideActive ? 0 : bedLevel },
+        { player: slidePlayer, to: overrideActive ? bedLevel : 0 },
       ],
-      CROSSFADE_MS,
+      narrationSpeaking ? BED_DUCK_MS : BED_UNDUCK_MS,
     );
     return () => {
       if (fadeRef.current != null) {
@@ -331,16 +427,26 @@ export default function StoryViewer({
         fadeRef.current = null;
       }
     };
-  }, [groupPlayer, slidePlayer, slideOverrideUrl]);
+  }, [groupPlayer, slidePlayer, slideOverrideUrl, bedLevel, narrationSpeaking, fadeRef]);
+
+  // Fade the bed in from silence when the viewer opens.
+  useEffect(() => {
+    if (!visible || !groupPlayer) return;
+    try {
+      groupPlayer.volume = 0;
+    } catch {
+      /* noop */
+    }
+    fadeVolume(fadeRef, [{ player: groupPlayer, to: BED_FULL }], BED_FADE_IN_MS);
+  }, [visible, groupPlayer, fadeRef]);
 
   // ── Auto-advance timer ─────────────────────────────────────
-  const progress = useRef(new RNAnimated.Value(0)).current;
-
   useEffect(() => {
     if (!visible || paused || !currentGroup) return;
     // Video slides advance themselves when the clip ends (see VideoSlideFace),
     // and drive the progress bar from playback position — skip the timer.
-    if (currentIsVideo) return;
+    // Narrated slides do the same, driven by the narration queue.
+    if (currentIsVideo || narrationActive) return;
     progress.setValue(0);
     const anim = RNAnimated.timing(progress, {
       toValue: 1,
@@ -354,10 +460,37 @@ export default function StoryViewer({
     });
     return () => anim.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentGroupIndex, currentSlideIndex, paused, visible, durationMs, currentIsVideo]);
+  }, [
+    currentGroupIndex,
+    currentSlideIndex,
+    paused,
+    visible,
+    durationMs,
+    currentIsVideo,
+    narrationActive,
+  ]);
+
+  // Every way out (close button, swipe-down, end of the last group, Android
+  // back) runs through here so the bed and the voice fade instead of cutting.
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    fadeVolume(
+      fadeRef,
+      [
+        { player: groupPlayer, to: 0 },
+        { player: slidePlayer, to: 0 },
+        { player: narrationPlayer, to: 0 },
+      ],
+      BED_FADE_OUT_MS,
+    );
+    setTimeout(onClose, BED_FADE_OUT_MS);
+  }, [groupPlayer, slidePlayer, narrationPlayer, onClose]);
 
   // ── Navigation (instant — no animation) ────────────────────
   const stepForwardJS = useCallback(() => {
+    // Any navigation retires the intro for this open.
+    setIntroConsumed(true);
     // Reset the shared progress value synchronously BEFORE the slide-index
     // state change re-renders. Otherwise the incoming segment paints bound to
     // the previous segment's finished value (1 → 100%) for one frame before
@@ -372,7 +505,7 @@ export default function StoryViewer({
       return;
     }
     if (gi >= groupsRef.current.length - 1) {
-      onClose();
+      requestClose();
       return;
     }
     const nextGrp = groupsRef.current[gi + 1];
@@ -382,9 +515,10 @@ export default function StoryViewer({
       );
     }
     setCurrentGroupIndex(gi + 1);
-  }, [onClose, progress]);
+  }, [progress, requestClose]);
 
   const stepBackJS = useCallback(() => {
+    setIntroConsumed(true);
     progress.setValue(0); // avoid the incoming segment flashing the old value
     const gi = currentGroupIndexRef.current;
     const grp = groupsRef.current[gi];
@@ -402,6 +536,59 @@ export default function StoryViewer({
     }
     setCurrentGroupIndex(gi - 1);
   }, [progress]);
+
+  // ── Narration queue effects ────────────────────────────────
+  // A new slide restarts the queue at its first clip.
+  useEffect(() => {
+    setClipIndex(0);
+    setNarrationFailed(false);
+  }, [currentGroupIndex, currentSlideIndex]);
+
+  // Never let a slow or broken clip freeze the story: fall back to the timer.
+  useEffect(() => {
+    if (!narrationUrl || narrationStatus.isLoaded) return;
+    const t = setTimeout(() => setNarrationFailed(true), NARRATION_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [narrationUrl, narrationStatus.isLoaded]);
+
+  // Clip finished → next clip, or advance the slide after a short tail.
+  const finishedClipRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!narrationActive || !currentClip || !narrationStatus.didJustFinish) return;
+    const key = `${currentGroupIndex}:${currentSlideIndex}:${clipIndex}`;
+    if (finishedClipRef.current === key) return;
+    finishedClipRef.current = key;
+    if (clipIndex < narrationQueue.length - 1) {
+      setClipIndex(clipIndex + 1);
+      return;
+    }
+    const t = setTimeout(() => stepForwardJS(), NARRATION_TAIL_MS);
+    return () => clearTimeout(t);
+  }, [
+    narrationStatus.didJustFinish,
+    narrationActive,
+    currentClip,
+    clipIndex,
+    narrationQueue.length,
+    currentGroupIndex,
+    currentSlideIndex,
+    stepForwardJS,
+  ]);
+
+  // Drive the segment progress bar from the narration position.
+  useEffect(() => {
+    if (!narrationActive) return;
+    progress.setValue(narrationProgress(narrationQueue, clipIndex, narrationStatus.currentTime ?? 0));
+    // narrationQueue is rebuilt every render; clipIndex + currentTime are the
+    // values that actually move the bar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [narrationActive, narrationStatus.currentTime, clipIndex, progress]);
+
+  // Preload the next slide's clip so it starts without a gap.
+  useEffect(() => {
+    const next = currentGroup?.slides[currentSlideIndex + 1]?.narration?.audioUrl;
+    if (next) preloadAudio({ uri: next }).catch(() => {});
+  }, [currentGroup, currentSlideIndex]);
 
   const triggerSwipeUp = useCallback(() => {
     const grp = groupsRef.current[currentGroupIndexRef.current];
@@ -443,7 +630,7 @@ export default function StoryViewer({
       const vy = e.velocityY;
       if (dy > SWIPE_DOWN_THRESHOLD || vy > SWIPE_DOWN_VELOCITY) {
         dragY.value = withTiming(height, { duration: 220 }, (finished) => {
-          if (finished) runOnJS(onClose)();
+          if (finished) runOnJS(requestClose)();
         });
         return;
       }
@@ -518,7 +705,7 @@ export default function StoryViewer({
       animationType="fade"
       transparent
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
     >
       <StatusBar hidden />
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -636,19 +823,25 @@ export default function StoryViewer({
                     )}
                   </Pressable>
                 ) : null}
-                <Pressable onPress={onClose} hitSlop={16} style={styles.closeBtn}>
+                <Pressable onPress={requestClose} hitSlop={16} style={styles.closeBtn}>
                   <CloseIcon width={26} height={26} />
                 </Pressable>
                 {hasAudio &&
-                (groupPlayer || slidePlayer) &&
+                (groupPlayer || slidePlayer || narrationPlayer) &&
                 !muted &&
                 currentGroup.audioTitle ? (
                   <SongTooltip
                     title={currentGroup.audioTitle}
-                    onPress={() => {
-                      const url = currentGroup.audioLinkUrl;
-                      if (url) Linking.openURL(url).catch(() => {});
-                    }}
+                    // With Mecky narrating, the tooltip is the AI-voice
+                    // disclosure and has no link to open.
+                    onPress={
+                      currentGroup.audioLinkUrl
+                        ? () => {
+                            const url = currentGroup.audioLinkUrl;
+                            if (url) Linking.openURL(url).catch(() => {});
+                          }
+                        : undefined
+                    }
                   />
                 ) : null}
               </Animated.View>
@@ -750,7 +943,7 @@ function SongTooltip({
   onPress,
 }: {
   title: string;
-  onPress: () => void;
+  onPress?: () => void;
 }) {
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.85);
@@ -776,6 +969,7 @@ function SongTooltip({
       <View style={styles.songTooltipCaret} pointerEvents="none" />
       <Pressable
         onPress={onPress}
+        disabled={!onPress}
         hitSlop={8}
         style={styles.songTooltipPressable}
       >
