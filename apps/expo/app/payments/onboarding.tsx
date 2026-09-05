@@ -1,10 +1,13 @@
 /**
- * Merchant onboarding: turn a business into a stablecoin acceptance point.
+ * Gnosis Pay onboarding: open a Konto (euro balance + Visa debit card) for a
+ * person, and optionally make their business a stablecoin acceptance point.
  *
  * Drives the fixed Gnosis Pay sequence (signup -> terms -> KYC -> source of
  * funds -> phone -> Safe deploy) and, when the Safe exists, writes it into the
- * merchant registry and links the business. That link is the moment the place
- * appears on the map, which is what "Sie sind live" means.
+ * registry and creates a virtual card. With `entityId` in the route params it
+ * also links the business -- that link is the moment the place appears on the
+ * map, which is what "Sie sind live" means. Without it the same steps end at
+ * "Konto eröffnet" (entry: the Konto & Karte card on every personal profile).
  *
  * The step order is decided by lib/gnosispay/onboarding.nextStep -- this screen
  * only renders what it is told and reports results back. Every network call
@@ -31,6 +34,7 @@ import { useTheme } from '@/context/ThemeContext';
 import {
   REQUIRED_TERMS,
   acceptTerm,
+  createVirtualCard,
   deploySafe,
   getKycLink,
   getSafeConfig,
@@ -68,6 +72,10 @@ export default function MerchantOnboardingScreen() {
   const params = useLocalSearchParams<{ entityType?: string; entityId?: string }>();
   const entityType = (params.entityType ?? 'business') as MerchantEntityType;
   const entityId = params.entityId ?? '';
+  // With a business to link this is the merchant flow; without one it is a
+  // person opening a Konto + card for themselves. Same steps, different words.
+  const isMerchantFlow = entityId.length > 0;
+  const [cardCreated, setCardCreated] = useState(false);
 
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<GpUser | null>(null);
@@ -173,7 +181,7 @@ export default function MerchantOnboardingScreen() {
         <Text style={[styles.headerBack, { color: colors.primary }]}>Zurück</Text>
       </Pressable>
       <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-        Stablecoin-Zahlungen
+        {isMerchantFlow ? 'Stablecoin-Zahlungen' : 'Konto & Karte'}
       </Text>
       <View style={styles.headerSpacer} />
     </View>
@@ -196,8 +204,14 @@ export default function MerchantOnboardingScreen() {
         <OnboardingStep
           stepIndex={progress.index}
           stepTotal={progress.total}
-          title="Geld, das sofort auf Ihrer Karte ist"
-          body="Sie nehmen Zahlungen in digitalen Euro an. Das Geld liegt auf Ihrem eigenen Konto und lässt sich sofort mit Karte ausgeben."
+          title={
+            isMerchantFlow ? 'Geld, das sofort auf Ihrer Karte ist' : 'Konto & Karte in zehn Minuten'
+          }
+          body={
+            isMerchantFlow
+              ? 'Sie nehmen Zahlungen in digitalen Euro an. Das Geld liegt auf Ihrem eigenen Konto und lässt sich sofort mit Karte ausgeben.'
+              : 'Ein Euro-Konto mit Visa-Debitkarte. Sie zahlen mit Guthaben, weltweit und per Google Pay. Einmal Ausweis und Selfie, fertig.'
+          }
           actionLabel={token ? "Los geht's" : 'Anmeldung wiederholen'}
           busy={busy}
           error={error}
@@ -446,13 +460,22 @@ export default function MerchantOnboardingScreen() {
                 safeAddress: config.data.address,
                 status: 'live',
               });
-              if (entityId) {
+              if (isMerchantFlow) {
                 const linked = await linkEntity(account!, { entityType, entityId });
                 if (!linked.ok) {
                   throw new Error(
                     'Das Konto ist da, aber der Eintrag auf der Karte hat nicht geklappt. Bitte erneut versuchen.',
                   );
                 }
+              }
+              // A virtual Visa is free and instant; 409 means one already
+              // exists. Anything else must not block the finish -- the Konto
+              // is the deliverable, the card can be ordered later.
+              const card = await createVirtualCard(token);
+              if (card.ok || card.code === 'ALREADY_DONE') {
+                setCardCreated(true);
+              } else {
+                console.warn('[gnosispay] virtual card not created', card.code, card.message);
               }
               await refresh(token);
             })
@@ -465,8 +488,15 @@ export default function MerchantOnboardingScreen() {
       <OnboardingStep
         stepIndex={progress.total}
         stepTotal={progress.total}
-        title="Sie sind live"
-        body="Ihr Geschäft ist ab sofort auf der Karte als Stablecoin-Annahmestelle sichtbar. Karte und Kontonummer finden Sie im Konto-Bereich."
+        title={isMerchantFlow ? 'Sie sind live' : 'Konto eröffnet'}
+        body={
+          (isMerchantFlow
+            ? 'Ihr Geschäft ist ab sofort auf der Karte als Stablecoin-Annahmestelle sichtbar. '
+            : 'Ihr Euro-Konto ist aktiv. ') +
+          (cardCreated
+            ? 'Ihre virtuelle Visa-Karte ist bereits aktiv; Kartendaten und IBAN folgen im Konto-Bereich.'
+            : 'Die Karte lässt sich im Konto-Bereich bestellen.')
+        }
         actionLabel="Fertig"
         onAction={() => router.back()}
       />

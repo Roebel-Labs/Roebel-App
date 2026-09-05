@@ -120,3 +120,13 @@ export function getSafeDeployStatus(token: string): Promise<GpResult<{ status: s
 export function getSafeConfig(token: string): Promise<GpResult<GpSafeConfig>> {
   return gpFetch<GpSafeConfig>('/api/v1/safe-config', { token });
 }
+
+/**
+ * Creates a virtual Visa debit card on the user's Safe. Free, activated
+ * immediately, no shipping or payment step. 409 means a card (or order)
+ * already exists, which gpFetch reports as ALREADY_DONE -- callers treat that
+ * as success. Card number/CVV are only viewable through PSE (slice 1c).
+ */
+export function createVirtualCard(token: string): Promise<GpResult<{ id?: string }>> {
+  return gpFetch<{ id?: string }>('/api/v1/cards/virtual', { method: 'POST', token, body: {} });
+}

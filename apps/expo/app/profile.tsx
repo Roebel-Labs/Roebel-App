@@ -11,6 +11,7 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Events, track } from '@/lib/analytics';
 import AvatarStack from '@/components/AvatarStack';
+import KontoCard from '@/components/payments/KontoCard';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import BottomDrawer from '@/components/BottomDrawer';
@@ -346,6 +347,10 @@ const handleRefresh = async () => {
                     <TouristActionRow />
                   </>
                 )}
+
+                {/* Konto & Karte (Gnosis Pay) — every personal profile; the card
+                    hides itself while the pilot gate is closed for this wallet. */}
+                {!isOrg && <KontoCard />}
 
                 {/* "Lerne mehr über die Röbel App" — citizens (incl. aspiring) only */}
                 {!isOrg && (isCitizen || isAspiringCitizen || wantsToBeCitizen) && (

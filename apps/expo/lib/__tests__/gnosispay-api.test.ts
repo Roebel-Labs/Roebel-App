@@ -7,6 +7,7 @@ import * as client from '../gnosispay/client';
 import {
   REQUIRED_TERMS,
   acceptTerm,
+  createVirtualCard,
   deploySafe,
   getKycLink,
   getSafeConfig,
@@ -133,5 +134,16 @@ describe('safe deployment', () => {
   it('reads the finished config from safe-config', async () => {
     await getSafeConfig('jwt');
     expect(gpFetch).toHaveBeenCalledWith('/api/v1/safe-config', { token: 'jwt' });
+  });
+});
+
+describe('createVirtualCard', () => {
+  it('posts to the virtual card endpoint with an empty body', async () => {
+    await createVirtualCard('jwt');
+    expect(gpFetch).toHaveBeenCalledWith('/api/v1/cards/virtual', {
+      method: 'POST',
+      token: 'jwt',
+      body: {},
+    });
   });
 });
