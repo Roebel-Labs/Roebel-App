@@ -108,6 +108,8 @@ export function EventRadioPanel() {
       )
   }, [load])
 
+  const activeVoice = voices.find((v) => v.id === overview?.voiceId) ?? null
+
   const saveVoice = async (id?: string) => {
     const next = (id ?? voiceInput) || null
     setVoiceInput(next ?? "")
@@ -187,41 +189,21 @@ export function EventRadioPanel() {
 
       {voicesError ? (
         <p className="rounded-[10px] border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-          Stimmen-Auswahl nicht verfügbar. {voicesError}
+          Vorschau der Stimme nicht verfügbar. {voicesError}
         </p>
       ) : null}
 
-      {voices.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Stimme wählen: anhören, übernehmen, dann unten neu generieren, um sie in echten
-            Beiträgen zu hören. Umschalten geht jederzeit.
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {voices.map((v) => {
-              const active = v.id === overview?.voiceId
-              return (
-                <div
-                  key={v.id}
-                  className={`rounded-[10px] border p-2 space-y-2 ${active ? "border-primary" : "border-border"}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium truncate">{v.name}</span>
-                    {active ? (
-                      <Badge variant="secondary">Aktiv</Badge>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={() => saveVoice(v.id)}>
-                        Übernehmen
-                      </Button>
-                    )}
-                  </div>
-                  {v.previewUrl ? (
-                    <audio controls preload="none" src={v.previewUrl} className="w-full h-8" />
-                  ) : null}
-                </div>
-              )
-            })}
+      {/* Only the voice that is actually in use. Candidates are switched by
+          pasting another Voice ID below, not by browsing a list here. */}
+      {activeVoice ? (
+        <div className="rounded-[10px] border border-primary p-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium truncate">{activeVoice.name}</span>
+            <Badge variant="secondary">Aktive Stimme</Badge>
           </div>
+          {activeVoice.previewUrl ? (
+            <audio controls preload="none" src={activeVoice.previewUrl} className="w-full h-8" />
+          ) : null}
         </div>
       ) : null}
 
