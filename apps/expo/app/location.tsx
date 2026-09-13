@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DiscoverStroke from '@/assets/icons/bottom-nav/discover.svg';
 
 import { ArrowLeftIcon, CallIcon, LocationIcon, SearchIcon } from '@/components/Icons';
 import SearchModal from '@/components/SearchModal';
@@ -19,10 +18,15 @@ import MapboxMapView from '@/components/map/MapboxMapView';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MapPrivacyConsent from '@/components/map/MapPrivacyConsent';
 import MapFilterBar from '@/components/map/MapFilterBar';
-import MapCategoryRow from '@/components/map/MapCategoryRow';
+import MapCategoryRow, { MAP_CATEGORY_ROW_HEIGHT } from '@/components/map/MapCategoryRow';
+import MapBottomFade from '@/components/map/MapBottomFade';
+import MapExploreButton, { EXPLORE_BUTTON_HEIGHT } from '@/components/map/MapExploreButton';
 import MapCategorySheet from '@/components/map/MapCategorySheet';
 import { categoryByKey, type MapCategoryKey } from '@/lib/map/categories';
-import MapPlaceSheet, { type PlaceItem } from '@/components/map/MapPlaceSheet';
+import MapPlaceSheet from '@/components/map/MapPlaceSheet';
+import { placeKey, type PlaceItem } from '@/lib/map/place-item';
+import { itemsForCategory } from '@/lib/map/category-items';
+import { useRecommendationScores } from '@/hooks/useRecommendationScores';
 import VerlorenSheet from '@/components/utilities/VerlorenSheet';
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -74,6 +78,9 @@ import {
 // which screen loads first. Fails gracefully in Expo Go (Mapbox === null).
 import { isMapboxAvailable } from '@/lib/map/mapbox';
 
+/** How far the bottom fade reaches above the category row before it is gone. */
+const FADE_LEAD = 48;
+
 export default function LocationScreen() {
   const router = useRouter();
   const { selectedEventId, focusEntityType, focusEntityId, filterOnly } = useLocalSearchParams<{
@@ -84,7 +91,15 @@ export default function LocationScreen() {
   }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const bottomBase = Math.max(insets.bottom, 12) + 28;
+
+  // Bottom stack, from the screen edge up: Erkunden pill, category row,
+  // locate button. The fade under all of it reaches FADE_LEAD past the row so
+  // the frost is already there when the labels start.
+  const exploreBottom = Math.max(insets.bottom, 12) + 6;
+  const rowBottom = exploreBottom + EXPLORE_BUTTON_HEIGHT + 10;
+  const rowTop = rowBottom + MAP_CATEGORY_ROW_HEIGHT;
+  const fadeHeight = rowTop + FADE_LEAD;
+  const locateBottom = rowTop + 12;
 
   const [events, setEvents] = useState<EventWithCoordinates[]>([]);
   const [restaurants, setRestaurants] = useState<RestaurantRecord[]>([]);
@@ -96,10 +111,7 @@ export default function LocationScreen() {
   const [allOrgs, setAllOrgs] = useState<Account[]>([]);
   const [advisories, setAdvisories] = useState<DailyAdvisoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selection, setSelection] = useState<{
-    items: PlaceItem[];
-    selectedId: string;
-  } | null>(null);
+  const [selection, setSelection] = useState<PlaceItem | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState<MapCategoryKey | null>(null);
@@ -115,16 +127,19 @@ export default function LocationScreen() {
     ROEBEL_CENTER
   );
 
-  // Fade the map chrome (bottom row + filter bar) out while the sheet is open
+  // Fade the map chrome (bottom row, pills, buttons) out while any sheet is
+  // open. The sheets render above the chrome regardless; the fade only keeps
+  // faded-out controls from catching taps around the sheet's edges.
+  const chromeHidden = !!selection || !!activeCategory;
   const chromeOpacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.timing(chromeOpacity, {
-      toValue: selection ? 0 : 1,
+      toValue: chromeHidden ? 0 : 1,
       duration: 200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [selection, chromeOpacity]);
+  }, [chromeHidden, chromeOpacity]);
 
   const [mapFilter, setMapFilter] = useState<MapFilterState>(
     filterOnly === 'orgs'
@@ -149,7 +164,7 @@ export default function LocationScreen() {
   }, [filterOnly]);
 
   // "Jetzt geöffnet" applies to places with opening hours; a marker tap still
-  // finds its entity because buildPlaceItems uses the unfiltered lists.
+  // finds its entity because findPlaceItem reads the unfiltered lists.
   const visibleRestaurants = useMemo(
     () => filterOpenNow(restaurants, mapFilter.openNow),
     [restaurants, mapFilter.openNow]
@@ -181,6 +196,30 @@ export default function LocationScreen() {
     [allOrgs, restaurants, businesses]
   );
 
+  // Every org that stands behind a pin — the accounts whose votes and saves
+  // rank the Empfehlungen sheet. Fetched only while that sheet is open.
+  const pinAccountIds = useMemo(
+    () => Array.from(new Set(orgIndex.byPin.values())),
+    [orgIndex]
+  );
+  const recommendationScores = useRecommendationScores(
+    activeCategory === 'empfehlungen' ? pinAccountIds : null
+  );
+
+  // `tickNow` (a 15s clock) stands in for "now" so the list is a pure function
+  // of state rather than of a Date read during render.
+  const categoryItems = useMemo(
+    () =>
+      activeCategory
+        ? itemsForCategory(
+            activeCategory,
+            { events, restaurants, businesses, orgs },
+            { orgIndex, scores: recommendationScores, now: tickNow }
+          )
+        : [],
+    [activeCategory, events, restaurants, businesses, orgs, orgIndex, recommendationScores, tickNow]
+  );
+
   const onSelectCategory = useCallback(
     (key: MapCategoryKey) => {
       if (activeCategory === key) {
@@ -202,11 +241,7 @@ export default function LocationScreen() {
     [activeCategory]
   );
 
-  const selectedFeatureId = useMemo(() => {
-    if (!selection) return null;
-    const item = selection.items.find((it) => it.id === selection.selectedId);
-    return item ? `${item.entityType}-${item.id}` : null;
-  }, [selection]);
+  const selectedFeatureId = selection ? placeKey(selection) : null;
 
   // Privacy consent
   useEffect(() => {
@@ -338,76 +373,53 @@ export default function LocationScreen() {
     }
   };
 
-  // Build a PlaceItem list of all entities of the given type
-  const buildPlaceItems = (entityType: MapEntityType): PlaceItem[] => {
-    if (entityType === 'event') {
-      return events.map((e) => ({
-        id: e.id,
-        entityType: 'event',
-        lat: e.latitude,
-        lon: e.longitude,
-        data: e,
-      }));
+  // The PlaceItem for a pin, from the unfiltered lists so a tap always finds
+  // its entity even while a layer or "Jetzt geöffnet" hides it.
+  const findPlaceItem = (entityType: MapEntityType, id: string): PlaceItem | null => {
+    switch (entityType) {
+      case 'event': {
+        const e = events.find((x) => x.id === id);
+        return e ? { id: e.id, entityType: 'event', lat: e.latitude, lon: e.longitude, data: e } : null;
+      }
+      case 'restaurant': {
+        const r = restaurants.find((x) => x.id === id);
+        return r && r.latitude != null && r.longitude != null
+          ? { id: r.id, entityType: 'restaurant', lat: r.latitude, lon: r.longitude, data: r }
+          : null;
+      }
+      case 'business': {
+        const b = businesses.find((x) => x.id === id);
+        return b && b.latitude != null && b.longitude != null
+          ? { id: b.id, entityType: 'business', lat: b.latitude, lon: b.longitude, data: b }
+          : null;
+      }
+      case 'poi': {
+        const p = pois.find((x) => x.id === id);
+        return p ? { id: p.id, entityType: 'poi', lat: p.lat, lon: p.lon, data: p } : null;
+      }
+      case 'org': {
+        const o = orgs.find((x) => x.id === id);
+        return o
+          ? { id: o.id, entityType: 'org', lat: o.latitude, lon: o.longitude, data: o as Account }
+          : null;
+      }
+      default:
+        return null;
     }
-    if (entityType === 'restaurant') {
-      return restaurants
-        .filter((r) => r.latitude != null && r.longitude != null)
-        .map((r) => ({
-          id: r.id,
-          entityType: 'restaurant',
-          lat: r.latitude!,
-          lon: r.longitude!,
-          data: r,
-        }));
-    }
-    if (entityType === 'business') {
-      return businesses
-        .filter((b) => b.latitude != null && b.longitude != null)
-        .map((b) => ({
-          id: b.id,
-          entityType: 'business',
-          lat: b.latitude!,
-          lon: b.longitude!,
-          data: b,
-        }));
-    }
-    if (entityType === 'poi') {
-      return pois.map((p) => ({
-        id: p.id,
-        entityType: 'poi',
-        lat: p.lat,
-        lon: p.lon,
-        data: p,
-      }));
-    }
-    if (entityType === 'org') {
-      return orgs.map((o) => ({
-        id: o.id,
-        entityType: 'org',
-        lat: o.latitude,
-        lon: o.longitude,
-        data: o as Account,
-      }));
-    }
-    return [];
+  };
+
+  const selectPlace = (item: PlaceItem) => {
+    setSelection(item);
+    setFlyToCoordinate([item.lon, item.lat]);
   };
 
   const openSelectionFor = (entityType: MapEntityType, id: string) => {
-    const items = buildPlaceItems(entityType);
-    if (items.length === 0) return;
-    const target = items.find((it) => it.id === id);
-    if (!target) return;
-    setSelection({ items, selectedId: id });
-    setFlyToCoordinate([target.lon, target.lat]);
+    const item = findPlaceItem(entityType, id);
+    if (item) selectPlace(item);
   };
 
   const handleMarkerPress = (id: string, entityType: MapEntityType) => {
     openSelectionFor(entityType, id);
-  };
-
-  const handleSheetSelectionChange = (item: PlaceItem) => {
-    setSelection((prev) => (prev ? { ...prev, selectedId: item.id } : prev));
-    setFlyToCoordinate([item.lon, item.lat]);
   };
 
   const handleLocateMe = async () => {
@@ -557,20 +569,31 @@ export default function LocationScreen() {
               opacity={chromeOpacity}
             />
 
-            {/* Browse row — icon above, label beneath, on the map's one
-                frosted pane. Fades behind the place sheet like the rest. */}
+            {/* The frosted ground under the bottom chrome — from the screen
+                edge up past the category row. Not faded: sheets open over it. */}
+            <MapBottomFade height={fadeHeight} />
+
+            {/* Browse row — icon above, label beneath, standing on the fade. */}
             <MapCategoryRow
               activeKey={activeCategory}
               onSelect={onSelectCategory}
-              bottom={bottomBase}
+              bottom={rowBottom}
               opacity={chromeOpacity}
+              hidden={chromeHidden}
             />
 
-            {/* SOS + Erkunden move to the top-left: the category row now owns
-                the bottom strip. */}
+            {/* Erkunden — the shadowed pill under the row, above the safe area. */}
+            <MapExploreButton
+              onPress={() => router.push('/explore' as any)}
+              bottom={exploreBottom}
+              opacity={chromeOpacity}
+              hidden={chromeHidden}
+            />
+
+            {/* SOS keeps the top-left corner. */}
             <Animated.View
               style={[styles.topLeftRow, { top: insets.top + 8, opacity: chromeOpacity }]}
-              pointerEvents={selection ? 'none' : 'box-none'}
+              pointerEvents={chromeHidden ? 'none' : 'box-none'}
             >
               <Pressable
                 onPress={() => setShowVerloren(true)}
@@ -579,24 +602,12 @@ export default function LocationScreen() {
               >
                 <CallIcon size={20} color={colors.textPrimary} />
               </Pressable>
-
-              <Pressable
-                onPress={() => router.push('/explore' as any)}
-                style={[styles.erkundenPill, { backgroundColor: colors.card }]}
-                accessibilityLabel="Erkunden öffnen"
-              >
-                <DiscoverStroke width={18} height={18} color={colors.textPrimary} />
-                <Text style={[styles.erkundenText, { color: colors.textPrimary }]}>Erkunden</Text>
-              </Pressable>
             </Animated.View>
 
             {/* Locate stays bottom-right, floating above the category row. */}
             <Animated.View
-              style={[
-                styles.locateFloat,
-                { bottom: bottomBase + 84, opacity: chromeOpacity },
-              ]}
-              pointerEvents={selection ? 'none' : 'box-none'}
+              style={[styles.locateFloat, { bottom: locateBottom, opacity: chromeOpacity }]}
+              pointerEvents={chromeHidden ? 'none' : 'box-none'}
             >
               <Pressable
                 onPress={handleLocateMe}
@@ -612,22 +623,30 @@ export default function LocationScreen() {
 
       <VerlorenSheet visible={showVerloren} onClose={() => setShowVerloren(false)} />
 
-      {selection ? (
-        <MapPlaceSheet
-          items={selection.items}
-          selectedId={selection.selectedId}
-          onClose={() => setSelection(null)}
-          onSelectionChange={handleSheetSelectionChange}
-          orgIndex={orgIndex}
-        />
-      ) : null}
+      {/* Sheets live in their own layer over the map container, so no z-index
+          inside it (the category row, the buttons) can ever paint above them.
+          A place chosen from a category list opens the place sheet in front;
+          the category sheet returns when it closes. */}
+      <View style={styles.sheetLayer} pointerEvents="box-none">
+        {selection ? (
+          <MapPlaceSheet
+            item={selection}
+            onClose={() => setSelection(null)}
+            orgIndex={orgIndex}
+          />
+        ) : null}
 
-      {activeCategory && !selection ? (
-        <MapCategorySheet
-          categoryKey={activeCategory}
-          onClose={() => setActiveCategory(null)}
-        />
-      ) : null}
+        {activeCategory && !selection ? (
+          <MapCategorySheet
+            categoryKey={activeCategory}
+            items={categoryItems}
+            onSelectPlace={selectPlace}
+            onClose={() => setActiveCategory(null)}
+            orgIndex={orgIndex}
+            scores={recommendationScores}
+          />
+        ) : null}
+      </View>
 
       <SearchModal
         visible={showSearchModal}
@@ -750,22 +769,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  erkundenPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  erkundenText: {
-    fontSize: 15,
-    fontFamily: fontFamily.medium,
+  sheetLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3000,
   },
   fallbackContainer: {
     flex: 1,

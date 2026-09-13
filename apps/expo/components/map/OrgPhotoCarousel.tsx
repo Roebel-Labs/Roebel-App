@@ -1,9 +1,13 @@
 /**
- * The photo rail in the org sheet.
+ * The photo carousel in the place sheet.
  *
- * A paged gallery rather than a free-scrolling rail: photos snap so a swipe
- * always lands on a picture instead of drifting to rest between two. Owners
- * get a "+" tile at the end to add a photo without leaving the map.
+ * One photo per page, full sheet width, snapping so a swipe always lands on a
+ * picture; page dots beneath. Owners get a "+" page at the end to add a photo
+ * without leaving the map.
+ *
+ * The list comes from react-native-gesture-handler rather than React Native:
+ * inside a @gorhom bottom sheet the sheet's own pan gesture otherwise wins
+ * every horizontal swipe on Android and the rail cannot be scrolled at all.
  *
  * Falls back to the org's cover and avatar when the gallery is empty, so a
  * place that has not uploaded anything yet still reads as a place rather than
@@ -12,13 +16,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { FlatList } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 
 import { useTheme } from '@/context/ThemeContext';
@@ -27,11 +31,6 @@ import type { AccountPhoto } from '@/lib/types';
 
 const GUTTER = 16;
 const GAP = 8;
-// Leave the next photo peeking so the rail reads as swipeable at a glance.
-const PEEK = 44;
-const TILE_WIDTH = Dimensions.get('window').width - GUTTER * 2 - PEEK;
-const TILE_HEIGHT = Math.round(TILE_WIDTH * 0.78);
-const SNAP = TILE_WIDTH + GAP;
 
 type Props = {
   photos: AccountPhoto[];
@@ -46,6 +45,8 @@ type Props = {
   onAddPhoto?: () => void;
 };
 
+type ScrollEvent = { nativeEvent: { contentOffset: { x: number } } };
+
 export default function OrgPhotoCarousel({
   photos,
   fallbackUrls = [],
@@ -56,7 +57,12 @@ export default function OrgPhotoCarousel({
   onAddPhoto,
 }: Props) {
   const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const [page, setPage] = useState(0);
+
+  const tileWidth = windowWidth - GUTTER * 2;
+  const tileHeight = Math.round(tileWidth * 0.66);
+  const snap = tileWidth + GAP;
 
   const urls = useMemo(() => {
     if (photos.length) return photos.map((p) => p.url);
@@ -66,13 +72,19 @@ export default function OrgPhotoCarousel({
   // getItemLayout keeps paging maths independent of measurement, so the first
   // swipe snaps correctly even before the row has laid out.
   const getItemLayout = useCallback(
-    (_: unknown, index: number) => ({ length: SNAP, offset: SNAP * index, index }),
-    []
+    (_: unknown, index: number) => ({ length: snap, offset: snap * index, index }),
+    [snap]
   );
 
-  const onScroll = useCallback((e: { nativeEvent: { contentOffset: { x: number } } }) => {
-    setPage(Math.round(e.nativeEvent.contentOffset.x / SNAP));
-  }, []);
+  // The page settles on momentum end (snapping always produces momentum);
+  // drag end is the fallback for a release that lands exactly on a page.
+  const settle = useCallback(
+    (e: ScrollEvent) => {
+      const raw = Math.round(e.nativeEvent.contentOffset.x / snap);
+      setPage(Math.max(0, Math.min(urls.length - 1, raw)));
+    },
+    [snap, urls.length]
+  );
 
   if (!urls.length && !canUpload) return null;
 
@@ -84,13 +96,13 @@ export default function OrgPhotoCarousel({
         keyExtractor={(url, index) => `${url}-${index}`}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.list}
-        snapToInterval={SNAP}
+        snapToInterval={snap}
         snapToAlignment="start"
         decelerationRate="fast"
         disableIntervalMomentum
         getItemLayout={getItemLayout}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
+        onMomentumScrollEnd={settle}
+        onScrollEndDrag={settle}
         ListFooterComponent={
           canUpload ? (
             <Pressable
@@ -98,7 +110,12 @@ export default function OrgPhotoCarousel({
               disabled={uploading}
               style={[
                 styles.addTile,
-                { borderColor: colors.border, backgroundColor: colors.surface },
+                {
+                  width: tileWidth,
+                  height: tileHeight,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Foto hinzufügen"
@@ -123,7 +140,10 @@ export default function OrgPhotoCarousel({
           >
             <Image
               source={{ uri: item }}
-              style={[styles.photo, { backgroundColor: colors.surfaceSecondary }]}
+              style={[
+                styles.photo,
+                { width: tileWidth, height: tileHeight, backgroundColor: colors.surfaceSecondary },
+              ]}
               contentFit="cover"
               transition={150}
             />
@@ -162,10 +182,8 @@ export default function OrgPhotoCarousel({
 const styles = StyleSheet.create({
   wrap: { position: 'relative' },
   list: { gap: GAP, paddingHorizontal: GUTTER },
-  photo: { width: TILE_WIDTH, height: TILE_HEIGHT, borderRadius: 16 },
+  photo: { borderRadius: 16 },
   addTile: {
-    width: TILE_WIDTH,
-    height: TILE_HEIGHT,
     borderRadius: 16,
     borderWidth: 1,
     borderStyle: 'dashed',

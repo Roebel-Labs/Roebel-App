@@ -124,3 +124,20 @@ export async function clearAccountSave(accountId: string, wallet: string): Promi
     .eq('wallet_address', wallet.toLowerCase());
   if (error) console.error('clearAccountSave error:', error);
 }
+
+/** Save counts for many orgs at once — the Empfehlungen ranking reads these. */
+export async function fetchAccountSaveSummaries(
+  accountIds: string[]
+): Promise<AccountSaveSummary[]> {
+  if (!accountIds.length) return [];
+  const { data, error } = await supabase
+    .from('account_save_summary')
+    .select('*')
+    .in('account_id', accountIds);
+
+  if (error) {
+    console.error('fetchAccountSaveSummaries error:', error);
+    return [];
+  }
+  return (data as AccountSaveSummary[]) ?? [];
+}
