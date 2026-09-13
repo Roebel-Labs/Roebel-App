@@ -1,4 +1,4 @@
-// Renders assets/cards/*.svg to PNG at 2x and 3x. The SVGs use a soft-light
+// Renders assets/cards/*.svg to PNG at 1x, 2x and 3x (1x keeps jest and web resolvers happy). The SVGs use a soft-light
 // sheen and inner-shadow filters that react-native-svg cannot reproduce, so
 // the app ships PNGs and keeps the SVGs as the design source.
 //
@@ -21,7 +21,7 @@ const OUT = path.join(SRC, 'png');
 mkdirSync(OUT, { recursive: true });
 
 const CARDS = { Guest: 'guest', Citizen: 'citizen', Attester: 'attester' };
-const SCALES = [2, 3];
+const SCALES = [1, 2, 3];
 
 for (const [file, name] of Object.entries(CARDS)) {
   for (const scale of SCALES) {
