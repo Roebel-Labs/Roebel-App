@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
 import MarketplaceCard from './MarketplaceCard';
 import BusinessDealCard from './BusinessDealCard';
@@ -16,7 +17,7 @@ type RailItem =
   | { kind: 'deal'; id: string; data: BusinessDealWithBusiness }
   | { kind: 'listing'; id: string; data: MarketplaceListingRecord };
 
-export default function MarketplaceSection({ listings, deals }: Props) {
+function MarketplaceSection({ listings, deals }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -52,16 +53,11 @@ export default function MarketplaceSection({ listings, deals }: Props) {
       <FlatList
         horizontal
         data={railItems}
-        renderItem={({ item }) =>
-          item.kind === 'deal' ? (
-            <BusinessDealCard deal={item.data} compact />
-          ) : (
-            <MarketplaceCard listing={item.data} compact />
-          )
-        }
-        keyExtractor={(item) => item.id}
+        renderItem={renderRailItem}
+        keyExtractor={railItemKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
@@ -94,3 +90,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 });
+
+const renderRailItem = ({ item }: { item: RailItem }) =>
+  item.kind === 'deal' ? (
+    <BusinessDealCard deal={item.data} compact />
+  ) : (
+    <MarketplaceCard listing={item.data} compact />
+  );
+const railItemKey = (item: RailItem) => item.id;
+
+export default memo(MarketplaceSection);

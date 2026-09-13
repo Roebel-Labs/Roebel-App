@@ -1,27 +1,22 @@
-import React, { useMemo } from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { EventRecord } from '@/lib/types';
-import { isEventThisWeek, isEventTodayOrFuture, isEventInRoebel } from '@/lib/utils';
 import HorizontalEventCard from './HorizontalEventCard';
 import { useTheme } from '@/context/ThemeContext';
+import { RAIL_LIST_PROPS } from './railListProps';
 
 type Props = {
+  /** Already bucketed by partitionExploreEvents: upcoming, this week, in Röbel. */
   events: EventRecord[];
 };
 
-export default function ThisWeekEventsHorizontal({ events }: Props) {
+const renderEventCard = ({ item }: { item: EventRecord }) => <HorizontalEventCard event={item} />;
+const eventKey = (event: EventRecord) => event.id;
+
+function ThisWeekEventsHorizontal({ events }: Props) {
   const { colors } = useTheme();
 
-  const thisWeekEvents = useMemo(() => {
-    return events.filter(
-      (event) =>
-        isEventThisWeek(event.date) &&
-        isEventTodayOrFuture(event.date) &&
-        isEventInRoebel(event.location, event.formatted_address, event.address_components)
-    );
-  }, [events]);
-
-  if (thisWeekEvents.length === 0) return null;
+  if (events.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -30,15 +25,18 @@ export default function ThisWeekEventsHorizontal({ events }: Props) {
       </View>
       <FlatList
         horizontal
-        data={thisWeekEvents}
-        renderItem={({ item }) => <HorizontalEventCard event={item} />}
-        keyExtractor={(item) => item.id}
+        data={events}
+        renderItem={renderEventCard}
+        keyExtractor={eventKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
 }
+
+export default memo(ThisWeekEventsHorizontal);
 
 const styles = StyleSheet.create({
   container: {

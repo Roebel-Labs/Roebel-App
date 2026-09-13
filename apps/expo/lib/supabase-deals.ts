@@ -176,6 +176,36 @@ export async function fetchActiveDeals(): Promise<(BusinessDealRecord & { busine
   return data as (BusinessDealRecord & { business?: any })[];
 }
 
+// Only the columns BusinessDealCard reads in its compact rail form plus the
+// filter/order columns. A column that does not exist 42703-fails the whole
+// select, so extend this list only with names verified against the schema.
+const EXPLORE_DEAL_COLUMNS =
+  'id, title, description, deal_type, deal_value, image_url, is_boosted, end_date, created_at, status, is_active, business:businesses(id, name, slug, logo_url, category)';
+
+/**
+ * Active deals for the Erkunden Marktplatz rail: same filters as
+ * fetchActiveDeals, but narrowed columns and capped at the rail's size.
+ */
+export async function fetchExploreDeals(limit = 4): Promise<(BusinessDealRecord & { business?: any })[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('business_deals')
+    .select(EXPLORE_DEAL_COLUMNS)
+    .eq('status', 'active')
+    .eq('is_active', true)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+    .order('is_boosted', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching explore deals:', error);
+    return [];
+  }
+
+  return (data ?? []) as unknown as (BusinessDealRecord & { business?: any })[];
+}
+
 /**
  * Fetch analytics for a business's deals
  */

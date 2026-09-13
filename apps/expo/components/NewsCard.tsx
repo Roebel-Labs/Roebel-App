@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ type Props = {
   compact?: boolean;
 };
 
-export default function NewsCard({ article, compact = false }: Props) {
+function NewsCard({ article, compact = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const publishDate = formatPublishDate(article.published_at);
@@ -162,3 +162,5 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
 });
+
+export default memo(NewsCard);
