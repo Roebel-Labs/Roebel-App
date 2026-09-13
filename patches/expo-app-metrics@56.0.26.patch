@@ -1,0 +1,70 @@
+diff --git a/ios/Database/SQLiteDatabase.swift b/ios/Database/SQLiteDatabase.swift
+index 34210a6338642b8051413f65564e18746f0e2fbf..436ce18aa849f315be97696492a64bf6a8cf026d 100644
+--- a/ios/Database/SQLiteDatabase.swift
++++ b/ios/Database/SQLiteDatabase.swift
+@@ -1,7 +1,11 @@
+ // Copyright 2025-present 650 Industries. All rights reserved.
+ 
+ import Foundation
++#if canImport(sqlite3)
++import sqlite3
++#else
+ import SQLite3
++#endif
+ 
+ /**
+  Owns a SQLite connection. The non-copyable shape encodes that the underlying C handle is an
+diff --git a/ios/Database/SQLiteError.swift b/ios/Database/SQLiteError.swift
+index 2c40f33fa318870cef6cd4c2498b2e677d6d24fc..fc33bb8663fe468b9f157b2ecd7b7ec8b9b13523 100644
+--- a/ios/Database/SQLiteError.swift
++++ b/ios/Database/SQLiteError.swift
+@@ -1,7 +1,11 @@
+ // Copyright 2025-present 650 Industries. All rights reserved.
+ 
+ import Foundation
++#if canImport(sqlite3)
++import sqlite3
++#else
+ import SQLite3
++#endif
+ 
+ public struct SQLiteError: Error, LocalizedError, Sendable {
+   public let code: Int32
+diff --git a/ios/Database/SQLiteStatement.swift b/ios/Database/SQLiteStatement.swift
+index 2a0bfa1aea21e5fce456af42ff1a0eedc3f8585c..d87108e249a5cc39b5bcde9f394c02cce4fc9b63 100644
+--- a/ios/Database/SQLiteStatement.swift
++++ b/ios/Database/SQLiteStatement.swift
+@@ -1,7 +1,11 @@
+ // Copyright 2025-present 650 Industries. All rights reserved.
+ 
+ import Foundation
++#if canImport(sqlite3)
++import sqlite3
++#else
+ import SQLite3
++#endif
+ 
+ // SQLite expects this sentinel for parameters that need to be copied into its own buffers.
+ private let SQLITE_TRANSIENT = unsafeBitCast(OpaquePointer(bitPattern: -1), to: sqlite3_destructor_type.self)
+diff --git a/ios/ExpoAppMetrics.podspec b/ios/ExpoAppMetrics.podspec
+index b1a843de844ad7aaaf37723462245eaf99329702..c02e0c66959e8de67ae2f4556d14956a52c8a557 100644
+--- a/ios/ExpoAppMetrics.podspec
++++ b/ios/ExpoAppMetrics.podspec
+@@ -26,7 +26,16 @@ Pod::Spec.new do |s|
+   s.dependency 'React-Core'
+   s.dependency 'EXUpdatesInterface'
+ 
+-  s.libraries = 'sqlite3'
++  # Mirrors EXUpdates.podspec: when the app also links SQLCipher (XMTP), the
++  # iOS system SQLite3 clang module cannot be built ("unknown type name
++  # 'sqlite3_stmt'"), so honour the same Podfile switch and use the
++  # namespaced sqlite3 pod instead of the system library.
++  podfile_properties = JSON.parse(File.read("#{Pod::Config.instance.installation_root}/Podfile.properties.json")) rescue {}
++  if podfile_properties['expo.updates.useThirdPartySQLitePod'] === 'true'
++    s.dependency 'sqlite3'
++  else
++    s.libraries = 'sqlite3'
++  end
+ 
+   install_modules_dependencies(s)
+ 

@@ -12,6 +12,9 @@ patchedDependencies:
   '@xmtp/react-native-sdk@5.7.0':
     hash: zsbjrzt63olefnuqohjresjh3q
     path: patches/@xmtp__react-native-sdk@5.7.0.patch
+  expo-app-metrics@56.0.26:
+    hash: q3nlc5xp2afthy43brv4bqdunq
+    path: patches/expo-app-metrics@56.0.26.patch
 
 importers:
 
@@ -33451,7 +33454,7 @@ snapshots:
       jest-message-util: 29.7.0
       jest-util: 29.7.0
 
-  expo-app-metrics@56.0.26(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3):
+  expo-app-metrics@56.0.26(patch_hash=q3nlc5xp2afthy43brv4bqdunq)(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3):
     dependencies:
       expo: 56.0.21(haj35gvialewoygqr5cvfeja3a)
       expo-updates-interface: 56.0.2(expo@56.0.21)
@@ -33795,7 +33798,7 @@ snapshots:
   expo-observe@56.0.29(@react-navigation/native@7.2.2(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3))(expo-router@56.2.20)(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3):
     dependencies:
       expo: 56.0.21(haj35gvialewoygqr5cvfeja3a)
-      expo-app-metrics: 56.0.26(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3)
+      expo-app-metrics: 56.0.26(patch_hash=q3nlc5xp2afthy43brv4bqdunq)(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10))(react@19.2.3)
       expo-eas-client: 56.0.1
       react: 19.2.3
       react-native: 0.85.3(@babel/core@7.29.0)(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@5.0.10)

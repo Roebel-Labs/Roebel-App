@@ -20,7 +20,8 @@
       "@types/react-dom": "^19.1.0"
     },
     "patchedDependencies": {
-      "@xmtp/react-native-sdk@5.7.0": "patches/@xmtp__react-native-sdk@5.7.0.patch"
+      "@xmtp/react-native-sdk@5.7.0": "patches/@xmtp__react-native-sdk@5.7.0.patch",
+      "expo-app-metrics@56.0.26": "patches/expo-app-metrics@56.0.26.patch"
     }
   },
   "devDependencies": {
