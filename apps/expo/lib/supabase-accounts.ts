@@ -8,7 +8,7 @@
  * apps/expo/supabase/functions/org-membership/index.ts.
  */
 import { supabase } from './supabase';
-import type { Account, AccountOwner, OrgSubType } from './types';
+import type { Account, AccountOwner, OrgSubType, OrgAccountCardRecord } from './types';
 import { callOrgMembership, type SigningAccount } from './org-membership';
 
 export type CreateOrgAccountOptions = {
@@ -51,6 +51,27 @@ export async function fetchOrgAccountsBySubType(subType: OrgSubType): Promise<Ac
     return [];
   }
   return (data as Account[]) ?? [];
+}
+
+/**
+ * Org accounts of one sub-type, trimmed to what the Erkunden rail card
+ * renders. `fetchOrgAccountsBySubType` keeps returning full rows for the
+ * Unternehmen overview; this one exists so the explore screen does not pull
+ * bios, opening hours and moderation columns for ~30 cards.
+ */
+export async function fetchOrgAccountCards(subType: OrgSubType): Promise<OrgAccountCardRecord[]> {
+  const { data, error } = await supabase
+    .from('accounts' as any)
+    .select('id, name, avatar_url, cover_url')
+    .eq('account_type', 'organisation')
+    .eq('sub_type', subType)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('fetchOrgAccountCards error:', error);
+    return [];
+  }
+  return (data as OrgAccountCardRecord[]) ?? [];
 }
 
 /**

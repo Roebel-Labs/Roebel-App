@@ -14,8 +14,8 @@ import EventCancelledScrim from './EventCancelledScrim';
 /**
  * Agenda row for the events overview: a date rail on the left, the event
  * itself in a single content column on the right (cover → host → title →
- * time → place), closed by a hairline that runs from the content edge to
- * the screen edge.
+ * time → place), closed by a 1px line that spans the whole row inside the
+ * list's 16px gutters.
  *
  * The date rail is drawn only on the first event of each day — consecutive
  * events on the same date hang under one chip, which is what makes a long
@@ -28,6 +28,11 @@ export const DATE_RAIL_GAP = 16;
 // The end time carries the accent so a glanced row still tells you how long
 // the evening runs. Amber-700 on white, amber-400 on the dark surface.
 const END_TIME_ACCENT = { light: '#B45309', dark: '#FBBF24' };
+
+// Row dividers and the date chip's border. Light mode uses the design
+// system's border grey (CLAUDE.md: borders #B4B8C1) — the theme's `border`
+// token is too faint at 1px on white; dark mode keeps the surface border.
+const LINE_COLOR = { light: '#B4B8C1', dark: '#3c4043' };
 
 type Props = {
   event: EventRecord;
@@ -50,17 +55,14 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
   const hostName = event.author?.name || event.organizer_name;
   const hostAvatar = event.author?.avatarUrl;
   const place = formatLocation(event.location);
+  const lineColor = isDark ? LINE_COLOR.dark : LINE_COLOR.light;
 
   return (
+    <>
     <View style={styles.row}>
       <View style={styles.rail}>
         {showDate && (
-          <View
-            style={[
-              styles.dateChip,
-              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderTertiary },
-            ]}
-          >
+          <View style={[styles.dateChip, { borderColor: lineColor }]}>
             <Text style={[styles.dateMonth, { color: colors.textSecondary }]}>{rail.month}</Text>
             <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{rail.day}</Text>
             <Text style={[styles.dateWeekday, { color: colors.textSecondary }]}>{rail.weekday}</Text>
@@ -125,12 +127,16 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
             <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
               {event.title}
             </Text>
-            <InterestButton eventId={event.id} iconOnly />
+            {/* Fixed to one title line so a one-liner hugs its text and the
+                gap to the meta rows never depends on the heart's box. */}
+            <View style={styles.titleAction}>
+              <InterestButton eventId={event.id} iconOnly variant="feed" />
+            </View>
           </View>
 
           {startTime && (
             <View style={styles.metaRow}>
-              <ClockIcon size={16} color={colors.textSecondary} />
+              <ClockIcon size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {startTime} Uhr
                 {endTime ? (
@@ -144,7 +150,7 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
 
           {!!place && (
             <View style={styles.metaRow}>
-              <LocationSmallIcon size={16} color={colors.textSecondary} />
+              <LocationSmallIcon size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {place}
               </Text>
@@ -153,17 +159,18 @@ export default function EventListRow({ event, showDate = true, showDivider = tru
 
           {event.ticket_price != null && (
             <View style={styles.metaRow}>
-              <TicketSmallIcon size={16} color={colors.textSecondary} />
+              <TicketSmallIcon size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {currency(event.ticket_price)}
               </Text>
             </View>
           )}
         </Pressable>
-
-        {showDivider && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
       </View>
     </View>
+
+    {showDivider && <View style={[styles.divider, { backgroundColor: lineColor }]} />}
+    </>
   );
 }
 
@@ -176,8 +183,8 @@ const styles = StyleSheet.create({
     marginRight: DATE_RAIL_GAP,
   },
   dateChip: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    borderWidth: 1,
     paddingVertical: 8,
     alignItems: 'center',
   },
@@ -189,7 +196,7 @@ const styles = StyleSheet.create({
   },
   dateDay: {
     fontSize: 26,
-    fontFamily: fontFamily.bold,
+    fontFamily: fontFamily.medium,
     lineHeight: 32,
   },
   dateWeekday: {
@@ -248,7 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   hostName: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: fontFamily.medium,
     flex: 1,
   },
@@ -264,6 +271,10 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     fontFamily: fontFamily.semiBold,
   },
+  titleAction: {
+    height: 25,
+    justifyContent: 'center',
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,14 +283,11 @@ const styles = StyleSheet.create({
   },
   metaText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 13,
     fontFamily: fontFamily.regular,
   },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    // Bleeds past the list's 16px right padding so the hairline reaches the
-    // screen edge, exactly as it does in the reference layout.
-    marginRight: -16,
+    height: 1,
     marginTop: 16,
     marginBottom: 20,
   },

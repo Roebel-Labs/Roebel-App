@@ -524,6 +524,9 @@ export type Account = {
   updated_at: string;
 };
 
+/** The columns OrgAccountCard reads — what the Erkunden rail fetches. */
+export type OrgAccountCardRecord = Pick<Account, 'id' | 'name' | 'avatar_url' | 'cover_url'>;
+
 // ── Org sub-type labels & feature gating ──────────────────────────
 
 export const SUB_TYPE_LABELS: Record<OrgSubType, string> = {

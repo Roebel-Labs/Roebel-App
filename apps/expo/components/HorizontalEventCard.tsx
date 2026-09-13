@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -17,7 +17,7 @@ type Props = {
   fullWidth?: boolean;
 };
 
-export default function HorizontalEventCard({ event, fullWidth = false }: Props) {
+function HorizontalEventCard({ event, fullWidth = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const time = formatTime(event.time);
@@ -186,3 +186,5 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
 });
+
+export default memo(HorizontalEventCard);

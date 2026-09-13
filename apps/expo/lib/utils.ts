@@ -113,15 +113,19 @@ export function getCurrentWeekBounds(): { start: Date; end: Date } {
   };
 }
 
+// Intl.DateTimeFormat construction is comparatively expensive and formatTime
+// runs once per rendered card; one module-level formatter serves them all.
+const TIME_FORMATTER = new Intl.DateTimeFormat('de-DE', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
 export function formatTime(time: string | null | undefined): string | null {
   if (!time) return null;
   const [h, m] = time.split(':');
   const date = new Date();
   date.setHours(Number(h), Number(m), 0, 0);
-  return new Intl.DateTimeFormat('de-DE', {
-    hour: 'numeric',
-    minute: '2-digit'
-  }).format(date);
+  return TIME_FORMATTER.format(date);
 }
 
 export function addMinutesToTime(time: string | null | undefined, minutes: number): string | null {

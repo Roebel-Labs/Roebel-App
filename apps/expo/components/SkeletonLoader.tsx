@@ -1,6 +1,12 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
+import {
+  HERO_CAROUSEL_CARD_HEIGHT,
+  HERO_CAROUSEL_GAP,
+  HERO_CAROUSEL_PEEK,
+  heroCarouselLayout,
+} from '@/lib/hero-carousel-layout';
 
 type SkeletonProps = {
   width?: number | string;
@@ -46,7 +52,7 @@ export function EventCardSkeleton() {
 export function EventListRowSkeleton() {
   return (
     <View style={styles.eventRowSkeleton}>
-      <Skeleton width={52} height={66} borderRadius={12} />
+      <Skeleton width={52} height={66} borderRadius={8} />
       <View style={styles.eventRowContent}>
         <Skeleton height={140} borderRadius={12} />
         <View style={styles.eventRowHost}>
@@ -65,6 +71,32 @@ export function HeroCardSkeleton() {
   return (
     <View style={styles.heroCardSkeleton}>
       <Skeleton height={450} borderRadius={20} />
+    </View>
+  );
+}
+
+/**
+ * Placeholder for HeroCarousel: the centered card plus the two teased
+ * neighbours, in the carousel's own geometry so the swap is shift-free.
+ */
+export function HeroCarouselSkeleton() {
+  const { width } = useWindowDimensions();
+  const { cardWidth } = heroCarouselLayout(width);
+  return (
+    <View style={styles.heroCarouselSkeleton}>
+      <Skeleton
+        width={HERO_CAROUSEL_PEEK}
+        height={HERO_CAROUSEL_CARD_HEIGHT * 0.92}
+        borderRadius={24}
+        style={styles.heroCarouselPeek}
+      />
+      <Skeleton width={cardWidth} height={HERO_CAROUSEL_CARD_HEIGHT} borderRadius={24} />
+      <Skeleton
+        width={HERO_CAROUSEL_PEEK}
+        height={HERO_CAROUSEL_CARD_HEIGHT * 0.92}
+        borderRadius={24}
+        style={styles.heroCarouselPeek}
+      />
     </View>
   );
 }
@@ -517,6 +549,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginTop: 12,
+  },
+  heroCarouselSkeleton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: HERO_CAROUSEL_GAP,
+    paddingTop: 4,
+    paddingBottom: 16,
+    overflow: 'hidden',
+  },
+  heroCarouselPeek: {
+    opacity: 0.6,
   },
   heroCardSkeleton: {
     width: '100%',

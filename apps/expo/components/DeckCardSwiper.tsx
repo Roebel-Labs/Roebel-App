@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions, ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { View, StyleSheet, Dimensions, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
@@ -10,16 +9,13 @@ import Animated, {
   runOnJS,
   interpolate,
   Easing,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 import { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
-import { formatTime, formatLocation } from '@/lib/utils';
 import { softShadow } from '@/lib/shadow';
-import EventCancelledScrim from '@/components/EventCancelledScrim';
-import { transformedImageUrl } from '@/lib/image-url';
+import HeroEventCard from '@/components/HeroEventCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -79,7 +75,7 @@ export default function DeckCardSwiper({
   const containerTranslateY = useSharedValue(20);
 
   useEffect(() => {
-    setTimeout(() => {
+    const id = setTimeout(() => {
       containerOpacity.value = withTiming(1, {
         duration: 300,
         easing: Easing.out(Easing.ease),
@@ -89,6 +85,7 @@ export default function DeckCardSwiper({
         easing: Easing.out(Easing.ease),
       });
     }, 500);
+    return () => clearTimeout(id);
   }, []);
 
   const containerAnimatedStyle = useAnimatedStyle(() => ({
@@ -161,7 +158,7 @@ type DeckCardProps = {
   event: EventRecord;
   slideIndex: number;
   isActive: boolean;
-  progress: Animated.SharedValue<number>;
+  progress: SharedValue<number>;
   onSlideNext: () => void;
   totalSlides: number;
 };
@@ -175,7 +172,10 @@ function DeckCard({
   totalSlides,
 }: DeckCardProps) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { isDark } = useTheme();
+  const openEvent = () => {
+    router.push({ pathname: '/event/[id]', params: { id: event.id } });
+  };
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -185,18 +185,6 @@ function DeckCard({
 
   const slideIndexSV = useSharedValue(slideIndex);
   slideIndexSV.value = slideIndex;
-
-  const dayName = event.date
-    ? format(parseISO(event.date), 'EEEE', { locale: de })
-    : '';
-
-  const timeStr = formatTime(event.time);
-  const sublineParts: string[] = [];
-  if (timeStr) sublineParts.push(`${timeStr} Uhr`);
-  if (event.organizer_name) sublineParts.push(`Von ${event.organizer_name}`);
-  const subline = sublineParts.join(' • ');
-
-  const locationText = formatLocation(event.location).toUpperCase();
 
   // Slot transitions run in the RENDER BODY (same trick as the parent's
   // progress reset) so the tuck state lands in the same frame as
@@ -357,99 +345,12 @@ function DeckCard({
           slideIndex === 0 && softShadow(3, isDark),
         ]}
       >
-        <Pressable
-          onPress={() => {
-            if (isActive) {
-              router.push({
-                pathname: '/event/[id]',
-                params: { id: event.id },
-              });
-            }
-          }}
-          style={[
-            styles.card,
-            { backgroundColor: colors.background, borderColor: colors.borderSecondary },
-          ]}
-        >
-          {/* Image Section */}
-          <View style={styles.imageSection}>
-            {event.image_url ? (
-              <>
-                {/* Blurred background */}
-                <Image
-                  source={{
-                    uri:
-                      transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ??
-                      undefined,
-                  }}
-                  style={styles.blurredBg}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  blurRadius={20}
-                />
-                {/* 20% white overlay */}
-                <View style={styles.whiteOverlay} />
-                {/* Sharp event image */}
-                <Image
-                  source={{ uri: transformedImageUrl(event.image_url, { width: 1080 }) ?? undefined }}
-                  style={styles.sharpImage}
-                  contentFit="contain"
-                  cachePolicy="memory-disk"
-                />
-              </>
-            ) : (
-              <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-            )}
-
-            {/* Day pill */}
-            {dayName ? (
-              <View style={[styles.dayPill, { backgroundColor: colors.background }]}>
-                <Text style={[styles.dayPillText, { color: colors.textPrimary }]}>{dayName}</Text>
-              </View>
-            ) : null}
-
-            {event.is_cancelled && <EventCancelledScrim radius={18} />}
-          </View>
-
-          {/* Content Section */}
-          <View style={styles.contentSection}>
-            <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={2}>
-              {event.title}
-            </Text>
-
-            {subline ? (
-              <Text style={[styles.subline, { color: colors.textSecondary }]}>{subline}</Text>
-            ) : null}
-
-            {/* Divider */}
-            <View style={[styles.divider, { backgroundColor: colors.borderSecondary }]} />
-
-            {/* Bottom row: Location + Button */}
-            <View style={styles.bottomRow}>
-              <Text
-                style={[styles.locationText, { color: colors.textSecondary }]}
-                numberOfLines={2}
-              >
-                {locationText}
-              </Text>
-
-              <Pressable
-                style={[styles.moreButton, { backgroundColor: colors.surfaceSecondary }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  router.push({
-                    pathname: '/event/[id]',
-                    params: { id: event.id },
-                  });
-                }}
-              >
-                <Text style={[styles.moreButtonText, { color: colors.textPrimary }]}>
-                  Mehr erfahren
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </Pressable>
+        <HeroEventCard
+          event={event}
+          onPress={isActive ? openEvent : undefined}
+          imagePriority={isActive ? 'high' : 'normal'}
+          style={styles.card}
+        />
       </Animated.View>
     </GestureDetector>
   );
@@ -483,96 +384,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
 
-  // Card container
   card: {
     width: '100%',
     height: '100%',
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 8,
-    overflow: 'hidden',
-  },
-
-  // Image section
-  imageSection: {
-    flex: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  blurredBg: {
-    ...StyleSheet.absoluteFill,
-  },
-  whiteOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  sharpImage: {
-    ...StyleSheet.absoluteFill,
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 18,
-  },
-
-  // Day pill
-  dayPill: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  dayPillText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-
-  // Content section
-  contentSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 32,
-    marginBottom: 6,
-  },
-  subline: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    marginBottom: 16,
-  },
-  divider: {
-    height: 1,
-    width: '100%',
-    marginBottom: 16,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  locationText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    letterSpacing: 0.5,
-    flex: 1,
-    marginRight: 12,
-  },
-  moreButton: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  moreButtonText: {
-    fontSize: 14,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 
   // Pagination

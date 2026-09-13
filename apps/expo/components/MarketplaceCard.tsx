@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -20,7 +20,7 @@ function formatPrice(price: number, priceType: string): string {
   return suffix ? `${formatted} ${suffix}` : formatted;
 }
 
-export default function MarketplaceCard({ listing, compact = true, style }: Props) {
+function MarketplaceCard({ listing, compact = true, style }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -191,3 +191,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
 });
+
+export default memo(MarketplaceCard);

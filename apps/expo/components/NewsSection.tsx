@@ -1,17 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { NewsArticle } from '@/lib/types';
 import NewsCard from './NewsCard';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
 
 type Props = {
   articles: NewsArticle[];
 };
 
-export default function NewsSection({ articles }: Props) {
+const renderNewsCard = ({ item }: { item: NewsArticle }) => <NewsCard article={item} compact={true} />;
+const articleKey = (article: NewsArticle) => article.id;
+
+function NewsSection({ articles }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -47,10 +50,11 @@ export default function NewsSection({ articles }: Props) {
       <FlatList
         horizontal
         data={recentArticles}
-        renderItem={({ item }) => <NewsCard article={item} compact={true} />}
-        keyExtractor={(item) => item.id}
+        renderItem={renderNewsCard}
+        keyExtractor={articleKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
@@ -83,3 +87,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 });
+
+export default memo(NewsSection);

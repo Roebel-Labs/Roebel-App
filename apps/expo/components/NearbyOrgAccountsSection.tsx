@@ -1,19 +1,23 @@
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
-import { fetchOrgAccountsBySubType } from '@/lib/supabase-accounts';
+import { fetchOrgAccountCards } from '@/lib/supabase-accounts';
 import { fetchAccountVoteSummaries } from '@/lib/supabase-ratings';
 import OrgAccountCard from '@/components/OrgAccountCard';
-import type { Account, AccountVoteSummary } from '@/lib/types';
+import type { AccountVoteSummary, OrgAccountCardRecord } from '@/lib/types';
+import { RAIL_LIST_PROPS } from './railListProps';
 
 type OrgAccountsSection = {
-  accounts: Account[];
+  accounts: OrgAccountCardRecord[];
   summaries: Record<string, AccountVoteSummary>;
 };
 
-async function fetchOrgAccountsSection(): Promise<OrgAccountsSection> {
-  const data = await fetchOrgAccountsBySubType('unternehmen');
+/** Shared with the Erkunden screen so it can warm this query before the section mounts. */
+export const ORG_ACCOUNTS_QUERY_KEY = ['explore', 'org-accounts'] as const;
+
+export async function fetchOrgAccountsSection(): Promise<OrgAccountsSection> {
+  const data = await fetchOrgAccountCards('unternehmen');
   const summaries = await fetchAccountVoteSummaries(data.map((a) => a.id));
   const accounts = [...data].sort((a, b) => {
     const ua = summaries[a.id]?.up_count ?? 0;
@@ -24,20 +28,29 @@ async function fetchOrgAccountsSection(): Promise<OrgAccountsSection> {
   return { accounts, summaries };
 }
 
+const accountKey = (account: OrgAccountCardRecord) => account.id;
+
 /**
  * Horizontal row of org accounts (sub_type 'unternehmen') shown under the
  * "In der Nähe" section, ordered by most thumbs-up first.
  */
-export default function NearbyOrgAccountsSection() {
+function NearbyOrgAccountsSection() {
   const { colors } = useTheme();
 
   const { data } = useQuery({
-    queryKey: ['explore', 'org-accounts'],
+    queryKey: ORG_ACCOUNTS_QUERY_KEY,
     queryFn: fetchOrgAccountsSection,
     meta: { persist: true },
   });
   const accounts = data?.accounts ?? [];
-  const summaries = data?.summaries ?? {};
+  const summaries = data?.summaries;
+
+  const renderItem = useCallback(
+    ({ item }: { item: OrgAccountCardRecord }) => (
+      <OrgAccountCard account={item} upCount={summaries?.[item.id]?.up_count ?? 0} />
+    ),
+    [summaries]
+  );
 
   if (accounts.length === 0) return null;
 
@@ -51,16 +64,17 @@ export default function NearbyOrgAccountsSection() {
       <FlatList
         horizontal
         data={accounts}
-        renderItem={({ item }) => (
-          <OrgAccountCard account={item} upCount={summaries[item.id]?.up_count ?? 0} />
-        )}
-        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        keyExtractor={accountKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
 }
+
+export default memo(NearbyOrgAccountsSection);
 
 const styles = StyleSheet.create({
   container: {

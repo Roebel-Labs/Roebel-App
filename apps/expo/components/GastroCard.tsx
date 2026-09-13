@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -29,7 +29,7 @@ function formatCount(n: number): string {
  * restaurant's brand color), circular logo avatar overlapping the banner,
  * name, then a small black-star rating + Geöffnet/Geschlossen pill.
  */
-export default function GastroCard({ restaurant, ratingSummary }: Props) {
+function GastroCard({ restaurant, ratingSummary }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -191,3 +191,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
 });
+
+export default memo(GastroCard);

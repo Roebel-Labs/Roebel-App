@@ -1,14 +1,16 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { fetchActiveDeals } from '@/lib/supabase-deals';
-import { fetchMarketplaceListings } from '@/lib/supabase-marketplace';
-import { isEventTodayOrFuture, isEventInRoebel } from '@/lib/utils';
+import { fetchExploreDeals } from '@/lib/supabase-deals';
+import { fetchExploreListings } from '@/lib/supabase-marketplace';
+import { fetchLiveMiniApps } from '@/lib/miniapps';
+import { partitionExploreEvents, selectHeroEvents } from '@/lib/explore-events';
+import { useAfterInteractions } from '@/hooks/useAfterInteractions';
 import type {
   EventRecord,
   NewsArticle,
@@ -18,10 +20,9 @@ import type {
 
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ExploreSearchBar from '@/components/ExploreSearchBar';
 import ExploreCategoryChips from '@/components/ExploreCategoryChips';
-import DeckCardSwiper from '@/components/DeckCardSwiper';
+import HeroCarousel from '@/components/HeroCarousel';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
 import NewsSection from '@/components/NewsSection';
@@ -29,11 +30,14 @@ import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
 import MarketplaceSection from '@/components/MarketplaceSection';
 import NearbyEventsSection from '@/components/NearbyEventsSection';
-import NearbyOrgAccountsSection from '@/components/NearbyOrgAccountsSection';
+import NearbyOrgAccountsSection, {
+  ORG_ACCOUNTS_QUERY_KEY,
+  fetchOrgAccountsSection,
+} from '@/components/NearbyOrgAccountsSection';
 import MapFAB from '@/components/MapFAB';
 import MiniAppsEntry from '@/components/miniapp/MiniAppsEntry';
 import SearchModal from '@/components/SearchModal';
-import { Skeleton, HeroCardSkeleton } from '@/components/SkeletonLoader';
+import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 
 const EVENT_CARD_COLUMNS =
   'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name';
@@ -41,13 +45,18 @@ const EVENT_CARD_COLUMNS =
 // Stable (module-level) empty-array fallbacks: `data ?? []` would mint a new
 // array identity every render, which defeats the useMemo below.
 const EMPTY_EVENTS: EventRecord[] = [];
+const EMPTY_NEWS: NewsArticle[] = [];
+const EMPTY_MOVIES: MovieRecord[] = [];
+const EMPTY_RESTAURANTS: RestaurantRecord[] = [];
+
+const todayISO = () => new Date().toISOString().split('T')[0];
 
 async function fetchExploreEvents() {
   const { data } = await supabase
     .from('events')
     .select(EVENT_CARD_COLUMNS)
     .eq('status', 'approved')
-    .gte('date', new Date().toISOString().split('T')[0]) // LIMIT: only today+future
+    .gte('date', todayISO()) // LIMIT: only today+future
     .order('date', { ascending: true })
     .order('time', { ascending: true, nullsFirst: true })
     .limit(60); // LIMIT
@@ -60,9 +69,12 @@ async function fetchExplorePopularEvents() {
     .select(EVENT_CARD_COLUMNS)
     .eq('status', 'approved')
     .eq('is_popular', true)
+    // Filter server-side: without this the limit could be spent entirely on
+    // past popular events and the hero would come back empty.
+    .gte('date', todayISO())
     .order('date', { ascending: true })
     .order('time', { ascending: true, nullsFirst: true })
-    .limit(3);
+    .limit(5);
   return (data ?? []) as EventRecord[];
 }
 
@@ -81,7 +93,9 @@ async function fetchExploreMovies() {
     .from('movies')
     .select('id, title, date, cover_image_url, fsk, status')
     .eq('status', 'published')
-    .order('date', { ascending: true });
+    .gte('date', todayISO()) // the rail only shows upcoming screenings
+    .order('date', { ascending: true })
+    .limit(12); // LIMIT: the rail renders at most 6
   return (data ?? []) as MovieRecord[];
 }
 
@@ -117,6 +131,7 @@ export default function ExploreScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'home' | 'explore' | 'profile'>('explore');
 
   const [refreshing, setRefreshing] = useState(false);
@@ -131,6 +146,12 @@ export default function ExploreScreen() {
   // and navigate, but flag it to reopen once Explore regains focus — so pressing
   // back from the subpage returns to the search page, not the bare feed.
   const reopenSearch = useRef(false);
+
+  // Progressive first paint: everything from the Mini-Apps grid downward
+  // mounts once the initial interactions settle, so the search bar, chips,
+  // hero and the first two rails reach the screen without waiting on six
+  // more FlatLists and their images.
+  const belowFoldReady = useAfterInteractions();
 
   useFocusEffect(
     useCallback(() => {
@@ -168,35 +189,49 @@ export default function ExploreScreen() {
   });
   const dealsQuery = useQuery({
     queryKey: ['explore', 'deals'],
-    queryFn: () => fetchActiveDeals(),
+    queryFn: () => fetchExploreDeals(),
     meta: { persist: true },
   });
   const listingsQuery = useQuery({
     queryKey: ['explore', 'listings'],
-    queryFn: () => fetchMarketplaceListings({ limit: 10 }),
+    queryFn: () => fetchExploreListings(),
     meta: { persist: true },
+  });
+  // The org-accounts and mini-apps rails own their queries, but they mount
+  // below the fold (deferred). Subscribing here with the same keys starts
+  // those requests in the first network burst; the sections then hydrate
+  // from cache the moment they mount. notifyOnChangeProps: [] keeps their
+  // state changes from re-rendering this screen.
+  useQuery({
+    queryKey: ORG_ACCOUNTS_QUERY_KEY,
+    queryFn: fetchOrgAccountsSection,
+    meta: { persist: true },
+    notifyOnChangeProps: [],
+  });
+  useQuery({
+    queryKey: ['explore', 'mini-apps'],
+    queryFn: fetchLiveMiniApps,
+    meta: { persist: true },
+    notifyOnChangeProps: [],
   });
 
   const events = eventsQuery.data ?? EMPTY_EVENTS;
   const popularEvents = popularQuery.data ?? EMPTY_EVENTS;
-  const newsArticles = newsQuery.data ?? [];
-  const movies = moviesQuery.data ?? [];
-  const restaurants = restaurantsQuery.data ?? [];
-  const deals = dealsQuery.data ?? [];
-  const listings = listingsQuery.data ?? [];
+  const newsArticles = newsQuery.data ?? EMPTY_NEWS;
+  const movies = moviesQuery.data ?? EMPTY_MOVIES;
+  const restaurants = restaurantsQuery.data ?? EMPTY_RESTAURANTS;
+  const deals = dealsQuery.data;
+  const listings = listingsQuery.data;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([
-      eventsQuery.refetch(),
-      popularQuery.refetch(),
-      newsQuery.refetch(),
-      moviesQuery.refetch(),
-      restaurantsQuery.refetch(),
-      dealsQuery.refetch(),
-      listingsQuery.refetch(),
-    ]);
-    setRefreshing(false);
+    try {
+      // Every explore query, including the ones owned by the rails
+      // (restaurant ratings, org accounts, mini apps).
+      await queryClient.refetchQueries({ queryKey: ['explore'], type: 'active' });
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleTabPress = (tab: 'home' | 'explore' | 'profile') => {
@@ -224,24 +259,12 @@ export default function ExploreScreen() {
     },
   });
 
-  // Filter events for sections. `events`/`popularEvents` are referentially
-  // stable across renders (EMPTY_EVENTS fallback, unchanged query data), so
-  // these only recompute when the underlying query data actually changes.
-  const futurePopularEvents = useMemo(
-    () => popularEvents.filter((e) => isEventTodayOrFuture(e.date)),
-    [popularEvents]
-  );
-  const futureEvents = useMemo(
-    () => events.filter((e) => isEventTodayOrFuture(e.date)),
-    [events]
-  );
-  const nearbyEvents = useMemo(
-    () =>
-      futureEvents.filter(
-        (e) => !isEventInRoebel(e.location, e.formatted_address, e.address_components) && !e.is_popular
-      ),
-    [futureEvents]
-  );
+  // One pass buckets the event list for all three event rails. `events` /
+  // `popularEvents` are referentially stable across renders (EMPTY_EVENTS
+  // fallback, unchanged query data), so these only recompute when the
+  // underlying query data actually changes.
+  const heroEvents = useMemo(() => selectHeroEvents(popularEvents), [popularEvents]);
+  const eventBuckets = useMemo(() => partitionExploreEvents(events), [events]);
 
   return (
     <SafeAreaView
@@ -271,23 +294,18 @@ export default function ExploreScreen() {
         {/* Category tiles */}
         <ExploreCategoryChips />
 
-        {/* Hero Swiper */}
+        {/* Hero carousel: popular events, neighbours teased at both edges */}
         {popularQuery.isPending ? (
-          <HeroCardSkeleton />
+          <HeroCarouselSkeleton />
         ) : (
-          <DeckCardSwiper
-            events={futurePopularEvents}
-            showPagination
-            loop
-            containerStyle={{ paddingTop: 4, paddingBottom: 16, marginBottom: 0 }}
-          />
+          <HeroCarousel events={heroEvents} showPagination containerStyle={styles.hero} />
         )}
 
         {/* This Week Events - Horizontal */}
         {eventsQuery.isPending ? (
           <SectionRailSkeleton titleWidth="35%" />
         ) : (
-          <ThisWeekEventsHorizontal events={futureEvents} />
+          <ThisWeekEventsHorizontal events={eventBuckets.thisWeek} />
         )}
 
         {/* Movies */}
@@ -297,45 +315,55 @@ export default function ExploreScreen() {
           <MovieSection movies={movies} />
         )}
 
-        {/* Mini Apps store entry */}
-        <MiniAppsEntry />
+        {belowFoldReady ? (
+          <>
+            {/* Mini Apps store entry */}
+            <MiniAppsEntry />
 
-        {/* Marketplace (listings + promotional deals in one rail) */}
-        {listingsQuery.isPending || dealsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="35%" />
+            {/* Marketplace (listings + promotional deals in one rail) */}
+            {listingsQuery.isPending || dealsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="35%" />
+            ) : (
+              <MarketplaceSection listings={listings ?? []} deals={deals} />
+            )}
+
+            {/* News */}
+            {newsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="40%" />
+            ) : (
+              <NewsSection articles={newsArticles} />
+            )}
+
+            {/* Restaurants */}
+            {restaurantsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="40%" />
+            ) : (
+              <RestaurantSection restaurants={restaurants} />
+            )}
+
+            {/* Nearby Events */}
+            {eventsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="30%" />
+            ) : (
+              <NearbyEventsSection events={eventBuckets.nearby} />
+            )}
+
+            {/* Nearby Org Accounts (Unternehmen) */}
+            <NearbyOrgAccountsSection />
+
+            {/* All Events - Horizontal */}
+            {eventsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="50%" />
+            ) : (
+              <AllEventsHorizontal events={eventBuckets.later} />
+            )}
+          </>
         ) : (
-          <MarketplaceSection listings={listings} deals={deals} />
-        )}
-
-        {/* News */}
-        {newsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="40%" />
-        ) : (
-          <NewsSection articles={newsArticles} />
-        )}
-
-        {/* Restaurants */}
-        {restaurantsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="40%" />
-        ) : (
-          <RestaurantSection restaurants={restaurants} />
-        )}
-
-        {/* Nearby Events */}
-        {eventsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="30%" />
-        ) : (
-          <NearbyEventsSection events={nearbyEvents} />
-        )}
-
-        {/* Nearby Org Accounts (Unternehmen) */}
-        <NearbyOrgAccountsSection />
-
-        {/* All Events - Horizontal */}
-        {eventsQuery.isPending ? (
-          <SectionRailSkeleton titleWidth="50%" />
-        ) : (
-          <AllEventsHorizontal events={futureEvents} />
+          <>
+            <SectionRailSkeleton titleWidth="35%" />
+            <SectionRailSkeleton titleWidth="40%" />
+            <SectionRailSkeleton titleWidth="40%" />
+          </>
         )}
 
         {/* Clearance for the now-overlaying glass BottomNavigation */}
@@ -374,6 +402,10 @@ const styles = StyleSheet.create({
   },
   glassBody: {
     flex: 1,
+  },
+  hero: {
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   navOverlay: {
     position: 'absolute',

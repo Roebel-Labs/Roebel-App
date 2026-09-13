@@ -101,6 +101,31 @@ export async function fetchMarketplaceListings(options?: {
   return data as MarketplaceListingRecord[];
 }
 
+// Only the columns MarketplaceCard reads in its compact rail form plus the
+// filter/order columns (see the 42703 note in supabase-deals.ts).
+const EXPLORE_LISTING_COLUMNS =
+  'id, title, price, price_type, condition, neighborhood, media_urls, status, created_at';
+
+/**
+ * Newest active listings for the Erkunden Marktplatz rail: narrowed columns,
+ * capped at the rail's size. The overview keeps using fetchMarketplaceListings.
+ */
+export async function fetchExploreListings(limit = 6): Promise<MarketplaceListingRecord[]> {
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .select(EXPLORE_LISTING_COLUMNS)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching explore listings:', error);
+    return [];
+  }
+
+  return (data ?? []) as unknown as MarketplaceListingRecord[];
+}
+
 /**
  * Create a new marketplace listing
  */

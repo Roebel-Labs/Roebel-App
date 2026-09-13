@@ -1,15 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { EventRecord } from '@/lib/types';
 import { isEventInRoebel, isEventTodayOrFuture } from '@/lib/utils';
 import HorizontalEventCard from './HorizontalEventCard';
 import { useTheme } from '@/context/ThemeContext';
+import { RAIL_LIST_PROPS } from './railListProps';
 
 type Props = {
   events: EventRecord[];
 };
 
-export default function NearbyEventsSection({ events }: Props) {
+const renderEventCard = ({ item }: { item: EventRecord }) => <HorizontalEventCard event={item} />;
+const eventKey = (event: EventRecord) => event.id;
+
+function NearbyEventsSection({ events }: Props) {
   const { colors } = useTheme();
   // Filter events that are NOT in Röbel and are today or in the future
   const nearbyEvents = useMemo(() => {
@@ -33,10 +37,11 @@ export default function NearbyEventsSection({ events }: Props) {
       <FlatList
         horizontal
         data={nearbyEvents}
-        renderItem={({ item }) => <HorizontalEventCard event={item} />}
-        keyExtractor={(item) => item.id}
+        renderItem={renderEventCard}
+        keyExtractor={eventKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
@@ -63,3 +68,5 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+
+export default memo(NearbyEventsSection);

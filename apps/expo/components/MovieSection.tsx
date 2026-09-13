@@ -1,16 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { MovieRecord } from '@/lib/types';
 import MovieCard from './MovieCard';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { RAIL_LIST_PROPS } from './railListProps';
 import { ArrowRight02Icon } from './Icons';
 
 type Props = {
   movies: MovieRecord[];
 };
 
-export default function MovieSection({ movies }: Props) {
+const renderMovieCard = ({ item }: { item: MovieRecord }) => <MovieCard movie={item} compact={true} />;
+const movieKey = (movie: MovieRecord) => movie.id;
+
+function MovieSection({ movies }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -53,10 +57,11 @@ export default function MovieSection({ movies }: Props) {
       <FlatList
         horizontal
         data={upcomingMovies}
-        renderItem={({ item }) => <MovieCard movie={item} compact={true} />}
-        keyExtractor={(item) => item.id}
+        renderItem={renderMovieCard}
+        keyExtractor={movieKey}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        {...RAIL_LIST_PROPS}
       />
     </View>
   );
@@ -89,3 +94,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 });
+
+export default memo(MovieSection);

@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import ThumbsVote from '@/components/ThumbsVote';
-import type { Account } from '@/lib/types';
+import type { OrgAccountCardRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
 
 const CARD_WIDTH = 168;
@@ -13,7 +13,7 @@ const COVER_RADIUS = 16;
 const AVATAR_SIZE = 56;
 
 type Props = {
-  account: Account;
+  account: OrgAccountCardRecord;
   upCount: number | null;
 };
 
@@ -23,7 +23,7 @@ type Props = {
  * avatar (thick background-color border) overlapping the bottom, the name
  * below (medium weight) and a read-only thumbs-up count.
  */
-export default function OrgAccountCard({ account, upCount }: Props) {
+function OrgAccountCard({ account, upCount }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -125,3 +125,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+export default memo(OrgAccountCard);

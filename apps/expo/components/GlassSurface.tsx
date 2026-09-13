@@ -167,7 +167,8 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
               {
                 backgroundColor: isDark
                   ? 'rgba(24, 25, 27, 0.45)'
-                  : 'rgba(255, 255, 255, 0.55)',
+                  // 0.55 → 0.72 (Max 2026-09-13: light mode still read too dark).
+                  : 'rgba(255, 255, 255, 0.72)',
               },
             ]}
           />
