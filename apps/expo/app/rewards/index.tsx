@@ -42,44 +42,26 @@ import QrIcon from '@/assets/icons/qr-code.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import { softShadow } from '@/lib/shadow';
 import { getTreasuryEuro } from '@/lib/roebel-taler';
+import {
+  MIN_MINTABLE,
+  MINT_COOLDOWN_MS,
+  computeNextStreak,
+  dayStart,
+  fmtCountdown,
+  nextMidnight,
+  rtClaimKey,
+  rtStreakKey,
+} from '@/lib/muenzen-daily-mint';
 import { attesterSafeGnosisAddress } from '@/constants/gnosis';
 
 const WELCOME_MECKY = require('../../assets/illustration/mecky/welcome.png');
 
-// Min claimable Röbel Münzen before the mint button activates (≈6 min of accrual at
-// ~1/hour) — avoids dust-sized mints while still letting citizens collect hourly.
-const MIN_MINTABLE = 0.1;
-// One full Röbel Münze accrues ≈1h after a mint — drives the in-button countdown.
-const MINT_COOLDOWN_MS = 3_600_000;
 const STADTKASSE_IMG = require('../../assets/illustration/muenzen/stadtkasse.png');
 const SCHATZTRUHE_IMG = require('../../assets/illustration/muenzen/schatztruhe.png');
 
 // One-time Röbel Münzen feature intro (per device).
 const MUENZEN_INTRO_KEY = '@rewards/muenzen_intro_seen';
 
-// Daily-claim cooldown helpers: "Heute abholen" resets at local midnight.
-const rtClaimKey = (addr: string) => `rt_lastclaim_${addr.toLowerCase()}`;
-const nextMidnight = (t: number) => {
-  const d = new Date(t);
-  d.setHours(24, 0, 0, 0);
-  return d.getTime();
-};
-const fmtCountdown = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return h > 0 ? `${h} h ${m} min` : `${m} min ${sec} s`;
-};
-
-// Local Röbel-Münzen daily-mint streak (decoupled from the off-chain check-in
-// streak so it reflects the REAL new currency, starting fresh per wallet).
-const rtStreakKey = (addr: string) => `rt_streak_${addr.toLowerCase()}`;
-const dayStart = (t: number) => {
-  const d = new Date(t);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-};
 
 export default function RewardsIndexScreen() {
   const router = useRouter();
@@ -221,12 +203,7 @@ export default function RewardsIndexScreen() {
     const prevStreak = rtStreak;
 
     // Optimistic cooldown + streak so the "Heute abholen" button flips at once.
-    let nextStreak = 1;
-    try {
-      const lastDay = prevLastClaim != null ? dayStart(prevLastClaim) : 0;
-      if (lastDay === today) nextStreak = prevStreak;
-      else if (lastDay === today - 86_400_000) nextStreak = prevStreak + 1;
-    } catch { /* fresh streak */ }
+    const nextStreak = computeNextStreak(prevStreak, prevLastClaim, ts);
     setLastClaim(ts);
     setNowTs(Date.now());
     setRtStreak(nextStreak);
