@@ -30,7 +30,7 @@ type Props = {
  */
 function HeroEventCard({ event, onPress, imagePriority = 'normal', style }: Props) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const dayName = event.date ? format(parseISO(event.date), 'EEEE', { locale: de }) : '';
 
@@ -54,7 +54,12 @@ function HeroEventCard({ event, onPress, imagePriority = 'normal', style }: Prop
       accessibilityLabel={`${event.title} öffnen`}
       style={[
         styles.card,
-        { backgroundColor: colors.background, borderColor: colors.borderSecondary },
+        {
+          backgroundColor: colors.background,
+          // Dark mode: the secondary border reads as a light halo around the
+          // card; the base border token sits closer to the surface.
+          borderColor: isDark ? colors.border : colors.borderSecondary,
+        },
         style,
       ]}
     >

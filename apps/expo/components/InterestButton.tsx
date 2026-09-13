@@ -6,6 +6,9 @@ import { useInterest } from '@/context/InterestContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
 import { HeartIcon, HeartFilledIcon } from './Icons';
+// The feed's heart (PostActions) — the 'feed' variant renders exactly that.
+import FeedHeartIcon from '@/assets/icons/heart-02.svg';
+import FeedHeartFilledIcon from '@/assets/icons/heart-02-filled.svg';
 import AvatarStack from './AvatarStack';
 import { InterestedUser } from '@/lib/supabase-interests';
 
@@ -14,11 +17,23 @@ type InterestButtonProps = {
   compact?: boolean;
   /** Icon-only mode: just the heart icon, no avatar stack or text. Replaces bookmark. */
   iconOnly?: boolean;
+  /**
+   * 'feed' draws the same heart as the main feed's PostActions (22px
+   * heart-02 outline in textPrimary, filled in the error red) so an event
+   * row's heart matches a post's. Default keeps the primary-blue heart.
+   */
+  variant?: 'default' | 'feed';
 };
 
 const HEART_PNG = require('@/assets/icons/Heart.png');
 
-export default function InterestButton({ eventId, compact = false, iconOnly = false }: InterestButtonProps) {
+export default function InterestButton({
+  eventId,
+  compact = false,
+  iconOnly = false,
+  variant = 'default',
+}: InterestButtonProps) {
+  const feedLook = variant === 'feed';
   const account = useActiveAccount();
   const { colors } = useTheme();
   const requireAuth = useRequireAuth();
@@ -136,8 +151,8 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
     outputRange: ['0deg', '-15deg', '5deg'],
   });
 
-  const iconSize = compact ? 16 : 20;
-  const pngSize = compact ? 24 : 32;
+  const iconSize = feedLook ? 22 : compact ? 16 : 20;
+  const pngSize = feedLook ? 28 : compact ? 24 : 32;
   const avatarUsers = users.map((u) => ({
     avatar_url: u.profile_picture_url,
     username: u.username,
@@ -154,16 +169,20 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
     <Pressable
       onPress={handleToggle}
       style={({ pressed }) => [
-        styles.heartBtn,
+        feedLook ? styles.heartBtnFeed : styles.heartBtn,
         pressed && styles.heartBtnPressed,
       ]}
       accessibilityRole="button"
       accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
     >
-      <View style={styles.heartIconWrap}>
+      <View style={feedLook ? styles.heartIconWrapFeed : styles.heartIconWrap}>
         {/* Outline heart — bottom layer */}
         <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
-          <HeartIcon size={iconSize} color={colors.primary} />
+          {feedLook ? (
+            <FeedHeartIcon width={iconSize} height={iconSize} color={colors.textPrimary} />
+          ) : (
+            <HeartIcon size={iconSize} color={colors.primary} />
+          )}
         </Animated.View>
 
         {/* Filled heart — middle layer, revealed after PNG fades */}
@@ -176,7 +195,11 @@ export default function InterestButton({ eventId, compact = false, iconOnly = fa
             },
           ]}
         >
-          <HeartFilledIcon size={iconSize} color={colors.primary} />
+          {feedLook ? (
+            <FeedHeartFilledIcon width={iconSize} height={iconSize} color={colors.error} />
+          ) : (
+            <HeartFilledIcon size={iconSize} color={colors.primary} />
+          )}
         </Animated.View>
 
         {/* Heart.png (plop animation) — top layer, sits above both SVG hearts on Android */}
@@ -258,6 +281,11 @@ const styles = StyleSheet.create({
   heartBtn: {
     padding: 4,
   },
+  // Mirrors PostActions' `action` box so the heart sits identically.
+  heartBtnFeed: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
   heartBtnPressed: {
     opacity: 0.7,
   },
@@ -267,6 +295,13 @@ const styles = StyleSheet.create({
   heartIconWrap: {
     width: 32,
     height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  heartIconWrapFeed: {
+    width: 22,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'visible',

@@ -1,13 +1,14 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  Extrapolation,
-  interpolate,
+  cancelAnimation,
   runOnJS,
-  useAnimatedScrollHandler,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   type SharedValue,
 } from 'react-native-reanimated';
 import type { EventRecord } from '@/lib/types';
@@ -16,15 +17,22 @@ import { softShadow } from '@/lib/shadow';
 import HeroEventCard from '@/components/HeroEventCard';
 import {
   HERO_CAROUSEL_CARD_HEIGHT,
-  HERO_CAROUSEL_GAP,
   activeIndexFromOffset,
+  carouselSlots,
   heroCarouselLayout,
+  snapTarget,
+  wrapOffset,
 } from '@/lib/hero-carousel-layout';
 
-// Resting pose of a teased neighbour. Interpolated continuously from the
-// scroll offset, so the incoming card grows into place under the finger.
+// Resting pose of a teased neighbour, interpolated continuously from the
+// offset so the incoming card grows into place under the finger.
 const NEIGHBOUR_SCALE = 0.92;
 const NEIGHBOUR_OPACITY = 0.7;
+
+// Snap spring: soft enough to glide the last stretch, damped enough to
+// settle without a visible wobble. Release velocity is handed straight in
+// so a flick and a slow drag both land naturally.
+const SNAP_SPRING = { damping: 24, stiffness: 170, mass: 1 };
 
 type Props = {
   events: EventRecord[];
@@ -33,88 +41,109 @@ type Props = {
 };
 
 /**
- * Hero variant B: the hero cards in a horizontal, center-snapping carousel
- * where the previous and next card peek in at the screen edges. Scroll
- * tracking, scaling and the active-index hop all run on the UI thread; the
- * only JS re-render is the pagination dot flip once per settled card.
+ * Hero variant B: the hero cards in an endless, center-snapping carousel
+ * with the previous and next card teased at the screen edges.
+ *
+ * Not a FlatList: one continuous `offset` shared value drives every card
+ * view, whose position wraps modulo the loop length, so the deck has no
+ * ends and the only JS work per swipe is the pagination dot flip.
  */
 export default function HeroCarousel({ events, showPagination = false, containerStyle }: Props) {
+  const router = useRouter();
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const layout = useMemo(() => heroCarouselLayout(screenWidth), [screenWidth]);
-
-  const [activeIndex, setActiveIndex] = useState(0);
-  const scrollX = useSharedValue(0);
-  const activeIndexSV = useSharedValue(0);
   const count = events.length;
+  const slots = carouselSlots(count);
+  // Primitives for the worklets below — never capture the layout object
+  // itself (it carries a plain function reanimated cannot ship to the UI thread).
+  const interval = layout.interval;
+  const loopLength = slots * interval;
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      const x = event.contentOffset.x;
-      scrollX.value = x;
-      const next = activeIndexFromOffset(x, layout.interval, count);
-      if (next !== activeIndexSV.value) {
-        activeIndexSV.value = next;
-        runOnJS(setActiveIndex)(next);
-      }
+  // Unbounded content offset in px. Positive = the deck has advanced.
+  // Written via .set()/.get() (not .value) so the React Compiler lint does
+  // not read the worklet writes as mutating a frozen hook value.
+  const offset = useSharedValue(0);
+  const dragStart = useSharedValue(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // New data or a width change: back to the first card, mid-spring or not.
+  useEffect(() => {
+    cancelAnimation(offset);
+    offset.set(0);
+  }, [count, interval, offset]);
+
+  useAnimatedReaction(
+    () => activeIndexFromOffset(offset.value, interval, count),
+    (index, previous) => {
+      if (index !== previous) runOnJS(setActiveIndex)(index);
     },
-  });
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: EventRecord; index: number }) => (
-      <HeroCarouselItem
-        event={item}
-        index={index}
-        isLast={index === count - 1}
-        interval={layout.interval}
-        cardWidth={layout.cardWidth}
-        scrollX={scrollX}
-      />
-    ),
-    [count, layout.interval, layout.cardWidth, scrollX]
+    [interval, count]
   );
 
-  const contentContainerStyle = useMemo(
-    () => ({ paddingHorizontal: layout.sideInset }),
-    [layout.sideInset]
-  );
+  // Built per render on purpose (RNGH's documented pattern): wrapping it in
+  // useMemo trips the React Compiler's immutability rule on the shared-value
+  // writes, and this component only re-renders on a pagination dot flip.
+  const pan = Gesture.Pan()
+    .enabled(count > 1)
+    // Horizontal intent only; the page's vertical ScrollView keeps
+    // winning an up/down drag (same thresholds as the deck swiper).
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-10, 10])
+    .onStart((e) => {
+      // Activation happens ~10px into the drag: fold that distance into
+      // the start so the card does not jump under the finger. A spring
+      // still in flight is caught where it is.
+      cancelAnimation(offset);
+      dragStart.set(offset.get() + e.translationX);
+    })
+    .onUpdate((e) => {
+      offset.set(dragStart.get() - e.translationX);
+    })
+    .onEnd((e) => {
+      const target = snapTarget(offset.get(), -e.velocityX, interval, dragStart.get());
+      offset.set(withSpring(
+        target,
+        { ...SNAP_SPRING, velocity: -e.velocityX },
+        (finished) => {
+          if (finished && loopLength > 0) {
+            // Same pose, wrapped into one loop — keeps the number small
+            // however long someone keeps swiping.
+            offset.set(((offset.get() % loopLength) + loopLength) % loopLength);
+          }
+        }
+      ));
+    });
 
-  const getItemLayout = useCallback(
-    (_: ArrayLike<EventRecord> | null | undefined, index: number) => ({
-      length: layout.interval,
-      offset: layout.offsetForIndex(index),
-      index,
-    }),
-    [layout]
+  const openEvent = useCallback(
+    (id: string) => router.push({ pathname: '/event/[id]', params: { id } }),
+    [router]
   );
 
   if (count === 0) return null;
 
   return (
     <View style={[styles.container, containerStyle]}>
-      <Animated.FlatList
-        horizontal
-        data={events}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        getItemLayout={getItemLayout}
-        showsHorizontalScrollIndicator={false}
-        // One card per swipe: snap to card+gap multiples, no momentum overshoot.
-        snapToInterval={layout.interval}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        disableIntervalMomentum
-        scrollEnabled={count > 1}
-        contentContainerStyle={contentContainerStyle}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        // Every hero card is above the fold; render them all in one pass so
-        // the peeks are never blank. Popular is capped server-side anyway.
-        initialNumToRender={count}
-        windowSize={3}
-        removeClippedSubviews={false}
-        style={styles.list}
-      />
+      <GestureDetector gesture={pan}>
+        <Animated.View style={styles.stage}>
+          {Array.from({ length: slots }, (_, slot) => {
+            const event = events[slot % count];
+            return (
+              <HeroCarouselSlot
+                key={`${event.id}-${slot}`}
+                slot={slot}
+                slots={slots}
+                event={event}
+                interval={interval}
+                cardWidth={layout.cardWidth}
+                sideInset={layout.sideInset}
+                offset={offset}
+                onPress={openEvent}
+              />
+            );
+          })}
+        </Animated.View>
+      </GestureDetector>
 
       {showPagination && count > 1 && (
         <View style={styles.pagination} accessibilityRole="none">
@@ -136,66 +165,58 @@ export default function HeroCarousel({ events, showPagination = false, container
   );
 }
 
-const keyExtractor = (event: EventRecord) => event.id;
-
-type ItemProps = {
+type SlotProps = {
+  slot: number;
+  slots: number;
   event: EventRecord;
-  index: number;
-  isLast: boolean;
   interval: number;
   cardWidth: number;
-  scrollX: SharedValue<number>;
+  sideInset: number;
+  offset: SharedValue<number>;
+  onPress: (id: string) => void;
 };
 
-const HeroCarouselItem = memo(function HeroCarouselItem({
+const HeroCarouselSlot = memo(function HeroCarouselSlot({
+  slot,
+  slots,
   event,
-  index,
-  isLast,
   interval,
   cardWidth,
-  scrollX,
-}: ItemProps) {
-  const router = useRouter();
+  sideInset,
+  offset,
+  onPress,
+}: SlotProps) {
   const { isDark } = useTheme();
 
   const animatedStyle = useAnimatedStyle(() => {
-    const inputRange = [(index - 1) * interval, index * interval, (index + 1) * interval];
+    const loopLength = slots * interval;
+    const relative = wrapOffset(slot * interval - offset.value, loopLength);
+    const distance = Math.min(Math.abs(relative) / interval, 1);
+    const scale = 1 - (1 - NEIGHBOUR_SCALE) * distance;
+    // Scaling shrinks a neighbour toward its own centre, which would eat
+    // most of the peek; pull it back inward by that amount so the full
+    // PEEK stays visible at the screen edge.
+    const inward = -Math.sign(relative) * (1 - scale) * (cardWidth / 2);
     return {
-      transform: [
-        {
-          scale: interpolate(
-            scrollX.value,
-            inputRange,
-            [NEIGHBOUR_SCALE, 1, NEIGHBOUR_SCALE],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-      opacity: interpolate(
-        scrollX.value,
-        inputRange,
-        [NEIGHBOUR_OPACITY, 1, NEIGHBOUR_OPACITY],
-        Extrapolation.CLAMP
-      ),
+      transform: [{ translateX: relative + inward }, { scale }],
+      opacity: 1 - (1 - NEIGHBOUR_OPACITY) * distance,
     };
   });
 
-  const openEvent = useCallback(() => {
-    router.push({ pathname: '/event/[id]', params: { id: event.id } });
-  }, [router, event.id]);
+  const handlePress = useCallback(() => onPress(event.id), [onPress, event.id]);
 
   return (
     <Animated.View
       style={[
-        styles.itemWrapper,
-        { width: cardWidth, marginRight: isLast ? 0 : HERO_CAROUSEL_GAP },
+        styles.slot,
+        { width: cardWidth, left: sideInset },
         softShadow(3, isDark),
         animatedStyle,
       ]}
     >
       <HeroEventCard
         event={event}
-        onPress={openEvent}
+        onPress={handlePress}
         imagePriority="high"
         style={{ width: cardWidth, height: HERO_CAROUSEL_CARD_HEIGHT }}
       />
@@ -207,10 +228,14 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
   },
-  list: {
+  stage: {
+    width: '100%',
+    height: HERO_CAROUSEL_CARD_HEIGHT,
     overflow: 'visible',
   },
-  itemWrapper: {
+  slot: {
+    position: 'absolute',
+    top: 0,
     height: HERO_CAROUSEL_CARD_HEIGHT,
     borderRadius: 24,
   },

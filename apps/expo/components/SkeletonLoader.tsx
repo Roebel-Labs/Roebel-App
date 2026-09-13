@@ -52,7 +52,7 @@ export function EventCardSkeleton() {
 export function EventListRowSkeleton() {
   return (
     <View style={styles.eventRowSkeleton}>
-      <Skeleton width={52} height={66} borderRadius={12} />
+      <Skeleton width={52} height={66} borderRadius={8} />
       <View style={styles.eventRowContent}>
         <Skeleton height={140} borderRadius={12} />
         <View style={styles.eventRowHost}>
