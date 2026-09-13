@@ -25,9 +25,10 @@ const SCALES = [1, 2, 3];
 
 for (const [file, name] of Object.entries(CARDS)) {
   for (const scale of SCALES) {
-    const out = path.join(OUT, `${name}@${scale}x.png`);
+    // The 1x file is the bare name: Metro treats it as the base asset, jest and web need it.
+    const out = path.join(OUT, scale === 1 ? `${name}.png` : `${name}@${scale}x.png`);
     await sharp(path.join(SRC, `${file}.svg`), { density: 72 * scale }).png().toFile(out);
     const { width, height } = await sharp(out).metadata();
-    console.log(`${name}@${scale}x.png ${width}x${height}`);
+    console.log(`${path.basename(out)} ${width}x${height}`);
   }
 }
