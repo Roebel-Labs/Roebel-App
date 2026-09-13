@@ -1,6 +1,6 @@
 # Röbel Münzen activation: invite and register every CitizenNFT holder
 
-**Date:** 2026-09-13 · **Status:** approved in chat, awaiting spec review · **Scope:** Expo app + Circles mini-app
+**Date:** 2026-09-13 · **Status:** approved in chat, awaiting spec review · **Scope:** Expo app + Circles mini-app + one reward-rail action
 
 ## Problem
 
@@ -40,6 +40,12 @@ picks a truster that holds ≥96 raw CRC at activation time. No coordination bet
    later slice.
 4. **Ordering.** The sponsor reserve in the daily mint ships first, and the two dormant attesters
    must not claim before the OTA is live (their 335 CRC would be locked as Münzen).
+5. **Sponsoring earns a referral reward: 24 Röbel Münzen per activated citizen**, paid by the
+   funder through the existing reward rail (`reward_config` row `citizen_activation`, editable in
+   the admin console). Sponsor nets −72 per citizen; 48 activations need 1,152 Münzen of float.
+6. **The invitation page becomes Münzen-native.** `app/rewards/referral.tsx` turns into
+   "Bürger einladen": it hosts the sponsor toggle, on-chain invite stats, and the share-code flow
+   reworded around Münzen. Points wording disappears from the page.
 
 ## Non-goals
 
@@ -47,7 +53,10 @@ picks a truster that holds ≥96 raw CRC at activation time. No coordination bet
   session key would also be able to move Münzen).
 - Safe-based Circles identities / InviteFarm quota. Long-term Circles-native path, not this work.
 - Push notification "Deine Röbel Münzen sind bereit" (slice 2).
-- Web admin changes. The existing `/admin/dashboard/circles` page already shows per-citizen state.
+- Web admin changes. The existing `/admin/dashboard/circles` page already shows per-citizen state,
+  and the Belohnungen tab already edits `reward_config` rows.
+- Changing the `redeem_referral` SQL function (it still awards points to both sides; only the page
+  copy stops talking about points).
 
 ## Architecture
 
@@ -129,9 +138,10 @@ The Circles RPC "In" filter and the group-trustee query were verified live (52 r
 AsyncStorage under `muenzen:sponsor:<address>`. Attesters default to on; the toggle is visible to
 every registered citizen and switchable by all, attesters included.
 
-**Toggle.** A row on the Münzen screen (below the balance hero, above the tabs): switch labelled
+**Toggle.** Lives on the invitation page (section 6), not on the Münzen screen. Switch labelled
 **"Neue Bürger mit einladen"**, sub-copy **"Pro neuem Bürger werden 96 Münzen von deinem Konto
-verwendet."** Only rendered when `activationStatus === 'registered'`.
+verwendet – du bekommst 24 Münzen Belohnung."** Only rendered when
+`activationStatus === 'registered'`. The Münzen screen keeps its existing banner to the page.
 
 **Fan-out (`useSponsorFanOut` hook, new, called from the host).** On app open and on
 `AppState` → `active`, at most once per 6 h per address (AsyncStorage timestamp):
@@ -168,7 +178,61 @@ that view; if not, label from `CrcV2_Burn` events instead.
 - Both copies stay identical. Deployment is manual: `cd circles-roebel-mini-app && npx vercel@latest
   --prod --yes` (Max runs it), and the roebel-data deploy repo per its usual sync.
 
-### 5. Guard rails
+### 5. Referral reward and the Münzen-native invitation page
+
+**Reward action (`claim-reward` edge function + `reward_config`).**
+
+- New `reward_config` row: `action = 'citizen_activation'`, `amount_atto = 24e18`, `enabled = true`,
+  `per_reference = true`, `daily_cap = null`, description
+  "Ein:e Bürger:in, die du eingeladen hast, hat ihr Münzen-Konto aktiviert". Applied as a
+  migration under `supabase/migrations/` and via the Supabase MCP.
+- New verifier in `apps/expo/supabase/functions/claim-reward/index.ts`:
+  `citizen_activation(wallet, reference)` queries the Circles RPC
+  `CrcV2.RegisterHuman` with `avatar = reference` and checks `inviter === wallet`
+  (both lowercased). Verified live: the table exposes an `inviter` column. Because a human has
+  exactly one inviter on-chain and the unique index on `reward_claims` covers
+  `(wallet, action, reference_id)`, each activation pays at most once, to the inviter only.
+- `RewardAction` in `lib/rewards-claim.ts` gains `"citizen_activation"`.
+- Funder float: when it is empty the claim is stored `failed` ("insufficient funder float") and
+  the client retries on a later open, as today. The admin console's Belohnungen tab shows float
+  and claims.
+
+**Auto-claim (`useSponsorRewardClaims` hook, new).** On app open and page focus, for a registered
+wallet: fetch `RegisterHuman` rows with `inviter = me` (Circles RPC), diff against a local
+"claimed" set in AsyncStorage (`muenzen:sponsor-claims:<address>`), and call
+`claimReward(me, 'citizen_activation', invitee)` for each new one. `paid` and `already_claimed`
+mark the invitee as done; `failed` leaves it for the next run. Fire-and-forget, no UI blocking.
+A paid claim shows the existing reward celebration ("+24 Münzen").
+
+**Page: `app/rewards/referral.tsx` → "Bürger einladen".** Same shell (header, hero, scroll),
+new content top to bottom:
+
+1. Hero + title **"Lade Bürger ein, verdiene Münzen"**, subtitle
+   **"Jede:r Bürger:in, die über dich ihr Münzen-Konto aktiviert, bringt dir 24 Röbel Münzen."**
+2. **Sponsor card** (registered wallets only): the toggle from section 3 plus three steps:
+   "Einladen einschalten" → "Ein:e Bürger:in aktiviert das Konto (96 Münzen von dir)" →
+   "Du bekommst 24 Münzen". Unregistered wallets see the same card with the copy
+   "Aktiviere zuerst dein eigenes Münzen-Konto" and the activation CTA.
+3. **Stats**: "Eingeladen" = count of `RegisterHuman` rows with `inviter = me`;
+   "Verdient" = `Σ amount_atto` of `reward_claims` where `wallet = me`,
+   `action = 'citizen_activation'`, `status = 'paid'`, shown as "N Münzen".
+4. **"Von dir eingeladen"** list: invitees as display name + date, resolved with the existing
+   `lib/circles-profile.ts` wallet→profile map; fallback label "Bürger:in" (never an address).
+   Hidden when empty.
+5. **Share section** kept: `ReferralShareCard` with the code/link, retitled
+   **"Freunde nach Röbel holen"**, copy: "Teile deinen Code. Wird dein:e Freund:in Bürger:in,
+   startet sie mit 48 Münzen – und du wirst automatisch ihr:e Einlader:in." The share message in
+   `buildReferralShareMessage` already says Münzen.
+6. **Redeem box** kept as is (friend enters a code), success text becomes
+   "Code eingelöst! Willkommen bei Röbel." (no "Punkte").
+7. **"So funktioniert's"** rewritten to the three sponsor steps; the "200 Punkte / 100 Punkte"
+   step is removed. Footer note unchanged.
+
+The deep-link handler (`/r/<code>`, `lib/referral-deeplink.ts`) and `redeem_referral` RPC are
+untouched. When a code is redeemed the app still fires the existing `claimReward(referrer,
+'referral')`; that action stays as configured today.
+
+### 6. Guard rails
 
 - Never send `registerHuman` without a balance read less than 60 s old that shows ≥96.
 - Fan-out only ever trusts addresses from the group-trustee list (citizen-only by construction).
@@ -176,14 +240,19 @@ that view; if not, label from `CrcV2_Burn` events instead.
 - No raw wallet addresses in any new UI. German copy only; code and comments English.
 - Nothing here changes the Circles gate logic (`app_settings`), the auto-invite worker, or the
   group's membership condition.
+- The reward verifier trusts only the Circles indexer's `RegisterHuman.inviter`; the client can
+  never name itself as inviter for someone else's activation.
 
 ## Rollout order
 
-1. Ship the reserve + toggle + fan-out + activation sheet as one OTA (they are one flow).
+1. Apply the `citizen_activation` reward row and deploy the updated `claim-reward` function
+   (Supabase MCP; needs an authenticated interactive session, so Max runs that step).
+2. Ship the reserve + toggle + fan-out + activation sheet + invitation page as one OTA.
    **Before that: tell the two dormant attesters not to tap "Heute abholen".**
-2. Max trusts the 40 open citizens from the mini-app (free) so nobody is `not_invited`.
-3. The dormant attesters claim → 335 raw each → 6 activations become `ready` at once.
-4. Steady state: ~1.5 activations/day from attesters, more as citizens opt in.
+3. Max trusts the 40 open citizens from the mini-app (free) so nobody is `not_invited`.
+4. The dormant attesters claim → 335 raw each → 6 activations become `ready` at once.
+5. Steady state: ~1.5 activations/day from attesters, more as citizens opt in. Keep the funder
+   float ≥ 24 × expected activations per week (Safe top-up).
 
 Expected: 6 on day one, all 48 in roughly four weeks, faster with opt-ins.
 
@@ -192,16 +261,21 @@ Expected: 6 on day one, all 48 in roughly four weeks, faster with opt-ins.
 - **Unit (written first):** `computeActivationStatus` for all five statuses; `pickFundedInviter`
   (none funded, one funded, highest wins, exactly 96 counts); reserve decision
   (`shouldKeepRaw(isSponsor, unregisteredCount)`); the fan-out todo excludes registered and
-  already-trusted addresses; history label matcher for the 96-burn.
+  already-trusted addresses; history label matcher for the 96-burn; the sponsor-claims diff
+  (new invitee → claim, paid → remembered, failed → retried); the `citizen_activation` verifier
+  (inviter match, mismatch, no row) with a mocked Circles RPC.
 - **Type check:** judge only the new/changed files (the repo baseline has ~1,235 known errors).
 - **Manual (Max):** on his citizen wallet: daily mint keeps raw; fan-out trusts the open citizens
   on the next open; the toggle persists. Then one dormant attester claims and one citizen sees the
-  sheet and activates (48 Münzen + snackbar). Device pass before OTA as per the usual gate.
+  sheet and activates (48 Münzen + snackbar); the attester's next app open pays 24 Münzen and
+  the invitation page shows "Eingeladen 1 · Verdient 24 Münzen". Device pass before OTA as per
+  the usual gate.
 
 ## Open items
 
 - Slice 2: push "Deine Röbel Münzen sind bereit" when a citizen turns `ready` (needs a small
   server cron reading the same snapshot).
 - Slice 2: sponsor "convert before send".
+- Ops: top up the funder from the Attester Safe as activations ramp (1,152 Münzen for all 48).
 - Circles team: trust-only quota path (request already filed in
   `docs/CIRCLES_DEVREL_INVITE_QUOTA_REQUEST.md`).
