@@ -3,7 +3,6 @@ import {
   Alert,
   Animated,
   Easing,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -21,6 +20,7 @@ import MapFilterBar from '@/components/map/MapFilterBar';
 import MapCategoryRow, { MAP_CATEGORY_ROW_HEIGHT } from '@/components/map/MapCategoryRow';
 import MapBottomFade from '@/components/map/MapBottomFade';
 import MapExploreButton, { EXPLORE_BUTTON_HEIGHT } from '@/components/map/MapExploreButton';
+import MapIconButton from '@/components/map/MapIconButton';
 import MapCategorySheet from '@/components/map/MapCategorySheet';
 import { categoryByKey, type MapCategoryKey } from '@/lib/map/categories';
 import MapPlaceSheet from '@/components/map/MapPlaceSheet';
@@ -92,9 +92,10 @@ export default function LocationScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Bottom stack, from the screen edge up: Erkunden pill, category row,
-  // locate button. The fade under all of it reaches FADE_LEAD past the row so
-  // the frost is already there when the labels start.
+  // Bottom stack, from the screen edge up: the button row (SOS, Erkunden,
+  // search), the category row, the locate button. The fade under all of it
+  // reaches FADE_LEAD past the row so the frost is already there when the
+  // labels start.
   const exploreBottom = Math.max(insets.bottom, 12) + 6;
   const rowBottom = exploreBottom + EXPLORE_BUTTON_HEIGHT + 10;
   const rowTop = rowBottom + MAP_CATEGORY_ROW_HEIGHT;
@@ -422,6 +423,13 @@ export default function LocationScreen() {
     openSelectionFor(entityType, id);
   };
 
+  // The map is usually pushed from Erkunden; a deep link has nothing behind
+  // it, so back falls through to the explore feed rather than doing nothing.
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/explore' as any);
+  };
+
   const handleLocateMe = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -512,22 +520,11 @@ export default function LocationScreen() {
             />
             </ErrorBoundary>
 
-            {/* Top header — back left, search right */}
+            {/* Top-left: back. Search moved down to the bottom row. */}
             <SafeAreaView style={styles.topHeader} edges={['top']} pointerEvents="box-none">
-              <Pressable
-                onPress={() => router.back()}
-                style={[styles.headerCircle, { backgroundColor: colors.card }]}
-                accessibilityLabel="Zurück"
-              >
+              <MapIconButton onPress={goBack} accessibilityLabel="Zurück">
                 <ArrowLeftIcon size={20} color={colors.textPrimary} />
-              </Pressable>
-              <Pressable
-                onPress={() => setShowSearchModal(true)}
-                style={[styles.headerCircle, { backgroundColor: colors.card }]}
-                accessibilityLabel="Suchen"
-              >
-                <SearchIcon size={20} color={colors.textPrimary} />
-              </Pressable>
+              </MapIconButton>
             </SafeAreaView>
 
             {/* Today's advisories — visible when Tipps layer is on */}
@@ -582,26 +579,22 @@ export default function LocationScreen() {
               hidden={chromeHidden}
             />
 
-            {/* Erkunden — the shadowed pill under the row, above the safe area. */}
-            <MapExploreButton
-              onPress={() => router.push('/explore' as any)}
-              bottom={exploreBottom}
-              opacity={chromeOpacity}
-              hidden={chromeHidden}
-            />
-
-            {/* SOS keeps the top-left corner. */}
+            {/* Bottom row on the fade, above the safe area: SOS at the left
+                edge, Erkunden centred, search at the right edge. */}
             <Animated.View
-              style={[styles.topLeftRow, { top: insets.top + 8, opacity: chromeOpacity }]}
+              style={[styles.bottomRow, { bottom: exploreBottom, opacity: chromeOpacity }]}
               pointerEvents={chromeHidden ? 'none' : 'box-none'}
             >
-              <Pressable
+              <MapIconButton
                 onPress={() => setShowVerloren(true)}
-                style={[styles.iconButton, { backgroundColor: colors.card }]}
                 accessibilityLabel="Wo bin ich verloren"
               >
                 <CallIcon size={20} color={colors.textPrimary} />
-              </Pressable>
+              </MapIconButton>
+              <MapExploreButton onPress={() => router.push('/explore' as any)} />
+              <MapIconButton onPress={() => setShowSearchModal(true)} accessibilityLabel="Suchen">
+                <SearchIcon size={20} color={colors.textPrimary} />
+              </MapIconButton>
             </Animated.View>
 
             {/* Locate stays bottom-right, floating above the category row. */}
@@ -609,13 +602,9 @@ export default function LocationScreen() {
               style={[styles.locateFloat, { bottom: locateBottom, opacity: chromeOpacity }]}
               pointerEvents={chromeHidden ? 'none' : 'box-none'}
             >
-              <Pressable
-                onPress={handleLocateMe}
-                style={[styles.iconButton, { backgroundColor: colors.card }]}
-                accessibilityLabel="Mein Standort"
-              >
+              <MapIconButton onPress={handleLocateMe} accessibilityLabel="Mein Standort">
                 <LocationIcon size={20} color={colors.textPrimary} />
-              </Pressable>
+              </MapIconButton>
             </Animated.View>
           </>
         )}
@@ -697,22 +686,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingHorizontal: 16,
     paddingTop: 8,
     zIndex: 200,
-  },
-  headerCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
   },
   advisoriesRow: {
     position: 'absolute',
@@ -744,30 +721,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: fontFamily.medium,
   },
-  topLeftRow: {
+  bottomRow: {
     position: 'absolute',
     left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     zIndex: 2000,
   },
   locateFloat: {
     position: 'absolute',
     right: 16,
     zIndex: 2000,
-  },
-  iconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
   },
   sheetLayer: {
     position: 'absolute',

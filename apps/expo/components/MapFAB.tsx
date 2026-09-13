@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Pressable, Text, StyleSheet, Animated as RNAnimated } from 'react-native';
+import { Pressable, Text, StyleSheet, View, Animated as RNAnimated } from 'react-native';
 import { useRouter } from 'expo-router';
 import ReanimatedAnimated, {
   useAnimatedStyle,
@@ -10,7 +10,10 @@ import ReanimatedAnimated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
+import { fontFamily } from '@/constants/theme';
+import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
 import { LocationIcon } from '@/components/Icons';
+import { softShadow } from '@/lib/shadow';
 import { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 
 type Props = {
@@ -35,7 +38,7 @@ export default function MapFAB({
   accessibilityLabel,
 }: Props) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const scaleAnim = useRef(new RNAnimated.Value(1)).current;
   // Fallback for callers that don't drive show/hide — created unconditionally
   // to satisfy the rules of hooks, only actually used when `visible` is omitted.
@@ -82,12 +85,19 @@ export default function MapFAB({
           onPress={() => router.push(href as any)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          style={[styles.pill, { backgroundColor: colors.background }]}
+          style={[styles.pill, softShadow(2, isDark)]}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel ?? `${label} öffnen`}
         >
-          {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
-          <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+          {/* Frosted pill: the outer pressable carries the shadow, the inner
+              view clips the glass — same material as the map's controls. */}
+          <View style={[styles.clip, { borderColor: glassEdgeColor(isDark) }]}>
+            <GlassSurface />
+            <View style={styles.content}>
+              {icon ?? <LocationIcon size={16} color={colors.textPrimary} />}
+              <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+            </View>
+          </View>
         </Pressable>
       </RNAnimated.View>
     </ReanimatedAnimated.View>
@@ -104,20 +114,22 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   pill: {
+    borderRadius: 24,
+  },
+  clip: {
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  content: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
   },
   label: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
 });
