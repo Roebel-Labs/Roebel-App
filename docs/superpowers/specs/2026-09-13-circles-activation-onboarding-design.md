@@ -138,7 +138,7 @@ The Circles RPC "In" filter and the group-trustee query were verified live (52 r
 AsyncStorage under `muenzen:sponsor:<address>`. Attesters default to on; the toggle is visible to
 every registered citizen and switchable by all, attesters included.
 
-**Toggle.** Lives on the invitation page (section 6), not on the Münzen screen. Switch labelled
+**Toggle.** Lives on the invitation page (section 5), not on the Münzen screen. Switch labelled
 **"Neue Bürger mit einladen"**, sub-copy **"Pro neuem Bürger werden 96 Münzen von deinem Konto
 verwendet – du bekommst 24 Münzen Belohnung."** Only rendered when
 `activationStatus === 'registered'`. The Münzen screen keeps its existing banner to the page.
@@ -209,10 +209,10 @@ new content top to bottom:
 
 1. Hero + title **"Lade Bürger ein, verdiene Münzen"**, subtitle
    **"Jede:r Bürger:in, die über dich ihr Münzen-Konto aktiviert, bringt dir 24 Röbel Münzen."**
-2. **Sponsor card** (registered wallets only): the toggle from section 3 plus three steps:
+2. **Sponsor card**: for registered wallets, the toggle from section 3 plus three steps:
    "Einladen einschalten" → "Ein:e Bürger:in aktiviert das Konto (96 Münzen von dir)" →
-   "Du bekommst 24 Münzen". Unregistered wallets see the same card with the copy
-   "Aktiviere zuerst dein eigenes Münzen-Konto" and the activation CTA.
+   "Du bekommst 24 Münzen". For unregistered wallets the same card shows
+   "Aktiviere zuerst dein eigenes Münzen-Konto" and the activation CTA instead of the toggle.
 3. **Stats**: "Eingeladen" = count of `RegisterHuman` rows with `inviter = me`;
    "Verdient" = `Σ amount_atto` of `reward_claims` where `wallet = me`,
    `action = 'citizen_activation'`, `status = 'paid'`, shown as "N Münzen".
