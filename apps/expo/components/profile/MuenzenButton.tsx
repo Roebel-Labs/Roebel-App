@@ -76,18 +76,18 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen }: Props)
   // Skin crossfade (gold ↔ neutral) independent of the content swap.
   const gold = useSharedValue(isGold ? 1 : 0);
   useEffect(() => {
-    gold.value = reducedMotion ? (isGold ? 1 : 0) : withTiming(isGold ? 1 : 0, { duration: 260 });
+    gold.set(reducedMotion ? (isGold ? 1 : 0) : withTiming(isGold ? 1 : 0, { duration: 260 }));
   }, [gold, isGold, reducedMotion]);
   const goldSkinStyle = useAnimatedStyle(() => ({ opacity: gold.value }));
   const neutralSkinStyle = useAnimatedStyle(() => ({ opacity: 1 - gold.value }));
 
   const handlePressIn = useCallback(() => {
-    pressed.value = withTiming(1, { duration: 90 });
+    pressed.set(withTiming(1, { duration: 90 }));
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, [pressed]);
 
   const handlePressOut = useCallback(() => {
-    pressed.value = withSpring(0, { damping: 14, stiffness: 260 });
+    pressed.set(withSpring(0, { damping: 14, stiffness: 260 }));
   }, [pressed]);
 
   const handlePress = useCallback(() => {
@@ -182,7 +182,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   shadowLayer: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: RADIUS,
   },
   surface: {

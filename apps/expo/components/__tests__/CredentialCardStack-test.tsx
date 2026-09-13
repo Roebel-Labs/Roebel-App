@@ -16,7 +16,7 @@ import CredentialCardStack, { stackHeight } from '../profile/CredentialCardStack
 
 function labelsOf(tree: renderer.ReactTestRenderer): string[] {
   return tree.root
-    .findAll((n) => n.props.accessibilityRole === 'image')
+    .findAll((n) => typeof n.type === 'string' && n.props.accessibilityRole === 'image')
     .map((n) => n.props.accessibilityLabel);
 }
 
@@ -36,7 +36,8 @@ describe('CredentialCardStack', () => {
       tree = renderer.create(<CredentialCardStack kinds={['citizen', 'attester']} onPress={onPress} />);
     });
     expect(labelsOf(tree)).toEqual(['Bürgerausweis', 'Bescheiniger-Ausweis']);
-    const zone = tree.root.findAll((n) => n.props.accessibilityRole === 'button')[0];
+    // The mocked Pressable's composite node carries onPress; its host View does not.
+    const zone = tree.root.findAll((n) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function')[0];
     act(() => {
       zone.props.onPress();
     });

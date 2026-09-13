@@ -17,13 +17,13 @@ import VoteIcon from '@/assets/icons/delegate.svg';
 import CoinsIcon from '@/assets/icons/coins-01.svg';
 import OrgIcon from '@/assets/icons/community.svg';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
-import SignatureIcon from '@/assets/icons/pencil-edit-01.svg';
+import SignatureIcon from '@/assets/icons/pencil.svg';
 import ShieldIcon from '@/assets/icons/profile/shield-user.svg';
 import CalendarIcon from '@/assets/icons/calendar-02.svg';
 import ListingIcon from '@/assets/icons/package.svg';
 import FeedbackIcon from '@/assets/icons/profile/sent.svg';
 import ScanIcon from '@/assets/icons/qr-code.svg';
-import TallyIcon from '@/assets/icons/badge-check.svg';
+import TallyIcon from '@/assets/icons/check.svg';
 
 const BENEFIT_ICONS: Record<BenefitIcon, React.ComponentType<{ width: number; height: number; color: string }>> = {
   vote: VoteIcon,

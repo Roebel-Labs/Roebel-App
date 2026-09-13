@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, useWindowDimensions, type ViewToken } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import type { CredentialKind } from '@/lib/credentials';
@@ -29,13 +29,26 @@ export default function CredentialCarousel({ kinds, initialKind, onActiveChange 
   const [active, setActive] = useState(initialIndex);
 
   const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 55 }), []);
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    const first = viewableItems.find((v) => v.isViewable);
-    if (first && typeof first.index === 'number') {
-      setActive(first.index);
-      onActiveChange(kinds[first.index]);
-    }
-  }).current;
+  // FlatList forbids swapping onViewableItemsChanged, so the handler is created
+  // once and reads the latest kinds/callback through refs updated in effects.
+  const kindsRef = useRef(kinds);
+  const onActiveChangeRef = useRef(onActiveChange);
+  useEffect(() => {
+    kindsRef.current = kinds;
+  }, [kinds]);
+  useEffect(() => {
+    onActiveChangeRef.current = onActiveChange;
+  }, [onActiveChange]);
+  const [onViewableItemsChanged] = useState(
+    () =>
+      ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+        const first = viewableItems.find((v) => v.isViewable);
+        if (first && typeof first.index === 'number') {
+          setActive(first.index);
+          onActiveChangeRef.current(kindsRef.current[first.index]);
+        }
+      },
+  );
 
   const renderItem = useCallback(
     ({ item, index }: { item: CredentialKind; index: number }) => (

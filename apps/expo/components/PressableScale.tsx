@@ -38,7 +38,7 @@ export default function PressableScale({
 
   const handlePressIn = useCallback(
     (e: GestureResponderEvent) => {
-      scale.value = withSpring(scaleTo, SPRING);
+      scale.set(withSpring(scaleTo, SPRING));
       if (haptic !== 'none' && Platform.OS !== 'web') {
         if (haptic === 'selection') Haptics.selectionAsync().catch(() => {});
         else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -50,7 +50,7 @@ export default function PressableScale({
 
   const handlePressOut = useCallback(
     (e: GestureResponderEvent) => {
-      scale.value = withSpring(1, SPRING);
+      scale.set(withSpring(1, SPRING));
       onPressOut?.(e);
     },
     [onPressOut, scale],

@@ -24,32 +24,29 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
   const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account } = useRoebelTaler();
   const address = account?.address ?? null;
 
-  const [lastClaim, setLastClaim] = useState<number | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  // Last claim per wallet, loaded from the same key the Münzen page writes.
+  const [claimState, setClaimState] = useState<{ address: string; lastClaim: number | null } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setLoaded(false);
-    if (!address) {
-      setLastClaim(null);
-      setLoaded(true);
-      return;
-    }
+    if (!address) return;
     let cancelled = false;
     AsyncStorage.getItem(rtClaimKey(address))
       .then((v) => {
         if (cancelled) return;
-        setLastClaim(v ? Number(v) : null);
+        setClaimState({ address, lastClaim: v ? Number(v) : null });
         setNow(Date.now());
-        setLoaded(true);
       })
       .catch(() => {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) setClaimState({ address, lastClaim: null });
       });
     return () => {
       cancelled = true;
     };
   }, [address]);
+
+  const loaded = !!address && claimState?.address === address;
+  const lastClaim = loaded ? claimState!.lastClaim : null;
 
   // Wake once when the cooldown ends instead of ticking every second.
   useEffect(() => {
@@ -79,7 +76,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
     const prevLastClaim = lastClaim;
     const received = amount;
 
-    setLastClaim(ts);
+    setClaimState({ address, lastClaim: ts });
     setNow(ts);
     AsyncStorage.setItem(rtClaimKey(address), String(ts)).catch(() => {});
     AsyncStorage.getItem(rtStreakKey(address))
@@ -102,7 +99,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
       onFailed: () => {
         // Roll the optimistic cooldown back so the user can retry; the accrual
         // is still on-chain and reappears on the next refresh.
-        setLastClaim(prevLastClaim);
+        setClaimState({ address, lastClaim: prevLastClaim });
         if (prevLastClaim != null) AsyncStorage.setItem(rtClaimKey(address), String(prevLastClaim)).catch(() => {});
         else AsyncStorage.removeItem(rtClaimKey(address)).catch(() => {});
       },

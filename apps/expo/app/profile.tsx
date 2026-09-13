@@ -72,10 +72,6 @@ export default function ProfileScreen() {
   const members = useOrgMemberPreview(isOrg ? activeAccount?.id : undefined);
 
   useEffect(() => {
-    if (isConnected && showLoginDrawer) setShowLoginDrawer(false);
-  }, [isConnected, showLoginDrawer]);
-
-  useEffect(() => {
     fetchProfileStoryCollections().then(setStoryCollections);
   }, []);
 
@@ -223,7 +219,8 @@ export default function ProfileScreen() {
           <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} glass />
         </View>
 
-        <LoginDrawer visible={showLoginDrawer} onClose={() => setShowLoginDrawer(false)} />
+        {/* Closes itself once the login lands (no effect needed). */}
+        <LoginDrawer visible={showLoginDrawer && !isConnected} onClose={() => setShowLoginDrawer(false)} />
         <LogoutDrawer visible={showLogoutDrawer} onClose={() => setShowLogoutDrawer(false)} onLogout={handleDisconnect} />
         <AccountSwitchSheet
           visible={showAccountSheet}

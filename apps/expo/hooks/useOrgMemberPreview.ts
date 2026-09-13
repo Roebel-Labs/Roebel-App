@@ -3,39 +3,37 @@ import { fetchMembersWithProfiles } from '@/lib/supabase-member-management';
 
 export type MemberPreviewUser = { avatar_url: string | null; username: string | null };
 
+type Preview = { accountId: string; users: MemberPreviewUser[]; count: number };
+const EMPTY: MemberPreviewUser[] = [];
+
 /** Member avatars + count for the org "Mitglieder" pill. One fetch per account id. */
 export function useOrgMemberPreview(accountId: string | undefined) {
-  const [users, setUsers] = useState<MemberPreviewUser[]>([]);
-  const [count, setCount] = useState(0);
+  const [preview, setPreview] = useState<Preview | null>(null);
 
   useEffect(() => {
-    if (!accountId) {
-      setUsers([]);
-      setCount(0);
-      return;
-    }
+    if (!accountId) return;
     let cancelled = false;
     fetchMembersWithProfiles(accountId)
       .then((members) => {
         if (cancelled) return;
-        setUsers(
-          members.map((m) => ({
+        setPreview({
+          accountId,
+          users: members.map((m) => ({
             avatar_url: m.user?.profile_picture_url ?? null,
             username: m.user?.username ?? null,
           })),
-        );
-        setCount(members.length);
+          count: members.length,
+        });
       })
       .catch(() => {
-        if (!cancelled) {
-          setUsers([]);
-          setCount(0);
-        }
+        if (!cancelled) setPreview({ accountId, users: EMPTY, count: 0 });
       });
     return () => {
       cancelled = true;
     };
   }, [accountId]);
 
-  return { users, count };
+  // A preview for another account (or none yet) reads as empty.
+  const current = accountId && preview?.accountId === accountId ? preview : null;
+  return { users: current?.users ?? EMPTY, count: current?.count ?? 0 };
 }

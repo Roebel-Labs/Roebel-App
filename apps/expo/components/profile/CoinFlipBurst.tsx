@@ -48,9 +48,8 @@ function CoinSprite({ index, total }: { index: number; total: number }) {
   const spreadX = (index - (total - 1) / 2) * 16;
 
   useEffect(() => {
-    progress.value = withDelay(
-      index * BURST_STAGGER_MS,
-      withTiming(1, { duration: BURST_DURATION_MS, easing: Easing.out(Easing.cubic) }),
+    progress.set(
+      withDelay(index * BURST_STAGGER_MS, withTiming(1, { duration: BURST_DURATION_MS, easing: Easing.out(Easing.cubic) })),
     );
   }, [index, progress]);
 
