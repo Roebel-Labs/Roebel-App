@@ -76,6 +76,8 @@ export const borderRadius = {
 export const lightColors = {
   // Backgrounds
   background: '#ffffff',
+  /** Stage behind sheets and stacked cards (profile header + card zone). */
+  backdrop: '#F0F0F0',
   surface: '#F7F7F7',
   surfaceSecondary: '#f5f5f5',
   feedBackground: '#F0F0F0',
@@ -149,6 +151,8 @@ export const darkColors = {
   // Backgrounds — one unified dark surface: background, feedBackground, card
   // and popover all share the same darker tone (#18191B) by design.
   background: '#18191B',
+  /** Stage behind sheets and stacked cards — darker than the surface so the sheet lifts. */
+  backdrop: '#111214',
   surface: '#3c4043',
   surfaceSecondary: '#2d2e31',
   feedBackground: '#18191B',
