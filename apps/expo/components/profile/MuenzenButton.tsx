@@ -30,7 +30,7 @@ type Props = {
   onClaim: () => boolean;
   /** Idle press → Münzen page. */
   onOpen: () => void;
-  /** While set (and in the future), the idle label alternates with a MM:SS clock. */
+  /** Set only while the hourly cooldown runs: the idle label alternates with a MM:SS clock. */
   cooldownEnd?: number | null;
 };
 
@@ -168,7 +168,7 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
           ) : (
             <Animated.View key="idle" entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)} style={styles.content}>
               <Image source={COIN_STACK} style={styles.coinStack} resizeMode="contain" />
-              {cooldownEnd && cooldownEnd > Date.now() ? (
+              {cooldownEnd != null ? (
                 <MuenzenCooldownLabel cooldownEnd={cooldownEnd} style={[styles.label, { color: colors.textPrimary }]} />
               ) : (
                 <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>

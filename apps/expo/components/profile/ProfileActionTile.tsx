@@ -56,8 +56,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   image: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
   },
   label: {
     fontFamily: 'Inter-Medium',
