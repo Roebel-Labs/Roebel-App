@@ -481,3 +481,19 @@ shows the cooldown.
 Public profile page (`/user/[username]`), org public page, `/org/manage`,
 the Münzen page itself, not-connected layout beyond the header, iOS-only
 Liquid Glass, and any change to the reward overlay used elsewhere.
+
+## 13. Review round 1 (2026-09-13, after the first Android preview)
+
+Max's device feedback, applied on the branch: the Röbel Card tile is replaced by
+Abfallkalender (the menu row remains only for users without the grid); the
+"Konto & Karte" card is removed from the profile until Gnosis Pay works; the
+glass switcher border is 1.5pt; the Münzen label is 13pt; in a two-card stack
+the back card is drawn at 93% width, centred; the header and card zone sit on
+a new `colors.backdrop` token (`#F0F0F0` light, `#111214` dark) while the
+sheet keeps `colors.background`, and the flat sheet (org, not connected) is
+rounded with a 12pt top gap so every mode reads as a sheet on the stage.
+
+Added in the same round: while the hourly cooldown runs, the idle button label
+alternates between "Münzen" and a MM:SS clock (`MuenzenCooldownLabel`), using
+the explore search placeholder's slide/fade with a 3 s hold; the clock ticks
+inside the label only, and the hook exposes `cooldownEnd`.

@@ -6,7 +6,7 @@ import type { ProfileAction, ProfileActionKey } from '@/lib/profile-actions';
 import ProfileActionTile from './ProfileActionTile';
 
 const ACTION_ART: Record<ProfileActionKey, ImageSourcePropType> = {
-  'roebel-card': require('../../assets/images/card.png'),
+  abfallkalender: require('../../assets/illustration/profile/trash.png'),
   governance: require('../../assets/illustration/profile/02.png'),
   'create-org': require('../../assets/illustration/profile/03.png'),
   'submit-event': require('../../assets/illustration/profile/04.png'),

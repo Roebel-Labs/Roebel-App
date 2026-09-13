@@ -16,14 +16,14 @@ import TrashIcon from '@/assets/icons/profile/trash.svg';
 
 type Props = {
   variant: 'guest' | 'personal' | 'org';
-  /** Personal only: tourists/guests get the row, citizens have the tile. */
-  showSubmitEventRow?: boolean;
+  /** Personal only: users without the action grid get the rows the tiles cover. */
+  gridless?: boolean;
 };
 
 const ICON = 20;
 
 /** The two groups of menu rows under the profile content. */
-export default function ProfileMenu({ variant, showSubmitEventRow = false }: Props) {
+export default function ProfileMenu({ variant, gridless = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const c = colors.textPrimary;
@@ -55,11 +55,11 @@ export default function ProfileMenu({ variant, showSubmitEventRow = false }: Pro
   return (
     <View style={styles.section}>
       <View style={styles.group}>
-        {(isGuest || showSubmitEventRow) && (
+        {(isGuest || gridless) && (
           <ProfileMenuItem icon={<UploadIcon width={ICON} height={ICON} color={c} />} label="Veranstaltung einsenden" onPress={push('/submit-event' as Href)} />
         )}
         <ProfileMenuItem icon={<CalendarIcon width={ICON} height={ICON} color={c} />} label="Meine Veranstaltungen" onPress={push('/my-events' as Href)} />
-        {!isGuest && (
+        {!isGuest && gridless && (
           <ProfileMenuItem icon={<TrashIcon width={ICON} height={ICON} color={c} />} label="Abfallkalender" onPress={push('/abfallkalender' as Href)} />
         )}
         <ProfileMenuItem icon={<SentIcon width={ICON} height={ICON} color={c} />} label="Feedback geben" onPress={push('/feedback' as Href)} />

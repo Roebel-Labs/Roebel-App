@@ -15,6 +15,7 @@ import Animated, {
 import { useTheme } from '@/context/ThemeContext';
 import ChevronRightIcon from '@/assets/icons/chevron-right.svg';
 import CoinFlipBurst from './CoinFlipBurst';
+import MuenzenCooldownLabel from './MuenzenCooldownLabel';
 
 const COIN_TILTED = require('../../assets/illustration/muenzen/top_hero_coin.png');
 const COIN_STACK = require('../../assets/illustration/gamification/stack.png');
@@ -29,6 +30,8 @@ type Props = {
   onClaim: () => boolean;
   /** Idle press → Münzen page. */
   onOpen: () => void;
+  /** While set (and in the future), the idle label alternates with a MM:SS clock. */
+  cooldownEnd?: number | null;
 };
 
 const HEIGHT = 44;
@@ -52,7 +55,7 @@ const GOLD = {
  * pushes down on press; on release coins flip up out of it and it morphs into
  * the neutral "Münzen ›" pill that opens the Münzen page.
  */
-export default function MuenzenButton({ state, amount, onClaim, onOpen }: Props) {
+export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldownEnd = null }: Props) {
   const { colors, isDark } = useTheme();
   const reducedMotion = useReducedMotion();
 
@@ -165,7 +168,11 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen }: Props)
           ) : (
             <Animated.View key="idle" entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)} style={styles.content}>
               <Image source={COIN_STACK} style={styles.coinStack} resizeMode="contain" />
-              <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+              {cooldownEnd && cooldownEnd > Date.now() ? (
+                <MuenzenCooldownLabel cooldownEnd={cooldownEnd} style={[styles.label, { color: colors.textPrimary }]} />
+              ) : (
+                <Text style={[styles.label, { color: colors.textPrimary }]}>{label}</Text>
+              )}
               <ChevronRightIcon width={16} height={16} color={colors.textSecondary} />
             </Animated.View>
           )}
@@ -233,7 +240,7 @@ const styles = StyleSheet.create({
     height: 28,
   },
   label: {
-    fontSize: 15,
+    fontSize: 13,
     fontFamily: 'MonaSans-SemiBold',
   },
 });

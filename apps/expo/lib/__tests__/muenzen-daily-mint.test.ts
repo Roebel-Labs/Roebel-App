@@ -4,6 +4,7 @@ import {
   claimAmount,
   computeNextStreak,
   dayStart,
+  formatCooldownClock,
   isInCooldown,
   rtClaimKey,
   rtStreakKey,
@@ -67,6 +68,18 @@ describe('dayStart', () => {
     const t = noon(2026, 9, 13);
     expect(dayStart(dayStart(t))).toBe(dayStart(t));
     expect(dayStart(t)).toBeLessThan(t);
+  });
+});
+
+describe('formatCooldownClock', () => {
+  it('formats minutes and seconds with padding', () => {
+    expect(formatCooldownClock(59 * 60_000 + 7_000)).toBe('59:07');
+    expect(formatCooldownClock(60 * 60_000)).toBe('60:00');
+    expect(formatCooldownClock(4_500)).toBe('00:05');
+  });
+  it('clamps at zero', () => {
+    expect(formatCooldownClock(0)).toBe('00:00');
+    expect(formatCooldownClock(-5_000)).toBe('00:00');
   });
 });
 

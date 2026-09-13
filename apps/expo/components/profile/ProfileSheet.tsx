@@ -4,7 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 
 type Props = {
   children: React.ReactNode;
-  /** No top radius / shadow — used when nothing peeks out from behind. */
+  /** No upward shadow — used when nothing peeks out from behind (still rounded on the stage). */
   flat?: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -23,11 +23,9 @@ export default function ProfileSheet({ children, flat = false, style }: Props) {
       style={[
         styles.sheet,
         { backgroundColor: colors.background, minHeight: height },
-        !flat && {
-          borderTopLeftRadius: SHEET_RADIUS,
-          borderTopRightRadius: SHEET_RADIUS,
-          boxShadow: isDark ? '0px -8px 24px rgba(0,0,0,0.35)' : '0px -8px 24px rgba(0,0,0,0.10)',
-        },
+        flat
+          ? { marginTop: 12 }
+          : { boxShadow: isDark ? '0px -8px 24px rgba(0,0,0,0.35)' : '0px -8px 24px rgba(0,0,0,0.10)' },
         style,
       ]}
     >
@@ -40,5 +38,7 @@ const styles = StyleSheet.create({
   sheet: {
     paddingTop: 20,
     zIndex: 2,
+    borderTopLeftRadius: SHEET_RADIUS,
+    borderTopRightRadius: SHEET_RADIUS,
   },
 });

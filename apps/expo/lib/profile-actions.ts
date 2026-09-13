@@ -1,7 +1,7 @@
 // Quick-action tiles on the profile. Art is attached in ProfileActionGrid.
 
 export type ProfileActionKey =
-  | 'roebel-card'
+  | 'abfallkalender'
   | 'governance'
   | 'create-org'
   | 'submit-event'
@@ -22,7 +22,7 @@ export type ProfileAction = {
 };
 
 export const PERSONAL_PROFILE_ACTIONS: ProfileAction[] = [
-  { key: 'roebel-card', label: 'Röbel Card', href: '/roebel-card' },
+  { key: 'abfallkalender', label: 'Abfall-\nkalender', href: '/abfallkalender' },
   { key: 'governance', label: 'Bürger-\nbefragung', href: '/governance' },
   { key: 'create-org', label: 'Durchstarten', href: '/create-org' },
   { key: 'submit-event', label: 'Veranstaltung\neinsenden', href: '/submit-event' },

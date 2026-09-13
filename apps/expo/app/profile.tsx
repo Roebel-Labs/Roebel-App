@@ -16,7 +16,6 @@ import { credentialKindsFor, type CredentialKind } from '@/lib/credentials';
 import { profileHeaderTitle } from '@/lib/profile-header';
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '@/lib/profile-actions';
 import { SUB_TYPE_EMOJI } from '@/lib/types';
-import KontoCard from '@/components/payments/KontoCard';
 import BottomNavigation, { BOTTOM_NAV_HEIGHT } from '@/components/BottomNavigation';
 import { GlassBackdrop, GlassProvider } from '@/components/GlassSurface';
 import LoginDrawer from '@/components/LoginDrawer';
@@ -111,11 +110,12 @@ export default function ProfileScreen() {
         amount={mint.amount}
         onClaim={mint.claim}
         onOpen={() => router.push('/rewards' as any)}
+        cooldownEnd={mint.cooldownEnd}
       />
     );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.backdrop }]} edges={['top', 'left', 'right']}>
       <GlassProvider>
         <ProfileHeader
           title={isConnected ? profileHeaderTitle(activeAccount) : 'Profil'}
@@ -193,11 +193,10 @@ export default function ProfileScreen() {
                     </View>
                   )}
                   {showGrid && <ProfileActionGrid items={PERSONAL_PROFILE_ACTIONS} />}
-                  <KontoCard />
                   {(isCitizen || isAspiringCitizen || wantsToBeCitizen) && (
                     <StoryCollectionsBar collections={storyCollections} heading="Lerne mehr über die Röbel App" />
                   )}
-                  <ProfileMenu variant="personal" showSubmitEventRow={!showGrid} />
+                  <ProfileMenu variant="personal" gridless={!showGrid} />
                 </ProfileSheet>
               </>
             )}

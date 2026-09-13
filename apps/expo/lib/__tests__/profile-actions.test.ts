@@ -3,7 +3,7 @@ import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '../profile-action
 describe('PERSONAL_PROFILE_ACTIONS', () => {
   it('has the six mockup actions in order', () => {
     expect(PERSONAL_PROFILE_ACTIONS.map((a) => a.key)).toEqual([
-      'roebel-card',
+      'abfallkalender',
       'governance',
       'create-org',
       'submit-event',

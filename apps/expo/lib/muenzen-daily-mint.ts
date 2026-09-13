@@ -55,3 +55,11 @@ export function computeNextStreak(prevStreak: number, prevLastClaim: number | nu
   if (lastDay === yesterday) return prevStreak + 1;
   return 1;
 }
+
+/** "MM:SS" for the in-button cooldown clock; clamps at 00:00. */
+export function formatCooldownClock(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}

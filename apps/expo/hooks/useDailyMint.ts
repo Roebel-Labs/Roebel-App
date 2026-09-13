@@ -59,6 +59,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
   }, [lastClaim]);
 
   const inCooldown = isInCooldown(lastClaim, now);
+  const cooldownEnd = inCooldown && lastClaim != null ? lastClaim + MINT_COOLDOWN_MS : null;
   const amount = claimAmount(mintable);
   const claimable = loaded && !!address && onboarded && !minting && !inCooldown && mintable >= MIN_MINTABLE;
   const hasMoney = onboarded || talerBalance > 0;
@@ -108,5 +109,5 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
     return true;
   }, [address, amount, claimable, dailyMint, enqueueSettlement, lastClaim]);
 
-  return { state, amount, claim };
+  return { state, amount, claim, cooldownEnd };
 }
