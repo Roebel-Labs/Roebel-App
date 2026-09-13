@@ -46,7 +46,8 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
   }, [address]);
 
   const loaded = !!address && claimState?.address === address;
-  const lastClaim = loaded ? claimState!.lastClaim : null;
+  // Optional chaining, not a non-null assertion: the compiler has hoisted `!` derefs before.
+  const lastClaim = loaded ? (claimState?.lastClaim ?? null) : null;
 
   // Wake once when the cooldown ends instead of ticking every second.
   useEffect(() => {
