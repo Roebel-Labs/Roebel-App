@@ -30,7 +30,7 @@ gaps that can be closed now with what we already run.
 
 | Idea | Verdict | What to do instead / trigger to revisit |
 |---|---|---|
-| **Waku replaces XMTP for DMs + notifications** | **No, not in 2026.** No maintained RN SDK (`@waku/react-native` archived 2023-11-21); Logos Chat is a desktop-only *Preview* without receipts, reactions, attachments, persistence or offline; Store is best-effort (≥12 h on the public network); OS push still needs APNs/FCM plus our own server. Most "XMTP bugs" we hit are ours (push tokens, activation flow) or are shared by every MLS system (new device cannot read old history). | Fix the XMTP backlog **or**, if sovereignty is the driver, take the already-assessed **Nostr NIP-17 → Marmot** path on the live relay (JS-only, no native module). Revisit Waku when **(a)** Status finishes its mobile cutover to Logos Delivery, **(b)** a Chat SDK reaches Beta with mobile bindings or a JS package on npm, **(c)** RLN memberships can live on a chain we use. Earliest sensible re-check: **Q2 2027**. |
+| **Waku replaces XMTP for DMs + notifications** | **No, not in 2026.** No maintained RN SDK (`@waku/react-native` archived 2023-11-21); Logos Chat is a desktop-only *Preview* without receipts, reactions, attachments, persistence or offline; Store is best-effort (≥12 h on the public network); OS push still needs APNs/FCM plus our own server. The messaging roadmap lists **"Support Mobile Platforms" under "Required for Mainnet"**, i.e. after Testnet v0.3. Most "XMTP bugs" we hit are ours (push tokens, activation flow) or are shared by every MLS system (new device cannot read old history). | Fix the XMTP backlog **or**, if sovereignty is the driver, take the already-assessed **Nostr NIP-17 → Marmot** path on the live relay (JS-only, no native module). Revisit Waku when **(a)** Status finishes its mobile cutover to Logos Delivery, **(b)** a Chat SDK reaches Beta with mobile bindings or a JS package on npm, **(c)** RLN memberships can live on a chain we use. Earliest sensible re-check: **Q2 2027**. |
 | **Logos Storage CID for every file** | **No as a store; the goal is right.** Codex's durability engine (erasure coding, storage proofs, marketplace, token) was paused Aug 2025 and removed Jan 2026. What ships is BitTorrent-style file sharing with organic replication: no durability, no payments, no encryption at rest, no gateway or light client, CIDs use private multicodecs (0xCD01–03) that IPFS cannot resolve, pre-alpha, testnet. | **Blossom server on the node** (sha256-addressed, Nostr-signed uploads, peer mirroring) + the sha256 already carried in every signed event, plus a derived IPFS CIDv1 for portability. This is Roadmap §12 and the real "CID for every file". Optional ≤2-day sidecar that also pins public blobs to a Logos Storage node, labelled experimental. Revisit as a durable tier when Logos ships **incentivised persistence** (post-mainnet, 2027+). |
 | **Logos Blockchain (LEZ / Bedrock)** | **No.** RISC Zero zkVM with Rust programs, no EVM, no bridge to any production chain, testnet resets, no token disclosed, validator keys are Ed25519 + hash-based ZK keys ("Bitcoin/Ethereum compatibility impossible"). Nothing on Gnosis (4337 accounts, CitizenNFTv2, MACI, Circles) can move or bridge. | Watch only: RLN-on-LEE milestone, mainnet 2027, the Zone model as a reference design. |
 | **Networking / mixnet (LIP-99 nim-libp2p-mix)** | **No.** Research-stage; used today only for Storage DHT lookups and a 5-node chat demo; no mobile. | Watch for node↔node federation privacy once a second independent node exists. |
@@ -118,6 +118,24 @@ which are live, JS-only and already federated. Keep Logos on a dated watchlist (
   Its Logos Delivery cutover started May 2026; nightly functional tests on 2026-09-11 still
   show 9 failures (store timeouts, delivery confirmation). Source:
   https://github.com/status-im/status-go/issues/7820.
+- **What Logos Chat is for.** `logos-chat` (Rust, crates `logos-chat` / `generic-chat` /
+  `libchat`, all 0.1.0, "breaking changes are expected", SQLCipher store, embedded Delivery
+  node) is the chat *protocol library*: authenticated 1:1 and group conversations over
+  de-MLS. Its consumers are **(a)** Basecamp's C++ `logos-chat-module` + `logos-chat-ui`
+  ("UI App for Logos ChatSDK POC") and **(b)** the **Status app**, via the milestone
+  "Status: Logos Chat Integration" (published 2026-02-01): Status replaces its own chat
+  protocol with Logos Chat for "1:1 chats, group chats, and eventually communities",
+  consumed "through Logos Core via Go bindings via C-bindings" inside status-go, in three
+  phases with both protocols running in parallel; it depends on "Chat — Beta (v0.3)". So
+  the mobile path for Chat is *Status's* Go/C path through Logos Core, not a library an
+  Expo app can import. The Nim chat SDK (`logos-chat-nim`) was archived 2026-09-09.
+  Bindings that exist in the `logos-messaging` org are all for the **Delivery transport**:
+  Go, Python, Rust, Node.js and Dart/Flutter wrappers over `liblogosdelivery`; the RN
+  wrapper is archived (last push 2023-09-27). The roadmap's "Required for Mainnet" list
+  contains **"Support Mobile Platforms"**, after Testnet v0.3 ("Chat — Beta"). Sources:
+  https://github.com/logos-messaging/logos-chat,
+  https://roadmap.logos.co/messaging/roadmap/milestones/2026-status-logos-chat-integration,
+  https://roadmap.logos.co/messaging/roadmap/, https://api.github.com/orgs/logos-messaging/repos.
 - **Push.** Status runs its own push-notification servers → gorush → APNs; Android since
   v2.38 (2026-06-12) uses an on-device background service instead. There is no serverless
   push; an offline iPhone is woken only by APNs with a cert-holding server. Sources:
@@ -199,6 +217,17 @@ live; a maintained RN/Expo module appears from anyone.
 
 ### 3.1 Facts
 
+- **Logos Storage exists; what it is has changed.** The official page describes it as
+  "Privacy-preserving file sharing using content identifiers" and says "The module *will*
+  support private file storage with files hosted across a decentralised network of nodes"
+  (future tense). docs.logos.co/storage, verbatim: "the file is added to the network with
+  1 replica (the uploading node)"; "the number of replicas is determined by the number of
+  nodes interested in a given file"; "if no one is interested in your files, chances are
+  that losing your node means your data is lost as well." Roadmap: the three gates
+  "required for mainnet" are "Logos Core Integration", "Scalable, Simple Filesharing",
+  "Privacy-Preserving Filesharing"; "Research on Incentivized, Anonymous Persistence" is
+  listed **after** mainnet. Sources: https://logos.co/technology-stack/storage,
+  https://docs.logos.co/storage, https://roadmap.logos.co/storage/roadmap/.
 - **The durability engine was removed.** Aug 2025: marketplace/proving paused; Jan 2026:
   "removed unused modules such as the marketplace and proving logic". LIPs for
   erasure coding, marketplace, prover and slot builder are *deprecated*; the source tree no
