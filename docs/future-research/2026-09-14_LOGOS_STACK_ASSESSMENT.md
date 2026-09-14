@@ -35,9 +35,14 @@ gaps that can be closed now with what we already run.
 | **Logos Blockchain (LEZ / Bedrock)** | **No.** RISC Zero zkVM with Rust programs, no EVM, no bridge to any production chain, testnet resets, no token disclosed, validator keys are Ed25519 + hash-based ZK keys ("Bitcoin/Ethereum compatibility impossible"). Nothing on Gnosis (4337 accounts, CitizenNFTv2, MACI, Circles) can move or bridge. | Watch only: RLN-on-LEE milestone, mainnet 2027, the Zone model as a reference design. |
 | **Networking / mixnet (LIP-99 nim-libp2p-mix)** | **No.** Research-stage; used today only for Storage DHT lookups and a 5-node chat demo; no mobile. | Watch for node↔node federation privacy once a second independent node exists. |
 | **Runtime / Basecamp / user modules** | **No.** C++17/Qt6 `.lgx` modules, macOS/Linux desktop; JS SDK is an unpublished Node-only FFI shim. Irrelevant to RN + Next.js. | Conceptual cousin of Roadmap §19 "Netizen OS". Positioning idea only. |
-| **zerokit RLN (Vac), standalone** | **Small yes, web-first.** Rust/WASM library, usable without Waku; RLN-API scopes memberships by CAIP-10 id, so a membership registry on Gnosis (`eip155:100`) is spec-compatible *(inference)*. | Candidate for an anonymous, rate-limited citizen post box next to the existing web-only Semaphore v4 proving. Not a priority; note it in the ZK/sybil track. |
+| **zerokit RLN (Vac), standalone** | **Not now.** Rust/WASM library, usable without Waku; RLN-API scopes memberships by CAIP-10 id, so a membership registry on Gnosis (`eip155:100`) is spec-compatible *(inference)*. But Hermes has no WASM, so in the Expo app this is a native module over the `go-zerokit-rln-apple`/`-arm` bindings, and **the Expo app is the only surface citizens use** (the Next.js app has no citizen users as of 2026-09-14). A web-only post box reaches nobody. | Keep in the ZK/sybil track; revisit only with an Expo-native proving path. |
 | **de-MLS (Vac)** | **No.** v4.0.0 library, pre-production, no RN binding, ≥⅔ honest members. | Track with Marmot/NIP-EE as the MLS-over-relay endgame. |
 | **Programmes** | λPrize ($400–1,200 per prize, adoption-metric based), RFPs (all closed, "reopening soon"), Logos Circles (~30 cities). Two closed prizes were civic: LP-0016 anonymous forum with threshold moderation, LP-0017 whistleblower upload. | Low-effort optional: a write-up submission if a fitting prize reopens. No municipal deployment exists anywhere on the stack. |
+
+**Reach rule (2026-09-14, Max):** the Expo app is the primary and, in practice, the only
+client citizens use; the Next.js web app has no citizen users. Any integration that only
+works in a browser or on a desktop (every Logos surface today) has zero reach. Judge each
+row above by "does it land in Expo or on the node", nothing else.
 
 **Net:** integrate nothing from Logos into the product path this year. Close the two real
 gaps (a sovereign DM rail decision; content-addressed public media) with Nostr/Blossom,
@@ -361,6 +366,13 @@ worth reading as a pattern for a future "town zone", nothing more.
 
 ## 6. Programmes and community
 
+- **Field Station** (Dhun, Rajasthan, 23–31 Oct 2026; applications 11–26 Sept): one-week
+  on-site builder residency; accommodation and meals covered, domestic travel support only,
+  no stipend, "milestone-based grant funding" for the strongest prototypes with no amounts
+  published; requires installing Basecamp and noting a block height. **Not pursued** (Max,
+  2026-09-14: cannot attend). The λPrize catalogue "runs in parallel to the residency under
+  its own normal rules", i.e. remotely, but its prizes are Basecamp/LEZ-shaped and pay about
+  $400. Source: https://logos.co/field-station/.
 - **λPrize** (2026-04-16): up to $500k total, $400–1,200 per prize in USDT, outcome-based,
   submission by PR. Civic-adjacent prizes already closed: LP-0016 anonymous forum with
   threshold moderation and slash-on-revocation; LP-0017 whistleblower flow (Storage upload →
