@@ -44,6 +44,14 @@ client citizens use; the Next.js web app has no citizen users. Any integration t
 works in a browser or on a desktop (every Logos surface today) has zero reach. Judge each
 row above by "does it land in Expo or on the node", nothing else.
 
+**Erratum (2026-09-15):** the zerokit row above says "Hermes has no WASM". Hermes gained a
+WebAssembly implementation in February 2026 (runtime load or `hermesc --wasm` AOT, executed by
+the bytecode interpreter, still being "hardened for production use"; not documented in Expo
+55/56 release notes). The conclusion stands for a different reason: proving-grade libraries
+need Web Workers, SharedArrayBuffer and gigabytes of memory, which an interpreted, single-
+threaded WASM in React Native does not provide. See
+[Interfold assessment §4](2026-09-15_INTERFOLD_ASSESSMENT.md).
+
 **Net:** integrate nothing from Logos into the product path this year. Close the two real
 gaps (a sovereign DM rail decision; content-addressed public media) with Nostr/Blossom,
 which are live, JS-only and already federated. Keep Logos on a dated watchlist (§7).
