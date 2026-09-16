@@ -27,6 +27,9 @@ import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import ForumOptionsDrawer from '@/components/forum/ForumOptionsDrawer';
 import ForumReplyThread from '@/components/forum/ForumReplyThread';
 import ForumStageStepper from '@/components/forum/ForumStageStepper';
+import ForumAttachmentsCarousel from '@/components/forum/ForumAttachmentsCarousel';
+import ImageZoomModal from '@/components/ImageZoomModal';
+import { FORUM_ATTACHMENTS_BUCKET } from '@/lib/forum-attachments';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
@@ -41,6 +44,7 @@ import {
   createForumReply,
   deleteForumReply,
   deleteForumThread,
+  fetchForumAttachments,
   fetchForumReplies,
   fetchForumThread,
   fetchThreadSubscription,
@@ -49,7 +53,7 @@ import {
   updateForumReply,
   type ForumVoteTarget,
 } from '@/lib/supabase-forum';
-import type { ForumReplyRecord } from '@/lib/types/feed';
+import type { ForumAttachmentRecord, ForumReplyRecord, PendingAttachment } from '@/lib/types/feed';
 
 type ReplyTarget = { id: string; parentId: string; name: string };
 type OptionsTarget = { type: ForumVoteTarget; id: string };
@@ -88,6 +92,25 @@ export default function ForumThreadScreen() {
     enabled: !!id && !!user?.wallet_address,
   });
 
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['forum', 'attachments', id],
+    queryFn: () => fetchForumAttachments(id!),
+    enabled: !!id,
+  });
+  const attachmentsByReply = useMemo(() => {
+    const map = new Map<string, ForumAttachmentRecord[]>();
+    for (const a of attachments) {
+      if (!a.reply_id) continue;
+      map.set(a.reply_id, [...(map.get(a.reply_id) ?? []), a]);
+    }
+    return map;
+  }, [attachments]);
+  const imageUrls = useMemo(
+    () => attachments.filter((a) => a.kind === 'image').map((a) => a.url),
+    [attachments],
+  );
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const groupedReplies = useMemo(() => groupReplies(replies), [replies]);
   const repliesById = useMemo(() => new Map(replies.map((r) => [r.id, r])), [replies]);
 
@@ -107,6 +130,7 @@ export default function ForumThreadScreen() {
         () => {
           queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
           queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+          queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', id] });
         },
       )
       .subscribe();
@@ -124,8 +148,9 @@ export default function ForumThreadScreen() {
     });
   }, []);
 
-  const handleSubmit = async (content: string) => {
-    const body = content.trim();
+  const handleSubmit = async (content: string, attachments: PendingAttachment[] = []) => {
+    // A reply may be just a file: the body then carries the file name.
+    const body = content.trim() || attachments[0]?.file_name || '';
     if (!body || sending || !user?.wallet_address || !id) return;
     setSending(true);
     setSendError(null);
@@ -139,6 +164,7 @@ export default function ForumThreadScreen() {
           body,
           parent_reply_id: parentId,
           reply_to_reply_id: replyTo?.id ?? null,
+          attachments,
         });
     setSending(false);
     if (!result) {
@@ -156,6 +182,7 @@ export default function ForumThreadScreen() {
     setEditingReply(null);
     await queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
     await queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+    await queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', id] });
   };
 
   const handleToggleSubscription = async () => {
@@ -294,6 +321,8 @@ export default function ForumThreadScreen() {
       onVoted={(replyId, next) => setLocal('reply', replyId, next)}
       onReply={startReply}
       onOptions={openReplyOptions}
+      attachmentsByReply={attachmentsByReply}
+      onOpenImage={setLightboxUrl}
     />
   );
 
@@ -426,6 +455,8 @@ export default function ForumThreadScreen() {
                   </Text>
                 ) : null}
 
+                <ForumAttachmentsCarousel attachments={attachments} onOpenImage={setLightboxUrl} />
+
                 <View style={styles.threadHeadActions}>
                   <ForumVoteCluster
                     targetType="thread"
@@ -487,7 +518,9 @@ export default function ForumThreadScreen() {
                 setSendError(null);
               }}
               isSubmitting={sending}
-              disableAttachments
+              disableStickers
+              enableFiles
+              uploadTarget={{ bucket: FORUM_ATTACHMENTS_BUCKET, folder: 'replies' }}
               replyingToName={editingReply ? null : (replyTo?.name ?? null)}
               onCancelReply={() => {
                 setReplyTo(null);
@@ -497,8 +530,13 @@ export default function ForumThreadScreen() {
               walletAddress={user?.wallet_address}
               avatarUrl={activeProfileImage.url}
               avatarFallbackInitial={activeProfileImage.fallbackInitial}
-              onSubmit={async (content) => {
-                await handleSubmit(content);
+              onSubmit={async (content, _sticker, imageUrl, file) => {
+                const items: PendingAttachment[] = [];
+                if (imageUrl) {
+                  items.push({ kind: 'image', url: imageUrl, mime_type: 'image/jpeg', file_name: 'bild.jpg' });
+                }
+                if (file) items.push(file);
+                await handleSubmit(content, items);
               }}
             />
           </View>
@@ -526,6 +564,13 @@ export default function ForumThreadScreen() {
         visible={!!reportFor}
         onClose={() => setReportFor(null)}
         onReport={handleReport}
+      />
+
+      <ImageZoomModal
+        visible={!!lightboxUrl}
+        imageUrl={lightboxUrl ?? ''}
+        images={imageUrls.length > 1 ? imageUrls : undefined}
+        onClose={() => setLightboxUrl(null)}
       />
     </SafeAreaView>
   );
