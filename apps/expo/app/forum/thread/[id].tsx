@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   Linking,
 } from 'react-native';
@@ -27,6 +26,7 @@ import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import ForumOptionsDrawer from '@/components/forum/ForumOptionsDrawer';
 import ForumReplyThread from '@/components/forum/ForumReplyThread';
 import ForumStageStepper from '@/components/forum/ForumStageStepper';
+import ForumThreadSkeleton from '@/components/forum/ForumThreadSkeleton';
 import ForumAttachmentsCarousel from '@/components/forum/ForumAttachmentsCarousel';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import { FORUM_ATTACHMENTS_BUCKET } from '@/lib/forum-attachments';
@@ -330,9 +330,12 @@ export default function ForumThreadScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* 'height' on Android (same as the post detail screen): the reply bar
+          must stay above the keyboard, also when answering a comment. */}
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
@@ -359,15 +362,13 @@ export default function ForumThreadScreen() {
           )}
         </View>
 
-        {isPending || !thread ? (
+        {isPending ? (
+          <ForumThreadSkeleton />
+        ) : !thread ? (
           <View style={styles.loading}>
-            {isPending ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Text style={[styles.notFound, { color: colors.textSecondary }]}>
-                Thema nicht gefunden.
-              </Text>
-            )}
+            <Text style={[styles.notFound, { color: colors.textSecondary }]}>
+              Thema nicht gefunden.
+            </Text>
           </View>
         ) : (
           <FlatList

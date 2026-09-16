@@ -365,6 +365,10 @@ export default function FeedHome() {
   const handleTabChange = (tab: FeedType) => {
     const idx = TAB_ORDER.indexOf(tab);
     if (idx === -1) return;
+    // A tab switch from deep in a scrolled feed (e.g. the Bürgerrat card)
+    // must bring the header + nav back, or the new page starts under a gap.
+    chromeHidden.value = 0;
+    headerTranslateY.value = withTiming(0, { duration: 160 });
     pagerRef.current?.setPage(idx);
     setActiveTab(tab);
   };

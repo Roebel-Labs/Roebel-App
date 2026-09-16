@@ -226,7 +226,8 @@ export default function ForumNewScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
