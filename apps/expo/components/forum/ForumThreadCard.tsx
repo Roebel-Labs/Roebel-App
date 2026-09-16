@@ -6,7 +6,6 @@ import { fontFamily } from '@/constants/theme';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import { shareForumThread } from '@/lib/forum-share';
-import { STAGE_LABELS } from '@/lib/forum-stages';
 import { markdownToSnippet } from '@/lib/forum-markdown';
 import CommentIcon from '@/assets/icons/comment-02.svg';
 import ShareIcon from '@/assets/icons/share-02.svg';
@@ -38,18 +37,6 @@ export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
             : 'DISKUSSION'}
         </Text>
         <View style={styles.headerRight}>
-          {thread.stage ? (
-            <View style={[styles.categoryChip, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={[styles.categoryText, { color: colors.textSecondary }]}>
-                {STAGE_LABELS[thread.stage]}
-              </Text>
-            </View>
-          ) : null}
-          {thread.category?.name ? (
-            <View style={[styles.categoryChip, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.categoryText, { color: colors.primary }]}>{thread.category.name}</Text>
-            </View>
-          ) : null}
           {thread.edited_at ? (
             <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
           ) : null}
@@ -116,15 +103,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  categoryText: {
-    fontSize: 11,
-    fontFamily: fontFamily.medium,
   },
   editedText: {
     fontSize: 11,
