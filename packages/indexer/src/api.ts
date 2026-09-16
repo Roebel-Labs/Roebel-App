@@ -133,6 +133,7 @@ everything served here is verifiable, not just asserted.</p>
 <ul>
 <li><a href="/events?kinds=0&amp;limit=50">0</a> — profiles: citizens, agents (<code>bot:true</code>), organisations (<code>netizen_org</code> tag; name, about, picture, banner, category, opening_hours, slug)</li>
 <li><a href="/events?kinds=1&amp;limit=20">1</a> — public feed posts &amp; replies, signed on the citizen's own device</li>
+<li><a href="/events?kinds=11&amp;limit=20">11</a> / <a href="/events?kinds=1111&amp;limit=20">1111</a> — Umfragen-Forum: Themen (NIP-7D threads, <code>title</code>/<code>t</code> tags; <code>t:buergerrat</code> = quoted Bürgerrat recommendation with <code>score</code>/<code>rank</code>/<code>r</code>) and Antworten (NIP-22 comments)</li>
 <li><a href="/events?kinds=5&amp;limit=10">5</a> / <a href="/events?kinds=6&amp;limit=10">6</a> / <a href="/events?kinds=7&amp;limit=10">7</a> — deletions (honoured), reposts, reactions</li>
 <li><a href="/events?kinds=31923&amp;limit=10">31923</a> — calendar: town events &amp; cinema programme (NIP-52; <code>d</code>=<code>event:&lt;id&gt;</code>/<code>movie:&lt;id&gt;</code>, title/start/end/location/image/status tags)</li>
 <li><a href="/events?kinds=30023&amp;limit=10">30023</a> — long-form articles (NIP-23, Markdown; <code>ai_generated</code> tag where it applies)</li>
