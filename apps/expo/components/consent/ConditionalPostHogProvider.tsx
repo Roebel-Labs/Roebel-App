@@ -6,6 +6,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import { useConsent } from '@/context/ConsentContext';
+import { POSTHOG_SUPPORTED } from '@/lib/analytics';
 
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST =
@@ -15,8 +16,9 @@ export function ConditionalPostHogProvider({ children }: { children: React.React
   const { preferences, ready } = useConsent();
 
   // Until SecureStore has been read, render children without PostHog so that
-  // we never fire a single event before consent is known.
-  if (!ready || !preferences.analytics || !POSTHOG_KEY) {
+  // we never fire a single event before consent is known. POSTHOG_SUPPORTED
+  // keeps the SDK off on iOS (launch crash, see lib/analytics.ts).
+  if (!ready || !preferences.analytics || !POSTHOG_KEY || !POSTHOG_SUPPORTED) {
     return <>{children}</>;
   }
 

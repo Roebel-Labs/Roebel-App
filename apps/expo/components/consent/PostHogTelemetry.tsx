@@ -15,11 +15,13 @@ import { usePostHog } from 'posthog-react-native';
 import { useConsent } from '@/context/ConsentContext';
 import { useUser } from '@/context/UserContext';
 import { getScreenName } from '@/hooks/useAnalytics';
-import { setAnalyticsClient } from '@/lib/analytics';
+import { POSTHOG_SUPPORTED, setAnalyticsClient } from '@/lib/analytics';
 
 export function PostHogTelemetry() {
   const { ready, preferences } = useConsent();
-  if (!ready || !preferences.analytics) return null;
+  // Mirrors ConditionalPostHogProvider exactly, including the iOS gate, so the
+  // inner hook never runs outside a real provider.
+  if (!ready || !preferences.analytics || !POSTHOG_SUPPORTED) return null;
   return <PostHogTelemetryInner />;
 }
 

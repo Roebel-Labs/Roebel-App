@@ -11,9 +11,29 @@
  * a silent no-op — no events leave the device.
  */
 
+import { Platform } from 'react-native';
 import type { PostHog } from 'posthog-react-native';
 
 let client: PostHog | null = null;
+
+/**
+ * Platform gate for the PostHog SDK.
+ *
+ * posthog-react-native crashes Hermes at launch on iOS 26.4 arm64e devices:
+ * EXC_BAD_ACCESS / pointer-authentication failure in PinnedHermesValue while
+ * modules initialise (PostHog/posthog-js#3562, still open at 4.74.0). The
+ * 3.7.0 App Store build never had EXPO_PUBLIC_POSTHOG_KEY (it is not in the
+ * EAS production environment), so the SDK was dormant on iOS until the
+ * 2026-09-16 production OTA — bundled from the local .env — switched it on and
+ * the app died on open for every consented iOS user. Keep the SDK off on iOS
+ * until an upstream fix has been proven on an arm64e / iOS 26.4 device via an
+ * internal build. `track()` stays a silent no-op when the client is absent.
+ */
+export function isPostHogSupportedOn(os: string): boolean {
+  return os !== 'ios';
+}
+
+export const POSTHOG_SUPPORTED = isPostHogSupportedOn(Platform.OS);
 
 /**
  * Canonical event names. Adding a new funnel step? Add it here so call-sites
