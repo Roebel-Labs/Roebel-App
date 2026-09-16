@@ -8,7 +8,7 @@ import { useUser } from '@/context/UserContext';
 import { fetchForumCategories } from '@/lib/supabase-forum';
 
 type Props = {
-  /** Highlighted category slug; 'alle' highlights the all-threads chip. */
+  /** Highlighted slug; 'alle' = all threads, 'buergerrat' = the Bürgerrat list. */
   activeSlug?: string;
   /** Show the trailing "+ Neues Thema" CTA (citizens only). Default true. */
   showNewCta?: boolean;
@@ -32,12 +32,11 @@ export default function ForumCategoryChips({ activeSlug, showNewCta = true }: Pr
 
   const chip = (slug: string, name: string) => {
     const active = activeSlug === slug;
+    const target = slug === 'alle' ? '/forum' : slug === 'buergerrat' ? '/forum/buergerrat' : `/forum/${slug}`;
     return (
       <Pressable
         key={slug}
-        onPress={() =>
-          router.push((slug === 'alle' ? '/forum' : `/forum/${slug}`) as any)
-        }
+        onPress={() => router.push(target as any)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
         style={[
@@ -68,6 +67,7 @@ export default function ForumCategoryChips({ activeSlug, showNewCta = true }: Pr
         contentContainerStyle={styles.scrollContent}
       >
         {chip('alle', 'Alle')}
+        {chip('buergerrat', 'Bürgerrat')}
         {categories.map((c) => chip(c.slug, c.name))}
         {showNewCta && isCitizen && (
           <Pressable

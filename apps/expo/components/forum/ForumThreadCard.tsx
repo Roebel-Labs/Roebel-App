@@ -6,6 +6,7 @@ import { fontFamily } from '@/constants/theme';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import { shareForumThread } from '@/lib/forum-share';
+import { STAGE_LABELS } from '@/lib/forum-stages';
 import CommentIcon from '@/assets/icons/comment-02.svg';
 import ShareIcon from '@/assets/icons/share-02.svg';
 import type { ForumThreadRecord } from '@/lib/types/feed';
@@ -30,8 +31,19 @@ export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
       ]}
     >
       <View style={styles.header}>
-        <Text style={[styles.label, { color: colors.primary }]}>DISKUSSION</Text>
+        <Text style={[styles.label, { color: colors.primary }]}>
+          {thread.source === 'buergerrat'
+            ? `BÜRGERRAT · ${thread.source_score ?? 0} PUNKTE`
+            : 'DISKUSSION'}
+        </Text>
         <View style={styles.headerRight}>
+          {thread.stage ? (
+            <View style={[styles.categoryChip, { backgroundColor: colors.surfaceSecondary }]}>
+              <Text style={[styles.categoryText, { color: colors.textSecondary }]}>
+                {STAGE_LABELS[thread.stage]}
+              </Text>
+            </View>
+          ) : null}
           {thread.category?.name ? (
             <View style={[styles.categoryChip, { backgroundColor: colors.primaryLight }]}>
               <Text style={[styles.categoryText, { color: colors.primary }]}>{thread.category.name}</Text>
