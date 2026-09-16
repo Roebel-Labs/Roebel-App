@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
+import { summarizeBuergerrat } from './buergerrat';
 import type {
+  BuergerratSummary,
   CreateForumReplyInput,
   CreateForumThreadInput,
   ForumCategoryRecord,
@@ -15,7 +17,8 @@ const THREAD_SELECT = `
     wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
   ),
   account:accounts(id, account_type, name, avatar_url),
-  category:forum_categories(slug, name)
+  category:forum_categories(slug, name),
+  stage_events:forum_thread_stage_events(id, thread_id, stage, note, occurred_at, created_at)
 `;
 
 const REPLY_SELECT = `
@@ -31,6 +34,16 @@ function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: 
     row.author = { ...row.author, account: row.account };
   }
   return row;
+}
+
+function normalizeThread(row: ForumThreadRecord): ForumThreadRecord {
+  const merged = mergeAccountIntoAuthor(row);
+  if (Array.isArray(merged.stage_events)) {
+    merged.stage_events = [...merged.stage_events].sort((a, b) =>
+      a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0,
+    );
+  }
+  return merged;
 }
 
 export async function fetchForumCategories(): Promise<ForumCategoryRecord[]> {
@@ -61,7 +74,7 @@ export async function fetchRecentForumThreads(
     console.error('Error fetching forum threads:', error);
     return [];
   }
-  return (data as unknown as ForumThreadRecord[]).map(mergeAccountIntoAuthor);
+  return (data as unknown as ForumThreadRecord[]).map(normalizeThread);
 }
 
 export async function fetchForumThread(id: string): Promise<ForumThreadRecord | null> {
@@ -75,7 +88,36 @@ export async function fetchForumThread(id: string): Promise<ForumThreadRecord | 
     if (error) console.error('Error fetching forum thread:', error);
     return null;
   }
-  return mergeAccountIntoAuthor(data as unknown as ForumThreadRecord);
+  return normalizeThread(data as unknown as ForumThreadRecord);
+}
+
+/** The Bürgerrat recommendation threads, best-ranked first. */
+export async function fetchBuergerratThreads(): Promise<ForumThreadRecord[]> {
+  const { data, error } = await supabase
+    .from('forum_threads')
+    .select(THREAD_SELECT)
+    .eq('status', 'published')
+    .eq('source', 'buergerrat')
+    .order('source_rank', { ascending: true });
+  if (error) {
+    console.error('Error fetching Bürgerrat threads:', error);
+    return [];
+  }
+  return (data as unknown as ForumThreadRecord[]).map(normalizeThread);
+}
+
+/** Aggregate for the feed card + tracker. Null on error so callers can hide. */
+export async function fetchBuergerratSummary(): Promise<BuergerratSummary | null> {
+  const { data, error } = await supabase
+    .from('forum_threads')
+    .select('created_at, stage')
+    .eq('status', 'published')
+    .eq('source', 'buergerrat');
+  if (error) {
+    console.error('Error fetching Bürgerrat summary:', error);
+    return null;
+  }
+  return summarizeBuergerrat((data ?? []) as Array<{ created_at: string; stage: string | null }>);
 }
 
 export async function fetchForumReplies(threadId: string): Promise<ForumReplyRecord[]> {
@@ -130,7 +172,7 @@ export async function createForumThread(
     console.error('Error creating forum thread:', error);
     return null;
   }
-  const thread = mergeAccountIntoAuthor(data as unknown as ForumThreadRecord);
+  const thread = normalizeThread(data as unknown as ForumThreadRecord);
   void mirrorThreadToNostr(thread);
   return thread;
 }
@@ -139,6 +181,7 @@ async function mirrorThreadToNostr(thread: ForumThreadRecord): Promise<void> {
   try {
     if (await isOrgAccount(thread.account_id)) return;
     const { publishForumThread } = await import('./nostr/publish');
+    const { officialThreadTags } = await import('./nostr/forum-tags');
     const createdSec = Math.floor(Date.parse(thread.created_at) / 1000);
     await publishForumThread(
       thread.id,
@@ -146,6 +189,7 @@ async function mirrorThreadToNostr(thread: ForumThreadRecord): Promise<void> {
       thread.body,
       thread.category_slug ?? undefined,
       Number.isFinite(createdSec) ? createdSec : undefined,
+      officialThreadTags(thread),
     );
   } catch (err) {
     console.warn('[nostr] forum thread mirror skipped', (err as Error)?.message);
@@ -163,6 +207,7 @@ export async function createForumReply(
       account_id: input.account_id || null,
       body: input.body.trim(),
       parent_reply_id: input.parent_reply_id || null,
+      reply_to_reply_id: input.reply_to_reply_id || null,
       status: 'published',
     })
     .select(REPLY_SELECT)
@@ -180,7 +225,14 @@ async function mirrorReplyToNostr(reply: ForumReplyRecord): Promise<void> {
   try {
     if (await isOrgAccount(reply.account_id)) return;
     const { publishForumReply } = await import('./nostr/publish');
-    await publishForumReply(reply.id, reply.thread_id, reply.body, reply.parent_reply_id);
+    const createdSec = Math.floor(Date.parse(reply.created_at) / 1000);
+    await publishForumReply(
+      reply.id,
+      reply.thread_id,
+      reply.body,
+      reply.reply_to_reply_id ?? reply.parent_reply_id,
+      Number.isFinite(createdSec) ? createdSec : undefined,
+    );
   } catch (err) {
     console.warn('[nostr] forum reply mirror skipped', (err as Error)?.message);
   }
