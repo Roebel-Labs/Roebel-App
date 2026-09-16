@@ -9,7 +9,7 @@ import {
   resolveMentionName,
   type GroupedReply,
 } from '@/lib/forum-replies';
-import type { ForumReplyRecord } from '@/lib/types/feed';
+import type { ForumAttachmentRecord, ForumReplyRecord } from '@/lib/types/feed';
 
 type Props = {
   group: GroupedReply;
@@ -22,6 +22,8 @@ type Props = {
   onVoted: (replyId: string, next: 1 | -1 | null) => void;
   onReply: (reply: ForumReplyRecord) => void;
   onOptions: (reply: ForumReplyRecord) => void;
+  attachmentsByReply: Map<string, ForumAttachmentRecord[]>;
+  onOpenImage: (url: string) => void;
 };
 
 /**
@@ -38,6 +40,8 @@ export default function ForumReplyThread({
   onVoted,
   onReply,
   onOptions,
+  attachmentsByReply,
+  onOpenImage,
 }: Props) {
   const { colors } = useTheme();
   const isAuthor = (r: ForumReplyRecord) =>
@@ -67,6 +71,8 @@ export default function ForumReplyThread({
         onVoted={(next) => onVoted(group.id, next)}
         onReply={onReply}
         onOptions={onOptions}
+        attachments={attachmentsByReply.get(group.id) ?? []}
+        onOpenImage={onOpenImage}
       />
       {children.length > 0 && (
         <View style={[styles.rail, { borderLeftColor: colors.borderTertiary }]}>
@@ -85,6 +91,8 @@ export default function ForumReplyThread({
                   onVoted={(next) => onVoted(child.id, next)}
                   onReply={onReply}
                   onOptions={onOptions}
+                  attachments={attachmentsByReply.get(child.id) ?? []}
+                  onOpenImage={onOpenImage}
                 />
               ))}
               {children.length > INLINE_CHILDREN_LIMIT && toggle('Antworten ausblenden')}

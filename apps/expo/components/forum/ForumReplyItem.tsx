@@ -9,9 +9,10 @@ import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
+import ForumReplyAttachments from '@/components/forum/ForumReplyAttachments';
 import { replyDisplayName, type ReplyMention } from '@/lib/forum-replies';
 import ReplyIcon from '@/assets/icons/reply.svg';
-import type { ForumReplyRecord } from '@/lib/types/feed';
+import type { ForumAttachmentRecord, ForumReplyRecord } from '@/lib/types/feed';
 
 type Props = {
   reply: ForumReplyRecord;
@@ -25,6 +26,8 @@ type Props = {
   onVoted: (next: 1 | -1 | null) => void;
   onReply: (reply: ForumReplyRecord) => void;
   onOptions: (reply: ForumReplyRecord) => void;
+  attachments?: ForumAttachmentRecord[];
+  onOpenImage?: (url: string) => void;
 };
 
 /**
@@ -41,6 +44,8 @@ export default function ForumReplyItem({
   onVoted,
   onReply,
   onOptions,
+  attachments = [],
+  onOpenImage,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -118,6 +123,7 @@ export default function ForumReplyItem({
           ) : null}
           {reply.body}
         </Text>
+        <ForumReplyAttachments attachments={attachments} onOpenImage={onOpenImage ?? (() => {})} />
 
         <View style={styles.actions}>
           <Pressable
