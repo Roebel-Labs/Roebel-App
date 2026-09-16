@@ -9,7 +9,9 @@ INSERT INTO public.forum_threads
 SELECT
   ('6b7e0000-2026-4a01-9000-0000000000' || lpad(r.rank::text, 2, '0'))::uuid,
   '0xc49de63ccfee46c6c5c3e393293f66779799fb28',
-  NULL,
+  -- Posted as the 'Stadt Röbel' organisation account (Max's decision, 2026-09-16);
+  -- the wallet stays Max's so the owner-checked edit/delete RPCs still work.
+  '07d8223c-0b94-46db-89d3-5b342980cd75',
   r.category,
   r.title,
   r.body,
