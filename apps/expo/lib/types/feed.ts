@@ -383,6 +383,7 @@ export type CreateForumThreadInput = {
   title: string;
   body: string;
   category_slug?: string | null;
+  attachments?: PendingAttachment[];
 };
 
 export type CreateForumReplyInput = {
@@ -392,6 +393,7 @@ export type CreateForumReplyInput = {
   body: string;
   parent_reply_id?: string | null;
   reply_to_reply_id?: string | null;
+  attachments?: PendingAttachment[];
 };
 
 /** Aggregate over the Bürgerrat threads for the feed card and the tracker. */
@@ -400,6 +402,33 @@ export type BuergerratSummary = {
   newestCreatedAt: string | null;
   beschlossen: number;
   umgesetzt: number;
+};
+
+export type ForumAttachmentKind = 'image' | 'pdf' | 'file';
+
+export type ForumAttachmentRecord = {
+  id: string;
+  thread_id: string;
+  /** Null for attachments on the thread body itself. */
+  reply_id: string | null;
+  wallet_address: string;
+  account_id: string | null;
+  kind: ForumAttachmentKind;
+  url: string;
+  mime_type: string;
+  file_name: string;
+  size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  status: 'published' | 'deleted';
+  created_at: string;
+};
+
+/** An uploaded file waiting to be attached to a thread or reply row. */
+export type PendingAttachment = Pick<ForumAttachmentRecord, 'kind' | 'url' | 'mime_type' | 'file_name'> & {
+  size_bytes?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 export type FeedItem =
