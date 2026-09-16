@@ -4,9 +4,11 @@ import type {
   BuergerratSummary,
   CreateForumReplyInput,
   CreateForumThreadInput,
+  ForumAttachmentRecord,
   ForumCategoryRecord,
   ForumReplyRecord,
   ForumThreadRecord,
+  PendingAttachment,
 } from './types/feed';
 
 // PostgREST embed strings — FK names follow the table_column_fkey convention
@@ -134,6 +136,62 @@ export async function fetchForumReplies(threadId: string): Promise<ForumReplyRec
   return (data as unknown as ForumReplyRecord[]).map(mergeAccountIntoAuthor);
 }
 
+const ATTACHMENT_SELECT =
+  'id, thread_id, reply_id, wallet_address, account_id, kind, url, mime_type, file_name, size_bytes, width, height, status, created_at';
+
+/** Every published attachment of a discussion (thread body + replies), newest first. */
+export async function fetchForumAttachments(threadId: string): Promise<ForumAttachmentRecord[]> {
+  const { data, error } = await supabase
+    .from('forum_attachments')
+    .select(ATTACHMENT_SELECT)
+    .eq('thread_id', threadId)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching forum attachments:', error);
+    return [];
+  }
+  return (data ?? []) as unknown as ForumAttachmentRecord[];
+}
+
+export async function addForumAttachments(input: {
+  thread_id: string;
+  reply_id?: string | null;
+  wallet_address: string;
+  account_id?: string | null;
+  items: PendingAttachment[];
+}): Promise<ForumAttachmentRecord[]> {
+  if (input.items.length === 0) return [];
+  const rows = input.items.map((a) => ({
+    thread_id: input.thread_id,
+    reply_id: input.reply_id ?? null,
+    wallet_address: input.wallet_address,
+    account_id: input.account_id ?? null,
+    kind: a.kind,
+    url: a.url,
+    mime_type: a.mime_type,
+    file_name: a.file_name,
+    size_bytes: a.size_bytes ?? null,
+    width: a.width ?? null,
+    height: a.height ?? null,
+    status: 'published',
+  }));
+  const { data, error } = await supabase.from('forum_attachments').insert(rows).select(ATTACHMENT_SELECT);
+  if (error) {
+    console.error('Error adding forum attachments:', error);
+    return [];
+  }
+  return (data ?? []) as unknown as ForumAttachmentRecord[];
+}
+
+export async function deleteForumAttachment(id: string, walletAddress: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_owned_forum_attachment', {
+    p_attachment_id: id,
+    p_wallet: walletAddress,
+  });
+  if (error) throw error;
+}
+
 /** Personal-account content mirrors to the relay; organisation words are the
  *  node's to publish under the org key (same rule as mirrorPostToNostr). */
 async function isOrgAccount(accountId: string | null | undefined): Promise<boolean> {
@@ -173,23 +231,35 @@ export async function createForumThread(
     return null;
   }
   const thread = normalizeThread(data as unknown as ForumThreadRecord);
-  void mirrorThreadToNostr(thread);
+  const attachments = input.attachments ?? [];
+  if (attachments.length) {
+    await addForumAttachments({
+      thread_id: thread.id,
+      wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
+      items: attachments,
+    });
+  }
+  void mirrorThreadToNostr(thread, attachments);
   return thread;
 }
 
-async function mirrorThreadToNostr(thread: ForumThreadRecord): Promise<void> {
+async function mirrorThreadToNostr(
+  thread: ForumThreadRecord,
+  attachments: PendingAttachment[] = [],
+): Promise<void> {
   try {
     if (await isOrgAccount(thread.account_id)) return;
     const { publishForumThread } = await import('./nostr/publish');
-    const { officialThreadTags } = await import('./nostr/forum-tags');
+    const { officialThreadTags, attachmentTags, attachmentContentSuffix } = await import('./nostr/forum-tags');
     const createdSec = Math.floor(Date.parse(thread.created_at) / 1000);
     await publishForumThread(
       thread.id,
       thread.title,
-      thread.body,
+      thread.body + attachmentContentSuffix(attachments),
       thread.category_slug ?? undefined,
       Number.isFinite(createdSec) ? createdSec : undefined,
-      officialThreadTags(thread),
+      [...officialThreadTags(thread), ...attachmentTags(attachments)],
     );
   } catch (err) {
     console.warn('[nostr] forum thread mirror skipped', (err as Error)?.message);
@@ -217,21 +287,36 @@ export async function createForumReply(
     return null;
   }
   const reply = mergeAccountIntoAuthor(data as unknown as ForumReplyRecord);
-  void mirrorReplyToNostr(reply);
+  const attachments = input.attachments ?? [];
+  if (attachments.length) {
+    await addForumAttachments({
+      thread_id: reply.thread_id,
+      reply_id: reply.id,
+      wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
+      items: attachments,
+    });
+  }
+  void mirrorReplyToNostr(reply, attachments);
   return reply;
 }
 
-async function mirrorReplyToNostr(reply: ForumReplyRecord): Promise<void> {
+async function mirrorReplyToNostr(
+  reply: ForumReplyRecord,
+  attachments: PendingAttachment[] = [],
+): Promise<void> {
   try {
     if (await isOrgAccount(reply.account_id)) return;
     const { publishForumReply } = await import('./nostr/publish');
+    const { attachmentTags, attachmentContentSuffix } = await import('./nostr/forum-tags');
     const createdSec = Math.floor(Date.parse(reply.created_at) / 1000);
     await publishForumReply(
       reply.id,
       reply.thread_id,
-      reply.body,
+      reply.body + attachmentContentSuffix(attachments),
       reply.reply_to_reply_id ?? reply.parent_reply_id,
       Number.isFinite(createdSec) ? createdSec : undefined,
+      attachmentTags(attachments),
     );
   } catch (err) {
     console.warn('[nostr] forum reply mirror skipped', (err as Error)?.message);
