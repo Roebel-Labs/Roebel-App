@@ -82,7 +82,7 @@ export function buildForumReplyEvent(
   content: string,
   root: ForumEventRef,
   parent?: ForumEventRef & { kind: number },
-  options: { createdAt?: number } = {},
+  options: { createdAt?: number; extraTags?: string[][] } = {},
 ): NostrEvent {
   const p = parent ?? { ...root, kind: KIND_FORUM_THREAD };
   const tags = [
@@ -92,6 +92,7 @@ export function buildForumReplyEvent(
     ["e", p.id, "", p.pubkey],
     ["k", String(p.kind)],
     ["p", p.pubkey],
+    ...(options.extraTags ?? []),
   ];
-  return buildEvent(secretKey, KIND_FORUM_REPLY, content, { ...options, tags });
+  return buildEvent(secretKey, KIND_FORUM_REPLY, content, { createdAt: options.createdAt, tags });
 }

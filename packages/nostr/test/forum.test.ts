@@ -133,4 +133,16 @@ describe("forum reply (kind 1111, NIP-22)", () => {
     assert.deepEqual(event.tags.find((t) => t[0] === "e"), ["e", PARENT_ID, "", PUBKEY]);
     assert.deepEqual(event.tags.find((t) => t[0] === "k"), ["k", "1111"]);
   });
+  it("appends extra tags after the NIP-22 scope tags", () => {
+    const event = buildForumReplyEvent(
+      SECRET_KEY,
+      "Antwort",
+      { id: ROOT_ID, pubkey: PUBKEY },
+      undefined,
+      { createdAt: CREATED_AT, extraTags: [["imeta", "url https://x/a.jpg", "m image/jpeg"]] },
+    );
+    assert.deepEqual(event.tags[event.tags.length - 1], ["imeta", "url https://x/a.jpg", "m image/jpeg"]);
+    assert.equal(event.tags[0][0], "E");
+    assert.ok(verifyEvent(event));
+  });
 });
