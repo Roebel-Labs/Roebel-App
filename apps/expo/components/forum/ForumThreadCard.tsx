@@ -7,6 +7,7 @@ import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import { shareForumThread } from '@/lib/forum-share';
 import { STAGE_LABELS } from '@/lib/forum-stages';
+import { markdownToSnippet } from '@/lib/forum-markdown';
 import CommentIcon from '@/assets/icons/comment-02.svg';
 import ShareIcon from '@/assets/icons/share-02.svg';
 import type { ForumThreadRecord } from '@/lib/types/feed';
@@ -60,7 +61,7 @@ export default function ForumThreadCard({ thread, myVote, onVoted }: Props) {
       </Text>
       {thread.body ? (
         <Text style={[styles.snippet, { color: colors.textSecondary }]} numberOfLines={2}>
-          {thread.body}
+          {markdownToSnippet(thread.body)}
         </Text>
       ) : null}
 
