@@ -13,12 +13,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import FilePickerSheet from '@/components/forum/FilePickerSheet';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
-import { createForumThread, fetchForumCategories, fetchForumThread, updateForumThread } from '@/lib/supabase-forum';
+import {
+  addForumAttachments,
+  createForumThread,
+  deleteForumAttachment,
+  fetchForumAttachments,
+  fetchForumCategories,
+  fetchForumThread,
+  updateForumThread,
+} from '@/lib/supabase-forum';
+import { formatFileSize, uploadForumFileFromBase64, uploadForumImage } from '@/lib/forum-attachments';
+import type { ForumAttachmentRecord, PendingAttachment } from '@/lib/types/feed';
 
 export default function ForumNewScreen() {
   const { colors } = useTheme();
@@ -34,6 +48,15 @@ export default function ForumNewScreen() {
   const [categorySlug, setCategorySlug] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
+  const { data: existing = [] } = useQuery({
+    queryKey: ['forum', 'attachments', edit],
+    queryFn: () => fetchForumAttachments(edit!),
+    enabled: !!edit,
+    select: (rows: ForumAttachmentRecord[]) => rows.filter((a) => a.reply_id === null),
+  });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['forum', 'categories'],
@@ -59,7 +82,51 @@ export default function ForumNewScreen() {
     prefilled.current = true;
   }, [isEditMode, editingThread]);
 
-  const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !submitting;
+  const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !submitting && !uploading;
+
+  // Edit mode writes the row right away; create mode keeps it until the thread exists.
+  const attach = async (item: PendingAttachment) => {
+    if (isEditMode && edit && user?.wallet_address) {
+      await addForumAttachments({
+        thread_id: edit,
+        wallet_address: user.wallet_address,
+        account_id: activeAccount?.id ?? null,
+        items: [item],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', edit] });
+      return;
+    }
+    setPending((prev) => [...prev, item]);
+  };
+
+  const pickImage = async () => {
+    if (!user?.wallet_address) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setUploading(true);
+    const item = await uploadForumImage(asset.uri, user.wallet_address, asset.mimeType || undefined, {
+      fileName: asset.fileName ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+    });
+    setUploading(false);
+    if (!item) {
+      setError('Bild konnte nicht hochgeladen werden.');
+      return;
+    }
+    await attach(item);
+  };
+
+  const removeExisting = async (a: ForumAttachmentRecord) => {
+    if (!user?.wallet_address) return;
+    try {
+      await deleteForumAttachment(a.id, user.wallet_address);
+      await queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', edit] });
+    } catch {
+      setError('Anhang konnte nicht entfernt werden.');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit || !user?.wallet_address) return;
@@ -92,6 +159,7 @@ export default function ForumNewScreen() {
       title,
       body,
       category_slug: categorySlug,
+      attachments: pending,
     });
     setSubmitting(false);
     if (!thread) {
@@ -233,10 +301,104 @@ export default function ForumNewScreen() {
             })}
           </View>
 
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Anhänge (optional)</Text>
+          <View style={styles.attachRow}>
+            <Pressable
+              onPress={pickImage}
+              style={[styles.attachBtn, { borderColor: colors.border }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="image-outline" size={18} color={colors.primary} />
+              <Text style={[styles.attachBtnText, { color: colors.primary }]}>Bild</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setFilePickerOpen(true)}
+              style={[styles.attachBtn, { borderColor: colors.border }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="attach-outline" size={18} color={colors.primary} />
+              <Text style={[styles.attachBtnText, { color: colors.primary }]}>Datei</Text>
+            </Pressable>
+            {uploading && <ActivityIndicator size="small" color={colors.primary} />}
+          </View>
+          {(existing.length > 0 || pending.length > 0) && (
+            <View style={styles.attachList}>
+              {existing.map((a) => (
+                <AttachmentDraftRow
+                  key={a.id}
+                  kind={a.kind}
+                  url={a.url}
+                  name={a.file_name}
+                  size={a.size_bytes}
+                  onRemove={() => void removeExisting(a)}
+                />
+              ))}
+              {pending.map((a, i) => (
+                <AttachmentDraftRow
+                  key={`${a.url}-${i}`}
+                  kind={a.kind}
+                  url={a.url}
+                  name={a.file_name}
+                  size={a.size_bytes ?? null}
+                  onRemove={() => setPending((prev) => prev.filter((_, j) => j !== i))}
+                />
+              ))}
+            </View>
+          )}
+
           {error ? <Text style={[styles.error, { color: colors.error ?? '#d33' }]}>{error}</Text> : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <FilePickerSheet
+        visible={filePickerOpen}
+        onClose={() => setFilePickerOpen(false)}
+        onError={(message) => setError(message)}
+        onPicked={async (file) => {
+          setUploading(true);
+          const item = await uploadForumFileFromBase64(file.base64, file.mime, file.name, file.size);
+          setUploading(false);
+          if (!item) {
+            setError('Datei konnte nicht hochgeladen werden (Typ oder Größe).');
+            return;
+          }
+          await attach(item);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+function AttachmentDraftRow({
+  kind,
+  url,
+  name,
+  size,
+  onRemove,
+}: {
+  kind: ForumAttachmentRecord['kind'];
+  url: string;
+  name: string;
+  size: number | null;
+  onRemove: () => void;
+}) {
+  const { colors } = useTheme();
+  const sizeLabel = formatFileSize(size);
+  return (
+    <View style={[styles.draftRow, { backgroundColor: colors.surfaceSecondary }]}>
+      {kind === 'image' ? (
+        <Image source={{ uri: url }} style={styles.draftThumb} contentFit="cover" accessibilityIgnoresInvertColors />
+      ) : (
+        <Ionicons name={kind === 'pdf' ? 'document-text-outline' : 'document-outline'} size={22} color={colors.primary} />
+      )}
+      <Text style={[styles.draftName, { color: colors.textPrimary }]} numberOfLines={1}>
+        {name}
+        {sizeLabel ? ` · ${sizeLabel}` : ''}
+      </Text>
+      <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel="Anhang entfernen">
+        <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -284,4 +446,19 @@ const styles = StyleSheet.create({
   },
   categoryChipText: { fontSize: 13, fontFamily: fontFamily.medium },
   error: { fontSize: 13, fontFamily: fontFamily.regular },
+  attachRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  attachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  attachBtnText: { fontSize: 13, fontFamily: fontFamily.medium },
+  attachList: { gap: 6 },
+  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8 },
+  draftThumb: { width: 36, height: 36, borderRadius: 6 },
+  draftName: { flex: 1, fontSize: 13, fontFamily: fontFamily.medium },
 });
