@@ -306,6 +306,30 @@ export type ForumCategoryRecord = {
   created_at: string;
 };
 
+/** NSP-12 stage vocabulary (packages/protocol/src/decisions.ts STAGES). */
+export type ForumStage =
+  | 'idee'
+  | 'entwurf'
+  | 'diskussion'
+  | 'meinungsbild'
+  | 'beschlussvorlage'
+  | 'beschlossen'
+  | 'abgelehnt'
+  | 'umgesetzt'
+  | 'ruhend'
+  | 'zurueckgezogen';
+
+export type ForumThreadSource = 'citizen' | 'buergerrat';
+
+export type ForumStageEventRecord = {
+  id: string;
+  thread_id: string;
+  stage: ForumStage;
+  note: string | null;
+  occurred_at: string;
+  created_at: string;
+};
+
 export type ForumThreadRecord = {
   id: string;
   wallet_address: string;
@@ -321,9 +345,16 @@ export type ForumThreadRecord = {
   created_at: string;
   updated_at: string;
   edited_at: string | null;
-  /** On-chain Deliberate debate this thread graduated into; null while none. */
-  debate_id: number | null;
-  debate_created_by?: string | null;
+  /** 'buergerrat' = quoted from the Bürgerrat brochure (admin-seeded); 'citizen' otherwise. */
+  source: ForumThreadSource;
+  source_rank: number | null;
+  source_score: number | null;
+  source_citation: string | null;
+  source_url: string | null;
+  /** Verbatim Bürgermeister comment from the brochure, or null. */
+  official_comment: string | null;
+  stage: ForumStage | null;
+  stage_events?: ForumStageEventRecord[];
   author?: PostAuthor;
   category?: Pick<ForumCategoryRecord, 'slug' | 'name'> | null;
 };
@@ -332,6 +363,9 @@ export type ForumReplyRecord = {
   id: string;
   thread_id: string;
   parent_reply_id: string | null;
+  /** The directly answered reply (may itself be nested); parent_reply_id stays the top-level parent. */
+  reply_to_reply_id: string | null;
+  author_kind: 'citizen' | 'agent';
   wallet_address: string;
   account_id: string | null;
   body: string;
@@ -357,6 +391,15 @@ export type CreateForumReplyInput = {
   account_id?: string;
   body: string;
   parent_reply_id?: string | null;
+  reply_to_reply_id?: string | null;
+};
+
+/** Aggregate over the Bürgerrat threads for the feed card and the tracker. */
+export type BuergerratSummary = {
+  count: number;
+  newestCreatedAt: string | null;
+  beschlossen: number;
+  umgesetzt: number;
 };
 
 export type FeedItem =
@@ -376,6 +419,7 @@ export type FeedItem =
   | { type: 'proposal'; data: ProposalFeedRecord; id: string }
   | { type: 'proposal_comment'; data: ProposalCommentFeedRecord; id: string }
   | { type: 'forum_thread'; data: ForumThreadRecord; id: string }
+  | { type: 'buergerrat_card'; data: BuergerratSummary; id: string }
   // UI-only sentinel injected by FeedList (not emitted by the assembler) to
   // render the pinned animated proposal hero card a little down the feed.
   | { type: 'proposal_hero'; id: string };
