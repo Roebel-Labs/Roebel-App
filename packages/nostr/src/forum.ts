@@ -52,6 +52,8 @@ export interface ForumThreadInput {
   title: string;
   content: string;
   categorySlug?: string;
+  /** Appended verbatim after the title/category tags (e.g. official-source markers). */
+  extraTags?: string[][];
 }
 
 export function buildForumThreadEvent(
@@ -65,6 +67,7 @@ export function buildForumThreadEvent(
   const tags = [
     ["title", title],
     ...(input.categorySlug ? [["t", input.categorySlug]] : []),
+    ...(input.extraTags ?? []),
   ];
   return buildEvent(secretKey, KIND_FORUM_THREAD, input.content, { ...options, tags });
 }

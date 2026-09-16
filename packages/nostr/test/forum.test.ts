@@ -79,6 +79,26 @@ describe("forum thread (kind 11)", () => {
       buildForumThreadEvent(SECRET_KEY, { title: "ok", content: "x", categorySlug: "Bad Slug" }),
     );
   });
+
+  it("appends extra tags after title and category", () => {
+    const event = buildForumThreadEvent(
+      SECRET_KEY,
+      {
+        title: "Konzept gegen Leerstand",
+        content: "…",
+        categorySlug: "ortsentwicklung",
+        extraTags: [["t", "buergerrat"], ["score", "12"]],
+      },
+      { createdAt: CREATED_AT },
+    );
+    assert.deepEqual(event.tags, [
+      ["title", "Konzept gegen Leerstand"],
+      ["t", "ortsentwicklung"],
+      ["t", "buergerrat"],
+      ["score", "12"],
+    ]);
+    assert.ok(verifyEvent(event));
+  });
 });
 
 describe("forum reply (kind 1111, NIP-22)", () => {
