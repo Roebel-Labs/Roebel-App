@@ -150,16 +150,16 @@ Source of truth for the texts: `docs/buergerrat/2026-empfehlungen.md` (committed
 Per thread:
 - `wallet_address` = `0xc49de63ccfee46c6c5c3e393293f66779799fb28` (Max, keeps edit/delete rights), `account_id` = the "Stadt Röbel" organisation account `07d8223c-0b94-46db-89d3-5b342980cd75` (changed from Max's personal account on 2026-09-16 at Max's request: the threads show "Stadt Röbel" as author), `status = 'published'`, `source = 'buergerrat'`. Consequence: organisation content is not signed by a citizen device, so these 11 threads reach the relay only once the node publisher maps forum threads (next slice), not through the device sweep.
 - `title` = recommendation title without the "Empfehlung N:" prefix.
-- `body` (plain text, ≤ 10 000 chars):
+- `body` (markdown, ≤ 10 000 chars, rendered by the app's `MarkdownRenderer` — Max asked for styled text on 2026-09-16):
   ```
-  Empfehlung des Bürgerrats
+  #### Empfehlung des Bürgerrats
   <recommendation sentence(s)>
 
-  Vorschläge zur Umsetzung
-  • <item>
-  • <item>
+  #### Vorschläge zur Umsetzung
+  - <item>
+    - <sub-item>
   ```
-  Additional paragraphs from the brochure (e.g. "Wichtig sind insbesondere …", "Positive Beispiele …") follow as plain paragraphs. Sub-items are indented with two spaces and "–".
+  Additional paragraphs from the brochure (e.g. "Wichtig sind insbesondere …", "Positive Beispiele …") follow as plain paragraphs.
 - `official_comment` = the Bürgermeister comment verbatim, or null.
 - `source_rank` 1..11, `source_score` = Punkte, `source_citation` = "Bürgerräte für MV — Bürgerrat Röbel/Müritz, Broschüre 2026 (Abstimmung in der 4. Sitzung)", `source_url` = the NDR article URL.
 - `category_slug`: 1 ortsentwicklung · 2 ortsentwicklung · 3 gesundheit · 4 ortsentwicklung · 5 gesundheit · 6 ortsentwicklung · 7 zusammenleben · 8 zusammenleben · 9 zusammenleben · 10 bildung · 11 gesundheit.
