@@ -25,6 +25,7 @@ import type {
   MeckyTipData,
   AudioPlayerData,
   ForumThreadRecord,
+  BuergerratSummary,
 } from '@/lib/types/feed';
 import type {
   EventRecord,
@@ -53,6 +54,7 @@ import FeedAudioPlayerCard from './FeedAudioPlayerCard';
 import FeedProposalCard from './FeedProposalCard';
 import FeedProposalCommentCard from './FeedProposalCommentCard';
 import FeedProposalHeroCard from './FeedProposalHeroCard';
+import FeedBuergerratCard from './FeedBuergerratCard';
 import ForumThreadCard from '../forum/ForumThreadCard';
 import { useForumVotes } from '@/hooks/useForumVotes';
 
@@ -110,6 +112,8 @@ type Props = {
    * eligible proposal).
    */
   showProposalHero?: boolean;
+  /** Opens the Umfragen tab (or the ranked list for users without city tabs) from the Bürgerrat card. */
+  onOpenUmfragen?: () => void;
 };
 
 const PROPOSAL_HERO_ID = '__proposal_hero';
@@ -191,6 +195,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
     enabled = true,
     onNewestContent,
     showProposalHero = false,
+    onOpenUmfragen,
   },
   ref,
 ) {
@@ -592,6 +597,16 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
           );
         }
 
+        case 'buergerrat_card':
+          return (
+            <View style={styles.moduleWrap}>
+              <FeedBuergerratCard
+                summary={item.data as BuergerratSummary}
+                onPress={onOpenUmfragen ?? (() => {})}
+              />
+            </View>
+          );
+
         case 'proposal_hero':
           return (
             <View style={styles.moduleWrap}>
@@ -620,6 +635,7 @@ const FeedList = forwardRef<FeedListHandle, Props>(function FeedList(
       handleRepost,
       forumMyVote,
       setForumVoteLocal,
+      onOpenUmfragen,
     ],
   );
 

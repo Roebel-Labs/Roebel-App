@@ -9,6 +9,7 @@ import type {
   ProposalFeedRecord,
   ProposalCommentFeedRecord,
   ForumThreadRecord,
+  BuergerratSummary,
 } from './types/feed';
 import type { EventRecord, MarketplaceListingRecord, NewsArticle, MovieRecord, RestaurantRecord, SpecialMenuRecord } from './types';
 
@@ -19,6 +20,7 @@ const MARKETPLACE_INTERVAL = 10;
 const MAX_MARKETPLACE_ITEMS = 3;
 const GOVERNANCE_NUDGE_POSITION = 4;
 const MECKY_TIP_POSITION = 16;
+const BUERGERRAT_CARD_POSITION = 1; // right after the first post
 
 // Positions for section cards (injected once)
 const SPECIAL_MENU_POSITION = 1;
@@ -65,6 +67,7 @@ export function assembleFeed(params: {
   proposals?: ProposalFeedRecord[];
   proposalComments?: ProposalCommentFeedRecord[];
   forumThreads?: ForumThreadRecord[];
+  buergerrat?: BuergerratSummary | null;
   feedType: FeedType;
 }): FeedItem[] {
   const {
@@ -82,6 +85,7 @@ export function assembleFeed(params: {
     proposals = [],
     proposalComments = [],
     forumThreads = [],
+    buergerrat = null,
     feedType,
   } = params;
   const items: FeedItem[] = [];
@@ -157,6 +161,7 @@ export function assembleFeed(params: {
   // 3. Main feed: interleave all content types
   // Track which section cards have been injected
   const sectionInjected = {
+    buergerrat: false,
     specialMenus: false,
     news: false,
     cinema: false,
@@ -179,6 +184,20 @@ export function assembleFeed(params: {
     dealIndex < deals.length ||
     eventIndex < upcomingEvents.length
   ) {
+    // Bürgerrat card right after the first post (spec §10). Checked first so
+    // it wins position 1; the other sections cascade one slot down.
+    if (
+      !sectionInjected.buergerrat &&
+      buergerrat &&
+      buergerrat.count > 0 &&
+      feedPosition >= BUERGERRAT_CARD_POSITION
+    ) {
+      items.push({ type: 'buergerrat_card', data: buergerrat, id: 'buergerrat-card' });
+      sectionInjected.buergerrat = true;
+      feedPosition++;
+      continue;
+    }
+
     // Inject special menus section near top
     if (
       !sectionInjected.specialMenus &&
