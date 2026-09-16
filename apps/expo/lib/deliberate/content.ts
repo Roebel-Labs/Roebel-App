@@ -1,3 +1,7 @@
+// DORMANT (2026-09-16): the Deliberate debate UI was removed from the app
+// (spec docs/superpowers/specs/2026-09-16-buergerrat-discussion-threads-design.md §4).
+// The contract stays deployed on Gnosis; this module and its tests are kept
+// so the feature can return without re-deriving the protocol rules.
 // Content addressing for debate texts: the chain stores contentURI = sha-256 of the
 // UTF-8 text (an IPFS raw-leaves digest); the plaintext lives in Supabase
 // `debate_contents`, whose digest-integrity CHECK mirrors this hashing.

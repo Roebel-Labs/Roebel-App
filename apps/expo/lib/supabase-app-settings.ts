@@ -48,26 +48,6 @@ export async function fetchBuzzWorkspaceEnabled(): Promise<boolean> {
 }
 
 /**
- * Pilot gate for Deliberate debates in the Umfragen-Forum. Dev builds always
- * see the feature (that's the test environment). In release/OTA builds the
- * key gates it: 'true' enables everyone, 'citizens' enables verified
- * citizens (Max's chosen rollout), any other non-empty value is read as a
- * comma-separated wallet allowlist; missing or 'false' hides everything.
- */
-export async function isDeliberateDebatesEnabled(opts?: {
-  isCitizen?: boolean;
-  walletAddress?: string | null;
-}): Promise<boolean> {
-  if (__DEV__) return true;
-  const value = await fetchAppSetting('deliberate_debates_enabled');
-  if (!value || value === 'false') return false;
-  if (value === 'true') return true;
-  if (value === 'citizens') return opts?.isCitizen === true;
-  if (!opts?.walletAddress) return false;
-  return value.toLowerCase().split(',').includes(opts.walletAddress.toLowerCase());
-}
-
-/**
  * Kill switch for the Wochen-Radio narration in event stories. Missing key
  * counts as ENABLED; setting it to 'false' silences narration on every client
  * without an app update (the bed track keeps playing as before).
