@@ -47,6 +47,7 @@ import NotificationIcon from '@/assets/icons/profile/notification.svg';
 import PostBar from './PostBar';
 import HomeStoryBar from './HomeStoryBar';
 import ForumCategoryChips from '../forum/ForumCategoryChips';
+import BuergerratTrackerCard from '../forum/BuergerratTrackerCard';
 import { HeaderWeather } from './HeaderWeather';
 import { useIsBusinessOwner } from '@/hooks/useIsBusinessOwner';
 import { usePostActions } from '@/hooks/usePostActions';
@@ -622,6 +623,11 @@ export default function FeedHome() {
             onMore={handleMore}
             listHeader={<HomeStoryBar onRailTouchActive={setStoryRailActive} />}
             showProposalHero={canSeeProposals}
+            onOpenUmfragen={
+              canAccessCityTabs
+                ? () => handleTabChange('rathaus')
+                : () => router.push('/forum/buergerrat' as any)
+            }
             active={screenFocused && effectiveTab === 'main'}
             {...feedListProps}
           />
@@ -634,7 +640,12 @@ export default function FeedHome() {
             walletAddress={walletAddress}
             onCompose={handleCompose}
             onMore={handleMore}
-            listHeader={<ForumCategoryChips activeSlug="alle" showNewCta={false} />}
+            listHeader={
+              <View>
+                <ForumCategoryChips activeSlug="alle" showNewCta={false} />
+                <BuergerratTrackerCard />
+              </View>
+            }
             active={screenFocused && effectiveTab === 'rathaus'}
             enabled={canAccessCityTabs}
             onNewestContent={handleNewestContent}

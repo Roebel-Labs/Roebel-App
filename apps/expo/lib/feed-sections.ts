@@ -6,6 +6,7 @@ import type {
   ProposalFeedRecord,
   ProposalCommentFeedRecord,
   ForumThreadRecord,
+  BuergerratSummary,
 } from '@/lib/types/feed';
 import type {
   EventRecord,
@@ -23,7 +24,7 @@ import { fetchUpcomingMovies } from '@/lib/supabase-cinema';
 import { fetchFeaturedRestaurants, fetchActiveSpecialMenus } from '@/lib/supabase-restaurants';
 import { fetchProposals, type SupabaseProposal } from '@/lib/supabase-proposals';
 import { fetchRecentProposalComments } from '@/lib/supabase-proposal-comments';
-import { fetchRecentForumThreads } from '@/lib/supabase-forum';
+import { fetchBuergerratSummary, fetchRecentForumThreads } from '@/lib/supabase-forum';
 
 export type FeedSections = {
   alerts: ServiceAlertRecord[];
@@ -37,6 +38,7 @@ export type FeedSections = {
   proposals: SupabaseProposal[];
   proposalComments: ProposalCommentFeedRecord[];
   forumThreads: ForumThreadRecord[];
+  buergerrat: BuergerratSummary | null;
 };
 
 /**
@@ -63,6 +65,7 @@ export async function fetchFeedSections(feedType: FeedType): Promise<FeedSection
     proposals,
     proposalComments,
     forumThreads,
+    buergerrat,
   ] = await Promise.all([
     fetchActiveServiceAlerts(),
     isMain ? fetchActiveDeals() : emptyArr,
@@ -75,6 +78,7 @@ export async function fetchFeedSections(feedType: FeedType): Promise<FeedSection
     isMain || isRathaus ? fetchProposals().catch(() => []) : emptyArr,
     isRathaus ? fetchRecentProposalComments(50).catch(() => []) : emptyArr,
     isRathaus ? fetchRecentForumThreads(30).catch(() => []) : emptyArr,
+    isMain || isRathaus ? fetchBuergerratSummary().catch(() => null) : Promise.resolve(null),
   ]);
 
   return {
@@ -89,5 +93,6 @@ export async function fetchFeedSections(feedType: FeedType): Promise<FeedSection
     proposals: proposals as SupabaseProposal[],
     proposalComments: proposalComments as ProposalCommentFeedRecord[],
     forumThreads: forumThreads as ForumThreadRecord[],
+    buergerrat: buergerrat as BuergerratSummary | null,
   };
 }

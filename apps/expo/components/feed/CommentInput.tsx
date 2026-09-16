@@ -8,6 +8,9 @@ import { useTheme } from '@/context/ThemeContext';
 import GlassSurface, { glassEdgeColor } from '@/components/GlassSurface';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
 import { uploadMediaFile } from '@/lib/upload-media';
+import { uploadForumFileFromBase64 } from '@/lib/forum-attachments';
+import FilePickerSheet from '@/components/forum/FilePickerSheet';
+import type { PendingAttachment } from '@/lib/types/feed';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
 import SendIcon from '@/assets/icons/sent.svg';
@@ -20,7 +23,12 @@ const INPUT_MIN_HEIGHT = 20;
 const INPUT_MAX_HEIGHT = 100;
 
 type Props = {
-  onSubmit: (content: string, stickerRewardId: string | null, imageUrl: string | null) => Promise<void>;
+  onSubmit: (
+    content: string,
+    stickerRewardId: string | null,
+    imageUrl: string | null,
+    file?: PendingAttachment | null,
+  ) => Promise<void>;
   isSubmitting: boolean;
   /** Controlled draft text — lives in the screen so the expand modal can share it. */
   value: string;
@@ -36,8 +44,14 @@ type Props = {
   avatarFallbackInitial?: string;
   /** Opens the full-screen composer, carrying the current draft along. */
   onExpand?: () => void;
-  /** Text-only mode: hides the sticker and image affordances (forum replies). */
+  /** Text-only mode: hides the sticker and image affordances (legacy). */
   disableAttachments?: boolean;
+  /** Keep the image button but hide emoji/stickers (forum replies). */
+  disableStickers?: boolean;
+  /** Show a paperclip that opens the WebView file picker (forum replies). */
+  enableFiles?: boolean;
+  /** Where picked images upload; defaults to the images bucket's comments folder. */
+  uploadTarget?: { bucket: string; folder: string };
 };
 
 export default function CommentInput({
@@ -54,12 +68,17 @@ export default function CommentInput({
   avatarFallbackInitial,
   onExpand,
   disableAttachments = false,
+  disableStickers = false,
+  enableFiles = false,
+  uploadTarget,
 }: Props) {
   const { colors, isDark } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pendingSticker, setPendingSticker] = useState<LootboxReward | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<PendingAttachment | null>(null);
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
@@ -74,19 +93,23 @@ export default function CommentInput({
   const inputHeight = Math.min(Math.max(INPUT_MIN_HEIGHT, contentHeight), INPUT_MAX_HEIGHT);
 
   const canSubmit =
-    (value.trim().length > 0 || !!pendingSticker || !!imageUrl) && !isSubmitting && !isUploading;
+    (value.trim().length > 0 || !!pendingSticker || !!imageUrl || !!pendingFile) &&
+    !isSubmitting &&
+    !isUploading;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     const content = value.trim();
     const stickerId = pendingSticker?.id ?? null;
     const submittedImage = imageUrl;
+    const submittedFile = pendingFile;
     onChangeText('');
     setContentHeight(0);
     setPendingSticker(null);
     setImageUrl(null);
+    setPendingFile(null);
     setShowPicker(false);
-    await onSubmit(content, stickerId, submittedImage);
+    await onSubmit(content, stickerId, submittedImage, submittedFile);
   };
 
   const handleFocus = () => {
@@ -113,15 +136,17 @@ export default function CommentInput({
       asset.uri,
       walletAddress,
       'image',
-      'comments',
+      uploadTarget?.folder ?? 'comments',
       asset.mimeType || undefined,
+      uploadTarget?.bucket ?? 'images',
     );
     if (url) setImageUrl(url);
     setIsUploading(false);
   };
 
   const isEditMode = !!onCancel;
-  const engaged = isFocused || value.length > 0 || !!pendingSticker || !!imageUrl;
+  const engaged = isFocused || value.length > 0 || !!pendingSticker || !!imageUrl || !!pendingFile;
+  const showFileIcon = enableFiles && (engaged || !!pendingFile) && !isEditMode && !!walletAddress;
   const showImageIcon = (engaged || !!imageUrl) && !isEditMode && !!walletAddress;
   const placeholder = isEditMode
     ? 'Kommentar bearbeiten...'
@@ -174,6 +199,21 @@ export default function CommentInput({
           </Pressable>
         </View>
       )}
+      {pendingFile && (
+        <View style={[styles.stickerChip, { backgroundColor: colors.surfaceSecondary }]}>
+          <Ionicons
+            name={pendingFile.kind === 'pdf' ? 'document-text-outline' : 'document-outline'}
+            size={22}
+            color={colors.primary}
+          />
+          <Text style={[styles.fileChipName, { color: colors.textPrimary }]} numberOfLines={1}>
+            {pendingFile.file_name}
+          </Text>
+          <Pressable onPress={() => setPendingFile(null)} hitSlop={8}>
+            <Ionicons name="close-circle" size={22} color={colors.textTertiary} />
+          </Pressable>
+        </View>
+      )}
 
       {/* Floating fully-rounded pill. Glass background, hairline border,
           content scrolls beneath it in the screen. */}
@@ -214,7 +254,7 @@ export default function CommentInput({
             autoFocus={isEditMode}
           />
 
-          {!isEditMode && !disableAttachments && (
+          {!isEditMode && !disableAttachments && !disableStickers && (
             <Pressable
               onPress={() => setShowPicker((p) => !p)}
               style={styles.iconButton}
@@ -236,6 +276,16 @@ export default function CommentInput({
               ) : (
                 <ImageIcon width={21} height={21} color={colors.textSecondary} />
               )}
+            </Pressable>
+          )}
+          {showFileIcon && !disableAttachments && (
+            <Pressable
+              onPress={() => setFilePickerOpen(true)}
+              style={styles.iconButton}
+              hitSlop={6}
+              accessibilityLabel="Datei anhängen"
+            >
+              <Ionicons name="attach-outline" size={22} color={colors.textSecondary} />
             </Pressable>
           )}
 
@@ -273,11 +323,24 @@ export default function CommentInput({
           )}
         </View>
       </View>
+      {enableFiles && (
+        <FilePickerSheet
+          visible={filePickerOpen}
+          onClose={() => setFilePickerOpen(false)}
+          onPicked={async (file) => {
+            setIsUploading(true);
+            const uploaded = await uploadForumFileFromBase64(file.base64, file.mime, file.name, file.size);
+            setIsUploading(false);
+            if (uploaded) setPendingFile(uploaded);
+          }}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fileChipName: { flex: 1, fontSize: 13, fontFamily: 'Inter-Medium' },
   pill: {
     borderRadius: 26,
     // A visible 1px light rim — the glass edge — instead of a hairline.

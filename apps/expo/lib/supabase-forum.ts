@@ -1,10 +1,14 @@
 import { supabase } from './supabase';
+import { summarizeBuergerrat } from './buergerrat';
 import type {
+  BuergerratSummary,
   CreateForumReplyInput,
   CreateForumThreadInput,
+  ForumAttachmentRecord,
   ForumCategoryRecord,
   ForumReplyRecord,
   ForumThreadRecord,
+  PendingAttachment,
 } from './types/feed';
 
 // PostgREST embed strings — FK names follow the table_column_fkey convention
@@ -15,7 +19,8 @@ const THREAD_SELECT = `
     wallet_address, username, profile_picture_url, is_verified_citizen, tier, equipped_frame_asset_url
   ),
   account:accounts(id, account_type, name, avatar_url),
-  category:forum_categories(slug, name)
+  category:forum_categories(slug, name),
+  stage_events:forum_thread_stage_events(id, thread_id, stage, note, occurred_at, created_at)
 `;
 
 const REPLY_SELECT = `
@@ -31,6 +36,16 @@ function mergeAccountIntoAuthor<T extends { author?: any; account?: any }>(row: 
     row.author = { ...row.author, account: row.account };
   }
   return row;
+}
+
+function normalizeThread(row: ForumThreadRecord): ForumThreadRecord {
+  const merged = mergeAccountIntoAuthor(row);
+  if (Array.isArray(merged.stage_events)) {
+    merged.stage_events = [...merged.stage_events].sort((a, b) =>
+      a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0,
+    );
+  }
+  return merged;
 }
 
 export async function fetchForumCategories(): Promise<ForumCategoryRecord[]> {
@@ -61,7 +76,7 @@ export async function fetchRecentForumThreads(
     console.error('Error fetching forum threads:', error);
     return [];
   }
-  return (data as unknown as ForumThreadRecord[]).map(mergeAccountIntoAuthor);
+  return (data as unknown as ForumThreadRecord[]).map(normalizeThread);
 }
 
 export async function fetchForumThread(id: string): Promise<ForumThreadRecord | null> {
@@ -75,7 +90,36 @@ export async function fetchForumThread(id: string): Promise<ForumThreadRecord | 
     if (error) console.error('Error fetching forum thread:', error);
     return null;
   }
-  return mergeAccountIntoAuthor(data as unknown as ForumThreadRecord);
+  return normalizeThread(data as unknown as ForumThreadRecord);
+}
+
+/** The Bürgerrat recommendation threads, best-ranked first. */
+export async function fetchBuergerratThreads(): Promise<ForumThreadRecord[]> {
+  const { data, error } = await supabase
+    .from('forum_threads')
+    .select(THREAD_SELECT)
+    .eq('status', 'published')
+    .eq('source', 'buergerrat')
+    .order('source_rank', { ascending: true });
+  if (error) {
+    console.error('Error fetching Bürgerrat threads:', error);
+    return [];
+  }
+  return (data as unknown as ForumThreadRecord[]).map(normalizeThread);
+}
+
+/** Aggregate for the feed card + tracker. Null on error so callers can hide. */
+export async function fetchBuergerratSummary(): Promise<BuergerratSummary | null> {
+  const { data, error } = await supabase
+    .from('forum_threads')
+    .select('created_at, stage')
+    .eq('status', 'published')
+    .eq('source', 'buergerrat');
+  if (error) {
+    console.error('Error fetching Bürgerrat summary:', error);
+    return null;
+  }
+  return summarizeBuergerrat((data ?? []) as Array<{ created_at: string; stage: string | null }>);
 }
 
 export async function fetchForumReplies(threadId: string): Promise<ForumReplyRecord[]> {
@@ -90,6 +134,62 @@ export async function fetchForumReplies(threadId: string): Promise<ForumReplyRec
     return [];
   }
   return (data as unknown as ForumReplyRecord[]).map(mergeAccountIntoAuthor);
+}
+
+const ATTACHMENT_SELECT =
+  'id, thread_id, reply_id, wallet_address, account_id, kind, url, mime_type, file_name, size_bytes, width, height, status, created_at';
+
+/** Every published attachment of a discussion (thread body + replies), newest first. */
+export async function fetchForumAttachments(threadId: string): Promise<ForumAttachmentRecord[]> {
+  const { data, error } = await supabase
+    .from('forum_attachments')
+    .select(ATTACHMENT_SELECT)
+    .eq('thread_id', threadId)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching forum attachments:', error);
+    return [];
+  }
+  return (data ?? []) as unknown as ForumAttachmentRecord[];
+}
+
+export async function addForumAttachments(input: {
+  thread_id: string;
+  reply_id?: string | null;
+  wallet_address: string;
+  account_id?: string | null;
+  items: PendingAttachment[];
+}): Promise<ForumAttachmentRecord[]> {
+  if (input.items.length === 0) return [];
+  const rows = input.items.map((a) => ({
+    thread_id: input.thread_id,
+    reply_id: input.reply_id ?? null,
+    wallet_address: input.wallet_address,
+    account_id: input.account_id ?? null,
+    kind: a.kind,
+    url: a.url,
+    mime_type: a.mime_type,
+    file_name: a.file_name,
+    size_bytes: a.size_bytes ?? null,
+    width: a.width ?? null,
+    height: a.height ?? null,
+    status: 'published',
+  }));
+  const { data, error } = await supabase.from('forum_attachments').insert(rows).select(ATTACHMENT_SELECT);
+  if (error) {
+    console.error('Error adding forum attachments:', error);
+    return [];
+  }
+  return (data ?? []) as unknown as ForumAttachmentRecord[];
+}
+
+export async function deleteForumAttachment(id: string, walletAddress: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_owned_forum_attachment', {
+    p_attachment_id: id,
+    p_wallet: walletAddress,
+  });
+  if (error) throw error;
 }
 
 /** Personal-account content mirrors to the relay; organisation words are the
@@ -130,22 +230,36 @@ export async function createForumThread(
     console.error('Error creating forum thread:', error);
     return null;
   }
-  const thread = mergeAccountIntoAuthor(data as unknown as ForumThreadRecord);
-  void mirrorThreadToNostr(thread);
+  const thread = normalizeThread(data as unknown as ForumThreadRecord);
+  const attachments = input.attachments ?? [];
+  if (attachments.length) {
+    await addForumAttachments({
+      thread_id: thread.id,
+      wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
+      items: attachments,
+    });
+  }
+  void mirrorThreadToNostr(thread, attachments);
   return thread;
 }
 
-async function mirrorThreadToNostr(thread: ForumThreadRecord): Promise<void> {
+async function mirrorThreadToNostr(
+  thread: ForumThreadRecord,
+  attachments: PendingAttachment[] = [],
+): Promise<void> {
   try {
     if (await isOrgAccount(thread.account_id)) return;
     const { publishForumThread } = await import('./nostr/publish');
+    const { officialThreadTags, attachmentTags, attachmentContentSuffix } = await import('./nostr/forum-tags');
     const createdSec = Math.floor(Date.parse(thread.created_at) / 1000);
     await publishForumThread(
       thread.id,
       thread.title,
-      thread.body,
+      thread.body + attachmentContentSuffix(attachments),
       thread.category_slug ?? undefined,
       Number.isFinite(createdSec) ? createdSec : undefined,
+      [...officialThreadTags(thread), ...attachmentTags(attachments)],
     );
   } catch (err) {
     console.warn('[nostr] forum thread mirror skipped', (err as Error)?.message);
@@ -163,6 +277,7 @@ export async function createForumReply(
       account_id: input.account_id || null,
       body: input.body.trim(),
       parent_reply_id: input.parent_reply_id || null,
+      reply_to_reply_id: input.reply_to_reply_id || null,
       status: 'published',
     })
     .select(REPLY_SELECT)
@@ -172,15 +287,37 @@ export async function createForumReply(
     return null;
   }
   const reply = mergeAccountIntoAuthor(data as unknown as ForumReplyRecord);
-  void mirrorReplyToNostr(reply);
+  const attachments = input.attachments ?? [];
+  if (attachments.length) {
+    await addForumAttachments({
+      thread_id: reply.thread_id,
+      reply_id: reply.id,
+      wallet_address: input.wallet_address,
+      account_id: input.account_id || null,
+      items: attachments,
+    });
+  }
+  void mirrorReplyToNostr(reply, attachments);
   return reply;
 }
 
-async function mirrorReplyToNostr(reply: ForumReplyRecord): Promise<void> {
+async function mirrorReplyToNostr(
+  reply: ForumReplyRecord,
+  attachments: PendingAttachment[] = [],
+): Promise<void> {
   try {
     if (await isOrgAccount(reply.account_id)) return;
     const { publishForumReply } = await import('./nostr/publish');
-    await publishForumReply(reply.id, reply.thread_id, reply.body, reply.parent_reply_id);
+    const { attachmentTags, attachmentContentSuffix } = await import('./nostr/forum-tags');
+    const createdSec = Math.floor(Date.parse(reply.created_at) / 1000);
+    await publishForumReply(
+      reply.id,
+      reply.thread_id,
+      reply.body + attachmentContentSuffix(attachments),
+      reply.reply_to_reply_id ?? reply.parent_reply_id,
+      Number.isFinite(createdSec) ? createdSec : undefined,
+      attachmentTags(attachments),
+    );
   } catch (err) {
     console.warn('[nostr] forum reply mirror skipped', (err as Error)?.message);
   }
@@ -221,20 +358,6 @@ export async function deleteForumReply(id: string, walletAddress: string): Promi
   });
   if (error) throw error;
   void mirrorDeletionToNostr('forum_reply', id);
-}
-
-/** One-shot link from a thread to its on-chain Deliberate debate (owner only). */
-export async function attachDebateToThread(
-  threadId: string,
-  walletAddress: string,
-  debateId: number,
-): Promise<void> {
-  const { error } = await supabase.rpc('attach_debate_to_thread', {
-    p_thread_id: threadId,
-    p_wallet: walletAddress,
-    p_debate_id: debateId,
-  });
-  if (error) throw error;
 }
 
 // ─── Votes (spec §A2.2) ─────────────────────────────────────

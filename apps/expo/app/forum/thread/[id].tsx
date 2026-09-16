@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,20 +23,28 @@ import ShareIcon from '@/assets/icons/share-02.svg';
 import PostAuthorRow from '@/components/feed/PostAuthorRow';
 import CommentInput from '@/components/feed/CommentInput';
 import ReportDrawer from '@/components/feed/ReportDrawer';
-import DebateStrip from '@/components/forum/DebateStrip';
 import ForumVoteCluster from '@/components/forum/ForumVoteCluster';
 import ForumOptionsDrawer from '@/components/forum/ForumOptionsDrawer';
+import ForumReplyThread from '@/components/forum/ForumReplyThread';
+import ForumStageStepper from '@/components/forum/ForumStageStepper';
+import ForumAttachmentsCarousel from '@/components/forum/ForumAttachmentsCarousel';
+import ImageZoomModal from '@/components/ImageZoomModal';
+import { FORUM_ATTACHMENTS_BUCKET } from '@/lib/forum-attachments';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { useUser } from '@/context/UserContext';
 import { useAccount } from '@/context/AccountContext';
 import { useForumVotes } from '@/hooks/useForumVotes';
 import { useActiveProfileImage } from '@/hooks/useActiveProfileImage';
 import { supabase } from '@/lib/supabase';
-import { isDeliberateDebatesEnabled } from '@/lib/supabase-app-settings';
 import { shareForumThread, shareForumReply } from '@/lib/forum-share';
+import { groupReplies, replyDisplayName, type GroupedReply } from '@/lib/forum-replies';
+import { STAGE_LABELS } from '@/lib/forum-stages';
+import { BUERGERRAT_TOTAL } from '@/lib/buergerrat';
 import {
   createForumReply,
   deleteForumReply,
   deleteForumThread,
+  fetchForumAttachments,
   fetchForumReplies,
   fetchForumThread,
   fetchThreadSubscription,
@@ -44,27 +53,7 @@ import {
   updateForumReply,
   type ForumVoteTarget,
 } from '@/lib/supabase-forum';
-import type { ForumReplyRecord } from '@/lib/types/feed';
-
-type GroupedReply = ForumReplyRecord & { children: ForumReplyRecord[] };
-
-/** Replies are single-level nested (spec §A2.4): a reply's parent_reply_id
- *  always points directly at a top-level reply, never at another nested
- *  reply. Group into top-level + their direct children for rendering. */
-function groupReplies(replies: ForumReplyRecord[]): GroupedReply[] {
-  const byId = new Map<string, GroupedReply>();
-  replies.forEach((r) => byId.set(r.id, { ...r, children: [] }));
-  const topLevel: GroupedReply[] = [];
-  replies.forEach((r) => {
-    const node = byId.get(r.id)!;
-    if (r.parent_reply_id && byId.has(r.parent_reply_id)) {
-      byId.get(r.parent_reply_id)!.children.push(r);
-    } else {
-      topLevel.push(node);
-    }
-  });
-  return topLevel;
-}
+import type { ForumAttachmentRecord, ForumReplyRecord, PendingAttachment } from '@/lib/types/feed';
 
 type ReplyTarget = { id: string; parentId: string; name: string };
 type OptionsTarget = { type: ForumVoteTarget; id: string };
@@ -85,6 +74,7 @@ export default function ForumThreadScreen() {
   const [editingReply, setEditingReply] = useState<ForumReplyRecord | null>(null);
   const [optionsFor, setOptionsFor] = useState<OptionsTarget | null>(null);
   const [reportFor, setReportFor] = useState<OptionsTarget | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const { data: thread, isPending } = useQuery({
     queryKey: ['forum', 'thread', id],
@@ -96,25 +86,33 @@ export default function ForumThreadScreen() {
     queryFn: () => fetchForumReplies(id!),
     enabled: !!id,
   });
-
   const { data: isSubscribed = false } = useQuery({
     queryKey: ['forum', 'subscription', id, user?.wallet_address],
     queryFn: () => fetchThreadSubscription(id!, user!.wallet_address!),
     enabled: !!id && !!user?.wallet_address,
   });
 
-  const { data: debatesEnabled = false } = useQuery({
-    queryKey: ['flags', 'deliberate', isCitizen, user?.wallet_address],
-    queryFn: () =>
-      isDeliberateDebatesEnabled({ isCitizen, walletAddress: user?.wallet_address }),
-    staleTime: 5 * 60 * 1000,
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['forum', 'attachments', id],
+    queryFn: () => fetchForumAttachments(id!),
+    enabled: !!id,
   });
-  const isThreadOwner =
-    !!user?.wallet_address &&
-    !!thread?.wallet_address &&
-    user.wallet_address.toLowerCase() === thread.wallet_address.toLowerCase();
+  const attachmentsByReply = useMemo(() => {
+    const map = new Map<string, ForumAttachmentRecord[]>();
+    for (const a of attachments) {
+      if (!a.reply_id) continue;
+      map.set(a.reply_id, [...(map.get(a.reply_id) ?? []), a]);
+    }
+    return map;
+  }, [attachments]);
+  const imageUrls = useMemo(
+    () => attachments.filter((a) => a.kind === 'image').map((a) => a.url),
+    [attachments],
+  );
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const groupedReplies = useMemo(() => groupReplies(replies), [replies]);
+  const repliesById = useMemo(() => new Map(replies.map((r) => [r.id, r])), [replies]);
 
   const voteTargets = useMemo(() => {
     if (!id) return [];
@@ -132,6 +130,7 @@ export default function ForumThreadScreen() {
         () => {
           queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
           queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+          queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', id] });
         },
       )
       .subscribe();
@@ -140,11 +139,22 @@ export default function ForumThreadScreen() {
     };
   }, [id, queryClient]);
 
-  const handleSubmit = async (content: string) => {
-    const body = content.trim();
+  const toggleExpanded = useCallback((topLevelId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(topLevelId)) next.delete(topLevelId);
+      else next.add(topLevelId);
+      return next;
+    });
+  }, []);
+
+  const handleSubmit = async (content: string, attachments: PendingAttachment[] = []) => {
+    // A reply may be just a file: the body then carries the file name.
+    const body = content.trim() || attachments[0]?.file_name || '';
     if (!body || sending || !user?.wallet_address || !id) return;
     setSending(true);
     setSendError(null);
+    const parentId = replyTo?.parentId ?? null;
     const result = editingReply
       ? await updateForumReply(editingReply.id, user.wallet_address, body)
       : await createForumReply({
@@ -152,7 +162,9 @@ export default function ForumThreadScreen() {
           wallet_address: user.wallet_address,
           account_id: activeAccount?.id,
           body,
-          parent_reply_id: replyTo?.parentId ?? null,
+          parent_reply_id: parentId,
+          reply_to_reply_id: replyTo?.id ?? null,
+          attachments,
         });
     setSending(false);
     if (!result) {
@@ -163,11 +175,14 @@ export default function ForumThreadScreen() {
       setSendError('Antwort konnte nicht gesendet werden.');
       return;
     }
+    // Show the reply the user just wrote even when its parent was collapsed.
+    if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
     setDraft('');
     setReplyTo(null);
     setEditingReply(null);
     await queryClient.invalidateQueries({ queryKey: ['forum', 'replies', id] });
     await queryClient.invalidateQueries({ queryKey: ['forum', 'thread', id] });
+    await queryClient.invalidateQueries({ queryKey: ['forum', 'attachments', id] });
   };
 
   const handleToggleSubscription = async () => {
@@ -185,7 +200,7 @@ export default function ForumThreadScreen() {
   const isOwn = (walletAddress: string) =>
     !!user?.wallet_address && walletAddress.toLowerCase() === user.wallet_address.toLowerCase();
 
-  const findReply = (replyId: string) => replies.find((r) => r.id === replyId);
+  const findReply = (replyId: string) => repliesById.get(replyId);
 
   const handleDeleteThread = () => {
     if (!thread || !user?.wallet_address) return;
@@ -227,7 +242,6 @@ export default function ForumThreadScreen() {
     ]);
   };
 
-  // ─── Options drawer target resolution ────────────────────────────────────
   const isOwnerOfTarget = (target: OptionsTarget | null): boolean => {
     if (!target || !thread) return false;
     if (target.type === 'thread') return isOwn(thread.wallet_address);
@@ -280,65 +294,39 @@ export default function ForumThreadScreen() {
     await reportForumContent(reportFor.type, reportFor.id, user.wallet_address, reason);
   };
 
-  const renderReplyRow = (reply: ForumReplyRecord, isChild: boolean) => (
-    <View key={reply.id} style={isChild ? styles.replyChild : styles.reply}>
-      <PostAuthorRow
-        author={reply.author}
-        createdAt={reply.created_at}
-        onMore={() => setOptionsFor({ type: 'reply', id: reply.id })}
-      />
-      {reply.edited_at ? (
-        <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
-      ) : null}
-      <Text style={[styles.replyBody, { color: colors.textPrimary }]}>{reply.body}</Text>
-      <View style={styles.replyActions}>
-        <ForumVoteCluster
-          targetType="reply"
-          targetId={reply.id}
-          upvotes={reply.upvotes_count ?? 0}
-          downvotes={reply.downvotes_count ?? 0}
-          myVote={myVote('reply', reply.id)}
-          onVoted={(next) => setLocal('reply', reply.id, next)}
-          compact
-        />
-        <Pressable
-          onPress={() =>
-            setReplyTo({
-              id: reply.id,
-              parentId: reply.parent_reply_id ?? reply.id,
-              name: reply.author?.account?.name ?? reply.author?.username ?? 'Unbekannt',
-            })
-          }
-          hitSlop={8}
-        >
-          <Text style={[styles.replyLink, { color: colors.textSecondary }]}>Antworten</Text>
-        </Pressable>
-        <Pressable
-          // The thread must be dereferenced INSIDE the handler, never as
-          // `thread!.id` in the closure's argument list: React Compiler lifts
-          // such a read into this callback's memo-dependency check, which runs
-          // on every render — including the first one, while the thread query
-          // is still pending and `thread` is undefined.
-          onPress={() => {
-            if (!thread) return;
-            void shareForumReply(reply.body, thread.id);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Teilen"
-        >
-          <ShareIcon width={16} height={16} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-    </View>
+  const startReply = useCallback((reply: ForumReplyRecord) => {
+    setEditingReply(null);
+    setReplyTo({
+      id: reply.id,
+      parentId: reply.parent_reply_id ?? reply.id,
+      name: replyDisplayName(reply),
+    });
+  }, []);
+
+  const openReplyOptions = useCallback((reply: ForumReplyRecord) => {
+    setOptionsFor({ type: 'reply', id: reply.id });
+  }, []);
+
+  const renderGroup = ({ item }: { item: GroupedReply }) => (
+    <ForumReplyThread
+      group={item}
+      byId={repliesById}
+      // The thread is read INSIDE the callback body, never as `thread!.x` in
+      // an argument list: React Compiler hoists such reads into the memo
+      // check, which runs on the first render while the query is pending.
+      threadAuthorWallet={thread ? thread.wallet_address : ''}
+      expanded={expanded.has(item.id)}
+      onToggleExpanded={toggleExpanded}
+      myVote={(replyId) => myVote('reply', replyId)}
+      onVoted={(replyId, next) => setLocal('reply', replyId, next)}
+      onReply={startReply}
+      onOptions={openReplyOptions}
+      attachmentsByReply={attachmentsByReply}
+      onOpenImage={setLightboxUrl}
+    />
   );
 
-  const renderReply = ({ item }: { item: GroupedReply }) => (
-    <View style={[styles.replyGroup, { borderColor: colors.borderTertiary }]}>
-      {renderReplyRow(item, false)}
-      {item.children.map((child) => renderReplyRow(child, true))}
-    </View>
-  );
+  const isOfficial = thread?.source === 'buergerrat';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -385,42 +373,90 @@ export default function ForumThreadScreen() {
           <FlatList
             data={groupedReplies}
             keyExtractor={(r) => r.id}
-            renderItem={renderReply}
+            renderItem={renderGroup}
+            extraData={expanded}
             contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
               <View style={[styles.threadHead, { borderColor: colors.borderTertiary }]}>
-                {thread.category?.name ? (
+                {isOfficial ? (
+                  <View style={styles.officialRow}>
+                    <Text style={[styles.category, { color: colors.primary }]}>
+                      BÜRGERRAT · EMPFEHLUNG {thread.source_rank ?? '–'} VON {BUERGERRAT_TOTAL}
+                    </Text>
+                    {thread.source_score != null && (
+                      <View style={[styles.scoreChip, { backgroundColor: colors.primaryLight }]}>
+                        <Text style={[styles.scoreText, { color: colors.primary }]}>
+                          {thread.source_score} Punkte
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : thread.category?.name ? (
                   <Text style={[styles.category, { color: colors.primary }]}>
                     {thread.category.name.toUpperCase()}
                   </Text>
                 ) : null}
+
                 <Text style={[styles.title, { color: colors.textPrimary }]}>{thread.title}</Text>
+
+                {isOfficial && (
+                  <ForumStageStepper stage={thread.stage} events={thread.stage_events ?? []} />
+                )}
+
                 <PostAuthorRow
                   author={thread.author}
                   createdAt={thread.created_at}
+                  badge={isOfficial ? 'Eingestellt' : undefined}
                   onMore={() => setOptionsFor({ type: 'thread', id: thread.id })}
                 />
                 {thread.edited_at ? (
                   <Text style={[styles.editedText, { color: colors.textTertiary }]}>Bearbeitet</Text>
                 ) : null}
-                <Text style={[styles.body, { color: colors.textPrimary }]}>{thread.body}</Text>
-                {thread.debate_id != null ? (
-                  <DebateStrip debateId={thread.debate_id} />
-                ) : debatesEnabled && isThreadOwner ? (
-                  <Pressable
-                    onPress={() => router.push(`/forum/debate/new?thread=${thread.id}` as any)}
-                    accessibilityRole="button"
-                    style={({ pressed }) => [
-                      styles.startDebate,
-                      { borderColor: colors.primary },
-                      pressed && { backgroundColor: colors.primaryLight },
+
+                {/* Thread bodies are markdown (headings, lists, links) for readability. */}
+                <MarkdownRenderer content={thread.body} />
+
+                {isOfficial && thread.official_comment ? (
+                  <View
+                    style={[
+                      styles.quote,
+                      { borderLeftColor: colors.border, backgroundColor: colors.surfaceSecondary },
                     ]}
                   >
-                    <Text style={[styles.startDebateText, { color: colors.primary }]}>
-                      Strukturierte Debatte starten
+                    <Text style={[styles.quoteHeading, { color: colors.textSecondary }]}>
+                      Kommentar des Bürgermeisters (aus der Broschüre)
                     </Text>
-                  </Pressable>
+                    <Text style={[styles.quoteBody, { color: colors.textPrimary }]}>
+                      {thread.official_comment}
+                    </Text>
+                  </View>
                 ) : null}
+
+                {isOfficial && thread.source_citation ? (
+                  <Text style={[styles.citation, { color: colors.textSecondary }]}>
+                    Quelle: {thread.source_citation}
+                    {thread.source_url ? (
+                      <Text
+                        style={[styles.citationLink, { color: colors.primary }]}
+                        onPress={() => {
+                          if (thread.source_url) void Linking.openURL(thread.source_url);
+                        }}
+                      >
+                        {' '}· NDR-Bericht
+                      </Text>
+                    ) : null}
+                  </Text>
+                ) : null}
+
+                {thread.stage && !isOfficial ? (
+                  <Text style={[styles.stageLine, { color: colors.textSecondary }]}>
+                    Stand: {STAGE_LABELS[thread.stage]}
+                  </Text>
+                ) : null}
+
+                <ForumAttachmentsCarousel attachments={attachments} onOpenImage={setLightboxUrl} />
+
                 <View style={styles.threadHeadActions}>
                   <ForumVoteCluster
                     targetType="thread"
@@ -482,7 +518,9 @@ export default function ForumThreadScreen() {
                 setSendError(null);
               }}
               isSubmitting={sending}
-              disableAttachments
+              disableStickers
+              enableFiles
+              uploadTarget={{ bucket: FORUM_ATTACHMENTS_BUCKET, folder: 'replies' }}
               replyingToName={editingReply ? null : (replyTo?.name ?? null)}
               onCancelReply={() => {
                 setReplyTo(null);
@@ -492,8 +530,13 @@ export default function ForumThreadScreen() {
               walletAddress={user?.wallet_address}
               avatarUrl={activeProfileImage.url}
               avatarFallbackInitial={activeProfileImage.fallbackInitial}
-              onSubmit={async (content) => {
-                await handleSubmit(content);
+              onSubmit={async (content, _sticker, imageUrl, file) => {
+                const items: PendingAttachment[] = [];
+                if (imageUrl) {
+                  items.push({ kind: 'image', url: imageUrl, mime_type: 'image/jpeg', file_name: 'bild.jpg' });
+                }
+                if (file) items.push(file);
+                await handleSubmit(content, items);
               }}
             />
           </View>
@@ -522,6 +565,13 @@ export default function ForumThreadScreen() {
         onClose={() => setReportFor(null)}
         onReport={handleReport}
       />
+
+      <ImageZoomModal
+        visible={!!lightboxUrl}
+        imageUrl={lightboxUrl ?? ''}
+        images={imageUrls.length > 1 ? imageUrls : undefined}
+        onClose={() => setLightboxUrl(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -545,38 +595,26 @@ const styles = StyleSheet.create({
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  category: { fontSize: 11, fontFamily: fontFamily.semiBold, letterSpacing: 0.6 },
-  title: { fontSize: 20, fontFamily: fontFamily.heading, lineHeight: 26 },
-  body: { fontSize: 15, fontFamily: fontFamily.regular, lineHeight: 22 },
+  officialRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  category: { fontSize: 11, fontFamily: fontFamily.semiBold, letterSpacing: 0.6, flexShrink: 1 },
+  scoreChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  scoreText: { fontSize: 11, fontFamily: fontFamily.semiBold },
+  title: { fontSize: 24, fontFamily: fontFamily.heading, lineHeight: 30 },
+  quote: {
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  quoteHeading: { fontSize: 11, fontFamily: fontFamily.semiBold, letterSpacing: 0.4 },
+  quoteBody: { fontSize: 14, fontFamily: fontFamily.regular, lineHeight: 20 },
+  citation: { fontSize: 12, fontFamily: fontFamily.regular, lineHeight: 17 },
+  citationLink: { fontFamily: fontFamily.semiBold },
+  stageLine: { fontSize: 12, fontFamily: fontFamily.medium },
   replyCount: { fontSize: 12, fontFamily: fontFamily.regular },
   threadHeadActions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  startDebate: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  startDebateText: { fontSize: 13, fontFamily: fontFamily.medium },
   editedText: { fontSize: 12, fontFamily: fontFamily.regular },
-  replyGroup: {
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  reply: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 6,
-  },
-  replyChild: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    marginLeft: 32,
-    gap: 6,
-  },
-  replyBody: { fontSize: 14, fontFamily: fontFamily.regular, lineHeight: 20 },
-  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  replyLink: { fontSize: 12, fontFamily: fontFamily.medium },
   empty: {
     textAlign: 'center',
     marginTop: 32,

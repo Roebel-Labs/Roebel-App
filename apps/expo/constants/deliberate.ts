@@ -1,3 +1,7 @@
+// DORMANT (2026-09-16): the Deliberate debate UI was removed from the app
+// (spec docs/superpowers/specs/2026-09-16-buergerrat-discussion-threads-design.md §4).
+// The contract stays deployed on Gnosis; this module and its tests are kept
+// so the feature can return without re-deriving the protocol rules.
 // Deliberate protocol deployment on Gnosis (test env 2026-09-02, pinned commit 0392bd43).
 // Spec: docs/superpowers/specs/2026-09-02-deliberate-debates-test-env-design.md
 import { getContract } from 'thirdweb';

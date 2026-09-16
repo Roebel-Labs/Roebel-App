@@ -110,6 +110,7 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
       proposals: (s?.proposals ?? []) as unknown as ProposalFeedRecord[],
       proposalComments: s?.proposalComments ?? [],
       forumThreads: s?.forumThreads ?? [],
+      buergerrat: s?.buergerrat ?? null,
       feedType,
     });
   }, [posts, sectionsQuery.data, feedType]);

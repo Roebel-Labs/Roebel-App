@@ -15,7 +15,7 @@ type Props = {
 };
 
 export default function FeedEventCard({ event }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
 
   const handlePress = () => {
@@ -40,7 +40,9 @@ export default function FeedEventCard({ event }: Props) {
         styles.container,
         {
           backgroundColor: colors.background,
-          borderColor: isDark ? colors.border : '#ffffff',
+          // The 4px frame only exists to inset the image; painting it in the
+          // surface colour keeps the inset without a halo in dark mode.
+          borderColor: colors.background,
         },
         pressed && { backgroundColor: colors.pressedOverlay },
       ]}

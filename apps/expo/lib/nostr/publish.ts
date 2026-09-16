@@ -14,6 +14,13 @@ import {
 } from '@netizen-labs/nostr';
 import { supabase } from '../supabase';
 import { type NostrIdentity, loadStoredIdentity } from './identity';
+import {
+  attachmentContentSuffix,
+  attachmentTags,
+  officialThreadTags,
+  type OfficialThreadFields,
+} from './forum-tags';
+import { parseVoteSourceId, selectUnpublished, type LedgerRow } from './forum-sweep';
 
 /**
  * Publishing app content to the sovereign relay.
@@ -191,12 +198,13 @@ export async function publishForumThread(
   body: string,
   categorySlug?: string,
   createdAtSec?: number,
+  extraTags?: string[][],
 ): Promise<PublicationStatus> {
   const identity = await loadStoredIdentity();
   if (!identity) return 'pending';
   const event = buildForumThreadEvent(
     identity.secretKey,
-    { title, content: body, categorySlug },
+    { title, content: body, categorySlug, extraTags },
     createdAtSec ? { createdAt: createdAtSec } : {},
   );
   return publish(event, 'forum_thread', threadId);
@@ -212,6 +220,8 @@ export async function publishForumReply(
   threadId: string,
   content: string,
   parentReplyId?: string | null,
+  createdAtSec?: number,
+  extraTags?: string[][],
 ): Promise<PublicationStatus> {
   const identity = await loadStoredIdentity();
   if (!identity) return 'pending';
@@ -227,6 +237,7 @@ export async function publishForumReply(
     content,
     { id: root.eventId, pubkey: root.pubkey },
     parent,
+    { createdAt: createdAtSec, extraTags },
   );
   return publish(event, 'forum_reply', replyId);
 }
@@ -613,6 +624,134 @@ async function repairMisdatedMirrors(identity: NostrIdentity): Promise<void> {
   }
 }
 
+type AttachmentRef = { url: string; mime_type: string; file_name: string };
+
+/** Published attachments grouped by thread (body-level only) or by reply. */
+async function attachmentsBy(
+  column: 'thread_id' | 'reply_id',
+  ids: string[],
+  bodyOnly: boolean,
+): Promise<Map<string, AttachmentRef[]>> {
+  const map = new Map<string, AttachmentRef[]>();
+  if (ids.length === 0) return map;
+  let query = supabase
+    .from('forum_attachments')
+    .select(`${column}, url, mime_type, file_name`)
+    .in(column, ids)
+    .eq('status', 'published');
+  if (bodyOnly) query = query.is('reply_id', null);
+  const { data } = await query;
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const key = String(row[column]);
+    map.set(key, [
+      ...(map.get(key) ?? []),
+      { url: String(row.url), mime_type: String(row.mime_type), file_name: String(row.file_name) },
+    ]);
+  }
+  return map;
+}
+
+/**
+ * Re-publish this citizen's forum content whose mirror never landed: threads
+ * (incl. SQL-seeded official ones, signed here with the device key), replies
+ * whose thread is on the relay, and votes that were recorded pending because
+ * their target was not mirrored yet. Same scope rule as posts: only the
+ * citizen's own, personal-account content; org words belong to the node.
+ */
+async function retryForumPublications(identity: NostrIdentity, walletAddress: string): Promise<void> {
+  const wallet = walletAddress.toLowerCase();
+  const isOrg = (row: { account?: unknown }) =>
+    (row.account as { account_type?: string } | null)?.account_type === 'organisation';
+  try {
+    const { data: threads } = await supabase
+      .from('forum_threads')
+      .select('id, title, body, category_slug, created_at, source, source_url, source_citation, source_score, source_rank, account:account_id(account_type)')
+      .eq('wallet_address', wallet)
+      .eq('status', 'published')
+      .order('created_at', { ascending: true })
+      .limit(30);
+    const ownThreads = (threads ?? []).filter((t) => !isOrg(t));
+    if (ownThreads.length) {
+      const ids = ownThreads.map((t) => String(t.id));
+      const { data: ledger } = await supabase
+        .from('nostr_publications')
+        .select('source_id, status')
+        .eq('source_type', 'forum_thread')
+        .in('source_id', ids);
+      const todo = new Set(selectUnpublished(ids, (ledger ?? []) as LedgerRow[]));
+      const filesByThread = await attachmentsBy('thread_id', ids, true);
+      for (const t of ownThreads) {
+        if (!todo.has(String(t.id))) continue;
+        const files = filesByThread.get(String(t.id)) ?? [];
+        const createdSec = Math.floor(Date.parse(String(t.created_at)) / 1000);
+        await publishForumThread(
+          String(t.id),
+          String(t.title),
+          String(t.body) + attachmentContentSuffix(files),
+          (t.category_slug as string | null) ?? undefined,
+          Number.isFinite(createdSec) ? createdSec : undefined,
+          [...officialThreadTags(t as unknown as OfficialThreadFields), ...attachmentTags(files)],
+        );
+      }
+    }
+
+    const { data: replies } = await supabase
+      .from('forum_replies')
+      .select('id, thread_id, body, parent_reply_id, reply_to_reply_id, created_at, account:account_id(account_type)')
+      .eq('wallet_address', wallet)
+      .eq('status', 'published')
+      .order('created_at', { ascending: true })
+      .limit(30);
+    const ownReplies = (replies ?? []).filter((r) => !isOrg(r));
+    if (ownReplies.length) {
+      const ids = ownReplies.map((r) => String(r.id));
+      const { data: ledger } = await supabase
+        .from('nostr_publications')
+        .select('source_id, status')
+        .eq('source_type', 'forum_reply')
+        .in('source_id', ids);
+      const todo = new Set(selectUnpublished(ids, (ledger ?? []) as LedgerRow[]));
+      const filesByReply = await attachmentsBy('reply_id', ids, false);
+      for (const r of ownReplies) {
+        if (!todo.has(String(r.id))) continue;
+        const files = filesByReply.get(String(r.id)) ?? [];
+        const createdSec = Math.floor(Date.parse(String(r.created_at)) / 1000);
+        await publishForumReply(
+          String(r.id),
+          String(r.thread_id),
+          String(r.body) + attachmentContentSuffix(files),
+          (r.reply_to_reply_id as string | null) ?? (r.parent_reply_id as string | null),
+          Number.isFinite(createdSec) ? createdSec : undefined,
+          attachmentTags(files),
+        );
+      }
+    }
+
+    const { data: votes } = await supabase
+      .from('nostr_publications')
+      .select('source_id')
+      .eq('source_type', 'forum_vote')
+      .eq('pubkey_hex', identity.publicKey)
+      .in('status', ['pending', 'rejected'])
+      .limit(30);
+    for (const row of votes ?? []) {
+      const parsed = parseVoteSourceId(String(row.source_id));
+      if (!parsed) continue;
+      const { data: vote } = await supabase
+        .from('forum_votes')
+        .select('value')
+        .eq('target_type', parsed.targetType)
+        .eq('target_id', parsed.targetId)
+        .ilike('wallet_address', wallet)
+        .maybeSingle();
+      if (!vote) continue;
+      await publishForumVote(parsed.targetType, parsed.targetId, vote.value === 1 ? 1 : -1);
+    }
+  } catch {
+    // Best-effort; the next sweep tries again.
+  }
+}
+
 export async function retryPendingPublications(walletAddress?: string): Promise<void> {
   const identity = await loadStoredIdentity();
   if (!identity) return;
@@ -676,4 +815,5 @@ export async function retryPendingPublications(walletAddress?: string): Promise<
   } catch {
     // Best-effort; the next sweep tries again.
   }
+  if (walletAddress) await retryForumPublications(identity, walletAddress);
 }

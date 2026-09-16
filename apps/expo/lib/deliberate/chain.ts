@@ -1,3 +1,7 @@
+// DORMANT (2026-09-16): the Deliberate debate UI was removed from the app
+// (spec docs/superpowers/specs/2026-09-16-buergerrat-discussion-threads-design.md §4).
+// The contract stays deployed on Gnosis; this module and its tests are kept
+// so the feature can return without re-deriving the protocol rules.
 // Thin thirdweb adapters over the deployed Deliberate contract (reads on gnosisRead,
 // prepared writes for the gasless smart account). Method strings mirror IDeliberate.sol
 // at the pinned commit 0392bd43 — keep them in sync with the deployment, not with upstream.
