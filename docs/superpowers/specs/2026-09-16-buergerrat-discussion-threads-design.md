@@ -22,7 +22,7 @@ End goal (unchanged, later slices): discussion → on-chain proposal → executi
 | Decision | Choice |
 |---|---|
 | Where the 11 recommendations live | As forum threads (Themen) in the Umfragen tab, one per recommendation. Not feed posts. |
-| Who posts them | The "Stadt Röbel" organisation account (Max's decision 2026-09-16, revised from his personal account; Max co-owns that account). Row owner (wallet) stays Max for edit/delete. |
+| Who posts them | The "Bürger für Röbel" organisation account (Max's decision 2026-09-17; Max co-owns it). Row owner (wallet) stays Max for edit/delete. |
 | Neutrality | Every thread is labelled as a quote from the brochure, carries the citation and the NDR link, and includes the Bürgermeister comments verbatim where the brochure has one. Empfehlung 7 stays complete including the Mein-Ort-App remark. |
 | Deliberate | UI removed from the app. `lib/deliberate` and `constants/deliberate.ts` stay as a dormant, tested protocol module. Remote flag set to `false` so already-shipped builds hide it too. |
 | Discussion UI | Facebook-group style thread: avatar rail, "Autor" badge, connector lines, `@Name` prefix on targeted replies, replies collapsed behind "N Antworten anzeigen" when more than two. Chronological order, no "Beste" sort yet. |
@@ -148,7 +148,7 @@ Citizen threads keep `stage = null` and show no stepper. The v2 promotion ladder
 Source of truth for the texts: `docs/buergerrat/2026-empfehlungen.md` (committed with this spec). The seed migration `20260916_buergerrat_2026_seed.sql` mirrors it exactly.
 
 Per thread:
-- `wallet_address` = `0xc49de63ccfee46c6c5c3e393293f66779799fb28` (Max, keeps edit/delete rights), `account_id` = the "Stadt Röbel" organisation account `07d8223c-0b94-46db-89d3-5b342980cd75` (changed from Max's personal account on 2026-09-16 at Max's request: the threads show "Stadt Röbel" as author), `status = 'published'`, `source = 'buergerrat'`. Consequence: organisation content is not signed by a citizen device, so these 11 threads reach the relay only once the node publisher maps forum threads (next slice), not through the device sweep.
+- `wallet_address` = `0xc49de63ccfee46c6c5c3e393293f66779799fb28` (Max, keeps edit/delete rights), `account_id` = the "Bürger für Röbel" organisation account `9373a71a-53a3-44b7-b2b0-ea128fb4c27c` (2026-09-17, Max's decision; earlier Max's personal account, then Stadt Röbel on 2026-09-16), `status = 'published'`, `source = 'buergerrat'`. Consequence: organisation content is not signed by a citizen device, so these 11 threads reach the relay only once the node publisher maps forum threads (next slice), not through the device sweep.
 - `title` = recommendation title without the "Empfehlung N:" prefix.
 - `body` (markdown, ≤ 10 000 chars, rendered by the app's `MarkdownRenderer` — Max asked for styled text on 2026-09-16):
   ```
