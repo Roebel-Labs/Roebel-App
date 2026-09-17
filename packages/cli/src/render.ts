@@ -612,7 +612,7 @@ export function renderComposeYml(m: NetizenManifest): string {
       MEDIA_DIR: "/media"${m.services.indexer?.publicRead ? `\n      MEDIA_PUBLIC_BASE: "${m.services.indexer.publicRead}"` : ""}${pub.backfeed ? `\n      BACKFEED: "true"` : ""}
       SUPABASE_URL: "\${SUPABASE_URL}"
       SUPABASE_SERVICE_KEY: "\${SUPABASE_SERVICE_KEY}"
-      NODE_AGENT_SECRET: "\${NODE_AGENT_SECRET}"
+      NODE_AGENT_SECRET: "\${NODE_AGENT_SECRET}"${pub.datasets.includes("proposals") && m.contracts?.governor ? `\n      PROPOSAL_GOVERNOR: "${m.contracts.governor}"` : ""}
     depends_on: [strfry]`,
       );
     }
