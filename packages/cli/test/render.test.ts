@@ -58,6 +58,15 @@ test("web.env carries exactly the two dashboard-tile base URLs", () => {
   assert.match(env, /NEXT_PUBLIC_CHAT_BASE_URL=https:\/\/chat\.roebel\.app/);
 });
 
+test("the publisher gets the proposal governor from contracts when it publishes proposals", () => {
+  const compose = renderBundle(roebel).files["docker-compose.yml"];
+  // Röbel publishes proposals: without PROPOSAL_GOVERNOR the publisher CLI
+  // refused every pass ("datasets includes 'proposals' but PROPOSAL_GOVERNOR is
+  // not set"), and a pass is all-or-nothing — nothing published at all.
+  assert.match(compose, /PROPOSAL_GOVERNOR: "0x5F5e499Dc1872c2Ce19a4b50cd10f680e78E3Ba3"/);
+  assert.match(compose, /PUBLISH_DATASETS: "[^"]*proposals[^"]*"/);
+});
+
 test("secrets appear only as references, never resolved values", () => {
   const bundle = renderBundle(fullNode);
   // every secret the manifest names is surfaced as a ref in SECRETS.md
