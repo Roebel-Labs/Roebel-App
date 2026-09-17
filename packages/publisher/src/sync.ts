@@ -269,9 +269,13 @@ export async function buildSpecs(
       const spec = noticeToSpec(row, "service_alert");
       if (spec) specs.push(spec);
     }
+    // `announcements` stores its text in `description`; alias it to the
+    // `content` key the notice mapper reads (PostgREST `alias:column`). A
+    // literal `content` here 400s the fetch and, because a pass is
+    // all-or-nothing, silently stops EVERY dataset from publishing.
     const announcements = await deps.fetchRows(
       "announcements",
-      "select=id,title,content,is_active,updated_at,created_at",
+      "select=id,title,content:description,is_active,updated_at,created_at",
     );
     for (const row of announcements) {
       const spec = noticeToSpec(row, "announcement");
