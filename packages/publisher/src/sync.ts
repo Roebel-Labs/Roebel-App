@@ -11,6 +11,7 @@ import {
   businessToSpec,
   dealToSpec,
   eventToSpec,
+  forumThreadToSpec,
   listingToSpec,
   menuToSpec,
   movieToSpec,
@@ -42,7 +43,16 @@ import {
 
 export type DatasetName =
   | "events" | "cinema" | "orgs" | "articles" | "marketplace" | "deals"
-  | "news" | "businesses" | "notices" | "menus" | "proposals";
+  | "news" | "businesses" | "notices" | "menus" | "proposals" | "forum";
+
+/** One ledger row per published event that a spec asked to record. */
+export interface LedgerRow {
+  source_type: string;
+  source_id: string;
+  pubkey_hex: string;
+  event_id: string;
+  status: "published";
+}
 
 export interface PublisherDeps {
   nodeSecret: string;
@@ -52,6 +62,12 @@ export interface PublisherDeps {
   fetchRows: (table: string, query: string) => Promise<Record<string, unknown>[]>;
   relayUrl: string;
   makeClient?: (url: string) => Pick<RelayClient, "publish" | "close">;
+  /**
+   * Upsert accepted events into the app's `nostr_publications` ledger
+   * (keyed source_type + source_id). Optional; a failure is logged, never
+   * fails the pass — the relay stays the source of truth.
+   */
+  recordPublications?: (rows: LedgerRow[]) => Promise<void>;
   /**
    * Mirror an image onto the node, content-addressed. Returns the public URL
    * to substitute, or null to keep the original (a failed mirror must degrade
@@ -93,7 +109,7 @@ export async function buildSpecs(
   // "personal accounts stay off the record" rule is enforced against it.
   // Menus also need it to scope org-owned restaurants correctly.
   let orgRows: Record<string, unknown>[] = [];
-  if (wantsOrgs || wantsEvents || deps.datasets.includes("menus")) {
+  if (wantsOrgs || wantsEvents || deps.datasets.includes("menus") || deps.datasets.includes("forum")) {
     orgRows = await deps.fetchRows(
       "accounts",
       "select=id,account_type,name,bio,avatar_url,cover_url,sub_type,opening_hours,slug,updated_at,created_at&account_type=eq.organisation",
@@ -163,6 +179,19 @@ export async function buildSpecs(
     );
     for (const row of rows) {
       const spec = orgPostToSpec(row, orgIds);
+      if (spec) specs.push(spec);
+    }
+  }
+  if (deps.datasets.includes("forum") && orgIds.size) {
+    // Forum threads (Themen) opened under organisation accounts — e.g. the
+    // Bürgerrat recommendations posted by "Bürger für Röbel". Citizen threads
+    // are signed on the citizen's own device and are not the node's to publish.
+    const rows = await deps.fetchRows(
+      "forum_threads",
+      `select=id,account_id,title,body,category_slug,status,source,source_rank,source_score,source_citation,source_url,created_at&status=eq.published&account_id=in.(${[...orgIds].join(",")})`,
+    );
+    for (const row of rows) {
+      const spec = forumThreadToSpec(row, orgIds);
       if (spec) specs.push(spec);
     }
   }
@@ -382,8 +411,10 @@ export async function publishOnce(deps: PublisherDeps): Promise<PublishSummary> 
   let accepted = 0;
   let duplicates = 0;
   let rejected = 0;
+  const ledgerRows: LedgerRow[] = [];
   try {
-    for (const event of events) {
+    for (let i = 0; i < events.length; i += 1) {
+      const event = events[i];
       const result = await client.publish(event);
       if (result.ok && /duplicate/i.test(result.message)) duplicates += 1;
       else if (result.ok) accepted += 1;
@@ -391,9 +422,26 @@ export async function publishOnce(deps: PublisherDeps): Promise<PublishSummary> 
         rejected += 1;
         log(`relay rejected ${event.kind}/${event.id.slice(0, 12)}…: ${result.message}`);
       }
+      const ledger = specs[i]?.ledger;
+      if (result.ok && ledger) {
+        ledgerRows.push({
+          source_type: ledger.sourceType,
+          source_id: ledger.sourceId,
+          pubkey_hex: event.pubkey,
+          event_id: event.id,
+          status: "published",
+        });
+      }
     }
   } finally {
     client.close();
+  }
+  if (deps.recordPublications && ledgerRows.length) {
+    try {
+      await deps.recordPublications(ledgerRows);
+    } catch (error) {
+      log(`ledger write failed for ${ledgerRows.length} rows: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   log(`built ${specs.length}, accepted ${accepted}, duplicates ${duplicates}, rejected ${rejected}`);

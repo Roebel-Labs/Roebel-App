@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { htmlToMarkdown } from "../src/html-to-md.js";
-import { articleToSpec, berlinToUnix, businessToSpec, dealToSpec, eventToSpec, KIND_DECISION_TRANSITION, listingToSpec, MAPPER_VERSION, menuToSpec, movieToSpec, newsToSpec, noticeToSpec, orgPostToSpec, orgToSpec, proposalToSpec, transitionToSpec } from "../src/mappers.js";
+import { articleToSpec, berlinToUnix, businessToSpec, dealToSpec, eventToSpec, forumThreadToSpec, KIND_DECISION_TRANSITION, KIND_FORUM_THREAD, listingToSpec, MAPPER_VERSION, menuToSpec, movieToSpec, newsToSpec, noticeToSpec, orgPostToSpec, orgToSpec, proposalToSpec, transitionToSpec } from "../src/mappers.js";
 
 const ORG_ID = "11111111-1111-1111-1111-111111111111";
 const ORGS = new Set([ORG_ID]);
@@ -682,5 +682,52 @@ describe("decision transition mapping", () => {
 
   it("refuses a malformed head pubkey", () => {
     assert.equal(transitionToSpec({ ...base, headPubkey: "0xdeadbeef" }), null);
+  });
+});
+
+describe("forum threads (kind 11)", () => {
+  const thread = {
+    id: "6b7e0000-2026-4a01-9000-000000000001",
+    account_id: ORG_ID,
+    title: "Konzept gegen Leerstand",
+    body: "#### Empfehlung des Bürgerrats\nDer Bürgerrat empfiehlt …",
+    category_slug: "ortsentwicklung",
+    status: "published",
+    source: "buergerrat",
+    source_rank: 2,
+    source_score: 12,
+    source_citation: "Bürgerräte für MV · Broschüre 2026",
+    source_url: "https://www.ndr.de/x",
+    created_at: "2026-09-16T10:00:09+00:00",
+  };
+
+  it("an org thread maps to kind 11 under the org scope with official tags and a ledger ref", () => {
+    const spec = forumThreadToSpec(thread, ORGS)!;
+    assert.equal(spec.kind, KIND_FORUM_THREAD);
+    assert.equal(spec.scope, `org-${ORG_ID}`);
+    assert.equal(spec.d, "");
+    assert.equal(spec.content, thread.body);
+    assert.equal(spec.createdAt, Math.floor(Date.parse(thread.created_at) / 1000));
+    assert.deepEqual(spec.tags, [
+      ["title", "Konzept gegen Leerstand"],
+      ["t", "ortsentwicklung"],
+      ["t", "buergerrat"],
+      ["r", "https://www.ndr.de/x"],
+      ["source", "Bürgerräte für MV · Broschüre 2026"],
+      ["score", "12"],
+      ["rank", "2"],
+    ]);
+    assert.deepEqual(spec.ledger, { sourceType: "forum_thread", sourceId: thread.id });
+  });
+
+  it("a citizen thread has no official tags", () => {
+    const spec = forumThreadToSpec({ ...thread, source: "citizen", source_rank: null, source_score: null, source_citation: null, source_url: null }, ORGS)!;
+    assert.deepEqual(spec.tags, [["title", "Konzept gegen Leerstand"], ["t", "ortsentwicklung"]]);
+  });
+
+  it("personal-account, deleted, and empty threads are not the node's to publish", () => {
+    assert.equal(forumThreadToSpec({ ...thread, account_id: "personal-acc-1" }, ORGS), null);
+    assert.equal(forumThreadToSpec({ ...thread, status: "deleted" }, ORGS), null);
+    assert.equal(forumThreadToSpec({ ...thread, body: "" }, ORGS), null);
   });
 });

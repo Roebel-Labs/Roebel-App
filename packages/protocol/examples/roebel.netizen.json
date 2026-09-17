@@ -201,7 +201,8 @@
         "news",
         "notices",
         "menus",
-        "proposals"
+        "proposals",
+        "forum"
       ],
       "intervalSeconds": 300,
       "backfeed": true

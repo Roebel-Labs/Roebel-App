@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { verifyEvent, type NostrEvent } from "@netizen-labs/nostr";
-import { buildSpecs, publishOnce, type DatasetName, type PublisherDeps } from "../src/sync.js";
+import { buildSpecs, publishOnce, type DatasetName, type LedgerRow, type PublisherDeps } from "../src/sync.js";
 
 const SECRET = "a-node-secret-with-plenty-of-entropy-0123456789";
 const ORG_ID = "11111111-1111-1111-1111-111111111111";
@@ -366,5 +366,55 @@ describe("buildSpecs query string validation across datasets", () => {
         }
       }
     }
+  });
+});
+
+describe("forum dataset", () => {
+  const FORUM_TABLES: Record<string, Record<string, unknown>[]> = {
+    accounts: [{ id: ORG_ID, account_type: "organisation", name: "Bürger für Röbel", slug: "bfr", updated_at: "2026-09-01T00:00:00+00:00" }],
+    forum_threads: [
+      { id: "t-org", account_id: ORG_ID, title: "Thema", body: "Text", category_slug: null, status: "published", source: "buergerrat", source_rank: 1, source_score: 13, source_citation: "Broschüre", source_url: "https://ndr.de/a", created_at: "2026-09-16T10:00:10+00:00" },
+      { id: "t-personal", account_id: "someone-else", title: "Meins", body: "x", status: "published", source: "citizen", created_at: "2026-09-16T10:00:11+00:00" },
+    ],
+  };
+  const fetchForum = async (table: string, query: string) => {
+    const rows = FORUM_TABLES[table] ?? [];
+    // Mirror the org filter the real query carries.
+    if (table === "forum_threads" && query.includes("account_id=in.")) return rows.filter((r) => r.account_id === ORG_ID);
+    return rows;
+  };
+
+  it("builds one kind-11 spec per org-authored thread and none for citizens", async () => {
+    const specs = await buildSpecs({ datasets: ["forum"], fetchRows: fetchForum, nodeId: "roebel" });
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].kind, 11);
+    assert.equal(specs[0].scope, `org-${ORG_ID}`);
+  });
+
+  it("ledgers the accepted event under forum_thread/<id>", async () => {
+    const published: NostrEvent[] = [];
+    const ledgered: LedgerRow[] = [];
+    await publishOnce({
+      nodeSecret: SECRET,
+      nodeId: "roebel",
+      datasets: ["forum"],
+      fetchRows: fetchForum,
+      relayUrl: "ws://test",
+      makeClient: () => ({
+        publish: async (event: NostrEvent) => {
+          published.push(event);
+          return { ok: true, message: "" };
+        },
+        close: () => {},
+      }),
+      recordPublications: async (rows) => {
+        ledgered.push(...rows);
+      },
+    });
+    assert.equal(published.length, 1);
+    assert.ok(verifyEvent(published[0]));
+    assert.deepEqual(ledgered, [
+      { source_type: "forum_thread", source_id: "t-org", pubkey_hex: published[0].pubkey, event_id: published[0].id, status: "published" },
+    ]);
   });
 });

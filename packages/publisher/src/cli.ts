@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { backfeedOnce } from "./backfeed.js";
-import { publishOnce, type DatasetName } from "./sync.js";
+import { publishOnce, type DatasetName, type LedgerRow } from "./sync.js";
 
 /**
  * `netizen-publisher` — runs beside the relay and mirrors the node's public
@@ -23,7 +23,7 @@ function required(name: string): string {
   return value;
 }
 
-const VALID_DATASETS = new Set<DatasetName>(["events", "cinema", "orgs", "articles", "marketplace", "deals", "news", "businesses", "notices", "menus", "proposals"]);
+const VALID_DATASETS = new Set<DatasetName>(["events", "cinema", "orgs", "articles", "marketplace", "deals", "news", "businesses", "notices", "menus", "proposals", "forum"]);
 
 async function main(): Promise<void> {
   const nodeId = required("NODE_ID");
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     .map((d) => d.trim())
     .filter((d): d is DatasetName => VALID_DATASETS.has(d as DatasetName));
   if (datasets.length === 0) {
-    console.error("PUBLISH_DATASETS names no known dataset (events, cinema, orgs, articles, marketplace, deals, news, businesses, notices, menus, proposals)");
+    console.error("PUBLISH_DATASETS names no known dataset (events, cinema, orgs, articles, marketplace, deals, news, businesses, notices, menus, proposals, forum)");
     process.exit(2);
   }
 
@@ -140,6 +140,24 @@ async function main(): Promise<void> {
     if (!res.ok) throw new Error(`${table}: PostgREST ${res.status}`);
   };
 
+  // Ledger write-back for org-signed forum threads: PostgREST upsert keyed on
+  // (source_type, source_id), the same row the citizen device writes for its
+  // own publications.
+  const recordPublications = async (rows: LedgerRow[]): Promise<void> => {
+    const now = new Date().toISOString();
+    const res = await fetch(`${supabaseUrl}/rest/v1/nostr_publications?on_conflict=source_type,source_id`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(rows.map((r) => ({ ...r, updated_at: now }))),
+    });
+    if (!res.ok) throw new Error(`nostr_publications: PostgREST ${res.status} ${await res.text()}`);
+  };
+
   const pass = async (): Promise<void> => {
     const startedAt = new Date().toISOString();
     try {
@@ -149,6 +167,7 @@ async function main(): Promise<void> {
         datasets,
         fetchRows,
         relayUrl,
+        recordPublications,
         ...(governor ? { governor } : {}),
         ...(mirrorMedia ? { mirrorMedia } : {}),
         // Announce signing keys BEFORE publishing, atomically — the allow-list

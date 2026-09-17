@@ -25,6 +25,12 @@ export interface PublishSpec {
   content: string;
   tags: string[][];
   createdAt: number;
+  /**
+   * When set, the published event id is written back to the app's
+   * `nostr_publications` ledger under this source, so the citizen device can
+   * thread its own replies (NIP-22 root) under an org-signed event.
+   */
+  ledger?: { sourceType: string; sourceId: string };
 }
 
 /** NIP-52 time-based calendar event. */
@@ -495,6 +501,52 @@ export function orgPostToSpec(row: Row, orgAccountIds: Set<string>): PublishSpec
     content,
     tags: [],
     createdAt: unixFromCreatedAt(row),
+  };
+}
+
+/** NIP-7D thread (Umfragen-Forum "Thema"). */
+export const KIND_FORUM_THREAD = 11;
+
+const FORUM_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * A forum thread created under an ORGANISATION account → kind 11 signed by
+ * that org's node-held key (same rule as org posts: the citizen device never
+ * signs an organisation's words). Kind 11 is immutable, so created_at is the
+ * thread's original wall-clock. Official-source markers (a quoted Bürgerrat
+ * recommendation) travel as tags, mirroring what the app puts on citizen
+ * threads, so the explorer can tell a quotation from a citizen's own Thema.
+ * The event id is ledgered so citizens' replies can cite it as their root.
+ */
+export function forumThreadToSpec(row: Row, orgAccountIds: Set<string>): PublishSpec | null {
+  if (str(row, "status") !== "published") return null;
+  const id = str(row, "id");
+  const accountId = str(row, "account_id");
+  const title = str(row, "title");
+  const body = str(row, "body");
+  if (!id || !accountId || !title || !body || !orgAccountIds.has(accountId)) return null;
+
+  const tags: string[][] = [["title", title]];
+  const category = str(row, "category_slug");
+  if (category && FORUM_SLUG_RE.test(category)) tags.push(["t", category]);
+  if (str(row, "source") === "buergerrat") {
+    tags.push(["t", "buergerrat"]);
+    const url = str(row, "source_url");
+    if (url) tags.push(["r", url]);
+    const citation = str(row, "source_citation");
+    if (citation) tags.push(["source", citation]);
+    if (typeof row["source_score"] === "number") tags.push(["score", String(row["source_score"])]);
+    if (typeof row["source_rank"] === "number") tags.push(["rank", String(row["source_rank"])]);
+  }
+
+  return {
+    scope: `org-${accountId}`,
+    kind: KIND_FORUM_THREAD,
+    d: "",
+    content: body,
+    tags,
+    createdAt: unixFromCreatedAt(row),
+    ledger: { sourceType: "forum_thread", sourceId: id },
   };
 }
 
