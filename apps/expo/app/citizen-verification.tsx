@@ -3,7 +3,6 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { openBrowserAsync } from 'expo-web-browser';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
@@ -126,19 +125,6 @@ export default function CredentialExplainerScreen() {
               <Text style={[styles.ctaText, { color: colors.onPrimary }]}>{copy.cta.label}</Text>
             </Pressable>
           )}
-
-          {active === 'citizen' && (
-            <Text style={[styles.footnote, { color: colors.textSecondary }]}>
-              Unser Verifizierungsprozess gleicht die Daten einer Person mit vertrauenswürdigen Drittquellen oder einem
-              amtlichen Ausweis ab.{' '}
-              <Text
-                style={[styles.link, { color: colors.textPrimary }]}
-                onPress={() => openBrowserAsync('https://www.roebel.app/buergerausweis')}
-              >
-                Mehr erfahren
-              </Text>
-            </Text>
-          )}
         </Animated.View>
       </ScrollView>
 
@@ -163,6 +149,4 @@ const styles = StyleSheet.create({
   benefitDesc: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter-Regular' },
   cta: { height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   ctaText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
-  footnote: { fontSize: 13, lineHeight: 19, fontFamily: 'Inter-Regular' },
-  link: { fontFamily: 'Inter-Medium', textDecorationLine: 'underline' },
 });
