@@ -21,6 +21,7 @@ the right one.
 | Publish app data (events, cinema, orgs, marketplace) to Nostr | [Public data on Nostr](PUBLIC_DATA_ON_NOSTR.md) |
 | Work with the Stadtstack contributor | [Röbel × Netizen × Stadtstack alignment](STADTSTACK_ALIGNMENT.md) |
 | Understand the mission | [Mission and goals](MISSION_AND_GOALS.md) |
+| See where the app fits the Bürgerrat 2026 recommendations, and where it must not | [Bürgerrat app-contribution strategy](buergerrat/2026-09-18_APP_CONTRIBUTION_STRATEGY.md) (source texts: [the 11 recommendations](buergerrat/2026-empfehlungen.md)) |
 
 ## How these documents relate
 

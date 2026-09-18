@@ -4,6 +4,8 @@ Quelle: Broschüre „Bürgerräte für MV“, Bürgerrat Röbel/Müritz, 2026. 
 Vorgestellt der Stadtvertretung am 15.09.2026 (NDR, „Röbel: Bürgerrat macht Vorschläge für lebenswertere Innenstadt“, Stand 15.09.2026 18:31 Uhr).
 NDR-Link: https://www.ndr.de/nachrichten/mecklenburg-vorpommern/haff-mueritz/roebel-buergerrat-macht-vorschlaege-fuer-lebenswertere-innenstadt,mvregioneubrandenburg-5162.html
 
+Strategie (was die App zu den Empfehlungen beitragen kann und was nicht): [`2026-09-18_APP_CONTRIBUTION_STRATEGY.md`](2026-09-18_APP_CONTRIBUTION_STRATEGY.md).
+
 Diese Datei ist die Textquelle für die Seed-Migration `20260916_buergerrat_2026_seed.sql` (Spec: `docs/superpowers/specs/2026-09-16-buergerrat-discussion-threads-design.md` §9). Die Threads sind Zitate aus der Broschüre; die Kommentare des Bürgermeisters stehen getrennt im Feld `official_comment`.
 
 Gemeinsame Felder: `source = buergerrat`, `source_citation = "Bürgerräte für MV — Bürgerrat Röbel/Müritz, Broschüre 2026 (Abstimmung in der 4. Sitzung)"`, `source_url` = NDR-Link, Stage-Event `diskussion` am 15.09.2026.
