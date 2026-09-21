@@ -190,6 +190,39 @@ donation rail already uses on the platform account (`apps/web/src/app/api/donate
    the citizen side (buy, ticket wallet) live in the Expo app; the web org dashboard gets the
    same "Zahlungen" panel later, not first.
 
+### 2.7 Why not end-to-end on Gnosis Pay / EURe (asked 2026-09-21)
+
+The stablecoin acceptance rail (`docs/superpowers/specs/2026-09-04-stablecoin-acceptance-rail-design.md`)
+already has the same posture as Stripe direct charges: D7 "never in the money flow", D6 no
+fee, the merchant's account is its own Gnosis Pay Safe. So the values question is not
+"custody vs no custody"; both rails leave the platform outside the money. What differs is
+**who must pass KYC** and **who can be a seller today**:
+
+| | Stripe Connect, direct charges | Gnosis Pay + EURe (spec D4) |
+|---|---|---|
+| Buyer needs | any card, Apple Pay, Google Pay; no account beyond the app | EURe in the thirdweb wallet → a KYC'd Gnosis Pay IBAN and a SEPA top-up first; there is no card→EURe on-ramp anywhere (Monerium research §5) |
+| Seller needs | a Stripe account in the Verein's name (Vorstand + Vereinsregisterauszug + IBAN) | a Gnosis Pay account; v1 supports **individuals only**, KYB for companies is an open question with Gnosis Pay (spec §3, §12); a Verein cannot legally receive into a Vorstand's personal Safe |
+| State of the rail | GA, DE, Vereine onboard on other platforms every day | D2C wound down 09-2026, partner platform in flux, SIWE domain gate only via workaround, Max's own KYC not finished, IBAN brokerage unverified |
+| Refunds / disputes | Stripe tooling, org's dashboard | manual transfer back; no disputes (fine for tickets) |
+| Fees | 1,5 % + 0,25 € per card payment to the org | ≈ 0 (sponsored gas) |
+| Intermediaries | Stripe (US), the org's bank | Monerium (EMI, EURe issuer), Gnosis Pay / Monavate (KYC, card), the org's bank on off-ramp |
+
+Neither rail is "sovereign" in the strong sense: EURe is a regulated e-money token behind a
+KYC gate, and the euro leaves the chain through an EMI either way. The honest reading is
+that for a Verein selling a €5 ticket to 200 Röbelers this autumn, the EURe rail has a buyer
+side of roughly zero and no legal seller type. For a sole-trader Gastronomie whose regulars
+already run Konto & Karte, it is exactly right, and that is what the acceptance spec targets.
+
+**Decision:** one ticket model, two acceptance rails. `ticket_orders.rail ∈ ('stripe','eure','free')`
+(same idea as `donations.rail`), one order screen with "Mit Karte / Apple Pay" (Stripe direct
+charge, when the org has a connected account) and "Mit Konto (EURe)" (EIP-681 transfer to the
+org's Gnosis Pay Safe, when the org has one and the buyer holds EURe), same `tickets`, same
+QR, same scanner. Stripe ships first because it has buyers and legal sellers today; the EURe
+share grows with Konto & Karte adoption and nothing locks an org into Stripe, because the
+connected account is theirs. A citizen with a Gnosis Pay card can already pay the Stripe
+Checkout with it: the card rail is where the two meet. Röbel Münzen stay the community
+layer (a Münzen reward per ticket, Münzen-priced community events), never the euro rail.
+
 ---
 
 ## 3. Store rules per use case
@@ -449,7 +482,16 @@ Flags in `app_settings`: `stripe_connect_enabled` (org side, allowlist pattern),
 
 ## 8. Phased plan and effort
 
-| Phase | Scope | Gate to start | Effort *(estimate, nights-and-weekends blocks)* | Done when |
+### 8.0 Stripe dashboard setup choices (Connect wizard, 2026-09-21)
+
+| Wizard step | Choose | Because |
+|---|---|---|
+| Platform profile: "Sellers will collect payments directly" vs "Buyers will purchase from you" | **Sellers will collect payments directly** | = direct charges, sellers on receipts, "Stripe will be liable if sellers can't pay back negative balances" (§1.2). |
+| "Plattform näher beschreiben" | narrow and honest: Bürger-App Röbel/Müritz; Vereine und lokale Betriebe verkaufen Eintrittskarten, Kurs- und Mitgliedsgebühren an Bürger; die Plattform hält keine Gelder | Stripe underwrites the platform; no Münzen, no Gnosis Pay, no crypto wording (§4). |
+| "Branding hinzufügen" (marked optional) | do it: name Röbel, colour `#00498B`, icon = the navy windmill | Stripe-hosted onboarding requires name, colour and icon; Checkout shows the org's branding, onboarding shows ours. |
+| Test connected account, "Was soll dieses Konto tun?" | **only** "Zahlungen von ihren eigenen Kundinnen und Kunden akzeptieren" (Händlerkonfiguration); leave "Übertragungen auf ihr Stripe-Saldo erhalten" (Empfängerkonfiguration) unchecked | merchant configuration = `card_payments` + payouts; recipient configuration exists for transfers, i.e. destination charges, which we never use. |
+| Next wizard pages (responsibilities, dashboard, onboarding) | fees: **Stripe rechnet mit dem verbundenen Konto ab**; losses: **Stripe**; dashboard: **vollständiges Stripe-Dashboard**; onboarding: **von Stripe gehostet**; country DE; business type for a Verein: gemeinnützige Organisation / Verein | maps 1:1 to `fees_collector: stripe`, `losses_collector: stripe`, `dashboard: full` in `POST /api/connect/onboard` (§7.3); dashboard type is immutable. |
+| "Ausweisdokument verifizieren — Max Brych" and "Endgültige Angaben bestätigen" | sandbox first (test account, hosted onboarding link, €1 Checkout with `4242…`, webhook), then activate | live activation is Stripe's platform review of the account holder and of roebel.app; this is decision 3 in §10 (which entity holds the platform account). |
 |---|---|---|---|---|
 | **0. Policy + ops** | Amend R5 / line 133; name the partner Verein; enable Connect on the main Stripe account, fill the platform profile, set branding; add `STRIPE_*` names to `.env.example`; test-mode connected account | Max decisions §10 | ½ block | Strategy doc updated; a test `acct_…` exists with `charges_enabled` |
 | **A. Tickets, OTA-shippable** | §7.2 tables + `reserve_tickets` + cron; §7.3 routes; §7.4 screens; flags; Jest tests for capacity, HMAC, fee maths; Stripe test cards incl. 3DS and `async_payment_failed`; one real €1 ticket with the partner Verein | Phase 0 | 3 blocks | Partner's next event sells tickets; scanner used at the door; no `event_tickets` rows touched |
