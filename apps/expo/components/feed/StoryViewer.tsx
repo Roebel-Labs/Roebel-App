@@ -38,6 +38,7 @@ import {
 } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEvent } from 'expo';
@@ -174,6 +175,10 @@ type Props = {
 };
 
 const SWIPE_DOWN_THRESHOLD = 120;
+// The slide is a rounded card inset from the screen edges; the progress
+// stepper sits on the black strip above it.
+const STAGE_INSET = 8;
+const STAGE_RADIUS = 4;
 const SWIPE_DOWN_VELOCITY = 800;
 const SWIPE_UP_THRESHOLD = 90;
 const SWIPE_UP_VELOCITY = 700;
@@ -235,6 +240,8 @@ export default function StoryViewer({
   durationMs = 6000,
 }: Props) {
   const { width: _width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const stageWidth = _width - STAGE_INSET * 2;
 
   // ── React state ────────────────────────────────────────────
   const [currentGroupIndex, setCurrentGroupIndex] = useState(initialGroupIndex);
@@ -605,7 +612,7 @@ export default function StoryViewer({
     .maxDistance(12)
     .onEnd((e, success) => {
       if (!success) return;
-      if (e.x < _width / 2) runOnJS(stepBackJS)();
+      if (e.x < stageWidth / 2) runOnJS(stepBackJS)();
       else runOnJS(stepForwardJS)();
     });
 
@@ -710,28 +717,13 @@ export default function StoryViewer({
       <StatusBar hidden />
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Animated.View
-          style={[styles.container, { width: _width, height }, backdropStyle]}
+          style={[
+            styles.container,
+            { width: _width, height, paddingTop: Math.max(insets.top, 24) },
+            backdropStyle,
+          ]}
         >
-          <GestureDetector gesture={composed}>
-            <View style={StyleSheet.absoluteFill}>
-              <Animated.View style={[StyleSheet.absoluteFill, slideStyle]}>
-                {slide?.videoUrl ? (
-                  <VideoSlideFace
-                    key={slide.videoUrl}
-                    slide={slide}
-                    muted={muted}
-                    paused={paused}
-                    onProgress={(f) => progress.setValue(f)}
-                    onEnded={stepForwardJS}
-                  />
-                ) : (
-                  <SlideFace slide={slide} />
-                )}
-              </Animated.View>
-            </View>
-          </GestureDetector>
-
-          {/* Chrome — rendered outside the gesture detector so Pressables win. */}
+          {/* Progress stepper on the black strip above the slide card. */}
           <Animated.View
             style={[styles.progressRow, chromeStyle]}
             pointerEvents="none"
@@ -774,6 +766,27 @@ export default function StoryViewer({
             })}
           </Animated.View>
 
+          <View style={[styles.stage, { marginBottom: Math.max(insets.bottom, 12) }]}>
+          <GestureDetector gesture={composed}>
+            <View style={StyleSheet.absoluteFill}>
+              <Animated.View style={[StyleSheet.absoluteFill, styles.slideCard, slideStyle]}>
+                {slide?.videoUrl ? (
+                  <VideoSlideFace
+                    key={slide.videoUrl}
+                    slide={slide}
+                    muted={muted}
+                    paused={paused}
+                    onProgress={(f) => progress.setValue(f)}
+                    onEnded={stepForwardJS}
+                  />
+                ) : (
+                  <SlideFace slide={slide} />
+                )}
+              </Animated.View>
+            </View>
+          </GestureDetector>
+
+          {/* Chrome — rendered outside the gesture detector so Pressables win. */}
           {(() => {
             const header = slide?.header ?? currentGroup.header;
             return (
@@ -861,11 +874,11 @@ export default function StoryViewer({
                 >
                   <LinearGradient
                     colors={[
-                      'transparent',
-                      'rgba(0,0,0,0.55)',
-                      'rgba(0,0,0,0.93)',
+                      'rgba(0,0,0,0)',
+                      'rgba(0,0,0,0.72)',
+                      '#000000',
                     ]}
-                    locations={[0, 0.45, 1]}
+                    locations={[0, 0.5, 1]}
                     style={StyleSheet.absoluteFill}
                   />
                 </Animated.View>
@@ -906,6 +919,7 @@ export default function StoryViewer({
               </>
             );
           })()}
+          </View>
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
@@ -1066,20 +1080,35 @@ function SlideFace({ slide }: { slide: StorySlideInput | undefined }) {
   const overlayTextColor = slide.textColor || '#000000';
   return (
     <View style={[StyleSheet.absoluteFill, styles.imageFallback]}>
-      {/* Shared illustration backdrop — fills the letterbox behind every
-          (contain-fitted) slide; fully covered by cover/video slides. */}
-      <Image
-        source={require('@/assets/illustration/story-bg.png')}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-      />
       {slide.backgroundUrl ? (
+        <>
+          {slide.imageFit === 'contain' ? (
+            // Ambient backdrop: the flyer itself, blurred wide, fills the
+            // letterbox around the contained image (the event stories).
+            <>
+              <Image
+                source={{ uri: slide.backgroundUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                blurRadius={40}
+              />
+              <View style={styles.ambientTint} pointerEvents="none" />
+            </>
+          ) : null}
+          <Image
+            source={{ uri: slide.backgroundUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit={slide.imageFit ?? 'cover'}
+          />
+        </>
+      ) : (
+        // Shared illustration backdrop for slides without an image.
         <Image
-          source={{ uri: slide.backgroundUrl }}
+          source={require('@/assets/illustration/story-bg.png')}
           style={StyleSheet.absoluteFill}
-          contentFit={slide.imageFit ?? 'cover'}
+          contentFit="cover"
         />
-      ) : null}
+      )}
       {slide.overlayText ? (
         <View style={styles.overlayTextWrap} pointerEvents="none">
           <Text style={[styles.overlayText, { color: overlayTextColor }]}>
@@ -1199,12 +1228,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   progressRow: {
-    position: 'absolute',
-    top: 52,
-    left: 12,
-    right: 12,
     flexDirection: 'row',
     gap: 4,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  stage: {
+    flex: 1,
+    marginHorizontal: STAGE_INSET,
+  },
+  slideCard: {
+    borderRadius: STAGE_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+  },
+  ambientTint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.22)',
   },
   progressBar: {
     flex: 1,
@@ -1228,7 +1269,7 @@ const styles = StyleSheet.create({
   },
   header: {
     position: 'absolute',
-    top: 64,
+    top: 14,
     left: 12,
     right: 12,
     flexDirection: 'row',
@@ -1332,11 +1373,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 260,
+    height: 300,
   },
   bottomContent: {
     position: 'absolute',
-    bottom: 48,
+    bottom: 40,
     left: 20,
     right: 20,
   },

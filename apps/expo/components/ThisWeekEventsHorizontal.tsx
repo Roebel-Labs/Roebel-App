@@ -4,6 +4,7 @@ import { EventRecord } from '@/lib/types';
 import HorizontalEventCard from './HorizontalEventCard';
 import { useTheme } from '@/context/ThemeContext';
 import { RAIL_LIST_PROPS } from './railListProps';
+import { useInterestPreviews } from '@/hooks/useInterestPreviews';
 
 type Props = {
   /** Already bucketed by partitionExploreEvents: upcoming, this week, in Röbel. */
@@ -15,6 +16,7 @@ const eventKey = (event: EventRecord) => event.id;
 
 function ThisWeekEventsHorizontal({ events }: Props) {
   const { colors } = useTheme();
+  useInterestPreviews(events);
 
   if (events.length === 0) return null;
 

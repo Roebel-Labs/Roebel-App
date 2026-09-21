@@ -1,4 +1,4 @@
-import { format, parseISO, isThisWeek, startOfWeek, endOfWeek, isToday, isFuture, startOfDay, addWeeks, addMonths, addYears, isAfter, isBefore } from 'date-fns';
+import { format, parseISO, isThisWeek, isSameWeek, startOfWeek, endOfWeek, isToday, isFuture, startOfDay, addWeeks, addMonths, addYears, isAfter, isBefore } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 export function formatDate(dateISO: string): string {
@@ -51,6 +51,38 @@ export function formatEventRailDate(dateISO: string): { month: string; day: stri
 }
 
 // Long-form date subtitle for linked event previews: "26. Mai · Montag"
+/**
+ * One relative "when" line for the poster cards on the explore rails:
+ * "Heute um 16:00", "Morgen um 19:30", "Samstag um 20:00" (later this
+ * week) and "Sa., 3. Okt um 20:00" beyond that. Without a start time the
+ * " um HH:MM" suffix is dropped. Days that already passed this week never
+ * get a bare weekday name — that would read as next week.
+ */
+export function formatEventCardWhen(
+  dateISO: string,
+  time: string | null | undefined,
+  now: Date = new Date()
+): string {
+  const date = parseISO(dateISO);
+  const today = startOfDay(now);
+  const target = startOfDay(date);
+  const dayDiff = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+
+  let dayLabel: string;
+  if (dayDiff === 0) {
+    dayLabel = 'Heute';
+  } else if (dayDiff === 1) {
+    dayLabel = 'Morgen';
+  } else if (dayDiff > 1 && isSameWeek(date, now, { weekStartsOn: 1 })) {
+    dayLabel = format(date, 'EEEE', { locale: de });
+  } else {
+    dayLabel = format(date, 'EE, d. MMM', { locale: de }).replace(/\.$/, '');
+  }
+
+  const startTime = formatTime(time);
+  return startTime ? `${dayLabel} um ${startTime}` : dayLabel;
+}
+
 export function formatEventDateLong(dateISO: string): string {
   const date = parseISO(dateISO);
   return format(date, "d. MMMM '·' EEEE", { locale: de });

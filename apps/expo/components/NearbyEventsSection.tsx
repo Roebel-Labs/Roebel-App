@@ -5,6 +5,7 @@ import { isEventInRoebel, isEventTodayOrFuture } from '@/lib/utils';
 import HorizontalEventCard from './HorizontalEventCard';
 import { useTheme } from '@/context/ThemeContext';
 import { RAIL_LIST_PROPS } from './railListProps';
+import { useInterestPreviews } from '@/hooks/useInterestPreviews';
 
 type Props = {
   events: EventRecord[];
@@ -24,6 +25,7 @@ function NearbyEventsSection({ events }: Props) {
         event.is_popular !== true
     );
   }, [events]);
+  useInterestPreviews(nearbyEvents);
 
   if (nearbyEvents.length === 0) {
     return null;

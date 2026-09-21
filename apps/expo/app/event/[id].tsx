@@ -1,12 +1,27 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Linking, Pressable, FlatList, Share, Dimensions } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Linking,
+  Pressable,
+  FlatList,
+  Share,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useActiveAccount } from 'thirdweb/react';
+import { SvgXml } from 'react-native-svg';
 import { useGoBack } from '@/hooks/useGoBack';
-import { ArrowLeftIcon, LocationIcon, CalendarIcon, UserIcon, MailIcon, CallIcon, TicketIcon, LocationSmallIcon, ShareIcon, ChevronRight } from '@/components/Icons';
+import { ArrowLeftIcon, UserIcon, MailIcon, CallIcon, ShareIcon, CalendarIcon, ChevronRight } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
-import { EventRecord, EventDateRecord } from '@/lib/types';
-import { currency, formatDate, formatTime, formatLocationFull, formatEventCardDateSplit, formatLocation, getNextUpcomingDate } from '@/lib/utils';
+import type { Account, EventRecord, EventDateRecord, OrgSubType } from '@/lib/types';
+import { currency, formatDate, formatTime, formatLocationFull, getNextUpcomingDate } from '@/lib/utils';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { EventDetailSkeleton } from '@/components/SkeletonLoader';
 import EventWeatherWidget from '@/components/EventWeatherWidget';
@@ -15,19 +30,22 @@ import { logEventView, logEvent, logCalendarSave } from '@/lib/firebase';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useInterest } from '@/context/InterestContext';
+import { useInterestPreviews } from '@/hooks/useInterestPreviews';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
-import { SvgXml } from 'react-native-svg';
 import ExperienceSection, { type ExperienceSectionHandle } from '@/components/events/ExperienceSection';
 import ExperienceComposerModal from '@/components/events/ExperienceComposerModal';
-import InterestCTA from '@/components/InterestCTA';
-import InterestButton from '@/components/InterestButton';
+import InterestCTA, { INTEREST_CTA_HEIGHT } from '@/components/InterestCTA';
+import InterestOrbs from '@/components/InterestOrbs';
+import InterestSocialRow from '@/components/InterestSocialRow';
+import HorizontalEventCard from '@/components/HorizontalEventCard';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
 import { fetchAccountById } from '@/lib/supabase-accounts';
-import { useActiveAccount } from 'thirdweb/react';
-import type { Account, OrgSubType } from '@/lib/types';
+import { fontFamily } from '@/constants/theme';
+import { POSTER_ASPECT_RATIO } from '@/constants/poster';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -35,7 +53,16 @@ const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   stadt: '🏛️ Stadt',
   fraktion: '📋 Fraktion',
   unternehmen: '🏢 Unternehmen',
+  journalist: '📝 Journalist:in',
 };
+
+const GUTTER = 16;
+const FLYER_RADIUS = 12;
+/** The ambient blur keeps running this far below the flyer block so it
+ *  fades out underneath the organizer row and title, not at a hard edge. */
+const AMBIENT_TAIL = 160;
+/** How much of the screen a very tall flyer may take before it shrinks. */
+const FLYER_MAX_HEIGHT_RATIO = 0.6;
 
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
   const svgXml = `
@@ -50,7 +77,9 @@ export default function EventDetails() {
   const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
   const router = useRouter();
   const goBack = useGoBack();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [moreEvents, setMoreEvents] = useState<EventRecord[]>([]);
   const [eventDates, setEventDates] = useState<EventDateRecord[]>([]);
@@ -58,11 +87,27 @@ export default function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  // The flyer is shown uncropped at its own ratio; A4 until the image reports its size.
+  const [flyerAspect, setFlyerAspect] = useState(POSTER_ASPECT_RATIO);
+  // Measured height of the top block (chrome + flyer) — sizes the ambient backdrop.
+  const [heroHeight, setHeroHeight] = useState(0);
   const { showSnackbar } = useSnackbar();
   const { user } = useUser();
   const activeAccount = useActiveAccount();
+  const { loadPreviews } = useInterest();
   const scrollRef = useRef<ScrollView>(null);
   const experienceSectionRef = useRef<ExperienceSectionHandle>(null);
+
+  // Count + avatars for the orbs and the social row; forced so a stale rail
+  // preview never hides someone who just joined.
+  useEffect(() => {
+    if (id) loadPreviews([id], { force: true });
+  }, [id, loadPreviews]);
+  useInterestPreviews(moreEvents);
+
+  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
+    setHeroHeight(e.nativeEvent.layout.height);
+  }, []);
 
   const handleShare = async () => {
     if (!event) return;
@@ -133,16 +178,17 @@ export default function EventDetails() {
           console.error(error);
           setEvent(null);
         } else {
-          setEvent(data as EventRecord);
-          logEventView(data.id, data.title, data.category || undefined);
+          const record = data as EventRecord;
+          setEvent(record);
+          logEventView(record.id, record.title, record.category || undefined);
 
           // Record unique view in Supabase
           if (activeAccount?.address) {
-            recordView(data.id, activeAccount.address).catch(() => {});
+            recordView(record.id, activeAccount.address).catch(() => {});
           }
 
           // Load publisher account (org that created the event) so the
-          // "Veranstalter" section can link to a public org profile.
+          // organizer row can link to a public org profile.
           const publisherAccountId = (data as EventRecord).account_id;
           if (publisherAccountId) {
             fetchAccountById(publisherAccountId)
@@ -220,10 +266,10 @@ export default function EventDetails() {
 
   if (loading) {
     return (
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <EventDetailSkeleton />
-      </ScrollView>
+      </View>
     );
   }
   if (!event) {
@@ -240,272 +286,341 @@ export default function EventDetails() {
     ? getNextUpcomingDate(eventDates.map(d => d.date)) || event.date
     : event.date;
   const isRecurring = event.is_recurring && eventDates.length > 1;
-  const dateBadge = formatEventCardDateSplit(displayDate);
-  const start = `${formatDate(displayDate)}${formatTime(event.time) ? ` • ${formatTime(event.time)}` : ''}`;
-  const end = formatTime(event.end_time);
+  const startTime = formatTime(event.time);
+  const endTime = formatTime(event.end_time);
+  const whenLine =
+    formatDate(displayDate) +
+    (startTime ? ` • ${startTime}${endTime ? ` – ${endTime}` : ''} Uhr` : '');
+  const priceLine = event.ticket_price == null ? null : currency(event.ticket_price);
+  const showLivestream = !!(event.livestream_active && event.livestream_url);
+  const hasAmbient = !!event.image_url;
+
+  // Flyer box: full width inside the gutters unless that would make a tall
+  // poster exceed FLYER_MAX_HEIGHT_RATIO of the screen.
+  const maxFlyerWidth = screenWidth - GUTTER * 2;
+  const flyerWidth = Math.min(maxFlyerWidth, screenHeight * FLYER_MAX_HEIGHT_RATIO * flyerAspect);
+  const flyerHeight = flyerWidth / flyerAspect;
+
+  // Chrome over the ambient blur reads white; without an image it sits on
+  // the plain page and uses the text colour.
+  const chromeColor = hasAmbient ? '#ffffff' : colors.textPrimary;
+  const hostName = publisherAccount?.name ?? event.organizer_name;
+  const hostAvatar = publisherAccount?.avatar_url ?? null;
+  const hostIsOrg = publisherAccount?.account_type === 'organisation';
+  const publisherId = publisherAccount?.id;
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      {event.livestream_active && event.livestream_url ? (
-        <View style={[styles.livestreamSection, { backgroundColor: colors.background }]}>
-          <View style={styles.livestreamNavRow}>
-            <Pressable onPress={goBack} style={[styles.navBtn, { backgroundColor: colors.surface }]}>
-              <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
-            </Pressable>
-            <View style={styles.navBtn} />
-          </View>
-          <YouTubeEmbed youtubeUrl={event.livestream_url} height={Dimensions.get('window').width * 9 / 16} borderRadius={0} />
-        </View>
-      ) : (
-        <View style={[styles.imageSection, { backgroundColor: colors.cardPlaceholder }]}>
-          {event.image_url ? (
-            <Pressable onPress={() => setImageZoomVisible(true)} style={StyleSheet.absoluteFill}>
-              <Image
-                source={{ uri: event.image_url }}
-                style={styles.heroBlurred}
-                contentFit="cover"
-                blurRadius={20}
-              />
-              <Image
-                source={{ uri: event.image_url }}
-                style={styles.hero}
-                contentFit="contain"
-                accessibilityIgnoresInvertColors
-              />
-            </Pressable>
-          ) : (
-            <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-          )}
-
-          {event.is_cancelled && <EventCancelledScrim />}
-
-          <Pressable onPress={goBack} style={[styles.backBtn, { backgroundColor: colors.background }]}>
-            <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
-          </Pressable>
-
-          {event.image_url && (
-            <View style={[styles.dateOverlay, { backgroundColor: colors.background }]}>
-              <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateBadge.day}</Text>
-              <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateBadge.label}</Text>
-            </View>
-          )}
-
-          <View style={styles.pageIndicator} />
-        </View>
-      )}
-
-      <View style={[styles.contentOverlay, { backgroundColor: colors.background }]}>
-        <View style={styles.content}>
-            <View style={styles.titleSection}>
-              {event.category && (
-                <View style={styles.categoryBadge}>
-                  <Text style={[styles.categoryText, { color: colors.primary }]}>{event.category}</Text>
-                </View>
-              )}
-              <Text style={[styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
-            </View>
-
-            {event.livestream_active && event.livestream_url && (
-              <Pressable
-                style={[styles.livestreamCta, { backgroundColor: colors.primary }]}
-                onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-              >
-                <PlayIcon size={20} color={colors.onPrimary} />
-                <Text style={[styles.livestreamCtaText, { color: colors.onPrimary }]}>Livestream ansehen</Text>
-              </Pressable>
-            )}
-
-            <InterestCTA eventId={id as string} />
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtonsRow}>
-              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleSaveToCalendar}>
-                <CalendarIcon size={18} color={colors.textSecondary} strokeWidth={1.5} />
-                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Zum Kalender</Text>
-              </Pressable>
-              <Pressable style={[styles.actionButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleShare}>
-                <ShareIcon size={18} color={colors.textSecondary} />
-                <Text style={[styles.actionButtonText, { color: colors.textSecondary }]}>Teilen</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über die Veranstaltung</Text>
-              <Text style={[styles.sectionText, { color: colors.textPrimary }]}>
-                {event.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elitr, sed diam nonumy eiusmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.'}
-              </Text>
-            </View>
-
-            <View style={styles.infoCards}>
-              <View style={[styles.infoCard, { borderColor: colors.border }]}>
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
-                  <CalendarIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>
-                    {isRecurring ? 'Nächster Termin' : 'Datum & Zeit'}
-                  </Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{start}</Text>
-                  {end && <Text style={[styles.infoSubValue, { color: colors.textSecondary }]}>bis {end}</Text>}
-                  {isRecurring && (
-                    <Pressable
-                      onPress={() => router.push(`/event/${id}/dates`)}
-                      style={styles.allDatesLink}
-                    >
-                      <Text style={[styles.allDatesText, { color: colors.primary }]}>
-                        Alle {eventDates.length} Termine anzeigen
-                      </Text>
-                      <ChevronRight size={14} color={colors.primary} />
-                    </Pressable>
-                  )}
-                </View>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.infoCard,
-                  { borderColor: colors.border },
-                  pressed && [styles.infoCardPressed, { backgroundColor: colors.cardPlaceholder }]
-                ]}
-                onPress={() => router.push(`/location?selectedEventId=${event.id}`)}
-              >
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
-                  <LocationIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Ort</Text>
-                  <Text style={[styles.infoValueClickable, { color: colors.primary }]} numberOfLines={1} ellipsizeMode="tail">
-                    {formatLocationFull(event.location)}
-                  </Text>
-                </View>
-                <View style={styles.chevronContainer}>
-                  <ChevronRight size={20} color={colors.primary} strokeWidth={1.5} />
-                </View>
-              </Pressable>
-
-              <View style={[styles.infoCard, { borderColor: colors.border }]}>
-                <View style={[styles.infoIconContainer, { backgroundColor: colors.surfaceSecondary }]}>
-                  <TicketIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-                </View>
-                <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Preis</Text>
-                  <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{currency(event.ticket_price)}</Text>
-                </View>
-              </View>
-            </View>
-
-
-
-            {/* Weather Widget - Only shows if event is within 10 days */}
-            <View style={styles.section}>
-              <EventWeatherWidget
-                date={event.date}
-                latitude={event.latitude}
-                longitude={event.longitude}
-              />
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstalter</Text>
-              {publisherAccount && publisherAccount.account_type === 'organisation' && (
-                <Pressable
-                  onPress={() =>
-                    router.push({ pathname: '/account/[id]' as any, params: { id: publisherAccount.id } })
-                  }
-                  style={({ pressed }) => [
-                    styles.publisherRow,
-                    { borderColor: colors.border },
-                    pressed && styles.infoCardPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Profil von ${publisherAccount.name} öffnen`}
-                >
-                  {publisherAccount.avatar_url ? (
-                    <Image
-                      source={{ uri: publisherAccount.avatar_url }}
-                      style={styles.publisherAvatar}
-                      contentFit="cover"
-                      accessibilityIgnoresInvertColors
-                    />
-                  ) : (
-                    <View style={[styles.publisherAvatarPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
-                      <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-                    </View>
-                  )}
-                  <View style={styles.publisherInfo}>
-                    <Text style={[styles.publisherName, { color: colors.textPrimary }]} numberOfLines={1}>
-                      {publisherAccount.name}
-                    </Text>
-                    {publisherAccount.sub_type && (
-                      <Text style={[styles.publisherSubType, { color: colors.textTertiary }]} numberOfLines={1}>
-                        {EVENT_PUBLISHER_SUB_TYPE_LABELS[publisherAccount.sub_type]}
-                      </Text>
-                    )}
-                  </View>
-                  <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
-                </Pressable>
-              )}
-              <View style={[styles.organizerCard, { borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
-                <View style={styles.organizerHeader}>
-                  <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
-                    <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-                  </View>
-                  <Text style={[styles.organizerName, { color: colors.textPrimary }]}>{event.organizer_name}</Text>
-                </View>
-                <View style={styles.contactInfo}>
-                  <Pressable
-                    onPress={() => Linking.openURL(`mailto:${event.organizer_email}`)}
-                    style={styles.contactRow}
-                  >
-                    <MailIcon size={16} color={colors.primary} strokeWidth={1.5} />
-                    <Text style={[styles.organizerEmail, { color: colors.primary }]}>{event.organizer_email}</Text>
-                  </Pressable>
-                  {event.organizer_phone ? (
-                    <Pressable
-                      onPress={() => Linking.openURL(`tel:${event.organizer_phone}`)}
-                      style={styles.contactRow}
-                    >
-                      <CallIcon size={16} color={colors.tabIconActive} strokeWidth={1.5} />
-                      <Text style={[styles.organizerPhone, { color: colors.textPrimary }]}>{event.organizer_phone}</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-
-            {/* Event Experiences Section */}
-            <ExperienceSection
-              ref={experienceSectionRef}
-              eventId={id as string}
-              highlightExperienceId={experienceId}
-              scrollViewRef={scrollRef}
-              onOpenComposer={() => setComposerOpen(true)}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: INTEREST_CTA_HEIGHT + insets.bottom + 48 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Ambient backdrop: the flyer itself, blurred wide, fading into the
+            page under the title block. Sized from the measured hero block. */}
+        {hasAmbient && heroHeight > 0 && (
+          <View style={[styles.ambient, { height: heroHeight + AMBIENT_TAIL }]} pointerEvents="none">
+            <Image
+              source={{ uri: event.image_url ?? undefined }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              blurRadius={48}
+              cachePolicy="memory-disk"
             />
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: isDark ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.12)' },
+              ]}
+            />
+            <LinearGradient
+              colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)']}
+              style={styles.topScrim}
+            />
+            <LinearGradient
+              colors={[`${colors.background}00`, colors.background]}
+              style={styles.ambientFade}
+            />
+          </View>
+        )}
 
-            {/* More Events Section */}
-            {moreEvents.length > 0 && (
-              <View style={styles.moreEventsSection}>
-                <Text style={[styles.moreEventsTitle, { color: colors.textPrimary }]}>Weitere Veranstaltungen</Text>
-                <FlatList
-                  horizontal
-                  data={moreEvents}
-                  renderItem={({ item }) => <CompactEventCard event={item} />}
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.moreEventsList}
+        <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
+          <View style={styles.topBar}>
+            <Pressable
+              onPress={goBack}
+              hitSlop={8}
+              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Zurück"
+            >
+              <ArrowLeftIcon size={26} color={chromeColor} strokeWidth={1.8} />
+            </Pressable>
+            <Pressable
+              onPress={handleShare}
+              hitSlop={8}
+              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Veranstaltung teilen"
+            >
+              <ShareIcon size={24} color={chromeColor} />
+            </Pressable>
+          </View>
+
+          {showLivestream ? (
+            <View style={[styles.flyerWrap, { width: maxFlyerWidth }]}>
+              <View style={styles.flyer}>
+                <YouTubeEmbed
+                  youtubeUrl={event.livestream_url as string}
+                  height={maxFlyerWidth * 9 / 16}
+                  borderRadius={FLYER_RADIUS}
                 />
               </View>
-            )}
-
-            <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
-
+            </View>
+          ) : (
+            <View style={[styles.flyerWrap, { width: flyerWidth, height: flyerHeight }]}>
+              <Pressable
+                onPress={() => setImageZoomVisible(true)}
+                disabled={!event.image_url}
+                style={[styles.flyer, { backgroundColor: colors.cardPlaceholder }]}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Flyer vergrößern"
+              >
+                {event.image_url ? (
+                  <Image
+                    source={{ uri: event.image_url }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
+                    priority="high"
+                    accessibilityIgnoresInvertColors
+                    onLoad={(e) => {
+                      const { width, height } = e.source;
+                      if (width && height) setFlyerAspect(width / height);
+                    }}
+                  />
+                ) : null}
+                {event.is_cancelled && <EventCancelledScrim radius={FLYER_RADIUS} />}
+              </Pressable>
+              <InterestOrbs eventId={id as string} />
+            </View>
+          )}
         </View>
+
+        <View style={styles.headerBlock}>
+          <View style={styles.hostRow}>
+            <Pressable
+              onPress={
+                hostIsOrg && publisherId
+                  ? () => router.push({ pathname: '/account/[id]' as any, params: { id: publisherId } })
+                  : undefined
+              }
+              disabled={!hostIsOrg}
+              style={({ pressed }) => [styles.host, pressed && styles.pressed]}
+              accessibilityRole={hostIsOrg ? 'button' : undefined}
+              accessibilityLabel={hostIsOrg ? `Profil von ${hostName} öffnen` : undefined}
+            >
+              {hostAvatar ? (
+                <Image
+                  source={{ uri: hostAvatar }}
+                  style={[styles.hostAvatar, { backgroundColor: colors.cardPlaceholder }]}
+                  contentFit="cover"
+                  accessibilityIgnoresInvertColors
+                />
+              ) : (
+                <View style={[styles.hostAvatar, styles.hostAvatarFallback, { backgroundColor: colors.surfaceSecondary }]}>
+                  <UserIcon size={14} color={colors.tabIconActive} strokeWidth={1.5} />
+                </View>
+              )}
+              <Text style={[styles.hostName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {hostName}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSaveToCalendar}
+              hitSlop={8}
+              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Zum Kalender hinzufügen"
+            >
+              <CalendarIcon size={22} color={colors.textPrimary} strokeWidth={1.5} />
+            </Pressable>
+          </View>
+
+          {event.category && (
+            <View style={[styles.categoryBadge, { backgroundColor: colors.categoryBackground }]}>
+              <Text style={[styles.categoryText, { color: colors.primary }]}>{event.category}</Text>
+            </View>
+          )}
+          <Text style={[styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
+
+          <Pressable
+            onPress={() => router.push(`/location?selectedEventId=${event.id}`)}
+            hitSlop={4}
+            style={({ pressed }) => pressed && styles.pressed}
+            accessibilityRole="button"
+            accessibilityLabel="Ort auf der Karte anzeigen"
+          >
+            <Text style={[styles.place, { color: colors.textPrimary }]} numberOfLines={2}>
+              {formatLocationFull(event.location)}
+            </Text>
+          </Pressable>
+          <Text style={[styles.when, { color: colors.textSecondary }]}>{whenLine}</Text>
+          {isRecurring && (
+            <Pressable
+              onPress={() => router.push(`/event/${id}/dates`)}
+              hitSlop={4}
+              style={({ pressed }) => [styles.allDatesLink, pressed && styles.pressed]}
+            >
+              <Text style={[styles.allDatesText, { color: colors.primary }]}>
+                Alle {eventDates.length} Termine anzeigen
+              </Text>
+              <ChevronRight size={14} color={colors.primary} />
+            </Pressable>
+          )}
+          {priceLine && (
+            <Text style={[styles.when, { color: colors.textSecondary }]}>
+              {priceLine === 'Kostenlos' ? priceLine : `Eintritt ${priceLine}`}
+            </Text>
+          )}
+
+          <InterestSocialRow eventId={id as string} style={styles.socialRow} />
+        </View>
+
+        <View style={styles.sections}>
+          {showLivestream && (
+            <Pressable
+              style={[styles.livestreamCta, { backgroundColor: colors.primary }]}
+              onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+            >
+              <PlayIcon size={20} color={colors.onPrimary} />
+              <Text style={[styles.livestreamCtaText, { color: colors.onPrimary }]}>Livestream ansehen</Text>
+            </Pressable>
+          )}
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Über die Veranstaltung</Text>
+            <Text style={[styles.sectionText, { color: colors.textPrimary }]}>
+              {event.description || 'Für diese Veranstaltung gibt es noch keine Beschreibung.'}
+            </Text>
+          </View>
+
+          {/* Weather Widget - Only shows if event is within 10 days */}
+          <View style={styles.section}>
+            <EventWeatherWidget
+              date={event.date}
+              latitude={event.latitude}
+              longitude={event.longitude}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Veranstalter</Text>
+            {publisherAccount && hostIsOrg && (
+              <Pressable
+                onPress={() =>
+                  router.push({ pathname: '/account/[id]' as any, params: { id: publisherAccount.id } })
+                }
+                style={({ pressed }) => [
+                  styles.publisherRow,
+                  { borderColor: colors.border },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Profil von ${publisherAccount.name} öffnen`}
+              >
+                {publisherAccount.avatar_url ? (
+                  <Image
+                    source={{ uri: publisherAccount.avatar_url }}
+                    style={styles.publisherAvatar}
+                    contentFit="cover"
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : (
+                  <View style={[styles.publisherAvatarPlaceholder, { backgroundColor: colors.surfaceSecondary }]}>
+                    <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+                  </View>
+                )}
+                <View style={styles.publisherInfo}>
+                  <Text style={[styles.publisherName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {publisherAccount.name}
+                  </Text>
+                  {publisherAccount.sub_type && (
+                    <Text style={[styles.publisherSubType, { color: colors.textTertiary }]} numberOfLines={1}>
+                      {EVENT_PUBLISHER_SUB_TYPE_LABELS[publisherAccount.sub_type]}
+                    </Text>
+                  )}
+                </View>
+                <ChevronRight size={20} color={colors.textTertiary} strokeWidth={1.5} />
+              </Pressable>
+            )}
+            <View style={[styles.organizerCard, { borderColor: colors.border, marginTop: publisherAccount ? 12 : 0 }]}>
+              <View style={styles.organizerHeader}>
+                <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
+                  <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
+                </View>
+                <Text style={[styles.organizerName, { color: colors.textPrimary }]}>{event.organizer_name}</Text>
+              </View>
+              <View style={styles.contactInfo}>
+                <Pressable
+                  onPress={() => Linking.openURL(`mailto:${event.organizer_email}`)}
+                  style={styles.contactRow}
+                >
+                  <MailIcon size={16} color={colors.primary} strokeWidth={1.5} />
+                  <Text style={[styles.organizerEmail, { color: colors.primary }]}>{event.organizer_email}</Text>
+                </Pressable>
+                {event.organizer_phone ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(`tel:${event.organizer_phone}`)}
+                    style={styles.contactRow}
+                  >
+                    <CallIcon size={16} color={colors.tabIconActive} strokeWidth={1.5} />
+                    <Text style={[styles.organizerPhone, { color: colors.textPrimary }]}>{event.organizer_phone}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
+          {/* Event Experiences Section */}
+          <ExperienceSection
+            ref={experienceSectionRef}
+            eventId={id as string}
+            highlightExperienceId={experienceId}
+            scrollViewRef={scrollRef}
+            onOpenComposer={() => setComposerOpen(true)}
+          />
+        </View>
+
+        {/* More Events Section */}
+        {moreEvents.length > 0 && (
+          <View style={styles.moreEventsSection}>
+            <Text style={[styles.moreEventsTitle, { color: colors.textPrimary }]}>Weitere Veranstaltungen</Text>
+            <FlatList
+              horizontal
+              data={moreEvents}
+              renderItem={({ item }) => <HorizontalEventCard event={item} />}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.moreEventsList}
+            />
+          </View>
+        )}
+
+        <QualityStampSection title="Veranstaltungen sind geprüft auf Qualität" />
+      </ScrollView>
+
+      {/* Sticky footer: the primary action floats over the scrolling content. */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
+        <LinearGradient
+          colors={[`${colors.background}00`, colors.background]}
+          locations={[0, 0.55]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <InterestCTA eventId={id as string} />
       </View>
 
       {/* Image Zoom Modal */}
@@ -527,64 +642,7 @@ export default function EventDetails() {
           onError={(message) => showSnackbar({ message, duration: 4000 })}
         />
       )}
-    </ScrollView>
-  );
-}
-
-// Compact Event Card Component for horizontal list
-function CompactEventCard({ event }: { event: EventRecord }) {
-  const router = useRouter();
-  const { colors } = useTheme();
-  const time = formatTime(event.time);
-  const dateDisplay = formatEventCardDateSplit(event.date);
-
-  return (
-    <Pressable
-      onPress={() => router.push({ pathname: '/event/[id]', params: { id: event.id } })}
-      style={({ pressed }) => [styles.compactCard, { backgroundColor: colors.background }, pressed && styles.compactCardPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`Details für ${event.title} öffnen`}
-    >
-      <View style={styles.compactImageContainer}>
-        {event.image_url ? (
-          <Image
-            source={{ uri: event.image_url }}
-            style={[styles.compactImage, { backgroundColor: colors.cardPlaceholder }]}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        ) : (
-          <View style={[styles.compactImagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-        )}
-
-        {/* Date overlay */}
-        <View style={[styles.compactDateOverlay, { backgroundColor: colors.background }]}>
-          <Text style={[styles.compactDateDay, { color: colors.textPrimary }]}>{dateDisplay.day}</Text>
-          <Text style={[styles.compactDateLabel, { color: colors.textSecondary }]}>{dateDisplay.label}</Text>
-        </View>
-      </View>
-
-      <View style={styles.compactContentContainer}>
-        <View style={styles.compactHeaderRow}>
-          <Text style={[styles.compactEventTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-            {event.title}
-          </Text>
-          <InterestButton eventId={event.id} iconOnly compact />
-        </View>
-
-        <View style={styles.compactMetaRow}>
-          <View style={styles.compactLocationRow}>
-            <LocationSmallIcon color={colors.tabIconActive} />
-            <Text style={[styles.compactLocation, { color: colors.textPrimary }]} numberOfLines={1}>
-              {formatLocation(event.location)}
-            </Text>
-          </View>
-          {time && (
-            <Text style={[styles.compactTimeText, { color: colors.textPrimary }]}>{time}</Text>
-          )}
-        </View>
-      </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -592,92 +650,130 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 40,
+  pressed: {
+    opacity: 0.7,
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  imageSection: {
-    height: 400,
-    position: 'relative',
+  ambient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     overflow: 'hidden',
   },
-  heroBlurred: {
-    ...StyleSheet.absoluteFill,
+  topScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+  },
+  ambientFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '55%',
   },
   hero: {
-    ...StyleSheet.absoluteFill,
+    paddingHorizontal: GUTTER,
   },
-  heroPlaceholder: {
-    width: '100%',
-    height: '100%',
-  },
-  backBtn: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    width: 44,
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     height: 44,
-    borderRadius: 22,
+  },
+  chromeBtn: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
-  pageIndicator: {
-    position: 'absolute',
-    bottom: 20,
+  flyerWrap: {
     alignSelf: 'center',
-    width: 60,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 2,
+    marginTop: 10,
+    // No overflow clipping here: the orbs sit half outside the flyer.
   },
-  dateOverlay: {
-    position: 'absolute',
-    top: 60,
-    right: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+  flyer: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: FLYER_RADIUS,
+    overflow: 'hidden',
+  },
+  headerBlock: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 20,
+  },
+  hostRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 60,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
   },
-  dateDay: {
-    fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 28,
+  host: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  dateLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 17,
-    marginTop: 2,
+  hostAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
-  contentOverlay: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -30,
-    minHeight: 600,
+  hostAvatarFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  content: {
-    padding: 24,
-    paddingBottom: 40,
+  hostName: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fontFamily.semiBold,
   },
-  titleSection: {
-    marginBottom: 20,
+  categoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+  },
+  categoryText: {
+    fontSize: 12,
+    fontFamily: fontFamily.medium,
   },
   title: {
-    fontSize: 26,
-    fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : 'Inter-Semibold',
+    fontSize: 30,
+    lineHeight: 34,
+    fontFamily: fontFamily.heading,
+    marginBottom: 12,
+  },
+  place: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: fontFamily.semiBold,
+    marginBottom: 4,
+  },
+  when: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontFamily: fontFamily.regular,
+  },
+  allDatesLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  allDatesText: {
+    fontSize: 14,
+    fontFamily: fontFamily.medium,
+  },
+  socialRow: {
+    marginTop: 16,
+  },
+  sections: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 28,
   },
   livestreamCta: {
     flexDirection: 'row',
@@ -691,73 +787,7 @@ const styles = StyleSheet.create({
   },
   livestreamCtaText: {
     fontSize: 16,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-  },
-  categoryBadge: {
-    backgroundColor: 'rgba(24, 140, 252, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-  },
-  infoCards: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  infoCardPressed: {
-    opacity: 0.8,
-  },
-  infoIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-  },
-  infoValueClickable: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    flex: 1,
-  },
-  infoSubValue: {
-    fontSize: 13,
-    fontFamily: 'Inter',
-    marginTop: 2,
-  },
-  allDatesLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 4,
-  },
-  allDatesText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.heading,
   },
   section: {
     marginBottom: 28,
@@ -769,7 +799,7 @@ const styles = StyleSheet.create({
   },
   sectionText: {
     fontSize: 16,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.regular,
     lineHeight: 22,
     opacity: 0.85,
   },
@@ -799,11 +829,11 @@ const styles = StyleSheet.create({
   },
   publisherName: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
   publisherSubType: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: fontFamily.regular,
   },
   organizerCard: {
     borderRadius: 12,
@@ -825,7 +855,7 @@ const styles = StyleSheet.create({
   },
   organizerName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
   contactInfo: {
     gap: 8,
@@ -838,157 +868,32 @@ const styles = StyleSheet.create({
   },
   organizerEmail: {
     fontSize: 14,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.regular,
     textDecorationLine: 'underline',
   },
   organizerPhone: {
     fontSize: 14,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.regular,
   },
   moreEventsSection: {
     marginTop: 16,
-    marginBottom: 0,
-    marginHorizontal: -24,
   },
   moreEventsTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 16,
-    paddingHorizontal: 24,
+    fontFamily: 'MonaSansSemiCondensed-Medium',
+    marginBottom: 12,
+    paddingHorizontal: GUTTER,
   },
   moreEventsList: {
     gap: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: GUTTER,
   },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    fontSize: 15,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-  },
-  // Compact Event Card Styles
-  compactCard: {
-    width: 240,
-  },
-  compactCardPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  compactImageContainer: {
-    height: 140,
-    position: 'relative',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  compactImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-  },
-  compactImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-  },
-  compactDateOverlay: {
+  footer: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    alignItems: 'center',
-    minWidth: 42,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  compactDateDay: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 20,
-  },
-  compactDateLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 13,
-    marginTop: 1,
-  },
-  compactContentContainer: {
-    paddingVertical: 12,
-    gap: 6,
-  },
-  compactHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 2,
-  },
-  compactEventTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    flex: 1,
-    paddingRight: 8,
-    lineHeight: 18,
-  },
-  compactMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  compactLocationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    flex: 1,
-  },
-  compactLocation: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    opacity: 0.7,
-    flex: 1,
-  },
-  compactTimeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    opacity: 0.7,
-  },
-  chevronContainer: {
-    marginLeft: 8,
-    justifyContent: 'center',
-  },
-  livestreamSection: {
-    paddingTop: 56,
-  },
-  livestreamNavRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  navBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 28,
+    paddingHorizontal: GUTTER,
   },
 });

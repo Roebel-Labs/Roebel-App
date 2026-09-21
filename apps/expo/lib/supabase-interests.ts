@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { buildInterestPreviews, type InterestPreview } from './interest-previews';
 
 export type InterestedUser = {
   wallet_address: string;
@@ -119,4 +120,40 @@ async function fetchInterestedUsers(
       profile_picture_url: user?.profile_picture_url ?? null,
     };
   });
+}
+
+/**
+ * Count + a few interested people for MANY events in two round trips
+ * (one on event_interests, one on users) — the explore rails call this
+ * once per rail instead of two queries per card. Every requested id gets
+ * an entry, so an absent key means "not loaded yet".
+ */
+export async function fetchInterestPreviews(
+  eventIds: string[]
+): Promise<Map<string, InterestPreview>> {
+  const ids = Array.from(new Set(eventIds));
+  if (ids.length === 0) return new Map();
+
+  const { data: rows } = await supabase
+    .from('event_interests')
+    .select('event_id, user_wallet')
+    .in('event_id', ids)
+    .order('created_at', { ascending: false })
+    .limit(2000);
+
+  const interestRows = (rows ?? []) as { event_id: string; user_wallet: string }[];
+  const wallets = Array.from(new Set(interestRows.map((r) => r.user_wallet.toLowerCase())));
+
+  // PostgREST puts the `in` list in the URL — keep each request short.
+  type ProfileRow = { wallet_address: string; username: string | null; profile_picture_url: string | null };
+  const users: ProfileRow[] = [];
+  for (let i = 0; i < wallets.length; i += 100) {
+    const { data } = await supabase
+      .from('users')
+      .select('wallet_address, username, profile_picture_url')
+      .in('wallet_address', wallets.slice(i, i + 100));
+    if (data) users.push(...(data as ProfileRow[]));
+  }
+
+  return buildInterestPreviews(ids, interestRows, users);
 }

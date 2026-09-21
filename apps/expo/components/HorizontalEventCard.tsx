@@ -3,28 +3,41 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { EventRecord } from '@/lib/types';
-import { formatEventCardDateSplit, formatLocation, formatTime } from '@/lib/utils';
-import { LocationSmallIcon } from './Icons';
+import { currency, formatEventCardWhen, formatLocation } from '@/lib/utils';
 import { useTheme } from '@/context/ThemeContext';
-import InterestButton from './InterestButton';
+import { fontFamily } from '@/constants/theme';
+import EventInterestPeek from './EventInterestPeek';
 import EventCancelledScrim from './EventCancelledScrim';
 import { transformedImageUrl } from '@/lib/image-url';
+
+import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/constants/poster';
+
+export { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS };
 
 type Props = {
   event: EventRecord;
   /** Stretch the card to its container width and show the image at its
-   *  natural aspect ratio (no crop) instead of the fixed carousel size. */
+   *  natural aspect ratio (no crop) instead of the fixed rail poster. */
   fullWidth?: boolean;
 };
 
+/**
+ * Poster card for the explore rails ("Diese Woche", "In der Nähe", "Alle
+ * Veranstaltungen") and the detail page's "Weitere Veranstaltungen": the
+ * flyer tall and uncropped, then title, price · place, a relative "when"
+ * line and the interest peek (avatar stack + count). No date badge, no
+ * heart — interest is toggled on the detail page.
+ */
 function HorizontalEventCard({ event, fullWidth = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
-  const time = formatTime(event.time);
-  const dateDisplay = formatEventCardDateSplit(event.date);
+  const when = formatEventCardWhen(event.date, event.time);
+  const place = formatLocation(event.location);
+  const price = event.ticket_price == null ? null : currency(event.ticket_price);
+  const priceAndPlace = [price, place].filter(Boolean).join(' · ');
   // In full-width mode we size the image container to the picture's own
-  // aspect ratio so it scales up without cropping. Default to 16:9 until loaded.
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  // aspect ratio so it scales up without cropping. Default to A4 until loaded.
+  const [aspectRatio, setAspectRatio] = useState(POSTER_ASPECT_RATIO);
 
   return (
     <Pressable
@@ -32,20 +45,25 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
       style={({ pressed }) => [
         styles.card,
         fullWidth && styles.cardFullWidth,
-        { backgroundColor: colors.background },
         pressed && styles.cardPressed,
       ]}
       accessibilityRole="button"
       accessibilityLabel={`Details für ${event.title} öffnen`}
     >
-      <View style={[styles.imageContainer, fullWidth && { height: undefined, aspectRatio }]}>
+      <View
+        style={[
+          styles.poster,
+          { aspectRatio: fullWidth ? aspectRatio : POSTER_ASPECT_RATIO, backgroundColor: colors.cardPlaceholder },
+        ]}
+      >
         {event.image_url ? (
           <Image
             source={{ uri: transformedImageUrl(event.image_url, { width: 640 }) ?? undefined }}
-            style={[styles.image, { backgroundColor: colors.cardPlaceholder }]}
+            style={styles.posterImage}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={event.image_url ?? undefined}
+            transition={150}
             accessibilityIgnoresInvertColors
             onLoad={
               fullWidth
@@ -56,35 +74,23 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
                 : undefined
             }
           />
-        ) : (
-          <View style={[styles.imagePlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
-        )}
-        <View style={[styles.dateOverlay, { backgroundColor: colors.background }]}>
-          <Text style={[styles.dateDay, { color: colors.textPrimary }]}>{dateDisplay.day}</Text>
-          <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{dateDisplay.label}</Text>
-        </View>
-        {event.is_cancelled && <EventCancelledScrim radius={12} compact />}
+        ) : null}
+        {event.is_cancelled && <EventCancelledScrim radius={POSTER_RADIUS} compact />}
       </View>
 
-      <View style={styles.contentContainer}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-            {event.title}
+      <View style={styles.caption}>
+        <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
+          {event.title}
+        </Text>
+        {priceAndPlace ? (
+          <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>
+            {priceAndPlace}
           </Text>
-          <InterestButton eventId={event.id} iconOnly compact />
-        </View>
-
-        <View style={styles.metaRow}>
-          <View style={styles.locationRow}>
-            <LocationSmallIcon color={colors.tabIconActive} />
-            <Text style={[styles.locationText, { color: colors.textPrimary }]} numberOfLines={1}>
-              {formatLocation(event.location)}
-            </Text>
-          </View>
-          {time && (
-            <Text style={[styles.timeText, { color: colors.textPrimary }]}>{time}</Text>
-          )}
-        </View>
+        ) : null}
+        <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>
+          {when}
+        </Text>
+        <EventInterestPeek eventId={event.id} style={styles.peek} />
       </View>
     </Pressable>
   );
@@ -92,7 +98,7 @@ function HorizontalEventCard({ event, fullWidth = false }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 240,
+    width: POSTER_CARD_WIDTH,
   },
   cardFullWidth: {
     width: '100%',
@@ -101,89 +107,31 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     transform: [{ scale: 0.98 }],
   },
-  imageContainer: {
-    height: 140,
-    position: 'relative',
-    borderRadius: 12,
+  poster: {
+    width: '100%',
+    borderRadius: POSTER_RADIUS,
     overflow: 'hidden',
   },
-  image: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-  },
-  imagePlaceholder: {
+  posterImage: {
     width: '100%',
     height: '100%',
   },
-  dateOverlay: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    alignItems: 'center',
-    minWidth: 42,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  dateDay: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 20,
-  },
-  dateLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 13,
-    marginTop: 1,
-  },
-  contentContainer: {
+  caption: {
     paddingTop: 12,
-    paddingBottom: 0,
-    gap: 6,
+    gap: 4,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 2,
+  title: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: fontFamily.medium,
   },
-  cardTitle: {
+  meta: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    flex: 1,
-    paddingRight: 8,
-    lineHeight: 18,
+    lineHeight: 19,
+    fontFamily: fontFamily.regular,
   },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    flex: 1,
-  },
-  locationText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    opacity: 0.7,
-    flex: 1,
-  },
-  timeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    opacity: 0.7,
+  peek: {
+    marginTop: 6,
   },
 });
 

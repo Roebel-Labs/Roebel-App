@@ -25,6 +25,7 @@ import ExploreCategoryChips from '@/components/ExploreCategoryChips';
 import HeroCarousel from '@/components/HeroCarousel';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
+import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/components/HorizontalEventCard';
 import NewsSection from '@/components/NewsSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
@@ -40,7 +41,7 @@ import SearchModal from '@/components/SearchModal';
 import { Skeleton, HeroCarouselSkeleton } from '@/components/SkeletonLoader';
 
 const EVENT_CARD_COLUMNS =
-  'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name';
+  'id, title, date, time, location, formatted_address, address_components, image_url, is_popular, is_cancelled, organizer_name, ticket_price';
 
 // Stable (module-level) empty-array fallbacks: `data ?? []` would mint a new
 // array identity every render, which defeats the useMemo below.
@@ -120,8 +121,17 @@ function SectionRailSkeleton({ titleWidth = '40%' }: { titleWidth?: string | num
     <View style={styles.skeletonSection}>
       <Skeleton width={titleWidth} height={24} borderRadius={6} style={{ marginBottom: 12, marginHorizontal: 16 }} />
       <View style={styles.skeletonRow}>
-        <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 16 }} />
-        <Skeleton width={240} height={140} borderRadius={12} style={{ marginLeft: 12 }} />
+        {[16, 12].map((marginLeft) => (
+          <View key={marginLeft} style={{ marginLeft, width: POSTER_CARD_WIDTH }}>
+            <Skeleton
+              width={POSTER_CARD_WIDTH}
+              height={Math.round(POSTER_CARD_WIDTH / POSTER_ASPECT_RATIO)}
+              borderRadius={POSTER_RADIUS}
+            />
+            <Skeleton width="70%" height={16} borderRadius={4} style={{ marginTop: 12 }} />
+            <Skeleton width="55%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
+          </View>
+        ))}
       </View>
     </View>
   );

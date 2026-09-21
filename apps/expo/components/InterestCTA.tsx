@@ -1,44 +1,43 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Text, Pressable, Animated, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useActiveAccount } from 'thirdweb/react';
 import { useInterest } from '@/context/InterestContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useRequireAuth } from '@/context/AuthGateContext';
+import { fontFamily } from '@/constants/theme';
 import { HeartIcon, HeartFilledIcon } from './Icons';
-import AvatarStack from './AvatarStack';
-import { InterestedUser } from '@/lib/supabase-interests';
 
-type InterestCTAProps = {
-  eventId: string;
-};
+export const INTEREST_CTA_HEIGHT = 54;
 
 const HEART_PNG = require('@/assets/icons/Heart.png');
 
-export default function InterestCTA({ eventId }: InterestCTAProps) {
+/**
+ * The detail page's primary action, pinned to the bottom of the screen:
+ * a full-width "Interessiert" button that flips to an outlined "Du bist
+ * interessiert". Interest state, count and the avatar previews all live in
+ * InterestContext (updated optimistically on press), so the flyer orbs and
+ * the social row react without this button knowing about them.
+ */
+export default function InterestCTA({ eventId }: { eventId: string }) {
   const account = useActiveAccount();
-  const router = useRouter();
   const { colors } = useTheme();
   const requireAuth = useRequireAuth();
-  const { isInterested, toggleInterest, getCount, refreshCount, getInterestedUsers } = useInterest();
+  const { isInterested, toggleInterest } = useInterest();
 
   const interested = isInterested(eventId);
-  const count = getCount(eventId);
-  const [users, setUsers] = useState<InterestedUser[]>([]);
   const [toggling, setToggling] = useState(false);
 
-  // Animation values
-  const pngScale = useRef(new Animated.Value(0)).current;
-  const pngRotate = useRef(new Animated.Value(0)).current;
-  const pngOpacity = useRef(new Animated.Value(0)).current;
-  const filledScale = useRef(new Animated.Value(interested ? 1 : 0)).current;
-  const outlineOpacity = useRef(new Animated.Value(interested ? 0 : 1)).current;
-
-  useEffect(() => {
-    refreshCount(eventId);
-    getInterestedUsers(eventId, 5).then(setUsers);
-  }, [eventId]);
+  // Heart "plop": the PNG heart scales up with a tilt, settles, fades and
+  // hands over to the filled SVG heart.
+  // Lazy state, not refs: stable Animated.Values without reading a ref
+  // during render (React Compiler rule).
+  const [pngScale] = useState(() => new Animated.Value(0));
+  const [pngRotate] = useState(() => new Animated.Value(0));
+  const [pngOpacity] = useState(() => new Animated.Value(0));
+  const [filledScale] = useState(() => new Animated.Value(interested ? 1 : 0));
+  const [outlineOpacity] = useState(() => new Animated.Value(interested ? 0 : 1));
 
   const handleToggle = useCallback(async () => {
     if (toggling) return;
@@ -49,6 +48,7 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
 
     setToggling(true);
     const wasInterested = interested;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     if (!wasInterested) {
       outlineOpacity.setValue(0);
@@ -56,248 +56,115 @@ export default function InterestCTA({ eventId }: InterestCTAProps) {
       pngScale.setValue(0);
       pngRotate.setValue(0);
 
-      Animated.spring(pngScale, {
-        toValue: 1.5,
-        damping: 6,
-        stiffness: 250,
-        useNativeDriver: true,
-      }).start();
-
-      Animated.spring(pngRotate, {
-        toValue: 1,
-        damping: 6,
-        stiffness: 250,
-        useNativeDriver: true,
-      }).start();
+      Animated.spring(pngScale, { toValue: 1.5, damping: 6, stiffness: 250, useNativeDriver: true }).start();
+      Animated.spring(pngRotate, { toValue: 1, damping: 6, stiffness: 250, useNativeDriver: true }).start();
 
       setTimeout(() => {
         Animated.parallel([
-          Animated.spring(pngScale, {
-            toValue: 0.85,
-            damping: 10,
-            stiffness: 200,
-            useNativeDriver: true,
-          }),
-          Animated.spring(pngRotate, {
-            toValue: 2,
-            damping: 10,
-            stiffness: 200,
-            useNativeDriver: true,
-          }),
+          Animated.spring(pngScale, { toValue: 0.85, damping: 10, stiffness: 200, useNativeDriver: true }),
+          Animated.spring(pngRotate, { toValue: 2, damping: 10, stiffness: 200, useNativeDriver: true }),
         ]).start();
       }, 350);
 
       setTimeout(() => {
-        Animated.timing(pngOpacity, {
-          toValue: 0,
-          duration: 100,
-          useNativeDriver: true,
-        }).start();
-
+        Animated.timing(pngOpacity, { toValue: 0, duration: 100, useNativeDriver: true }).start();
         filledScale.setValue(0.85);
-        Animated.spring(filledScale, {
-          toValue: 1,
-          damping: 12,
-          stiffness: 200,
-          useNativeDriver: true,
-        }).start();
+        Animated.spring(filledScale, { toValue: 1, damping: 12, stiffness: 200, useNativeDriver: true }).start();
       }, 500);
     } else {
-      // Smooth fade transition — no shrink animation
-      Animated.parallel([
-        Animated.timing(filledScale, {
-          toValue: 1,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(outlineOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
       filledScale.setValue(0);
+      Animated.timing(outlineOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     }
 
     try {
       await toggleInterest(eventId);
-      getInterestedUsers(eventId, 5).then(setUsers);
     } catch {
-      // Context handles revert
+      // Context reverts the optimistic state.
     } finally {
       setToggling(false);
     }
-  }, [account, toggling, interested, eventId]);
+  }, [account, toggling, interested, eventId, requireAuth, toggleInterest, outlineOpacity, pngOpacity, pngScale, pngRotate, filledScale]);
 
   const rotateInterpolation = pngRotate.interpolate({
     inputRange: [0, 1, 2],
     outputRange: ['0deg', '-15deg', '5deg'],
   });
 
-  const displayCount = count ?? 0;
-  const avatarUsers = users.map((u) => ({
-    avatar_url: u.profile_picture_url,
-    username: u.username,
-  }));
-
-  const countText = interested
-    ? displayCount > 1
-      ? `Du und ${displayCount - 1} weitere sind interessiert`
-      : 'Du bist interessiert'
-    : displayCount > 0
-      ? `${displayCount} Personen sind interessiert`
-      : 'Sei der Erste, der Interesse zeigt';
-
-  const isActive = interested;
+  const iconColor = interested ? colors.primary : colors.onPrimary;
 
   return (
-    <View style={styles.container}>
-      <Pressable
-        onPress={handleToggle}
-        style={({ pressed }) => [
-          styles.button,
-          isActive
-            ? [styles.buttonActive, { backgroundColor: colors.surface, borderColor: colors.primary }]
-            : { backgroundColor: colors.primary },
-          pressed && styles.buttonPressed,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
-      >
-        <View style={styles.buttonIconWrap}>
-          {/* Outline heart (default) — bottom layer */}
-          <Animated.View style={[styles.iconBottom, { opacity: outlineOpacity }]}>
-            <HeartIcon size={20} color={isActive ? colors.primary : '#fff'} />
-          </Animated.View>
-
-          {/* Filled heart — middle layer, revealed after PNG fades */}
-          <Animated.View
-            style={[
-              styles.iconMid,
-              {
-                opacity: interested ? 1 : 0,
-                transform: [{ scale: filledScale }],
-              },
-            ]}
-          >
-            <HeartFilledIcon size={20} color={colors.primary} />
-          </Animated.View>
-
-          {/* Heart.png plop — top layer, sits above both SVG hearts on Android */}
-          <Animated.View
-            style={[
-              styles.iconTop,
-              {
-                opacity: pngOpacity,
-                transform: [
-                  { scale: pngScale },
-                  { rotate: rotateInterpolation },
-                ],
-              },
-            ]}
-          >
-            <Image source={HEART_PNG} style={{ width: 28, height: 28 }} contentFit="contain" />
-          </Animated.View>
-        </View>
-
-        <Text
+    <Pressable
+      onPress={handleToggle}
+      style={({ pressed }) => [
+        styles.button,
+        interested
+          ? { backgroundColor: colors.background, borderColor: colors.primary }
+          : { backgroundColor: colors.primary, borderColor: colors.primary },
+        pressed && styles.buttonPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: interested }}
+      accessibilityLabel={interested ? 'Interesse entfernen' : 'Interessiert'}
+    >
+      <View style={styles.iconWrap}>
+        <Animated.View style={[styles.iconLayer, { opacity: outlineOpacity }]}>
+          <HeartIcon size={20} color={iconColor} />
+        </Animated.View>
+        <Animated.View
+          style={[styles.iconLayer, { opacity: interested ? 1 : 0, transform: [{ scale: filledScale }] }]}
+        >
+          <HeartFilledIcon size={20} color={colors.primary} />
+        </Animated.View>
+        <Animated.View
           style={[
-            styles.buttonText,
-            isActive ? { color: colors.primary } : { color: '#fff' },
+            styles.iconLayer,
+            styles.iconTop,
+            { opacity: pngOpacity, transform: [{ scale: pngScale }, { rotate: rotateInterpolation }] },
           ]}
         >
-          Interessiert
-        </Text>
-      </Pressable>
-
-      {(displayCount > 0 || interested) && (
-        <Pressable
-          onPress={() =>
-            router.push({ pathname: '/event/[id]/interested' as any, params: { id: eventId } })
-          }
-          disabled={displayCount === 0}
-          hitSlop={8}
-          style={({ pressed }) => [styles.socialRow, pressed && displayCount > 0 && styles.socialRowPressed]}
-          accessibilityRole={displayCount > 0 ? 'button' : undefined}
-          accessibilityLabel={displayCount > 0 ? 'Alle interessierten Personen anzeigen' : undefined}
-        >
-          {avatarUsers.length > 0 && (
-            <AvatarStack
-              users={avatarUsers}
-              maxVisible={4}
-              size="large"
-              totalCount={displayCount}
-            />
-          )}
-          <Text style={[styles.socialText, { color: colors.textSecondary }]}>
-            {countText}
-          </Text>
-        </Pressable>
-      )}
-    </View>
+          <Image source={HEART_PNG} style={styles.png} contentFit="contain" />
+        </Animated.View>
+      </View>
+      <Text style={[styles.label, { color: interested ? colors.primary : colors.onPrimary }]}>
+        {interested ? 'Du bist interessiert' : 'Interessiert'}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 8,
-    gap: 10,
-  },
   button: {
+    height: INTEREST_CTA_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  buttonActive: {
+    borderRadius: 14,
     borderWidth: 2,
   },
   buttonPressed: {
     opacity: 0.85,
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonIconWrap: {
+  iconWrap: {
     width: 24,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'visible',
   },
-  iconBottom: {
+  iconLayer: {
     position: 'absolute',
-    zIndex: 0,
-  },
-  iconMid: {
-    position: 'absolute',
-    zIndex: 1,
   },
   iconTop: {
-    position: 'absolute',
     zIndex: 2,
   },
-  buttonText: {
-    fontSize: 15,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
+  png: {
+    width: 28,
+    height: 28,
   },
-  buttonTextActive: {
-    // Color set dynamically via inline style using colors.primary
-  },
-  socialRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  socialRowPressed: {
-    opacity: 0.6,
-  },
-  socialText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    flex: 1,
+  label: {
+    fontSize: 16,
+    fontFamily: fontFamily.heading,
   },
 });
