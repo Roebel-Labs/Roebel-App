@@ -14,6 +14,11 @@ import {
 } from "thirdweb";
 import { client } from "@/constants/thirdweb";
 import {
+	resolveTreasuryEuro,
+	TREASURY_SNAPSHOT,
+	TREASURY_SNAPSHOT_ENABLED,
+} from "@/constants/treasury-snapshot";
+import {
 	gnosis,
 	gnosisRead,
 	circlesHubAddress,
@@ -371,7 +376,9 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	}
 	const ledger = await xdaiLedgerEuro(address, xdai);
 	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
-	return xdaiEuro + eure;
+	// Never surface 0 € while the treasury is mid-move: fall back to the dated
+	// snapshot (see constants/treasury-snapshot.ts).
+	return resolveTreasuryEuro(xdaiEuro + eure).euro;
 }
 
 export interface TreasuryAssets {
@@ -383,6 +390,8 @@ export interface TreasuryAssets {
 	eure: number;
 	/** Fiat € total (xDAI live-converted + EURe). Röbel Münzen excluded — not euro-redeemable. */
 	euroTotal: number;
+	/** true = `euroTotal` is the dated snapshot, not a live chain read. */
+	fromSnapshot: boolean;
 }
 
 /** Real per-asset breakdown of a treasury address (Röbel Münzen + xDAI + EURe). */
@@ -412,7 +421,28 @@ export async function getTreasuryAssets(address: string): Promise<TreasuryAssets
 	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
 	const ledger = await xdaiLedgerEuro(address, xdai);
 	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
-	return { roebel, xdai, eure, euroTotal: xdaiEuro + eure };
+	const resolved = resolveTreasuryEuro(xdaiEuro + eure);
+	return {
+		roebel,
+		xdai: resolved.fromSnapshot ? TREASURY_SNAPSHOT.xdai : xdai,
+		eure: resolved.fromSnapshot ? TREASURY_SNAPSHOT.eure : eure,
+		euroTotal: resolved.euro,
+		fromSnapshot: resolved.fromSnapshot,
+	};
+}
+
+/** The assets object used when the chain cannot be read at all. */
+export function treasuryAssetsFallback(): TreasuryAssets {
+	if (!TREASURY_SNAPSHOT_ENABLED) {
+		return { roebel: 0, xdai: 0, eure: 0, euroTotal: 0, fromSnapshot: false };
+	}
+	return {
+		roebel: TREASURY_SNAPSHOT.roebel,
+		xdai: TREASURY_SNAPSHOT.xdai,
+		eure: TREASURY_SNAPSHOT.eure,
+		euroTotal: TREASURY_SNAPSHOT.euroTotal,
+		fromSnapshot: true,
+	};
 }
 
 export interface TreasuryTx {

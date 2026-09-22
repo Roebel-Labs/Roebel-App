@@ -9,14 +9,19 @@ import { useTheme } from "@/context/ThemeContext";
 import {
 	getTreasuryAssets,
 	getTreasuryTransactions,
+	treasuryAssetsFallback,
 	type TreasuryAssets,
 	type TreasuryTx,
 } from "@/lib/roebel-taler";
+import { TREASURY_SNAPSHOT } from "@/constants/treasury-snapshot";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import ChevronLeftIcon from "@/assets/icons/chevron-left.svg";
 import InfoIcon from "@/assets/icons/info.svg";
 import Skeleton from "@/components/ui/Skeleton";
 import TxHistoryList, { type TxHistoryItem } from "@/components/rewards/TxHistoryList";
+
+/** Give up on the chain after this and show the snapshot rather than a spinner. */
+const LOAD_TIMEOUT_MS = 12000;
 
 const fmtEur = (n: number) => n.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtEurUnit = (n: number) => `${fmtEur(n)}€`;
@@ -27,14 +32,21 @@ export default function TreasuryScreen() {
 	const [assets, setAssets] = useState<TreasuryAssets | null>(null);
 	const [txs, setTxs] = useState<TreasuryTx[] | null>(null);
 
+	// A dead RPC used to leave the hero on a skeleton forever (RN fetch has no
+	// timeout of its own), so both reads are raced against a deadline and fall
+	// back to the dated snapshot instead of showing 0 €.
 	useEffect(() => {
 		let cancelled = false;
-		getTreasuryAssets(attesterSafeGnosisAddress)
-			.then((a) => { if (!cancelled) setAssets(a); })
-			.catch(() => { if (!cancelled) setAssets({ roebel: 0, xdai: 0, eure: 0, euroTotal: 0 }); });
-		getTreasuryTransactions(attesterSafeGnosisAddress)
-			.then((t) => { if (!cancelled) setTxs(t); })
-			.catch(() => { if (!cancelled) setTxs([]); });
+		const deadline = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
+			Promise.race([
+				p,
+				new Promise<T>((resolve) => setTimeout(() => resolve(fallback), LOAD_TIMEOUT_MS)),
+			]).catch(() => fallback);
+
+		deadline(getTreasuryAssets(attesterSafeGnosisAddress), treasuryAssetsFallback())
+			.then((a) => { if (!cancelled) setAssets(a); });
+		deadline(getTreasuryTransactions(attesterSafeGnosisAddress), [] as TreasuryTx[])
+			.then((t) => { if (!cancelled) setTxs(t); });
 		return () => { cancelled = true; };
 	}, []);
 
@@ -98,6 +110,9 @@ export default function TreasuryScreen() {
 								{fmtEurUnit(euroFiat)}
 							</Text>
 						)}
+						{assets?.fromSnapshot ? (
+							<Text style={styles.heroNote}>Stand: {TREASURY_SNAPSHOT.asOfLabel}</Text>
+						) : null}
 						<Pressable
 							onPress={() => router.push("/donate" as any)}
 							style={({ pressed }) => [styles.donateBtn, { opacity: pressed ? 0.8 : 1 }]}
@@ -194,6 +209,7 @@ function makeStyles(colors: any, isDark: boolean) {
 		},
 		donateBtnText: { fontFamily: "Inter-SemiBold", fontSize: 15, color: colors.primaryForeground ?? "#FFFFFF" },
 		heroLabel: { fontFamily: "Inter-Medium", fontSize: 16, color: colors.textSecondary },
+		heroNote: { fontFamily: "Inter-Regular", fontSize: 13, color: colors.textSecondary, marginTop: 6 },
 		heroValue: {
 			fontFamily: "Inter-SemiBold",
 			fontSize: 56,
