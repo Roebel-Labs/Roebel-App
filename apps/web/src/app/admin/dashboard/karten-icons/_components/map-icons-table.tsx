@@ -7,8 +7,12 @@ import { ImagePlus, Trash2, Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { setMapMarkerIcon, type MapMarkerEntity } from "@/app/actions/map-icons";
-import { ENTITY_TYPE_LABELS, type MapMarkerEntityType } from "@/lib/maps/marker-emoji";
+import { setMapMarkerIcon } from "@/app/actions/map-icons";
+import {
+  ENTITY_TYPE_LABELS,
+  type MapMarkerEntity,
+  type MapMarkerEntityType,
+} from "@/lib/maps/marker-emoji";
 
 const TYPE_ORDER: MapMarkerEntityType[] = ["restaurant", "business", "org", "event", "poi"];
 

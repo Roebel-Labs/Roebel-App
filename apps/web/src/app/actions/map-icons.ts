@@ -5,26 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   defaultMarkerEmoji,
+  type MapMarkerEntity,
   type MapMarkerEntityType,
 } from "@/lib/maps/marker-emoji";
 
-export const MAP_ICONS_PATH = "/admin/dashboard/karten-icons";
-
-/** One pinned thing on the Expo map, with what the pin currently shows. */
-export type MapMarkerEntity = {
-  entityType: MapMarkerEntityType;
-  entityId: string;
-  name: string;
-  /** Category / type / sub_type the default emoji is matched from. */
-  category: string | null;
-  defaultEmoji: string;
-  /** Admin override, null = default. */
-  emoji: string | null;
-  /** Custom circular pin image, null = emoji pin. */
-  imageUrl: string | null;
-  /** The entity's own picture (logo/avatar/cover) — a handy source to crop from. */
-  sourceImageUrl: string | null;
-};
+// "use server" modules may only export async functions — keep this local.
+const MAP_ICONS_PATH = "/admin/dashboard/karten-icons";
 
 type IconRow = { entity_type: string; entity_id: string; emoji: string | null; image_url: string | null };
 

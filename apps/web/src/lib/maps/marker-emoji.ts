@@ -99,6 +99,24 @@ export function defaultMarkerEmoji(input: {
   }
 }
 
+/** One pinned thing on the Expo map, with what the pin currently shows.
+ *  Lives here (not in the "use server" actions file) because server-action
+ *  modules may only export async functions. */
+export type MapMarkerEntity = {
+  entityType: MapMarkerEntityType;
+  entityId: string;
+  name: string;
+  /** Category / type / sub_type the default emoji is matched from. */
+  category: string | null;
+  defaultEmoji: string;
+  /** Admin override, null = default. */
+  emoji: string | null;
+  /** Custom circular pin image, null = emoji pin. */
+  imageUrl: string | null;
+  /** The entity's own picture (logo/avatar/cover) — a handy source to crop from. */
+  sourceImageUrl: string | null;
+};
+
 export const ENTITY_TYPE_LABELS: Record<MapMarkerEntityType, string> = {
   event: "Veranstaltung",
   restaurant: "Restaurant",
