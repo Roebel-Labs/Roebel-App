@@ -1,5 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -15,9 +17,11 @@ import type { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { softShadow } from '@/lib/shadow';
 import HeroEventCard from '@/components/HeroEventCard';
+import { transformedImageUrl } from '@/lib/image-url';
 import {
   HERO_CAROUSEL_CARD_HEIGHT,
   activeIndexFromOffset,
+  ambientWeight,
   carouselSlots,
   heroCarouselLayout,
   snapTarget,
@@ -33,6 +37,13 @@ const NEIGHBOUR_OPACITY = 0.7;
 // settle without a visible wobble. Release velocity is handed straight in
 // so a flick and a slow drag both land naturally.
 const SNAP_SPRING = { damping: 24, stiffness: 170, mass: 1 };
+
+// Ambient wash behind the deck: the centred card's picture, blurred wide,
+// kept quiet (half strength) and bleeding a little past the stage so it
+// melts into the page above and below.
+const AMBIENT_MAX_OPACITY = 0.5;
+const AMBIENT_BLEED = 28;
+const AMBIENT_EDGE_FADE = 56;
 
 type Props = {
   events: EventRecord[];
@@ -124,6 +135,32 @@ export default function HeroCarousel({ events, showPagination = false, container
 
   return (
     <View style={[styles.container, containerStyle]}>
+      {/* Ambient backdrop: one blurred layer per slot, crossfading with the swipe. */}
+      <View style={styles.ambient} pointerEvents="none">
+        {Array.from({ length: slots }, (_, slot) => {
+          const event = events[slot % count];
+          if (!event.image_url) return null;
+          return (
+            <HeroAmbientLayer
+              key={`ambient-${event.id}-${slot}`}
+              slot={slot}
+              slots={slots}
+              interval={interval}
+              offset={offset}
+              uri={transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ?? event.image_url}
+            />
+          );
+        })}
+        <LinearGradient
+          colors={[colors.background, `${colors.background}00`]}
+          style={[styles.ambientEdge, { top: 0 }]}
+        />
+        <LinearGradient
+          colors={[`${colors.background}00`, colors.background]}
+          style={[styles.ambientEdge, { bottom: 0 }]}
+        />
+      </View>
+
       <GestureDetector gesture={pan}>
         <Animated.View style={styles.stage}>
           {Array.from({ length: slots }, (_, slot) => {
@@ -224,9 +261,57 @@ const HeroCarouselSlot = memo(function HeroCarouselSlot({
   );
 });
 
+type AmbientLayerProps = {
+  slot: number;
+  slots: number;
+  interval: number;
+  offset: SharedValue<number>;
+  uri: string;
+};
+
+const HeroAmbientLayer = memo(function HeroAmbientLayer({
+  slot,
+  slots,
+  interval,
+  offset,
+  uri,
+}: AmbientLayerProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const loopLength = slots * interval;
+    const relative = wrapOffset(slot * interval - offset.value, loopLength);
+    return { opacity: AMBIENT_MAX_OPACITY * ambientWeight(relative, interval) };
+  });
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+      <Image
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        blurRadius={40}
+        cachePolicy="memory-disk"
+        recyclingKey={uri}
+      />
+    </Animated.View>
+  );
+});
+
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+  },
+  ambient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -AMBIENT_BLEED,
+    bottom: -AMBIENT_BLEED,
+    overflow: 'hidden',
+  },
+  ambientEdge: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: AMBIENT_EDGE_FADE,
   },
   stage: {
     width: '100%',

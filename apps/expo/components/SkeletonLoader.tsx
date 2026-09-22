@@ -388,76 +388,29 @@ export function NotificationCardSkeleton() {
 
 export function MovieDetailSkeleton() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  // Mirrors the movie page: chrome row, a 2:3 poster inside 16pt gutters
+  // (capped at 60% of the screen), presenter row, title and meta lines.
+  const posterWidth = Math.min(width - 32, height * 0.6 * (2 / 3));
+  const posterHeight = Math.round(posterWidth / (2 / 3));
   return (
-    <View style={[styles.movieDetailSkeleton, { backgroundColor: colors.background }]}>
-      {/* Movie Poster Section */}
-      <View style={{ height: 450 }}>
-        <Skeleton height={450} />
+    <View style={[styles.movieDetailSkeleton, { backgroundColor: colors.background, paddingTop: insets.top + 6 }]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, height: 44, alignItems: 'center' }}>
+        <Skeleton width={28} height={28} borderRadius={14} />
+        <Skeleton width={28} height={28} borderRadius={14} />
       </View>
-
-      {/* Content Overlay */}
-      <View style={{
-        backgroundColor: colors.background,
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        marginTop: -30,
-        padding: 24,
-      }}>
-        {/* Title and FSK Badge */}
-        <View style={{ marginBottom: 20 }}>
-          <Skeleton width={80} height={24} borderRadius={8} style={{ marginBottom: 12 }} />
-          <Skeleton width="95%" height={26} style={{ marginBottom: 8 }} />
-          <Skeleton width="70%" height={26} />
+      <Skeleton width={posterWidth} height={posterHeight} borderRadius={12} style={{ alignSelf: 'center', marginTop: 10 }} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Skeleton width={24} height={24} borderRadius={12} />
+          <Skeleton width={120} height={14} />
         </View>
-
-        {/* Trailer Button */}
-        <Skeleton width="100%" height={48} borderRadius={12} style={{ marginBottom: 24 }} />
-
-        {/* Description Section */}
-        <View style={{ marginBottom: 28 }}>
-          <Skeleton width={140} height={18} style={{ marginBottom: 12 }} />
-          <Skeleton width="100%" height={16} style={{ marginBottom: 6 }} />
-          <Skeleton width="100%" height={16} style={{ marginBottom: 6 }} />
-          <Skeleton width="100%" height={16} style={{ marginBottom: 6 }} />
-          <Skeleton width="90%" height={16} />
-        </View>
-
-        {/* Info Cards (Date, Time, Location, Price) */}
-        <View style={{ marginBottom: 24, gap: 12 }}>
-          {[1, 2, 3, 4].map((index) => (
-            <View
-              key={index}
-              style={{
-                flexDirection: 'row',
-                backgroundColor: colors.surfaceSecondary,
-                borderRadius: 12,
-                padding: 16,
-                gap: 12,
-                alignItems: 'center',
-              }}
-            >
-              <Skeleton width={40} height={40} borderRadius={20} />
-              <View style={{ flex: 1 }}>
-                <Skeleton width={80} height={12} style={{ marginBottom: 4 }} />
-                <Skeleton width="70%" height={15} />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Organizer Section */}
-        <View style={{ marginBottom: 28 }}>
-          <Skeleton width={140} height={18} style={{ marginBottom: 12 }} />
-          <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <Skeleton width={36} height={36} borderRadius={18} />
-              <Skeleton width={160} height={16} />
-            </View>
-            <View style={{ marginLeft: 48 }}>
-              <Skeleton width="85%" height={14} />
-            </View>
-          </View>
-        </View>
+        <Skeleton width={64} height={24} borderRadius={12} style={{ marginBottom: 10 }} />
+        <Skeleton width="80%" height={28} style={{ marginBottom: 14 }} />
+        <Skeleton width="45%" height={17} style={{ marginBottom: 8 }} />
+        <Skeleton width="70%" height={15} style={{ marginBottom: 6 }} />
+        <Skeleton width="60%" height={15} />
       </View>
     </View>
   );

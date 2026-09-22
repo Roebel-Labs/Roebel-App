@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,44 @@ import {
   ScrollView,
   Pressable,
   Linking,
+  useWindowDimensions,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { ArrowLeftIcon, CalendarIcon, ClockIcon, LocationIcon, TicketIcon, UserIcon } from '@/components/Icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { SvgXml } from 'react-native-svg';
+import { ArrowLeftIcon, CalendarIcon, UserIcon } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { MovieRecord } from '@/lib/types';
 import { formatDate, formatTime, addMinutesToTime } from '@/lib/utils';
-import { SvgXml } from 'react-native-svg';
+import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
+import { useSnackbar } from '@/context/SnackbarContext';
+import { useGoBack } from '@/hooks/useGoBack';
 import MovieCard from '@/components/MovieCard';
+import AmbientBackdrop from '@/components/AmbientBackdrop';
+import ImageZoomModal from '@/components/ImageZoomModal';
 import { MovieDetailSkeleton } from '@/components/SkeletonLoader';
 import { useTheme } from '@/context/ThemeContext';
 import MeckyNotFound from '@/components/MeckyNotFound';
+import { fontFamily } from '@/constants/theme';
+
+const GUTTER = 16;
+const POSTER_RADIUS = 12;
+/** Cinema posters are 2:3 (width / height) until the image reports its size. */
+const POSTER_ASPECT_DEFAULT = 2 / 3;
+const POSTER_MAX_HEIGHT_RATIO = 0.6;
+/** The ambient blur keeps running this far below the poster block. */
+const AMBIENT_TAIL = 160;
+const FOOTER_BUTTON_HEIGHT = 54;
+
+// The cinema evenings are a fixed series; venue and price do not live on the row.
+const VENUE_NAME = 'Engelscher Hof';
+const VENUE_ADDRESS = 'Kleine Staffenstraße 9-11, Röbel';
+const TICKET_PRICE = '5 €';
+const PRESENTER = 'Kulturstammtisch';
+const PRESENTER_LINE = 'Mit dem Moki Güstrow, dem Engelschen Hof & der "Flotte für Bürger"';
 
 // Play icon SVG component
 const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, color = "#ffffff" }) => {
@@ -31,12 +57,22 @@ const PlayIcon: React.FC<{ size?: number; color?: string }> = ({ size = 20, colo
 
 export default function MovieDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const goBack = useGoBack();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { showSnackbar } = useSnackbar();
   const [movie, setMovie] = useState<MovieRecord | null>(null);
   const [moreMovies, setMoreMovies] = useState<MovieRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [zoomVisible, setZoomVisible] = useState(false);
+  const [posterAspect, setPosterAspect] = useState(POSTER_ASPECT_DEFAULT);
+  const [heroHeight, setHeroHeight] = useState(0);
+
+  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
+    setHeroHeight(e.nativeEvent.layout.height);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,12 +119,35 @@ export default function MovieDetailScreen() {
     };
   }, [id]);
 
+  const handleSaveToCalendar = async () => {
+    if (!movie) return;
+    try {
+      const granted = await requestCalendarPermission();
+      if (!granted) {
+        showSnackbar({ message: 'Kalender-Zugriff wurde nicht erlaubt', duration: 4000 });
+        return;
+      }
+      await saveEventToCalendar({
+        title: `Kino: ${movie.title}`,
+        description: movie.description,
+        date: movie.date,
+        time: movie.time,
+        endTime: null,
+        location: `${VENUE_NAME}, ${VENUE_ADDRESS}`,
+      });
+      showSnackbar({ message: 'Zum Kalender hinzugefügt', duration: 4000 });
+    } catch (error) {
+      console.error('Error saving to calendar:', error);
+      showSnackbar({ message: 'Fehler beim Speichern in den Kalender', duration: 4000 });
+    }
+  };
+
   if (loading) {
     return (
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <MovieDetailSkeleton />
-      </ScrollView>
+      </View>
     );
   }
 
@@ -101,7 +160,18 @@ export default function MovieDetailScreen() {
     );
   }
 
-  const movieDate = formatDate(movie.date);
+  const admission = formatTime(movie.time);
+  const start = addMinutesToTime(movie.time, 30);
+  const whenLine =
+    formatDate(movie.date) +
+    (admission ? ` • Einlass ${admission}${start ? `, Beginn ${start}` : ''} Uhr` : '');
+  const hasTrailer = !!movie.trailer_youtube_url;
+  const hasAmbient = !!movie.cover_image_url;
+  const chromeColor = hasAmbient ? '#ffffff' : colors.textPrimary;
+
+  const maxPosterWidth = screenWidth - GUTTER * 2;
+  const posterWidth = Math.min(maxPosterWidth, screenHeight * POSTER_MAX_HEIGHT_RATIO * posterAspect);
+  const posterHeight = posterWidth / posterAspect;
 
   const handleTrailerPress = () => {
     if (movie.trailer_youtube_url) {
@@ -112,50 +182,99 @@ export default function MovieDetailScreen() {
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.imageSection}>
-        {movie.cover_image_url ? (
-          <Image
-            source={{ uri: movie.cover_image_url }}
-            style={[styles.hero, { backgroundColor: colors.cardPlaceholder }]}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-        ) : (
-          <View style={[styles.heroPlaceholder, { backgroundColor: colors.cardPlaceholder }]} />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{
+          paddingBottom: (hasTrailer ? FOOTER_BUTTON_HEIGHT + 48 : 24) + insets.bottom,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {hasAmbient && heroHeight > 0 && movie.cover_image_url && (
+          <AmbientBackdrop uri={movie.cover_image_url} height={heroHeight + AMBIENT_TAIL} />
         )}
 
-        <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.background }]}>
-          <ArrowLeftIcon size={24} color={colors.tabIconActive} strokeWidth={1.5} />
-        </Pressable>
-
-        <View style={styles.pageIndicator} />
-      </View>
-
-      <View style={[styles.contentOverlay, { backgroundColor: colors.background }]}>
-        <View style={styles.content}>
-          <View style={styles.titleSection}>
-            {movie.fsk && (
-              <View style={[styles.fskBadge, { backgroundColor: colors.textPrimary }]}>
-                <Text style={[styles.fskText, { color: colors.textInverted }]}>{movie.fsk}</Text>
-              </View>
-            )}
-            <Text style={[styles.title, { color: colors.textPrimary }]}>{movie.title}</Text>
+        <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
+          <View style={styles.topBar}>
+            <Pressable
+              onPress={goBack}
+              hitSlop={8}
+              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Zurück"
+            >
+              <ArrowLeftIcon size={26} color={chromeColor} strokeWidth={1.8} />
+            </Pressable>
+            <View style={styles.chromeBtn} />
           </View>
 
-          {/* Trailer Button - if available */}
-          {movie.trailer_youtube_url && (
-            <Pressable style={[styles.trailerButton, { backgroundColor: colors.primary }]} onPress={handleTrailerPress}>
-              <PlayIcon size={20} color={colors.onPrimary} />
-              <Text style={[styles.trailerButtonText, { color: colors.onPrimary }]}>Trailer ansehen</Text>
+          <View style={[styles.posterWrap, { width: posterWidth, height: posterHeight }]}>
+            <Pressable
+              onPress={() => setZoomVisible(true)}
+              disabled={!movie.cover_image_url}
+              style={[styles.poster, { backgroundColor: colors.cardPlaceholder }]}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="Filmplakat vergrößern"
+            >
+              {movie.cover_image_url ? (
+                <Image
+                  source={{ uri: movie.cover_image_url }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                  priority="high"
+                  accessibilityIgnoresInvertColors
+                  onLoad={(e) => {
+                    const { width, height } = e.source;
+                    if (width && height) setPosterAspect(width / height);
+                  }}
+                />
+              ) : (
+                <View style={styles.posterPlaceholder}>
+                  <Text style={styles.posterPlaceholderText}>🎬</Text>
+                </View>
+              )}
             </Pressable>
-          )}
+          </View>
+        </View>
 
+        <View style={styles.headerBlock}>
+          <View style={styles.hostRow}>
+            <View style={styles.host}>
+              <View style={[styles.hostAvatar, { backgroundColor: colors.surfaceSecondary }]}>
+                <UserIcon size={14} color={colors.tabIconActive} strokeWidth={1.5} />
+              </View>
+              <Text style={[styles.hostName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {PRESENTER}
+              </Text>
+            </View>
+            <Pressable
+              onPress={handleSaveToCalendar}
+              hitSlop={8}
+              style={({ pressed }) => [styles.chromeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Zum Kalender hinzufügen"
+            >
+              <CalendarIcon size={22} color={colors.textPrimary} strokeWidth={1.5} />
+            </Pressable>
+          </View>
+
+          {movie.fsk && (
+            <View style={[styles.fskBadge, { backgroundColor: colors.textPrimary }]}>
+              <Text style={[styles.fskText, { color: colors.textInverted }]}>{movie.fsk}</Text>
+            </View>
+          )}
+          <Text style={[styles.title, { color: colors.textPrimary }]}>{movie.title}</Text>
+
+          <Text style={[styles.place, { color: colors.textPrimary }]}>{VENUE_NAME}</Text>
+          <Text style={[styles.when, { color: colors.textSecondary }]}>{VENUE_ADDRESS}</Text>
+          <Text style={[styles.when, { color: colors.textSecondary }]}>{whenLine}</Text>
+          <Text style={[styles.when, { color: colors.textSecondary }]}>Eintritt {TICKET_PRICE}</Text>
+        </View>
+
+        <View style={styles.sections}>
           {/* Description Section */}
           {movie.description && (
             <View style={styles.section}>
@@ -174,86 +293,73 @@ export default function MovieDetailScreen() {
             </View>
           )}
 
-          {/* Info Cards */}
-          <View style={styles.infoCards}>
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
-                <CalendarIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Datum</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{movieDate}</Text>
-              </View>
-            </View>
-
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
-                <ClockIcon size={20} color={colors.tabIconActive} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Einlass</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{formatTime(movie.time) ?? '–'} Uhr</Text>
-                <Text style={[styles.infoSubValue, { color: colors.textSecondary }]}>Beginn: {addMinutesToTime(movie.time, 30) ?? '–'} Uhr</Text>
-              </View>
-            </View>
-
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
-                <LocationIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Ort</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>Engelscherhof</Text>
-                <Text style={[styles.infoSubValue, { color: colors.textSecondary }]}>Kleine Staffenstraße 9-11</Text>
-              </View>
-            </View>
-
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-              <View style={[styles.infoIconContainer, { backgroundColor: colors.background }]}>
-                <TicketIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={[styles.infoLabel, { color: colors.textTertiary }]}>Preis</Text>
-                <Text style={[styles.infoValue, { color: colors.textPrimary }]}>5€</Text>
-              </View>
-            </View>
-          </View>
-
           {/* Organizer Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Präsentiert von</Text>
-            <View style={[styles.organizerCard, { backgroundColor: colors.surface }]}>
+            <View style={[styles.organizerCard, { borderColor: colors.border }]}>
               <View style={styles.organizerHeader}>
-                <View style={[styles.organizerIcon, { backgroundColor: colors.background }]}>
+                <View style={[styles.organizerIcon, { backgroundColor: colors.surfaceSecondary }]}>
                   <UserIcon size={20} color={colors.tabIconActive} strokeWidth={1.5} />
                 </View>
+                <Text style={[styles.organizerName, { color: colors.textPrimary }]}>{PRESENTER}</Text>
               </View>
-              <Text style={[styles.organizerName, { color: colors.textPrimary }]}>
-                Mit dem Moki Güstrow, dem Engelschen Hof & der "Flotte für Bürger"
+              <Text style={[styles.organizerDescription, { color: colors.textSecondary }]}>
+                {PRESENTER_LINE}
               </Text>
-              <Text style={[styles.organizerDescription, { color: colors.textSecondary }]}>Kulturstammtisch</Text>
-
             </View>
           </View>
-
-          {/* More Movies Section */}
-          {moreMovies.length > 0 && (
-            <View style={styles.moreMoviesSection}>
-              <Text style={[styles.moreMoviesTitle, { color: colors.textPrimary }]}>Weitere Filme</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.moreMoviesList}
-              >
-                {moreMovies.map((moreMovie) => (
-                  <MovieCard key={moreMovie.id} movie={moreMovie} compact={true} />
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
-      </View>
-    </ScrollView>
+
+        {/* More Movies Section */}
+        {moreMovies.length > 0 && (
+          <View style={styles.moreMoviesSection}>
+            <Text style={[styles.moreMoviesTitle, { color: colors.textPrimary }]}>Weitere Filme</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.moreMoviesList}
+            >
+              {moreMovies.map((moreMovie) => (
+                <MovieCard key={moreMovie.id} movie={moreMovie} compact={true} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Sticky footer: the trailer is the one action a film page has. */}
+      {hasTrailer && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
+          <LinearGradient
+            colors={[`${colors.background}00`, colors.background]}
+            locations={[0, 0.55]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.trailerButton,
+              { backgroundColor: colors.primary },
+              pressed && styles.pressed,
+            ]}
+            onPress={handleTrailerPress}
+            accessibilityRole="button"
+            accessibilityLabel="Trailer ansehen"
+          >
+            <PlayIcon size={20} color={colors.onPrimary} />
+            <Text style={[styles.trailerButtonText, { color: colors.onPrimary }]}>Trailer ansehen</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {movie.cover_image_url && (
+        <ImageZoomModal
+          visible={zoomVisible}
+          imageUrl={movie.cover_image_url}
+          onClose={() => setZoomVisible(false)}
+        />
+      )}
+    </View>
   );
 }
 
@@ -261,126 +367,101 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  imageSection: {
-    height: 550, // Movie poster height
-    position: 'relative',
+  pressed: {
+    opacity: 0.7,
   },
   hero: {
-    width: '100%',
-    height: '100%',
+    paddingHorizontal: GUTTER,
   },
-  heroPlaceholder: {
-    width: '100%',
-    height: '100%',
-  },
-  backBtn: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    width: 44,
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     height: 44,
-    borderRadius: 22,
+  },
+  chromeBtn: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
-  pageIndicator: {
-    position: 'absolute',
-    bottom: 20,
+  posterWrap: {
     alignSelf: 'center',
-    width: 60,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 2,
+    marginTop: 10,
   },
-  contentOverlay: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -30,
-    minHeight: 600,
+  poster: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: POSTER_RADIUS,
+    overflow: 'hidden',
   },
-  content: {
-    padding: 24,
-    paddingBottom: 40,
+  posterPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  titleSection: {
-    marginBottom: 20,
+  posterPlaceholderText: {
+    fontSize: 56,
   },
-  title: {
-    fontSize: 26,
-    fontFamily: 'Inter-Medium',
+  headerBlock: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 20,
+  },
+  hostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  host: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hostAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hostName: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fontFamily.semiBold,
   },
   fskBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   fskText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
-  trailerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginBottom: 24,
+  title: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontFamily: fontFamily.heading,
+    marginBottom: 12,
   },
-  trailerButtonText: {
-    fontSize: 16,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
+  place: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: fontFamily.semiBold,
+    marginBottom: 4,
   },
-  infoCards: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    alignItems: 'center',
-  },
-  infoIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 2,
-  },
-  infoValue: {
+  when: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
+    lineHeight: 21,
+    fontFamily: fontFamily.regular,
   },
-  infoSubValue: {
-    fontSize: 13,
-    fontFamily: 'Inter',
-    marginTop: 2,
+  sections: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 28,
   },
   section: {
     marginBottom: 28,
@@ -392,19 +473,20 @@ const styles = StyleSheet.create({
   },
   sectionText: {
     fontSize: 16,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.regular,
     lineHeight: 22,
     opacity: 0.85,
     marginBottom: 8,
   },
   expandButton: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
     marginTop: 4,
   },
   organizerCard: {
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
   },
   organizerHeader: {
     flexDirection: 'row',
@@ -421,25 +503,43 @@ const styles = StyleSheet.create({
   },
   organizerName: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: fontFamily.medium,
   },
   organizerDescription: {
     fontSize: 14,
-    fontFamily: 'Inter',
+    fontFamily: fontFamily.regular,
     lineHeight: 20,
   },
   moreMoviesSection: {
     marginTop: 16,
-    marginBottom: 0,
-    marginHorizontal: -24, // Negative margin to break out of parent padding
   },
   moreMoviesTitle: {
     fontSize: 22,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 16,
-    paddingHorizontal: 24,
+    fontFamily: 'MonaSansSemiCondensed-Medium',
+    marginBottom: 12,
+    paddingHorizontal: GUTTER,
   },
   moreMoviesList: {
-    paddingHorizontal: 24,
+    paddingHorizontal: GUTTER,
+  },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 28,
+    paddingHorizontal: GUTTER,
+  },
+  trailerButton: {
+    height: FOOTER_BUTTON_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+  },
+  trailerButtonText: {
+    fontSize: 16,
+    fontFamily: fontFamily.heading,
   },
 });

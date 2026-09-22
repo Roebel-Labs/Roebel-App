@@ -93,3 +93,14 @@ export function snapTarget(
   const index = Math.max(startIndex - 1, Math.min(startIndex + 1, nearest));
   return index * interval;
 }
+
+/**
+ * How much a slot's ambient backdrop shows: 1 when the slot is centred,
+ * fading linearly to 0 one interval away, so two neighbouring backdrops
+ * always crossfade to a constant total while the deck moves.
+ */
+export function ambientWeight(relative: number, interval: number): number {
+  'worklet';
+  if (interval <= 0) return 0;
+  return Math.max(0, 1 - Math.abs(relative) / interval);
+}

@@ -40,6 +40,7 @@ import InterestOrbs from '@/components/InterestOrbs';
 import InterestSocialRow from '@/components/InterestSocialRow';
 import HorizontalEventCard from '@/components/HorizontalEventCard';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
+import AmbientBackdrop from '@/components/AmbientBackdrop';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { QualityStampSection } from '@/components/QualityStampSection';
 import { recordView } from '@/lib/supabase-event-views';
@@ -77,7 +78,7 @@ export default function EventDetails() {
   const { id, experienceId } = useLocalSearchParams<{ id: string; experienceId?: string }>();
   const router = useRouter();
   const goBack = useGoBack();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [event, setEvent] = useState<EventRecord | null>(null);
@@ -320,30 +321,8 @@ export default function EventDetails() {
       >
         {/* Ambient backdrop: the flyer itself, blurred wide, fading into the
             page under the title block. Sized from the measured hero block. */}
-        {hasAmbient && heroHeight > 0 && (
-          <View style={[styles.ambient, { height: heroHeight + AMBIENT_TAIL }]} pointerEvents="none">
-            <Image
-              source={{ uri: event.image_url ?? undefined }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              blurRadius={48}
-              cachePolicy="memory-disk"
-            />
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: isDark ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.12)' },
-              ]}
-            />
-            <LinearGradient
-              colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)']}
-              style={styles.topScrim}
-            />
-            <LinearGradient
-              colors={[`${colors.background}00`, colors.background]}
-              style={styles.ambientFade}
-            />
-          </View>
+        {hasAmbient && heroHeight > 0 && event.image_url && (
+          <AmbientBackdrop uri={event.image_url} height={heroHeight + AMBIENT_TAIL} />
         )}
 
         <View style={[styles.hero, { paddingTop: insets.top + 6 }]} onLayout={onHeroLayout}>
@@ -652,27 +631,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
-  },
-  ambient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-  },
-  topScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 140,
-  },
-  ambientFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
   },
   hero: {
     paddingHorizontal: GUTTER,
