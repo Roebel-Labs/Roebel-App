@@ -17,7 +17,7 @@ import {
 import { buildPosterContent } from "./content";
 import { decideMode } from "./decide";
 import { pickDirections } from "./directions";
-import { renderPoster, type RenderedPoster } from "./openai-image";
+import { PosterRenderError, renderPoster, type RenderedPoster } from "./openai-image";
 import { buildDesignPrompt, buildReformatPrompt } from "./prompts";
 import { classifyRatio, type RatioClass } from "./ratio";
 import type {
@@ -43,14 +43,18 @@ export interface ProposeContext {
   force?: boolean;
 }
 
+export type PosterServiceErrorCode = "caps" | "not_found" | "render" | "billing" | "upload";
+
 export class PosterServiceError extends Error {
-  code: "caps" | "not_found" | "render" | "upload";
-  constructor(message: string, code: "caps" | "not_found" | "render" | "upload") {
+  code: PosterServiceErrorCode;
+  constructor(message: string, code: PosterServiceErrorCode) {
     super(message);
     this.name = "PosterServiceError";
     this.code = code;
   }
 }
+
+const BILLING_MESSAGE = "OpenAI-Guthaben aufgebraucht. Bitte Guthaben unter platform.openai.com aufladen.";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -147,15 +151,22 @@ async function renderWithRetry(
     references: image ? [{ bytes: image.bytes, contentType: image.contentType }] : [],
     model: model ?? undefined,
   };
+  const toServiceError = (error: unknown): PosterServiceError => {
+    if (error instanceof PosterRenderError && !error.retryable) {
+      return new PosterServiceError(BILLING_MESSAGE, "billing");
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return new PosterServiceError(`Rendern fehlgeschlagen: ${message}`, "render");
+  };
   try {
     return await renderPoster(input);
   } catch (first) {
+    if (first instanceof PosterRenderError && !first.retryable) throw toServiceError(first);
     console.warn("renderPoster failed once, retrying", first);
     try {
       return await renderPoster(input);
     } catch (second) {
-      const message = second instanceof Error ? second.message : String(second);
-      throw new PosterServiceError(`Rendern fehlgeschlagen: ${message}`, "render");
+      throw toServiceError(second);
     }
   }
 }

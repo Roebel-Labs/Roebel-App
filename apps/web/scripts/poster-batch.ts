@@ -2,7 +2,7 @@
 // open batch and no review yet. Run from apps/web:
 //   set -a; source .env.local; set +a; pnpm exec tsx scripts/poster-batch.ts [--limit N] [--dry]
 import { createAdminClient } from "../src/lib/supabase/admin";
-import { proposePosters } from "../src/lib/poster/service";
+import { proposePosters, PosterServiceError } from "../src/lib/poster/service";
 
 const args = process.argv.slice(2);
 const limitArg = args.indexOf("--limit");
@@ -49,6 +49,10 @@ async function main() {
       }
     } catch (err) {
       console.error(`! ${e.title}:`, err instanceof Error ? err.message : err);
+      if (err instanceof PosterServiceError && (err.code === "billing" || err.code === "caps")) {
+        console.error(`stopping: ${err.code}`);
+        break;
+      }
     }
   }
   console.log(`done, $${total.toFixed(2)} spent`);
