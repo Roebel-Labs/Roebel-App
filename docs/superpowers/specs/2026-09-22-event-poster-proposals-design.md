@@ -1,6 +1,6 @@
 # Event poster proposals (Plakat-Vorschläge) — design
 
-**Status:** DRAFT for Max's review, 2026-09-22. Nothing implemented yet.
+**Status:** Slice 1 (core + admin) SHIPPED 2026-09-22 on `feat/event-poster-proposals` (merged to main the same day). Slices 2 and 3 (Expo chat, web chat) pending. Model choice and assumptions in §8 approved by Max on 2026-09-22 (variant A of designed posters = Plakativ).
 **Probe page:** see the "Plakat-Probe Röbel" artifact (three real events rendered by the recommended model, plus the ratio census).
 
 ## 1. Problem
@@ -163,7 +163,7 @@ Unchanged. Once images are DIN A, `cover` shows them edge to edge; the ±8 % tol
 
 ## 7. Slices
 
-1. **Core + admin** — lib, migration, service, admin overview + review pages, batch for the current events. Fixes the explore rails immediately.
+1. **Core + admin** — SHIPPED 2026-09-22: lib `apps/web/src/lib/poster/*`, migration `20260922_event_poster_proposals.sql` (applied), service, admin pages `/admin/dashboard/events/poster` (+ `[eventId]`), API routes `/api/posters/{propose,select,link}`, batch script `apps/web/scripts/poster-batch.ts`. First run: 9 events got pairs (variant A applied live), 3 A-format posters skipped, run stopped when the OpenAI organisation ran out of prepaid credits (17 events open). Deviations: per-IP cap dropped (every caller must own an account); the events-list row got a link instead of a ratio chip; `keepOriginal` reverts an applied proposal.
 2. **Expo chat** — `PosterProposalCard`, propose/select/link calls, fallback download; `expo-media-library` behind a build-gated flag.
 3. **Web chat** — route/client restructure to the UI message stream, `PosterProposalPair`, `submitPreparedEvent`.
 4. **Follow-ups** — classic form `/app/submit`, org dashboard event edit ("Plakat" tab beside "Flyer"), signed wallet requests, GC whitelist, print-size 2048×2896 option.
