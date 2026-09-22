@@ -16,7 +16,7 @@ import ErrorDrawer from './ErrorDrawer';
 const BARCODE_SCANNER_SETTINGS = { barcodeTypes: ['qr'] as const };
 
 export type QRScanResult = {
-  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'unknown';
+  type: 'verification' | 'checkpoint' | 'stamp' | 'order' | 'roebel_card' | 'event' | 'ticket' | 'unknown';
   data: string;
   id?: string;
   nftType?: string;
@@ -26,6 +26,8 @@ export type QRScanResult = {
   cardVersion?: string;
   /** Full v2 payload string (unchanged) to hand to create_roebel_card_charge_from_qr. */
   cardPayload?: string;
+  /** Full ticket payload string (unchanged) to hand to checkInTicket. */
+  ticketPayload?: string;
 };
 
 interface QRScannerProps {
@@ -49,6 +51,11 @@ function parseQRCode(data: string): QRScanResult {
   // Stamp card: roebel-stamp:<partner_id>
   if (data.startsWith('roebel-stamp:')) {
     return { type: 'stamp', data, id: data.replace('roebel-stamp:', '') };
+  }
+
+  // Event ticket (HMAC-signed): roebel-ticket:v1:<code>:<hmac16>; verified server-side at check-in.
+  if (/^roebel-ticket:v1:[A-HJ-NP-Z2-9]{10}:[0-9a-f]{16}$/.test(data)) {
+    return { type: 'ticket', data, ticketPayload: data };
   }
 
   // Röbel Card v2 (HMAC-signed): roebel-card:v2:<card_id>:<expires_unix>:<hex_hmac>
@@ -141,6 +148,7 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
         order: 'Bestellung',
         roebel_card: 'Röbel Card',
         event: 'Event',
+        ticket: 'Ticket',
       };
       const expected = allowedTypes.map(t => typeLabels[t] || t).join(' oder ');
       setErrorDrawer({
@@ -187,6 +195,9 @@ export default function QRScanner({ onScan, allowedTypes }: QRScannerProps) {
       // Handled by parent via onScan
       setScanned(false);
     } else if (result.type === 'stamp') {
+      // Handled by parent via onScan
+      setScanned(false);
+    } else if (result.type === 'ticket') {
       // Handled by parent via onScan
       setScanned(false);
     }
