@@ -21,6 +21,10 @@ export async function POST(req: Request) {
   if (actor.requestedBy !== "admin" && !(await accountOwnsEvent(actor.accountId, body.eventId))) {
     return NextResponse.json({ success: false, error: "Keine Berechtigung" }, { status: 403 });
   }
-  const res = await linkDraftProposals(body.draftId, body.eventId);
+  const res = await linkDraftProposals(
+    body.draftId,
+    body.eventId,
+    actor.requestedBy === "admin" ? null : actor.accountId,
+  );
   return NextResponse.json({ success: res.ok, linked: res.linked }, { status: res.ok ? 200 : 400 });
 }

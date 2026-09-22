@@ -10,6 +10,7 @@ import {
   PosterServiceError,
   selectProposal,
   spentTodayUsd,
+  type PosterServiceErrorCode,
 } from "@/lib/poster/service";
 import type { PosterCheck, PosterProposal, ProposeResult } from "@/lib/poster/types";
 
@@ -80,7 +81,10 @@ export async function listPosterOverviewAction() {
 export async function proposeForEventAction(
   eventId: string,
   opts?: { hint?: string; force?: boolean },
-): Promise<{ success: true; result: ProposeResult } | { success: false; error: string }> {
+): Promise<
+  | { success: true; result: ProposeResult }
+  | { success: false; error: string; code?: PosterServiceErrorCode }
+> {
   const denied = await guard();
   if (denied) return { success: false, error: denied };
   try {
@@ -93,9 +97,8 @@ export async function proposeForEventAction(
     return { success: true, result };
   } catch (error) {
     console.error("proposeForEventAction failed", error);
-    const message =
-      error instanceof PosterServiceError ? error.message : "Vorschläge konnten nicht erzeugt werden.";
-    return { success: false, error: message };
+    if (error instanceof PosterServiceError) return { success: false, error: error.message, code: error.code };
+    return { success: false, error: "Vorschläge konnten nicht erzeugt werden." };
   }
 }
 

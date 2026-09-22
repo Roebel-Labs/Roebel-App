@@ -34,7 +34,8 @@ export function PosterLightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, index, images.length]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>

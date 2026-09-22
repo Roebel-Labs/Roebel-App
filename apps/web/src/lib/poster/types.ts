@@ -80,7 +80,8 @@ export interface PosterProposal {
   source_image_url: string | null;
   image_url: string;
   status: PosterProposalStatus;
-  cost_usd: number | null;
+  /** numeric(8,4) arrives as a string from PostgREST. */
+  cost_usd: number | string | null;
   created_at: string;
 }
 
