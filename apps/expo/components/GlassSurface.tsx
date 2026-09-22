@@ -98,7 +98,12 @@ type Props = {
  * transparent and, for rounded shapes, clip with overflow:'hidden'.
  */
 export default function GlassSurface({ intensity = 100, edge = 'none', androidExperimentalBlur = false }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, variant } = useTheme();
+  // Pure-black theme: the frost tints above are cut for the Dim palette and
+  // read as bright grey bars against #000, so every glass surface gets an
+  // extra black wash (Max 2026-09-22: "header, feed tabs and bottom nav are
+  // too bright"). Dim keeps the values it has always had.
+  const isBlack = variant === 'dark';
   const target = useContext(GlassTargetContext);
 
   // RACE GUARD (Android): expo-blur's BlurView reads `blurTarget.current`
@@ -165,12 +170,22 @@ export default function GlassSurface({ intensity = 100, edge = 'none', androidEx
             style={[
               StyleSheet.absoluteFill,
               {
-                backgroundColor: isDark
-                  ? 'rgba(24, 25, 27, 0.45)'
-                  // 0.55 → 0.72 (Max 2026-09-13: light mode still read too dark).
-                  : 'rgba(255, 255, 255, 0.72)',
+                backgroundColor: isBlack
+                  ? 'rgba(0, 0, 0, 0.62)'
+                  : isDark
+                    ? 'rgba(24, 25, 27, 0.45)'
+                    // 0.55 → 0.72 (Max 2026-09-13: light mode still read too dark).
+                    : 'rgba(255, 255, 255, 0.72)',
               },
             ]}
+          />
+        )}
+        {Platform.OS === 'ios' && isBlack && (
+          // iOS materials have no black variant — systemChromeMaterialDark is
+          // mixed for a grey background, so damp it toward #000.
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.45)' }]}
           />
         )}
         {edgeLine}
