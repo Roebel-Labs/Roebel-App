@@ -6,7 +6,16 @@ export interface RSSItem {
   guid: string
 }
 
+// Order matters: the regional feed comes first so shared items keep its label
+// and Röbel-area stories lead the list Claude picks from.
 const RSS_FEEDS = [
+  {
+    // Haff-Müritz studio (Neubrandenburg) — covers Röbel and the Seenplatte.
+    // Most local stories (sport, clubs, road closures) ONLY appear here, not
+    // in the statewide feed below.
+    url: "https://www.ndr.de/nachrichten/mecklenburg-vorpommern/haff-mueritz/index-rss.xml",
+    site: "NDR Haff-Müritz",
+  },
   {
     url: "https://www.ndr.de/nachrichten/mecklenburg-vorpommern/index-rss.xml",
     site: "NDR MV",
@@ -64,6 +73,8 @@ export async function fetchAllFeeds(): Promise<
   Array<RSSItem & { site: string }>
 > {
   const allItems: Array<RSSItem & { site: string }> = []
+  // Regional stories are cross-posted to the statewide feed with the same guid
+  const seen = new Set<string>()
 
   for (const feed of RSS_FEEDS) {
     try {
@@ -81,6 +92,9 @@ export async function fetchAllFeeds(): Promise<
       const items = parseRSSItems(xml)
 
       for (const item of items) {
+        const key = item.guid || item.link
+        if (seen.has(key)) continue
+        seen.add(key)
         allItems.push({ ...item, site: feed.site })
       }
     } catch (error) {
@@ -119,11 +133,40 @@ export interface ResolvedTimeWindow {
   label: string
 }
 
-function startOfLocalDay(offsetDays = 0): Date {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() + offsetDays)
-  return d
+const NEWS_TIME_ZONE = "Europe/Berlin"
+
+/** UTC offset of Europe/Berlin at `at`, in minutes (+60 CET, +120 CEST). */
+function berlinOffsetMinutes(at: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone: NEWS_TIME_ZONE,
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(at)
+    .find((part) => part.type === "timeZoneName")?.value // "GMT+02:00"
+  const match = name?.match(/GMT([+-])(\d{2}):(\d{2})/)
+  if (!match) return 0
+  const minutes = Number(match[2]) * 60 + Number(match[3])
+  return match[1] === "-" ? -minutes : minutes
+}
+
+/**
+ * Midnight in Röbel's time zone, `offsetDays` from today. The server runs in
+ * UTC on Vercel, so local-midnight math would put the day boundary at 02:00.
+ */
+function startOfBerlinDay(offsetDays = 0, now: Date = new Date()): Date {
+  const [y, m, d] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: NEWS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(now)
+    .split("-")
+    .map(Number)
+  const utcMidnight = Date.UTC(y, m - 1, d + offsetDays)
+  return new Date(
+    utcMidnight - berlinOffsetMinutes(new Date(utcMidnight)) * 60 * 1000
+  )
 }
 
 export function resolveTimeWindow(
@@ -132,11 +175,11 @@ export function resolveTimeWindow(
 ): ResolvedTimeWindow {
   switch (window) {
     case "today":
-      return { from: startOfLocalDay(0), to: now, label: "heute" }
+      return { from: startOfBerlinDay(0, now), to: now, label: "heute" }
     case "yesterday":
       return {
-        from: startOfLocalDay(-1),
-        to: startOfLocalDay(0),
+        from: startOfBerlinDay(-1, now),
+        to: startOfBerlinDay(0, now),
         label: "gestern",
       }
     case "7d":
