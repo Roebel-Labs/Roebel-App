@@ -16,6 +16,13 @@ export interface OrderView {
   event: { id: string; title: string; date: string | null; time: string | null; location: string | null; image_url: string | null };
   ticket_type_name: string; tickets: TicketView[];
 }
+/** One order as the ORGANISER sees it: money and door numbers, never the buyer's identity. */
+export interface OrgOrderView {
+  id: string; status: 'pending' | 'paid' | 'expired' | 'cancelled' | 'refunded'; quantity: number;
+  amount_cents: number; currency: string; rail: string;
+  created_at: string; paid_at: string | null; refunded_at: string | null;
+  ticket_type_name: string; tickets_total: number; tickets_checked_in: number;
+}
 export interface CheckoutResult { order_id: string; status: 'pending' | 'paid'; url: string | null; expires_at: string | null; amount_cents: number; fee_cents: number }
 export interface CheckinResult { result: 'ok' | 'already_checked_in' | 'invalid' | 'refunded'; ticket?: TicketView; event_title?: string; checked_in_count?: number; issued_count?: number }
 
@@ -23,6 +30,14 @@ export async function fetchTicketTypes(eventId: string): Promise<TicketTypeRow[]
   const { data, error } = await supabase.from('ticket_types').select('*').eq('event_id', eventId).eq('is_active', true).order('sort_order');
   if (error) { console.error('fetchTicketTypes', error); return []; }
   return (data ?? []) as TicketTypeRow[];
+}
+/**
+ * Ticket types for the ORG editor. Goes through the signed API instead of the anon table read,
+ * because the anon policy only exposes is_active rows — the org has to see its deactivated
+ * types too, or saving would silently re-create them.
+ */
+export function fetchTicketTypesForOrg(account: SigningAccount, eventId: string) {
+  return postSigned<{ types: TicketTypeRow[] }>('/api/tickets/types', account, 'ticket_types_list', { event_id: eventId });
 }
 export function upsertTicketTypes(account: SigningAccount, eventId: string, types: TicketTypeInput[]) {
   return postSigned<{ types: TicketTypeRow[] }>('/api/tickets/types', account, 'ticket_types_upsert', { event_id: eventId, types });
@@ -44,8 +59,15 @@ export function fetchMyTickets(account: SigningAccount) {
 export function checkInTicket(account: SigningAccount, payload: string) {
   return postSigned<CheckinResult>('/api/tickets/checkin', account, 'checkin', { payload });
 }
-export function refundOrder(account: SigningAccount, orderId: string) {
-  return postSigned<{ refunded: true }>('/api/tickets/refund', account, 'refund_order', { order_id: orderId });
+/** Orders for one event, owner/admin only. */
+export function fetchOrgOrders(account: SigningAccount, eventId: string) {
+  return postSigned<{ orders: OrgOrderView[] }>('/api/tickets/orders', account, 'orders_list', { event_id: eventId });
+}
+/** `force` overrides the server's TICKETS_CHECKED_IN guard — only after a second confirmation. */
+export function refundOrder(account: SigningAccount, orderId: string, opts?: { force?: boolean }) {
+  return postSigned<{ refunded: true }>('/api/tickets/refund', account, 'refund_order', {
+    order_id: orderId, ...(opts?.force ? { force: true } : {}),
+  });
 }
 
 export function formatCents(cents: number): string {

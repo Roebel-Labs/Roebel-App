@@ -4,8 +4,8 @@ import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
 
 export const SIGNED_SCOPE = 'roebel-tickets-v1';
 export type TicketAction =
-  | 'connect_onboard' | 'connect_status' | 'ticket_types_upsert' | 'checkout'
-  | 'order_status' | 'tickets_list' | 'checkin' | 'refund_order';
+  | 'connect_onboard' | 'connect_status' | 'ticket_types_upsert' | 'ticket_types_list' | 'checkout'
+  | 'order_status' | 'tickets_list' | 'orders_list' | 'checkin' | 'refund_order';
 
 export interface SigningAccount {
   address: string;

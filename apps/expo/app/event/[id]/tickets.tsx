@@ -1,7 +1,8 @@
-// Ticket-Kauf: Ticketart wählen, Menge, optional E-Mail für die
-// Stripe-Zahlungsbestätigung, dann weiter zu Stripe Checkout — oder direkt
-// reserviert, wenn die Ticketart kostenlos ist. Nach dem Checkout landet man
-// auf /tickets/[order], demselben Ziel wie der Deep-Link roebel://tickets/<id>.
+// Ticket purchase: pick a ticket type, a quantity and optionally an e-mail for Stripe's payment
+// confirmation, then on to Stripe Checkout — or straight to a reservation if the type is free.
+// After checkout the buyer lands on /tickets/[order], the same target as the deep link
+// roebel://tickets/<id>. The screen repeats the event's date, time and place, and names the
+// organiser, so nobody pays for a date they only half remember.
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -19,6 +20,7 @@ import { useActiveAccount } from 'thirdweb/react';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
+import { formatDate, formatTime } from '@/lib/utils';
 import { fetchTicketTypes, startCheckout, openCheckout, formatCents, type TicketTypeRow } from '@/lib/tickets';
 
 interface EventSummary {
@@ -70,6 +72,13 @@ export default function EventTicketOrderScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  // Same helpers the event detail screen formats its "when" line with, so the two never disagree.
+  const startTime = formatTime(event?.time);
+  const whenLine = event?.date ? formatDate(event.date) + (startTime ? ` • ${startTime} Uhr` : '') : '';
+  // Read out here, not inside the Pressable's onPress argument list: a narrowed property deref in
+  // a JSX callback argument can be hoisted above its guard by the React Compiler.
+  const organiserAccountId = event?.account_id ?? null;
 
   const selectedType = ticketTypes.find((t) => t.id === selectedTypeId) ?? null;
   const maxQuantity = Math.max(1, selectedType?.per_order_max ?? 10);
@@ -137,9 +146,17 @@ export default function EventTicketOrderScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
         {!!event?.title && (
-          <Text style={[styles.eventTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-            {event.title}
-          </Text>
+          <View style={styles.eventHeader}>
+            <Text style={[styles.eventTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+              {event.title}
+            </Text>
+            {!!whenLine && <Text style={[styles.eventMeta, { color: colors.textSecondary }]}>{whenLine}</Text>}
+            {!!event.location && (
+              <Text style={[styles.eventMeta, { color: colors.textSecondary }]} numberOfLines={2}>
+                {event.location}
+              </Text>
+            )}
+          </View>
         )}
 
         {ticketTypes.length === 0 ? (
@@ -222,8 +239,17 @@ export default function EventTicketOrderScreen() {
                 </Text>
                 <Text style={[styles.summaryTotal, { color: colors.textPrimary }]}>{formatCents(totalCents)}</Text>
               </View>
-              {!!orgName && (
-                <Text style={[styles.summaryLine, { color: colors.textSecondary }]}>Veranstalter: {orgName}</Text>
+              {!!orgName && !!organiserAccountId && (
+                <Pressable
+                  onPress={() => router.push({ pathname: '/account/[id]' as any, params: { id: organiserAccountId } })}
+                  accessibilityRole="link"
+                  accessibilityLabel={`Veranstalter ${orgName}, Impressum und AGB öffnen`}
+                >
+                  <Text style={[styles.summaryLine, { color: colors.textSecondary }]}>
+                    Veranstalter: {orgName} ·{' '}
+                    <Text style={[styles.summaryLink, { color: colors.primary }]}>Impressum & AGB des Veranstalters</Text>
+                  </Text>
+                </Pressable>
               )}
               <Text style={[styles.legalLine, { color: colors.textTertiary }]}>
                 Preis inkl. MwSt. · Kein Widerrufsrecht bei termingebundenen Veranstaltungen (§ 312g Abs. 2 Nr. 9 BGB)
@@ -283,7 +309,9 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 40 },
   content: { flex: 1 },
   contentInner: { padding: 16, gap: 16, paddingBottom: 40 },
+  eventHeader: { gap: 4 },
   eventTitle: { fontSize: 20, fontFamily: 'MonaSansSemiCondensed-Bold', lineHeight: 26 },
+  eventMeta: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
   emptyText: { fontSize: 14, fontFamily: 'Inter-Regular', lineHeight: 20, textAlign: 'center', marginTop: 24 },
   typeList: { gap: 10 },
   typeRow: {
@@ -337,7 +365,8 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   summaryLabel: { fontSize: 14, fontFamily: 'Inter-Regular' },
   summaryTotal: { fontSize: 17, fontFamily: 'Inter-Bold' },
-  summaryLine: { fontSize: 13, fontFamily: 'Inter-Regular' },
+  summaryLine: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  summaryLink: { fontFamily: 'Inter-SemiBold', textDecorationLine: 'underline' },
   legalLine: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 16, marginTop: 4 },
   authHint: { fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' },
   primaryButton: {

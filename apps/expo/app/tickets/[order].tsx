@@ -1,10 +1,11 @@
-// Ticket-Bestellung im Detail — Ziel des Deep-Links roebel://tickets/<orderId>,
-// den Stripe Checkout nach Zahlungsabschluss öffnet (siehe lib/tickets.ts
-// openCheckout). Muss deshalb auch "kalt" funktionieren: Parameter lesen,
-// laden, bei fehlendem Wallet zur Anmeldung auffordern. Solange die
-// Bestellung noch offen ist, wird alle 2 Sekunden neu geladen — derselbe
-// setInterval-Ansatz wie roebel-card/topup-success.tsx — höchstens 3 Minuten
-// lang, danach ein manueller "Neu laden"-Button.
+// Ticket order detail — the target of the deep link roebel://tickets/<orderId> that Stripe
+// Checkout opens once the payment is done (see lib/tickets.ts openCheckout). It therefore has
+// to work "cold": read the param, load, and ask for sign-in if no wallet turns up. While the
+// order is still pending it reloads every 4 seconds — the same setInterval idiom as
+// roebel-card/topup-success.tsx — for at most 3 minutes, after which a manual "Neu laden"
+// button takes over. Only a NOT_FOUND answer is treated as "this order does not exist"; any
+// other failure keeps whatever was on screen and keeps polling, because a flaky connection
+// must never tell a buyer their paid order is gone.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -33,8 +34,11 @@ import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { logCalendarSave } from '@/lib/firebase';
 import { fetchOrder, orderStatusLabel, type OrderView, type TicketView } from '@/lib/tickets';
 
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 4000;
 const MAX_POLL_SECONDS = 180;
+// thirdweb reports `undefined` for a moment while it restores the session. Treat that as
+// "loading" instead of flashing "Bitte melde dich an" at an already signed-in buyer.
+const AUTH_GRACE_MS = 3000;
 const MONOSPACE = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const VALID_GREEN = '#16a34a';
 
@@ -73,6 +77,8 @@ export default function TicketOrderDetailScreen() {
   const [order, setOrder] = useState<OrderView | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [authGraceOver, setAuthGraceOver] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [pollGen, setPollGen] = useState(0);
   const [savingCalendar, setSavingCalendar] = useState(false);
@@ -87,11 +93,29 @@ export default function TicketOrderDetailScreen() {
     if (res.ok) {
       setOrder(res.data);
       setNotFound(false);
-    } else {
+      setLoadFailed(false);
+    } else if (res.code === 'NOT_FOUND') {
       setNotFound(true);
+      setLoadFailed(false);
+    } else {
+      // Network hiccup, signature trouble, a 503 — none of those mean the order is gone.
+      // Keep the last view (and keep polling while it is pending) and only note the failure.
+      console.warn('[tickets] order load failed', res.code, res.message);
+      setLoadFailed(true);
     }
     setLoading(false);
   }, [account, orderId]);
+
+  // Give thirdweb up to AUTH_GRACE_MS to restore the session before this screen concludes
+  // that nobody is signed in. Cleared on unmount and whenever an account does turn up.
+  useEffect(() => {
+    if (account) {
+      setAuthGraceOver(false);
+      return;
+    }
+    const timer = setTimeout(() => setAuthGraceOver(true), AUTH_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [account]);
 
   // Initial load once the wallet is available. Re-runs if the deep-link
   // param changes (e.g. two consecutive checkouts reuse this screen).
@@ -105,7 +129,7 @@ export default function TicketOrderDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, orderId]);
 
-  // Poll every 2s while the order is still pending, cleared on unmount or
+  // Poll while the order is still pending, cleared on unmount or
   // once the status moves on — same idiom as roebel-card/topup-success.tsx.
   useEffect(() => {
     if (!account || order?.status !== 'pending') return;
@@ -146,6 +170,7 @@ export default function TicketOrderDetailScreen() {
   const handleReload = useCallback(() => {
     setElapsed(0);
     setPollGen((g) => g + 1);
+    setLoadFailed(false);
     void load();
   }, [load]);
 
@@ -203,7 +228,11 @@ export default function TicketOrderDetailScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {!account ? (
+      {!account && !authGraceOver ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : !account ? (
         <View style={styles.center}>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             Bitte melde dich an, um dein Ticket zu sehen.
@@ -219,6 +248,19 @@ export default function TicketOrderDetailScreen() {
       ) : loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : !order && loadFailed ? (
+        <View style={styles.center}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            Die Bestellung konnte gerade nicht geladen werden.
+          </Text>
+          <Pressable
+            onPress={handleReload}
+            style={[styles.secondaryButton, { borderColor: colors.border, marginTop: 20 }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.secondaryButtonText, { color: colors.textPrimary }]}>Neu laden</Text>
+          </Pressable>
         </View>
       ) : notFound || !order ? (
         <View style={styles.center}>
@@ -345,7 +387,7 @@ export default function TicketOrderDetailScreen() {
           )}
 
           <Text style={[styles.note, { color: colors.textTertiary }]}>
-            Beim Einlass vorzeigen. Der Code ist personengebunden nicht nötig, aber jeder Code gilt nur einmal.
+            Beim Einlass vorzeigen. Nicht personengebunden – jeder Code gilt nur einmal.
           </Text>
         </ScrollView>
       )}

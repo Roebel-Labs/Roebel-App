@@ -1,6 +1,7 @@
-// Per-event ticket type editor — org-owner only. Loads ticket types directly
-// from Supabase instead of fetchTicketTypes(), which only returns active rows
-// under the anon RLS policy; the org still needs to see deactivated types.
+// Per-event ticket type editor plus the order list — org-owner only. Ticket types come from the
+// signed ticket_types_list action rather than a table read, because BOTH anon paths (the RLS
+// policy and fetchTicketTypes) hide is_active = false rows, and the org has to see the types it
+// deactivated. Below the editor, the orders for this event, with a refund action for paid ones.
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
@@ -20,7 +21,16 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { supabase } from '@/lib/supabase';
 import { connectStatus } from '@/lib/stripe-connect';
-import { upsertTicketTypes, formatCents, type TicketTypeRow } from '@/lib/tickets';
+import {
+  upsertTicketTypes,
+  fetchTicketTypesForOrg,
+  fetchOrgOrders,
+  refundOrder,
+  formatCents,
+  orderStatusLabel,
+  type TicketTypeRow,
+  type OrgOrderView,
+} from '@/lib/tickets';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 interface EditableRow {
@@ -94,6 +104,9 @@ export default function EventTicketsScreen() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [chargesEnabled, setChargesEnabled] = useState(false);
   const [rows, setRows] = useState<EditableRow[]>([]);
+  const [orders, setOrders] = useState<OrgOrderView[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id || !activeAccount) return;
@@ -116,12 +129,12 @@ export default function EventTicketsScreen() {
       if (!ok) return;
 
       const [typesResult, statusResult] = await Promise.all([
-        supabase.from('ticket_types').select('*').eq('event_id', id).order('sort_order'),
+        thirdwebAccount ? fetchTicketTypesForOrg(thirdwebAccount, id) : Promise.resolve(null),
         thirdwebAccount ? connectStatus(thirdwebAccount, activeAccount.id) : Promise.resolve(null),
       ]);
 
-      const types = (typesResult.data ?? []) as TicketTypeRow[];
-      setRows(types.map(rowFromRecord));
+      if (typesResult?.ok) setRows(typesResult.data.types.map(rowFromRecord));
+      else if (typesResult) Alert.alert('Fehler', typesResult.message);
       if (statusResult?.ok) setChargesEnabled(statusResult.data.charges_enabled);
     } finally {
       setLoading(false);
@@ -132,16 +145,34 @@ export default function EventTicketsScreen() {
     void load();
   }, [load]);
 
+  const loadOrders = useCallback(async () => {
+    if (!id || !thirdwebAccount) return;
+    setOrdersLoading(true);
+    try {
+      const res = await fetchOrgOrders(thirdwebAccount, id);
+      if (res.ok) setOrders(res.data.orders);
+      else console.warn('[tickets] order list failed', res.code, res.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [id, thirdwebAccount]);
+
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
+
   function updateRow(key: string, patch: Partial<EditableRow>) {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
+  // An empty field means free. Anything unparseable OR negative is invalid and blocks saving —
+  // it is never quietly rewritten to 0, which would sell a paid ticket for nothing.
   function handlePriceChange(key: string, text: string) {
     const parsed = Math.round(parseFloat(text.replace(',', '.')) * 100);
-    const invalid = text.trim() !== '' && !Number.isFinite(parsed);
+    const invalid = text.trim() !== '' && (!Number.isFinite(parsed) || parsed < 0);
     updateRow(key, {
       priceText: text,
-      price_cents: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
+      price_cents: !invalid && Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
       priceInvalid: invalid,
     });
   }
@@ -172,9 +203,11 @@ export default function EventTicketsScreen() {
 
   const hasPaidRow = rows.some((r) => r.price_cents > 0);
   const stripeBlocked = hasPaidRow && !chargesEnabled;
+  const hasInvalidPrice = rows.some((r) => r.priceInvalid);
+  const saveBlocked = saving || stripeBlocked || hasInvalidPrice;
 
   const handleSave = useCallback(async () => {
-    if (!activeAccount || !thirdwebAccount || !id || saving || stripeBlocked) return;
+    if (!activeAccount || !thirdwebAccount || !id || saveBlocked) return;
     setSaving(true);
     try {
       const payload = rows.map((r) => ({
@@ -195,7 +228,43 @@ export default function EventTicketsScreen() {
     } finally {
       setSaving(false);
     }
-  }, [activeAccount, thirdwebAccount, id, saving, stripeBlocked, rows]);
+  }, [activeAccount, thirdwebAccount, id, saveBlocked, rows]);
+
+  // Declared as a function so it can call itself for the forced retry without a self-referencing
+  // useCallback. `force` is only ever true after the organiser confirmed a second time.
+  async function submitRefund(order: OrgOrderView, force: boolean): Promise<void> {
+    if (!thirdwebAccount || refundingId) return;
+    setRefundingId(order.id);
+    try {
+      const res = await refundOrder(thirdwebAccount, order.id, force ? { force: true } : undefined);
+      if (res.ok) {
+        Alert.alert('Erstattet', 'Die Bestellung wurde erstattet. Die Tickets sind nicht mehr gültig.');
+        await loadOrders();
+        return;
+      }
+      if (res.code === 'TICKETS_CHECKED_IN' && !force) {
+        Alert.alert('Ticket bereits eingelöst', 'Mindestens ein Ticket wurde eingelöst. Trotzdem erstatten?', [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Trotzdem erstatten', style: 'destructive', onPress: () => void submitRefund(order, true) },
+        ]);
+        return;
+      }
+      Alert.alert('Fehler', res.message);
+    } finally {
+      setRefundingId(null);
+    }
+  }
+
+  function confirmRefund(order: OrgOrderView) {
+    Alert.alert(
+      'Bestellung erstatten?',
+      `${formatCents(order.amount_cents)} für ${order.quantity} × ${order.ticket_type_name} werden zurückgebucht. Die Tickets verlieren ihre Gültigkeit.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Erstatten', style: 'destructive', onPress: () => void submitRefund(order, false) },
+      ]
+    );
+  }
 
   if (loading) {
     return (
@@ -259,7 +328,7 @@ export default function EventTicketsScreen() {
                     placeholderTextColor={colors.textTertiary}
                   />
                   {row.priceInvalid ? (
-                    <Text style={[styles.errorHint, { color: colors.error }]}>Ungültiger Preis — wird als 0 gespeichert.</Text>
+                    <Text style={[styles.errorHint, { color: colors.error }]}>Ungültiger Preis — bitte korrigieren.</Text>
                   ) : (
                     <Text style={[styles.fieldHint, { color: colors.textTertiary }]}>{formatCents(row.price_cents)}</Text>
                   )}
@@ -312,10 +381,10 @@ export default function EventTicketsScreen() {
 
           <Pressable
             onPress={handleSave}
-            disabled={saving || stripeBlocked}
+            disabled={saveBlocked}
             style={({ pressed }) => [
               styles.primaryButton,
-              { backgroundColor: colors.primary, opacity: saving || stripeBlocked ? 0.5 : pressed ? 0.85 : 1 },
+              { backgroundColor: colors.primary, opacity: saveBlocked ? 0.5 : pressed ? 0.85 : 1 },
             ]}
           >
             {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Speichern</Text>}
@@ -325,6 +394,41 @@ export default function EventTicketsScreen() {
             Käufer sehen: Preis inkl. MwSt., Veranstalter = deine Organisation, kein Widerrufsrecht bei
             termingebundenen Veranstaltungen.
           </Text>
+
+          <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>Bestellungen</Text>
+          {ordersLoading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : orders.length === 0 ? (
+            <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>Noch keine Bestellungen.</Text>
+          ) : (
+            orders.map((order) => (
+              <View key={order.id} style={[styles.orderRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.orderLine, { color: colors.textPrimary }]}>
+                  #{order.id.slice(0, 8).toUpperCase()} · {order.quantity} × {order.ticket_type_name} ·{' '}
+                  {formatCents(order.amount_cents)} · {orderStatusLabel(order.status)}
+                </Text>
+                {order.tickets_total > 0 && (
+                  <Text style={[styles.orderMeta, { color: colors.textTertiary }]}>
+                    {order.tickets_checked_in} von {order.tickets_total} eingelöst
+                  </Text>
+                )}
+                {order.status === 'paid' && (
+                  <Pressable
+                    onPress={() => confirmRefund(order)}
+                    disabled={refundingId === order.id}
+                    style={styles.refundButton}
+                    accessibilityRole="button"
+                  >
+                    {refundingId === order.id ? (
+                      <ActivityIndicator color={colors.error} />
+                    ) : (
+                      <Text style={[styles.refundText, { color: colors.error }]}>Erstatten</Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            ))
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -354,6 +458,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionBody: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  sectionHeading: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-Bold', marginTop: 8 },
+  orderRow: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
+  orderLine: { fontSize: 13, fontFamily: 'Inter-Medium', lineHeight: 18 },
+  orderMeta: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  refundButton: { alignSelf: 'flex-start', minHeight: 24, justifyContent: 'center' },
+  refundText: { fontSize: 13, fontFamily: 'Inter-SemiBold' },
   label: { fontSize: 12, fontFamily: 'Inter-Medium', marginBottom: 4 },
   input: {
     borderWidth: 1,

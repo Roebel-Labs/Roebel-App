@@ -488,7 +488,7 @@ export default function EventDetails() {
             </Text>
           )}
 
-          {salesEnabled && ticketTypes.length > 0 && (
+          {salesEnabled && !event.is_cancelled && ticketTypes.length > 0 && (
             <Pressable
               onPress={() => router.push({ pathname: '/event/[id]/tickets' as any, params: { id } })}
               style={({ pressed }) => [styles.ticketCta, { backgroundColor: colors.primary }, pressed && styles.pressed]}
