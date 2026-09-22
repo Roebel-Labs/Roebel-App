@@ -17,7 +17,7 @@ export interface OrderView {
   ticket_type_name: string; tickets: TicketView[];
 }
 export interface CheckoutResult { order_id: string; status: 'pending' | 'paid'; url: string | null; expires_at: string | null; amount_cents: number; fee_cents: number }
-export interface CheckinResult { result: 'ok' | 'already_checked_in' | 'invalid' | 'refunded' | 'wrong_event'; ticket?: TicketView; event_title?: string; checked_in_count?: number; issued_count?: number }
+export interface CheckinResult { result: 'ok' | 'already_checked_in' | 'invalid' | 'refunded'; ticket?: TicketView; event_title?: string; checked_in_count?: number; issued_count?: number }
 
 export async function fetchTicketTypes(eventId: string): Promise<TicketTypeRow[]> {
   const { data, error } = await supabase.from('ticket_types').select('*').eq('event_id', eventId).eq('is_active', true).order('sort_order');

@@ -7,18 +7,20 @@ export async function settleOrder(
 ): Promise<{ issued: number }> {
   const { data: order } = await admin.from("ticket_orders").select("*").eq("id", orderId).maybeSingle();
   if (!order) return { issued: 0 };
-  if (order.status !== "pending" && !(order.rail === "free" && order.status === "paid")) return { issued: 0 };
-
-  const { count } = await admin.from("tickets").select("id", { count: "exact", head: true }).eq("order_id", orderId);
-  if ((count ?? 0) > 0) return { issued: 0 };
+  if (order.status !== "pending" && order.status !== "paid") return { issued: 0 };
 
   if (order.status === "pending") {
     const { data: updated } = await admin.from("ticket_orders")
       .update({ status: "paid", paid_at: new Date().toISOString(), stripe_payment_intent_id: opts.paymentIntentId ?? order.stripe_payment_intent_id,
         stripe_checkout_session_id: opts.sessionId ?? order.stripe_checkout_session_id })
       .eq("id", orderId).eq("status", "pending").select("id");
-    if (!updated || updated.length === 0) return { issued: 0 };
+    if (!updated || updated.length === 0) return { issued: 0 }; // another caller settled first
   }
+
+  // Checked after the pending→paid flip (not before): a `paid` order with zero tickets — e.g. the
+  // insert below failed on a previous call — must still be recoverable by any later settleOrder call.
+  const { count } = await admin.from("tickets").select("id", { count: "exact", head: true }).eq("order_id", orderId);
+  if ((count ?? 0) > 0) return { issued: 0 };
 
   const rows = Array.from({ length: order.quantity }, () => ({
     order_id: orderId, event_id: order.event_id, ticket_type_id: order.ticket_type_id,

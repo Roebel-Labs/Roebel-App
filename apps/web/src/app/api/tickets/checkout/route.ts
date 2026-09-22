@@ -37,7 +37,12 @@ export async function POST(request: NextRequest) {
   if (email) await admin.from("ticket_orders").update({ buyer_email: email }).eq("id", order.id);
 
   if (order.rail === "free") {
-    await settleOrder(admin, order.id, {});
+    try {
+      await settleOrder(admin, order.id, {});
+    } catch (err) {
+      console.error("[tickets/checkout] settleOrder failed for free order", order.id, err);
+      return jsonFail(500, "SETTLE_FAILED", "Reserviert, aber die Tickets konnten noch nicht erstellt werden. Bitte gleich unter „Meine Tickets“ neu laden.");
+    }
     return jsonOk({ order_id: order.id, status: "paid", url: null, expires_at: null, amount_cents: 0, fee_cents: 0 });
   }
 
