@@ -19,6 +19,7 @@ import { softShadow } from '@/lib/shadow';
 import HeroEventCard from '@/components/HeroEventCard';
 import { transformedImageUrl } from '@/lib/image-url';
 import {
+  HERO_AMBIENT_MAX_OPACITY,
   HERO_CAROUSEL_CARD_HEIGHT,
   activeIndexFromOffset,
   ambientWeight,
@@ -39,9 +40,9 @@ const NEIGHBOUR_OPACITY = 0.7;
 const SNAP_SPRING = { damping: 24, stiffness: 170, mass: 1 };
 
 // Ambient wash behind the deck: the centred card's picture, blurred wide,
-// kept quiet (half strength) and bleeding a little past the stage so it
-// melts into the page above and below.
-const AMBIENT_MAX_OPACITY = 0.5;
+// kept quiet and bleeding a little past the stage so it melts into the page
+// above and below. The peak opacity lives in the layout module because the
+// cards' frost is sized against it (lib/glass-contrast.ts).
 const AMBIENT_BLEED = 28;
 const AMBIENT_EDGE_FADE = 56;
 
@@ -253,6 +254,7 @@ const HeroCarouselSlot = memo(function HeroCarouselSlot({
     >
       <HeroEventCard
         event={event}
+        glass
         onPress={handlePress}
         imagePriority="high"
         style={{ width: cardWidth, height: HERO_CAROUSEL_CARD_HEIGHT }}
@@ -279,7 +281,7 @@ const HeroAmbientLayer = memo(function HeroAmbientLayer({
   const animatedStyle = useAnimatedStyle(() => {
     const loopLength = slots * interval;
     const relative = wrapOffset(slot * interval - offset.value, loopLength);
-    return { opacity: AMBIENT_MAX_OPACITY * ambientWeight(relative, interval) };
+    return { opacity: HERO_AMBIENT_MAX_OPACITY * ambientWeight(relative, interval) };
   });
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>

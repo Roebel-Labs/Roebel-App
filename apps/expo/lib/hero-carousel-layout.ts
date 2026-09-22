@@ -2,6 +2,13 @@
 export const HERO_CAROUSEL_PEEK = 12;
 /** Horizontal gap between two hero cards. */
 export const HERO_CAROUSEL_GAP = 8;
+/**
+ * Peak opacity of the ambient wash behind the centred hero card. Quiet on
+ * purpose (Max 2026-09-22: "less prominent"); lib/glass-contrast.ts sizes the
+ * cards' frost against exactly this value, so raising it needs a re-check
+ * of the contrast test.
+ */
+export const HERO_AMBIENT_MAX_OPACITY = 0.3;
 /** Fixed card height; the skeleton reserves the same box so nothing shifts. */
 export const HERO_CAROUSEL_CARD_HEIGHT = 500;
 

@@ -8,6 +8,8 @@ import type { EventRecord } from '@/lib/types';
 import { useTheme } from '@/context/ThemeContext';
 import { formatTime, formatLocation } from '@/lib/utils';
 import EventCancelledScrim from '@/components/EventCancelledScrim';
+import { glassEdgeColor } from '@/components/GlassSurface';
+import { heroGlassTintColor } from '@/lib/glass-contrast';
 import { transformedImageUrl } from '@/lib/image-url';
 
 type Props = {
@@ -19,6 +21,14 @@ type Props = {
   onPress?: () => void;
   /** Above-the-fold hero: let expo-image fetch these before rail thumbnails. */
   imagePriority?: 'low' | 'normal' | 'high';
+  /**
+   * Frosted panel instead of an opaque card, for decks that draw the
+   * ambient wash behind them (the explore carousel). No BlurView: what sits
+   * behind is already a blurred picture, so the frost alone reads as glass —
+   * and one sampler per screen stays with the bottom nav. The tint's alpha is
+   * the accessibility knob (lib/glass-contrast.ts).
+   */
+  glass?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -28,9 +38,9 @@ type Props = {
  * time/organizer subline, location and the "Mehr erfahren" button.
  * Sizing (width/height) comes from the parent via `style`.
  */
-function HeroEventCard({ event, onPress, imagePriority = 'normal', style }: Props) {
+function HeroEventCard({ event, onPress, imagePriority = 'normal', glass = false, style }: Props) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, variant } = useTheme();
 
   const dayName = event.date ? format(parseISO(event.date), 'EEEE', { locale: de }) : '';
 
@@ -55,14 +65,24 @@ function HeroEventCard({ event, onPress, imagePriority = 'normal', style }: Prop
       style={[
         styles.card,
         {
-          backgroundColor: colors.background,
+          backgroundColor: glass ? 'transparent' : colors.background,
           // Dark mode: the secondary border reads as a light halo around the
           // card; the base border token sits closer to the surface.
-          borderColor: isDark ? colors.border : colors.borderSecondary,
+          borderColor: glass
+            ? glassEdgeColor(isDark)
+            : isDark
+              ? colors.border
+              : colors.borderSecondary,
         },
         style,
       ]}
     >
+      {glass && (
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: heroGlassTintColor(variant) }]}
+        />
+      )}
       {/* Image section */}
       <View style={styles.imageSection}>
         {event.image_url ? (

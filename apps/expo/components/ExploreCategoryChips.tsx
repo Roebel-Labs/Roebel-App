@@ -70,6 +70,10 @@ export default function ExploreCategoryChips() {
 const styles = StyleSheet.create({
   container: {
     marginBottom: 4,
+    // The hero carousel's ambient wash bleeds upward past its own box; the
+    // tiles and their labels must stay on top of it (Max 2026-09-22).
+    zIndex: 2,
+    elevation: 2,
   },
   listContent: {
     paddingHorizontal: 16,
