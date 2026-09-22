@@ -23,12 +23,20 @@ export function statusFromAccount(acct: Stripe.Account): ConnectStatus {
   };
 }
 
-/** Load the org's mirror row (same livemode as the current key). */
-export async function connectedAccountRow(admin: SupabaseClient, accountId: string) {
+export type ConnectedAccountRow = {
+  account_id: string; stripe_account_id: string; charges_enabled: boolean; livemode: boolean;
+};
+
+/**
+ * Load the org's mirror row for the mode the current platform key is in. Since
+ * 20260923_stripe_connect_tickets_fixes.sql the table is unique on (account_id, livemode), so an
+ * org can hold a sandbox row and a live row side by side and this never returns the wrong one.
+ */
+export async function connectedAccountRow(admin: SupabaseClient, accountId: string): Promise<ConnectedAccountRow | null> {
   const { data } = await admin
     .from("stripe_connected_accounts").select("*")
     .eq("account_id", accountId).eq("livemode", isConnectLivemode()).maybeSingle();
-  return data as { stripe_account_id: string; charges_enabled: boolean } | null;
+  return (data as ConnectedAccountRow | null) ?? null;
 }
 
 /** Fetch the account from Stripe and mirror it. Returns EMPTY_STATUS when the org has no account. */
