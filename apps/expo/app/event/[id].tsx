@@ -47,6 +47,8 @@ import { recordView } from '@/lib/supabase-event-views';
 import { fetchAccountById } from '@/lib/supabase-accounts';
 import { fontFamily } from '@/constants/theme';
 import { POSTER_ASPECT_RATIO } from '@/constants/poster';
+import { isTicketSalesEnabled } from '@/lib/supabase-app-settings';
+import { fetchTicketTypes, formatCents, type TicketTypeRow } from '@/lib/tickets';
 
 const EVENT_PUBLISHER_SUB_TYPE_LABELS: Record<OrgSubType, string> = {
   verein: '🏛️ Verein',
@@ -92,6 +94,8 @@ export default function EventDetails() {
   const [flyerAspect, setFlyerAspect] = useState(POSTER_ASPECT_RATIO);
   // Measured height of the top block (chrome + flyer) — sizes the ambient backdrop.
   const [heroHeight, setHeroHeight] = useState(0);
+  const [ticketTypes, setTicketTypes] = useState<TicketTypeRow[]>([]);
+  const [salesEnabled, setSalesEnabled] = useState(false);
   const { showSnackbar } = useSnackbar();
   const { user } = useUser();
   const activeAccount = useActiveAccount();
@@ -105,6 +109,24 @@ export default function EventDetails() {
     if (id) loadPreviews([id], { force: true });
   }, [id, loadPreviews]);
   useInterestPreviews(moreEvents);
+
+  // Ticket CTA: only fetched when the citizen-side sales gate is on, and
+  // only rendered once there's at least one active ticket type to sell.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTickets() {
+      const enabled = await isTicketSalesEnabled();
+      if (cancelled) return;
+      setSalesEnabled(enabled);
+      if (!enabled || !id) return;
+      const types = await fetchTicketTypes(id);
+      if (!cancelled) setTicketTypes(types);
+    }
+    loadTickets();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
     setHeroHeight(e.nativeEvent.layout.height);
@@ -293,6 +315,7 @@ export default function EventDetails() {
     formatDate(displayDate) +
     (startTime ? ` • ${startTime}${endTime ? ` – ${endTime}` : ''} Uhr` : '');
   const priceLine = event.ticket_price == null ? null : currency(event.ticket_price);
+  const minTicketPrice = ticketTypes.length > 0 ? Math.min(...ticketTypes.map((t) => t.price_cents)) : 0;
   const showLivestream = !!(event.livestream_active && event.livestream_url);
   const hasAmbient = !!event.image_url;
 
@@ -463,6 +486,18 @@ export default function EventDetails() {
             <Text style={[styles.when, { color: colors.textSecondary }]}>
               {priceLine === 'Kostenlos' ? priceLine : `Eintritt ${priceLine}`}
             </Text>
+          )}
+
+          {salesEnabled && ticketTypes.length > 0 && (
+            <Pressable
+              onPress={() => router.push({ pathname: '/event/[id]/tickets' as any, params: { id } })}
+              style={({ pressed }) => [styles.ticketCta, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.ticketCtaText}>
+                {minTicketPrice === 0 ? 'Platz sichern' : `Tickets ab ${formatCents(minTicketPrice)}`}
+              </Text>
+            </Pressable>
           )}
 
           <InterestSocialRow eventId={id as string} style={styles.socialRow} />
@@ -715,6 +750,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     fontFamily: fontFamily.regular,
+  },
+  ticketCta: {
+    marginTop: 12,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketCtaText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
   allDatesLink: {
     flexDirection: 'row',
