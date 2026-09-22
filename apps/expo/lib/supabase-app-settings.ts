@@ -77,3 +77,18 @@ export async function isStablecoinPaymentsEnabled(opts?: {
     .map((entry) => entry.trim())
     .includes(opts.walletAddress.toLowerCase());
 }
+
+/** Org-side gate for Stripe Connect (Zahlungen einrichten). New surface: missing key = OFF; 'true' = all; else wallet allowlist. */
+export async function isStripeConnectEnabled(opts?: { walletAddress?: string | null }): Promise<boolean> {
+  if (__DEV__) return true;
+  const value = await fetchAppSetting('stripe_connect_enabled');
+  if (!value || value === 'false') return false;
+  if (value === 'true') return true;
+  if (!opts?.walletAddress) return false;
+  return value.toLowerCase().split(',').map((e) => e.trim()).includes(opts.walletAddress.toLowerCase());
+}
+/** Citizen-side gate for buying tickets. Missing key = OFF. */
+export async function isTicketSalesEnabled(): Promise<boolean> {
+  if (__DEV__) return true;
+  return (await fetchAppSetting('stripe_tickets_enabled')) === 'true';
+}
