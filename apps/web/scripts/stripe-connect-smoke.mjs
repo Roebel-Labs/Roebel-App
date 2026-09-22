@@ -10,6 +10,7 @@
 //   node --env-file=apps/web/.env.local apps/web/scripts/stripe-connect-smoke.mjs checkout acct_… [amountCents=100] [feeCents=10]
 //   node --env-file=apps/web/.env.local apps/web/scripts/stripe-connect-smoke.mjs session  acct_… cs_test_…
 //   node --env-file=apps/web/.env.local apps/web/scripts/stripe-connect-smoke.mjs fees
+//   node --env-file=apps/web/.env.local apps/web/scripts/stripe-connect-smoke.mjs webhook https://www.roebel.app/api/webhooks/stripe-connect
 //
 // Key: STRIPE_SECRET_KEY_SANDBOX (sk_test_… from the Sandbox's Entwickler → API-Schlüssel page).
 // Live keys are refused on purpose; this script must never create a real charge.
@@ -147,7 +148,25 @@ async function fees() {
   );
 }
 
-const commands = { account, link, checkout, session, fees };
+async function webhook(url) {
+  if (!/^https:\/\//.test(url ?? "")) throw new Error("webhook <https url> is required");
+  const endpoint = await stripe.webhookEndpoints.create({
+    url,
+    connect: true,
+    enabled_events: [
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "checkout.session.async_payment_failed",
+      "checkout.session.expired",
+      "charge.refunded",
+      "account.updated",
+    ],
+    description: "Röbel App Connect webhook (sandbox)",
+  });
+  console.log(`Connect webhook ${endpoint.id} → ${endpoint.url}\nSTRIPE_CONNECT_WEBHOOK_SECRET=${endpoint.secret}\n(put this in Vercel + .env.local; it is shown only once)`);
+}
+
+const commands = { account, link, checkout, session, fees, webhook };
 const run = commands[command];
 if (!run) {
   console.error(`Unknown command "${command ?? ""}". Commands: ${Object.keys(commands).join(", ")}`);
