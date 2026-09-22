@@ -26,24 +26,29 @@ export async function POST(request: NextRequest) {
 
   let stripeAccountId = (await connectedAccountRow(admin, accountId))?.stripe_account_id ?? null;
   if (!stripeAccountId) {
-    const acct = await stripeConnect.accounts.create({
-      country: "DE",
-      email: org.contact_email ?? undefined,
-      business_type: org.sub_type === "verein" ? "non_profit" : undefined,
-      controller: {
-        fees: { payer: "account" },
-        losses: { payments: "stripe" },
-        stripe_dashboard: { type: "full" },
-        requirement_collection: "stripe",
-      },
-      capabilities: { card_payments: { requested: true } },
-      business_profile: {
-        name: org.name,
-        url: org.slug ? `${webBaseUrl()}/org/${org.slug}` : undefined,
-        product_description: "Eintrittskarten und Gebühren für Veranstaltungen in Röbel/Müritz",
-      },
-      metadata: { roebel_account_id: accountId },
-    });
+    let acct;
+    try {
+      acct = await stripeConnect.accounts.create({
+        country: "DE",
+        email: org.contact_email ?? undefined,
+        business_type: org.sub_type === "verein" ? "non_profit" : undefined,
+        controller: {
+          fees: { payer: "account" },
+          losses: { payments: "stripe" },
+          stripe_dashboard: { type: "full" },
+          requirement_collection: "stripe",
+        },
+        capabilities: { card_payments: { requested: true } },
+        business_profile: {
+          name: org.name,
+          url: org.slug ? `${webBaseUrl()}/org/${org.slug}` : undefined,
+          product_description: "Eintrittskarten und Gebühren für Veranstaltungen in Röbel/Müritz",
+        },
+        metadata: { roebel_account_id: accountId },
+      });
+    } catch (err) {
+      return jsonFail(502, "STRIPE_ERROR", err instanceof Error ? err.message : "Stripe-Fehler");
+    }
     stripeAccountId = acct.id;
     const status = statusFromAccount(acct);
     const { error } = await admin.from("stripe_connected_accounts").insert({
@@ -58,16 +63,29 @@ export async function POST(request: NextRequest) {
       disabled_reason: status.disabled_reason,
       requirements_currently_due: acct.requirements?.currently_due ?? [],
     });
-    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    if (error) {
+      try {
+        await stripeConnect.accounts.del(acct.id);
+      } catch (delErr) {
+        console.error("[connect/onboard] failed to clean up orphaned Stripe account", acct.id, "for org", accountId, delErr);
+      }
+      console.error("[connect/onboard] orphaned Stripe account", acct.id, "for org", accountId);
+      return jsonFail(500, "DB_ERROR", error.message);
+    }
   }
 
-  const returnTo = encodeURIComponent("roebel://org/payments");
-  const link = await stripeConnect.accountLinks.create({
-    account: stripeAccountId,
-    type: "account_onboarding",
-    collection_options: { fields: "eventually_due" },
-    return_url: `${webBaseUrl()}/connect/return?return_to=${returnTo}`,
-    refresh_url: `${webBaseUrl()}/connect/return?refresh=true&return_to=${returnTo}`,
-  });
+  let link;
+  try {
+    const returnTo = encodeURIComponent("roebel://org/payments");
+    link = await stripeConnect.accountLinks.create({
+      account: stripeAccountId,
+      type: "account_onboarding",
+      collection_options: { fields: "eventually_due" },
+      return_url: `${webBaseUrl()}/connect/return?return_to=${returnTo}`,
+      refresh_url: `${webBaseUrl()}/connect/return?refresh=true&return_to=${returnTo}`,
+    });
+  } catch (err) {
+    return jsonFail(502, "STRIPE_ERROR", err instanceof Error ? err.message : "Stripe-Fehler");
+  }
   return jsonOk({ url: link.url, stripe_account_id: stripeAccountId });
 }
