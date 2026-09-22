@@ -1,7 +1,9 @@
 import { SuccessRedirect } from "@/app/roebel-card/success/success-redirect";
 
 const FALLBACK = "roebel://org/payments";
-const ALLOW = /^(roebel:\/\/|https:\/\/(www\.)?roebel\.app\/)/;
+// Exactly the one deep link this page is ever asked to hand back to. A prefix match on
+// "roebel://" would let ?return_to= point the returning organiser at any screen in the app.
+const ALLOW = /^roebel:\/\/org\/payments$/;
 
 export default async function ConnectReturnPage({ searchParams }: { searchParams: Promise<{ return_to?: string; refresh?: string }> }) {
   const { return_to, refresh } = await searchParams;

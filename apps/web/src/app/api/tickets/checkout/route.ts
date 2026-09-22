@@ -4,6 +4,7 @@ import { verifySignedRequest, failResponse, jsonOk, jsonFail } from "@/lib/signe
 import { stripeConnect, isConnectLivemode, platformFeeCents, webBaseUrl } from "@/lib/stripe-connect";
 import { connectedAccountRow } from "@/lib/tickets/connect-status";
 import { settleOrder } from "@/lib/tickets/settle";
+import { assertTicketsEnabled } from "@/lib/tickets/flags";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,12 +21,19 @@ const RESERVE_ERRORS: Record<string, [number, string]> = {
 export async function POST(request: NextRequest) {
   const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["checkout"] });
   if (!v.ok) return failResponse(v);
+
+  // Server-side pilot gate. The Expo flag only hides the buy button; this one closes the route,
+  // so rolling the pilot back cannot be undone by an old build or a hand-crafted signed request.
+  const admin = createAdminClient();
+  if (!(await assertTicketsEnabled(admin, "stripe_tickets_enabled"))) {
+    return jsonFail(503, "DISABLED", "Diese Funktion ist derzeit nicht verfügbar.");
+  }
+
   const ticketTypeId = String(v.payload.ticket_type_id ?? "");
   const quantity = Number(v.payload.quantity ?? 1);
   const email = typeof v.payload.buyer_email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.payload.buyer_email) ? v.payload.buyer_email : null;
   if (!UUID_RE.test(ticketTypeId) || !Number.isInteger(quantity) || quantity < 1) return jsonFail(400, "BAD_REQUEST", "ticket_type_id oder quantity fehlt");
 
-  const admin = createAdminClient();
   const { data: order, error } = await admin.rpc("reserve_tickets", {
     p_ticket_type_id: ticketTypeId, p_quantity: quantity, p_buyer_wallet: v.wallet, p_hold_minutes: HOLD_MINUTES,
   });
@@ -61,6 +69,10 @@ export async function POST(request: NextRequest) {
     const session = await stripeConnect.checkout.sessions.create(
       {
         mode: "payment", locale: "de", submit_type: "book",
+        // Cards only: every other method Stripe could offer is either asynchronous (the buyer
+        // leaves with no ticket and the order expires before the payment confirms) or not
+        // available on a direct charge with an application fee.
+        payment_method_types: ["card"],
         line_items: [{ quantity: order.quantity, price_data: { currency: order.currency, unit_amount: Math.round(order.amount_cents / order.quantity),
           product_data: { name: `${tt?.name ?? "Ticket"} – ${ev?.title ?? "Veranstaltung"}` } } }],
         ...(feeCents > 0 ? { payment_intent_data: { application_fee_amount: feeCents } } : {}),

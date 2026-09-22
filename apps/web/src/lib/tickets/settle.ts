@@ -1,20 +1,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateTicketCode } from "./codes";
 
-/** Flip a pending order to paid and mint its tickets exactly once. Free orders are already paid when created. */
+/**
+ * Flip a pending order to paid and mint its tickets exactly once. Free orders are already paid
+ * when created.
+ *
+ * `allowLate` also accepts an `expired` or `cancelled` order. Only the Stripe webhook passes it:
+ * Stripe confirming a payment is proof that money moved, and our 35-minute hold having run out in
+ * the meantime must not turn that into a charge without tickets. The self-heal paths do not pass
+ * it, so a cancelled order is never resurrected by a plain reload.
+ */
 export async function settleOrder(
-  admin: SupabaseClient, orderId: string, opts: { paymentIntentId?: string | null; sessionId?: string | null },
+  admin: SupabaseClient, orderId: string,
+  opts: { paymentIntentId?: string | null; sessionId?: string | null; allowLate?: boolean },
 ): Promise<{ issued: number }> {
   const { data: order } = await admin.from("ticket_orders").select("*").eq("id", orderId).maybeSingle();
   if (!order) return { issued: 0 };
-  if (order.status !== "pending" && order.status !== "paid") return { issued: 0 };
+  const isLate = opts.allowLate === true && (order.status === "expired" || order.status === "cancelled");
+  if (!isLate && order.status !== "pending" && order.status !== "paid") return { issued: 0 };
 
-  if (order.status === "pending") {
-    const { data: updated } = await admin.from("ticket_orders")
+  if (isLate || order.status === "pending") {
+    const update = admin.from("ticket_orders")
       .update({ status: "paid", paid_at: new Date().toISOString(), stripe_payment_intent_id: opts.paymentIntentId ?? order.stripe_payment_intent_id,
         stripe_checkout_session_id: opts.sessionId ?? order.stripe_checkout_session_id })
-      .eq("id", orderId).eq("status", "pending").select("id");
+      .eq("id", orderId);
+    const { data: updated } = await (isLate ? update.in("status", ["expired", "cancelled"]) : update.eq("status", "pending")).select("id");
     if (!updated || updated.length === 0) return { issued: 0 }; // another caller settled first
+    if (isLate) console.warn("[tickets] late payment settled after hold expiry", orderId);
   }
 
   // Checked after the pending→paid flip (not before): a `paid` order with zero tickets — e.g. the

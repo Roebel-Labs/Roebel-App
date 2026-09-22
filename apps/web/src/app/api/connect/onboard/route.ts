@@ -4,6 +4,7 @@ import { verifySignedRequest, failResponse, jsonOk, jsonFail } from "@/lib/signe
 import { roleInAccount, canManage } from "@/lib/tickets/authz";
 import { stripeConnect, isConnectLivemode, isConnectConfigured, webBaseUrl } from "@/lib/stripe-connect";
 import { connectedAccountRow, statusFromAccount } from "@/lib/tickets/connect-status";
+import { assertTicketsEnabled } from "@/lib/tickets/flags";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,6 +20,11 @@ export async function POST(request: NextRequest) {
   if (!UUID_RE.test(accountId)) return jsonFail(400, "BAD_REQUEST", "account_id fehlt");
 
   const admin = createAdminClient();
+  // Server-side pilot gate (allowlist-capable), so the org rollout is not governed by which
+  // app build the organiser happens to have installed.
+  if (!(await assertTicketsEnabled(admin, "stripe_connect_enabled", v.wallet))) {
+    return jsonFail(503, "DISABLED", "Diese Funktion ist derzeit nicht verfügbar.");
+  }
   if (!canManage(await roleInAccount(admin, accountId, v.wallet))) return jsonFail(403, "FORBIDDEN", "Nur Inhaber oder Admins der Organisation.");
 
   const { data: org } = await admin.from("accounts").select("id, name, contact_email, slug, sub_type").eq("id", accountId).maybeSingle();

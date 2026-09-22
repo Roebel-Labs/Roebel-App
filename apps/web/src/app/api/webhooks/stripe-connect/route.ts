@@ -32,7 +32,41 @@ export async function POST(request: NextRequest) {
       case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
         if (s.metadata?.kind === "event_ticket" && s.metadata.order_id && s.payment_status === "paid") {
-          await settleOrder(admin, s.metadata.order_id, { paymentIntentId: typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id ?? null, sessionId: s.id });
+          const orderId = s.metadata.order_id;
+          const { data: order } = await admin.from("ticket_orders")
+            .select("id, status, stripe_account_id, stripe_checkout_session_id, amount_cents")
+            .eq("id", orderId).maybeSingle();
+          // Bind the settlement to the order we created. The metadata is attacker-shaped input
+          // (any connected account can send a session carrying any order_id), so it only names
+          // the order — the connected account, the Checkout Session and the amount must all be
+          // the ones this order was created with before a single ticket is minted.
+          const matches = !!order
+            && !!order.stripe_account_id && order.stripe_account_id === event.account
+            && !!order.stripe_checkout_session_id && order.stripe_checkout_session_id === s.id
+            && (s.amount_total ?? 0) >= order.amount_cents;
+          if (!matches) {
+            console.error("[stripe-connect] settlement mismatch — no tickets minted", {
+              event_id: event.id,
+              order_id: orderId,
+              event_account: event.account ?? null,
+              order_stripe_account_id: order?.stripe_account_id ?? null,
+              session_id: s.id,
+              order_stripe_checkout_session_id: order?.stripe_checkout_session_id ?? null,
+              amount_total: s.amount_total ?? null,
+              order_amount_cents: order?.amount_cents ?? null,
+            });
+            // Keep the stripe_events row (flagged) so the same event is not retried into the
+            // same mismatch, and answer 200 so Stripe stops redelivering it.
+            await admin.from("stripe_events").update({ error: "settlement_mismatch" }).eq("id", event.id);
+            return NextResponse.json({ received: true, settled: false });
+          }
+          // allowLate: a payment that lands after the 35-minute hold expired is still a real
+          // payment — the buyer must get tickets, not a silent loss.
+          await settleOrder(admin, orderId, {
+            paymentIntentId: typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id ?? null,
+            sessionId: s.id,
+            allowLate: true,
+          });
         }
         break;
       }
@@ -70,8 +104,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await admin.from("stripe_events").update({ error: message }).eq("id", event.id);
-    await admin.from("stripe_events").delete().eq("id", event.id); // let Stripe retry
+    console.error("[stripe-connect] processing failed", event.id, event.type, message);
+    // Drop the idempotency row so Stripe's retry is processed instead of skipped as a duplicate.
+    // No point writing `error` first — the row is gone a line later.
+    const { error: delErr } = await admin.from("stripe_events").delete().eq("id", event.id);
+    if (delErr) console.error("[stripe-connect] could not delete stripe_events row; the retry will be skipped as a duplicate", event.id, delErr.message);
     return NextResponse.json({ error: "processing_failed", details: message }, { status: 500 });
   }
 }

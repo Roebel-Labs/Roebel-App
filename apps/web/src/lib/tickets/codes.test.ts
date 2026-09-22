@@ -14,6 +14,8 @@ test("payload round-trips and a tampered payload is rejected", () => {
   const payload = ticketQrPayload(code);
   assert.match(payload, /^roebel-ticket:v1:[A-HJ-NP-Z2-9]{10}:[0-9a-f]{16}$/);
   assert.deepEqual(parseTicketQrPayload(payload), { code });
-  assert.equal(parseTicketQrPayload(payload.slice(0, -1) + "0"), null);
+  // Flip the last hex digit of the tag to something it is definitely not, so the assertion can
+  // never accidentally rebuild the untampered payload.
+  assert.equal(parseTicketQrPayload(payload.slice(0, -1) + (payload.endsWith("0") ? "1" : "0")), null);
   assert.equal(parseTicketQrPayload("roebel-card:v2:x"), null);
 });

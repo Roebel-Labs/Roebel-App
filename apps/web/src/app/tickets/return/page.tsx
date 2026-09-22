@@ -1,7 +1,9 @@
 import { SuccessRedirect } from "@/app/roebel-card/success/success-redirect";
 
 const FALLBACK = "roebel://tickets";
-const ALLOW = /^(roebel:\/\/|https:\/\/(www\.)?roebel\.app\/)/;
+// Only the two deep links checkout/route.ts builds: the ticket wallet, or one order's detail
+// screen. A prefix match on "roebel://" would let ?return_to= aim at any screen in the app.
+const ALLOW = /^roebel:\/\/(org\/payments|tickets(\/[0-9a-f-]{36})?)$/;
 
 export default async function TicketsReturnPage({ searchParams }: { searchParams: Promise<{ cancelled?: string; return_to?: string }> }) {
   const { cancelled, return_to } = await searchParams;
