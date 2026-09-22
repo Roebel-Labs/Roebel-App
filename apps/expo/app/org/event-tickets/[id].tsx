@@ -145,8 +145,14 @@ export default function EventTicketsScreen() {
     void load();
   }, [load]);
 
+  // Waits for `authorized`, so a visitor who is not owner/admin never signs a request the server
+  // would only answer with 403. Always clears the spinner — including on the early return, which
+  // otherwise leaves the Bestellungen section loading forever.
   const loadOrders = useCallback(async () => {
-    if (!id || !thirdwebAccount) return;
+    if (!id || !thirdwebAccount || authorized !== true) {
+      if (authorized === false) setOrdersLoading(false);
+      return;
+    }
     setOrdersLoading(true);
     try {
       const res = await fetchOrgOrders(thirdwebAccount, id);
@@ -155,7 +161,7 @@ export default function EventTicketsScreen() {
     } finally {
       setOrdersLoading(false);
     }
-  }, [id, thirdwebAccount]);
+  }, [id, thirdwebAccount, authorized]);
 
   useEffect(() => {
     void loadOrders();
