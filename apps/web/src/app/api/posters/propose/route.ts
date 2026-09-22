@@ -36,7 +36,8 @@ async function run(fn: () => ReturnType<typeof proposePosters>) {
   } catch (error) {
     console.error("[api/posters/propose]", error);
     if (error instanceof PosterServiceError) {
-      const status = error.code === "caps" ? 429 : error.code === "not_found" ? 404 : 502;
+      const status =
+        error.code === "caps" ? 429 : error.code === "not_found" ? 404 : error.code === "billing" ? 503 : 502;
       return NextResponse.json({ success: false, error: error.message }, { status });
     }
     return NextResponse.json({ success: false, error: "Vorschläge konnten nicht erzeugt werden." }, { status: 500 });
