@@ -1,7 +1,6 @@
-// Ticket-Typen-Editor pro Veranstaltung — nur für die Organisation, der die
-// Veranstaltung gehört. Lädt auch inaktive Ticket-Typen direkt aus Supabase:
-// fetchTicketTypes() liefert nur aktive Zeilen (RLS für anon) und ist hier zu
-// eng, weil die Organisation ihre deaktivierten Ticketarten weiter sehen muss.
+// Per-event ticket type editor — org-owner only. Loads ticket types directly
+// from Supabase instead of fetchTicketTypes(), which only returns active rows
+// under the anon RLS policy; the org still needs to see deactivated types.
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
@@ -39,7 +38,7 @@ interface EditableRow {
   sort_order: number;
 }
 
-/** 1000 → "10", 1050 → "10,5", 1005 → "10,05", 0 → "" (kostenlos). */
+/** 1000 → "10", 1050 → "10,5", 1005 → "10,05", 0 → "" (free). */
 function centsToEuroInputText(cents: number): string {
   if (!cents) return '';
   const str = (cents / 100).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
