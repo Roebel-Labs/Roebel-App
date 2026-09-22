@@ -25,6 +25,7 @@ import { formatDate } from '@/lib/utils';
 import { getAccountRole, canEditEvents, AccountRole } from '@/lib/supabase-account-roles';
 import { getViewCount } from '@/lib/supabase-event-views';
 import { getInterestCount } from '@/lib/supabase-interests';
+import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,6 +40,8 @@ export default function EditEventScreen() {
   const [role, setRole] = useState<AccountRole | null>(null);
   const [viewCount, setViewCount] = useState(0);
   const [interestCount, setInterestCount] = useState(0);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [hasTicketTypes, setHasTicketTypes] = useState(false);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -92,18 +95,33 @@ export default function EditEventScreen() {
         setRole(userRole);
       }
 
-      const [views, interests] = await Promise.all([
+      const [views, interests, ticketTypesResult] = await Promise.all([
         getViewCount(event.id),
         getInterestCount(event.id),
+        supabase.from('ticket_types').select('id', { count: 'exact', head: true }).eq('event_id', event.id),
       ]);
       setViewCount(views);
       setInterestCount(interests);
+      setHasTicketTypes((ticketTypesResult.count ?? 0) > 0);
 
       setLoading(false);
     }
 
     load();
   }, [id, account?.address]);
+
+  // "Tickets verwalten" is shown once Stripe Connect is rolled out for this
+  // wallet, or unconditionally once the event already has ticket types (so
+  // orgs can keep managing existing ones after a later rollback of the gate).
+  useEffect(() => {
+    let cancelled = false;
+    isStripeConnectEnabled({ walletAddress: account?.address ?? null }).then((on) => {
+      if (!cancelled) setStripeEnabled(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.address]);
 
   const handleSave = useCallback(async () => {
     if (!id || !title.trim() || !location.trim() || !organizerName.trim() || !organizerEmail.trim()) {
@@ -402,6 +420,19 @@ export default function EditEventScreen() {
                 )}
               </Pressable>
 
+              {(stripeEnabled || hasTicketTypes) && (
+                <Pressable
+                  onPress={() => router.push({ pathname: '/org/event-tickets/[id]' as any, params: { id: id as string } })}
+                  style={({ pressed }) => [
+                    styles.secondaryBtn,
+                    { borderColor: colors.primary },
+                    pressed && styles.btnPressed,
+                  ]}
+                >
+                  <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>Tickets verwalten</Text>
+                </Pressable>
+              )}
+
               <Pressable
                 onPress={handleDelete}
                 style={({ pressed }) => [
@@ -552,6 +583,17 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: '#fff',
+    fontSize: 16,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
+  },
+  secondaryBtn: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
     fontSize: 16,
     fontFamily: 'MonaSansSemiCondensed-Bold',
   },
