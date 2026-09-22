@@ -15,6 +15,7 @@ const ACTION_ART: Record<ProfileActionKey, ImageSourcePropType> = {
   'create-product': require('../../assets/illustration/profile/05.png'),
   'org-ads': require('../../assets/illustration/profile/ads.png'),
   'org-dashboard': require('../../assets/illustration/profile/dashboard.png'),
+  tickets: require('../../assets/illustration/profile/01.png'),
 };
 
 type Props = {

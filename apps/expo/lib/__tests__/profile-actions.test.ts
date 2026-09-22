@@ -1,7 +1,7 @@
 import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '../profile-actions';
 
 describe('PERSONAL_PROFILE_ACTIONS', () => {
-  it('has the six mockup actions in order', () => {
+  it('has the seven mockup actions in order', () => {
     expect(PERSONAL_PROFILE_ACTIONS.map((a) => a.key)).toEqual([
       'abfallkalender',
       'governance',
@@ -9,6 +9,7 @@ describe('PERSONAL_PROFILE_ACTIONS', () => {
       'submit-event',
       'create-listing',
       'create-service',
+      'tickets',
     ]);
   });
   it('routes the service tile to the listing form with the service type', () => {

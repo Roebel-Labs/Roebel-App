@@ -9,7 +9,8 @@ export type ProfileActionKey =
   | 'create-service'
   | 'create-product'
   | 'org-ads'
-  | 'org-dashboard';
+  | 'org-dashboard'
+  | 'tickets';
 
 export type ProfileAction = {
   key: ProfileActionKey;
@@ -28,6 +29,7 @@ export const PERSONAL_PROFILE_ACTIONS: ProfileAction[] = [
   { key: 'submit-event', label: 'Veranstaltung\neinsenden', href: '/submit-event' },
   { key: 'create-listing', label: 'Anzeige\nerstellen', href: '/create-listing' },
   { key: 'create-service', label: 'Dienstleistung\nanbieten', href: '/create-listing', params: { listingType: 'service' } },
+  { key: 'tickets', label: 'Meine\nTickets', href: '/tickets' },
 ];
 
 export const ORG_PROFILE_ACTIONS: ProfileAction[] = [
