@@ -32,18 +32,30 @@ function clean(t: unknown, i: number): TicketTypeInput | string {
   };
 }
 
+// POST signed, two actions behind the same owner/admin check:
+//   ticket_types_upsert { event_id, types } → { types }  (write)
+//   ticket_types_list   { event_id }        → { types }  (read, includes inactive rows)
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["ticket_types_upsert"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["ticket_types_upsert", "ticket_types_list"] });
   if (!v.ok) return failResponse(v);
   const eventId = String(v.payload.event_id ?? "");
   if (!UUID_RE.test(eventId)) return jsonFail(400, "BAD_REQUEST", "event_id fehlt");
-  const rawTypes = Array.isArray(v.payload.types) ? v.payload.types : null;
-  if (!rawTypes || rawTypes.length > 20) return jsonFail(400, "BAD_REQUEST", "types fehlt oder zu lang");
 
   const admin = createAdminClient();
   const { data: event } = await admin.from("events").select("id, account_id").eq("id", eventId).maybeSingle();
   if (!event?.account_id) return jsonFail(404, "NOT_FOUND", "Veranstaltung gehört keiner Organisation");
   if (!canManage(await roleInAccount(admin, event.account_id, v.wallet))) return jsonFail(403, "FORBIDDEN", "Nur Inhaber oder Admins.");
+
+  // The org editor reads through the service role: the anon policy only exposes is_active rows,
+  // so a deactivated ticket type would silently disappear from the editor and be re-created on save.
+  if (v.action === "ticket_types_list") {
+    const { data: all, error } = await admin.from("ticket_types").select("*").eq("event_id", eventId).order("sort_order");
+    if (error) return jsonFail(500, "DB_ERROR", error.message);
+    return jsonOk({ types: all ?? [] });
+  }
+
+  const rawTypes = Array.isArray(v.payload.types) ? v.payload.types : null;
+  if (!rawTypes || rawTypes.length > 20) return jsonFail(400, "BAD_REQUEST", "types fehlt oder zu lang");
 
   const types: TicketTypeInput[] = [];
   for (let i = 0; i < rawTypes.length; i++) {

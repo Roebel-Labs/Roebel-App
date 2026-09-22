@@ -9,8 +9,8 @@ export const SIGNED_SCOPE = "roebel-tickets-v1" as const;
 export const MAX_SIGNED_AGE_SECONDS = 300;
 
 export type TicketAction =
-  | "connect_onboard" | "connect_status" | "ticket_types_upsert" | "checkout"
-  | "order_status" | "tickets_list" | "checkin" | "refund_order";
+  | "connect_onboard" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
+  | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order";
 
 export function buildSignedMessage(
   scope: string, action: string, wallet: string, timestampSec: number, payload: Record<string, unknown>,
