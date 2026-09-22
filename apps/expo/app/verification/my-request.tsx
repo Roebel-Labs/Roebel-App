@@ -67,7 +67,7 @@ export default function MyRequestScreen() {
   };
 
   const gradientColors: readonly [string, string] = isDark
-    ? ['#1a2335', '#18191B']
+    ? ['#1a2335', colors.background]
     : ['#E4F2FF', '#FFFFFF'];
 
   if (hasCitizenNFT) {

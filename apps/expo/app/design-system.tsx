@@ -2,11 +2,10 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Switch, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@/context/ThemeContext';
+import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import {
-  lightColors,
-  darkColors,
+  colors as themeColors,
   fontFamily,
   fontSize,
   spacing,
@@ -14,6 +13,13 @@ import {
   ColorTokens,
 } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+
+const THEME_LABELS: Record<ThemePreference, string> = {
+  system: 'System',
+  light: 'Hell',
+  dim: 'Gedimmt',
+  dark: 'Dunkel',
+};
 
 // ─── Color Swatch ─────────────────────────────────────────
 
@@ -91,7 +97,7 @@ const dsSectionStyles = StyleSheet.create({
 
 export default function DesignSystemScreen() {
   const router = useRouter();
-  const { colors, isDark, preference, setPreference, effectiveTheme } = useTheme();
+  const { colors, isDark, preference, setPreference, variant } = useTheme();
   const { tier } = useUser();
   const isExtendedMode = tier !== 'guest';
 
@@ -103,7 +109,7 @@ export default function DesignSystemScreen() {
 
   if (!isExtendedMode) return null;
 
-  const colorEntries = Object.entries(isDark ? darkColors : lightColors) as [string, string][];
+  const colorEntries = Object.entries(themeColors[variant]) as [string, string][];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -120,11 +126,11 @@ export default function DesignSystemScreen() {
         <View style={[styles.themeInfo, { backgroundColor: colors.surface, marginHorizontal: 16, marginTop: 16 }]}>
           <Text style={[styles.themeInfoLabel, { color: colors.textSecondary }]}>
             Aktuelles Schema: <Text style={{ color: colors.primary, fontFamily: 'Inter-Medium' }}>
-              {effectiveTheme === 'dark' ? 'Dunkel' : 'Hell'}
-            </Text> (Einstellung: {preference === 'system' ? 'System' : preference === 'light' ? 'Hell' : 'Dunkel'})
+              {THEME_LABELS[variant]}
+            </Text> (Einstellung: {THEME_LABELS[preference]})
           </Text>
           <View style={styles.themeButtons}>
-            {(['system', 'light', 'dark'] as const).map((p) => (
+            {(['system', 'light', 'dim', 'dark'] as const).map((p) => (
               <Pressable
                 key={p}
                 style={[
@@ -135,7 +141,7 @@ export default function DesignSystemScreen() {
                 onPress={() => setPreference(p)}
               >
                 <Text style={[styles.themeButtonText, { color: preference === p ? colors.primary : colors.textSecondary }]}>
-                  {p === 'system' ? 'System' : p === 'light' ? 'Hell' : 'Dunkel'}
+                  {THEME_LABELS[p]}
                 </Text>
               </Pressable>
             ))}

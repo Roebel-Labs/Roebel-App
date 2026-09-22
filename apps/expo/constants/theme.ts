@@ -147,7 +147,11 @@ export const lightColors = {
   chart5: '#F4A462',
 } as const;
 
-export const darkColors = {
+/**
+ * "Dim" — the soft grey dark theme (was the only dark theme before the
+ * pure-black "Dark" theme below was added).
+ */
+export const dimColors = {
   // Backgrounds — one unified dark surface: background, feedBackground, card
   // and popover all share the same darker tone (#18191B) by design.
   background: '#18191B',
@@ -222,10 +226,51 @@ export const darkColors = {
   chart5: '#DD3870',
 } as const;
 
-export type ColorTokens = typeof lightColors;
+/**
+ * "Dark" — pure black (#000) for OLED screens. Derived from Dim: every
+ * background layer goes to #000 and the surfaces/borders drop one step so
+ * they still read against black. Text, brand and semantic colors stay as Dim.
+ */
+export const darkColors = {
+  ...dimColors,
+
+  // Backgrounds — no stage darker than black exists, so backdrop == background.
+  background: '#000000',
+  backdrop: '#000000',
+  surface: '#202327',
+  surfaceSecondary: '#16181C',
+  feedBackground: '#000000',
+
+  // Borders
+  border: '#2F3336',
+  borderSecondary: '#3E4144',
+  borderTertiary: '#3E4144',
+
+  // Component-specific
+  cardPlaceholder: '#202327',
+  skeleton: '#202327',
+  pressedOverlay: '#16181C',
+  switchTrackOff: '#3E4144',
+  disabled: '#3E4144',
+
+  // Extended / shadcn-aligned
+  card: '#000000',
+  popover: '#000000',
+  secondary: '#1A1B1E',
+  muted: '#1A1B1E',
+  accent: '#1A1B1E',
+  input: '#2F3336',
+} as const;
+
+/** Token names from the light palette; values widened so every palette fits. */
+export type ColorTokens = { readonly [K in keyof typeof lightColors]: string };
 export type ColorKey = keyof ColorTokens;
+
+/** A concrete palette; `dim` and `dark` both render with a dark color scheme. */
+export type ThemeVariant = 'light' | 'dim' | 'dark';
 
 export const colors = {
   light: lightColors,
+  dim: dimColors,
   dark: darkColors,
 } as const;

@@ -71,7 +71,8 @@ function ThemeOption({ label, description, isSelected, onPress, isLast, colors }
 const themeOptions: { value: ThemePreference; label: string; description?: string }[] = [
   { value: 'system', label: 'System', description: 'Folgt den Geräteeinstellungen' },
   { value: 'light', label: 'Hell' },
-  { value: 'dark', label: 'Dunkel' },
+  { value: 'dim', label: 'Gedimmt', description: 'Dunkles Grau, schont die Augen' },
+  { value: 'dark', label: 'Dunkel', description: 'Reines Schwarz, spart Akku bei OLED-Displays' },
 ];
 
 // Same options and copy as the onboarding role screen (app/welcome/role.tsx).

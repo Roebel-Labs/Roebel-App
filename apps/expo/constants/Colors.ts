@@ -3,7 +3,7 @@
  * This file is kept for backward compatibility only.
  */
 
-import { lightColors, darkColors } from './theme';
+import { lightColors, dimColors } from './theme';
 
 export const Colors = {
   light: {
@@ -19,15 +19,15 @@ export const Colors = {
     categoryBackground: lightColors.categoryBackground,
   },
   dark: {
-    text: darkColors.textPrimary,
-    subtext: darkColors.textSecondary,
-    textInverted: darkColors.textInverted,
-    background: darkColors.background,
-    tint: darkColors.primary,
-    icon: darkColors.textTertiary,
-    tabIconDefault: darkColors.tabIconDefault,
-    tabIconSelected: darkColors.primary,
-    border: darkColors.border,
-    categoryBackground: darkColors.categoryBackground,
+    text: dimColors.textPrimary,
+    subtext: dimColors.textSecondary,
+    textInverted: dimColors.textInverted,
+    background: dimColors.background,
+    tint: dimColors.primary,
+    icon: dimColors.textTertiary,
+    tabIconDefault: dimColors.tabIconDefault,
+    tabIconSelected: dimColors.primary,
+    border: dimColors.border,
+    categoryBackground: dimColors.categoryBackground,
   },
 };
