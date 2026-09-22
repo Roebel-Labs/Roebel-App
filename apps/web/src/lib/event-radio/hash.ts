@@ -1,9 +1,12 @@
 // apps/web/src/lib/event-radio/hash.ts
 // Content addressing for narration clips. Bump PROMPT_VERSION whenever the
 // prompts in prompts.ts change in a way that should re-render every clip.
+// The ElevenLabs VOICE_SETTINGS are hashed automatically.
 import { createHash } from "node:crypto";
+import { VOICE_SETTINGS } from "./tts";
 
-export const PROMPT_VERSION = 1;
+// 2 (2026-09-22): calm delivery, no exclamation marks.
+export const PROMPT_VERSION = 2;
 
 /** The only event fields that ever leave the database (spec section 6.1). */
 export type PublicEvent = {
@@ -69,8 +72,13 @@ export function sha256Hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
+/** Everything that changes how a clip sounds, independent of its content. */
+function renderContext(ctx: HashContext) {
+  return { v: PROMPT_VERSION, voice: VOICE_SETTINGS, ...ctx };
+}
+
 export function eventContentHash(ev: PublicEvent, ctx: HashContext): string {
-  return sha256Hex(stableStringify({ v: PROMPT_VERSION, ...ctx, ev }));
+  return sha256Hex(stableStringify({ ...renderContext(ctx), ev }));
 }
 
 export function introContentHash(
@@ -80,8 +88,7 @@ export function introContentHash(
 ): string {
   return sha256Hex(
     stableStringify({
-      v: PROMPT_VERSION,
-      ...ctx,
+      ...renderContext(ctx),
       validOn,
       events: events.map((e) => ({ id: e.id, title: e.title, date: e.date })),
     }),
@@ -89,5 +96,5 @@ export function introContentHash(
 }
 
 export function outroContentHash(weekKey: string, ctx: HashContext): string {
-  return sha256Hex(stableStringify({ v: PROMPT_VERSION, ...ctx, weekKey }));
+  return sha256Hex(stableStringify({ ...renderContext(ctx), weekKey }));
 }

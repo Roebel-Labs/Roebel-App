@@ -175,9 +175,12 @@ type Props = {
 };
 
 const SWIPE_DOWN_THRESHOLD = 120;
-// The slide is a rounded card inset from the screen edges; the progress
-// stepper sits on the black strip above it.
-const STAGE_INSET = 8;
+// The slide is a full-width rounded card; the progress stepper sits on the
+// black strip above it.
+const STAGE_INSET = 0;
+// The bottom fade runs past the card's edge: a gradient that ends exactly at
+// the last row can leave a hairline of image uncovered on Android.
+const FADE_OVERSHOOT = 8;
 const STAGE_RADIUS = 4;
 const SWIPE_DOWN_VELOCITY = 800;
 const SWIPE_UP_THRESHOLD = 90;
@@ -877,8 +880,9 @@ export default function StoryViewer({
                       'rgba(0,0,0,0)',
                       'rgba(0,0,0,0.72)',
                       '#000000',
+                      '#000000',
                     ]}
-                    locations={[0, 0.5, 1]}
+                    locations={[0, 0.5, 0.96, 1]}
                     style={StyleSheet.absoluteFill}
                   />
                 </Animated.View>
@@ -1370,10 +1374,10 @@ const styles = StyleSheet.create({
   },
   bottomGradient: {
     position: 'absolute',
-    bottom: 0,
+    bottom: -FADE_OVERSHOOT,
     left: 0,
     right: 0,
-    height: 300,
+    height: 300 + FADE_OVERSHOOT,
   },
   bottomContent: {
     position: 'absolute',

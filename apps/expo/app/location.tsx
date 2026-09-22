@@ -38,9 +38,12 @@ import {
   processEventsWithCoordinates,
   processOrgsWithCoordinates,
   entitiesToGeoJSON,
+  markerImagesFromIcons,
   type EventWithCoordinates,
   type OrgWithCoordinates,
 } from '@/lib/map/geojson';
+import type { MapMarkerIcons } from '@/lib/map/markers';
+import { fetchMapMarkerIcons } from '@/lib/supabase-map-icons';
 import { fetchAllOrgAccounts } from '@/lib/supabase-accounts';
 import { buildOrgIndex, EMPTY_ORG_INDEX } from '@/lib/map/org-lookup';
 import { filterOpenNow, type MapFilterState } from '@/lib/map/filters';
@@ -107,6 +110,8 @@ export default function LocationScreen() {
   const [businesses, setBusinesses] = useState<BusinessRecord[]>([]);
   const [pois, setPois] = useState<PoiRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgWithCoordinates[]>([]);
+  // Admin-set pin overrides (emoji / custom image), keyed by feature fid.
+  const [markerIcons, setMarkerIcons] = useState<MapMarkerIcons>(() => new Map());
   // All org accounts, geocoded or not — the geocoded ones are the org pins,
   // the rest are what a restaurant/business pin resolves to. See org-lookup.
   const [allOrgs, setAllOrgs] = useState<Account[]>([]);
@@ -186,10 +191,12 @@ export default function LocationScreen() {
         mapFilter.restaurants ? visibleRestaurants : [],
         mapFilter.businesses ? visibleBusinesses : [],
         mapFilter.pois ? pois : [],
-        mapFilter.orgs ? visibleOrgs : []
+        mapFilter.orgs ? visibleOrgs : [],
+        markerIcons
       ),
-    [events, visibleRestaurants, visibleBusinesses, pois, visibleOrgs, mapFilter]
+    [events, visibleRestaurants, visibleBusinesses, pois, visibleOrgs, mapFilter, markerIcons]
   );
+  const markerImages = useMemo(() => markerImagesFromIcons(markerIcons), [markerIcons]);
 
   const orgIndex = useMemo(
     () =>
@@ -327,6 +334,7 @@ export default function LocationScreen() {
         poisResult,
         advisoriesResult,
         orgsResult,
+        iconsResult,
       ] =
         await Promise.all([
           supabase
@@ -340,6 +348,7 @@ export default function LocationScreen() {
           fetchPois(),
           fetchTodayAdvisories(),
           fetchAllOrgAccounts(),
+          fetchMapMarkerIcons(),
         ]);
 
       if (eventsResult.data) {
@@ -355,6 +364,7 @@ export default function LocationScreen() {
       setAdvisories(advisoriesResult);
       setAllOrgs(orgsResult);
       setOrgs(processOrgsWithCoordinates(orgsResult));
+      setMarkerIcons(iconsResult);
     } catch (error) {
       console.error('Failed to fetch map data:', error);
     } finally {
@@ -486,6 +496,7 @@ export default function LocationScreen() {
             >
             <MapboxMapView
               geojson={geojson}
+              markerImages={markerImages}
               onMarkerPress={handleMarkerPress}
               flyToCoordinate={flyToCoordinate}
               selectedFeatureId={selectedFeatureId}

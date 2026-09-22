@@ -56,7 +56,7 @@ export function getEmoji(item: PlaceItem): string {
     case 'event':
       return eventEmoji(item.data.category);
     case 'restaurant':
-      return restaurantEmoji(item.data.slug);
+      return restaurantEmoji(item.data.slug, item.data.name);
     case 'business':
       return businessEmoji(item.data.slug, item.data.category);
     case 'poi':

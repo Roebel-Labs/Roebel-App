@@ -21,9 +21,16 @@ const segmentsSchema = z.object({
   ),
 });
 
-function clean(script: string): string {
-  // Belt and braces: strip dash asides the prompt already forbids.
-  return script.replace(/\s*[—–]\s*/g, ", ").replace(/\s+/g, " ").trim();
+export function cleanScript(script: string): string {
+  // Belt and braces: strip dash asides and exclamation marks the prompt
+  // already forbids. ElevenLabs raises the energy on "!" and the show came
+  // out shouting; a period keeps the same sentence at a calm level.
+  return script
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/!+/g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function writeIntro(events: PublicEvent[], todayKey: string): Promise<string> {
@@ -33,7 +40,7 @@ export async function writeIntro(events: PublicEvent[], todayKey: string): Promi
     prompt: buildIntroPrompt(events, todayKey),
     maxOutputTokens: 2000,
   });
-  return clean(object.script);
+  return cleanScript(object.script);
 }
 
 export async function writeOutro(): Promise<string> {
@@ -43,7 +50,7 @@ export async function writeOutro(): Promise<string> {
     prompt: buildOutroPrompt(),
     maxOutputTokens: 1000,
   });
-  return clean(object.script);
+  return cleanScript(object.script);
 }
 
 /** Map event id to script. Throws when any requested id is missing. */
@@ -56,7 +63,7 @@ export async function writeEventSegments(events: PublicEvent[]): Promise<Map<str
     maxOutputTokens: 6000,
   });
   const map = new Map<string, string>();
-  for (const s of object.segments) map.set(s.event_id, clean(s.script));
+  for (const s of object.segments) map.set(s.event_id, cleanScript(s.script));
   for (const ev of events) {
     if (!map.get(ev.id)) throw new Error(`Skript fehlt für Veranstaltung ${ev.id} (${ev.title})`);
   }

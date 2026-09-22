@@ -70,8 +70,10 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
   },
+  // Rail poster, sized to sit next to the event posters (256 × 362): 2:3 at
+  // 240 wide is 360 tall.
   cardCompact: {
-    width: 160,
+    width: 240,
     marginRight: 12,
   },
   pressed: {

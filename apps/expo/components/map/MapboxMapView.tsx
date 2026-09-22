@@ -22,6 +22,9 @@ type Props = {
   selectedFeatureId?: string | null;
   vehiclesGeoJSON?: GeoJSON.FeatureCollection<GeoJSON.Point> | null;
   onVehiclePress?: (departureId: string) => void;
+  // Remote custom pin images keyed by feature fid (markerImagesFromIcons);
+  // registered next to the bundled MARKER_IMAGES.
+  markerImages?: Record<string, { uri: string; scale: number }>;
 };
 
 // Marker circle radius / emoji text size / PNG icon scale per size class
@@ -42,6 +45,7 @@ export default function MapboxMapView({
   selectedFeatureId,
   vehiclesGeoJSON,
   onVehiclePress,
+  markerImages,
 }: Props) {
   const { isDark, colors } = useTheme();
   const cameraRef = useRef<any>(null);
@@ -137,7 +141,7 @@ export default function MapboxMapView({
           animationDuration={1000}
         />
 
-        <Mapbox.Images images={MARKER_IMAGES} />
+        <Mapbox.Images images={{ ...MARKER_IMAGES, ...(markerImages ?? {}) }} />
 
         {/* Entities — one clustered source, Corner-style emoji/PNG pins */}
         <Mapbox.ShapeSource

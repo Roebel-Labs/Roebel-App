@@ -40,3 +40,21 @@ describe('map marker emoji resolution', () => {
     expect(markerImageForSlug(null)).toBeUndefined();
   });
 });
+
+describe('restaurant emoji from name/slug keywords', () => {
+  it('reads the kind of place off the slug or the name', () => {
+    expect(restaurantEmoji('pizzeria-roma', 'Pizzeria Roma')).toBe('🍕');
+    expect(restaurantEmoji('eiscafe-venezia')).toBe('🍦');
+    expect(restaurantEmoji('haus-am-see', 'Döner Haus')).toBe('🥙');
+    expect(restaurantEmoji('fischerhof', 'Fischerhof')).toBe('🐟');
+    expect(restaurantEmoji('cafe-am-markt')).toBe('☕');
+  });
+
+  it('keeps the plain plate when nothing matches', () => {
+    expect(restaurantEmoji('seeblick', 'Seeblick')).toBe('🍽️');
+  });
+
+  it('slug overrides still beat keywords', () => {
+    expect(restaurantEmoji('__test-doener', 'Pizza Palace')).toBe('🥙');
+  });
+});

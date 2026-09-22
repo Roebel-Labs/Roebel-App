@@ -10,9 +10,11 @@ import {
   businessEmoji,
   eventEmoji,
   markerImageForSlug,
+  MARKER_IMAGE_SCALE,
   orgEmoji,
   poiEmoji,
   restaurantEmoji,
+  type MapMarkerIcons,
   type MarkerSize,
 } from './markers';
 
@@ -82,19 +84,41 @@ export function processOrgsWithCoordinates(orgs: Account[]): OrgWithCoordinates[
 function feature(
   lon: number,
   lat: number,
-  props: Omit<MapFeatureProperties, 'fid'> & { markerImage?: string }
+  props: Omit<MapFeatureProperties, 'fid'> & { markerImage?: string },
+  icons?: MapMarkerIcons
 ): GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties> {
-  const { markerImage, ...rest } = props;
+  const fid = `${props.entityType}-${props.id}`;
+  // Admin overrides (map_marker_icons) beat everything computed here: a custom
+  // image is registered under the fid (see markerImagesFromIcons), an emoji
+  // override replaces the category emoji.
+  const icon = icons?.get(fid);
+  const { markerImage: bundledImage, ...rest } = props;
+  const markerImage = icon?.image_url ? fid : bundledImage;
   return {
     type: 'Feature',
-    id: `${props.entityType}-${props.id}`,
+    id: fid,
     geometry: { type: 'Point', coordinates: [lon, lat] },
     properties: {
       ...rest,
-      fid: `${props.entityType}-${props.id}`,
+      emoji: icon?.emoji || rest.emoji,
+      fid,
       ...(markerImage ? { markerImage } : {}),
     },
   };
+}
+
+/**
+ * The remote images to register on the map for every pin with a custom
+ * marker, keyed by fid so the feature's `markerImage` resolves to it.
+ */
+export function markerImagesFromIcons(
+  icons: MapMarkerIcons | undefined
+): Record<string, { uri: string; scale: number }> {
+  const images: Record<string, { uri: string; scale: number }> = {};
+  icons?.forEach((icon, fid) => {
+    if (icon.image_url) images[fid] = { uri: icon.image_url, scale: MARKER_IMAGE_SCALE };
+  });
+  return images;
 }
 
 /**
@@ -106,7 +130,8 @@ export function entitiesToGeoJSON(
   restaurants: RestaurantRecord[],
   businesses: BusinessRecord[],
   pois: PoiRecord[] = [],
-  orgs: OrgWithCoordinates[] = []
+  orgs: OrgWithCoordinates[] = [],
+  icons?: MapMarkerIcons
 ): MapGeoJSON {
   const features: GeoJSON.Feature<GeoJSON.Point, MapFeatureProperties>[] = [];
 
@@ -132,7 +157,7 @@ export function entitiesToGeoJSON(
         emoji: eventEmoji(e.category),
         size: featured ? 'lg' : 'md',
         featured,
-      })
+      }, icons)
     );
   }
 
@@ -150,11 +175,11 @@ export function entitiesToGeoJSON(
         slug: r.slug,
         poi_type: null,
         poi_status: null,
-        emoji: restaurantEmoji(r.slug),
+        emoji: restaurantEmoji(r.slug, r.name),
         size: featured ? 'lg' : 'md',
         featured,
         markerImage: markerImageForSlug(r.slug),
-      })
+      }, icons)
     );
   }
 
@@ -177,7 +202,7 @@ export function entitiesToGeoJSON(
         size: featured ? 'lg' : 'md',
         featured,
         markerImage: markerImageForSlug(b.slug),
-      })
+      }, icons)
     );
   }
 
@@ -197,7 +222,7 @@ export function entitiesToGeoJSON(
         emoji: poiEmoji(p.type),
         size: 'sm',
         featured: false,
-      })
+      }, icons)
     );
   }
 
@@ -217,7 +242,7 @@ export function entitiesToGeoJSON(
         emoji: orgEmoji(o.sub_type),
         size: 'md',
         featured: false,
-      })
+      }, icons)
     );
   }
 

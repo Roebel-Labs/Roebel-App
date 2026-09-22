@@ -129,7 +129,7 @@ Hard rules in the prompt:
 
 ### 6.4 Text to speech
 
-`eleven_multilingual_v2`, `output_format=mp3_44100_128`, voice settings stability 0.5, similarity boost 0.75, style 0, speaker boost on, speed 1.0, `apply_text_normalization: 'auto'`, a fixed seed. `previous_text` is the intro script for every event segment, which gives the model the show's tone. Duration comes from the last `character_end_times_seconds` in the alignment; if the alignment is missing, estimate from file size at 128 kbps.
+`eleven_multilingual_v2`, `output_format=mp3_44100_128`, voice settings stability 0.75 (raised from 0.5 on 2026-09-22: at 0.5 the show came out shouting), similarity boost 0.75, style 0, speaker boost on, speed 1.0, `apply_text_normalization: 'auto'`, a fixed seed. `previous_text` is the intro script for every event segment, which gives the model the show's tone. Duration comes from the last `character_end_times_seconds` in the alignment; if the alignment is missing, estimate from file size at 128 kbps. The voice settings are part of every clip's content hash, so changing them re-renders all clips on the next run; the prompts forbid exclamation marks and ask for a quiet, unhurried delivery, and the script cleaner turns any remaining `!` into a period.
 
 Concurrency: a small pool, default 2 parallel requests (`ELEVENLABS_CONCURRENCY` env override). SDK retries (max 2) handle 429 and 5xx. An event whose TTS still fails is skipped for this run and listed in the response; the next daily run retries it.
 

@@ -171,3 +171,29 @@ describe('processEventsWithCoordinates', () => {
     expect(out.map((e) => e.id)).toEqual(['e1']);
   });
 });
+
+describe('per-pin icon overrides (map_marker_icons)', () => {
+  const { markerImagesFromIcons } = require('@/lib/map/geojson');
+
+  it('an emoji override replaces the computed emoji', () => {
+    const icons = new Map([['restaurant-r1', { emoji: '🦀', image_url: null }]]);
+    const geo = entitiesToGeoJSON([], [restaurant()], [], [], [], icons);
+    expect(geo.features[0].properties.emoji).toBe('🦀');
+    expect(geo.features[0].properties.markerImage).toBeUndefined();
+  });
+
+  it('a custom image sets markerImage to the pin fid and registers a scaled remote image', () => {
+    const icons = new Map([
+      ['restaurant-r1', { emoji: null, image_url: 'https://x/map-markers/r1.png' }],
+      ['event-e1', { emoji: null, image_url: null }],
+    ]);
+    const geo = entitiesToGeoJSON([event()], [restaurant()], [], [], [], icons);
+    const r = geo.features.find((f) => f.properties.fid === 'restaurant-r1')!;
+    const e = geo.features.find((f) => f.properties.fid === 'event-e1')!;
+    expect(r.properties.markerImage).toBe('restaurant-r1');
+    expect(e.properties.markerImage).toBeUndefined();
+    expect(markerImagesFromIcons(icons)).toEqual({
+      'restaurant-r1': { uri: 'https://x/map-markers/r1.png', scale: 3 },
+    });
+  });
+});
