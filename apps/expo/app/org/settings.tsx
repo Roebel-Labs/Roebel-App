@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import BottomDrawer from '@/components/BottomDrawer';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
@@ -11,9 +13,11 @@ export default function OrgSettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { activeAccount, ownedAccounts, switchAccount, deleteOrgAccount } = useAccount();
+  const account = useActiveAccount();
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
 
   // Guard: this screen is only valid for org accounts.
   useEffect(() => {
@@ -21,6 +25,17 @@ export default function OrgSettingsScreen() {
       router.replace('/profile');
     }
   }, [activeAccount, router]);
+
+  // Show the "Zahlungen" entry only once Stripe Connect is rolled out for this wallet.
+  useEffect(() => {
+    let cancelled = false;
+    isStripeConnectEnabled({ walletAddress: account?.address ?? null }).then((on) => {
+      if (!cancelled) setStripeEnabled(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.address]);
 
   const handleDelete = async () => {
     if (!activeAccount || isDeleting) return;
@@ -63,6 +78,24 @@ export default function OrgSettingsScreen() {
           <Text style={[styles.accountName, { color: colors.textPrimary }]}>{activeAccount.name}</Text>
           <Text style={[styles.accountSub, { color: colors.textSecondary }]}>Organisation</Text>
         </View>
+
+        {stripeEnabled && (
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Zahlungen</Text>
+            <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
+              Stripe-Konto einrichten, Tickets verkaufen und am Einlass scannen.
+            </Text>
+            <Pressable
+              onPress={() => router.push('/org/payments' as any)}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Zahlungen öffnen</Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Konto löschen</Text>
@@ -141,6 +174,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 16, fontFamily: 'MonaSansSemiCondensed-SemiBold'},
   sectionBody: { fontSize: 13, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
   dangerButton: {
     height: 48,
     borderRadius: 12,
