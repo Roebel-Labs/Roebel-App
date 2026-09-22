@@ -69,6 +69,7 @@
     "geist": "^1.5.1",
     "got": "^11.8.6",
     "hls.js": "^1.6.0",
+    "image-size": "^2.0.2",
     "jose": "^6.2.3",
     "lucide-react": "^0.546.0",
     "maci-domainobjs": "2.5.0",
