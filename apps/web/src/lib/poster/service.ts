@@ -114,6 +114,9 @@ async function loadEvent(admin: Admin, eventId: string): Promise<EventRow> {
 
 async function uploadPoster(admin: Admin, scope: string, rendered: RenderedPoster): Promise<string> {
   const marked = markSyntheticImage(rendered.bytes, posterGeneratorLabel(rendered.model));
+  if (!marked.marked) {
+    throw new PosterServiceError("Bild konnte nicht als KI-generiert markiert werden", "upload");
+  }
   const path = `${POSTER_STORAGE_FOLDER}/${scope}/${crypto.randomUUID()}.jpg`;
   const { error } = await admin.storage
     .from(POSTER_STORAGE_BUCKET)
@@ -228,13 +231,30 @@ export async function proposePosters(input: ProposeInput, ctx: ProposeContext): 
         }),
   );
 
-  const rendered = await Promise.all(prompts.map((p) => renderWithRetry(p, image, settings.model)));
+  const settled = await Promise.allSettled(prompts.map((p) => renderWithRetry(p, image, settings.model)));
+  const rendered: RenderedPoster[] = [];
+  const kept: number[] = [];
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      rendered.push(r.value);
+      kept.push(i);
+    } else {
+      console.warn(`poster variant ${i + 1} failed`, r.reason);
+    }
+  });
+  if (rendered.length === 0) {
+    const first = settled[0];
+    throw first.status === "rejected" && first.reason instanceof PosterServiceError
+      ? first.reason
+      : new PosterServiceError("Rendern fehlgeschlagen", "render");
+  }
 
   const batchId = crypto.randomUUID();
-  const scope = eventId ?? `draft/${draftId}`;
+  const scope = eventId ?? `draft-${draftId}`;
   const rows = [];
-  for (let i = 0; i < rendered.length; i++) {
-    const imageUrl = await uploadPoster(admin, scope, rendered[i]);
+  for (let k = 0; k < rendered.length; k++) {
+    const i = kept[k];
+    const imageUrl = await uploadPoster(admin, scope, rendered[k]);
     rows.push({
       batch_id: batchId,
       event_id: eventId,
@@ -248,9 +268,9 @@ export async function proposePosters(input: ProposeInput, ctx: ProposeContext): 
       image_url: imageUrl,
       analysis: analysis ?? {},
       prompt: prompts[i],
-      model: rendered[i].model,
-      usage: rendered[i].usage,
-      cost_usd: rendered[i].costUsd,
+      model: rendered[k].model,
+      usage: rendered[k].usage,
+      cost_usd: rendered[k].costUsd,
       status: "proposed",
     });
   }
@@ -298,16 +318,26 @@ export async function selectProposal(
   return { ok: true, eventId: proposal.event_id, imageUrl: proposal.image_url };
 }
 
+/** Reject open proposals; if a proposal was applied, restore the original image. */
 export async function keepOriginal(eventId: string): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
   await admin
     .from("event_poster_proposals")
     .update({ status: "rejected" })
     .eq("event_id", eventId)
-    .eq("status", "proposed");
+    .in("status", ["proposed", "selected"]);
+  const { data: ev } = await admin
+    .from("events")
+    .select("original_image_url, poster_proposal_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  const now = new Date().toISOString();
+  const revert = ev?.poster_proposal_id && ev?.original_image_url
+    ? { image_url: ev.original_image_url, poster_proposal_id: null, updated_at: now }
+    : {};
   const { error } = await admin
     .from("events")
-    .update({ poster_reviewed_at: new Date().toISOString() })
+    .update({ poster_reviewed_at: now, ...revert })
     .eq("id", eventId);
   return error ? { ok: false, error: error.message } : { ok: true };
 }
@@ -315,14 +345,17 @@ export async function keepOriginal(eventId: string): Promise<{ ok: boolean; erro
 export async function linkDraftProposals(
   draftId: string,
   eventId: string,
+  /** Non-admin callers may only link proposals created under their own account. */
+  accountId?: string | null,
 ): Promise<{ ok: boolean; linked: number }> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let q = admin
     .from("event_poster_proposals")
     .update({ event_id: eventId })
     .eq("draft_id", draftId)
-    .is("event_id", null)
-    .select("id, image_url, status");
+    .is("event_id", null);
+  if (accountId) q = q.eq("account_id", accountId);
+  const { data, error } = await q.select("id, image_url, status");
   if (error) return { ok: false, linked: 0 };
   const rows = (data ?? []) as Array<{ id: string; image_url: string; status: string }>;
   const selected = rows.find((r) => r.status === "selected");

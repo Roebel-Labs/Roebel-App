@@ -45,7 +45,6 @@ export function isBillingError(status: number | undefined, code?: string | null,
 }
 
 const TIMEOUT_MS = 170_000;
-const RETRY_DELAY_MS = 3_000;
 
 function extensionFor(contentType: string): string {
   if (contentType.includes("png")) return "png";
@@ -109,17 +108,12 @@ export async function renderPoster(input: RenderPosterInput): Promise<RenderedPo
     usage?: ImageUsage;
     error?: { message?: string; code?: string; type?: string };
   } | null;
-  const first = buildRequest();
-  let res = await callOnce(first.url, first.init);
-  let json = (await res.json().catch(() => null)) as ImagesResponse;
+  // One attempt here; the service layer retries once (keeps the worst case under maxDuration).
+  const req = buildRequest();
+  const res = await callOnce(req.url, req.init);
+  const json = (await res.json().catch(() => null)) as ImagesResponse;
   const billing = (r: Response, j: ImagesResponse) =>
     isBillingError(r.status, j?.error?.code ?? j?.error?.type, j?.error?.message);
-  if ((res.status === 429 || res.status >= 500) && !billing(res, json)) {
-    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-    const second = buildRequest();
-    res = await callOnce(second.url, second.init);
-    json = (await res.json().catch(() => null)) as ImagesResponse;
-  }
   if (!res.ok || !json?.data?.[0]?.b64_json) {
     const message = json?.error?.message || `OpenAI Images API ${res.status}`;
     throw new PosterRenderError(message, res.status, !billing(res, json));

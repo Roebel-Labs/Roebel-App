@@ -24,7 +24,8 @@ export const posterGeneratorLabel = (model: string) => `Röbel App / OpenAI ${mo
 export const MAX_BATCHES_PER_DRAFT = 2;
 export const MAX_BATCHES_PER_ACCOUNT_PER_DAY = 10;
 export const DEFAULT_DAILY_BUDGET_USD = 20;
-export const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
+/** Anthropic vision rejects images above 5 MB; uploads are capped at 5 MB anyway. */
+export const MAX_REFERENCE_BYTES = 5 * 1024 * 1024;
 
 export const SETTING_ENABLED = "poster_proposals_enabled";
 export const SETTING_BUDGET = "poster_daily_budget_usd";

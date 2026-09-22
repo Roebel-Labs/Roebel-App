@@ -29,10 +29,28 @@ const bodySchema = z.object({
   hint: z.string().max(400).optional(),
 });
 
+/** Public shape for the chat clients: no prompts, usage or analysis internals. */
+function publicResult(result: Awaited<ReturnType<typeof proposePosters>>) {
+  const ratio = result.check?.ratio ?? null;
+  if ("skipped" in result) return { success: true, skipped: result.skipped, ratio };
+  return {
+    success: true,
+    batchId: result.batchId,
+    mode: result.mode,
+    ratio,
+    proposals: result.proposals.map((p) => ({
+      id: p.id,
+      variant: p.variant,
+      direction: p.direction,
+      image_url: p.image_url,
+    })),
+  };
+}
+
 async function run(fn: () => ReturnType<typeof proposePosters>) {
   try {
     const result = await fn();
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json(publicResult(result));
   } catch (error) {
     console.error("[api/posters/propose]", error);
     if (error instanceof PosterServiceError) {

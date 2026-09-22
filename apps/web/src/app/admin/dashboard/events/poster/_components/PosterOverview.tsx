@@ -76,18 +76,19 @@ export function PosterOverview() {
   );
 
   const counts = useMemo(() => {
-    const c = { fine: 0, needs: 0, ready: 0, applied: 0 };
+    const c = { fine: 0, open: 0, ready: 0, applied: 0 };
     for (const e of events) {
       const s = stateOf(e);
       if (s === "applied") c.applied++;
       else if (s === "ready") c.ready++;
-      else if (s === "fine" || (s === "open" && !e.poster_check && ratioFor(e) === "ok")) c.fine++;
-      else c.needs++;
+      else if (s === "fine") c.fine++;
+      else if (s === "open") c.open++;
     }
     return c;
-  }, [events, ratioFor]);
+  }, [events]);
 
-  const proposeOne = async (eventId: string, force = false) => {
+  /** "stop" = a terminal error (budget, kill switch, billing): the batch must not continue. */
+  const proposeOne = async (eventId: string, force = false): Promise<"ok" | "error" | "stop"> => {
     setRunning((s) => new Set(s).add(eventId));
     const res = await proposeForEventAction(eventId, { force });
     setRunning((s) => {
@@ -97,12 +98,12 @@ export function PosterOverview() {
     });
     if (!res.success) {
       toast.error(res.error);
-      return false;
+      return res.code === "caps" || res.code === "billing" ? "stop" : "error";
     }
     if ("skipped" in res.result) toast.message("Plakat passt bereits, nichts erzeugt.");
-    else toast.success(`Zwei Vorschläge erzeugt (${res.result.costUsd.toFixed(2)} $)`);
+    else toast.success(`${res.result.proposals.length === 2 ? "Zwei Vorschläge" : "Ein Vorschlag"} erzeugt (${res.result.costUsd.toFixed(2)} $)`);
     await load();
-    return true;
+    return "ok";
   };
 
   const runBatch = async () => {
@@ -117,8 +118,12 @@ export function PosterOverview() {
       while (queue.length > 0 && !stopRef.current) {
         const id = queue.shift();
         if (!id) break;
-        await proposeOne(id);
+        const outcome = await proposeOne(id);
         setBatch((b) => (b ? { ...b, done: b.done + 1 } : b));
+        if (outcome === "stop") {
+          stopRef.current = true;
+          break;
+        }
       }
     });
     await Promise.all(workers);
@@ -169,7 +174,7 @@ export function PosterOverview() {
         {(
           [
             ["Plakat passt", counts.fine],
-            ["Braucht Plakat", counts.needs],
+            ["Offen", counts.open],
             ["Vorschläge bereit", counts.ready],
             ["Übernommen", counts.applied],
           ] as Array<[string, number]>
