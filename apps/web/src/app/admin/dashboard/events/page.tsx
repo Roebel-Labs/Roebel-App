@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, MapPin, User, Eye, Trash2, Search, Star, X, Pencil } from "lucide-react"
+import { Calendar, MapPin, User, Eye, Trash2, Search, Star, X, Pencil, Images } from "lucide-react"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import {
@@ -244,7 +245,15 @@ export default function EventsManagementPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-medium text-foreground mb-2">Veranstaltungen verwalten</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <h1 className="text-3xl font-medium text-foreground">Veranstaltungen verwalten</h1>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/dashboard/events/poster">
+              <Images className="h-4 w-4 mr-1.5" />
+              Plakate
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Featured Events Cards - Always 3 columns */}
@@ -431,6 +440,13 @@ export default function EventsManagementPage() {
                         >
                           <Pencil className="h-4 w-4 mr-1.5" />
                           Bearbeiten
+                        </Button>
+
+                        <Button size="sm" variant="ghost" className="h-9" asChild>
+                          <Link href={`/admin/dashboard/events/poster/${event.id}`}>
+                            <Images className="h-4 w-4 mr-1.5" />
+                            Plakat
+                          </Link>
                         </Button>
 
                         <AlertDialog>
