@@ -504,6 +504,29 @@ platform fees before the entity question is settled, Münzen pricing.
 
 ---
 
+## 8.1 Shipped (2026-09-23)
+
+Slice A is on `main` (plan `docs/superpowers/plans/2026-09-21-stripe-connect-tickets-slice-a.md`, 23 commits
+from 47d3180e to c0b96ae4), reviewed task by task plus one whole-branch review and one fix wave.
+
+- **Web (live on www.roebel.app):** `/api/connect/onboard|status`, `/api/tickets/types|checkout|order|mine|orders|checkin|refund`,
+  `/api/webhooks/stripe-connect` (settlement bound to the order's account, session id and amount; late payments
+  still mint; idempotent via `stripe_events`), return pages `/connect/return` and `/tickets/return`. Server-side
+  flags `stripe_tickets_enabled` / `stripe_connect_enabled` gate checkout and onboarding.
+- **Database:** `stripe_connected_accounts` (unique per org and livemode), `ticket_types`, `ticket_orders`,
+  `tickets`, `stripe_events`, `reserve_tickets()`, `expire_ticket_orders()` on pg_cron every 10 min.
+- **Expo (OTA, no native change):** org Zahlungen screen, ticket-types editor with order list and refunds,
+  buy screen, ticket wallet with QR codes, door scanner; entry points in org settings, event editor, event
+  detail and the profile grid.
+- **Ops:** Stripe sandbox Connect webhook `we_1UIbS6If2c83sXcLc9RtP1Aq`; Vercel has the Connect secret key
+  (sandbox), webhook secret, `TICKET_QR_SECRET`, fee 2 % + 0,10 € (Max's decision of 2026-09-21), base URL.
+  `app_settings.stripe_connect_enabled` = Max's wallet, `stripe_tickets_enabled` = `true`.
+- **Go-live checklist:** platform approval by Stripe → set `STRIPE_CONNECT_SECRET_KEY` to the live key and create
+  a live Connect webhook endpoint (new secret) → orgs onboard again in live mode (sandbox rows stay, keyed by
+  livemode) → widen `stripe_connect_enabled`. Deferred items live in the plan's ledger and the final review:
+  partial refunds are not mirrored, the profile tile is not flag-gated, one theoretical webhook-before-session-id
+  window.
+
 ## 9. Costs, summarised
 
 | Who | Pays what |
