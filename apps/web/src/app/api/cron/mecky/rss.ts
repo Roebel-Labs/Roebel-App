@@ -103,3 +103,73 @@ export function filterRecentItems(
     return pubDate >= cutoff
   })
 }
+
+/**
+ * Time windows the admin can pick before triggering a manual generation run.
+ * "48h" is the default and matches what the daily cron has always done.
+ */
+export type MeckyTimeWindow = "today" | "yesterday" | "48h" | "7d"
+
+export interface ResolvedTimeWindow {
+  /** inclusive lower bound */
+  from: Date
+  /** exclusive upper bound */
+  to: Date
+  /** German label, shown in the UI and handed to Claude as context */
+  label: string
+}
+
+function startOfLocalDay(offsetDays = 0): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + offsetDays)
+  return d
+}
+
+export function resolveTimeWindow(
+  window: MeckyTimeWindow = "48h",
+  now: Date = new Date()
+): ResolvedTimeWindow {
+  switch (window) {
+    case "today":
+      return { from: startOfLocalDay(0), to: now, label: "heute" }
+    case "yesterday":
+      return {
+        from: startOfLocalDay(-1),
+        to: startOfLocalDay(0),
+        label: "gestern",
+      }
+    case "7d":
+      return {
+        from: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        to: now,
+        label: "letzte 7 Tage",
+      }
+    case "48h":
+    default:
+      return {
+        from: new Date(now.getTime() - 48 * 60 * 60 * 1000),
+        to: now,
+        label: "letzte 48 Stunden",
+      }
+  }
+}
+
+/**
+ * Keep only items published inside [from, to).
+ *
+ * Unlike filterRecentItems(), items without a pubDate are dropped: a bounded
+ * window is an explicit request for a specific day, so undated items (NDR
+ * ships a few evergreen pages in the feed) would just be noise.
+ */
+export function filterItemsInWindow(
+  items: Array<RSSItem & { site: string }>,
+  window: ResolvedTimeWindow
+): Array<RSSItem & { site: string }> {
+  return items.filter((item) => {
+    if (!item.pubDate) return false
+    const pubDate = new Date(item.pubDate)
+    if (Number.isNaN(pubDate.getTime())) return false
+    return pubDate >= window.from && pubDate < window.to
+  })
+}

@@ -34,6 +34,7 @@ import {
   Loader2,
   Sparkles,
   Trash2,
+  CalendarRange,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -44,12 +45,27 @@ import {
   triggerMeckyGeneration,
 } from "@/app/actions/mecky"
 import type { MeckyDraft } from "@/types/mecky"
+import type { MeckyTimeWindow } from "@/app/api/cron/mecky/rss"
+
+// Order shown in the dropdown. Kept here (not imported from the RSS module)
+// so this client component does not pull the feed-fetching code into the bundle.
+const TIME_WINDOW_OPTIONS: Array<{ value: MeckyTimeWindow; label: string }> = [
+  { value: "today", label: "Heute" },
+  { value: "yesterday", label: "Gestern" },
+  { value: "48h", label: "Letzte 48 Std." },
+  { value: "7d", label: "Letzte 7 Tage" },
+]
+
+const TIME_WINDOW_LABELS = Object.fromEntries(
+  TIME_WINDOW_OPTIONS.map((o) => [o.value, o.label])
+) as Record<MeckyTimeWindow, string>
 
 export default function MeckyDashboardPage() {
   const [drafts, setDrafts] = useState<MeckyDraft[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [statusFilter, setStatusFilter] = useState("pending")
+  const [timeWindow, setTimeWindow] = useState<MeckyTimeWindow>("48h")
 
   const fetchDrafts = useCallback(async () => {
     try {
@@ -127,15 +143,17 @@ export default function MeckyDashboardPage() {
 
   const handleGenerate = async () => {
     setGenerating(true)
-    const loadingToast = toast.loading("Mecky generiert neue Vorschläge...")
+    const loadingToast = toast.loading(
+      `Mecky sucht Nachrichten (${TIME_WINDOW_LABELS[timeWindow]})...`
+    )
 
     try {
-      const result = await triggerMeckyGeneration()
+      const result = await triggerMeckyGeneration(timeWindow)
 
       if (result.success && result.count && result.count > 0) {
         toast.success(`${result.count} neue Vorschläge generiert!`, {
           id: loadingToast,
-          description: "Mecky hat neue Nachrichten für dich.",
+          description: `Zeitraum: ${TIME_WINDOW_LABELS[timeWindow]}`,
         })
         setStatusFilter("pending")
         fetchDrafts()
@@ -189,7 +207,10 @@ export default function MeckyDashboardPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <Skeleton className="h-9 w-48" />
-          <Skeleton className="h-10 w-[180px]" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-[170px]" />
+            <Skeleton className="h-10 w-[180px]" />
+          </div>
         </div>
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
@@ -221,6 +242,23 @@ export default function MeckyDashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Select
+            value={timeWindow}
+            onValueChange={(value) => setTimeWindow(value as MeckyTimeWindow)}
+            disabled={generating}
+          >
+            <SelectTrigger className="w-[170px] gap-2">
+              <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Zeitraum" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_WINDOW_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             onClick={handleGenerate}
             disabled={generating}
@@ -234,21 +272,21 @@ export default function MeckyDashboardPage() {
             {generating ? "Generiert..." : "Jetzt generieren"}
           </Button>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">
-              Ausstehend{" "}
-              {statusFilter !== "pending" && pendingCount > 0
-                ? `(${pendingCount})`
-                : ""}
-            </SelectItem>
-            <SelectItem value="approved">Genehmigt</SelectItem>
-            <SelectItem value="rejected">Abgelehnt</SelectItem>
-            <SelectItem value="all">Alle</SelectItem>
-          </SelectContent>
-        </Select>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">
+                Ausstehend{" "}
+                {statusFilter !== "pending" && pendingCount > 0
+                  ? `(${pendingCount})`
+                  : ""}
+              </SelectItem>
+              <SelectItem value="approved">Genehmigt</SelectItem>
+              <SelectItem value="rejected">Abgelehnt</SelectItem>
+              <SelectItem value="all">Alle</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

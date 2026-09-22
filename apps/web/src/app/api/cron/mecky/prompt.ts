@@ -55,7 +55,8 @@ export type MeckyPostProposal = z.infer<
 >["posts"][number]
 
 export async function generateMeckyPosts(
-  articles: Array<RSSItem & { site: string }>
+  articles: Array<RSSItem & { site: string }>,
+  periodLabel = "letzte 48 Stunden"
 ): Promise<MeckyPostProposal[]> {
   if (articles.length === 0) {
     console.log("No articles to process for Mecky")
@@ -73,11 +74,14 @@ export async function generateMeckyPosts(
     model: anthropic("claude-haiku-4-5"),
     schema: MeckyPostsSchema,
     system: MECKY_SYSTEM_PROMPT,
-    prompt: `Hier sind die aktuellen Nachrichtenartikel aus der Region. Wähle die 3 relevantesten für Röbel/Müritz aus und schreibe jeweils einen Post in Meckys Stimme.
+    prompt: `Hier sind die Nachrichtenartikel aus der Region aus dem Zeitraum "${periodLabel}". Wähle die 3 relevantesten für Röbel/Müritz aus und schreibe jeweils einen Post in Meckys Stimme.
 
 ${articlesText}
 
-Datum heute: ${new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`,
+Datum heute: ${new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+Zeitraum der Artikel: ${periodLabel}
+
+Wenn der Zeitraum nicht "heute" ist, formuliere zeitlich passend (z.B. "gestern") statt "heute".`,
   })
 
   // Validate source indices and content length

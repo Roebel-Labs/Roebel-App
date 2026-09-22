@@ -1,5 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin"
-import { fetchAllFeeds, filterRecentItems } from "./rss"
+import {
+  fetchAllFeeds,
+  filterItemsInWindow,
+  filterRecentItems,
+  resolveTimeWindow,
+  type MeckyTimeWindow,
+} from "./rss"
 import { generateMeckyPosts } from "./prompt"
 
 export interface GenerateResult {
@@ -11,6 +17,8 @@ export interface GenerateResult {
 
 export async function generateMeckyDrafts(options?: {
   skipDedup?: boolean
+  /** Explicit publication window. Omitted (the daily cron) = last 48 hours. */
+  window?: MeckyTimeWindow
 }): Promise<GenerateResult> {
   const supabase = createAdminClient()
 
@@ -39,14 +47,18 @@ export async function generateMeckyDrafts(options?: {
   const allItems = await fetchAllFeeds()
   console.log(`Fetched ${allItems.length} total RSS items`)
 
-  // Filter for recent items (last 48 hours)
-  const recentItems = filterRecentItems(allItems, 48)
-  console.log(`${recentItems.length} items from last 48 hours`)
+  // Narrow to the requested publication window (default: last 48 hours)
+  const window = options?.window ? resolveTimeWindow(options.window) : null
+  const periodLabel = window?.label ?? "letzte 48 Stunden"
+  const recentItems = window
+    ? filterItemsInWindow(allItems, window)
+    : filterRecentItems(allItems, 48)
+  console.log(`${recentItems.length} items from ${periodLabel}`)
 
   if (recentItems.length === 0) {
     return {
       success: true,
-      message: "No recent news items found",
+      message: `Keine Nachrichten im Zeitraum "${periodLabel}" gefunden`,
       count: 0,
     }
   }
@@ -71,20 +83,20 @@ export async function generateMeckyDrafts(options?: {
   if (newItems.length === 0) {
     return {
       success: true,
-      message: "All recent items already processed",
+      message: `Alle Nachrichten aus "${periodLabel}" wurden bereits verarbeitet`,
       count: 0,
     }
   }
 
   // Generate posts with Claude
   console.log("Generating Mecky posts with Claude...")
-  const proposals = await generateMeckyPosts(newItems)
+  const proposals = await generateMeckyPosts(newItems, periodLabel)
   console.log(`Claude generated ${proposals.length} post proposals`)
 
   if (proposals.length === 0) {
     return {
       success: true,
-      message: "Claude found no relevant news for Röbel/Müritz",
+      message: `Keine für Röbel/Müritz relevanten Nachrichten aus "${periodLabel}"`,
       count: 0,
     }
   }
@@ -161,7 +173,7 @@ export async function generateMeckyDrafts(options?: {
 
   return {
     success: true,
-    message: `Generated ${insertedDrafts.length} Mecky post proposals`,
+    message: `${insertedDrafts.length} Mecky-Vorschläge aus "${periodLabel}" generiert`,
     count: insertedDrafts.length,
     drafts: insertedDrafts,
   }

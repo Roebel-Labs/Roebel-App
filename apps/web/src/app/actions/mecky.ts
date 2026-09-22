@@ -4,17 +4,20 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { MeckyDraft } from "@/types/mecky"
 import { generateMeckyDrafts } from "@/app/api/cron/mecky/generate"
+import type { MeckyTimeWindow } from "@/app/api/cron/mecky/rss"
 import { createAppNotification } from "@/app/actions/app-notifications"
 
 const MECKY_WALLET = "mecky_bot"
 
-export async function triggerMeckyGeneration(): Promise<{
+export async function triggerMeckyGeneration(
+  window: MeckyTimeWindow = "48h"
+): Promise<{
   success: boolean
   message: string
   count?: number
 }> {
   try {
-    const result = await generateMeckyDrafts({ skipDedup: true })
+    const result = await generateMeckyDrafts({ skipDedup: true, window })
 
     revalidatePath("/admin/dashboard/mecky")
 
