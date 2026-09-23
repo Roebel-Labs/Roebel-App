@@ -27,14 +27,24 @@ import { supabase } from '@/lib/supabase';
 import { compressImageForUpload } from '@/lib/utils/image-compression';
 import { geocodeLocation } from '@/lib/utils/geocoding';
 import { formatDate } from '@/lib/utils';
-import PencilIcon from '@/assets/icons/pencil.svg';
-import FlyerIcon from '@/assets/icons/flyer.svg';
 import UploadIcon from '@/assets/icons/profile/upload.svg';
 import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import type { ColorTokens } from '@/constants/theme';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
+import * as Crypto from 'expo-crypto';
+import PosterProposalCard, { type PosterStep } from '@/components/ai/PosterProposalCard';
+import {
+  buildPosterDraft,
+  linkPosterDraft,
+  proposePostersForDraft,
+  selectPoster,
+  variantLetter,
+  type PosterCaller,
+  type PosterMode,
+  type PosterOption,
+} from '@/lib/poster-api';
 
 // Structured event data used to render the pre-submit recap card.
 interface EventRecapData {
@@ -63,6 +73,10 @@ interface Message {
   localUri?: string;
   isLoading?: boolean;
   eventRecap?: EventRecapData;
+  /** Content was generated for the model ("Ich habe ein Bild hochgeladen.") — never shown. */
+  autoCaption?: boolean;
+  /** Poster proposals (Plakat-Vorschläge) shown right before submitting. */
+  posterStep?: PosterStep;
 }
 
 // All events are for the current year — force the year of a YYYY-MM-DD date
@@ -200,7 +214,9 @@ async function callAnthropicAPI(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      // Haiku 4.5: the fastest current Claude model, still reliable for
+      // reading flyers (vision) and filling the submission tool.
+      model: 'claude-haiku-4-5',
       max_tokens: 1024,
       system: systemPrompt,
       tools: tools,
@@ -268,25 +284,68 @@ function createMarkdownStyles(colors: ColorTokens) {
   });
 }
 
+// The picked image shows at once, blurred, and sharpens when the upload has
+// finished — no spinner, no bubble around it, no caption under it.
+function UploadedImage({ uri, uploading }: { uri: string; uploading: boolean }) {
+  const { colors } = useTheme();
+  const blurOpacity = useRef(new Animated.Value(uploading ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(blurOpacity, {
+      toValue: uploading ? 1 : 0,
+      duration: 450,
+      useNativeDriver: true,
+    }).start();
+  }, [uploading, blurOpacity]);
+
+  return (
+    <View style={[styles.uploadedImage, { backgroundColor: colors.cardPlaceholder }]}>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <Animated.Image
+        source={{ uri }}
+        style={[StyleSheet.absoluteFill, { opacity: blurOpacity }]}
+        resizeMode="cover"
+        blurRadius={18}
+      />
+    </View>
+  );
+}
+
 // Message bubble component with image and markdown support
 function MessageBubbleInner({
   role,
   content,
   imageUrl,
   localUri,
-  isLoading
+  isLoading,
+  autoCaption,
 }: {
   role: 'user' | 'assistant';
   content: string;
   imageUrl?: string;
   localUri?: string;
   isLoading?: boolean;
+  autoCaption?: boolean;
 }) {
   const { colors } = useTheme();
   const isUser = role === 'user';
   const displayUri = localUri || imageUrl;
 
   const markdownStyles = useMemo(() => createMarkdownStyles(colors), [colors]);
+
+  if (isUser && displayUri) {
+    const caption = autoCaption ? '' : content;
+    return (
+      <>
+        <UploadedImage uri={displayUri} uploading={!!isLoading} />
+        {caption ? (
+          <View style={[styles.messageBubble, styles.userBubble, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.messageText, { color: colors.onPrimary }]}>{caption}</Text>
+          </View>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <View style={[
@@ -295,20 +354,6 @@ function MessageBubbleInner({
         ? [styles.userBubble, { backgroundColor: colors.primary }]
         : [styles.assistantBubble, { backgroundColor: colors.surface }],
     ]}>
-      {displayUri && (
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: displayUri }}
-            style={styles.messageImage}
-            resizeMode="cover"
-          />
-          {isLoading && (
-            <View style={styles.imageLoadingOverlay}>
-              <ActivityIndicator size="small" color={colors.textInverted} />
-            </View>
-          )}
-        </View>
-      )}
       {content ? (
         isUser ? (
           <Text style={[styles.messageText, { color: colors.onPrimary }]}>{content}</Text>
@@ -626,6 +671,14 @@ export function MinimalAIChat() {
   const [pendingEventData, setPendingEventData] = useState<any>(null);
   // Id of the newest recap message — only that card shows the Ja/Ändern buttons.
   const [activeRecapId, setActiveRecapId] = useState<string | null>(null);
+  // Poster step (Plakat-Vorschläge). One draft id per recap version; the server
+  // allows two proposal rounds per draft (the second = "Andere Vorschläge").
+  const draftIdRef = useRef<string>(Crypto.randomUUID());
+  const posterRoundsRef = useRef(0);
+  const posterMessageIdRef = useRef<string | null>(null);
+  const posterDecidedRef = useRef(false);
+  const chosenPosterRef = useRef<{ proposalId: string } | null>(null);
+  const lastProposalsRef = useRef<{ mode: PosterMode; proposals: PosterOption[] } | null>(null);
   const inputRef = useRef<TextInput>(null);
   const translateY = useRef(new Animated.Value(0)).current;
   const iconBounceAnim = useRef(new Animated.Value(0)).current;
@@ -725,27 +778,130 @@ export function MinimalAIChat() {
     return true;
   };
 
-  // "Ja, einsenden" button under the recap card → reveal swipe-to-submit.
-  const handleConfirmSubmit = () => {
+  const SWIPE_HINT = 'Wische nach oben, um dein Event einzureichen.';
+
+  const posterCaller = (): PosterCaller | null =>
+    activeAccount?.id && user?.wallet_address
+      ? { accountId: activeAccount.id, wallet: user.wallet_address }
+      : null;
+
+  const updatePosterMessage = (id: string, patch: Partial<PosterStep>) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id && m.posterStep ? { ...m, posterStep: { ...m.posterStep, ...patch } } : m)),
+    );
+  };
+
+  // Ends the poster step and shows the swipe-to-submit control.
+  const finishPosterStep = (text: string) => {
+    posterMessageIdRef.current = null;
+    posterDecidedRef.current = true;
     if (revealSwipeToSubmit()) {
-      const confirmMessage: Message = {
-        id: `confirm-${Date.now()}`,
-        role: 'assistant',
-        content: 'Super! Wische nach oben, um dein Event einzureichen.',
-      };
-      setMessages((prev) => [...prev, confirmMessage]);
+      setMessages((prev) => [...prev, { id: `confirm-${Date.now()}`, role: 'assistant', content: text }]);
     }
+  };
+
+  // One proposal round. A failure never blocks the submission: the first round
+  // falls back to the person's own image, a failed second round restores the
+  // first round's proposals.
+  const runPosterRound = async (messageId: string) => {
+    const caller = posterCaller();
+    const draft = buildPosterDraft(pendingEventDataRef.current);
+    if (!caller || !draft) {
+      updatePosterMessage(messageId, { status: 'dismissed' });
+      finishPosterStep(`Super! ${SWIPE_HINT}`);
+      return;
+    }
+    posterRoundsRef.current += 1;
+    const outcome = await proposePostersForDraft(draftIdRef.current, draft, caller);
+    // Skipped or superseded while the server was designing: ignore the result.
+    if (posterMessageIdRef.current !== messageId) return;
+
+    if (outcome.kind === 'proposals') {
+      lastProposalsRef.current = { mode: outcome.mode, proposals: outcome.proposals };
+      updatePosterMessage(messageId, {
+        status: 'ready',
+        mode: outcome.mode,
+        proposals: outcome.proposals,
+        selectedId: null,
+        canRegenerate: posterRoundsRef.current < 2,
+      });
+      return;
+    }
+    if (lastProposalsRef.current) {
+      updatePosterMessage(messageId, { status: 'ready', ...lastProposalsRef.current, canRegenerate: false });
+      return;
+    }
+    updatePosterMessage(messageId, { status: 'dismissed' });
+    const hasImage = !!pendingEventDataRef.current?.image_url;
+    finishPosterStep(
+      outcome.kind === 'skipped'
+        ? `Dein Flyer passt schon perfekt ins Plakatformat. ${SWIPE_HINT}`
+        : hasImage
+          ? `Plakat-Vorschläge sind gerade nicht verfügbar, wir nehmen dein Bild. ${SWIPE_HINT}`
+          : `Plakat-Vorschläge sind gerade nicht verfügbar. ${SWIPE_HINT}`,
+    );
+  };
+
+  // Right before submitting: propose two posters (or go straight to the swipe
+  // when this draft's poster question is already settled or running).
+  const startPosterStep = () => {
+    if (!pendingEventDataRef.current) return;
+    setActiveRecapId(null);
+    if (posterMessageIdRef.current) return;
+    if (posterDecidedRef.current) {
+      finishPosterStep(`Super! ${SWIPE_HINT}`);
+      return;
+    }
+    const id = `poster-${Date.now()}`;
+    posterMessageIdRef.current = id;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id,
+        role: 'assistant',
+        content: '',
+        posterStep: { status: 'loading', mode: null, proposals: [], selectedId: null, canRegenerate: false },
+      },
+    ]);
+    void runPosterRound(id);
+  };
+
+  const handleSelectPoster = (proposal: PosterOption) => {
+    const id = posterMessageIdRef.current;
+    const recap = pendingEventDataRef.current;
+    if (!id || !recap) return;
+    chosenPosterRef.current = { proposalId: proposal.id };
+    const updated = { ...recap, image_url: proposal.image_url };
+    pendingEventDataRef.current = updated;
+    setPendingEventData(updated);
+    updatePosterMessage(id, { status: 'chosen', selectedId: proposal.id });
+    const caller = posterCaller();
+    if (caller) void selectPoster(proposal.id, caller);
+    finishPosterStep(`Variante ${variantLetter(proposal.variant)} wird dein Veranstaltungsbild. ${SWIPE_HINT}`);
+  };
+
+  const handleKeepOriginal = () => {
+    const id = posterMessageIdRef.current;
+    if (id) updatePosterMessage(id, { status: 'dismissed' });
+    const hasImage = !!pendingEventDataRef.current?.image_url;
+    finishPosterStep(hasImage ? `Alles klar, wir nehmen dein Bild. ${SWIPE_HINT}` : `Alles klar. ${SWIPE_HINT}`);
+  };
+
+  const handleRegeneratePoster = () => {
+    const id = posterMessageIdRef.current;
+    if (!id || posterRoundsRef.current >= 2) return;
+    updatePosterMessage(id, { status: 'loading', canRegenerate: false });
+    void runPosterRound(id);
+  };
+
+  // "Ja, einsenden" button under the recap card → poster step, then swipe-to-submit.
+  const handleConfirmSubmit = () => {
+    startPosterStep();
   };
 
   // "Ändern" button under the recap card → let the user type what to change.
   const handleRequestChange = () => {
     inputRef.current?.focus();
-  };
-
-  // Handle describe button tap
-  const handleDescribe = () => {
-    // Send a message to the AI to start the describe flow
-    sendMessageWithImage('Ich möchte mein Event beschreiben.', null);
   };
 
   // Handle go to home
@@ -812,6 +968,14 @@ export function MinimalAIChat() {
       if (error) {
         console.error('Supabase insert error:', error);
         throw error;
+      }
+
+      // Attach this draft's poster proposals to the new event (admin review,
+      // chosen-poster bookkeeping). Fire-and-forget: never blocks success.
+      const newEventId = (data as { id?: string } | null)?.id;
+      if (newEventId && posterRoundsRef.current > 0) {
+        const caller = posterCaller();
+        if (caller) void linkPosterDraft(draftIdRef.current, newEventId, caller);
       }
 
       // Insert all dates into event_dates table
@@ -926,6 +1090,7 @@ export function MinimalAIChat() {
       id: userMessageId,
       role: 'user',
       content: trimmedInput || (hasImage ? 'Ich habe ein Bild hochgeladen.' : ''),
+      autoCaption: hasImage && !trimmedInput,
       localUri: imageUri || undefined,
       isLoading: hasImage,
     };
@@ -969,8 +1134,9 @@ export function MinimalAIChat() {
         console.log('Image uploaded:', uploadedImageUrl);
 
         // Update message with uploaded URL
+        // Upload done: the image sharpens now, not when the AI has answered.
         setMessages((prev) => prev.map(msg =>
-          msg.id === userMessageId ? { ...msg, imageUrl: uploadedImageUrl || undefined } : msg
+          msg.id === userMessageId ? { ...msg, imageUrl: uploadedImageUrl || undefined, isLoading: false } : msg
         ));
       }
 
@@ -1049,6 +1215,14 @@ export function MinimalAIChat() {
         const imageUrlToSubmit = uploadedImageUrl || lastUploadedImageUrl;
         const recap: EventRecapData = { ...normalizedData, image_url: imageUrlToSubmit };
         setPendingEventData(recap);
+        pendingEventDataRef.current = recap;
+        // New recap = new content: posters for an earlier version are stale.
+        draftIdRef.current = Crypto.randomUUID();
+        posterRoundsRef.current = 0;
+        posterMessageIdRef.current = null;
+        posterDecidedRef.current = false;
+        chosenPosterRef.current = null;
+        lastProposalsRef.current = null;
         // Re-preparing after a correction: hide any previously shown swipe control.
         setIsReadyToSubmit(false);
         stopIconBounceAnimation();
@@ -1066,25 +1240,29 @@ export function MinimalAIChat() {
         setActiveRecapId(recapId);
 
         setMessages((prev) => prev.map(msg =>
-          msg.id === userMessageId ? { ...msg, isLoading: false } : msg
+          msg.id === userMessageId
+            ? { ...msg, isLoading: false }
+            : msg.posterStep && msg.posterStep.status !== 'dismissed'
+              ? { ...msg, posterStep: { ...msg.posterStep, status: 'dismissed' as const } }
+              : msg
         ).concat([recapMessage]));
       } else if (toolUseBlock && toolUseBlock.name === 'confirm_event_submission') {
-        // Only reveal the swipe-to-submit if we actually have prepared data.
-        const hasPreparedData = revealSwipeToSubmit();
-
-        const confirmMessage: Message = {
-          id: `confirm-${Date.now()}`,
-          role: 'assistant',
-          content:
-            assistantContent ||
-            (hasPreparedData
-              ? 'Super! Wische nach oben, um dein Event einzureichen.'
-              : 'Mir fehlen noch ein paar Angaben, bevor wir einsenden können.'),
-        };
+        // Confirmed in text instead of the button: same path — poster step first.
+        const hasPreparedData = !!pendingEventDataRef.current;
+        const extra: Message[] = hasPreparedData
+          ? assistantContent
+            ? [{ id: `assistant-${Date.now()}`, role: 'assistant', content: assistantContent }]
+            : []
+          : [{
+              id: `confirm-${Date.now()}`,
+              role: 'assistant',
+              content: assistantContent || 'Mir fehlen noch ein paar Angaben, bevor wir einsenden können.',
+            }];
 
         setMessages((prev) => prev.map(msg =>
           msg.id === userMessageId ? { ...msg, isLoading: false } : msg
-        ).concat([confirmMessage]));
+        ).concat(extra));
+        if (hasPreparedData) startPosterStep();
       } else {
         const assistantMessage: Message = {
           id: `assistant-${Date.now()}`,
@@ -1145,6 +1323,7 @@ export function MinimalAIChat() {
               keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
             >
               {/* Messages */}
+              <View style={styles.messagesArea}>
               <ScrollView
                 ref={scrollViewRef}
                 style={styles.messagesContainer}
@@ -1152,7 +1331,16 @@ export function MinimalAIChat() {
                 showsVerticalScrollIndicator={false}
               >
                 {messages.map((message) =>
-                  message.eventRecap ? (
+                  message.posterStep ? (
+                    <PosterProposalCard
+                      key={message.id}
+                      step={message.posterStep}
+                      hasOriginal={!!pendingEventData?.image_url}
+                      onSelect={handleSelectPoster}
+                      onKeepOriginal={handleKeepOriginal}
+                      onRegenerate={handleRegeneratePoster}
+                    />
+                  ) : message.eventRecap ? (
                     <View key={message.id}>
                       <EventRecapCard data={message.eventRecap} />
                       {message.content ? (
@@ -1185,6 +1373,7 @@ export function MinimalAIChat() {
                       imageUrl={message.imageUrl}
                       localUri={message.localUri}
                       isLoading={message.isLoading}
+                      autoCaption={message.autoCaption}
                     />
                   )
                 )}
@@ -1209,21 +1398,25 @@ export function MinimalAIChat() {
                 )}
               </ScrollView>
 
-              {/* Action buttons (initial state only) */}
+              {/* Start state: one centered upload zone (describing = just type below) */}
               {showActionButtons && (
-                <View style={styles.actionButtonsContainer}>
-                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.pressedOverlay }]} onPress={handleDescribe}>
-                    <PencilIcon width={20} height={20} color={colors.textPrimary} />
-                    <Text style={[styles.actionButtonTitle, { color: colors.textPrimary }]}>Beschreiben</Text>
-                    <Text style={[styles.actionButtonSubtitle, { color: colors.textSecondary }]}>Gebe Name, Ort, Zeit und Veranstalter an.</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.pressedOverlay }]} onPress={handleSelectImage}>
-                    <FlyerIcon width={20} height={20} color={colors.textPrimary} />
-                    <Text style={[styles.actionButtonTitle, { color: colors.textPrimary }]}>Flyer einsenden</Text>
-                    <Text style={[styles.actionButtonSubtitle, { color: colors.textSecondary }]}>Sende ganz einfach ein Bild von deinem Flyer</Text>
+                <View style={styles.dropZoneWrap} pointerEvents="box-none">
+                  <TouchableOpacity
+                    style={[styles.dropZone, { borderColor: colors.border }]}
+                    onPress={handleSelectImage}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Bild hochladen"
+                  >
+                    <Ionicons name="image-outline" size={32} color={colors.textSecondary} />
+                    <Text style={[styles.dropZoneTitle, { color: colors.textPrimary }]}>Bild hochladen</Text>
+                    <Text style={[styles.dropZoneSubtitle, { color: colors.textSecondary }]}>
+                      Flyer oder Foto deiner Veranstaltung
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
+              </View>
 
               {/* Input Area OR Submit Button at BOTTOM */}
               {isReadyToSubmit ? (
@@ -1398,22 +1591,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageContainer: {
-    marginBottom: 8,
-    borderRadius: 12,
+  uploadedImage: {
+    alignSelf: 'flex-end',
+    width: 220,
+    aspectRatio: 3 / 4,
+    borderRadius: 14,
     overflow: 'hidden',
+    marginBottom: 12,
   },
-  messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 12,
-  },
-  imageLoadingOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
+  messagesArea: {
+    flex: 1,
   },
   // New styles for redesigned chat
   chatContainer: {
@@ -1556,28 +1743,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'MonaSansSemiCondensed-Bold',
   },
-  // Action buttons
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+  // Start state upload zone, centered over the empty chat
+  dropZoneWrap: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  actionButton: {
-    flex: 1,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'flex-start',
+  dropZone: {
+    width: '100%',
+    maxWidth: 360,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 36,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    gap: 6,
   },
-  actionButtonTitle: {
+  dropZoneTitle: {
+    fontSize: 16,
+    fontFamily: 'MonaSans-SemiBold',
+    marginTop: 6,
+  },
+  dropZoneSubtitle: {
     fontSize: 14,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-    marginTop: 8,
-  },
-  actionButtonSubtitle: {
-    fontSize: 12,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
-    marginTop: 4,
+    fontFamily: 'MonaSans-Regular',
+    textAlign: 'center',
   },
   // Typing indicator styles
   typingIndicator: {

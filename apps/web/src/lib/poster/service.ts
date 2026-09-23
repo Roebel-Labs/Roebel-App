@@ -355,14 +355,33 @@ export async function linkDraftProposals(
     .eq("draft_id", draftId)
     .is("event_id", null);
   if (accountId) q = q.eq("account_id", accountId);
-  const { data, error } = await q.select("id, image_url, status");
+  const { data, error } = await q.select("id, image_url, status, source_image_url");
   if (error) return { ok: false, linked: 0 };
-  const rows = (data ?? []) as Array<{ id: string; image_url: string; status: string }>;
+  const rows = (data ?? []) as Array<{
+    id: string;
+    image_url: string;
+    status: string;
+    source_image_url: string | null;
+  }>;
   const selected = rows.find((r) => r.status === "selected");
   if (selected) {
+    // The chat submits the chosen poster as events.image_url; keep the person's
+    // own upload as original_image_url so "Original behalten" can restore it.
+    const { data: ev } = await admin
+      .from("events")
+      .select("image_url, original_image_url")
+      .eq("id", eventId)
+      .maybeSingle();
+    const applied = ev?.image_url === selected.image_url;
     await admin
       .from("events")
-      .update({ poster_proposal_id: selected.id, poster_reviewed_at: new Date().toISOString() })
+      .update({
+        poster_proposal_id: selected.id,
+        poster_reviewed_at: new Date().toISOString(),
+        ...(applied && !ev?.original_image_url && selected.source_image_url
+          ? { original_image_url: selected.source_image_url }
+          : {}),
+      })
       .eq("id", eventId);
   }
   return { ok: true, linked: rows.length };
