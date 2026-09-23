@@ -29,6 +29,14 @@ export const PERSONAL_PROFILE_ACTIONS: ProfileAction[] = [
   { key: 'submit-event', label: 'Veranstaltung\neinsenden', href: '/submit-event' },
   { key: 'create-listing', label: 'Anzeige\nerstellen', href: '/create-listing' },
   { key: 'create-service', label: 'Dienstleistung\nanbieten', href: '/create-listing', params: { listingType: 'service' } },
+];
+
+/**
+ * Defined but deliberately kept out of the grid (Max 2026-09-23: hide the
+ * ticket link on the profile). The route itself stays reachable — an event's
+ * ticket CTA still leads there — so putting the tile back is one line.
+ */
+export const HIDDEN_PROFILE_ACTIONS: ProfileAction[] = [
   { key: 'tickets', label: 'Meine\nTickets', href: '/tickets' },
 ];
 

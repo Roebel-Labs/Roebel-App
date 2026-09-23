@@ -1,7 +1,11 @@
-import { ORG_PROFILE_ACTIONS, PERSONAL_PROFILE_ACTIONS } from '../profile-actions';
+import {
+  HIDDEN_PROFILE_ACTIONS,
+  ORG_PROFILE_ACTIONS,
+  PERSONAL_PROFILE_ACTIONS,
+} from '../profile-actions';
 
 describe('PERSONAL_PROFILE_ACTIONS', () => {
-  it('has the seven mockup actions in order', () => {
+  it('has the six visible actions in order, without the hidden tickets tile', () => {
     expect(PERSONAL_PROFILE_ACTIONS.map((a) => a.key)).toEqual([
       'abfallkalender',
       'governance',
@@ -9,8 +13,12 @@ describe('PERSONAL_PROFILE_ACTIONS', () => {
       'submit-event',
       'create-listing',
       'create-service',
-      'tickets',
     ]);
+  });
+
+  it('keeps the tickets tile defined but out of the grid', () => {
+    expect(HIDDEN_PROFILE_ACTIONS.map((a) => a.key)).toEqual(['tickets']);
+    expect(PERSONAL_PROFILE_ACTIONS.some((a) => a.key === 'tickets')).toBe(false);
   });
   it('routes the service tile to the listing form with the service type', () => {
     const svc = PERSONAL_PROFILE_ACTIONS.find((a) => a.key === 'create-service')!;
@@ -37,7 +45,7 @@ describe('ORG_PROFILE_ACTIONS', () => {
 });
 
 it('every href is an absolute route', () => {
-  for (const a of [...PERSONAL_PROFILE_ACTIONS, ...ORG_PROFILE_ACTIONS]) {
+  for (const a of [...PERSONAL_PROFILE_ACTIONS, ...ORG_PROFILE_ACTIONS, ...HIDDEN_PROFILE_ACTIONS]) {
     expect(a.href.startsWith('/')).toBe(true);
     expect(a.label.length).toBeGreaterThan(0);
   }

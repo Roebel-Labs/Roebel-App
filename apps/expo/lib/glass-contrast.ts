@@ -12,6 +12,8 @@ import type { ThemeVariant } from '@/constants/theme';
 
 /** WCAG 2.1 AA for body-sized text. */
 export const WCAG_AA_NORMAL_TEXT = 4.5;
+/** WCAG 2.1 AAA (enhanced) for body-sized text. */
+export const WCAG_AAA_NORMAL_TEXT = 7;
 
 export type Rgb = { r: number; g: number; b: number };
 
@@ -97,14 +99,26 @@ export function worstCaseAmbientBackdrop(variant: ThemeVariant, ambientOpacity: 
 }
 
 /**
- * The frost each hero card lays over that backdrop. Light mode has to go
- * nearly opaque because its grey meta text cannot clear AA otherwise; the
- * dark themes keep a genuine see-through panel.
+ * Contrast each theme's hero card is held to. The dark themes carry the
+ * enhanced AAA target — at AA they still read as too transparent on device
+ * (Max 2026-09-23). Light stays at AA because its grey meta text (#6b7280)
+ * would need a fully opaque panel to reach 7:1 over a dark backdrop, which
+ * would remove the glass altogether.
+ */
+export function heroGlassTarget(variant: ThemeVariant): number {
+  return variant === 'light' ? WCAG_AA_NORMAL_TEXT : WCAG_AAA_NORMAL_TEXT;
+}
+
+/**
+ * The frost each hero card lays over that backdrop: the smallest alpha that
+ * meets the target above, plus a small margin. A pure black frost is what
+ * lets the dark themes stay this far below opaque — a lighter near-black
+ * (#0c0d0f) needed 0.92 in Dim for the same ratio.
  */
 export const HERO_GLASS_TINT: Record<ThemeVariant, { rgb: string; alpha: number }> = {
   light: { rgb: '255,255,255', alpha: 0.94 },
-  dim: { rgb: '12,13,15', alpha: 0.5 },
-  dark: { rgb: '0,0,0', alpha: 0.32 },
+  dim: { rgb: '0,0,0', alpha: 0.84 },
+  dark: { rgb: '0,0,0', alpha: 0.79 },
 };
 
 export function heroGlassTintColor(variant: ThemeVariant): string {

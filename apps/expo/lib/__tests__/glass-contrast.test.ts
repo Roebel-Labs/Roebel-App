@@ -3,7 +3,9 @@ import {
   compositeOver,
   heroGlassSurfaceColor,
   HERO_GLASS_TINT,
+  heroGlassTarget,
   WCAG_AA_NORMAL_TEXT,
+  WCAG_AAA_NORMAL_TEXT,
   worstCaseAmbientBackdrop,
 } from '@/lib/glass-contrast';
 import { colors } from '@/constants/theme';
@@ -27,28 +29,38 @@ describe('contrast maths', () => {
 });
 
 describe('hero card glass stays readable over the ambient backdrop', () => {
-  it.each(VARIANTS)('%s: title and meta text clear WCAG AA on the worst backdrop', (variant) => {
+  it.each(VARIANTS)('%s: title and meta text clear their target on the worst backdrop', (variant) => {
     const theme = colors[variant];
     // Worst case: the loudest possible poster pixel showing through the
     // ambient wash — white behind a dark theme, black behind the light one.
     const backdrop = worstCaseAmbientBackdrop(variant, HERO_AMBIENT_MAX_OPACITY);
     const surface = heroGlassSurfaceColor(variant, backdrop);
+    const target = heroGlassTarget(variant);
 
-    expect(contrastRatio(theme.textPrimary, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
-    expect(contrastRatio(theme.textSecondary, surface)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+    expect(contrastRatio(theme.textPrimary, surface)).toBeGreaterThanOrEqual(target);
+    expect(contrastRatio(theme.textSecondary, surface)).toBeGreaterThanOrEqual(target);
   });
 
-  it('keeps the dark themes translucent enough to read as glass', () => {
-    // Light mode has to go nearly opaque for grey meta text; the dark
-    // themes must not, or the ambient glow behind the deck disappears.
-    expect(HERO_GLASS_TINT.dim.alpha).toBeLessThan(0.6);
-    expect(HERO_GLASS_TINT.dark.alpha).toBeLessThan(0.5);
+  it('holds the dark themes to the enhanced AAA target, light to AA', () => {
+    // Max 2026-09-23: the dark cards read as too transparent at AA, so both
+    // dark themes carry AAA. Light cannot: its grey meta text would need an
+    // opaque panel (see the comment in glass-contrast.ts).
+    expect(heroGlassTarget('dim')).toBe(WCAG_AAA_NORMAL_TEXT);
+    expect(heroGlassTarget('dark')).toBe(WCAG_AAA_NORMAL_TEXT);
+    expect(heroGlassTarget('light')).toBe(WCAG_AA_NORMAL_TEXT);
+  });
+
+  it('keeps every theme short of a fully opaque panel', () => {
+    // Some of the wash must still show through, or the deck loses its glow.
+    for (const variant of VARIANTS) {
+      expect(HERO_GLASS_TINT[variant].alpha).toBeLessThanOrEqual(0.95);
+    }
   });
 
   it('is stronger than the bottom navigation glass on every theme', () => {
     // GlassSurface's own wash tops out at 0.72 (light) / 0.45 (dim) / 0.62 (black).
     expect(HERO_GLASS_TINT.light.alpha).toBeGreaterThan(0.72);
-    expect(HERO_GLASS_TINT.dim.alpha).toBeGreaterThan(0.45 * 0.9);
-    expect(HERO_GLASS_TINT.dark.alpha).toBeGreaterThan(0.3);
+    expect(HERO_GLASS_TINT.dim.alpha).toBeGreaterThan(0.45);
+    expect(HERO_GLASS_TINT.dark.alpha).toBeGreaterThan(0.62);
   });
 });
