@@ -143,3 +143,39 @@ export function markerImageForSlug(slug: string | null): string | undefined {
   if (!slug) return undefined;
   return SLUG_MARKER_IMAGE_OVERRIDES[slug];
 }
+
+// Mapbox draws symbol text from SDF glyph fonts that contain no emoji, so an
+// emoji `textField` renders as nothing. Pins therefore draw each emoji as an
+// image (Twemoji PNG, 72 px) registered under the emoji string itself — the
+// layers use `iconImage: ['get', 'emoji']`.
+const TWEMOJI_BASE = 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/';
+
+/** 72 px Twemoji at scale 3 = a 24 pt icon at iconSize 1. */
+export const EMOJI_IMAGE_SCALE = 3;
+export const EMOJI_IMAGE_POINTS = 24;
+
+/** Twemoji file name: hex code points joined by '-'; U+FE0F is dropped
+ *  unless the sequence is a ZWJ sequence (Twemoji's own convention). */
+export function twemojiCodepoints(emoji: string): string {
+  const points = Array.from(emoji).map((c) => c.codePointAt(0)!);
+  const kept = points.includes(0x200d) ? points : points.filter((p) => p !== 0xfe0f);
+  return kept.map((p) => p.toString(16)).join('-');
+}
+
+export function emojiImageUrl(emoji: string): string {
+  return `${TWEMOJI_BASE}${twemojiCodepoints(emoji)}.png`;
+}
+
+/** Map image registry for every distinct emoji in the given features. */
+export function emojiImagesFor(
+  features: { properties: { emoji?: string | null } | null }[]
+): Record<string, { uri: string; scale: number }> {
+  const images: Record<string, { uri: string; scale: number }> = {};
+  for (const f of features) {
+    const emoji = f.properties?.emoji;
+    if (emoji && !images[emoji]) {
+      images[emoji] = { uri: emojiImageUrl(emoji), scale: EMOJI_IMAGE_SCALE };
+    }
+  }
+  return images;
+}

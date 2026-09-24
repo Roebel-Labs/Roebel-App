@@ -23,7 +23,7 @@ const THEME_PREFERENCE_KEY = '@theme_preference_v2';
 const LEGACY_THEME_PREFERENCE_KEY = '@theme_preference';
 
 /** Palette the "System" preference uses when the device is in dark mode. */
-const SYSTEM_DARK_VARIANT: ThemeVariant = 'dim';
+const SYSTEM_DARK_VARIANT: ThemeVariant = 'dark';
 
 function isThemePreference(val: string | null): val is ThemePreference {
   return val === 'system' || val === 'light' || val === 'dim' || val === 'dark';

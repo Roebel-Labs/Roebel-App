@@ -3,6 +3,7 @@ import { View, StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { ROEBEL_CENTER } from '@/lib/map/constants';
 import { Mapbox, mapboxToken } from '@/lib/map/mapbox';
+import { EMOJI_IMAGE_POINTS, emojiImagesFor } from '@/lib/map/markers';
 
 export type EmbeddedMapPoint = {
   id: string;
@@ -113,6 +114,10 @@ export default function EmbeddedMap({
 
   const bounds = useMemo(() => computeBounds(points), [points]);
   const pointsGeoJSON = useMemo(() => pointsToGeoJSON(points), [points]);
+  const emojiImages = useMemo(
+    () => emojiImagesFor(pointsGeoJSON.features as any),
+    [pointsGeoJSON]
+  );
 
   const arcGeoJSON = useMemo<GeoJSON.FeatureCollection<GeoJSON.LineString>>(() => {
     if (drawRoute === 'none' || points.length < 2) {
@@ -202,6 +207,8 @@ export default function EmbeddedMap({
           </Mapbox.ShapeSource>
         ) : null}
 
+        <Mapbox.Images images={emojiImages} />
+
         <Mapbox.ShapeSource id="embedded-points" shape={pointsGeoJSON}>
           <Mapbox.CircleLayer
             id="embedded-points-bg"
@@ -222,18 +229,17 @@ export default function EmbeddedMap({
           <Mapbox.SymbolLayer
             id="embedded-points-emoji"
             style={{
-              textField: ['get', 'emoji'] as any,
-              textSize: [
+              iconImage: ['get', 'emoji'] as any,
+              iconSize: [
                 'match',
                 ['get', 'size'],
-                'sm', 12,
-                'md', 16,
-                'lg', 20,
-                16,
+                'sm', 12 / EMOJI_IMAGE_POINTS,
+                'md', 16 / EMOJI_IMAGE_POINTS,
+                'lg', 20 / EMOJI_IMAGE_POINTS,
+                16 / EMOJI_IMAGE_POINTS,
               ] as any,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-              textHaloWidth: 0,
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
             }}
           />
         </Mapbox.ShapeSource>

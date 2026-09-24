@@ -4,6 +4,8 @@ import {
   businessEmoji,
   poiEmoji,
   markerImageForSlug,
+  twemojiCodepoints,
+  emojiImagesFor,
 } from '@/lib/map/markers';
 
 describe('map marker emoji resolution', () => {
@@ -56,5 +58,25 @@ describe('restaurant emoji from name/slug keywords', () => {
 
   it('slug overrides still beat keywords', () => {
     expect(restaurantEmoji('__test-doener', 'Pizza Palace')).toBe('🥙');
+  });
+});
+
+describe('emoji pin images', () => {
+  it('builds Twemoji file names, dropping FE0F outside ZWJ sequences', () => {
+    expect(twemojiCodepoints('🍕')).toBe('1f355');
+    expect(twemojiCodepoints('🖼️')).toBe('1f5bc');
+    expect(twemojiCodepoints('ℹ️')).toBe('2139');
+    expect(twemojiCodepoints('🏳️‍🌈')).toBe('1f3f3-fe0f-200d-1f308');
+  });
+
+  it('registers each distinct emoji once, keyed by the emoji itself', () => {
+    const images = emojiImagesFor([
+      { properties: { emoji: '🍕' } },
+      { properties: { emoji: '🍕' } },
+      { properties: { emoji: '' } },
+      { properties: null },
+    ]);
+    expect(Object.keys(images)).toEqual(['🍕']);
+    expect(images['🍕'].uri).toMatch(/\/72x72\/1f355\.png$/);
   });
 });

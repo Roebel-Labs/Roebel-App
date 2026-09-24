@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import {
@@ -10,7 +10,7 @@ import {
   CLUSTER_MAX_ZOOM,
 } from '@/lib/map/constants';
 import type { MapGeoJSON } from '@/lib/map/geojson';
-import { MARKER_IMAGES } from '@/lib/map/markers';
+import { EMOJI_IMAGE_POINTS, MARKER_IMAGES, emojiImagesFor } from '@/lib/map/markers';
 import type { MapEntityType } from '@/lib/types';
 import { Mapbox } from '@/lib/map/mapbox';
 
@@ -29,7 +29,15 @@ type Props = {
 
 // Marker circle radius / emoji text size / PNG icon scale per size class
 const PIN_RADIUS = ['match', ['get', 'size'], 'sm', 11, 'md', 15, 'lg', 21, 15];
-const EMOJI_SIZE = ['match', ['get', 'size'], 'sm', 12, 'md', 17, 'lg', 24, 17];
+// Emoji are drawn as images (see emojiImagesFor), sized in points / 24 pt.
+const EMOJI_ICON_SIZE = [
+  'match',
+  ['get', 'size'],
+  'sm', 12 / EMOJI_IMAGE_POINTS,
+  'md', 17 / EMOJI_IMAGE_POINTS,
+  'lg', 24 / EMOJI_IMAGE_POINTS,
+  17 / EMOJI_IMAGE_POINTS,
+];
 const ICON_SCALE = ['match', ['get', 'size'], 'sm', 0.25, 'md', 0.35, 'lg', 0.5, 0.35];
 const LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
 
@@ -50,6 +58,14 @@ export default function MapboxMapView({
   const { isDark, colors } = useTheme();
   const cameraRef = useRef<any>(null);
   const entitySourceRef = useRef<any>(null);
+
+  const emojiImages = useMemo(
+    () => ({
+      ...emojiImagesFor(geojson.features),
+      ...emojiImagesFor((vehiclesGeoJSON?.features ?? []) as any),
+    }),
+    [geojson, vehiclesGeoJSON]
+  );
 
   // Outdoors style is more vibrant for the Müritz Nationalpark setting
   // (terrain, parks, water in color); fall back to Light/Dark for monochrome.
@@ -141,7 +157,7 @@ export default function MapboxMapView({
           animationDuration={1000}
         />
 
-        <Mapbox.Images images={{ ...MARKER_IMAGES, ...(markerImages ?? {}) }} />
+        <Mapbox.Images images={{ ...emojiImages, ...MARKER_IMAGES, ...(markerImages ?? {}) }} />
 
         {/* Entities — one clustered source, Corner-style emoji/PNG pins */}
         <Mapbox.ShapeSource
@@ -207,11 +223,10 @@ export default function MapboxMapView({
             id="entity-pin-emoji"
             filter={['all', NOT_CLUSTER, NO_IMAGE] as any}
             style={{
-              textField: ['get', 'emoji'] as any,
-              textSize: EMOJI_SIZE as any,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-              textHaloWidth: 0,
+              iconImage: ['get', 'emoji'] as any,
+              iconSize: EMOJI_ICON_SIZE as any,
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
             }}
           />
 
@@ -283,10 +298,10 @@ export default function MapboxMapView({
             <Mapbox.SymbolLayer
               id="live-vehicles-emoji"
               style={{
-                textField: ['get', 'emoji'] as any,
-                textSize: 18,
-                textAllowOverlap: true,
-                textIgnorePlacement: true,
+                iconImage: ['get', 'emoji'] as any,
+                iconSize: 18 / EMOJI_IMAGE_POINTS,
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
               }}
             />
             <Mapbox.SymbolLayer
