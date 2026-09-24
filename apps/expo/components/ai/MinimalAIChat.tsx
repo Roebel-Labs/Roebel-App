@@ -35,6 +35,7 @@ import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import * as Crypto from 'expo-crypto';
 import PosterProposalCard, { type PosterStep } from '@/components/ai/PosterProposalCard';
+import ScanningImages, { type ImageStage } from '@/components/ai/ScanningImages';
 import {
   buildPosterDraft,
   linkPosterDraft,
@@ -69,14 +70,23 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  imageUrl?: string;
-  localUri?: string;
+  /** Uploaded public URLs, in the order the images were picked. */
+  imageUrls?: string[];
+  /** Local picker URIs, shown instantly while uploading. */
+  localUris?: string[];
+  /** Blur/scan state of the images: uploading → analyzing → done. */
+  imageStage?: ImageStage;
   isLoading?: boolean;
   eventRecap?: EventRecapData;
   /** Content was generated for the model ("Ich habe ein Bild hochgeladen.") — never shown. */
   autoCaption?: boolean;
   /** Poster proposals (Plakat-Vorschläge) shown right before submitting. */
   posterStep?: PosterStep;
+}
+
+// Response arrived (or failed): stop the loading state and let images sharpen fully.
+function settleMessage(msg: Message): Message {
+  return { ...msg, isLoading: false, ...(msg.imageStage ? { imageStage: 'done' as const } : {}) };
 }
 
 // All events are for the current year — force the year of a YYYY-MM-DD date
@@ -284,60 +294,31 @@ function createMarkdownStyles(colors: ColorTokens) {
   });
 }
 
-// The picked image shows at once, blurred, and sharpens when the upload has
-// finished — no spinner, no bubble around it, no caption under it.
-function UploadedImage({ uri, uploading }: { uri: string; uploading: boolean }) {
-  const { colors } = useTheme();
-  const blurOpacity = useRef(new Animated.Value(uploading ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(blurOpacity, {
-      toValue: uploading ? 1 : 0,
-      duration: 450,
-      useNativeDriver: true,
-    }).start();
-  }, [uploading, blurOpacity]);
-
-  return (
-    <View style={[styles.uploadedImage, { backgroundColor: colors.cardPlaceholder }]}>
-      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      <Animated.Image
-        source={{ uri }}
-        style={[StyleSheet.absoluteFill, { opacity: blurOpacity }]}
-        resizeMode="cover"
-        blurRadius={18}
-      />
-    </View>
-  );
-}
-
 // Message bubble component with image and markdown support
 function MessageBubbleInner({
   role,
   content,
-  imageUrl,
-  localUri,
-  isLoading,
+  imageUris,
+  imageStage,
   autoCaption,
 }: {
   role: 'user' | 'assistant';
   content: string;
-  imageUrl?: string;
-  localUri?: string;
-  isLoading?: boolean;
+  imageUris?: string[];
+  imageStage?: ImageStage;
   autoCaption?: boolean;
 }) {
   const { colors } = useTheme();
   const isUser = role === 'user';
-  const displayUri = localUri || imageUrl;
 
   const markdownStyles = useMemo(() => createMarkdownStyles(colors), [colors]);
 
-  if (isUser && displayUri) {
+  // Images sit centered (they are the thing being read); text keeps its side.
+  if (isUser && imageUris && imageUris.length > 0) {
     const caption = autoCaption ? '' : content;
     return (
       <>
-        <UploadedImage uri={displayUri} uploading={!!isLoading} />
+        <ScanningImages uris={imageUris} stage={imageStage ?? 'done'} />
         {caption ? (
           <View style={[styles.messageBubble, styles.userBubble, { backgroundColor: colors.primary }]}>
             <Text style={[styles.messageText, { color: colors.onPrimary }]}>{caption}</Text>
@@ -484,37 +465,42 @@ function TypingIndicator() {
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+/** Most flyers are one image; a few more cover front/back or a program page. */
+const MAX_IMAGES = 5;
 
 // Fullscreen image preview component (WhatsApp-style)
 function FullScreenImagePreviewInner({
   visible,
-  imageUri,
+  imageUris,
   onClose,
   onSend,
   isSending,
 }: {
   visible: boolean;
-  imageUri: string | null;
+  imageUris: string[];
   onClose: () => void;
   onSend: (message: string) => void;
   isSending?: boolean;
 }) {
   const { colors } = useTheme();
   const [caption, setCaption] = useState('');
+  const [page, setPage] = useState(0);
 
-  // Reset caption when modal opens with new image
+  // Reset caption and page when the modal opens with new images
   useEffect(() => {
     if (visible) {
       setCaption('');
+      setPage(0);
     }
-  }, [visible, imageUri]);
+  }, [visible, imageUris]);
 
   const handleSend = () => {
     onSend(caption);
     setCaption('');
   };
 
-  if (!imageUri) return null;
+  if (imageUris.length === 0) return null;
+  const multiple = imageUris.length > 1;
 
   return (
     <Modal
@@ -529,18 +515,30 @@ function FullScreenImagePreviewInner({
           <TouchableOpacity onPress={onClose} style={previewStyles.closeButton}>
             <Ionicons name="close" size={28} color={colors.textInverted} />
           </TouchableOpacity>
-          <Text style={[previewStyles.headerTitle, { color: colors.textInverted }]}>Bild anhängen</Text>
-          <View style={previewStyles.headerSpacer} />
+          <Text style={[previewStyles.headerTitle, { color: colors.textInverted }]}>
+            {multiple ? `${imageUris.length} Bilder anhängen` : 'Bild anhängen'}
+          </Text>
+          <View style={previewStyles.headerSpacer}>
+            {multiple ? (
+              <Text style={previewStyles.pageCounter}>{page + 1} / {imageUris.length}</Text>
+            ) : null}
+          </View>
         </View>
 
-        {/* Image */}
-        <View style={previewStyles.imageContainer}>
-          <Image
-            source={{ uri: imageUri }}
-            style={previewStyles.image}
-            resizeMode="contain"
-          />
-        </View>
+        {/* Images (swipe through when several were picked) */}
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          style={previewStyles.imageContainer}
+          onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
+        >
+          {imageUris.map((uri, i) => (
+            <View key={`${uri}-${i}`} style={previewStyles.page}>
+              <Image source={{ uri }} style={previewStyles.image} resizeMode="contain" />
+            </View>
+          ))}
+        </ScrollView>
 
         {/* Caption input and send */}
         <KeyboardAvoidingView
@@ -600,9 +598,18 @@ const previewStyles = StyleSheet.create({
   },
   headerSpacer: {
     width: 44,
+    alignItems: 'flex-end',
+  },
+  pageCounter: {
+    fontSize: 13,
+    fontFamily: 'MonaSans-Medium',
+    color: 'rgba(255,255,255,0.75)',
   },
   imageContainer: {
     flex: 1,
+  },
+  page: {
+    width: SCREEN_WIDTH,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -659,7 +666,7 @@ export function MinimalAIChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmittingEvent, setIsSubmittingEvent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stagedImageUri, setStagedImageUri] = useState<string | null>(null);
+  const [stagedImageUris, setStagedImageUris] = useState<string[]>([]);
   const [lastUploadedImageUrl, setLastUploadedImageUrl] = useState<string | null>(null);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [isSendingFromPreview, setIsSendingFromPreview] = useState(false);
@@ -1041,12 +1048,15 @@ export function MinimalAIChat() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_IMAGES,
+        orderedSelection: true,
         quality: 0.8,
       });
 
-      if (result.canceled || !result.assets[0]) return;
+      if (result.canceled || result.assets.length === 0) return;
 
-      setStagedImageUri(result.assets[0].uri);
+      setStagedImageUris(result.assets.slice(0, MAX_IMAGES).map((a) => a.uri));
       setShowImagePreview(true); // Open fullscreen preview
     } catch (error) {
       console.error('Image selection error:', error);
@@ -1056,26 +1066,43 @@ export function MinimalAIChat() {
 
   // Handle sending from fullscreen preview
   const handleSendFromPreview = async (caption: string) => {
-    const localUri = stagedImageUri;
+    const uris = stagedImageUris;
     setIsSendingFromPreview(true);
     setShowImagePreview(false);
-    setStagedImageUri(null);
+    setStagedImageUris([]);
 
-    // Call sendMessage with the caption and image
-    await sendMessageWithImage(caption, localUri);
+    await sendMessageWithImage(caption, uris);
     setIsSendingFromPreview(false);
   };
 
   // Close preview without sending
   const handleClosePreview = () => {
     setShowImagePreview(false);
-    setStagedImageUri(null);
+    setStagedImageUris([]);
+  };
+
+  // Compress to display size (1600px JPEG) — plenty for flyer OCR and event
+  // cards — upload to the images bucket and return the public URL.
+  const uploadEventImage = async (uri: string): Promise<string> => {
+    const compressedUri = await compressImageForUpload(uri, 1600);
+    const base64Data = await FileSystem.readAsStringAsync(compressedUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    const filePath = `event-images/${fileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from('images')
+      .upload(filePath, decode(base64Data), { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: urlData } = supabase.storage.from('images').getPublicUrl(filePath);
+    if (!urlData?.publicUrl) throw new Error('Failed to get public URL');
+    return urlData.publicUrl;
   };
 
   // Core message sending logic - used by both regular send and preview send
-  const sendMessageWithImage = async (messageText: string, imageUri: string | null) => {
+  const sendMessageWithImage = async (messageText: string, imageUris: string[]) => {
     const trimmedInput = messageText.trim();
-    const hasImage = !!imageUri;
+    const hasImage = imageUris.length > 0;
 
     // Allow sending if there's text OR an image
     if (!trimmedInput && !hasImage) return;
@@ -1089,9 +1116,16 @@ export function MinimalAIChat() {
     const userMessage: Message = {
       id: userMessageId,
       role: 'user',
-      content: trimmedInput || (hasImage ? 'Ich habe ein Bild hochgeladen.' : ''),
+      content:
+        trimmedInput ||
+        (hasImage
+          ? imageUris.length > 1
+            ? `Ich habe ${imageUris.length} Bilder hochgeladen.`
+            : 'Ich habe ein Bild hochgeladen.'
+          : ''),
       autoCaption: hasImage && !trimmedInput,
-      localUri: imageUri || undefined,
+      localUris: hasImage ? imageUris : undefined,
+      imageStage: hasImage ? 'uploading' : undefined,
       isLoading: hasImage,
     };
 
@@ -1106,37 +1140,17 @@ export function MinimalAIChat() {
         throw new Error('Anthropic API key is not configured');
       }
 
-      // Upload image to Supabase if present
-      if (imageUri) {
-        console.log('Uploading image to Supabase...');
-        // Compress to display size (1600px JPEG) — plenty for flyer OCR and
-        // event cards, avoids multi-MB originals piling up in storage
-        const compressedUri = await compressImageForUpload(imageUri, 1600);
-        const base64Data = await FileSystem.readAsStringAsync(compressedUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        const arrayBuffer = decode(base64Data);
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-        const filePath = `event-images/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('images')
-          .upload(filePath, arrayBuffer, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage.from('images').getPublicUrl(filePath);
-        if (!urlData?.publicUrl) throw new Error('Failed to get public URL');
-
-        uploadedImageUrl = urlData.publicUrl;
+      // Upload all picked images in parallel. The first one is the event image
+      // candidate (the flyer); every image goes to the model for reading.
+      if (hasImage) {
+        const uploaded = await Promise.all(imageUris.map((uri) => uploadEventImage(uri)));
+        uploadedImageUrl = uploaded[0];
         setLastUploadedImageUrl(uploadedImageUrl);
-        console.log('Image uploaded:', uploadedImageUrl);
 
-        // Update message with uploaded URL
-        // Upload done: the image sharpens now, not when the AI has answered.
+        // Upload done: images sharpen halfway and keep being "scanned" until the
+        // model has read them.
         setMessages((prev) => prev.map(msg =>
-          msg.id === userMessageId ? { ...msg, imageUrl: uploadedImageUrl || undefined, isLoading: false } : msg
+          msg.id === userMessageId ? { ...msg, imageUrls: uploaded, imageStage: 'analyzing' as const } : msg
         ));
       }
 
@@ -1147,22 +1161,24 @@ export function MinimalAIChat() {
 
       const apiMessages = await Promise.all(
         filteredMessages.map(async (msg) => {
-          const uriToConvert = msg.localUri || msg.imageUrl;
-          if (uriToConvert) {
-            const imageData = await imageToBase64(uriToConvert);
-            if (imageData) {
+          const uris = msg.localUris ?? msg.imageUrls ?? [];
+          if (uris.length > 0) {
+            const images = (await Promise.all(uris.map((u) => imageToBase64(u)))).filter(
+              (img): img is { base64: string; mediaType: string } => img !== null,
+            );
+            if (images.length > 0) {
               return {
                 role: msg.role,
                 content: [
                   { type: 'text' as const, text: msg.content || 'Ich habe ein Bild hochgeladen.' },
-                  {
+                  ...images.map((img) => ({
                     type: 'image' as const,
                     source: {
                       type: 'base64' as const,
-                      media_type: imageData.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                      data: imageData.base64,
+                      media_type: img.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                      data: img.base64,
                     },
-                  },
+                  })),
                 ],
               };
             }
@@ -1241,7 +1257,7 @@ export function MinimalAIChat() {
 
         setMessages((prev) => prev.map(msg =>
           msg.id === userMessageId
-            ? { ...msg, isLoading: false }
+            ? settleMessage(msg)
             : msg.posterStep && msg.posterStep.status !== 'dismissed'
               ? { ...msg, posterStep: { ...msg.posterStep, status: 'dismissed' as const } }
               : msg
@@ -1260,7 +1276,7 @@ export function MinimalAIChat() {
             }];
 
         setMessages((prev) => prev.map(msg =>
-          msg.id === userMessageId ? { ...msg, isLoading: false } : msg
+          msg.id === userMessageId ? settleMessage(msg) : msg
         ).concat(extra));
         if (hasPreparedData) startPosterStep();
       } else {
@@ -1271,7 +1287,7 @@ export function MinimalAIChat() {
         };
 
         setMessages((prev) => prev.map(msg =>
-          msg.id === userMessageId ? { ...msg, isLoading: false } : msg
+          msg.id === userMessageId ? settleMessage(msg) : msg
         ).concat([assistantMessage]));
       }
     } catch (err: any) {
@@ -1279,7 +1295,7 @@ export function MinimalAIChat() {
       setError(err.message || 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.');
       // Clear loading state on error
       setMessages((prev) => prev.map(msg =>
-        msg.isLoading ? { ...msg, isLoading: false } : msg
+        msg.isLoading ? settleMessage(msg) : msg
       ));
     } finally {
       setIsLoading(false);
@@ -1293,7 +1309,7 @@ export function MinimalAIChat() {
     if (!trimmedInput) return;
 
     setInput('');
-    await sendMessageWithImage(trimmedInput, null);
+    await sendMessageWithImage(trimmedInput, []);
   };
 
   // Check if we should show action buttons (only on initial state)
@@ -1370,9 +1386,8 @@ export function MinimalAIChat() {
                       key={message.id}
                       role={message.role}
                       content={message.content}
-                      imageUrl={message.imageUrl}
-                      localUri={message.localUri}
-                      isLoading={message.isLoading}
+                      imageUris={message.localUris ?? message.imageUrls}
+                      imageStage={message.imageStage}
                       autoCaption={message.autoCaption}
                     />
                   )
@@ -1474,7 +1489,7 @@ export function MinimalAIChat() {
       {/* Fullscreen Image Preview Modal */}
       <FullScreenImagePreviewInner
         visible={showImagePreview}
-        imageUri={stagedImageUri}
+        imageUris={stagedImageUris}
         onClose={handleClosePreview}
         onSend={handleSendFromPreview}
         isSending={isSendingFromPreview}
@@ -1590,14 +1605,6 @@ const styles = StyleSheet.create({
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  uploadedImage: {
-    alignSelf: 'flex-end',
-    width: 220,
-    aspectRatio: 3 / 4,
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginBottom: 12,
   },
   messagesArea: {
     flex: 1,
