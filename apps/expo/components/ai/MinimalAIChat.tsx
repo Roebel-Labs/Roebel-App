@@ -41,10 +41,9 @@ import {
   linkPosterDraft,
   proposePostersForDraft,
   selectPoster,
-  variantLetter,
   type PosterCaller,
-  type PosterMode,
   type PosterOption,
+  type ProposeOutcome,
 } from '@/lib/poster-api';
 
 // Structured event data used to render the pre-submit recap card.
@@ -678,14 +677,16 @@ export function MinimalAIChat() {
   const [pendingEventData, setPendingEventData] = useState<any>(null);
   // Id of the newest recap message — only that card shows the Ja/Ändern buttons.
   const [activeRecapId, setActiveRecapId] = useState<string | null>(null);
-  // Poster step (Plakat-Vorschläge). One draft id per recap version; the server
-  // allows two proposal rounds per draft (the second = "Andere Vorschläge").
+  // Poster step (Plakat-Vorschläge). One draft id per recap version. Posters are
+  // requested as soon as the recap card appears (prefetch), so they are often
+  // ready by the time the person confirms.
   const draftIdRef = useRef<string>(Crypto.randomUUID());
   const posterRoundsRef = useRef(0);
   const posterMessageIdRef = useRef<string | null>(null);
-  const posterDecidedRef = useRef(false);
+  const posterPrefetchRef = useRef<{ draftId: string; promise: Promise<ProposeOutcome> } | null>(null);
   const chosenPosterRef = useRef<{ proposalId: string } | null>(null);
-  const lastProposalsRef = useRef<{ mode: PosterMode; proposals: PosterOption[] } | null>(null);
+  /** The person's own image at confirm time, restored when a poster is un-chosen. */
+  const originalImageRef = useRef<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const translateY = useRef(new Animated.Value(0)).current;
   const iconBounceAnim = useRef(new Animated.Value(0)).current;
@@ -785,8 +786,6 @@ export function MinimalAIChat() {
     return true;
   };
 
-  const SWIPE_HINT = 'Wische nach oben, um dein Event einzureichen.';
-
   const posterCaller = (): PosterCaller | null =>
     activeAccount?.id && user?.wallet_address
       ? { accountId: activeAccount.id, wallet: user.wallet_address }
@@ -798,107 +797,79 @@ export function MinimalAIChat() {
     );
   };
 
-  // Ends the poster step and shows the swipe-to-submit control.
-  const finishPosterStep = (text: string) => {
-    posterMessageIdRef.current = null;
-    posterDecidedRef.current = true;
-    if (revealSwipeToSubmit()) {
-      setMessages((prev) => [...prev, { id: `confirm-${Date.now()}`, role: 'assistant', content: text }]);
-    }
-  };
-
-  // One proposal round. A failure never blocks the submission: the first round
-  // falls back to the person's own image, a failed second round restores the
-  // first round's proposals.
-  const runPosterRound = async (messageId: string) => {
+  // Request the two posters for the current recap. Returns null when there is
+  // nothing to design for (no account/wallet, no title).
+  const startPosterPrefetch = (): Promise<ProposeOutcome> | null => {
     const caller = posterCaller();
     const draft = buildPosterDraft(pendingEventDataRef.current);
-    if (!caller || !draft) {
-      updatePosterMessage(messageId, { status: 'dismissed' });
-      finishPosterStep(`Super! ${SWIPE_HINT}`);
-      return;
-    }
+    if (!caller || !draft) return null;
+    const draftId = draftIdRef.current;
     posterRoundsRef.current += 1;
-    const outcome = await proposePostersForDraft(draftIdRef.current, draft, caller);
-    // Skipped or superseded while the server was designing: ignore the result.
-    if (posterMessageIdRef.current !== messageId) return;
-
-    if (outcome.kind === 'proposals') {
-      lastProposalsRef.current = { mode: outcome.mode, proposals: outcome.proposals };
-      updatePosterMessage(messageId, {
-        status: 'ready',
-        mode: outcome.mode,
-        proposals: outcome.proposals,
-        selectedId: null,
-        canRegenerate: posterRoundsRef.current < 2,
-      });
-      return;
-    }
-    if (lastProposalsRef.current) {
-      updatePosterMessage(messageId, { status: 'ready', ...lastProposalsRef.current, canRegenerate: false });
-      return;
-    }
-    updatePosterMessage(messageId, { status: 'dismissed' });
-    const hasImage = !!pendingEventDataRef.current?.image_url;
-    finishPosterStep(
-      outcome.kind === 'skipped'
-        ? `Dein Flyer passt schon perfekt ins Plakatformat. ${SWIPE_HINT}`
-        : hasImage
-          ? `Plakat-Vorschläge sind gerade nicht verfügbar, wir nehmen dein Bild. ${SWIPE_HINT}`
-          : `Plakat-Vorschläge sind gerade nicht verfügbar. ${SWIPE_HINT}`,
-    );
+    const promise = proposePostersForDraft(draftId, draft, caller);
+    posterPrefetchRef.current = { draftId, promise };
+    return promise;
   };
 
-  // Right before submitting: propose two posters (or go straight to the swipe
-  // when this draft's poster question is already settled or running).
+  // On confirm: show the swipe-to-submit right away, plus the two posters
+  // (shimmering until they arrive). Tapping a poster makes it the event image;
+  // not tapping one keeps the person's own image. No buttons.
   const startPosterStep = () => {
-    if (!pendingEventDataRef.current) return;
+    const recap = pendingEventDataRef.current;
+    if (!recap) return;
     setActiveRecapId(null);
-    if (posterMessageIdRef.current) return;
-    if (posterDecidedRef.current) {
-      finishPosterStep(`Super! ${SWIPE_HINT}`);
+    if (posterMessageIdRef.current) {
+      revealSwipeToSubmit();
       return;
     }
+    originalImageRef.current = recap.image_url ?? null;
+    const prefetched = posterPrefetchRef.current;
+    const pending =
+      prefetched && prefetched.draftId === draftIdRef.current ? prefetched.promise : startPosterPrefetch();
+    revealSwipeToSubmit();
+
+    if (!pending) {
+      setMessages((prev) => [
+        ...prev,
+        { id: `confirm-${Date.now()}`, role: 'assistant', content: 'Super! Wische nach oben, um dein Event einzureichen.' },
+      ]);
+      return;
+    }
+
     const id = `poster-${Date.now()}`;
     posterMessageIdRef.current = id;
     setMessages((prev) => [
       ...prev,
-      {
-        id,
-        role: 'assistant',
-        content: '',
-        posterStep: { status: 'loading', mode: null, proposals: [], selectedId: null, canRegenerate: false },
-      },
+      { id, role: 'assistant', content: '', posterStep: { status: 'loading', mode: null, proposals: [], selectedId: null } },
     ]);
-    void runPosterRound(id);
+
+    void pending.then((outcome) => {
+      if (posterMessageIdRef.current !== id) return; // superseded by a new recap
+      if (outcome.kind === 'proposals') {
+        updatePosterMessage(id, { status: 'ready', mode: outcome.mode, proposals: outcome.proposals });
+        return;
+      }
+      updatePosterMessage(id, { status: 'dismissed' });
+      const note =
+        outcome.kind === 'skipped'
+          ? 'Dein Flyer passt schon perfekt ins Plakatformat.'
+          : originalImageRef.current
+            ? 'Plakat-Vorschläge sind gerade nicht verfügbar, wir nehmen dein Bild.'
+            : 'Plakat-Vorschläge sind gerade nicht verfügbar.';
+      setMessages((prev) => [...prev, { id: `poster-note-${Date.now()}`, role: 'assistant', content: note }]);
+    });
   };
 
-  const handleSelectPoster = (proposal: PosterOption) => {
+  // Tap a poster to use it, tap it again to go back to the own image.
+  const handleTogglePoster = (proposal: PosterOption) => {
     const id = posterMessageIdRef.current;
     const recap = pendingEventDataRef.current;
     if (!id || !recap) return;
-    chosenPosterRef.current = { proposalId: proposal.id };
-    const updated = { ...recap, image_url: proposal.image_url };
+    const deselect = chosenPosterRef.current?.proposalId === proposal.id;
+    chosenPosterRef.current = deselect ? null : { proposalId: proposal.id };
+    const updated = { ...recap, image_url: deselect ? originalImageRef.current : proposal.image_url };
     pendingEventDataRef.current = updated;
     setPendingEventData(updated);
-    updatePosterMessage(id, { status: 'chosen', selectedId: proposal.id });
-    const caller = posterCaller();
-    if (caller) void selectPoster(proposal.id, caller);
-    finishPosterStep(`Variante ${variantLetter(proposal.variant)} wird dein Veranstaltungsbild. ${SWIPE_HINT}`);
-  };
-
-  const handleKeepOriginal = () => {
-    const id = posterMessageIdRef.current;
-    if (id) updatePosterMessage(id, { status: 'dismissed' });
-    const hasImage = !!pendingEventDataRef.current?.image_url;
-    finishPosterStep(hasImage ? `Alles klar, wir nehmen dein Bild. ${SWIPE_HINT}` : `Alles klar. ${SWIPE_HINT}`);
-  };
-
-  const handleRegeneratePoster = () => {
-    const id = posterMessageIdRef.current;
-    if (!id || posterRoundsRef.current >= 2) return;
-    updatePosterMessage(id, { status: 'loading', canRegenerate: false });
-    void runPosterRound(id);
+    updatePosterMessage(id, { selectedId: deselect ? null : proposal.id });
   };
 
   // "Ja, einsenden" button under the recap card → poster step, then swipe-to-submit.
@@ -982,7 +953,14 @@ export function MinimalAIChat() {
       const newEventId = (data as { id?: string } | null)?.id;
       if (newEventId && posterRoundsRef.current > 0) {
         const caller = posterCaller();
-        if (caller) void linkPosterDraft(draftIdRef.current, newEventId, caller);
+        const chosen = chosenPosterRef.current;
+        const draftId = draftIdRef.current;
+        if (caller) {
+          void (async () => {
+            if (chosen) await selectPoster(chosen.proposalId, caller);
+            await linkPosterDraft(draftId, newEventId, caller);
+          })();
+        }
       }
 
       // Insert all dates into event_dates table
@@ -1236,9 +1214,11 @@ export function MinimalAIChat() {
         draftIdRef.current = Crypto.randomUUID();
         posterRoundsRef.current = 0;
         posterMessageIdRef.current = null;
-        posterDecidedRef.current = false;
+        posterPrefetchRef.current = null;
         chosenPosterRef.current = null;
-        lastProposalsRef.current = null;
+        originalImageRef.current = null;
+        // Start designing the posters now; they are shown once the person confirms.
+        startPosterPrefetch();
         // Re-preparing after a correction: hide any previously shown swipe control.
         setIsReadyToSubmit(false);
         stopIconBounceAnimation();
@@ -1351,10 +1331,7 @@ export function MinimalAIChat() {
                     <PosterProposalCard
                       key={message.id}
                       step={message.posterStep}
-                      hasOriginal={!!pendingEventData?.image_url}
-                      onSelect={handleSelectPoster}
-                      onKeepOriginal={handleKeepOriginal}
-                      onRegenerate={handleRegeneratePoster}
+                      onToggle={handleTogglePoster}
                     />
                   ) : message.eventRecap ? (
                     <View key={message.id}>

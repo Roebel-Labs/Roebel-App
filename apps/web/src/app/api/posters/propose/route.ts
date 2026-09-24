@@ -81,6 +81,7 @@ export async function POST(req: Request) {
           requestedBy: actor.requestedBy,
           accountId: actor.requestedBy === "admin" ? null : actor.accountId,
           hint: body.hint,
+          profile: "fast",
         },
       ),
     );
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
           requestedBy: actor.requestedBy,
           accountId: actor.requestedBy === "admin" ? null : actor.accountId,
           hint: body.hint,
+          profile: "fast",
         },
       ),
     );

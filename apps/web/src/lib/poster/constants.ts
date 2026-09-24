@@ -15,6 +15,20 @@ export const LOW_RES_MIN_SIDE = 700;
 
 export const DEFAULT_POSTER_MODEL = "gpt-image-2.5-sunburst";
 export const DEFAULT_POSTER_QUALITY = "high";
+
+/**
+ * Render profiles. "quality" = admin batch (nobody waits): sunburst, high, full
+ * DIN-A size. "fast" = the submission chats (a person waits): measured
+ * 2026-09-24 on the HEIMSPIEL design prompt with the crest as reference —
+ * sunburst/high/1440x2032 38.4 s, flare/high 22.0 s, flare/medium/1440 16.8 s,
+ * flare/medium/1024x1440 12.9 s ($0.021, every line correct), flare/low 13.8 s
+ * with a typo ("Staffell"). 1024x1440 is DIN A within 0.6 %.
+ */
+export type RenderProfile = "fast" | "quality";
+export const RENDER_PROFILES: Record<RenderProfile, { model: string | null; quality: string; size: string }> = {
+  quality: { model: null, quality: DEFAULT_POSTER_QUALITY, size: `${POSTER_WIDTH}x${POSTER_HEIGHT}` },
+  fast: { model: "gpt-image-2.5-flare", quality: "medium", size: "1024x1440" },
+};
 export const OPENAI_IMAGES_BASE = "https://api.openai.com/v1/images";
 
 export const POSTER_STORAGE_BUCKET = "images";

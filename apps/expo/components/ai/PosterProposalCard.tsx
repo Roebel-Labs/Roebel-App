@@ -1,9 +1,8 @@
-// Poster step of the AI event submission chat: right before the event is sent,
-// the web server designs two DIN-A posters for it and the person picks one,
-// keeps their own image, or skips. While the posters are designed the empty
-// cards are "scanned"; each poster then develops from blurred to sharp as it
-// arrives. Tapping a poster opens a lightbox that pages between the variants
-// and lets the person choose right there. Images are labelled as AI-generated.
+// Poster step of the AI event submission chat: two DIN-A posters side by side,
+// each with its style name underneath. Tap one to use it as the event image,
+// tap it again to go back to the own image; long-press to see it big. No
+// buttons. While the server designs them the cards shimmer; each poster then
+// develops from blurred to sharp as it arrives. Labelled as AI-generated.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -13,7 +12,7 @@ import {
   Linking,
   Modal,
   Platform,
-  ScrollView,
+  Pressable,
   Share,
   StatusBar,
   StyleSheet,
@@ -23,12 +22,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import type { ColorTokens } from '@/constants/theme';
 import { fontFamily } from '@/constants/theme';
 import { POSTER_ASPECT_RATIO, POSTER_RADIUS } from '@/constants/poster';
-import { ScanLine } from '@/components/ai/ScanningImages';
 import {
   directionLabel,
   variantLetter,
@@ -36,39 +35,29 @@ import {
   type PosterOption,
 } from '@/lib/poster-api';
 
-export type PosterStepStatus = 'loading' | 'ready' | 'chosen' | 'dismissed';
+export type PosterStepStatus = 'loading' | 'ready' | 'dismissed';
 
 export interface PosterStep {
   status: PosterStepStatus;
   mode: PosterMode | null;
   proposals: PosterOption[];
   selectedId: string | null;
-  /** The server allows two rounds per draft, so one "Andere Vorschläge". */
-  canRegenerate: boolean;
 }
 
 interface Props {
   step: PosterStep;
-  /** The person's own uploaded image, if any (for "Mein Bild behalten"). */
-  hasOriginal: boolean;
-  onSelect: (proposal: PosterOption) => void;
-  onKeepOriginal: () => void;
-  onRegenerate: () => void;
+  onToggle: (proposal: PosterOption) => void;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** Two cards, the second peeking in, so it is obvious there is a choice. */
-const CARD_WIDTH = Math.round(Math.min(SCREEN_WIDTH * 0.62, 300));
-const CARD_HEIGHT = Math.round(CARD_WIDTH / POSTER_ASPECT_RATIO);
 const CARD_GAP = 12;
-/** Lightbox poster: as large as fits between the top bar and the action bar. */
-const LIGHTBOX_HEIGHT = Math.round(Math.min(SCREEN_HEIGHT * 0.68, (SCREEN_WIDTH - 32) / POSTER_ASPECT_RATIO));
+/** The chat's horizontal padding is 12 on each side. */
+const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 24 - CARD_GAP) / 2);
+const CARD_HEIGHT = Math.round(CARD_WIDTH / POSTER_ASPECT_RATIO);
+const LIGHTBOX_HEIGHT = Math.round(Math.min(SCREEN_HEIGHT * 0.72, (SCREEN_WIDTH - 32) / POSTER_ASPECT_RATIO));
 const LIGHTBOX_WIDTH = Math.round(LIGHTBOX_HEIGHT * POSTER_ASPECT_RATIO);
 
-/**
- * No expo-media-library / expo-sharing in the store build, so "save" uses what
- * ships natively: iOS share sheet (has "Bild sichern"), Android browser.
- */
+/** No expo-media-library / expo-sharing in the store build: iOS share sheet, Android browser. */
 async function savePoster(url: string) {
   try {
     if (Platform.OS === 'ios') await Share.share({ url });
@@ -78,42 +67,60 @@ async function savePoster(url: string) {
   }
 }
 
-const SAVE_ICON = Platform.OS === 'ios' ? 'share-outline' : 'open-outline';
+/** Skeleton shimmer: a soft diagonal highlight sweeping across the empty card. */
+function Shimmer({ width }: { width: number }) {
+  const { isDark } = useTheme();
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1300,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [progress]);
+
+  const band = width * 0.8;
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-band, width + band] });
+  const highlight = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)';
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { width: band, transform: [{ translateX }, { skewX: '-18deg' }] }]}
+    >
+      <LinearGradient
+        colors={['transparent', highlight, 'transparent']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
 
 /** A poster that starts blurred and sharpens once its pixels have arrived. */
-function DevelopingPoster({ uri, radius }: { uri: string; radius: number }) {
+function DevelopingPoster({ uri }: { uri: string }) {
   const blur = useRef(new Animated.Value(1)).current;
   const settle = useRef(new Animated.Value(0)).current;
 
   const onLoad = () => {
     Animated.parallel([
-      Animated.timing(blur, {
-        toValue: 0,
-        duration: 900,
-        delay: 120,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(settle, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
+      Animated.timing(blur, { toValue: 0, duration: 900, delay: 100, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(settle, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
   };
 
   const scale = settle.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1] });
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', transform: [{ scale }] }]}>
-      <Image
-        source={{ uri }}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        onLoad={onLoad}
-      />
+    <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" onLoad={onLoad} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: blur }]}>
         <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={40} cachePolicy="memory-disk" />
       </Animated.View>
@@ -121,130 +128,100 @@ function DevelopingPoster({ uri, radius }: { uri: string; radius: number }) {
   );
 }
 
-/** Springs a little when a card becomes the chosen one. */
-function useSelectPop(selected: boolean) {
-  const pop = useRef(new Animated.Value(selected ? 1 : 0)).current;
-  useEffect(() => {
-    Animated.spring(pop, {
-      toValue: selected ? 1 : 0,
-      damping: 12,
-      stiffness: 220,
-      useNativeDriver: true,
-    }).start();
-  }, [selected, pop]);
-  return pop;
-}
-
-function PosterCard({
+function PosterTile({
   proposal,
   selected,
-  dimmed,
-  interactive,
-  onOpen,
-  onSelect,
-  styles,
+  anySelected,
+  onToggle,
+  onPeek,
   colors,
+  styles,
 }: {
   proposal: PosterOption;
   selected: boolean;
-  dimmed: boolean;
-  interactive: boolean;
-  onOpen: () => void;
-  onSelect: () => void;
-  styles: ReturnType<typeof createStyles>;
+  anySelected: boolean;
+  onToggle: () => void;
+  onPeek: () => void;
   colors: ColorTokens;
+  styles: ReturnType<typeof createStyles>;
 }) {
-  const pop = useSelectPop(selected);
-  const cardScale = pop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.04, 1] });
+  const pop = useRef(new Animated.Value(selected ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(pop, { toValue: selected ? 1 : 0, damping: 12, stiffness: 220, useNativeDriver: true }).start();
+  }, [selected, pop]);
+
+  const scale = pop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.04, 1] });
   const checkScale = pop.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] });
 
   return (
-    <View style={[styles.cardColumn, dimmed && styles.dimmed]}>
-      <Animated.View style={{ transform: [{ scale: cardScale }] }}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={onOpen}
-          accessibilityRole="imagebutton"
-          accessibilityLabel={`Variante ${variantLetter(proposal.variant)} groß ansehen`}
-          style={[styles.card, selected && { borderColor: colors.primary, borderWidth: 2.5 }]}
+    <Pressable
+      onPress={onToggle}
+      onLongPress={onPeek}
+      delayLongPress={280}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${directionLabel(proposal.direction)}, ${selected ? 'gewählt' : 'als Bild verwenden'}`}
+      accessibilityHint="Lange drücken, um das Plakat groß zu sehen"
+      style={[styles.tile, anySelected && !selected && styles.dimmed]}
+    >
+      <Animated.View
+        style={[
+          styles.card,
+          { transform: [{ scale }] },
+          selected && { borderColor: colors.primary, borderWidth: 2.5 },
+        ]}
+      >
+        <DevelopingPoster uri={proposal.image_url} />
+        <Animated.View
+          style={[styles.check, { backgroundColor: colors.primary, opacity: pop, transform: [{ scale: checkScale }] }]}
         >
-          <DevelopingPoster uri={proposal.image_url} radius={POSTER_RADIUS} />
-          <View style={styles.aiChip}>
-            <Text style={styles.aiChipText}>KI-generiert</Text>
-          </View>
-          <Animated.View
-            style={[
-              styles.check,
-              { backgroundColor: colors.primary, opacity: pop, transform: [{ scale: checkScale }] },
-            ]}
-          >
-            <Ionicons name="checkmark" size={16} color={colors.onPrimary} />
-          </Animated.View>
-        </TouchableOpacity>
+          <Ionicons name="checkmark" size={15} color={colors.onPrimary} />
+        </Animated.View>
       </Animated.View>
-      <Text style={styles.label} numberOfLines={1}>
-        Variante {variantLetter(proposal.variant)} · {directionLabel(proposal.direction)}
+      <Text style={[styles.name, selected && { color: colors.textPrimary }]} numberOfLines={1}>
+        {directionLabel(proposal.direction)}
       </Text>
-      {interactive ? (
-        <View style={styles.actions}>
-          <TouchableOpacity style={[styles.choose, { backgroundColor: colors.primary }]} onPress={onSelect}>
-            <Text style={[styles.chooseText, { color: colors.onPrimary }]}>Diese wählen</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.save, { borderColor: colors.border }]}
-            onPress={() => savePoster(proposal.image_url)}
-            accessibilityLabel={`Variante ${variantLetter(proposal.variant)} speichern`}
-          >
-            <Ionicons name={SAVE_ICON} size={18} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-    </View>
+    </Pressable>
   );
 }
 
-/** Full-screen viewer that pages between the variants and lets you choose one. */
+/** Full-screen view (long-press), paging between both posters. */
 function PosterLightbox({
   proposals,
   index,
-  canChoose,
-  selectedId,
   onClose,
-  onChoose,
 }: {
   proposals: PosterOption[];
   index: number | null;
-  canChoose: boolean;
-  selectedId: string | null;
   onClose: () => void;
-  onChoose: (p: PosterOption) => void;
 }) {
   const [current, setCurrent] = useState(index ?? 0);
   useEffect(() => {
     if (index !== null) setCurrent(index);
   }, [index]);
-
   const visible = index !== null;
   const active = proposals[current];
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <StatusBar barStyle="light-content" />
-      <SafeAreaView style={lightboxStyles.container}>
-        <View style={lightboxStyles.topBar}>
-          <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Schließen" style={lightboxStyles.close}>
+      <SafeAreaView style={lightbox.container}>
+        <View style={lightbox.topBar}>
+          <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Schließen" style={lightbox.icon}>
             <Ionicons name="close" size={26} color="#ffffff" />
           </TouchableOpacity>
-          {active ? (
-            <Text style={lightboxStyles.title} numberOfLines={1}>
-              Variante {variantLetter(active.variant)} · {directionLabel(active.direction)}
-            </Text>
-          ) : null}
-          <Text style={lightboxStyles.counter}>
-            {proposals.length > 1 ? `${current + 1} / ${proposals.length}` : ''}
+          <Text style={lightbox.title} numberOfLines={1}>
+            {active ? `${directionLabel(active.direction)} · Variante ${variantLetter(active.variant)}` : ''}
           </Text>
+          <TouchableOpacity
+            onPress={() => active && savePoster(active.image_url)}
+            hitSlop={10}
+            accessibilityLabel="Plakat speichern"
+            style={lightbox.icon}
+          >
+            <Ionicons name={Platform.OS === 'ios' ? 'share-outline' : 'open-outline'} size={22} color="#ffffff" />
+          </TouchableOpacity>
         </View>
-
         {visible ? (
           <FlatList
             data={proposals}
@@ -256,136 +233,65 @@ function PosterLightbox({
             getItemLayout={(_, i) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * i, index: i })}
             onMomentumScrollEnd={(e) => setCurrent(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
             renderItem={({ item }) => (
-              <View style={lightboxStyles.page}>
-                <View style={lightboxStyles.posterFrame}>
+              <View style={lightbox.page}>
+                <View style={lightbox.frame}>
                   <Image source={{ uri: item.image_url }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
-                  {selectedId === item.id ? (
-                    <View style={lightboxStyles.chosenChip}>
-                      <Ionicons name="checkmark" size={14} color="#ffffff" />
-                      <Text style={lightboxStyles.chosenText}>Gewählt</Text>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             )}
           />
         ) : null}
-
-        <View style={lightboxStyles.dots}>
+        <View style={lightbox.dots}>
           {proposals.map((p, i) => (
-            <View key={p.id} style={[lightboxStyles.dot, i === current && lightboxStyles.dotActive]} />
+            <View key={p.id} style={[lightbox.dot, i === current && lightbox.dotActive]} />
           ))}
         </View>
-
-        {active ? (
-          <View style={lightboxStyles.bottomBar}>
-            {canChoose ? (
-              <TouchableOpacity style={lightboxStyles.choose} onPress={() => onChoose(active)}>
-                <Text style={lightboxStyles.chooseText}>Variante {variantLetter(active.variant)} wählen</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
-            <TouchableOpacity
-              style={lightboxStyles.save}
-              onPress={() => savePoster(active.image_url)}
-              accessibilityLabel="Plakat speichern"
-            >
-              <Ionicons name={SAVE_ICON} size={20} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </SafeAreaView>
     </Modal>
   );
 }
 
-export default function PosterProposalCard({
-  step,
-  hasOriginal,
-  onSelect,
-  onKeepOriginal,
-  onRegenerate,
-}: Props) {
+export default function PosterProposalCard({ step, onToggle }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [peekIndex, setPeekIndex] = useState<number | null>(null);
 
   if (step.status === 'dismissed') return null;
 
   const heading = step.mode === 'reformat' ? 'Dein Flyer im Plakatformat' : 'Zwei Plakat-Vorschläge';
   const sub =
     step.status === 'loading'
-      ? 'Ich gestalte zwei Plakate für dein Event. Das dauert etwa eine Minute.'
-      : step.status === 'chosen'
-        ? 'Dieses Plakat wird dein Veranstaltungsbild.'
-        : step.mode === 'reformat'
-          ? 'Gleicher Inhalt, sauber ins Hochformat gebracht. Tippe ein Plakat an, um es groß zu sehen.'
-          : 'Aus deinen Angaben gestaltet. Tippe ein Plakat an, um es groß zu sehen.';
-
-  const choose = (p: PosterOption) => {
-    setLightboxIndex(null);
-    onSelect(p);
-  };
+      ? 'Deine Plakate entstehen gerade.'
+      : 'Tippe ein Plakat an, um es als Bild zu verwenden.';
 
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>{heading}</Text>
       <Text style={styles.sub}>{sub}</Text>
-
-      {step.status === 'loading' ? (
-        <View style={styles.row}>
-          {[0, 1].map((i) => (
-            <View key={i} style={[styles.card, { backgroundColor: colors.cardPlaceholder }]}>
-              <ScanLine active height={CARD_HEIGHT} />
-            </View>
-          ))}
-        </View>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={CARD_WIDTH + CARD_GAP}
-          decelerationRate="fast"
-          contentContainerStyle={styles.row}
-        >
-          {step.proposals.map((p, i) => (
-            <PosterCard
-              key={p.id}
-              proposal={p}
-              selected={step.selectedId === p.id}
-              dimmed={step.status === 'chosen' && step.selectedId !== p.id}
-              interactive={step.status === 'ready'}
-              onOpen={() => setLightboxIndex(i)}
-              onSelect={() => choose(p)}
-              styles={styles}
-              colors={colors}
-            />
-          ))}
-        </ScrollView>
-      )}
-
-      {step.status === 'loading' || step.status === 'ready' ? (
-        <View style={styles.footer}>
-          <TouchableOpacity onPress={onKeepOriginal} hitSlop={8}>
-            <Text style={styles.footerLink}>{hasOriginal ? 'Mein Bild behalten' : 'Ohne Plakat weiter'}</Text>
-          </TouchableOpacity>
-          {step.status === 'ready' && step.canRegenerate ? (
-            <TouchableOpacity onPress={onRegenerate} hitSlop={8}>
-              <Text style={styles.footerLink}>Andere Vorschläge</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      <PosterLightbox
-        proposals={step.proposals}
-        index={lightboxIndex}
-        canChoose={step.status === 'ready'}
-        selectedId={step.selectedId}
-        onClose={() => setLightboxIndex(null)}
-        onChoose={choose}
-      />
+      <View style={styles.row}>
+        {step.status === 'loading'
+          ? [0, 1].map((i) => (
+              <View key={i} style={styles.tile}>
+                <View style={styles.card}>
+                  <Shimmer width={CARD_WIDTH} />
+                </View>
+                <View style={styles.nameSkeleton} />
+              </View>
+            ))
+          : step.proposals.map((p, i) => (
+              <PosterTile
+                key={p.id}
+                proposal={p}
+                selected={step.selectedId === p.id}
+                anySelected={step.selectedId !== null}
+                onToggle={() => onToggle(p)}
+                onPeek={() => setPeekIndex(i)}
+                colors={colors}
+                styles={styles}
+              />
+            ))}
+      </View>
+      <PosterLightbox proposals={step.proposals} index={peekIndex} onClose={() => setPeekIndex(null)} />
     </View>
   );
 }
@@ -411,15 +317,13 @@ function createStyles(colors: ColorTokens) {
     row: {
       flexDirection: 'row',
       gap: CARD_GAP,
-      paddingRight: 16,
-      paddingVertical: 4,
     },
-    cardColumn: {
+    tile: {
       width: CARD_WIDTH,
       gap: 8,
     },
     dimmed: {
-      opacity: 0.4,
+      opacity: 0.45,
     },
     card: {
       width: CARD_WIDTH,
@@ -428,73 +332,34 @@ function createStyles(colors: ColorTokens) {
       overflow: 'hidden',
       backgroundColor: colors.cardPlaceholder,
     },
-    aiChip: {
-      position: 'absolute',
-      left: 8,
-      top: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 999,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-    },
-    aiChipText: {
-      fontFamily: fontFamily.medium,
-      fontSize: 11,
-      color: '#ffffff',
-    },
     check: {
       position: 'absolute',
       right: 8,
       top: 8,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    label: {
-      fontFamily: fontFamily.medium,
-      fontSize: 14,
-      color: colors.textPrimary,
-    },
-    actions: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    choose: {
-      flex: 1,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    chooseText: {
-      fontFamily: fontFamily.semiBold,
-      fontSize: 14,
-    },
-    save: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      borderWidth: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    footer: {
-      flexDirection: 'row',
-      gap: 20,
-      marginTop: 12,
-    },
-    footerLink: {
+    name: {
       fontFamily: fontFamily.medium,
       fontSize: 14,
       color: colors.textSecondary,
-      textDecorationLine: 'underline',
+      textAlign: 'center',
+    },
+    nameSkeleton: {
+      alignSelf: 'center',
+      width: CARD_WIDTH * 0.45,
+      height: 12,
+      borderRadius: 6,
+      marginTop: 3,
+      backgroundColor: colors.cardPlaceholder,
     },
   });
 }
 
-const lightboxStyles = StyleSheet.create({
+const lightbox = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
@@ -506,7 +371,7 @@ const lightboxStyles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
   },
-  close: {
+  icon: {
     width: 40,
     height: 40,
     alignItems: 'center',
@@ -519,46 +384,22 @@ const lightboxStyles = StyleSheet.create({
     fontSize: 15,
     color: '#ffffff',
   },
-  counter: {
-    width: 40,
-    textAlign: 'right',
-    fontFamily: fontFamily.medium,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
-  },
   page: {
     width: SCREEN_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  posterFrame: {
+  frame: {
     width: LIGHTBOX_WIDTH,
     height: LIGHTBOX_HEIGHT,
     borderRadius: POSTER_RADIUS,
     overflow: 'hidden',
   },
-  chosenChip: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  chosenText: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 12,
-    color: '#ffffff',
-  },
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   dot: {
     width: 6,
@@ -568,34 +409,5 @@ const lightboxStyles = StyleSheet.create({
   },
   dotActive: {
     backgroundColor: '#ffffff',
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  choose: {
-    flex: 1,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chooseText: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 15,
-    color: '#000000',
-  },
-  save: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

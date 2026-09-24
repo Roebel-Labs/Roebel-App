@@ -8,7 +8,9 @@ import { buildPosterCopyPrompt, normalizePosterCopy, posterCopySchema, POSTER_CO
 import type { FetchedImage } from "./analyze";
 import type { PosterAnalysis, PosterContent, PosterCopy, PosterEventInput } from "./types";
 
-const MODEL = "claude-sonnet-4-6";
+// Haiku 4.5: measured 3.3-3.6 s vs Sonnet 4.6 7.9-8.2 s on a real flyer with
+// identical extracted fields (2026-09-23); this call sits in front of rendering.
+const MODEL = "claude-haiku-4-5";
 
 export const posterAnalysisSchema = z.object({
   kind: z.enum(["poster", "photo", "logo", "graphic", "screenshot"]),

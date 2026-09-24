@@ -7,6 +7,8 @@ import { classifyImage, draftPosterCopy } from "./ai";
 import { evaluateCaps } from "./caps";
 import {
   DEFAULT_DAILY_BUDGET_USD,
+  RENDER_PROFILES,
+  type RenderProfile,
   POSTER_STORAGE_BUCKET,
   POSTER_STORAGE_FOLDER,
   SETTING_BUDGET,
@@ -41,6 +43,8 @@ export interface ProposeContext {
   hint?: string | null;
   /** Generate even when the analysis says the current image is fine. */
   force?: boolean;
+  /** "fast" for the chats (a person waits), "quality" for the admin batch (default). */
+  profile?: RenderProfile;
 }
 
 export type PosterServiceErrorCode = "caps" | "not_found" | "render" | "billing" | "upload";
@@ -147,12 +151,16 @@ async function analyze(imageUrl: string | null | undefined): Promise<{
 async function renderWithRetry(
   prompt: string,
   image: FetchedImage | null,
-  model: string | null,
+  settingsModel: string | null,
+  profile: RenderProfile,
 ): Promise<RenderedPoster> {
+  const p = RENDER_PROFILES[profile];
   const input = {
     prompt,
     references: image ? [{ bytes: image.bytes, contentType: image.contentType }] : [],
-    model: model ?? undefined,
+    model: p.model ?? settingsModel ?? undefined,
+    quality: p.quality,
+    size: p.size,
   };
   const toServiceError = (error: unknown): PosterServiceError => {
     if (error instanceof PosterRenderError && !error.retryable) {
@@ -196,6 +204,10 @@ export async function proposePosters(input: ProposeInput, ctx: ProposeContext): 
   });
   if (!caps.ok) throw new PosterServiceError(caps.message, "caps");
 
+  // The optional copy only depends on the event data, so draft it in parallel
+  // with the image analysis (it is used for designed posters only).
+  const content = buildPosterContent(event);
+  const copyPromise = draftPosterCopy(event, content);
   const { image, ratio, analysis } = await analyze(event.image_url);
   const decided = decideMode(ratio, analysis);
   const check: PosterCheck = {
@@ -218,8 +230,7 @@ export async function proposePosters(input: ProposeInput, ctx: ProposeContext): 
   const mode: PosterMode = decided === "skip" ? "reformat" : decided;
   if (mode === "design" && !(event.title ?? "").trim()) return { skipped: "nothing_to_design", check };
 
-  const content = buildPosterContent(event);
-  const copy: PosterCopy | null = mode === "design" ? await draftPosterCopy(event, content) : null;
+  const copy: PosterCopy | null = mode === "design" ? await copyPromise : null;
   const directions = pickDirections(mode, event.category);
   const prompts = directions.map((direction) =>
     mode === "reformat" && analysis
@@ -231,7 +242,10 @@ export async function proposePosters(input: ProposeInput, ctx: ProposeContext): 
         }),
   );
 
-  const settled = await Promise.allSettled(prompts.map((p) => renderWithRetry(p, image, settings.model)));
+  const profile = ctx.profile ?? "quality";
+  const settled = await Promise.allSettled(
+    prompts.map((p) => renderWithRetry(p, image, settings.model, profile)),
+  );
   const rendered: RenderedPoster[] = [];
   const kept: number[] = [];
   settled.forEach((r, i) => {
