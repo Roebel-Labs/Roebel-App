@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { Share } from 'react-native';
+import { Platform, Share } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   togglePostLike,
@@ -251,11 +251,14 @@ export function usePostActions(walletAddress: string | undefined) {
   /**
    * Share a post via native share sheet
    */
-  const sharePost = useCallback(async (postId: string, content: string) => {
+  const sharePost = useCallback(async (postId: string, _content?: string) => {
+    // Share ONLY the Röbel post link. Sharing the post text too made
+    // messengers preview the first URL inside it (e.g. an external page)
+    // instead of the post. The link opens the post in the app (universal /
+    // app links) or on roebel.app, whose og: tags preview the post.
+    const url = `https://www.roebel.app/app/posts/${postId}`;
     try {
-      await Share.share({
-        message: `${content}\nhttps://www.roebel.app/app/posts/${postId}`,
-      });
+      await Share.share(Platform.OS === 'ios' ? { url } : { message: url });
     } catch (err) {
       console.error('Error sharing post:', err);
     }
