@@ -9,6 +9,8 @@ import { openAuthorProfile, canOpenProfile } from '@/lib/profile-navigation';
 import ImageZoomModal from '@/components/ImageZoomModal';
 import UserAvatarWithFrame from '@/components/UserAvatarWithFrame';
 import VerifiedBadge from '@/components/VerifiedBadge';
+import LinkifiedText from '@/components/feed/LinkifiedText';
+import { MECKY_WALLET } from '@/lib/mentions';
 import type { PostCommentRecord } from '@/lib/types/feed';
 
 import HeartIcon from '@/assets/icons/heart-02.svg';
@@ -46,10 +48,15 @@ export default function CommentItem({
   const initial = displayName.charAt(0).toUpperCase();
   const avatarSize = isReply ? 28 : 32;
 
-  const isInteractive = canOpenProfile({ author: comment.author, account: comment.author?.account });
-  const openProfile = isInteractive
-    ? () => openAuthorProfile(router, { author: comment.author, account: comment.author?.account })
-    : undefined;
+  // Mecky's answers: the name opens the Mecky chat instead of a profile.
+  const isMecky = comment.wallet_address === MECKY_WALLET;
+  const isInteractive =
+    isMecky || canOpenProfile({ author: comment.author, account: comment.author?.account });
+  const openProfile = isMecky
+    ? () => router.push('/messages/mecky' as any)
+    : isInteractive
+      ? () => openAuthorProfile(router, { author: comment.author, account: comment.author?.account })
+      : undefined;
 
   const liked = comment.liked_by_me ?? false;
   const likesCount = comment.likes_count ?? 0;
@@ -79,7 +86,13 @@ export default function CommentItem({
           <Pressable onPress={openProfile} disabled={!isInteractive} hitSlop={4}>
             <Text style={[styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
           </Pressable>
-          {isVerified && <VerifiedBadge size={14} />}
+          {isVerified && !isMecky && <VerifiedBadge size={14} />}
+          {/* AI Act Art. 50(1): mark AI-generated answers where they appear. */}
+          {isMecky && (
+            <Text style={[styles.aiTag, { color: colors.textTertiary, borderColor: colors.border }]}>
+              KI-Assistent
+            </Text>
+          )}
           <Text style={[styles.time, { color: colors.textTertiary }]}>
             · {formatRelativeTimestamp(comment.created_at)}
           </Text>
@@ -97,7 +110,12 @@ export default function CommentItem({
           )}
         </View>
         {comment.content ? (
-          <Text style={[styles.text, { color: colors.textPrimary }]}>{comment.content}</Text>
+          <LinkifiedText
+            content={comment.content}
+            style={[styles.text, { color: colors.textPrimary }]}
+            linkColor={colors.primary}
+            mentionColor={colors.primary}
+          />
         ) : null}
 
         {comment.sticker ? (
@@ -205,6 +223,15 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+  },
+  aiTag: {
+    fontSize: 10,
+    fontFamily: 'Inter-Medium',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    overflow: 'hidden',
   },
   text: {
     fontSize: 14,

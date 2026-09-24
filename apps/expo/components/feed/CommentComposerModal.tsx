@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/context/ThemeContext';
 import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
+import MentionSuggestions from '@/components/feed/MentionSuggestions';
+import { useMentionAutocomplete } from '@/hooks/useMentionAutocomplete';
 import { uploadMediaFile } from '@/lib/upload-media';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
@@ -61,6 +63,7 @@ export default function CommentComposerModal({
   const [pendingSticker, setPendingSticker] = useState<LootboxReward | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const mentions = useMentionAutocomplete(value, onChangeText, colors.primary);
 
   const canSubmit =
     (value.trim().length > 0 || !!pendingSticker || !!imageUrl) && !isSubmitting && !isUploading;
@@ -155,12 +158,20 @@ export default function CommentComposerModal({
               style={[styles.input, { color: colors.textPrimary }]}
               placeholder="Antwort schreiben..."
               placeholderTextColor={colors.textTertiary}
-              value={value}
               onChangeText={onChangeText}
+              onSelectionChange={mentions.onSelectionChange}
+              selection={mentions.selection}
               maxLength={MAX_COMMENT_LENGTH}
               multiline
               autoFocus
-            />
+            >
+              {/* Styled children instead of `value`: @Mecky renders in primary. */}
+              {mentions.children}
+            </TextInput>
+          </View>
+
+          <View style={styles.suggestions}>
+            <MentionSuggestions suggestions={mentions.suggestions} onPick={mentions.pick} />
           </View>
 
           {/* Attachment previews */}
@@ -301,6 +312,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     textAlignVertical: 'top',
     paddingTop: 6,
+  },
+  suggestions: {
+    paddingHorizontal: 16,
   },
   chip: {
     flexDirection: 'row',

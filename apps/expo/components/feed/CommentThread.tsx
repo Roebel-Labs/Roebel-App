@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '@/context/ThemeContext';
 import CommentItem from '@/components/feed/CommentItem';
 import type { PostCommentRecord } from '@/lib/types/feed';
@@ -14,7 +15,11 @@ type Props = {
   onEdit: (comment: PostCommentRecord) => void;
   onDelete: (comment: PostCommentRecord) => void;
   onToggleLike: (comment: PostCommentRecord) => void;
+  /** An @Mecky question in this thread is still being answered. */
+  meckyThinking?: boolean;
 };
+
+const MECKY_AVATAR = require('@/assets/illustration/mecky/welcome.png');
 
 export default function CommentThread({
   comment,
@@ -26,6 +31,7 @@ export default function CommentThread({
   onEdit,
   onDelete,
   onToggleLike,
+  meckyThinking = false,
 }: Props) {
   const { colors } = useTheme();
 
@@ -79,6 +85,16 @@ export default function CommentThread({
             onToggleLike={onToggleLike}
           />
         ))}
+
+      {meckyThinking && (
+        <View style={styles.thinking} accessibilityLiveRegion="polite">
+          <Image source={MECKY_AVATAR} style={styles.thinkingAvatar} contentFit="cover" />
+          <Text style={[styles.thinkingText, { color: colors.textSecondary }]}>
+            Mecky denkt nach…
+          </Text>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      )}
     </View>
   );
 }
@@ -101,6 +117,24 @@ const styles = StyleSheet.create({
   expanderText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+  },
+  thinking: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 40,
+    paddingRight: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+  },
+  thinkingAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  thinkingText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   loader: {
     paddingVertical: 8,

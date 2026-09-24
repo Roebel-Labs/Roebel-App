@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, type StyleProp, type TextStyle, type GestureResponderEvent } from 'react-native';
 import { openBrowserAsync } from 'expo-web-browser';
 import { parseLinkTokens } from '@/lib/utils/linkify';
+import { splitMentions } from '@/lib/mentions';
 
 type Props = {
   /** Raw post text. URLs inside it become tappable spans. */
@@ -11,6 +12,8 @@ type Props = {
   linkColor: string;
   /** Appended inline after the content (e.g. the "Mehr anzeigen" toggle). */
   children?: React.ReactNode;
+  /** When set, @-mentions (e.g. @Mecky) render in this color. */
+  mentionColor?: string;
 };
 
 /**
@@ -19,7 +22,7 @@ type Props = {
  * inert, so a card that wraps this in a Pressable still navigates on a normal
  * tap while a tap on a link opens the browser instead.
  */
-export default function LinkifiedText({ content, style, linkColor, children }: Props) {
+export default function LinkifiedText({ content, style, linkColor, children, mentionColor }: Props) {
   const tokens = parseLinkTokens(content);
 
   const openLink = (href: string) => (e: GestureResponderEvent) => {
@@ -39,6 +42,18 @@ export default function LinkifiedText({ content, style, linkColor, children }: P
             suppressHighlighting
           >
             {token.value}
+          </Text>
+        ) : mentionColor ? (
+          <Text key={i}>
+            {splitMentions(token.value).map((part, j) =>
+              part.type === 'mention' ? (
+                <Text key={j} style={{ color: mentionColor }}>
+                  {part.value}
+                </Text>
+              ) : (
+                part.value
+              ),
+            )}
           </Text>
         ) : (
           <Text key={i}>{token.value}</Text>

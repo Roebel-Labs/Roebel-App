@@ -10,6 +10,8 @@ import StickerEmojiPicker from '@/components/pickers/StickerEmojiPicker';
 import { uploadMediaFile } from '@/lib/upload-media';
 import { uploadForumFileFromBase64 } from '@/lib/forum-attachments';
 import FilePickerSheet from '@/components/forum/FilePickerSheet';
+import MentionSuggestions from '@/components/feed/MentionSuggestions';
+import { useMentionAutocomplete } from '@/hooks/useMentionAutocomplete';
 import type { PendingAttachment } from '@/lib/types/feed';
 import type { LootboxReward } from '@/lib/supabase-rewards';
 
@@ -52,6 +54,8 @@ type Props = {
   enableFiles?: boolean;
   /** Where picked images upload; defaults to the images bucket's comments folder. */
   uploadTarget?: { bucket: string; folder: string };
+  /** "@" proposes @Mecky and highlights mentions (post comments only). */
+  enableMentions?: boolean;
 };
 
 export default function CommentInput({
@@ -71,6 +75,7 @@ export default function CommentInput({
   disableStickers = false,
   enableFiles = false,
   uploadTarget,
+  enableMentions = false,
 }: Props) {
   const { colors, isDark } = useTheme();
   const inputRef = useRef<TextInput>(null);
@@ -82,6 +87,7 @@ export default function CommentInput({
   const [isFocused, setIsFocused] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
+  const mentions = useMentionAutocomplete(value, onChangeText, colors.primary);
 
   // Focus the field when a reply is started.
   useEffect(() => {
@@ -156,6 +162,9 @@ export default function CommentInput({
 
   return (
     <View>
+      {enableMentions && isFocused && (
+        <MentionSuggestions suggestions={mentions.suggestions} onPick={mentions.pick} />
+      )}
       {showPicker && (
         <StickerEmojiPicker
           onPickEmoji={(emoji) => {
@@ -243,8 +252,12 @@ export default function CommentInput({
             style={[styles.input, { color: colors.textPrimary, height: inputHeight }]}
             placeholder={placeholder}
             placeholderTextColor={colors.textTertiary}
-            value={value}
+            // With mentions the draft renders as styled children (primary
+            // colored @Mecky); otherwise a plain controlled value.
+            value={enableMentions ? undefined : value}
             onChangeText={onChangeText}
+            onSelectionChange={enableMentions ? mentions.onSelectionChange : undefined}
+            selection={enableMentions ? mentions.selection : undefined}
             onFocus={handleFocus}
             onBlur={handleBlur}
             onContentSizeChange={(e) => setContentHeight(e.nativeEvent.contentSize.height)}
@@ -252,7 +265,9 @@ export default function CommentInput({
             multiline
             scrollEnabled
             autoFocus={isEditMode}
-          />
+          >
+            {enableMentions ? mentions.children : undefined}
+          </TextInput>
 
           {!isEditMode && !disableAttachments && !disableStickers && (
             <Pressable

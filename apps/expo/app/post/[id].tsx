@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useGoBack } from '@/hooks/useGoBack';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { useTheme } from '@/context/ThemeContext';
@@ -38,6 +39,7 @@ import {
   DuplicateReportError,
 } from '@/lib/supabase-posts';
 import { isPostPinned, pinErrorMessage } from '@/lib/utils/pin';
+import { mentionsMecky, MECKY_WALLET } from '@/lib/mentions';
 import { trackPostViews, setViewTrackerWallet } from '@/lib/viewTracker';
 import type { PostRecord, PostCommentRecord } from '@/lib/types/feed';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,6 +85,8 @@ export default function PostDetailScreen() {
   const walletAddress = user?.wallet_address;
   const { showSnackbar } = useSnackbar();
   const requireAuth = useRequireAuth();
+  // Pause the post video while another screen (profile, likes …) is on top.
+  const isFocused = useIsFocused();
 
   const [post, setPost] = useState<PostRecord | null>(null);
   const [comments, setComments] = useState<PostCommentRecord[]>([]);
@@ -111,6 +115,10 @@ export default function PostDetailScreen() {
   const [commentDraft, setCommentDraft] = useState('');
   const [editDraft, setEditDraft] = useState('');
   const [composerVisible, setComposerVisible] = useState(false);
+  // Top-level comment ids whose @Mecky question is still being answered.
+  const [meckyThinking, setMeckyThinking] = useState<Set<string>>(new Set());
+  const unmountedRef = useRef(false);
+  useEffect(() => () => { unmountedRef.current = true; }, []);
   const activeProfileImage = useActiveProfileImage();
 
   const {
@@ -184,6 +192,40 @@ export default function PostDetailScreen() {
     getPostLikers(id, 5).then(setLikers);
   }, [id]);
 
+  // Mecky answers server-side (DB trigger → edge function, 10–90 s). This
+  // screen has no realtime channel, so poll the thread until the answer lands.
+  const awaitMeckyAnswer = async (rootId: string, askedAt: string) => {
+    setMeckyThinking((prev) => new Set(prev).add(rootId));
+    const deadline = Date.now() + 150_000;
+    try {
+      while (Date.now() < deadline && !unmountedRef.current) {
+        await new Promise((r) => setTimeout(r, 4000));
+        if (unmountedRef.current) return;
+        const replies = await fetchCommentReplies(rootId, walletAddress);
+        const answered = replies.some(
+          (r) => r.wallet_address === MECKY_WALLET && r.created_at > askedAt,
+        );
+        if (answered) {
+          setComments((prev) =>
+            prev.map((c) => (c.id === rootId ? { ...c, replies, reply_count: replies.length } : c)),
+          );
+          setExpandedThreads((prev) => new Set(prev).add(rootId));
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('[PostDetail.awaitMeckyAnswer]', e);
+    } finally {
+      if (!unmountedRef.current) {
+        setMeckyThinking((prev) => {
+          const next = new Set(prev);
+          next.delete(rootId);
+          return next;
+        });
+      }
+    }
+  };
+
   const handleConfirmRepost = async () => {
     if (!post) return;
     if (!walletAddress) {
@@ -253,6 +295,7 @@ export default function PostDetailScreen() {
         );
         Keyboard.dismiss();
         setCommentFocused(false);
+        if (mentionsMecky(content)) awaitMeckyAnswer(newComment.id, newComment.created_at);
       }
     } catch (err) {
       console.error('Error submitting comment:', err);
@@ -434,6 +477,7 @@ export default function PostDetailScreen() {
         setReplyingTo(null);
         Keyboard.dismiss();
         setCommentFocused(false);
+        if (mentionsMecky(content)) awaitMeckyAnswer(parentId, newReply.created_at);
       }
     } catch (err) {
       console.error('Error submitting reply:', err);
@@ -625,7 +669,7 @@ export default function PostDetailScreen() {
       )}
 
       {post.video_url && (
-        <PostVideoPlayer videoUrl={post.video_url} isVisible autoPlay startUnmuted />
+        <PostVideoPlayer videoUrl={post.video_url} isVisible={isFocused} autoPlay startUnmuted />
       )}
 
       {post.sticker && (
@@ -710,6 +754,7 @@ export default function PostDetailScreen() {
       onEdit={handleEditComment}
       onDelete={handleDeleteComment}
       onToggleLike={handleToggleCommentLike}
+      meckyThinking={meckyThinking.has(item.id)}
     />
   );
 
@@ -738,7 +783,10 @@ export default function PostDetailScreen() {
             data={comments}
             keyExtractor={(item) => item.id}
             renderItem={renderComment}
-            ListHeaderComponent={renderHeader}
+            // An ELEMENT, not the function: a fresh function each render is a
+            // new component type, so every keystroke in the comment bar
+            // remounted the header — restarting the video (pause/play flicker).
+            ListHeaderComponent={renderHeader()}
             onEndReached={hasMoreComments ? loadMoreComments : undefined}
             onEndReachedThreshold={0.3}
             refreshControl={
@@ -779,6 +827,7 @@ export default function PostDetailScreen() {
                 onCancel={() => setEditingComment(null)}
                 onFocusChange={setCommentFocused}
                 walletAddress={walletAddress}
+                enableMentions
               />
             ) : (
               <CommentInput
@@ -793,6 +842,7 @@ export default function PostDetailScreen() {
                 avatarUrl={activeProfileImage.url}
                 avatarFallbackInitial={activeProfileImage.fallbackInitial}
                 onExpand={() => setComposerVisible(true)}
+                enableMentions
               />
             )}
           </View>
