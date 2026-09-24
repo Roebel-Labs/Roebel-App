@@ -12,8 +12,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useRouter, useLocalSearchParams, useIsFocused } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
 import MeckyNotFound from '@/components/MeckyNotFound';
 import { useTheme } from '@/context/ThemeContext';
