@@ -525,7 +525,10 @@ export type Account = {
 };
 
 /** The columns OrgAccountCard reads — what the Erkunden rail fetches. */
-export type OrgAccountCardRecord = Pick<Account, 'id' | 'name' | 'avatar_url' | 'cover_url'>;
+export type OrgAccountCardRecord = Pick<
+  Account,
+  'id' | 'name' | 'avatar_url' | 'cover_url' | 'address' | 'is_verified'
+>;
 
 // ── Org sub-type labels & feature gating ──────────────────────────
 

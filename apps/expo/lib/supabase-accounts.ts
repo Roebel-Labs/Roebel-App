@@ -62,7 +62,7 @@ export async function fetchOrgAccountsBySubType(subType: OrgSubType): Promise<Ac
 export async function fetchOrgAccountCards(subType: OrgSubType): Promise<OrgAccountCardRecord[]> {
   const { data, error } = await supabase
     .from('accounts' as any)
-    .select('id, name, avatar_url, cover_url')
+    .select('id, name, avatar_url, cover_url, address, is_verified')
     .eq('account_type', 'organisation')
     .eq('sub_type', subType)
     .order('name', { ascending: true });

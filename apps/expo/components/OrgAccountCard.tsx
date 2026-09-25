@@ -3,29 +3,38 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
-import ThumbsVote from '@/components/ThumbsVote';
-import type { OrgAccountCardRecord } from '@/lib/types';
+import { StarIcon } from '@/components/Icons';
+import BadgeCheckIcon from '@/assets/icons/badge-check.svg';
+import { VERIFIED_GOLD } from '@/components/profile/IdentityRow';
+import { placeCardStyles as styles } from '@/components/GastroCard';
+import { formatRating } from '@/lib/org-profile';
+import type { AccountRatingSummary, OrgAccountCardRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
 
-const CARD_WIDTH = 168;
-const COVER_HEIGHT = 100;
-const COVER_RADIUS = 16;
-const AVATAR_SIZE = 56;
+const STAR_GOLD = '#FFB400';
 
 type Props = {
   account: OrgAccountCardRecord;
   upCount: number | null;
+  ratingSummary?: AccountRatingSummary | null;
 };
 
 /**
- * Uber-Eats-style org-account card, shaped like GastroCard: a borderless,
- * fully-rounded banner cover image with the account's logo as a circular
- * avatar (thick background-color border) overlapping the bottom, the name
- * below (medium weight) and a read-only thumbs-up count.
+ * Large org-account card for the Erkunden rail, same shape as GastroCard:
+ * wide cover (logo centred when there is none) with a "Verifiziert" pill,
+ * then name + star rating, address and a category · recommendations line.
  */
-function OrgAccountCard({ account, upCount }: Props) {
+function OrgAccountCard({ account, upCount, ratingSummary }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
+
+  const hasRatings = !!ratingSummary && ratingSummary.rating_count > 0;
+  const ratingText = ratingSummary ? formatRating(ratingSummary.avg_stars) : '';
+  const ups = upCount ?? 0;
+  const metaParts = [
+    'Unternehmen',
+    ups > 0 ? `${ups} ${ups === 1 ? 'Empfehlung' : 'Empfehlungen'}` : null,
+  ].filter(Boolean);
 
   return (
     <Pressable
@@ -34,95 +43,68 @@ function OrgAccountCard({ account, upCount }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${account.name} ansehen`}
     >
-      <View style={[styles.coverWrap, { backgroundColor: colors.cardPlaceholder }]}>
+      <View style={[styles.cover, { backgroundColor: colors.cardPlaceholder }]}>
         {account.cover_url ? (
           <Image
-            source={{ uri: transformedImageUrl(account.cover_url, { width: 640 }) ?? undefined }}
+            source={{ uri: transformedImageUrl(account.cover_url, { width: 840 }) ?? undefined }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={account.cover_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
-        ) : null}
-      </View>
-
-      <View style={[styles.avatarWrap, { borderColor: colors.background }]}>
-        {account.avatar_url ? (
+        ) : account.avatar_url ? (
           <Image
-            source={{ uri: transformedImageUrl(account.avatar_url, { width: 160 }) ?? undefined }}
-            style={styles.avatarImage}
+            source={{ uri: transformedImageUrl(account.avatar_url, { width: 220 }) ?? undefined }}
+            style={styles.logo}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={account.avatar_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
         ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.avatarInitial, { color: colors.textPrimary }]}>
-              {(account.name[0] || '?').toUpperCase()}
-            </Text>
-          </View>
+          <Text style={[local.initial, { color: colors.textSecondary }]}>
+            {(account.name[0] || '?').toUpperCase()}
+          </Text>
         )}
+
+        {account.is_verified ? (
+          <View style={styles.pill}>
+            <BadgeCheckIcon width={18} height={18} color={VERIFIED_GOLD} />
+            <Text style={styles.pillText}>Verifiziert</Text>
+          </View>
+        ) : null}
       </View>
 
-      <View style={styles.info}>
+      <View style={styles.titleRow}>
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {account.name}
         </Text>
-        <ThumbsVote upCount={upCount ?? 0} size="md" />
+        {hasRatings ? (
+          <View style={styles.rating}>
+            <StarIcon size={16} color={STAR_GOLD} />
+            <Text style={[styles.ratingValue, { color: colors.textPrimary }]}>
+              {ratingText}
+            </Text>
+          </View>
+        ) : null}
       </View>
+      {account.address ? (
+        <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
+          {account.address}
+        </Text>
+      ) : null}
+      <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
+        {metaParts.join('  ·  ')}
+      </Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    width: CARD_WIDTH,
-    marginRight: 12,
-    paddingBottom: 12,
-  },
-  coverWrap: {
-    width: '100%',
-    height: COVER_HEIGHT,
-    borderRadius: COVER_RADIUS,
-    overflow: 'hidden',
-  },
-  avatarWrap: {
-    position: 'absolute',
-    top: COVER_HEIGHT - AVATAR_SIZE / 2,
-    left: '50%',
-    marginLeft: -AVATAR_SIZE / 2,
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 3,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    fontSize: 20,
-    fontFamily: 'Inter-Medium',
-  },
-  info: {
-    alignItems: 'center',
-    paddingTop: AVATAR_SIZE / 2 + 8,
-    paddingHorizontal: 8,
-    gap: 6,
-  },
-  name: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    textAlign: 'center',
+const local = StyleSheet.create({
+  initial: {
+    fontSize: 40,
+    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });
 

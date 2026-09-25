@@ -4,192 +4,175 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { StarIcon } from '@/components/Icons';
-import { isRestaurantOpen } from '@/lib/utils';
+import { describeOpenState, formatRating } from '@/lib/org-profile';
 import type { AccountRatingSummary, RestaurantRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
 
-const CARD_WIDTH = 168;
-const COVER_HEIGHT = 100;
+export const PLACE_CARD_WIDTH = 280;
+export const PLACE_COVER_HEIGHT = 186;
 const COVER_RADIUS = 16;
-const AVATAR_SIZE = 56;
+const LOGO_SIZE = 72;
+const STAR_GOLD = '#FFB400';
 
 type Props = {
   restaurant: RestaurantRecord;
   ratingSummary: AccountRatingSummary | null;
 };
 
-function formatCount(n: number): string {
-  if (n >= 100) return `${Math.floor(n / 100) * 100}+`;
-  return String(n);
-}
-
 /**
- * Gastro card for the Explore section, shaped like OrgAccountCard but
- * borderless: a fully-rounded banner image (cover, falling back to the
- * restaurant's brand color), circular logo avatar overlapping the banner,
- * name, then a small black-star rating + Geöffnet/Geschlossen pill.
+ * Large gastro card for the Erkunden rail: a wide photo with an open/closed
+ * pill, then name + star rating, address, and the open-state detail line.
+ * Without a cover photo the logo sits centred on the brand colour.
  */
 function GastroCard({ restaurant, ratingSummary }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const { isOpen } = isRestaurantOpen(restaurant.opening_hours);
-  const hasRatings = !!ratingSummary && ratingSummary.rating_count > 0;
-  const avg = hasRatings ? ratingSummary!.avg_stars.toFixed(1) : '–';
+  const openState = describeOpenState(restaurant.opening_hours);
+  const ratingCount = ratingSummary?.rating_count ?? 0;
+  const hasRatings = ratingCount > 0;
+  const ratingText = ratingSummary ? formatRating(ratingSummary.avg_stars) : '';
+  const metaParts = [
+    'Gastronomie',
+    hasRatings ? `${ratingCount} ${ratingCount === 1 ? 'Bewertung' : 'Bewertungen'}` : null,
+  ].filter(Boolean);
 
   return (
     <Pressable
       onPress={() => router.push(`/restaurant/${restaurant.slug}` as any)}
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
       accessibilityRole="button"
-      accessibilityLabel={`${restaurant.name} Speisekarte ansehen`}
+      accessibilityLabel={`${restaurant.name} ansehen`}
     >
       <View
         style={[
-          styles.coverWrap,
+          styles.cover,
           { backgroundColor: restaurant.background_color || colors.cardPlaceholder },
         ]}
       >
         {restaurant.cover_image_url ? (
           <Image
-            source={{ uri: transformedImageUrl(restaurant.cover_image_url, { width: 640 }) ?? undefined }}
+            source={{ uri: transformedImageUrl(restaurant.cover_image_url, { width: 840 }) ?? undefined }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={restaurant.cover_image_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
-        ) : null}
-      </View>
-
-      <View style={[styles.avatarWrap, { borderColor: colors.background }]}>
-        {restaurant.logo_url ? (
+        ) : restaurant.logo_url ? (
           <Image
-            source={{ uri: transformedImageUrl(restaurant.logo_url, { width: 160 }) ?? undefined }}
-            style={styles.avatarImage}
+            source={{ uri: transformedImageUrl(restaurant.logo_url, { width: 220 }) ?? undefined }}
+            style={styles.logo}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={restaurant.logo_url ?? undefined}
             accessibilityIgnoresInvertColors
           />
-        ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.avatarInitial, { color: colors.textPrimary }]}>
-              {(restaurant.name[0] || '?').toUpperCase()}
-            </Text>
+        ) : null}
+
+        {openState ? (
+          <View style={styles.pill}>
+            <View
+              style={[styles.pillDot, { backgroundColor: openState.isOpen ? '#16a34a' : '#9ca3af' }]}
+            />
+            <Text style={styles.pillText}>{openState.label}</Text>
           </View>
-        )}
+        ) : null}
       </View>
 
-      <View style={styles.info}>
+      <View style={styles.titleRow}>
         <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
           {restaurant.name}
         </Text>
-        <View style={styles.metaRow}>
+        {hasRatings ? (
           <View style={styles.rating}>
-            <Text style={[styles.ratingValue, { color: colors.textPrimary }]}>{avg}</Text>
-            <StarIcon size={12} color={colors.textPrimary} />
-            {hasRatings && (
-              <Text style={[styles.ratingCount, { color: colors.textSecondary }]}>
-                ({formatCount(ratingSummary!.rating_count)})
-              </Text>
-            )}
-          </View>
-          <View
-            style={[
-              styles.pill,
-              { backgroundColor: isOpen ? colors.successBackground : colors.surfaceSecondary },
-            ]}
-          >
-            <Text
-              style={[styles.pillText, { color: isOpen ? colors.success : colors.textSecondary }]}
-            >
-              {isOpen ? 'Geöffnet' : 'Geschlossen'}
+            <StarIcon size={16} color={STAR_GOLD} />
+            <Text style={[styles.ratingValue, { color: colors.textPrimary }]}>
+              {ratingText}
             </Text>
           </View>
-        </View>
+        ) : null}
       </View>
+      {restaurant.address ? (
+        <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
+          {restaurant.address}
+        </Text>
+      ) : null}
+      <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
+        {metaParts.join('  ·  ')}
+      </Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+export const placeCardStyles = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
-    marginRight: 12,
-    paddingBottom: 12,
+    width: PLACE_CARD_WIDTH,
+    marginRight: 14,
+    paddingBottom: 8,
   },
-  coverWrap: {
+  cover: {
     width: '100%',
-    height: COVER_HEIGHT,
+    height: PLACE_COVER_HEIGHT,
     borderRadius: COVER_RADIUS,
     overflow: 'hidden',
-  },
-  avatarWrap: {
-    position: 'absolute',
-    top: COVER_HEIGHT - AVATAR_SIZE / 2,
-    left: '50%',
-    marginLeft: -AVATAR_SIZE / 2,
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 3,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: {
-    fontSize: 20,
-    fontFamily: 'Inter-Medium',
+  logo: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: LOGO_SIZE / 2,
   },
-  info: {
+  pill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: AVATAR_SIZE / 2 + 8,
-    paddingHorizontal: 8,
     gap: 6,
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.94)',
   },
-  name: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    textAlign: 'center',
+  pillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  metaRow: {
+  pillText: {
+    fontSize: 14,
+    fontFamily: 'MonaSans-SemiBold',
+    color: '#000000',
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 12,
+  },
+  name: {
+    flex: 1,
+    fontSize: 18,
+    fontFamily: 'MonaSans-SemiBold',
   },
   rating: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
   ratingValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+    fontFamily: 'MonaSans-SemiBold',
   },
-  ratingCount: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-  },
-  pill: {
-    height: 22,
-    paddingHorizontal: 8,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
+  line: {
+    fontSize: 15,
+    fontFamily: 'MonaSans-Regular',
+    marginTop: 3,
   },
 });
+
+const styles = placeCardStyles;
 
 export default memo(GastroCard);

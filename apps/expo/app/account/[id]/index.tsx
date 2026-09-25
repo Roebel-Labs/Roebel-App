@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Linking,
+  Share,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,7 +16,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { useUser } from '@/context/UserContext';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
-import UserIcon from '@/assets/icons/user.svg';
 import PencilEditIcon from '@/assets/icons/pencil-edit-01.svg';
 import AvatarStack from '@/components/AvatarStack';
 import ProfileTabs from '@/components/profile/ProfileTabs';
@@ -23,13 +23,16 @@ import ProfileOfferRows from '@/components/profile/ProfileOfferRows';
 import AccountPostsList from '@/components/profile/AccountPostsList';
 import { Skeleton } from '@/components/SkeletonLoader';
 import InlineErrorBoundary from '@/components/InlineErrorBoundary';
-import HeaderFloatingActions from '@/components/HeaderFloatingActions';
 import RatingModal from '@/components/RatingModal';
-import RatingSummary from '@/components/RatingSummary';
 import MenuSearchModal from '@/components/MenuSearchModal';
 import FeaturedMenuItemsGrid from '@/components/FeaturedMenuItemsGrid';
 import MenuItemThumbs from '@/components/MenuItemThumbs';
 import ThumbsVote from '@/components/ThumbsVote';
+import OrgProfileHero, { HERO_HEIGHT, SHEET_OVERLAP, type HeroAction } from '@/components/org/OrgProfileHero';
+import BusinessProfileView from '@/components/org/BusinessProfileView';
+import { SearchIcon } from '@/components/Icons';
+import { useOrgSheetData } from '@/hooks/useOrgSheetData';
+import { describeOpenState, formatListingPrice as formatPrice, orgCategoryLabel, orgShareUrl } from '@/lib/org-profile';
 import StickyCategoryBar from '@/components/StickyCategoryBar';
 import MenuCategoriesSheet from '@/components/MenuCategoriesSheet';
 import { useAccountRating } from '@/hooks/useAccountRating';
@@ -56,7 +59,6 @@ import {
 } from '@/lib/types';
 import type { PostRecord } from '@/lib/types/feed';
 
-const AVATAR_SIZE = 120;
 const STICKY_OFFSET = 56;
 
 type TabKey = 'menu' | 'info' | 'posts';
@@ -99,12 +101,6 @@ function formatEventDate(date: string | null | undefined, time: string | null): 
   }
 }
 
-function formatPrice(price: number | null | undefined, priceType: string): string {
-  if (priceType === 'free') return 'Gratis';
-  if (typeof price !== 'number' || !Number.isFinite(price)) return '';
-  const formatted = price.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  return `${formatted} €${priceType === 'negotiable' ? ' VB' : ''}`;
-}
 
 export default function PublicAccountScreen() {
   return (
@@ -146,7 +142,7 @@ function PublicAccountScreenInner() {
   // Y of the in-flow sticky-bar slot; used to decide when to show the
   // absolute overlay copy of the bar.
   const slot5Y = React.useRef<number>(Number.POSITIVE_INFINITY);
-  const { summary: ratingSummary, userRating } = useAccountRating(account?.id ?? null);
+  const { summary: ratingSummary } = useAccountRating(account?.id ?? null);
   const {
     summary: voteSummary,
     userVote: accountUserVote,
@@ -154,6 +150,9 @@ function PublicAccountScreenInner() {
     setVote: setAccountVote,
     clearVote: clearAccountVoteState,
   } = useAccountVote(account?.id ?? null);
+  // Photos, comments (with replies) and the "Merken" save state — the same
+  // data the map sheet shows for this org.
+  const sheet = useOrgSheetData(account?.id ?? null);
   const isRestaurant = account?.sub_type === 'restaurant';
   const gastroData = useGastroData(isRestaurant ? account?.id : null);
 
@@ -359,6 +358,105 @@ function PublicAccountScreenInner() {
     !!orgLocation &&
     Number.isFinite(orgLocation.lat) &&
     Number.isFinite(orgLocation.lon);
+
+  const address = orgLocation?.address ?? account.address ?? null;
+  const heroImages = [
+    ...new Set(
+      [account.cover_url, ...sheet.photos.map((p) => p.url)].filter((u): u is string => !!u)
+    ),
+  ];
+  const heroRating = sheet.ratingSummary ?? ratingSummary;
+  const liked = sheet.mySave != null;
+  const toggleLike = () => {
+    if (!user?.wallet_address) {
+      router.push('/login');
+      return;
+    }
+    // Heart = "Merken"; tapping while saved (either state) clears it.
+    void sheet.setSave(sheet.mySave ?? 'to_try');
+  };
+  const shareAccount = () => {
+    Share.share({ message: `${account.name}\n${orgShareUrl(account)}` }).catch(() => undefined);
+  };
+  const closeRatingModal = () => {
+    setRatingModalOpen(false);
+    void sheet.refresh();
+  };
+  const heroActions: HeroAction[] = [
+    ...(isRestaurant
+      ? [{
+          key: 'search',
+          icon: <SearchIcon size={22} color={colors.textPrimary} />,
+          onPress: () => setSearchModalOpen(true),
+          accessibilityLabel: 'Speisekarte durchsuchen',
+        }]
+      : []),
+    ...(canEdit
+      ? [{
+          key: 'edit',
+          icon: <PencilEditIcon width={20} height={20} color={colors.textPrimary} />,
+          onPress: () => goToOwnerScreen('/edit-org'),
+          accessibilityLabel: 'Profil bearbeiten',
+        }]
+      : []),
+  ];
+
+  const hero = (
+    <OrgProfileHero
+      images={heroImages}
+      name={account.name}
+      verified={account.is_verified}
+      category={orgCategoryLabel(account, orgLocation?.business)}
+      ratingSummary={heroRating}
+      openState={describeOpenState(openingHours)}
+      address={address}
+      onOpenLocation={hasValidCoords ? openMap : undefined}
+      onRatingPress={() => setRatingModalOpen(true)}
+      onBack={goBack}
+      onShare={shareAccount}
+      liked={liked}
+      onToggleLike={toggleLike}
+      extraActions={heroActions}
+    />
+  );
+
+  if (account.sub_type === 'unternehmen') {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <BusinessProfileView
+          account={account}
+          hero={hero}
+          members={members}
+          services={services}
+          products={products}
+          deals={safeDeals}
+          events={safeEvents}
+          blog={safeBlog}
+          postsCount={posts.length}
+          openingHours={openingHours}
+          phone={orgLocation?.business?.phone ?? null}
+          website={orgLocation?.business?.website_url ?? null}
+          address={address}
+          ratingSummary={heroRating}
+          comments={sheet.comments}
+          liked={liked}
+          canEdit={canEdit}
+          onBack={goBack}
+          onShare={shareAccount}
+          onToggleLike={toggleLike}
+          onRate={() => setRatingModalOpen(true)}
+          onOpenMap={hasValidCoords ? openMap : undefined}
+          onEditHours={() => goToOwnerScreen('/org/opening-hours')}
+        />
+        <RatingModal
+          visible={ratingModalOpen}
+          accountId={account.id}
+          accountName={account.name}
+          onClose={closeRatingModal}
+        />
+      </View>
+    );
+  }
 
   const renderInfoTab = () => (
     <>
@@ -703,7 +801,7 @@ function PublicAccountScreenInner() {
   const showStickyBar = activeTab === 'menu' && isRestaurant && gastroData.categories.length > 0;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={[]}>
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -711,85 +809,17 @@ function PublicAccountScreenInner() {
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        {/* Banner with back button */}
-        <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
-          {account.cover_url ? (
-            <Image
-              source={{ uri: account.cover_url }}
-              style={StyleSheet.absoluteFill as any}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          ) : null}
-          <Pressable
-            onPress={goBack}
-            style={[styles.backPill, { backgroundColor: colors.background }]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <ChevronLeftIcon width={24} height={24} color={colors.textPrimary} />
-          </Pressable>
-          <HeaderFloatingActions
-            actions={[
-              ...(account.sub_type === 'restaurant'
-                ? [{ kind: 'search' as const, onPress: () => setSearchModalOpen(true), accessibilityLabel: 'Speisekarte durchsuchen' }]
-                : []),
-              { kind: 'rate' as const, onPress: () => setRatingModalOpen(true), active: !!userRating, accessibilityLabel: 'Bewerten' },
-            ]}
-          />
-        </View>
+        {hero}
 
-        {/* Avatar overlapping banner */}
-        <View style={styles.identityRow}>
-          {account.avatar_url ? (
-            <Image
-              source={{ uri: account.avatar_url }}
-              style={[styles.avatar, { borderColor: colors.background }]}
-              contentFit="cover"
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            <View
-              style={[
-                styles.avatarPlaceholder,
-                { backgroundColor: colors.cardPlaceholder, borderColor: colors.background },
-              ]}
-            >
-              <UserIcon width={48} height={48} color={colors.textTertiary} />
-            </View>
-          )}
-          {canEdit ? (
-            <View style={styles.identityActions}>
-              <Pressable
-                onPress={() => goToOwnerScreen('/edit-org')}
-                style={[styles.editPill, { borderColor: colors.borderSecondary, backgroundColor: colors.background }]}
-                accessibilityRole="button"
-                accessibilityLabel="Profil bearbeiten"
-              >
-                <Text style={[styles.editPillText, { color: colors.textPrimary }]}>Bearbeiten</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Identity block */}
+        {/* Extern status, bio and thumbs vote under the identity header */}
         <View style={styles.identityBlock}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>
-              {account.name}
-            </Text>
-          </View>
-
           {showExternBadge && (
             <View style={styles.pillRow}>
-              {showExternBadge && (
-                <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
-                  <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
-                    Extern · {account.extern_status === 'pending' ? 'in Prüfung' : 'abgelehnt'}
-                  </Text>
-                </View>
-              )}
+              <View style={[styles.subTypePill, { backgroundColor: colors.surfaceSecondary }]}>
+                <Text style={[styles.subTypeText, { color: colors.textSecondary }]}>
+                  Extern · {account.extern_status === 'pending' ? 'in Prüfung' : 'abgelehnt'}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -797,13 +827,7 @@ function PublicAccountScreenInner() {
             <Text style={[styles.bioText, { color: colors.textPrimary }]}>{account.bio}</Text>
           ) : null}
 
-          {(ratingSummary?.rating_count ?? 0) > 0 && (
-            <View style={{ marginTop: 8 }}>
-              <RatingSummary summary={ratingSummary} />
-            </View>
-          )}
-
-          <View style={{ marginTop: 12 }}>
+          <View>
             <ThumbsVote
               interactive
               size="md"
@@ -982,7 +1006,7 @@ function PublicAccountScreenInner() {
         visible={ratingModalOpen}
         accountId={account.id}
         accountName={account.name}
-        onClose={() => setRatingModalOpen(false)}
+        onClose={closeRatingModal}
       />
       {isRestaurant && (
         <MenuCategoriesSheet
@@ -1011,14 +1035,15 @@ function PublicAccountScreenInner() {
 // flashing variants.
 function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Banner — same height & box as the loaded screen */}
-        <View style={[styles.bannerWrap, { backgroundColor: colors.cardPlaceholder }]}>
+        {/* Photo — same height as OrgProfileHero */}
+        <View style={{ height: HERO_HEIGHT, backgroundColor: colors.cardPlaceholder }}>
           <Pressable
             onPress={onBack}
-            style={[styles.backPill, { backgroundColor: colors.background }]}
+            style={[styles.backPill, { top: insets.top + 8, backgroundColor: colors.background }]}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Zurück"
@@ -1027,35 +1052,16 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
           </Pressable>
         </View>
 
-        {/* Avatar overlapping banner — same size & position */}
-        <View style={styles.identityRow}>
-          <Skeleton
-            width={AVATAR_SIZE}
-            height={AVATAR_SIZE}
-            borderRadius={AVATAR_SIZE / 2}
-            style={{ borderWidth: 4, borderColor: colors.background } as any}
-          />
+        {/* Rounded info sheet — name, category, meta line, location row */}
+        <View style={[styles.skeletonSheet, { backgroundColor: colors.background }]}>
+          <Skeleton width={'75%' as any} height={30} borderRadius={6} />
+          <Skeleton width={110} height={16} borderRadius={4} />
+          <Skeleton width={'70%' as any} height={16} borderRadius={4} />
+          <Skeleton width={'100%' as any} height={52} borderRadius={14} />
         </View>
 
-        {/* Identity block — name + sub-type pill + bio lines */}
-        <View style={styles.identityBlock}>
-          <Skeleton width={'60%' as any} height={26} borderRadius={6} />
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            <Skeleton width={120} height={26} borderRadius={13} />
-          </View>
-          <Skeleton width={'100%' as any} height={16} borderRadius={4} />
-          <Skeleton width={'85%' as any} height={16} borderRadius={4} />
-        </View>
-
-        {/* Tabs strip placeholder — matches ProfileTabs visual weight */}
-        <View style={[styles.tabsWrap, { flexDirection: 'row', gap: 18, paddingHorizontal: 16 }]}>
-          <Skeleton width={90} height={20} borderRadius={6} />
-          <Skeleton width={48} height={20} borderRadius={6} />
-          <Skeleton width={70} height={20} borderRadius={6} />
-        </View>
-
-        {/* Menu row placeholders — pixel-aligned with gastroItemRow */}
-        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+        {/* Content rows */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 24 }}>
           {[0, 1, 2, 3].map((i) => (
             <View key={i} style={styles.gastroItemRow}>
               <View style={{ flex: 1, gap: 8 }}>
@@ -1068,7 +1074,7 @@ function AccountPageSkeleton({ onBack }: { onBack: () => void }) {
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1105,19 +1111,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  bannerWrap: {
-    width: '100%',
-    height: 200,
-    overflow: 'hidden',
-    position: 'relative',
-  },
   backPill: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -1126,67 +1125,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginTop: -(AVATAR_SIZE / 2),
-  },
-  identityActions: {
-    paddingBottom: 8,
-  },
-  editPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  editPillText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-  },
   identityBlock: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 16,
     gap: 10,
   },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 4,
-  },
-  avatarPlaceholder: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  name: {
-    fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    flexShrink: 1,
-  },
-  verifiedBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifiedCheck: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
+  skeletonSheet: {
+    marginTop: -SHEET_OVERLAP,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    gap: 12,
   },
   pillRow: {
     flexDirection: 'row',
