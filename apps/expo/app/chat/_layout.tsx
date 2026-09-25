@@ -6,7 +6,9 @@ import { ChatProvider } from '@/context/ChatContext';
 export default function ChatLayout() {
   return (
     <ChatProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'default' }} />
+      <Stack screenOptions={{ headerShown: false, animation: 'default' }}>
+        <Stack.Screen name="ultra" options={{ presentation: 'modal' }} />
+      </Stack>
     </ChatProvider>
   );
 }

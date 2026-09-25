@@ -25,3 +25,4 @@ export * from './MentionPopover';
 export * from './MessageActionSheet';
 export * from './FileSheet';
 export * from './UltraPaywall';
+export * from './BotSheet';
