@@ -3,7 +3,10 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { MeckyDraft } from "@/types/mecky"
-import { generateMeckyDrafts } from "@/app/api/cron/mecky/generate"
+import {
+  createMeckyDraftFromLink,
+  generateMeckyDrafts,
+} from "@/app/api/cron/mecky/generate"
 import type { MeckyTimeWindow } from "@/app/api/cron/mecky/rss"
 import { createAppNotification } from "@/app/actions/app-notifications"
 
@@ -28,6 +31,24 @@ export async function triggerMeckyGeneration(
     }
   } catch (error) {
     console.error("Error triggering Mecky generation:", error)
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Unbekannter Fehler",
+    }
+  }
+}
+
+export async function submitMeckyLink(
+  url: string,
+  notes?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const result = await createMeckyDraftFromLink(url, notes)
+    revalidatePath("/admin/dashboard/mecky")
+    return { success: result.success, message: result.message }
+  } catch (error) {
+    console.error("Error creating Mecky draft from link:", error)
     return {
       success: false,
       message:

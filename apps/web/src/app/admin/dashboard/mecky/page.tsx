@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -35,6 +37,7 @@ import {
   Sparkles,
   Trash2,
   CalendarRange,
+  Link2,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -43,6 +46,7 @@ import {
   rejectMeckyDraft,
   deleteMeckyDraft,
   triggerMeckyGeneration,
+  submitMeckyLink,
 } from "@/app/actions/mecky"
 import type { MeckyDraft } from "@/types/mecky"
 import type { MeckyTimeWindow } from "@/app/api/cron/mecky/rss"
@@ -66,6 +70,9 @@ export default function MeckyDashboardPage() {
   const [generating, setGenerating] = useState(false)
   const [statusFilter, setStatusFilter] = useState("pending")
   const [timeWindow, setTimeWindow] = useState<MeckyTimeWindow>("48h")
+  const [linkUrl, setLinkUrl] = useState("")
+  const [linkNotes, setLinkNotes] = useState("")
+  const [submittingLink, setSubmittingLink] = useState(false)
 
   const fetchDrafts = useCallback(async () => {
     try {
@@ -169,6 +176,30 @@ export default function MeckyDashboardPage() {
       toast.error("Fehler bei der Generierung", { id: loadingToast })
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleSubmitLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!linkUrl.trim()) return
+    setSubmittingLink(true)
+    const loadingToast = toast.loading("Mecky schreibt einen Post zum Artikel...")
+
+    try {
+      const result = await submitMeckyLink(linkUrl, linkNotes)
+      if (result.success) {
+        toast.success("Neuer Vorschlag erstellt!", { id: loadingToast })
+        setLinkUrl("")
+        setLinkNotes("")
+        setStatusFilter("pending")
+        fetchDrafts()
+      } else {
+        toast.error("Fehler", { id: loadingToast, description: result.message })
+      }
+    } catch {
+      toast.error("Fehler beim Erstellen des Vorschlags", { id: loadingToast })
+    } finally {
+      setSubmittingLink(false)
     }
   }
 
@@ -289,6 +320,49 @@ export default function MeckyDashboardPage() {
           </Select>
         </div>
       </div>
+
+      {/* Hand Mecky a specific article (sources without a feed, e.g. Nordkurier) */}
+      <form
+        onSubmit={handleSubmitLink}
+        className="bg-card border border-border rounded-[10px] p-5 space-y-3"
+      >
+        <div className="flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Artikel per Link vorschlagen</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Für Artikel, die Mecky nicht selbst findet (z. B. Nordkurier). Mecky
+          liest nur Titel und Vorschautext der Seite, nicht den Artikel selbst.
+          Wichtige Fakten bitte unten ergänzen.
+        </p>
+        <Input
+          type="url"
+          placeholder="https://www.nordkurier.de/regional/mueritz/..."
+          value={linkUrl}
+          onChange={(e) => setLinkUrl(e.target.value)}
+          disabled={submittingLink}
+          required
+        />
+        <Textarea
+          placeholder="Worum geht's? (optional, z. B. Zahlen, Termine)"
+          value={linkNotes}
+          onChange={(e) => setLinkNotes(e.target.value)}
+          disabled={submittingLink}
+          rows={2}
+        />
+        <Button
+          type="submit"
+          disabled={submittingLink || !linkUrl.trim()}
+          className="gap-2"
+        >
+          {submittingLink ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {submittingLink ? "Schreibt..." : "Vorschlag erstellen"}
+        </Button>
+      </form>
 
       {/* Drafts List */}
       <div className="space-y-3">

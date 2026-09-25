@@ -99,3 +99,45 @@ Wenn der Zeitraum nicht "heute" ist, formuliere zeitlich passend (z.B. "gestern"
     return true
   })
 }
+
+const MeckyLinkPostSchema = z.object({
+  content: z
+    .string()
+    .max(500)
+    .describe("Der Post-Text in Meckys Stimme, max 500 Zeichen"),
+})
+
+/**
+ * One post for an article an admin handed in by link. Claude only sees the
+ * publisher's share snippet (og:title/og:description) plus the admin's notes,
+ * never the article body: some regional publishers (Nordkurier) opt out of AI
+ * crawling, so the page itself is not fed to the model.
+ */
+export async function generateMeckyPostFromLink(article: {
+  title: string | null
+  description: string | null
+  site: string
+  url: string
+  notes: string | null
+}): Promise<string | null> {
+  const { object } = await generateObject({
+    model: anthropic("claude-haiku-4-5"),
+    schema: MeckyLinkPostSchema,
+    system: MECKY_SYSTEM_PROMPT,
+    prompt: `Ein Admin möchte, dass du diesen Artikel in einem Post erwähnst. Schreibe genau EINEN Post in Meckys Stimme.
+Nutze nur die Angaben unten, erfinde keine Zahlen, Daten oder Namen dazu.
+
+Titel: ${article.title || "unbekannt"}
+Teaser: ${article.description?.slice(0, 400) || "keiner"}
+Quelle: ${article.site} | URL: ${article.url}
+Hinweise vom Admin: ${article.notes || "keine"}
+
+Datum heute: ${new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`,
+  })
+
+  if (object.content.length > 500) {
+    console.warn(`Post too long (${object.content.length} chars), skipping`)
+    return null
+  }
+  return object.content
+}

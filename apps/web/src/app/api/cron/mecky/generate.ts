@@ -6,13 +6,47 @@ import {
   resolveTimeWindow,
   type MeckyTimeWindow,
 } from "./rss"
-import { generateMeckyPosts } from "./prompt"
+import { generateMeckyPostFromLink, generateMeckyPosts } from "./prompt"
 
 export interface GenerateResult {
   success: boolean
   message: string
   count?: number
   drafts?: Array<{ id: string; content: string; source: string | null }>
+}
+
+interface OgData {
+  title: string | null
+  description: string | null
+  image: string | null
+  siteName: string | null
+}
+
+async function fetchOgMetadata(url: string): Promise<OgData> {
+  const empty: OgData = {
+    title: null,
+    description: null,
+    image: null,
+    siteName: null,
+  }
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+    const ogRes = await fetch(
+      `${baseUrl}/api/og-metadata?url=${encodeURIComponent(url)}`
+    )
+    const ogJson = await ogRes.json()
+    if (ogJson.success && ogJson.data) {
+      return {
+        title: ogJson.data.title,
+        description: ogJson.data.description,
+        image: ogJson.data.image,
+        siteName: ogJson.data.siteName,
+      }
+    }
+  } catch (err) {
+    console.warn("OG metadata fetch failed for", url, err)
+  }
+  return empty
 }
 
 export async function generateMeckyDrafts(options?: {
@@ -112,28 +146,7 @@ export async function generateMeckyDrafts(options?: {
     const sourceArticle = newItems[proposal.source_index]
     if (!sourceArticle) continue
 
-    // Try to fetch OG metadata
-    let ogTitle: string | null = null
-    let ogDescription: string | null = null
-    let ogImage: string | null = null
-    let ogSiteName: string | null = null
-
-    try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-      const ogRes = await fetch(
-        `${baseUrl}/api/og-metadata?url=${encodeURIComponent(sourceArticle.link)}`
-      )
-      const ogJson = await ogRes.json()
-      if (ogJson.success && ogJson.data) {
-        ogTitle = ogJson.data.title
-        ogDescription = ogJson.data.description
-        ogImage = ogJson.data.image
-        ogSiteName = ogJson.data.siteName
-      }
-    } catch (err) {
-      console.warn("OG metadata fetch failed for", sourceArticle.link, err)
-    }
+    const og = await fetchOgMetadata(sourceArticle.link)
 
     const { data, error } = await supabase
       .from("mecky_drafts")
@@ -146,10 +159,10 @@ export async function generateMeckyDrafts(options?: {
           ? new Date(sourceArticle.pubDate).toISOString()
           : null,
         rss_item_guid: sourceArticle.guid || null,
-        og_title: ogTitle,
-        og_description: ogDescription,
-        og_image: ogImage,
-        og_site_name: ogSiteName,
+        og_title: og.title,
+        og_description: og.description,
+        og_image: og.image,
+        og_site_name: og.siteName,
       })
       .select()
       .single()
@@ -176,5 +189,95 @@ export async function generateMeckyDrafts(options?: {
     message: `${insertedDrafts.length} Mecky-Vorschläge aus "${periodLabel}" generiert`,
     count: insertedDrafts.length,
     drafts: insertedDrafts,
+  }
+}
+
+/**
+ * Pending draft for one article an admin pasted by link: for sources Mecky
+ * has no feed for (e.g. Nordkurier). The link itself is the dedup key.
+ */
+export async function createMeckyDraftFromLink(
+  rawUrl: string,
+  notes?: string
+): Promise<GenerateResult> {
+  let url: string
+  try {
+    const parsed = new URL(rawUrl.trim())
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("bad protocol")
+    }
+    url = parsed.href
+  } catch {
+    return { success: false, message: "Ungültiger Link" }
+  }
+
+  const supabase = createAdminClient()
+
+  const { data: existing } = await supabase
+    .from("mecky_drafts")
+    .select("id")
+    .eq("rss_item_guid", url)
+    .maybeSingle()
+  if (existing) {
+    return {
+      success: false,
+      message: "Zu diesem Link gibt es schon einen Vorschlag",
+    }
+  }
+
+  const og = await fetchOgMetadata(url)
+  const cleanNotes = notes?.trim() || null
+  if (!og.title && !cleanNotes) {
+    return {
+      success: false,
+      message:
+        "Die Seite liefert keinen Titel. Bitte kurz beschreiben, worum es geht.",
+    }
+  }
+
+  const site = og.siteName || new URL(url).hostname.replace(/^www\./, "")
+  const content = await generateMeckyPostFromLink({
+    title: og.title,
+    description: og.description,
+    site,
+    url,
+    notes: cleanNotes,
+  })
+  if (!content) {
+    return { success: false, message: "Mecky konnte keinen Post schreiben" }
+  }
+
+  const { data, error } = await supabase
+    .from("mecky_drafts")
+    .insert({
+      content,
+      source_url: url,
+      source_title: og.title,
+      source_site: site,
+      source_published_at: null,
+      rss_item_guid: url,
+      og_title: og.title,
+      og_description: og.description,
+      og_image: og.image,
+      og_site_name: og.siteName,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        success: false,
+        message: "Zu diesem Link gibt es schon einen Vorschlag",
+      }
+    }
+    throw error
+  }
+
+  return {
+    success: true,
+    message: "Vorschlag erstellt",
+    count: 1,
+    drafts: [{ id: data.id, content: data.content, source: data.source_site }],
   }
 }
