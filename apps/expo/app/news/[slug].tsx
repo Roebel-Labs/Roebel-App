@@ -6,18 +6,23 @@ import {
   ScrollView,
   RefreshControl,
   Pressable,
-  Linking,
   Share,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useGoBack } from '@/hooks/useGoBack';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { format, parseISO } from 'date-fns';
+import { de } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
-import { ArrowLeftIcon, ShareIcon } from '@/components/Icons';
+import { ArrowLeftIcon } from '@/components/Icons';
 import { supabase } from '@/lib/supabase';
 import { NewsArticle } from '@/lib/types';
-import { formatPublishDate, calculateReadTime } from '@/lib/utils';
+import { estimateListenMinutes } from '@/lib/news-audio';
+import ArticleListenRow from '@/components/news/ArticleListenRow';
+import { fontFamily } from '@/constants/theme';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { NewsDetailSkeleton } from '@/components/SkeletonLoader';
 import NewsCard from '@/components/NewsCard';
@@ -31,6 +36,7 @@ export default function NewsDetailScreen() {
   const router = useRouter();
   const goBack = useGoBack();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [article, setArticle] = useState<NewsArticle | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,74 +153,91 @@ export default function NewsDetailScreen() {
     );
   }
 
-  const publishDate = formatPublishDate(article.published_at);
-  const readTime = calculateReadTime(article.content);
+  const publishDate = article.published_at
+    ? format(parseISO(article.published_at), 'd. MMMM yyyy', { locale: de })
+    : null;
+  const kicker = (article.category?.trim() || 'Röbel News').toUpperCase();
+  const listenMinutes = estimateListenMinutes([article.title, article.excerpt, article.content]);
+
+  const handleMore = () => {
+    Alert.alert(article.title, undefined, [
+      { text: 'Teilen', onPress: handleShare },
+      { text: 'Feedback geben', onPress: () => router.push('/feedback') },
+      { text: 'Abbrechen', style: 'cancel' },
+    ]);
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <Pressable onPress={goBack} style={[styles.backButton, { backgroundColor: colors.surfaceSecondary }]}>
-          <ArrowLeftIcon size={24} color={colors.tabIconActive} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}></Text>
-        <View style={styles.headerSpacer} />
-      </View>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={insets.top} />
         }
       >
-        {/* Cover Image */}
+        {/* Hero: blurred cover as backdrop, the cover itself inset on top */}
         {article.cover_image_url ? (
-          <Pressable onPress={() => setImageZoomVisible(true)}>
+          <Pressable
+            onPress={() => setImageZoomVisible(true)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Titelbild vergrößern"
+            style={[styles.hero, { backgroundColor: colors.surface }]}
+          >
             <Image
               source={{ uri: article.cover_image_url }}
-              style={styles.coverImage}
+              style={StyleSheet.absoluteFill}
               contentFit="cover"
+              blurRadius={40}
               accessibilityIgnoresInvertColors
+            />
+            <View style={[styles.heroInset, { paddingTop: insets.top + 56 }]}>
+              <Image
+                source={{ uri: article.cover_image_url }}
+                style={styles.heroImage}
+                contentFit="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+            <LinearGradient
+              colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)']}
+              style={[styles.heroScrim, { height: insets.top + 72 }]}
+              pointerEvents="none"
             />
           </Pressable>
         ) : (
-          <View style={[styles.coverImagePlaceholder, { backgroundColor: colors.surface }]}>
-            <Ionicons name="document-text" size={64} color={colors.textTertiary} />
-          </View>
+          <View style={{ height: insets.top + 64 }} />
         )}
 
-        {/* Content Container */}
         <View style={styles.contentContainer}>
-          {/* Title */}
+          {/* Kicker */}
+          <View style={styles.kickerRow}>
+            <Image source={require('@/assets/images/icon.png')} style={styles.kickerIcon} />
+            <Text style={[styles.kicker, { color: colors.textPrimary }]} numberOfLines={1}>
+              {kicker}
+            </Text>
+          </View>
+
           <Text style={[styles.title, { color: colors.textPrimary }]}>{article.title}</Text>
 
-          {/* Meta Information */}
-          <View style={styles.metaContainer}>
-            <View style={styles.metaRow}>
-              <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>{article.author_name}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>{readTime}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>{publishDate}</Text>
-            </View>
-          </View>
+          {article.excerpt ? (
+            <Text style={[styles.excerpt, { color: colors.textPrimary }]}>{article.excerpt}</Text>
+          ) : null}
 
-          {/* View Count */}
-          <View style={styles.viewCountContainer}>
-            <Ionicons name="eye-outline" size={16} color={colors.textTertiary} />
-            <Text style={[styles.viewCountText, { color: colors.textTertiary }]}>{article.view_count} Aufrufe</Text>
-          </View>
+          <Text style={[styles.meta, { color: colors.textSecondary }]}>
+            {[publishDate, article.author_name ? `Von ${article.author_name}` : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
 
-          {/* Excerpt */}
-          {article.excerpt && (
-            <Text style={[styles.excerpt, { color: colors.textSecondary }]}>{article.excerpt}</Text>
-          )}
+          {/* Read out loud */}
+          <ArticleListenRow
+            slug={article.slug}
+            estimatedMinutes={listenMinutes}
+            onMore={handleMore}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Rich Text Content */}
           <View style={styles.richTextContainer}>
             <RichTextRenderer content={article.content} />
           </View>
@@ -230,7 +253,6 @@ export default function NewsDetailScreen() {
                 </View>
               </View>
               <View style={styles.authorButtons}>
-
                 <Pressable
                   style={[styles.feedbackButton, { backgroundColor: colors.primary }]}
                   onPress={() => router.push('/feedback')}
@@ -251,14 +273,23 @@ export default function NewsDetailScreen() {
               ))}
             </View>
           )}
-
-          {/* Share Button */}
-          <Pressable style={[styles.shareButton, { backgroundColor: colors.surfaceSecondary }]} onPress={handleShare}>
-            <ShareIcon size={18} color={colors.textSecondary} />
-            <Text style={[styles.shareButtonText, { color: colors.textSecondary }]}>Teilen</Text>
-          </Pressable>
         </View>
       </ScrollView>
+
+      {/* Floating back chevron over the hero */}
+      <Pressable
+        onPress={goBack}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Zurück"
+        style={[styles.floatingBack, { top: insets.top + 8 }]}
+      >
+        <Ionicons
+          name="chevron-back"
+          size={30}
+          color={article.cover_image_url ? '#FFFFFF' : colors.textPrimary}
+        />
+      </Pressable>
 
       {/* Image Zoom Modal */}
       {article.cover_image_url && (
@@ -268,7 +299,7 @@ export default function NewsDetailScreen() {
           onClose={() => setImageZoomVisible(false)}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -301,70 +332,81 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
   },
-  scrollContent: {
-    paddingBottom: 32,
-  },
+  scrollContent: {},
   loadingContainer: {
     padding: 16,
   },
-  coverImage: {
+  hero: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    aspectRatio: 1,
+    overflow: 'hidden',
   },
-  coverImagePlaceholder: {
-    width: '100%',
-    aspectRatio: 16 / 9,
+  heroInset: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 32,
+    paddingBottom: 32,
+  },
+  heroImage: {
+    flex: 1,
+  },
+  heroScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  floatingBack: {
+    position: 'absolute',
+    left: 12,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   contentContainer: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 28,
   },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 16,
+  kickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
   },
-  categoryText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+  kickerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+  },
+  kicker: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fontFamily.medium,
+    letterSpacing: 1.8,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Medium',
-    marginBottom: 16,
+    fontSize: 34,
     lineHeight: 40,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 8,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metaText: {
-    fontSize: 14,
-  },
-  viewCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
-  },
-  viewCountText: {
-    fontSize: 13,
+    fontFamily: fontFamily.heading,
+    marginBottom: 12,
   },
   excerpt: {
     fontSize: 18,
-    lineHeight: 28,
+    lineHeight: 26,
+    fontFamily: fontFamily.regular,
+    marginBottom: 10,
+  },
+  meta: {
+    fontSize: 14,
+    fontFamily: fontFamily.regular,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
     marginBottom: 24,
-    fontStyle: 'italic',
   },
   richTextContainer: {
     marginBottom: 32,
@@ -453,20 +495,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     marginBottom: 16,
-  },
-  shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 24,
-    marginBottom: 40,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  shareButtonText: {
-    fontSize: 15,
-    fontFamily: 'MonaSansSemiCondensed-Bold',
   },
 });
