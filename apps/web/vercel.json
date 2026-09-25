@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/workspace-sessions-gc",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/chat/cron/routines",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

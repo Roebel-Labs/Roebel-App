@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http, recoverMessageAddress } from "viem";
-import { gnosis } from "viem/chains";
 import { buildSignedMessage, MAX_SIGNED_AGE_SECONDS, SIGNED_SCOPE, type TicketAction } from "./message";
+import { verifyWalletSignature } from "./signature";
 
 export type VerifyOk = { ok: true; wallet: string; action: TicketAction; payload: Record<string, unknown> };
 export type VerifyFail = { ok: false; status: number; code: string; message: string };
-
-const gnosisClient = createPublicClient({
-  chain: gnosis,
-  transport: http(process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com"),
-});
 
 const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
 const SIG_RE = /^0x[a-fA-F0-9]{130,}$/;
@@ -34,15 +28,10 @@ export async function verifySignedRequest(
 
   let verified = false;
   try {
-    verified = (await recoverMessageAddress({ message, signature: signature as `0x${string}` })).toLowerCase() === claimed;
-  } catch { /* not an EOA signature */ }
-  if (!verified) {
-    try {
-      verified = await gnosisClient.verifyMessage({ address: claimed as `0x${string}`, message, signature: signature as `0x${string}` });
-    } catch (err) {
-      console.error("[signed-request] verifier unreachable", err);
-      return { ok: false, status: 503, code: "VERIFY_UNAVAILABLE", message: "could not reach verification RPC" };
-    }
+    verified = await verifyWalletSignature(claimed, message, signature);
+  } catch (err) {
+    console.error("[signed-request] verifier unreachable", err);
+    return { ok: false, status: 503, code: "VERIFY_UNAVAILABLE", message: "could not reach verification RPC" };
   }
   if (!verified) return { ok: false, status: 401, code: "BAD_SIGNATURE", message: "signer does not match wallet" };
   return { ok: true, wallet: claimed, action: action as TicketAction, payload: payloadObj };
