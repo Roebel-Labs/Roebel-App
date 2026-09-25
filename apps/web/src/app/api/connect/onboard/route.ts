@@ -44,7 +44,10 @@ export async function POST(request: NextRequest) {
           stripe_dashboard: { type: "full" },
           requirement_collection: "stripe",
         },
-        capabilities: { card_payments: { requested: true } },
+        // Stripe refuses card_payments without transfers on connected accounts
+        // ("Accounts do not currently support `card_payments` without `transfers`").
+        // transfers is never used by us (direct charges only), it is a Stripe prerequisite.
+        capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
         business_profile: {
           name: org.name,
           url: org.slug ? `${webBaseUrl()}/org/${org.slug}` : undefined,
