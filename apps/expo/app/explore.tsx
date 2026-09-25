@@ -13,6 +13,7 @@ import { partitionExploreEvents, selectHeroEvents } from '@/lib/explore-events';
 import { useAfterInteractions } from '@/hooks/useAfterInteractions';
 import type {
   EventRecord,
+  NewsArticle,
   MovieRecord,
   RestaurantRecord,
 } from '@/lib/types';
@@ -25,6 +26,7 @@ import HeroCarousel from '@/components/HeroCarousel';
 import ThisWeekEventsHorizontal from '@/components/ThisWeekEventsHorizontal';
 import AllEventsHorizontal from '@/components/AllEventsHorizontal';
 import { POSTER_ASPECT_RATIO, POSTER_CARD_WIDTH, POSTER_RADIUS } from '@/components/HorizontalEventCard';
+import NewsSection from '@/components/NewsSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import MovieSection from '@/components/MovieSection';
 import MarketplaceSection from '@/components/MarketplaceSection';
@@ -44,6 +46,7 @@ const EVENT_CARD_COLUMNS =
 // Stable (module-level) empty-array fallbacks: `data ?? []` would mint a new
 // array identity every render, which defeats the useMemo below.
 const EMPTY_EVENTS: EventRecord[] = [];
+const EMPTY_NEWS: NewsArticle[] = [];
 const EMPTY_MOVIES: MovieRecord[] = [];
 const EMPTY_RESTAURANTS: RestaurantRecord[] = [];
 
@@ -74,6 +77,16 @@ async function fetchExplorePopularEvents() {
     .order('time', { ascending: true, nullsFirst: true })
     .limit(5);
   return (data ?? []) as EventRecord[];
+}
+
+async function fetchExploreNews() {
+  const { data } = await supabase
+    .from('news_articles')
+    .select('id, slug, title, cover_image_url, author_name, published_at, created_at, excerpt, status')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(20); // LIMIT
+  return (data ?? []) as NewsArticle[];
 }
 
 async function fetchExploreMovies() {
@@ -169,6 +182,11 @@ export default function ExploreScreen() {
     queryFn: fetchExplorePopularEvents,
     meta: { persist: true },
   });
+  const newsQuery = useQuery({
+    queryKey: ['explore', 'news'],
+    queryFn: fetchExploreNews,
+    meta: { persist: true },
+  });
   const moviesQuery = useQuery({
     queryKey: ['explore', 'movies'],
     queryFn: fetchExploreMovies,
@@ -209,6 +227,7 @@ export default function ExploreScreen() {
 
   const events = eventsQuery.data ?? EMPTY_EVENTS;
   const popularEvents = popularQuery.data ?? EMPTY_EVENTS;
+  const newsArticles = newsQuery.data ?? EMPTY_NEWS;
   const movies = moviesQuery.data ?? EMPTY_MOVIES;
   const restaurants = restaurantsQuery.data ?? EMPTY_RESTAURANTS;
   const deals = dealsQuery.data;
@@ -316,6 +335,13 @@ export default function ExploreScreen() {
               <SectionRailSkeleton titleWidth="35%" />
             ) : (
               <MarketplaceSection listings={listings ?? []} deals={deals} />
+            )}
+
+            {/* News */}
+            {newsQuery.isPending ? (
+              <SectionRailSkeleton titleWidth="40%" />
+            ) : (
+              <NewsSection articles={newsArticles} />
             )}
 
             {/* Restaurants */}

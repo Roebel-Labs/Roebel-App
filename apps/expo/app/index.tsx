@@ -7,6 +7,7 @@ import { EventRecord, Filters, NewsArticle, MovieRecord, RestaurantRecord } from
 import EventCard from '@/components/EventCard';
 import SwipeableCardStack from '@/components/SwipeableCardStack';
 import ThisWeekEvents from '@/components/ThisWeekEvents';
+import NewsSection from '@/components/NewsSection';
 import MovieSection from '@/components/MovieSection';
 import RestaurantSection from '@/components/RestaurantSection';
 import SearchModal from '@/components/SearchModal';
@@ -695,6 +696,7 @@ function DefaultHome() {
             {primaryLiveEvent && <LivestreamBanner event={primaryLiveEvent} />}
             <SwipeableCardStack events={futurePopularEvents} showPagination loop containerStyle={{ paddingVertical: 16, marginBottom: 0 }} />
             <ThisWeekEvents events={events} />
+            <NewsSection articles={newsArticles} />
 
             <MovieSection movies={movies} />
 
