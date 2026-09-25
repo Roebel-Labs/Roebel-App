@@ -35,7 +35,8 @@ import ProfileActionGrid from '@/components/profile/ProfileActionGrid';
 import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
-import QrCodeIcon from '@/assets/icons/qr-code.svg';
+import ChatIcon from '@/assets/icons/comment-02.svg';
+import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 
 type Tab = 'home' | 'explore' | 'profile';
 
@@ -58,6 +59,7 @@ export default function ProfileScreen() {
   const [showAccountSheet, setShowAccountSheet] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [storyCollections, setStoryCollections] = useState<StoryCollection[]>([]);
+  const [chatEnabled, setChatEnabled] = useState(true);
 
   const isConnected = !!account;
   const isOrg = activeAccount?.account_type === 'organisation';
@@ -72,6 +74,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     fetchProfileStoryCollections().then(setStoryCollections);
+    fetchChatSuiteEnabled().then(setChatEnabled);
   }, []);
 
   const handleDisconnect = async () => {
@@ -123,6 +126,7 @@ export default function ProfileScreen() {
           recentOtherAccounts={recentOtherAccounts}
           personalAvatarUrl={personalAvatarUrl}
           onSwitch={() => setShowAccountSheet(true)}
+          onScanQr={isConnected && hasAnyNFT ? () => router.push('/verification/scan' as any) : undefined}
         />
 
         <GlassBackdrop style={styles.content}>
@@ -203,14 +207,14 @@ export default function ProfileScreen() {
           </ScrollView>
         </GlassBackdrop>
 
-        {hasAnyNFT && (
+        {isConnected && chatEnabled && (
           <Pressable
-            onPress={() => router.push('/verification/scan' as any)}
-            style={[styles.qrFab, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/chat' as any)}
+            style={[styles.chatFab, { backgroundColor: colors.primary }]}
             accessibilityRole="button"
-            accessibilityLabel="QR-Code scannen"
+            accessibilityLabel="Chat"
           >
-            <QrCodeIcon width={24} height={24} color={colors.onPrimary} />
+            <ChatIcon width={24} height={24} color={colors.onPrimary} />
           </Pressable>
         )}
 
@@ -259,7 +263,7 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', marginBottom: 12 },
   primaryButton: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryButtonText: { fontSize: 14, fontFamily: 'MonaSansSemiCondensed-Bold' },
-  qrFab: {
+  chatFab: {
     position: 'absolute',
     bottom: BOTTOM_NAV_HEIGHT + 40,
     right: 16,

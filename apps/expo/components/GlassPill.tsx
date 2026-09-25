@@ -10,6 +10,8 @@ type Props = {
   accessibilityLabel: string;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** Overrides for the inner content row (e.g. no padding for an icon-only circle). */
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 export const GLASS_PILL_HEIGHT = 36;
@@ -20,7 +22,7 @@ export const GLASS_PILL_HEIGHT = 36;
  * (GlassSurface must be its first child and the container transparent).
  * Not an Android blur sampler — the nav keeps that role on each screen.
  */
-export default function GlassPill({ onPress, accessibilityLabel, children, style }: Props) {
+export default function GlassPill({ onPress, accessibilityLabel, children, style, contentStyle }: Props) {
   const { isDark } = useTheme();
   return (
     <PressableScale
@@ -32,7 +34,7 @@ export default function GlassPill({ onPress, accessibilityLabel, children, style
     >
       <View style={[styles.clip, { borderColor: glassEdgeColor(isDark) }]}>
         <GlassSurface />
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, contentStyle]}>{children}</View>
       </View>
     </PressableScale>
   );

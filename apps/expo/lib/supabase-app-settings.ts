@@ -92,3 +92,12 @@ export async function isTicketSalesEnabled(): Promise<boolean> {
   if (__DEV__) return true;
   return (await fetchAppSetting('stripe_tickets_enabled')) === 'true';
 }
+
+/**
+ * Kill switch for the Mecky Chat suite (profile Chat FAB). Missing key (or any fetch error) counts
+ * as ENABLED; setting it to 'false' hides the entry on every client without an app update.
+ */
+export async function fetchChatSuiteEnabled(): Promise<boolean> {
+  const value = await fetchAppSetting('chat_suite_enabled');
+  return value !== 'false';
+}
