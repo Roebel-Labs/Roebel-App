@@ -98,10 +98,12 @@ export function useFeed(feedType: FeedType, enabled: boolean = true) {
     return assembleFeed({
       posts,
       alerts: s?.alerts ?? [],
-      deals: s?.deals ?? [],
+      // Events, sponsored deals and the news rail live on Explore only; the
+      // home feed stays posts-first.
+      deals: [],
       marketplaceListings: s?.marketplace ?? [],
-      upcomingEvents: s?.events ?? [],
-      newsArticles: s?.news ?? [],
+      upcomingEvents: [],
+      newsArticles: [],
       movies: s?.movies ?? [],
       restaurants: s?.restaurants ?? [],
       specialMenus: s?.specialMenus ?? [],
