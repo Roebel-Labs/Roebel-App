@@ -25,7 +25,9 @@ function cbor(v: CborValue): number[] {
   return out;
 }
 
-function buildAttestationObject(x: Uint8Array, y: Uint8Array, credentialId: Uint8Array): Uint8Array {
+const RP_ID_HASH = Array.from(hexToBytes(sha256(stringToBytes('roebel.app'))));
+
+function buildAttestationObject(x: Uint8Array, y: Uint8Array, credentialId: Uint8Array, rpId = 'roebel.app'): Uint8Array {
   const coseKey = new Map<CborValue, CborValue>([
     [1, 2], // kty: EC2
     [3, -7], // alg: ES256
@@ -34,7 +36,7 @@ function buildAttestationObject(x: Uint8Array, y: Uint8Array, credentialId: Uint
     [-3, y],
   ]);
   const authData = Uint8Array.from([
-    ...Array.from(hexToBytes(sha256(stringToBytes('roebel.app')))),
+    ...Array.from(hexToBytes(sha256(stringToBytes(rpId)))),
     0x45, // UP | UV | AT
     0, 0, 0, 0, // signCount
     ...new Array(16).fill(0), // aaguid
@@ -82,7 +84,7 @@ describe('cose / attestationObject parsing', () => {
         new Map<CborValue, CborValue>([
           ['fmt', 'none'],
           ['attStmt', new Map()],
-          ['authData', new Uint8Array(37)],
+          ['authData', Uint8Array.from([...RP_ID_HASH, 0, 0, 0, 0, 0])],
         ]),
       ),
     );
@@ -97,7 +99,7 @@ describe('cose / attestationObject parsing', () => {
       [-2, x],
     ]);
     const authData = Uint8Array.from([
-      ...new Array(32).fill(0),
+      ...RP_ID_HASH,
       0x45,
       0, 0, 0, 0,
       ...new Array(16).fill(0),
@@ -108,5 +110,11 @@ describe('cose / attestationObject parsing', () => {
     ]);
     const att = Uint8Array.from(cbor(new Map<CborValue, CborValue>([['authData', authData]])));
     expect(() => parseAttestationObject(att)).toThrow(/P-256/);
+  });
+
+  it('rejects a credential created for another rpId (rpIdHash != sha256("roebel.app"))', () => {
+    const att = buildAttestationObject(x, y, credentialId, 'evil.example');
+    expect(() => parseAttestationObject(att)).toThrow(/rpId/);
+    expect(() => publicKeyFromAttestationObject(base64UrlEncode(att))).toThrow(/rpId/);
   });
 });

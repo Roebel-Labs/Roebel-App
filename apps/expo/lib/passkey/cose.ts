@@ -5,7 +5,8 @@
  * ints, byte/text strings, arrays, maps and simple values. The COSE key must be
  * EC2 / P-256 (ES256) — the only curve the Safe WebAuthn signer verifies.
  */
-import { bytesToHex, type Hex } from 'viem';
+import { bytesToHex, sha256, stringToBytes, type Hex } from 'viem';
+import { PASSKEY_RP_ID } from './constants';
 import { base64UrlDecode, utf8Decode } from './encoding';
 
 type CborValue = number | bigint | string | Uint8Array | CborValue[] | Map<CborValue, CborValue> | boolean | null | undefined;
@@ -114,13 +115,17 @@ export function coseToP256(key: CborValue): { x: Hex; y: Hex } {
   return { x: to32(x), y: to32(y) };
 }
 
-/** Parses a raw attestationObject (CBOR bytes). */
-export function parseAttestationObject(attestationObject: Uint8Array): ParsedAttestation {
+/** Parses a raw attestationObject (CBOR bytes). Rejects a credential not scoped to `rpId`. */
+export function parseAttestationObject(attestationObject: Uint8Array, rpId: string = PASSKEY_RP_ID): ParsedAttestation {
   const { value } = decodeCbor(attestationObject);
   if (!(value instanceof Map)) throw new Error('attestationObject is not a CBOR map');
   const authData = value.get('authData');
   if (!(authData instanceof Uint8Array)) throw new Error('attestationObject has no authData');
   if (authData.length < 37) throw new Error('authData too short');
+  const rpIdHash = bytesToHex(authData.slice(0, 32));
+  if (rpIdHash !== sha256(stringToBytes(rpId))) {
+    throw new Error(`authData rpIdHash is not sha256("${rpId}"): credential belongs to another rpId`);
+  }
 
   const flags = authData[32];
   const signCount = ((authData[33] << 24) >>> 0) + (authData[34] << 16) + (authData[35] << 8) + authData[36];
@@ -136,7 +141,7 @@ export function parseAttestationObject(attestationObject: Uint8Array): ParsedAtt
   const { x, y } = coseToP256(coseKey);
 
   return {
-    rpIdHash: bytesToHex(authData.slice(0, 32)),
+    rpIdHash,
     flags,
     signCount,
     credentialId,
