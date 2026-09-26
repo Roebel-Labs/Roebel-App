@@ -4,7 +4,9 @@ import type { ExpoConfig } from 'expo/config';
 const config: ExpoConfig = {
   name: 'Röbel',
   slug: 'roebel-onchain',
-  scheme: 'roebel',
+  // 'roebel' stays first: Linking.createURL (thirdweb redirectUrl) uses the first scheme.
+  // 'ortis' is inert until the Ortis rebrand / "Connect with Ortis" (native, so it ships in the binary now).
+  scheme: ['roebel', 'ortis'],
   // 3.5.0 = first XMTP-era runtime. runtimeVersion follows appVersion, so this
   // bump FENCES old 3.4.0 builds from ever receiving XMTP-era JS via OTA
   // (2026-07-10: a main-tip preview update onto the 3.4.0 runtime crash-looped
@@ -179,7 +181,9 @@ const config: ExpoConfig = {
       'webcredentials:id.ortis.app',
       'applinks:thirdweb.com',
       'applinks:roebel.app',
-      'applinks:www.roebel.app'
+      'applinks:www.roebel.app',
+      // Inert until id.ortis.app's AASA declares applinks paths (planned: /connect only).
+      'applinks:id.ortis.app'
     ],
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -209,6 +213,14 @@ const config: ExpoConfig = {
           scheme: 'https',
           host: 'thirdweb.com'
         },
+        category: ['BROWSABLE', 'DEFAULT']
+      },
+      // "Connect with Ortis" (future). /connect ONLY — id.ortis.app also serves
+      // OIDC login pages that must keep opening in the browser.
+      {
+        autoVerify: true,
+        action: 'VIEW',
+        data: { scheme: 'https', host: 'id.ortis.app', pathPrefix: '/connect' },
         category: ['BROWSABLE', 'DEFAULT']
       },
       // Smart Event QR (/e/<id>) deep links — attendance reward
