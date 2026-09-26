@@ -1,29 +1,47 @@
 /**
  * Sponsorship policy for the preview-only passkey sponsor route
- * (/api/passkey/sponsor). No env, no clock; chain reads go through an
- * injected `ChainReader` so the policy stays unit-testable.
+ * (/api/passkey/sponsor). No env, no clock (the caller passes `nowSeconds`);
+ * chain reads go through an injected `ChainReader` so the policy stays
+ * unit-testable.
  *
- * A passkey Safe (Safe 1.4.1 + Safe4337Module v0.3.0, EntryPoint v0.7) may
- * get a gasless userOp ONLY for:
- *   - driving the SENDER'S OWN legacy thirdweb Account:
- *       setPermissionsForSigner(req, sig) with req.isAdmin == 1 (adds only;
- *       removals and isAdmin 0 are rejected in tranche 1) AND
- *       req.signer == userOp.sender (the handover makes the Safe itself admin);
- *       execute(...) / executeBatch(...) only where the sender is already an
- *       admin of that account (eth_call isAdmin), or where an EARLIER call in
- *       the same multiSend batch is a valid handover of that account to the
- *       sender. Every such target must carry exactly the EIP-1167 proxy code
- *       of the live thirdweb Account impl (LEGACY_ACCOUNT_PROXY_CODE).
- *   - guardian management on the Candide SocialRecoveryModule (exact address):
- *       addGuardianWithThreshold, revokeGuardianWithThreshold, changeThreshold,
- *       confirmRecovery, cancelRecovery
- * wrapped in Safe4337Module.executeUserOp / executeUserOpWithErrorString with
- * value 0 and operation 0 (call) - or operation 1 (delegatecall) ONLY into
- * MultiSendCallOnly 1.4.1 with multiSend(bytes), where every packed inner tx
- * is operation 0, value 0 and itself on the allowlist above.
+ * The request names the passkey public key (x, y) and ONE legacy thirdweb
+ * account (`legacy`, the citizen's account). A userOp is sponsored only if ALL
+ * of the following hold:
  *
- * Structural checks run first and never touch the chain. Any chain read
- * failure throws `ChainReadError` - callers must fail closed (never sponsor).
+ *  1. Fees / gas within CAPS (maxFeePerGas <= 3 gwei, priority <= maxFee).
+ *  2. The sender is a genuine passkey Safe for (x, y):
+ *     - deploy op: factory == SafeProxyFactory 1.4.1, factoryData ==
+ *       safeFactoryData(x, y) byte-for-byte, sender == predictSafeAddress(x, y)
+ *       (the initializer fixes owner, modules and fallback handler);
+ *     - deployed: code == SafeProxy 1.4.1 runtime, slot 0 == Safe L2 1.4.1
+ *       singleton, fallback-handler slot == Safe4337Module,
+ *       isModuleEnabled(Safe4337Module), getOwners() == [owner] where owner is
+ *       either SafeWebAuthnSharedSigner configured with (x, y, verifiers) for
+ *       this Safe, or a contract equal to
+ *       SafeWebAuthnSignerFactory.getSigner(x, y, verifiers) (a Safe recovered
+ *       to a new passkey).
+ *  3. `legacy` carries the thirdweb Account proxy code and holds a CitizenNFTv2.
+ *  4. callData = Safe4337Module.executeUserOp[WithErrorString] with value 0 and
+ *     either one CALL or a DELEGATECALL into MultiSendCallOnly 1.4.1
+ *     multiSend(bytes) whose inner txs are all CALLs with value 0. Every call
+ *     is one of:
+ *     - legacy.setPermissionsForSigner(req, sig) with req.signer == sender,
+ *       req.isAdmin == 1, inside its validity window, AND an eth_call of
+ *       legacy.verifySignerPermissionRequest(req, sig) returning
+ *       (true, signer) with legacy.isAdmin(signer);
+ *     - legacy.execute / executeBatch, if the sender is already admin of
+ *       legacy (eth_call isAdmin) or a verified handover precedes it in the
+ *       same batch; nested setPermissionsForSigner must also be add-sender;
+ *     - Candide SocialRecoveryModule guardian management
+ *       (addGuardianWithThreshold, revokeGuardianWithThreshold,
+ *       changeThreshold, confirmRecovery, cancelRecovery), if the sender is
+ *       admin of legacy or a verified handover of legacy is in the batch.
+ *     Any thirdweb-selector call to an address other than `legacy` is
+ *     rejected: one legacy account per op.
+ *
+ * Structural checks (1, the deploy half of 2, 4 without the reads) run first
+ * and never touch the chain. Any chain read failure throws `ChainReadError`,
+ * and callers must fail closed (never sponsor).
  *
  * Selectors were checked against deployed bytecode on Gnosis (chain 100):
  *   executeUserOp 0x7bb37428, executeUserOpWithErrorString 0x541d63c8,
@@ -44,18 +62,28 @@ import {
   size,
   type Hex,
 } from "viem";
+import {
+  FALLBACK_HANDLER_SLOT,
+  PASSKEY_SAFE,
+  SAFE_PROXY_RUNTIME_CODE,
+  WEBAUTHN_VERIFIERS,
+  predictSafeAddress,
+  safeFactoryData,
+} from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
 
 export const ADDRESSES = {
-  safe4337Module: "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226",
+  safe4337Module: PASSKEY_SAFE.safe4337Module,
   multiSendCallOnly: "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
   multiSend141: "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526",
-  safeProxyFactory: "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
-  safeL2Singleton: "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
-  socialRecoveryModule: "0x38275826E1933303E508433dD5f289315Da2541c",
-  paymaster: "0x11ed03Db610c88b010FfE38B13142D3657f2E84f",
+  safeProxyFactory: PASSKEY_SAFE.proxyFactory,
+  safeL2Singleton: PASSKEY_SAFE.singletonL2,
+  socialRecoveryModule: PASSKEY_SAFE.socialRecoveryModule,
   legacyAccountImpl: "0xf22175c80c6e074c171811c59c6c0087e2a6a346",
 } as const satisfies Record<string, Hex>;
+
+/** CitizenNFTv2 on Gnosis (ERC-721). */
+export const CITIZEN_NFT: Hex = "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5";
 
 /** EIP-1167 minimal proxy to the thirdweb Account impl. Verified 2026-09-26
  * against live accounts from AccountFactory 0x85e2…DF00 getAccounts(0,3). */
@@ -65,7 +93,7 @@ export const CAPS = {
   callGasLimit: 1_500_000n,
   verificationGasLimit: 1_000_000n,
   preVerificationGas: 200_000n,
-  maxFeePerGas: 50_000_000_000n, // 50 gwei
+  maxFeePerGas: 3_000_000_000n, // 3 gwei (Gnosis bundler floor is 1.5 gwei)
   paymasterVerificationGasLimit: 300_000n,
   paymasterPostOpGasLimit: 100_000n,
 } as const;
@@ -86,13 +114,49 @@ export interface SponsorUserOp {
   paymasterPostOpGasLimit: bigint;
 }
 
+/** Who the op claims to be: passkey key (32-byte hex each) + the ONE legacy account it may drive. */
+export interface SponsorContext {
+  x: Hex;
+  y: Hex;
+  legacy: Hex;
+  /** Unix seconds, for the handover validity window. */
+  nowSeconds: number;
+}
+
 export type PolicyResult = { ok: true } | { ok: false; reason: string };
 
-/** The two chain reads the policy needs. Implementations must throw (not
- * return a default) on RPC failure. */
+export interface SignerPermissionRequest {
+  signer: Hex;
+  isAdmin: number;
+  approvedTargets: readonly Hex[];
+  nativeTokenLimitPerTransaction: bigint;
+  permissionStartTimestamp: bigint;
+  permissionEndTimestamp: bigint;
+  reqValidityStartTimestamp: bigint;
+  reqValidityEndTimestamp: bigint;
+  uid: Hex;
+}
+
+/** Chain reads the policy needs. Implementations must THROW (never return a
+ * default) on transport / RPC failure. */
 export interface ChainReader {
   getCode(address: Hex): Promise<Hex | undefined>;
+  getStorageAt(address: Hex, slot: Hex): Promise<Hex | undefined>;
   isAdmin(account: Hex, signer: Hex): Promise<boolean>;
+  isModuleEnabled(safe: Hex, module: Hex): Promise<boolean>;
+  getOwners(safe: Hex): Promise<readonly Hex[]>;
+  /** SafeWebAuthnSharedSigner.getConfiguration(safe). */
+  getSharedSignerConfiguration(safe: Hex): Promise<{ x: bigint; y: bigint; verifiers: bigint }>;
+  /** SafeWebAuthnSignerFactory.getSigner(x, y, verifiers). */
+  getWebAuthnSigner(x: bigint, y: bigint, verifiers: bigint): Promise<Hex>;
+  balanceOf(token: Hex, owner: Hex): Promise<bigint>;
+  /** legacy.verifySignerPermissionRequest(req, sig); null when the CALL REVERTS (e.g. a malformed
+   * signature makes ECDSA.recover revert). Transport failures must still throw. */
+  verifySignerPermissionRequest(
+    account: Hex,
+    req: SignerPermissionRequest,
+    signature: Hex,
+  ): Promise<{ success: boolean; signer: Hex } | null>;
 }
 
 /** A chain read failed; the request must NOT be sponsored. */
@@ -122,9 +186,6 @@ const srmAbi = parseAbi([
   "function confirmRecovery(address wallet, address[] newOwners, uint256 newThreshold, bool execute)",
   "function cancelRecovery()",
 ]);
-const proxyFactoryAbi = parseAbi([
-  "function createProxyWithNonce(address singleton, bytes initializer, uint256 saltNonce)",
-]);
 
 const OK: PolicyResult = { ok: true };
 const deny = (reason: string): PolicyResult => ({ ok: false, reason });
@@ -137,15 +198,17 @@ function tryDecode<T>(fn: () => T): T | null {
   }
 }
 
-/** Chain facts the structural pass needs verified, in call order. */
+/** Facts collected by the structural pass, verified against the chain afterwards. */
 interface ScanState {
   sender: Hex;
-  /** Every thirdweb-selector target: must have LEGACY_ACCOUNT_PROXY_CODE. */
-  legacyTargets: Set<string>;
-  /** Targets already handed over to the sender earlier in this op. */
-  handedOver: Set<string>;
-  /** execute/executeBatch targets not covered by an earlier handover: sender must be admin. */
-  needsAdmin: Set<string>;
+  legacy: Hex;
+  nowSeconds: number;
+  /** Handovers of `legacy` to the sender, in batch order (each needs an eth_call verify). */
+  handovers: Array<{ req: SignerPermissionRequest; signature: Hex }>;
+  /** An execute/executeBatch ran before any handover: sender must already be admin. */
+  executeNeedsAdmin: boolean;
+  /** An SRM call is present. */
+  srm: boolean;
 }
 
 function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): PolicyResult {
@@ -170,18 +233,24 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): PolicyResult {
 
   if (isAddressEqual(to, ADDRESSES.socialRecoveryModule)) {
     const d = tryDecode(() => decodeFunctionData({ abi: srmAbi, data }));
-    return d ? OK : deny("SocialRecoveryModule function not allowlisted");
+    if (!d) return deny("SocialRecoveryModule function not allowlisted");
+    st.srm = true;
+    return OK;
   }
 
   const d = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
   if (!d) return deny("call target/selector not allowlisted");
-  const key = to.toLowerCase();
+  if (!isAddressEqual(to, st.legacy)) return deny("thirdweb account call must target the request's legacy account");
 
   if (d.functionName === "setPermissionsForSigner") {
-    const r = checkPermissionRequest(d.args[0], st.sender);
+    const [req, signature] = d.args;
+    const r = checkPermissionRequest(req, st.sender);
     if (!r.ok) return r;
-    st.legacyTargets.add(key);
-    st.handedOver.add(key);
+    const now = BigInt(st.nowSeconds);
+    if (!(req.reqValidityStartTimestamp <= now && now < req.reqValidityEndTimestamp)) {
+      return deny("handover request is outside its validity window");
+    }
+    st.handovers.push({ req, signature });
     return OK;
   }
 
@@ -198,8 +267,7 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): PolicyResult {
       if (!r.ok) return r;
     }
   }
-  st.legacyTargets.add(key);
-  if (!st.handedOver.has(key)) st.needsAdmin.add(key);
+  if (st.handovers.length === 0) st.executeNeedsAdmin = true;
   return OK;
 }
 
@@ -255,13 +323,16 @@ function checkCallData(callData: Hex, st: ScanState): PolicyResult {
   return OK;
 }
 
-function checkFactory(op: SponsorUserOp): PolicyResult {
+/** Deploy ops: the factory call must be EXACTLY the passkey Safe for (x, y). */
+function checkFactory(op: SponsorUserOp, ctx: SponsorContext): PolicyResult {
   const hasFactoryData = op.factoryData !== undefined && size(op.factoryData) > 0;
   if (!op.factory) return hasFactoryData ? deny("factoryData without factory") : OK;
   if (!isAddressEqual(op.factory, ADDRESSES.safeProxyFactory)) return deny("factory is not SafeProxyFactory 1.4.1");
-  const d = tryDecode(() => decodeFunctionData({ abi: proxyFactoryAbi, data: op.factoryData ?? "0x" }));
-  if (!d) return deny("factoryData is not createProxyWithNonce");
-  if (!isAddressEqual(d.args[0], ADDRESSES.safeL2Singleton)) return deny("singleton is not Safe L2 1.4.1");
+  const key = { x: ctx.x, y: ctx.y };
+  if ((op.factoryData ?? "0x").toLowerCase() !== safeFactoryData(key).toLowerCase()) {
+    return deny("factoryData is not the passkey Safe deployment for (x, y)");
+  }
+  if (!isAddressEqual(op.sender, predictSafeAddress(key))) return deny("sender is not the predicted passkey Safe for (x, y)");
   return OK;
 }
 
@@ -281,36 +352,103 @@ async function read<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+const SLOT_0: Hex = `0x${"0".repeat(64)}`;
+
+/** Storage word holds exactly `addr` (left-padded). */
+function wordIsAddress(word: Hex | undefined, addr: Hex): boolean {
+  if (!word || !/^0x[0-9a-fA-F]{1,64}$/.test(word)) return false;
+  return BigInt(word) === BigInt(addr);
+}
+
+/** Deployed sender: prove it is a passkey Safe whose single owner is bound to (x, y). */
+async function checkDeployedPasskeySafe(sender: Hex, ctx: SponsorContext, chain: ChainReader): Promise<PolicyResult> {
+  const code = await read(() => chain.getCode(sender));
+  if ((code ?? "0x").toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) {
+    return deny("sender is not a passkey Safe (not a SafeProxy 1.4.1)");
+  }
+  const [singleton, handler, moduleOn, owners] = await Promise.all([
+    read(() => chain.getStorageAt(sender, SLOT_0)),
+    read(() => chain.getStorageAt(sender, FALLBACK_HANDLER_SLOT)),
+    read(() => chain.isModuleEnabled(sender, PASSKEY_SAFE.safe4337Module)),
+    read(() => chain.getOwners(sender)),
+  ]);
+  if (!wordIsAddress(singleton, PASSKEY_SAFE.singletonL2)) return deny("sender singleton is not Safe L2 1.4.1");
+  if (!wordIsAddress(handler, PASSKEY_SAFE.safe4337Module)) return deny("sender fallback handler is not Safe4337Module");
+  if (moduleOn !== true) return deny("Safe4337Module is not an enabled module of the sender");
+  if (owners.length !== 1) return deny("sender must have exactly one owner");
+  const owner = owners[0];
+  const x = BigInt(ctx.x);
+  const y = BigInt(ctx.y);
+
+  if (isAddressEqual(owner, PASSKEY_SAFE.sharedSigner)) {
+    const cfg = await read(() => chain.getSharedSignerConfiguration(sender));
+    if (cfg.x !== x || cfg.y !== y || cfg.verifiers !== WEBAUTHN_VERIFIERS) {
+      return deny("sender owner (shared signer) is not configured with (x, y)");
+    }
+    return OK;
+  }
+  const [ownerCode, signer] = await Promise.all([
+    read(() => chain.getCode(owner)),
+    read(() => chain.getWebAuthnSigner(x, y, WEBAUTHN_VERIFIERS)),
+  ]);
+  if (!ownerCode || ownerCode === "0x") return deny("sender owner is not a contract signer");
+  if (!isAddressEqual(signer, owner)) return deny("sender owner is not the WebAuthn signer for (x, y)");
+  return OK;
+}
+
 /**
  * Resolves to { ok } or { ok: false, reason }. Throws ChainReadError when a
  * chain read fails - the caller must treat that as "do not sponsor".
  */
-export async function evaluateSponsorPolicy(op: SponsorUserOp, chain: ChainReader): Promise<PolicyResult> {
-  for (const check of [checkGas, checkFactory]) {
-    const r = check(op);
-    if (!r.ok) return r;
-  }
+export async function evaluateSponsorPolicy(
+  op: SponsorUserOp,
+  ctx: SponsorContext,
+  chain: ChainReader,
+): Promise<PolicyResult> {
+  // ---- structural: zero chain reads ----
+  const gas = checkGas(op);
+  if (!gas.ok) return gas;
+  const factory = checkFactory(op, ctx);
+  if (!factory.ok) return factory;
   const st: ScanState = {
     sender: op.sender,
-    legacyTargets: new Set(),
-    handedOver: new Set(),
-    needsAdmin: new Set(),
+    legacy: ctx.legacy,
+    nowSeconds: ctx.nowSeconds,
+    handovers: [],
+    executeNeedsAdmin: false,
+    srm: false,
   };
   const structural = checkCallData(op.callData, st);
   if (!structural.ok) return structural;
 
-  const targets = [...st.legacyTargets];
-  const codes = await Promise.all(targets.map((t) => read(() => chain.getCode(t as Hex))));
-  for (let i = 0; i < targets.length; i++) {
-    if ((codes[i] ?? "0x").toLowerCase() !== LEGACY_ACCOUNT_PROXY_CODE.toLowerCase()) {
-      return deny(`target ${targets[i]} is not a legacy thirdweb account`);
-    }
+  // ---- chain: who is the sender, who is the citizen ----
+  const [legacyCode, citizenBalance] = await Promise.all([
+    read(() => chain.getCode(ctx.legacy)),
+    read(() => chain.balanceOf(CITIZEN_NFT, ctx.legacy)),
+  ]);
+  if ((legacyCode ?? "0x").toLowerCase() !== LEGACY_ACCOUNT_PROXY_CODE.toLowerCase()) {
+    return deny(`${ctx.legacy} is not a legacy thirdweb account`);
+  }
+  if (citizenBalance <= 0n) return deny("legacy account holds no CitizenNFT");
+
+  if (!op.factory) {
+    const r = await checkDeployedPasskeySafe(op.sender, ctx, chain);
+    if (!r.ok) return r;
   }
 
-  const needAdmin = [...st.needsAdmin];
-  const admins = await Promise.all(needAdmin.map((t) => read(() => chain.isAdmin(t as Hex, op.sender))));
-  for (let i = 0; i < needAdmin.length; i++) {
-    if (admins[i] !== true) return deny(`sender is not an admin of ${needAdmin[i]}`);
+  // ---- chain: every handover must be a valid admin-signed request ----
+  for (const h of st.handovers) {
+    const v = await read(() => chain.verifySignerPermissionRequest(ctx.legacy, h.req, h.signature));
+    if (!v || v.success !== true) return deny("handover signature is not a valid admin signature");
+    const signerIsAdmin = await read(() => chain.isAdmin(ctx.legacy, v.signer));
+    if (!signerIsAdmin) return deny("handover signature is not a valid admin signature");
+  }
+
+  // ---- chain: execute before any handover / SRM without a handover need an existing admin ----
+  const needsAdmin = st.executeNeedsAdmin || (st.srm && st.handovers.length === 0);
+  if (needsAdmin) {
+    const admin = await read(() => chain.isAdmin(ctx.legacy, op.sender));
+    if (admin !== true) return deny(`sender is not an admin of ${ctx.legacy}`);
   }
   return OK;
 }
@@ -363,6 +501,33 @@ export function parseSponsorUserOp(input: unknown): SponsorUserOp {
     maxPriorityFeePerGas: quantity(o, "maxPriorityFeePerGas"),
     paymasterVerificationGasLimit: quantity(o, "paymasterVerificationGasLimit"),
     paymasterPostOpGasLimit: quantity(o, "paymasterPostOpGasLimit"),
+  };
+}
+
+const HEX_WORD = /^0x[0-9a-fA-F]{64}$/;
+
+function word32(obj: Record<string, unknown>, key: string): Hex {
+  const v = field(obj, key);
+  if (typeof v !== "string" || !HEX_WORD.test(v)) throw new Error(`${key} must be 32 bytes of 0x hex`);
+  return v as Hex;
+}
+
+/** The full request body: { chainId, userOp, x, y, legacy }. Throws on malformed input. */
+export function parseSponsorRequest(input: unknown): {
+  chainId: unknown;
+  userOp: SponsorUserOp;
+  x: Hex;
+  y: Hex;
+  legacy: Hex;
+} {
+  if (!input || typeof input !== "object") throw new Error("body must be an object");
+  const o = input as Record<string, unknown>;
+  return {
+    chainId: o.chainId,
+    userOp: parseSponsorUserOp(o.userOp),
+    x: word32(o, "x"),
+    y: word32(o, "y"),
+    legacy: address(o, "legacy"),
   };
 }
 
