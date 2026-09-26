@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Switch, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useChatActions } from '@/context/ChatContext';
 import type { GrantableTool } from '@/lib/chat/api';
 import { chatFont, useChatTokens } from './tokens';
+import { SettingsListSkeleton } from './Shimmer';
 
 /**
  * Gated tools that can be always-allowed (risk public/external; money is never grantable).
@@ -73,7 +74,7 @@ export function PermissionsSection({ botId }: PermissionsSectionProps) {
         bestätigst du immer selbst.
       </Text>
       {granted === null ? (
-        <ActivityIndicator color={t.textTertiary} style={styles.loading} />
+        <SettingsListSkeleton rows={2} style={styles.loading} />
       ) : (
         <View style={[styles.box, { backgroundColor: t.groupedBackground }]}>
           {available.map((g, i) => {
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
   root: { marginTop: 22 },
   label: { fontFamily: chatFont.medium, fontSize: 14, marginBottom: 4 },
   hint: { fontFamily: chatFont.regular, fontSize: 13, lineHeight: 18, marginBottom: 10 },
-  loading: { marginVertical: 12 },
+  loading: { borderRadius: 20 },
   box: { borderRadius: 20, paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
   rowText: { flex: 1, minWidth: 0 },

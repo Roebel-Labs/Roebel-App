@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { chatFont, chatSize, haloShadow, useChatTokens } from './tokens';
+import { ShimmerLine } from './Shimmer';
 
 export type BlackPillButtonProps = {
   label: string;
@@ -33,7 +34,13 @@ export function BlackPillButton({ label, onPress, variant = 'primary', loading, 
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={t.primaryButtonText} />
+        <ShimmerLine
+          label={label}
+          inverse
+          color={t.primaryButtonText}
+          textStyle={styles.label}
+          accessibilityLabel={`${label} – lädt`}
+        />
       ) : (
         <Text style={[styles.label, { color: variant === 'disabled' ? '#FFFFFF' : t.primaryButtonText }]}>{label}</Text>
       )}

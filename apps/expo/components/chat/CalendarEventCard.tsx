@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { formatEventWhen } from '@/lib/chat/calendar';
 import type { CalendarEventStatus } from '@/lib/chat/types';
 import { chatFont, chatSize, chatType, useChatTokens } from './tokens';
+import { ShimmerLine } from './Shimmer';
 
 export type CalendarEventCardProps = {
   title: string;
@@ -94,7 +95,12 @@ export function CalendarEventCard({
             style={({ pressed }) => [styles.btn, { backgroundColor: t.primaryButton, opacity: pressed ? 0.85 : 1 }]}
           >
             {busy ? (
-              <ActivityIndicator size="small" color={t.primaryButtonText} />
+              <ShimmerLine
+                label="Wird eingetragen …"
+                inverse
+                color={t.primaryButtonText}
+                textStyle={styles.btnText}
+              />
             ) : (
               <Text style={[styles.btnText, { color: t.primaryButtonText }]}>Zum Kalender hinzufügen</Text>
             )}

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap } from '@/context/ChatContext';
 import type { ChatMemory } from '@/lib/chat/api';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BOT_COLORS, BotAvatar, BlackPillButton, chatFont, chatSize, useChatTokens } from '@/components/chat';
+import { BOT_COLORS, BotAvatar, BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const FALLBACK_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dots' };
@@ -85,9 +85,7 @@ export default function ChatMemoryScreen() {
   let body: React.ReactNode;
   if (items === null && !error) {
     body = (
-      <View style={styles.center}>
-        <ActivityIndicator color={t.textSecondary} />
-      </View>
+      <SettingsListSkeleton rows={6} withIcon style={styles.skeleton} />
     );
   } else if (items === null && error) {
     body = (
@@ -156,6 +154,7 @@ export default function ChatMemoryScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  skeleton: { marginHorizontal: chatSize.screenPadH, marginTop: 8 },
   retry: { marginTop: 18, alignSelf: 'stretch' },
   list: { paddingHorizontal: chatSize.screenPadH, gap: 8 },
   flexGrow: { flexGrow: 1 },

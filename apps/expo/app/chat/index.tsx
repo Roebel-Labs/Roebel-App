@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +18,6 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import LoginDrawer from '@/components/LoginDrawer';
-import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
@@ -34,12 +32,12 @@ import {
   BotAvatar,
   InspirationEntryRow,
   ChatListRow,
+  ChatListSkeleton,
   FloatingMascots,
   GlassCircleButton,
   PagerDots,
   chatFont,
   formatListTime,
-  haloShadow,
   useChatTokens,
 } from '@/components/chat';
 
@@ -58,14 +56,6 @@ function randomAvatar(): BotAvatarSpec {
 function errorText(err: unknown): string {
   if (err instanceof ChatApiError) return err.message;
   return 'Es ist ein Fehler aufgetreten.';
-}
-
-function initialsOf(name: string | null | undefined): string {
-  const clean = (name ?? '').replace(/^@/, '').trim();
-  if (!clean || clean.startsWith('0x')) return '?';
-  const words = clean.split(/[\s._-]+/).filter(Boolean);
-  const letters = words.length > 1 ? words[0][0] + words[1][0] : clean.slice(0, 2);
-  return letters.toUpperCase();
 }
 
 /** Entry of the Mecky chat suite: login → Welcome → Onboarding → Chat list. */
@@ -101,11 +91,12 @@ export default function ChatIndexScreen() {
   return <View style={[styles.root, { backgroundColor: t.background }]}>{body}</View>;
 }
 
+/** Bootstrap placeholder: mirrors the chat list so the real list fades in in place. */
 function CenterLoader() {
-  const t = useChatTokens();
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.center}>
-      <ActivityIndicator color={t.textSecondary} />
+    <View style={[styles.flex, { paddingTop: insets.top + 72 }]}>
+      <ChatListSkeleton />
     </View>
   );
 }
@@ -351,12 +342,9 @@ function ChatList({
   const t = useChatTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useUser();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  const initials = initialsOf(user?.display_name || user?.username);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -379,25 +367,12 @@ function ChatList({
   return (
     <View style={styles.flex}>
       <View style={[styles.listHeader, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Zurück zum Profil"
-          onPress={() => {
-            Haptics.selectionAsync().catch(() => {});
-            router.back();
-          }}
-          style={({ pressed }) => [
-            styles.initials,
-            {
-              backgroundColor: t.initialsBg,
-              borderColor: t.surface,
-              transform: [{ scale: pressed ? 0.94 : 1 }],
-            },
-            haloShadow(t),
-          ]}
+        <GlassCircleButton
+          accessibilityLabel="Zurück"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/profile' as Href))}
         >
-          <Text style={[styles.initialsText, { color: t.initialsText }]}>{initials}</Text>
-        </Pressable>
+          <Feather name="chevron-left" size={26} color={t.icon} />
+        </GlassCircleButton>
         <View style={styles.headerRight}>
           <GlassCircleButton accessibilityLabel={searchOpen ? 'Suche schließen' : 'Suchen'} onPress={toggleSearch}>
             <Feather name={searchOpen ? 'x' : 'search'} size={22} color={t.icon} />
@@ -744,15 +719,6 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   headerRight: { flexDirection: 'row', gap: 10 },
-  initials: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initialsText: { fontFamily: chatFont.semiBold, fontSize: 16 },
   searchWrap: { paddingHorizontal: 18, paddingTop: 8 },
   searchField: {
     flexDirection: 'row',

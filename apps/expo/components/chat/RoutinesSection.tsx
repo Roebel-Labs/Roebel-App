@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useChatActions } from '@/context/ChatContext';
 import type { ChatRoutine } from '@/lib/chat/api';
 import { formatSchedule } from '@/lib/chat/routines';
 import { chatFont, useChatTokens } from './tokens';
+import { SettingsListSkeleton } from './Shimmer';
 
 export type RoutinesSectionProps = {
   threadId: string;
@@ -79,7 +80,7 @@ export function RoutinesSection({ threadId, botId }: RoutinesSectionProps) {
     <View style={styles.root}>
       <Text style={[styles.label, { color: t.textSecondary }]}>Routinen</Text>
       {shown === null && !error ? (
-        <ActivityIndicator color={t.textTertiary} style={styles.loading} />
+        <SettingsListSkeleton rows={2} style={styles.loading} />
       ) : shown && shown.length ? (
         <View style={[styles.box, { backgroundColor: t.groupedBackground }]}>
           {shown.map((r, i) => (
@@ -129,7 +130,7 @@ export function RoutinesSection({ threadId, botId }: RoutinesSectionProps) {
 const styles = StyleSheet.create({
   root: { marginTop: 22 },
   label: { fontFamily: chatFont.medium, fontSize: 14, marginBottom: 10 },
-  loading: { marginVertical: 12 },
+  loading: { borderRadius: 20 },
   box: { borderRadius: 20, paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
   rowText: { flex: 1, minWidth: 0 },

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Keyboard,
@@ -51,6 +50,8 @@ import {
   MessageParts,
   NewDivider,
   ScrollToBottomButton,
+  ShimmerLine,
+  ThreadSkeleton,
   TypingIndicator,
   chatFont,
   chatSize,
@@ -751,12 +752,14 @@ export default function ChatThreadScreen() {
               alignItems: 'center',
             }}
           >
-            {th.loadingOlder ? <ActivityIndicator color={t.textTertiary} style={styles.olderLoader} /> : null}
+            {th.loadingOlder ? (
+              <ShimmerLine width={96} height={10} accessibilityLabel="Ältere Nachrichten laden" style={styles.olderLoader} />
+            ) : null}
           </View>
         }
         ListEmptyComponent={
           !th.loaded ? (
-            <ActivityIndicator color={t.textTertiary} style={styles.firstLoader} />
+            <ThreadSkeleton style={styles.firstLoader} />
           ) : th.error && !th.error.retry ? (
             <View style={styles.loadError}>
               <Text style={[styles.loadErrorText, { color: t.textSecondary }]}>{th.error.message}</Text>
@@ -817,8 +820,7 @@ export default function ChatThreadScreen() {
       >
         {transcribing ? (
           <View style={styles.transcribing}>
-            <ActivityIndicator size="small" color={t.textSecondary} />
-            <Text style={[styles.transcribingText, { color: t.textSecondary }]}>Wird transkribiert …</Text>
+            <ShimmerLine label="Wird transkribiert …" color={t.textSecondary} textStyle={styles.transcribingText} />
           </View>
         ) : null}
         {replyTarget ? (
@@ -930,7 +932,7 @@ const styles = StyleSheet.create({
   failedText: { fontFamily: chatFont.regular, fontSize: 13 },
   failedAction: { fontFamily: chatFont.semiBold },
   olderLoader: { marginBottom: 8 },
-  firstLoader: { marginTop: 40 },
+  firstLoader: { marginTop: 8 },
   loadError: {
     alignItems: 'center',
     paddingHorizontal: 32,

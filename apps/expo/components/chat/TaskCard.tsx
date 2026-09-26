@@ -1,8 +1,9 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { ChatPart } from '@/lib/chat/types';
 import { chatFont, chatSize, useChatTokens, type ChatTokens } from './tokens';
+import { ShimmerBlock, ShimmerLine } from './Shimmer';
 
 export type TaskPart = Extract<ChatPart, { type: 'task' }>;
 
@@ -36,7 +37,13 @@ function StatusChip({ status, t }: { status: TaskPart['status']; t: ChatTokens }
 }
 
 function StepIcon({ status, t }: { status: TaskPart['steps'][number]['status']; t: ChatTokens }) {
-  if (status === 'running') return <ActivityIndicator size="small" color={t.textSecondary} style={styles.stepIcon} />;
+  if (status === 'running') {
+    return (
+      <View style={[styles.stepIcon, styles.pendingWrap]} accessible accessibilityLabel="Läuft">
+        <ShimmerBlock width={16} height={16} radius={8} />
+      </View>
+    );
+  }
   if (status === 'done') return <Feather name="check" size={17} color={t.check} style={styles.stepIcon} />;
   if (status === 'failed') return <Feather name="x" size={17} color={t.recordingRed} style={styles.stepIcon} />;
   return (
@@ -98,9 +105,11 @@ export function TaskCard({ part, onLongPress, onCancel, style }: TaskCardProps) 
           accessibilityLabel="Aufgabe abbrechen"
           style={styles.cancel}
         >
-          <Text style={[styles.cancelText, { color: t.textSecondary }, cancelling && styles.faded]}>
-            {cancelling ? 'Wird abgebrochen …' : 'Abbrechen'}
-          </Text>
+          {cancelling ? (
+            <ShimmerLine label="Wird abgebrochen …" color={t.textSecondary} textStyle={styles.cancelText} />
+          ) : (
+            <Text style={[styles.cancelText, { color: t.textSecondary }]}>Abbrechen</Text>
+          )}
         </Pressable>
       ) : null}
     </Pressable>

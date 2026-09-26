@@ -8,7 +8,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatBootstrap } from '@/context/ChatContext';
 import { threadTitle } from '@/lib/chat/format';
 import { showChatMenu } from '@/lib/chat/menu';
-import { BOT_COLORS, BotAvatar, GlassCircleButton, GlassPillHeader, chatFont, chatSize } from '@/components/chat';
+import { BOT_COLORS, BotAvatar, GlassCircleButton, GlassPillHeader, ShimmerBlock, chatFont, chatSize } from '@/components/chat';
 
 /** The bot's computer (ref 18). Until phase 5 there is no VM → empty state; with `vmUrl` a noVNC WebView. */
 export default function ChatComputerScreen() {
@@ -50,7 +50,18 @@ export default function ChatComputerScreen() {
       <View style={styles.stage}>
         <View style={[styles.screen, { height: screenHeight }]}>
           {vmUrl ? (
-            <WebView source={{ uri: vmUrl }} style={styles.webview} originWhitelist={['https://*']} allowsInlineMediaPlayback />
+            <WebView
+              source={{ uri: vmUrl }}
+              style={styles.webview}
+              originWhitelist={['https://*']}
+              allowsInlineMediaPlayback
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.loading} accessible accessibilityRole="progressbar" accessibilityLabel="Lädt">
+                  <ShimmerBlock tone="dark" width="100%" height={screenHeight} radius={0} />
+                </View>
+              )}
+            />
           ) : (
             <View style={styles.empty}>
               <BotAvatar
@@ -78,6 +89,7 @@ const styles = StyleSheet.create({
   gap: { marginLeft: 10 },
   stage: { flex: 1, justifyContent: 'center' },
   screen: { width: '100%', backgroundColor: '#0E0E10', overflow: 'hidden' },
+  loading: { ...StyleSheet.absoluteFillObject },
   webview: { flex: 1, backgroundColor: '#000000' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
   mascot: { opacity: 0.55, marginBottom: 14 },

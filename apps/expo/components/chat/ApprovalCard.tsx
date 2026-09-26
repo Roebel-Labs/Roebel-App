@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import type { ApprovalPreview, ChatPart } from '@/lib/chat/types';
 import { chatFont, chatSize, chatType, useChatTokens, type ChatTokens } from './tokens';
+import { ShimmerLine } from './Shimmer';
 
 export type ApprovalPart = Extract<ChatPart, { type: 'approval' }>;
 
@@ -223,7 +224,12 @@ export function ApprovalCard({ part, onApprove, onReject, disabled, onLongPress,
             ]}
           >
             {busy === 'approve' ? (
-              <ActivityIndicator size="small" color={t.primaryButtonText} />
+              <ShimmerLine
+                label={isMoney ? 'Wird signiert …' : 'Wird freigegeben …'}
+                inverse
+                color={t.primaryButtonText}
+                textStyle={styles.btnText}
+              />
             ) : (
               <Text style={[styles.btnText, { color: t.primaryButtonText }]}>
                 {isMoney ? 'Mit Wallet bestätigen' : 'Freigeben'}
@@ -239,7 +245,7 @@ export function ApprovalCard({ part, onApprove, onReject, disabled, onLongPress,
             style={styles.rejectBtn}
           >
             {busy === 'reject' ? (
-              <ActivityIndicator size="small" color={t.textSecondary} />
+              <ShimmerLine label="Wird abgelehnt …" color={t.textSecondary} textStyle={styles.rejectText} />
             ) : (
               <Text style={[styles.rejectText, { color: inactive ? t.textTertiary : t.textSecondary }]}>Ablehnen</Text>
             )}
@@ -250,8 +256,12 @@ export function ApprovalCard({ part, onApprove, onReject, disabled, onLongPress,
   } else if (status === 'approved') {
     footer = (
       <View style={styles.stateRow}>
-        <ActivityIndicator size="small" color={t.textSecondary} />
-        <Text style={[styles.stateText, { color: t.textSecondary }]}>Wird ausgeführt …</Text>
+        <ShimmerLine
+          label="Wird ausgeführt …"
+          color={t.textSecondary}
+          textStyle={styles.stateText}
+          style={styles.shimmerState}
+        />
       </View>
     );
   } else if (status === 'executed') {
@@ -331,6 +341,7 @@ const styles = StyleSheet.create({
   rejectBtn: { height: 37, justifyContent: 'center' },
   rejectText: { fontFamily: chatFont.medium, fontSize: 15 },
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
+  shimmerState: { alignSelf: 'flex-start' },
   stateText: { fontFamily: chatFont.medium, fontSize: 15, flexShrink: 1 },
   fadedText: { fontFamily: chatFont.regular, fontSize: 15, marginTop: 12, marginBottom: 2 },
 });

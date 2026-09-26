@@ -47,6 +47,11 @@ export const chatLightTokens = {
   icon: '#000000',
   backdrop: 'rgba(0,0,0,0.25)',
   computerBackground: '#000000',
+  /** Shimmer skeleton base + the light band that sweeps across it. */
+  skeleton: '#EEEEF0',
+  skeletonHighlight: 'rgba(255,255,255,0.65)',
+  /** Band sweeping over a label on a black (primaryButton) surface. */
+  skeletonHighlightInverse: 'rgba(255,255,255,0.28)',
   /** The very soft, wide halo under every floating white control. */
   halo: '0px 6px 28px rgba(0,0,0,0.08)',
   haloStrong: '0px 10px 36px rgba(0,0,0,0.12)',
@@ -95,6 +100,9 @@ export const chatDarkTokens: ChatTokens = {
   icon: '#F5F5F7',
   backdrop: 'rgba(0,0,0,0.55)',
   computerBackground: '#000000',
+  skeleton: '#222225',
+  skeletonHighlight: 'rgba(255,255,255,0.07)',
+  skeletonHighlightInverse: 'rgba(0,0,0,0.14)',
   halo: '0px 6px 28px rgba(0,0,0,0.5)',
   haloStrong: '0px 10px 36px rgba(0,0,0,0.6)',
 };

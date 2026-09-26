@@ -1,11 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
-import { ActivityIndicator, Share, StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Markdown from 'react-native-markdown-display';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { GlassCircleButton } from './GlassCircleButton';
 import { chatFont, useChatTokens, type ChatTokens } from './tokens';
+import { FileSheetSkeleton } from './Shimmer';
 
 export type FileSheetProps = {
   /** Mount/unmount controlled by the parent; render at the screen root. */
@@ -112,7 +113,7 @@ export function FileSheet({ visible, onClose, name, content, loading, error }: F
           error ? (
             <Text style={[styles.error, { color: t.textSecondary }]}>{error}</Text>
           ) : (
-            <ActivityIndicator style={styles.loader} color={t.textSecondary} />
+            <FileSheetSkeleton style={styles.loader} />
           )
         ) : (
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
   cell: { flex: 1 },
   th: { fontFamily: chatFont.semiBold, fontSize: 16, lineHeight: 20 },
   td: { fontFamily: chatFont.regular, fontSize: 16, lineHeight: 20 },
-  loader: { marginTop: 40 },
+  loader: { marginTop: 8 },
   error: { fontFamily: chatFont.regular, fontSize: 16, textAlign: 'center', marginTop: 40 },
 });
 

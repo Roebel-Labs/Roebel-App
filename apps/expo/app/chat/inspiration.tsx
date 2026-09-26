@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ import {
   chatFont,
   chatSize,
   useChatTokens,
+  InspirationSkeleton,
 } from '@/components/chat';
 
 /** "Für dich": ranked ideas what the bots can do for the viewer or one of their organisations. */
@@ -166,9 +167,7 @@ export default function ChatInspirationScreen() {
     );
   } else if (insp.status !== 'ready') {
     emptyState = (
-      <View style={styles.center}>
-        <ActivityIndicator color={t.textSecondary} />
-      </View>
+      <InspirationSkeleton />
     );
   } else {
     emptyState = <Message text="Gerade keine neuen Ideen. Schau bald wieder vorbei." />;

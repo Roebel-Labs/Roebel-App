@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
+  Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions } from '@/context/ChatContext';
 import { ChatApiError, type ChatConnector } from '@/lib/chat/api';
 import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl } from '@/lib/chat/connections';
-import { BlackPillButton, chatFont, chatSize, useChatTokens, type ChatTokens } from '@/components/chat';
+import { BlackPillButton, SettingsListSkeleton, ShimmerLine, chatFont, chatSize, useChatTokens, type ChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const GOOGLE_MESSAGES = {
@@ -182,7 +182,7 @@ export default function ChatConnectionsScreen() {
         </Text>
       </View>
       {busyId === c.id ? (
-        <ActivityIndicator color={t.textSecondary} />
+        <ShimmerLine width={44} height={10} />
       ) : (
         <>
           {c.kind === 'mcp' ? (
@@ -203,9 +203,7 @@ export default function ChatConnectionsScreen() {
   let body: React.ReactNode;
   if (items === null && !error) {
     body = (
-      <View style={styles.center}>
-        <ActivityIndicator color={t.textSecondary} />
-      </View>
+      <SettingsListSkeleton rows={3} withIcon style={styles.skeleton} />
     );
   } else if (items === null && error) {
     body = (
@@ -243,7 +241,7 @@ export default function ChatConnectionsScreen() {
               <Text style={[styles.meta, { color: t.textSecondary }]}>Gmail, Kalender und Drive</Text>
             </View>
             {googleBusy ? (
-              <ActivityIndicator color={t.textSecondary} />
+              <ShimmerLine width={44} height={10} accessibilityLabel="Google wird verbunden" />
             ) : googleAvailable ? (
               <Feather name="chevron-right" size={20} color={t.textSecondary} />
             ) : (
@@ -332,6 +330,7 @@ export default function ChatConnectionsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  skeleton: { marginHorizontal: chatSize.screenPadH, marginTop: 8 },
   retry: { marginTop: 18, alignSelf: 'stretch' },
   list: { paddingHorizontal: chatSize.screenPadH, gap: 8 },
   intro: { fontFamily: chatFont.regular, fontSize: 15, lineHeight: 21, marginTop: 4, marginBottom: 4 },

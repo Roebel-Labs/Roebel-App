@@ -1,10 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useChatActions } from '@/context/ChatContext';
 import type { AgentActionRecord, AgentActionStatus } from '@/lib/chat/api';
-import { BlackPillButton, chatFont, chatSize, useChatTokens, type ChatTokens } from '@/components/chat';
+import { BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatTokens, type ChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const STATUS_LABEL: Record<AgentActionStatus, string> = {
@@ -70,9 +70,7 @@ export default function ChatActivityScreen() {
   let body: React.ReactNode;
   if (items === null && !error) {
     body = (
-      <View style={styles.center}>
-        <ActivityIndicator color={t.textSecondary} />
-      </View>
+      <SettingsListSkeleton rows={6} style={styles.skeleton} />
     );
   } else if (items === null && error) {
     body = (
@@ -135,6 +133,7 @@ export default function ChatActivityScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  skeleton: { marginHorizontal: chatSize.screenPadH, marginTop: 8 },
   retry: { marginTop: 18, alignSelf: 'stretch' },
   list: { paddingHorizontal: chatSize.screenPadH + 4 },
   flexGrow: { flexGrow: 1 },

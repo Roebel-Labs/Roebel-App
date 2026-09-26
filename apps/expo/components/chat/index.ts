@@ -33,3 +33,4 @@ export * from './RoutinesSection';
 export * from './PermissionsSection';
 export * from './InspirationCard';
 export * from './InspirationEntryRow';
+export * from './Shimmer';
