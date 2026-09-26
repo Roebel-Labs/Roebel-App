@@ -274,7 +274,7 @@ export type MenuItemVariant = {
 export type AccountRatingSummary = {
   account_id: string;
   rating_count: number;
-  avg_stars: number;
+  avg_stars: number | null;
 };
 
 export type AccountRatingRecord = {

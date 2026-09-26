@@ -19,7 +19,7 @@ function formatCount(n: number): string {
 export default function RatingSummary({ summary, size = 'md', showCount = true }: Props) {
   const { colors } = useTheme();
   const hasRatings = summary && summary.rating_count > 0;
-  const avg = hasRatings ? summary!.avg_stars.toFixed(1) : '–';
+  const avg = hasRatings && summary?.avg_stars != null ? summary.avg_stars.toFixed(1) : '–';
   const count = hasRatings ? formatCount(summary!.rating_count) : '0';
   const fontSize = size === 'sm' ? 13 : 15;
   const iconSize = size === 'sm' ? 14 : 16;

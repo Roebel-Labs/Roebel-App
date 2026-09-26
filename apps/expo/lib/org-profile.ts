@@ -97,7 +97,9 @@ export function describeOpenState(hours: OpeningHours | null, now = new Date()):
 }
 
 /** German decimal comma: 4.5 → "4,5". */
-export function formatRating(avg: number): string {
+/** "4,7"; '' when there is no average yet (the RPC returns null for 0 ratings). */
+export function formatRating(avg: number | null | undefined): string {
+  if (typeof avg !== 'number' || !Number.isFinite(avg)) return '';
   return avg.toFixed(1).replace('.', ',');
 }
 
