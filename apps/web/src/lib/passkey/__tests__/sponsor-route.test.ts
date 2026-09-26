@@ -11,7 +11,7 @@ import { PRODUCTION_SPONSOR_SIGNERS, handleSponsorRequest } from "../sponsor-han
 import type { SponsorBudget } from "../sponsor-budget";
 import { hashStableFields, requiredPrefund, voucherTypedData } from "../voucher";
 import { safeFactoryData, PASSKEY_SAFE } from "../safe-address";
-import { GOOD_SIG, KEY, LEGACY, SAFE, brokenChain, fakeChain } from "./fake-chain";
+import { GOOD_SIG, KEY, LEGACY, SAFE, V3_CITIZEN, brokenChain, fakeChain } from "./fake-chain";
 
 // Anvil/Hardhat well-known test key #0 - publicly known, test-only.
 const TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -156,14 +156,19 @@ test("the production Netizen sponsor signer is refused as the preview key", () =
   assert.ok(PRODUCTION_SPONSOR_SIGNERS.map((a) => a.toLowerCase()).includes("0x218b0a592f2078aa542d7b981638595df6ba8bf7"));
 });
 
-test("400 on malformed JSON, malformed userOp, or missing x / y / legacy", async () => {
+test("400 on malformed JSON, malformed userOp, missing x / y, or a malformed legacy", async () => {
   enable();
   assert.equal((await POST(req("{not json"))).status, 400);
   assert.equal((await POST(req(body({ sender: "x" })))).status, 400);
   assert.equal((await POST(req({ chainId: 100 }))).status, 400);
   assert.equal((await POST(req(body(userOp(), { x: undefined })))).status, 400);
   assert.equal((await POST(req(body(userOp(), { y: "0x12" })))).status, 400);
-  assert.equal((await POST(req(body(userOp(), { legacy: undefined })))).status, 400);
+  assert.equal((await POST(req(body(userOp(), { legacy: "0x12" })))).status, 400);
+  assert.equal((await POST(req(body(userOp(), { recoveryLegacy: "0x12" })))).status, 400);
+  // legacy is optional now, but a legacy-account call without it is not sponsorable.
+  const res = await POST(req(body(userOp(), { legacy: undefined })));
+  assert.equal(res.status, 403);
+  assert.equal(budget.calls.length, 0);
 });
 
 test("403 on wrong chain", async () => {
@@ -281,4 +286,66 @@ test("a throwing budget fails closed with 503", async () => {
   const { result: res, logs } = await captureErrors(() => POST(req(body())));
   assert.equal(res.status, 503);
   assert.doesNotMatch(logs.join("\n"), /postgres|pw@/);
+});
+
+// ---- v3 env + identity-bound budget keys ----
+
+const v3Abi = parseAbi(["function moveTo(address newAccount)"]);
+const srmAbi = parseAbi(["function confirmRecovery(address wallet, address[] newOwners, uint256 newThreshold, bool execute)"]);
+const moveToCall = encodeFunctionData({
+  abi: safe4337,
+  functionName: "executeUserOp",
+  args: [
+    LEGACY,
+    0n,
+    encodeFunctionData({
+      abi: account,
+      functionName: "execute",
+      args: [V3_CITIZEN, 0n, encodeFunctionData({ abi: v3Abi, functionName: "moveTo", args: [SAFE] })],
+    }),
+    0,
+  ],
+});
+
+test("v3 moveTo is sponsorable only while PASSKEY_CITIZEN_NFT_V3 is set (malformed = off)", async () => {
+  enable();
+  try {
+    delete process.env.PASSKEY_CITIZEN_NFT_V3;
+    let res = await POST(req(body(userOp(moveToCall))));
+    assert.equal(res.status, 403);
+    assert.match((await res.json()).reason, /not enabled/);
+
+    process.env.PASSKEY_CITIZEN_NFT_V3 = "0x1234";
+    const { result } = await captureErrors(() => POST(req(body(userOp(moveToCall)))));
+    assert.equal(result.status, 403);
+
+    process.env.PASSKEY_CITIZEN_NFT_V3 = V3_CITIZEN;
+    res = await POST(req(body(userOp(moveToCall))));
+    assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+    assert.equal(budget.calls[0].key, LEGACY.toLowerCase());
+  } finally {
+    delete process.env.PASSKEY_CITIZEN_NFT_V3;
+  }
+});
+
+test("a family guardian's confirmRecovery (no legacy) is billed to the wallet being recovered", async () => {
+  enable();
+  const WALLET = "0x2222222222222222222222222222222222222222" as Hex;
+  chain = fakeChain((w) => {
+    w.citizens.add(WALLET.toLowerCase());
+    w.guardians.set(WALLET.toLowerCase(), new Set([SAFE.toLowerCase()]));
+  });
+  const confirmCall = encodeFunctionData({
+    abi: safe4337,
+    functionName: "executeUserOp",
+    args: [
+      PASSKEY_SAFE.socialRecoveryModule,
+      0n,
+      encodeFunctionData({ abi: srmAbi, functionName: "confirmRecovery", args: [WALLET, [TEST_ADDR], 1n, false] }),
+      0,
+    ],
+  });
+  const res = await POST(req(body(userOp(confirmCall), { legacy: undefined })));
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal(budget.calls[0].key, WALLET.toLowerCase());
 });

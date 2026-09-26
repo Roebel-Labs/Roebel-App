@@ -7,7 +7,9 @@
  *   - LEGACY and OTHER_LEGACY are thirdweb Account proxies holding a
  *     CitizenNFTv2, both with EOA as admin; SAFE is already admin of LEGACY;
  *   - a handover signature is valid iff it equals GOOD_SIG (anything else
- *     makes verifySignerPermissionRequest revert, like ECDSA.recover does).
+ *     makes verifySignerPermissionRequest revert, like ECDSA.recover does);
+ *   - v3 CitizenNFT / AttesterNFT live at V3_CITIZEN / V3_ATTESTER with no holders;
+ *   - no guardians, no recovery requests, AccountFactory.getAddress knows no admins.
  */
 import { getAddress, zeroAddress, type Hex } from "viem";
 import vector from "./passkey-safe-vector.json";
@@ -29,6 +31,8 @@ export const GUARDIAN = "0x4444444444444444444444444444444444444444" as Hex;
 export const RECOVERED_SIGNER = "0x7777777777777777777777777777777777777777" as Hex;
 export const GOOD_SIG = `0x${"ab".repeat(65)}` as Hex;
 export const BAD_SIG = `0x${"cd".repeat(65)}` as Hex;
+export const V3_CITIZEN = "0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c" as Hex;
+export const V3_ATTESTER = "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7" as Hex;
 
 const word = (a: Hex) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}` as Hex;
 const k = (...parts: Array<string | bigint>) => parts.map((p) => String(p).toLowerCase()).join(":");
@@ -42,7 +46,13 @@ export interface FakeWorld {
   sharedConfig: Map<string, { x: bigint; y: bigint; verifiers: bigint }>;
   webauthnSigners: Map<string, Hex>;
   citizens: Set<string>;
+  citizensV3: Set<string>;
   executedUids: Set<string>;
+  /** AccountFactory.getAddress(admin, 0x), keyed by lowercased admin. */
+  legacyAddresses: Map<string, Hex>;
+  /** SRM guardians per lowercased wallet. */
+  guardians: Map<string, Set<string>>;
+  recoveryRequests: Map<string, { executeAfter: bigint; newThreshold: bigint; newOwners: Hex[] }>;
 }
 
 export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
@@ -69,7 +79,11 @@ export function defaultWorld(): FakeWorld {
     sharedConfig: new Map(),
     webauthnSigners: new Map(),
     citizens: new Set([LEGACY.toLowerCase(), OTHER_LEGACY.toLowerCase()]),
+    citizensV3: new Set(),
     executedUids: new Set(),
+    legacyAddresses: new Map(),
+    guardians: new Map(),
+    recoveryRequests: new Map(),
   };
   makePasskeySafe(w, SAFE);
   return w;
@@ -114,10 +128,27 @@ export function fakeChain(mutate?: (w: FakeWorld) => void): FakeChain {
       reads.push("getWebAuthnSigner");
       return w.webauthnSigners.get(k(x, y, verifiers)) ?? zeroAddress;
     },
-    async balanceOf(token, owner) {
-      reads.push("balanceOf");
-      if (token.toLowerCase() !== CITIZEN_NFT.toLowerCase()) return 0n;
-      return w.citizens.has(owner.toLowerCase()) ? 1n : 0n;
+    async hasCitizenNFT(nft, account) {
+      reads.push("hasCitizenNFT");
+      if (nft.toLowerCase() === CITIZEN_NFT.toLowerCase()) return w.citizens.has(account.toLowerCase());
+      if (nft.toLowerCase() === V3_CITIZEN.toLowerCase()) return w.citizensV3.has(account.toLowerCase());
+      throw new Error("hasCitizenNFT on a contract without code");
+    },
+    async getLegacyAccountAddress(admin) {
+      reads.push("getLegacyAccountAddress");
+      return w.legacyAddresses.get(admin.toLowerCase()) ?? ("0x000000000000000000000000000000000000dEaD" as Hex);
+    },
+    async guardiansCount(wallet) {
+      reads.push("guardiansCount");
+      return BigInt(w.guardians.get(wallet.toLowerCase())?.size ?? 0);
+    },
+    async isGuardian(wallet, guardian) {
+      reads.push("isGuardian");
+      return w.guardians.get(wallet.toLowerCase())?.has(guardian.toLowerCase()) ?? false;
+    },
+    async getRecoveryRequest(wallet) {
+      reads.push("getRecoveryRequest");
+      return w.recoveryRequests.get(wallet.toLowerCase()) ?? { executeAfter: 0n, newThreshold: 0n, newOwners: [] };
     },
     async verifySignerPermissionRequest(account, req, signature) {
       reads.push("verifySignerPermissionRequest");
@@ -139,7 +170,11 @@ export function brokenChain(): ChainReader {
     getOwners: fail,
     getSharedSignerConfiguration: fail,
     getWebAuthnSigner: fail,
-    balanceOf: fail,
+    hasCitizenNFT: fail,
+    getLegacyAccountAddress: fail,
+    guardiansCount: fail,
+    isGuardian: fail,
+    getRecoveryRequest: fail,
     verifySignerPermissionRequest: fail,
   };
 }

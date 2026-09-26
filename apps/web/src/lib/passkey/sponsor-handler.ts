@@ -5,7 +5,9 @@
  *
  * Request:  { chainId: 100,
  *             x, y,       // passkey P-256 public key, 0x + 32 bytes each
- *             legacy,     // the citizen's legacy thirdweb account (the ONE account the op may drive)
+ *             legacy?,    // the citizen's legacy thirdweb account (the ONE account the op may drive);
+ *                         // omitted when the sender Safe itself is the citizen, or for recovery ops
+ *             recoveryLegacy?, // recovery ops: the legacy account the recovered wallet administers
  *             userOp: { sender, nonce, factory?, factoryData?, callData,
  *               callGasLimit, verificationGasLimit, preVerificationGas,
  *               maxFeePerGas, maxPriorityFeePerGas,
@@ -23,6 +25,8 @@
  *   PASSKEY_SPONSOR_ENABLED=1
  *   PASSKEY_SPONSOR_KEY        sponsorSigner key of the preview paymaster (never logged)
  *   PASSKEY_PAYMASTER_ADDRESS  the DEDICATED preview paymaster; required, no default
+ *   PASSKEY_CITIZEN_NFT_V3     optional; CitizenNFTv3 (citizen check + moveTo target). Unset = v3 off
+ *   PASSKEY_ATTESTER_NFT_V3    optional; AttesterNFTv3 (moveTo target). Unset = attester moveTo off
  *
  * Logging: never a raw error message (viem errors can embed the RPC URL with
  * an API key). A fixed string plus the error's `name` only.
@@ -36,6 +40,7 @@ import {
   parseSponsorRequest,
   toPackedUserOperation,
   type ChainReader,
+  type V3Config,
 } from "./sponsor-policy";
 import type { SponsorBudget } from "./sponsor-budget";
 import { issueSponsorship, requiredPrefund } from "./voucher";
@@ -78,6 +83,20 @@ function readConfig(): { key: Hex; paymaster: Hex } | null {
   return { key: key as Hex, paymaster: paymaster as Hex };
 }
 
+/** Optional v3 contracts; a malformed value is logged and treated as unset (v3 shapes rejected). */
+export function v3ConfigFromEnv(env: Record<string, string | undefined> = process.env): V3Config {
+  const pick = (name: string): Hex | undefined => {
+    const v = env[name];
+    if (!v) return undefined;
+    if (!isAddress(v, { strict: false })) {
+      console.error(`[passkey-sponsor] ${name} is malformed; v3 stays off`);
+      return undefined;
+    }
+    return v as Hex;
+  };
+  return { citizenNft: pick("PASSKEY_CITIZEN_NFT_V3"), attesterNft: pick("PASSKEY_ATTESTER_NFT_V3") };
+}
+
 export async function handleSponsorRequest(
   request: Request,
   deps: { chain: ChainReader; budget: SponsorBudget },
@@ -98,16 +117,18 @@ export async function handleSponsorRequest(
   } catch {
     return badRequest();
   }
-  const { userOp: op, x, y, legacy } = parsed;
+  const { userOp: op, x, y, legacy, recoveryLegacy } = parsed;
   if (parsed.chainId !== CHAIN_ID) return notSponsorable("chainId must be 100");
 
+  let budgetKey: Hex;
   try {
     const verdict = await evaluateSponsorPolicy(
       op,
-      { x, y, legacy, nowSeconds: Math.floor(Date.now() / 1000) },
+      { x, y, legacy, recoveryLegacy, nowSeconds: Math.floor(Date.now() / 1000), v3: v3ConfigFromEnv() },
       deps.chain,
     );
     if (!verdict.ok) return notSponsorable(verdict.reason);
+    budgetKey = verdict.budgetKey;
   } catch (err) {
     // Fail closed: no chain facts, no voucher.
     console.error("[passkey-sponsor] chain read failed:", errName(err));
@@ -116,7 +137,7 @@ export async function handleSponsorRequest(
 
   const packed = toPackedUserOperation(op);
   try {
-    const reserved = await deps.budget.reserve(legacy.toLowerCase(), requiredPrefund(packed));
+    const reserved = await deps.budget.reserve(budgetKey.toLowerCase(), requiredPrefund(packed));
     if (!reserved) return NextResponse.json({ error: "budget_exhausted" }, { status: 429 });
   } catch (err) {
     console.error("[passkey-sponsor] budget unavailable:", errName(err));

@@ -3,7 +3,8 @@
  *
  * The handler reserves the voucher's `maxCostWei` (EntryPoint v0.7 required
  * prefund, the most the paymaster can be charged) BEFORE signing, keyed by the
- * citizen's legacy thirdweb account (lowercased). A refused reservation spends
+ * citizen identity the policy bound the op to (lowercased): the legacy
+ * thirdweb account, the citizen Safe itself, or the wallet being recovered. A refused reservation spends
  * nothing.
  *
  * `InMemorySponsorBudget` is PREVIEW-ONLY: it lives in one serverless
@@ -16,7 +17,7 @@ export interface SponsorBudget {
   reserve(key: string, costWei: bigint): Promise<boolean>;
 }
 
-/** 0.01 xDAI per legacy account per UTC day. */
+/** 0.01 xDAI per identity (budget key) per UTC day. */
 export const DEFAULT_PER_KEY_DAILY_WEI = 10n ** 16n;
 /** 0.05 xDAI across all accounts per UTC day. */
 export const DEFAULT_GLOBAL_DAILY_WEI = 5n * 10n ** 16n;

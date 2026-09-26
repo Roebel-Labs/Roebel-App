@@ -8,7 +8,7 @@ import {
 } from "viem";
 import { gnosis } from "viem/chains";
 import { PASSKEY_SAFE } from "./safe-address";
-import type { ChainReader, SignerPermissionRequest } from "./sponsor-policy";
+import { ADDRESSES, type ChainReader, type SignerPermissionRequest } from "./sponsor-policy";
 
 const DEFAULT_GNOSIS_RPC = "https://gnosis-rpc.publicnode.com";
 const RPC_TIMEOUT_MS = 8_000;
@@ -29,7 +29,14 @@ const sharedSignerAbi = parseAbi([
 const signerFactoryAbi = parseAbi([
   "function getSigner(uint256 x, uint256 y, uint176 verifiers) view returns (address signer)",
 ]);
-const erc721Abi = parseAbi(["function balanceOf(address owner) view returns (uint256)"]);
+const citizenNftAbi = parseAbi(["function hasCitizenNFT(address account) view returns (bool)"]);
+const accountFactoryAbi = parseAbi(["function getAddress(address adminSigner, bytes data) view returns (address)"]);
+const srmAbi = parseAbi([
+  "struct RecoveryRequest { uint256 guardiansApprovalCount; uint256 newThreshold; uint64 executeAfter; address[] newOwners; }",
+  "function guardiansCount(address wallet) view returns (uint256)",
+  "function isGuardian(address wallet, address guardian) view returns (bool)",
+  "function getRecoveryRequest(address wallet) view returns (RecoveryRequest request)",
+]);
 
 /** The node answered and the call reverted (as opposed to a transport failure). */
 function isRevert(err: unknown): boolean {
@@ -65,8 +72,33 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
         functionName: "getSigner",
         args: [x, y, verifiers],
       }),
-    balanceOf: (token, owner) =>
-      client.readContract({ address: token, abi: erc721Abi, functionName: "balanceOf", args: [owner] }),
+    hasCitizenNFT: (nft, account) =>
+      client.readContract({ address: nft, abi: citizenNftAbi, functionName: "hasCitizenNFT", args: [account] }),
+    getLegacyAccountAddress: (admin) =>
+      client.readContract({
+        address: ADDRESSES.legacyAccountFactory,
+        abi: accountFactoryAbi,
+        functionName: "getAddress",
+        args: [admin, "0x"],
+      }),
+    guardiansCount: (wallet) =>
+      client.readContract({ address: ADDRESSES.socialRecoveryModule, abi: srmAbi, functionName: "guardiansCount", args: [wallet] }),
+    isGuardian: (wallet, guardian) =>
+      client.readContract({
+        address: ADDRESSES.socialRecoveryModule,
+        abi: srmAbi,
+        functionName: "isGuardian",
+        args: [wallet, guardian],
+      }),
+    async getRecoveryRequest(wallet) {
+      const r = await client.readContract({
+        address: ADDRESSES.socialRecoveryModule,
+        abi: srmAbi,
+        functionName: "getRecoveryRequest",
+        args: [wallet],
+      });
+      return { executeAfter: BigInt(r.executeAfter), newThreshold: r.newThreshold, newOwners: r.newOwners };
+    },
     async verifySignerPermissionRequest(account: Hex, req: SignerPermissionRequest, signature: Hex) {
       try {
         const [success, signer] = await client.readContract({

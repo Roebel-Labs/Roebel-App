@@ -32,8 +32,8 @@ test("live: the reader sees real Gnosis state the way the policy expects", { ski
   assert.deepEqual(await chain.getSharedSignerConfiguration(ATTESTER_SAFE), { x: 0n, y: 0n, verifiers: 0n });
   assert.match(await chain.getWebAuthnSigner(BigInt(KEY.x), BigInt(KEY.y), WEBAUTHN_VERIFIERS), /^0x[0-9a-fA-F]{40}$/);
   assert.equal((await chain.getCode(CITIZEN_LEGACY))?.toLowerCase(), LEGACY_ACCOUNT_PROXY_CODE.toLowerCase());
-  assert.ok((await chain.balanceOf(CITIZEN_NFT, CITIZEN_LEGACY)) > 0n);
-  assert.equal(await chain.balanceOf(CITIZEN_NFT, ATTESTER_SAFE), 0n);
+  assert.equal(await chain.hasCitizenNFT(CITIZEN_NFT, CITIZEN_LEGACY), true);
+  assert.equal(await chain.hasCitizenNFT(CITIZEN_NFT, ATTESTER_SAFE), false);
   assert.equal(await chain.isAdmin(CITIZEN_LEGACY, ATTESTER_SAFE), false);
 });
 
@@ -83,4 +83,18 @@ test("live: policy rejects a real non-passkey Safe (403 reason, not a read failu
   );
   assert.equal(r.ok, false);
   if (!r.ok) assert.match(r.reason, /fallback handler/);
+});
+
+/** A real CitizenNFTv2 holder whose thirdweb account is COUNTERFACTUAL on Gnosis (admin read from Base). */
+const COUNTERFACTUAL_CITIZEN = "0xEbf3C1694FBD80b1a7ab8F82e19A1291Cd795227" as Hex;
+const COUNTERFACTUAL_ADMIN = "0x21e70901AbC2656641d08F4eB326484b5Df50e90" as Hex;
+
+test("live: counterfactual v2 citizen, factory prediction, and SRM reads", { skip }, async () => {
+  const chain = createGnosisChainReader();
+  assert.equal(await chain.getCode(COUNTERFACTUAL_CITIZEN), undefined);
+  assert.equal(await chain.hasCitizenNFT(CITIZEN_NFT, COUNTERFACTUAL_CITIZEN), true);
+  assert.equal((await chain.getLegacyAccountAddress(COUNTERFACTUAL_ADMIN)).toLowerCase(), COUNTERFACTUAL_CITIZEN.toLowerCase());
+  assert.equal(await chain.guardiansCount(ATTESTER_SAFE), 0n);
+  assert.equal(await chain.isGuardian(ATTESTER_SAFE, CITIZEN_LEGACY), false);
+  assert.deepEqual(await chain.getRecoveryRequest(ATTESTER_SAFE), { executeAfter: 0n, newThreshold: 0n, newOwners: [] });
 });

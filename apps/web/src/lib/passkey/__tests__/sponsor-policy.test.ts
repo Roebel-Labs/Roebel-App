@@ -150,8 +150,10 @@ const undeployed = () =>
     w.admins.delete(`${LEGACY}:${SAFE}`.toLowerCase());
   });
 
-async function ok(o: SponsorUserOp, chain: ChainReader = fakeChain(), ctx: SponsorContext = CTX) {
-  assert.deepEqual(await evaluateSponsorPolicy(o, ctx, chain), { ok: true });
+async function ok(o: SponsorUserOp, chain: ChainReader = fakeChain(), ctx: SponsorContext = CTX, budgetKey?: Hex) {
+  const r = await evaluateSponsorPolicy(o, ctx, chain);
+  assert.equal(r.ok, true, r.ok ? "" : `expected ok, got: ${r.reason}`);
+  if (r.ok) assert.equal(r.budgetKey.toLowerCase(), (budgetKey ?? ctx.legacy ?? o.sender).toLowerCase(), "budget key");
 }
 async function rejected(o: SponsorUserOp, re?: RegExp, chain: ChainReader = fakeChain(), ctx: SponsorContext = CTX) {
   const r = await evaluateSponsorPolicy(o, ctx, chain);
@@ -482,16 +484,20 @@ test("parseSponsorUserOp reads hex numerics and rejects malformed input", () => 
   assert.throws(() => parseSponsorUserOp(null));
 });
 
-test("parseSponsorRequest requires 32-byte x, y and a legacy address", () => {
+test("parseSponsorRequest requires 32-byte x, y; legacy / recoveryLegacy are optional addresses", () => {
   const userOp = { ...toRpc(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x")))) };
   const good = parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y, legacy: LEGACY });
   assert.equal(good.chainId, 100);
   assert.equal(good.x, KEY.x);
-  assert.equal(getAddress(good.legacy), LEGACY);
+  assert.equal(getAddress(good.legacy!), LEGACY);
   assert.throws(() => parseSponsorRequest({ chainId: 100, userOp, y: KEY.y, legacy: LEGACY }));
   assert.throws(() => parseSponsorRequest({ chainId: 100, userOp, x: "0x1234", y: KEY.y, legacy: LEGACY }));
-  assert.throws(() => parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y }));
+  const noLegacy = parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y });
+  assert.equal(noLegacy.legacy, undefined);
+  assert.equal(noLegacy.recoveryLegacy, undefined);
+  assert.equal(parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y, recoveryLegacy: LEGACY }).recoveryLegacy, LEGACY);
   assert.throws(() => parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y, legacy: "0x12" }));
+  assert.throws(() => parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y, recoveryLegacy: "nope" }));
 });
 
 function toRpc(o: SponsorUserOp): Record<string, string> {
