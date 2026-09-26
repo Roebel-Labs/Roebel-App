@@ -13,7 +13,7 @@
  * skipped, so a run interrupted by a flaky RPC can simply be restarted.
  *
  * Real run (needs the burner key in .env; refuses unless it IS the manifest owner):
- *   ROEBEL_TEST_ENV=1 node scripts/test-env/org-registry-e2e.cjs [--dry-run]
+ *   ROEBEL_TEST_ENV=1 node scripts/test-env/org-registry-e2e.cjs [--dry-run] [--fresh]
  *
  * Rehearsal on a Gnosis fork (no key; impersonates the burner + co-signers):
  *   ORG_E2E_REHEARSAL=1 GNOSIS_FORK=1 ROEBEL_TEST_ENV=1 npx hardhat run scripts/test-env/org-registry-e2e.cjs
@@ -22,6 +22,8 @@ const { ethers } = require("ethers");
 const L = require("./lib.cjs");
 
 const DRY = process.argv.includes("--dry-run");
+// --fresh: deploy a new registry even if the manifest has one (after a contract change).
+const FRESH = process.argv.includes("--fresh") || process.env.ORG_E2E_FRESH === "1";
 const REHEARSAL = process.env.ORG_E2E_REHEARSAL === "1";
 
 // Safe 1.4.1 canonical deployments — the same ones the passkey stack uses.
@@ -38,6 +40,7 @@ const SAFE_ABI = [
 ];
 const FACTORY_ABI = [
   "function createProxyWithNonce(address singleton,bytes initializer,uint256 saltNonce) returns (address)",
+  "function proxyCreationCode() pure returns (bytes)",
   "event ProxyCreation(address indexed proxy, address singleton)",
 ];
 
@@ -136,12 +139,16 @@ async function deploySafe(burner, saltNonce) {
     ethers.ZeroAddress,
   ]);
   const factory = new ethers.Contract(SAFE.proxyFactory, FACTORY_ABI, burner);
-  // Deterministic: same burner + initializer + nonce → same address, so reruns find it.
-  const predicted = await factory.createProxyWithNonce.staticCall(SAFE.singletonL2, initializer, saltNonce).catch(() => null);
-  if (predicted && (await burner.provider.getCode(predicted)) !== "0x") return predicted;
+  // Deterministic CREATE2 (SafeProxyFactory 1.4.1): same initializer + nonce → same
+  // address, so a rerun finds the Safe it already deployed.
+  const salt = ethers.keccak256(ethers.solidityPacked(["bytes32", "uint256"], [ethers.keccak256(initializer), saltNonce]));
+  const initCode = ethers.concat([await factory.proxyCreationCode(), ethers.zeroPadValue(SAFE.singletonL2, 32)]);
+  const predicted = ethers.getCreate2Address(SAFE.proxyFactory, salt, ethers.keccak256(initCode));
+  if ((await burner.provider.getCode(predicted)) !== "0x") return predicted;
   const rcpt = await send(`deploy Safe (nonce ${saltNonce})`, factory.createProxyWithNonce(SAFE.singletonL2, initializer, saltNonce));
   const ev = rcpt.logs.map((l) => { try { return factory.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "ProxyCreation");
   if (!ev) throw new Error("no ProxyCreation event");
+  if (ev.args.proxy.toLowerCase() !== predicted.toLowerCase()) throw new Error(`Safe landed at ${ev.args.proxy}, predicted ${predicted}`);
   return ev.args.proxy;
 }
 
@@ -218,6 +225,11 @@ async function main() {
 
   // 1. Registry
   let registryAddr = manifest.contracts.orgRegistry;
+  if (FRESH && registryAddr) {
+    manifest.orgRegistryArchived = [...(manifest.orgRegistryArchived ?? []), registryAddr];
+    delete manifest.testOrgs;
+    registryAddr = undefined;
+  }
   if (registryAddr && (await provider.getCode(registryAddr)) !== "0x") {
     log(`OrgRegistry: reusing ${registryAddr}`);
   } else {
