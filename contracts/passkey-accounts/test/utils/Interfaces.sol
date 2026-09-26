@@ -102,6 +102,19 @@ interface ISafe {
     function getThreshold() external view returns (uint256);
     function isOwner(address owner) external view returns (bool);
     function isModuleEnabled(address module) external view returns (bool);
+    function domainSeparator() external view returns (bytes32);
+}
+
+/// @dev ERC-1271 (bytes32 variant). On a passkey Safe it is served by the fallback handler
+///      (Safe4337Module v0.3.0 inherits Safe's CompatibilityFallbackHandler 1.4.1).
+interface IERC1271 {
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4);
+}
+
+/// @dev CompatibilityFallbackHandler 1.4.1 helpers, callable directly on the Safe4337Module.
+interface ICompatibilityFallbackHandler {
+    function getMessageHashForSafe(address safe, bytes memory message) external view returns (bytes32);
+    function encodeMessageDataForSafe(address safe, bytes memory message) external view returns (bytes memory);
 }
 
 /// @dev SafeProxyFactory 1.4.1 at 0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67.
@@ -163,7 +176,32 @@ interface ISocialRecoveryModule {
         address[] newOwners;
     }
 
+    struct SignatureData {
+        address signer;
+        bytes signature;
+    }
+
     function addGuardianWithThreshold(address guardian, uint256 threshold) external;
+    function multiConfirmRecovery(
+        address wallet,
+        address[] calldata newOwners,
+        uint256 newThreshold,
+        SignatureData[] memory signatures,
+        bool execute
+    ) external;
+    function getRecoveryHash(address wallet, address[] calldata newOwners, uint256 newThreshold, uint256 nonce)
+        external
+        view
+        returns (bytes32);
+    function domainSeparator() external view returns (bytes32);
+    function validateGuardianSignature(address wallet, bytes32 signHash, address signer, bytes memory signature)
+        external
+        view;
+    function nonce(address wallet) external view returns (uint256);
+    function hasGuardianApproved(address wallet, address guardian, address[] calldata newOwners, uint256 newThreshold)
+        external
+        view
+        returns (bool);
     function confirmRecovery(address wallet, address[] calldata newOwners, uint256 newThreshold, bool execute)
         external;
     function executeRecovery(address wallet, address[] calldata newOwners, uint256 newThreshold) external;
