@@ -128,7 +128,7 @@ describe('suggestDefaultGuardians', () => {
   function suggestChain(base: LookupChain, approvals: Array<{ approver: Address; signedAsAttester: boolean }> | null): LookupChain & SuggestChain {
     return {
       ...base,
-      findMintRequest: jest.fn(async () => (approvals ? { requestId: 7n, blockNumber: 1000n } : null)),
+      findMintRequest: jest.fn(async () => (approvals ? { requestId: 7n, createdAt: 1000n, approvals: approvals.length } : null)),
       approvalsOf: jest.fn(async () => approvals ?? []),
     };
   }
@@ -146,7 +146,7 @@ describe('suggestDefaultGuardians', () => {
       { approver: ATT1, guardian: ATT_SAFE },
       { approver: ATT2, guardian: ATT2 },
     ]);
-    expect(chain.approvalsOf).toHaveBeenCalledWith(7n, 1000n);
+    expect(chain.approvalsOf).toHaveBeenCalledWith({ requestId: 7n, createdAt: 1000n, approvals: 4 });
   });
 
   it('migration-minted citizen (no request) → no suggestion', async () => {
@@ -166,46 +166,56 @@ describe('suggestDefaultGuardians', () => {
   });
 });
 
-describe('createLookupChain (chunked getLogs over a viem-like client)', () => {
-  it('findMintRequest scans backward in capped windows and stops at the newest mint', async () => {
+describe('createLookupChain (view calls + chunked getLogs over a viem-like client)', () => {
+  const req = (target: Address, type: number, status: number, att: bigint, cit: bigint, createdAt: bigint) =>
+    [addr(9), target, type, status, 'ipfs://x', att, cit, createdAt] as const;
+
+  it('findMintRequest walks requests newest-first and returns the executed attestation of the citizen', async () => {
+    const requests: Record<string, ReturnType<typeof req>> = {
+      '0': req(CIT, 0, 3, 2n, 1n, 100n), // the one
+      '1': req(CIT, 1, 3, 3n, 1n, 200n), // a revocation, ignored
+      '2': req(ATT1, 0, 3, 2n, 1n, 300n),
+      '3': req(CIT, 0, 2, 0n, 0n, 400n), // rejected, ignored
+    };
+    const client = {
+      getBlockNumber: jest.fn(),
+      getBlock: jest.fn(),
+      getLogs: jest.fn(),
+      getCode: jest.fn(),
+      readContract: jest.fn(async (a: any) => (a.functionName === 'requestCount' ? 4n : requests[String(a.args[0])])),
+    };
+    const chain = createLookupChain(client, { readGuardians: async () => [] });
+    expect(await chain.findMintRequest(CIT)).toEqual({ requestId: 0n, createdAt: 100n, approvals: 3 });
+    expect(await chain.findMintRequest(addr(0x77))).toBeNull();
+    expect(client.getLogs).not.toHaveBeenCalled();
+  });
+
+  it('approvalsOf scans forward from the estimated creation block in capped windows, stopping once all approvals are in', async () => {
     const calls: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
     const client = {
-      getBlockNumber: jest.fn(async () => 250n),
+      getBlockNumber: jest.fn(),
+      // latest block 10_000 at t = 50_000 → creation at t = 49_000 is ~200 blocks back
+      getBlock: jest.fn(async () => ({ number: 10_000n, timestamp: 50_000n })),
       getLogs: jest.fn(async (a: any) => {
         calls.push({ fromBlock: a.fromBlock, toBlock: a.toBlock });
-        if (a.fromBlock <= 120n && a.toBlock >= 120n) {
-          return [{ address: addr(1), blockNumber: 120n, logIndex: 0, args: { citizen: CIT, tokenId: 3n, requestId: 42n } }];
-        }
-        return [];
+        const hits = [
+          { block: 9_805n, approver: ATT1, signedAsAttester: true },
+          { block: 9_830n, approver: CIT, signedAsAttester: false },
+        ].filter((h) => h.block >= a.fromBlock && h.block <= a.toBlock);
+        return hits.map((h, i) => ({ address: addr(1), blockNumber: h.block, logIndex: i, args: { requestId: 7n, ...h } }));
       }),
       getCode: jest.fn(),
       readContract: jest.fn(),
     };
     const chain = createLookupChain(client, { readGuardians: async () => [], range: 50n, citizenFromBlock: 0n });
-    expect(await chain.findMintRequest(CIT)).toEqual({ requestId: 42n, blockNumber: 120n });
+    const out = await chain.approvalsOf({ requestId: 7n, createdAt: 49_000n, approvals: 2 });
+    expect(out).toEqual([
+      { approver: ATT1, signedAsAttester: true },
+      { approver: CIT, signedAsAttester: false },
+    ]);
     for (const c of calls) expect(c.toBlock - c.fromBlock).toBeLessThan(50n);
-    expect(calls[0].toBlock).toBe(250n);
-  });
-
-  it('approvalsOf walks back from the mint until the request creation appears', async () => {
-    const client = {
-      getBlockNumber: jest.fn(async () => 500n),
-      getLogs: jest.fn(async (a: any) => {
-        const approved = a.event.name === 'RequestApproved';
-        if (approved && a.fromBlock <= 90n && a.toBlock >= 90n) {
-          return [{ address: addr(1), blockNumber: 90n, logIndex: 1, args: { requestId: 7n, approver: ATT1, signedAsAttester: true } }];
-        }
-        if (!approved && a.fromBlock <= 60n && a.toBlock >= 60n) {
-          return [{ address: addr(1), blockNumber: 60n, logIndex: 0, args: { requestId: 7n } }];
-        }
-        return [];
-      }),
-      getCode: jest.fn(),
-      readContract: jest.fn(),
-    };
-    const chain = createLookupChain(client, { readGuardians: async () => [], range: 20n, citizenFromBlock: 0n });
-    expect(await chain.approvalsOf(7n, 100n)).toEqual([{ approver: ATT1, signedAsAttester: true }]);
-    const lowest = Math.min(...client.getLogs.mock.calls.map((c: any[]) => Number(c[0].fromBlock)));
-    expect(lowest).toBeGreaterThan(0); // stopped after the creation window, never reached block 0
+    expect(calls[0].fromBlock).toBe(9_750n); // estimate 9_800 minus one window of margin
+    expect(calls).toHaveLength(4); // one batch of 4 windows found both; the rest (up to the tip) skipped
+    expect(client.getLogs.mock.calls[0][0].args).toEqual({ requestId: 7n });
   });
 });

@@ -1,12 +1,18 @@
 /**
- * Chunked eth_getLogs over Gnosis. Public RPCs cap a getLogs block range (publicnode: 50 000
- * blocks, measured 2026-09-26), so every event lookup walks the chain in windows. The fetcher is
+ * Chunked eth_getLogs over Gnosis. Public RPCs cap a getLogs block range (publicnode: 10 000
+ * blocks on some backends, measured 2026-09-26), so every event lookup walks the chain in windows. The fetcher is
  * injected: tests pass a fake, the runtime passes a viem public client (its http transport has a
  * timeout, so a hung request aborts instead of spinning forever).
  */
 
-/** Largest block range the default Gnosis RPC accepts per eth_getLogs. */
-export const LOG_BLOCK_RANGE = 50_000n;
+/**
+ * Largest block range the default Gnosis RPC accepts per eth_getLogs. publicnode's backends
+ * disagree (50 000 on some, 10 000 on others, measured 2026-09-26): use the smaller one.
+ */
+export const LOG_BLOCK_RANGE = 10_000n;
+
+/** Gnosis produces one block per 5 s slot (missed slots only make blocks rarer). */
+export const GNOSIS_SLOT_SECONDS = 5n;
 
 /**
  * No passkey Safe existed before this block (the feature branch started 2026-09-26 at block

@@ -10,10 +10,12 @@
  * A recoverable wallet additionally needs >= 1 guardian (readGuardians). After the v3 moveTo the
  * profile may point at the Safe itself (it holds the NFT): that address is checked directly too.
  *
- * Default guardians = the attesters who approved the request that minted this citizen:
- * CitizenNFTv2 `CitizenNFTMinted(citizen, tokenId, requestId)` → `RequestApproved(requestId,
- * approver, signedAsAttester)` with signedAsAttester = true. Migration-minted citizens have no
- * request (MigrationMinted) → no suggestion. Each approver (a legacy account) is replaced by its
+ * Default guardians = the attesters who approved the request that minted this citizen: the
+ * executed CitizenNFTv2 attestation request whose target is the citizen (found with view calls,
+ * `requestCount` + `getRequest`, since a 1.6M-block log scan is too slow at 10k blocks per
+ * getLogs), then its `RequestApproved(requestId, approver, signedAsAttester)` logs with
+ * signedAsAttester = true, scanned forward from the request's `createdAt`. Migration-minted
+ * citizens have no request (MigrationMinted) → no suggestion. Each approver (a legacy account) is replaced by its
  * passkey Safe when it has exactly one; otherwise the legacy account itself is the guardian (its
  * Safe confirms via legacy.execute, see planGuardianConfirm).
  *
@@ -24,6 +26,7 @@ import { CITIZEN_NFT_V2 } from './constants';
 import { legacyAccountReadAbi } from './legacy-handover';
 import {
   CITIZEN_NFT_V2_FROM_BLOCK,
+  GNOSIS_SLOT_SECONDS,
   LOG_BLOCK_RANGE,
   PASSKEY_EPOCH_BLOCK,
   blockWindows,
@@ -43,11 +46,19 @@ export type LookupChain = {
   hasCode: (a: Address) => Promise<boolean>;
 };
 
+export type MintRequest = {
+  requestId: bigint;
+  /** Unix seconds of the request's creation (approvals come after it). */
+  createdAt: bigint;
+  /** attesterSignatures + citizenSignatures recorded on the request. */
+  approvals: number;
+};
+
 export type SuggestChain = {
-  /** The attestation request that minted `citizen` on CitizenNFTv2 (null: migration mint / none). */
-  findMintRequest: (citizen: Address) => Promise<{ requestId: bigint; blockNumber: bigint } | null>;
+  /** The executed attestation request whose target is `citizen` (null: migration mint / none). */
+  findMintRequest: (citizen: Address) => Promise<MintRequest | null>;
   /** RequestApproved logs of that request. */
-  approvalsOf: (requestId: bigint, mintBlock: bigint) => Promise<Array<{ approver: Address; signedAsAttester: boolean }>>;
+  approvalsOf: (req: MintRequest) => Promise<Array<{ approver: Address; signedAsAttester: boolean }>>;
 };
 
 const ordered = (a: AdminLog, b: AdminLog) =>
@@ -140,7 +151,7 @@ export async function suggestDefaultGuardians(
 ): Promise<SuggestedGuardian[]> {
   const mint = await chain.findMintRequest(p.citizen);
   if (!mint) return [];
-  const approvals = await chain.approvalsOf(mint.requestId, mint.blockNumber);
+  const approvals = await chain.approvalsOf(mint);
   const approvers: Address[] = [];
   for (const a of approvals) {
     if (!a.signedAsAttester) continue;
@@ -168,14 +179,31 @@ export const citizenMintedEvent = parseAbiItem(
 export const requestApprovedEvent = parseAbiItem(
   'event RequestApproved(uint256 indexed requestId, address indexed approver, bool signedAsAttester)',
 );
-export const attestationRequestCreatedEvent = parseAbiItem(
-  'event AttestationRequestCreated(uint256 indexed requestId, address indexed target, string evidenceURI)',
-);
+const citizenRequestAbi = [
+  { type: 'function', name: 'requestCount', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+  {
+    type: 'function',
+    name: 'getRequest',
+    stateMutability: 'view',
+    inputs: [{ name: 'requestId', type: 'uint256' }],
+    outputs: [
+      { name: 'requester', type: 'address' },
+      { name: 'target', type: 'address' },
+      { name: 'requestType', type: 'uint8' },
+      { name: 'status', type: 'uint8' },
+      { name: 'evidenceURI', type: 'string' },
+      { name: 'attesterSignatures', type: 'uint256' },
+      { name: 'citizenSignatures', type: 'uint256' },
+      { name: 'createdAt', type: 'uint256' },
+    ],
+  },
+] as const;
 
 type RawLog = { address: Address; blockNumber: bigint | null; logIndex: number | null; args: Record<string, unknown> };
 
 export type LookupClient = {
   getBlockNumber: () => Promise<bigint>;
+  getBlock: () => Promise<{ number: bigint; timestamp: bigint }>;
   getLogs: (args: any) => Promise<RawLog[]>;
   getCode: (args: { address: Address }) => Promise<Hex | undefined>;
   readContract: (args: any) => Promise<any>;
@@ -227,31 +255,44 @@ export function createLookupChain(
       return !!code && code !== '0x';
     },
     async findMintRequest(citizen) {
-      const logs = await scanLogs(
-        await windowsTo(citizenFrom, true),
-        (w: BlockWindow) => client.getLogs({ address: citizenNft, event: citizenMintedEvent, args: { citizen }, ...w }),
-        { stop: (found) => found.length > 0 },
-      );
-      if (logs.length === 0) return null;
-      const newest = logs.reduce((a, b) => ((b.blockNumber ?? 0n) > (a.blockNumber ?? 0n) ? b : a));
-      return { requestId: BigInt(newest.args.requestId as bigint), blockNumber: newest.blockNumber ?? 0n };
+      const count = BigInt(await client.readContract({ address: citizenNft, abi: citizenRequestAbi, functionName: 'requestCount' }));
+      for (let hi = count - 1n; hi >= 0n; hi -= 8n) {
+        const ids: bigint[] = [];
+        for (let i = hi; i > hi - 8n && i >= 0n; i--) ids.push(i);
+        const rows = await Promise.all(
+          ids.map(async (id) => ({
+            id,
+            r: (await client.readContract({
+              address: citizenNft,
+              abi: citizenRequestAbi,
+              functionName: 'getRequest',
+              args: [id],
+            })) as readonly [Address, Address, number, number, string, bigint, bigint, bigint],
+          })),
+        );
+        for (const { id, r } of rows) {
+          const [, target, requestType, status, , attesterSignatures, citizenSignatures, createdAt] = r;
+          if (Number(requestType) === 0 && Number(status) === 3 && isAddressEqual(target, citizen)) {
+            return { requestId: id, createdAt: BigInt(createdAt), approvals: Number(attesterSignatures) + Number(citizenSignatures) };
+          }
+        }
+      }
+      return null;
     },
-    async approvalsOf(requestId, mintBlock) {
-      // Backward from the mint until the request's creation shows up (approvals sit in between).
+    async approvalsOf(req) {
+      // Estimate the creation block from its timestamp (5 s slots; missed slots only make the
+      // real block later), keep one window of margin, then scan forward until every recorded
+      // approval showed up.
+      const latest = await client.getBlock();
+      const behind = (latest.timestamp - req.createdAt) / GNOSIS_SLOT_SECONDS;
+      const est = latest.number - behind - range;
+      const from = est > citizenFrom ? est : citizenFrom;
       const logs = await scanLogs(
-        blockWindows(citizenFrom, mintBlock, range, true),
-        async (w: BlockWindow) => {
-          const [approved, created] = await Promise.all([
-            client.getLogs({ address: citizenNft, event: requestApprovedEvent, args: { requestId }, ...w }),
-            client.getLogs({ address: citizenNft, event: attestationRequestCreatedEvent, args: { requestId }, ...w }),
-          ]);
-          return [...approved.map((l) => ({ kind: 'approved' as const, l })), ...created.map((l) => ({ kind: 'created' as const, l }))];
-        },
-        { concurrency: 2, stop: (found) => found.some((f) => f.kind === 'created') },
+        blockWindows(from, latest.number, range),
+        (w: BlockWindow) => client.getLogs({ address: citizenNft, event: requestApprovedEvent, args: { requestId: req.requestId }, ...w }),
+        { stop: (found) => found.length >= req.approvals },
       );
-      return logs
-        .filter((f) => f.kind === 'approved')
-        .map((f) => ({ approver: getAddress(f.l.args.approver as Address), signedAsAttester: Boolean(f.l.args.signedAsAttester) }));
+      return logs.map((l) => ({ approver: getAddress(l.args.approver as Address), signedAsAttester: Boolean(l.args.signedAsAttester) }));
     },
   };
 }
