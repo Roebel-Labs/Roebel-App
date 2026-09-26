@@ -27,6 +27,26 @@ working; nothing is removed.
 
 Expo passkey tests: 70 (`cd apps/expo && ./node_modules/.bin/jest lib/passkey --watchAll=false --no-watchman --ci`; watchman hangs jest).
 
+## Migration + recovery sponsorship (built 2026-09-26, not deployed)
+
+**ERC-1271 works on a passkey Safe** (fork-proven, `contracts/passkey-accounts/test/GuardianErc1271.t.sol`): Safe4337Module v0.3.0 inherits Safe's CompatibilityFallbackHandler 1.4.1, so `isValidSignature(h, sig)` returns `0x1626ba7e` when the WebAuthn challenge is the Safe's EIP-712 `SafeMessage` hash of `abi.encode(h)` and `sig` is the usual one-owner contract signature. Recipe + byte-exact vectors: `contracts/passkey-accounts/test/fixtures/recovery-vector.json` (copied to `apps/expo/lib/passkey/__tests__/`).
+
+**Recovery UX:** guardians with a DEPLOYED passkey Safe approve off-chain (`signRecoveryApprovalAsGuardian`); the recovering person's NEW passkey Safe sends one sponsored op `[createSigner(newKey), multiConfirmRecovery(wallet, [signer(newKey)], 1, approvals, true)]`, and after 3 days `[finalizeRecovery(wallet)]`. A guardian whose Safe is still counterfactual cannot sign off-chain (no code) and confirms on-chain with its own sponsored `confirmRecovery` op (which deploys it). After recovery the wallet signs through the per-key signer: the migration record persists `ownerType` + `owner` (review L4), `sendPasskeyUserOp({ sender, owner })`.
+
+**Sponsor policy modes** (`apps/web/src/lib/passkey/sponsor-policy.ts`), citizen(a) = CitizenNFTv2.hasCitizenNFT(a) OR (v3 configured AND CitizenNFTv3.hasCitizenNFT(a)):
+
+| Mode | Identity / budget key | Allowed |
+|---|---|---|
+| `legacy` (body names `legacy`) | the legacy thirdweb account | tranche-1 shapes + `legacy.execute(v3, 0, moveTo(sender))` on the configured v3 NFTs only + `AccountFactory.createAccount(admin, 0x)` as call #0 when `factory.getAddress(admin, 0x) == legacy` and legacy has no code (the handover is then verified by ECDSA recovery against `admin`, low-s) |
+| `safe` (no `legacy`, citizen(sender)) | the sender Safe | SRM guardian management + `confirmRecovery` |
+| `recovery` (no `legacy`) | the wallet being recovered | `multiConfirmRecovery` / `executeRecovery` with newOwners = [getSigner(x, y)], threshold 1; `finalizeRecovery` when the pending owners are [getSigner(x, y)] and the delay is over; `confirmRecovery` when the sender is a guardian; `createSigner(x, y)`. The wallet must be citizen(wallet) or admin of a citizen `recoveryLegacy`, with ≥ 1 guardian. Any passkey Safe may send these (family members are not citizens). |
+
+Identity and recovery calls never mix; a non-citizen passkey Safe gets nothing else. **Registration of brand-new users is not sponsored** (they need attesters first). Verified live: the counterfactual v2 citizen `0xEbf3…5227` has no code, `hasCitizenNFT == true`, and `AccountFactory.getAddress(0x21e7…0e90, 0x)` (admin read from Base) equals it.
+
+New env: web `PASSKEY_CITIZEN_NFT_V3`, `PASSKEY_ATTESTER_NFT_V3`; Expo `EXPO_PUBLIC_PASSKEY_CITIZEN_NFT_V3`, `EXPO_PUBLIC_PASSKEY_ATTESTER_NFT_V3` (empty = v3 off / hidden). Expo library: `guardians.ts`, `migration-v3.ts`. Fork gas (FCL fallback, worst case): deploy new Safe + createSigner + multiConfirmRecovery with 2 passkey approvals ≈ 1.56M; live Gnosis has the P-256 precompile and needs far less.
+
+Tests: 21 forge, 96 web node:test (+4 live), 96 Expo jest.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.
@@ -68,7 +88,7 @@ Passkeys use the rpId **`id.ortis.app`** (decided 2026-09-26): the neutral Ortis
 - Route every app write through the Safe → `legacy.execute`, via an account adapter.
 - Verifiers we control (Supabase login, delete-user-account, signed-request, Shamir submissions) accept "Safe signed + `legacy.isAdmin(safe)`".
 - EOA removal (`isAdmin: 2`). After it, thirdweb has no control and the legacy admin set is frozen.
-- Guardian setup UI, with the attesters who vouched for the citizen as default guardians.
+- Guardian setup UI, with the attesters who vouched for the citizen as default guardians (library + sponsor policy ready, see above).
 - Persistent per-account sponsor budget (today: in-memory, preview-only).
 - New users: Safe-only onboarding, with no thirdweb account.
 - Re-key the Shamir attester share keys, which derive from deterministic thirdweb signatures.

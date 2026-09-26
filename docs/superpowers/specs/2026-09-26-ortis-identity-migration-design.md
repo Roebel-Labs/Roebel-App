@@ -57,7 +57,7 @@ The Röbel app is **live**. Max will ship one more EAS build when this is done, 
    - **Adding family members:** any time, with one fingerprint (`addGuardianWithThreshold`).
    - **A family member needs an Ortis account** (free, counterfactual) but **not** citizenship.
    - **Confirmation UX:** a guardian signs a recovery approval (EIP-712, ERC-1271 through their passkey Safe). The recovering person's new device collects the approvals and one sponsored transaction submits `multiConfirmRecovery` + `executeRecovery`. Guardians never need gas or an on-chain transaction.
-   - **Sponsor policy change needed:** allow `multiConfirmRecovery`/`executeRecovery`/`finalizeRecovery` for a Safe whose guardians include at least one Röbel citizen, instead of requiring the caller to be a citizen, so non-citizen family members are covered.
+   - **Sponsor policy (built 2026-09-26):** `multiConfirmRecovery`/`executeRecovery`/`finalizeRecovery` are sponsored when the WALLET being recovered is a citizen identity with ≥ 1 guardian, sent by any passkey Safe, and only if the new owner is the submitter's own per-key signer; a guardian's `confirmRecovery` likewise (family members need no citizenship). ERC-1271 on passkey Safes is fork-proven. A guardian whose Safe is still counterfactual cannot sign off-chain and confirms on-chain with one sponsored op instead. See `docs/PASSKEY_ACCOUNTS_STATE.md`.
    - **Collusion guard:** the default set always includes a non-attester (family). The delay + email/push alerts are mandatory.
 3. **Optional second owner:** a family member's tablet or a hardware security key as a second passkey owner (1-of-2).
 4. **Client prerequisite (review L4):** persist the Safe address + owner type. After recovery the owner is a per-key signer proxy, and the address is no longer derivable from the new key.
@@ -101,7 +101,7 @@ v2 *could* be reused, because approvals are plain `msg.sender` checks and passke
 
 **New MACI keys:** random, wrapped under the passkey PRF, with a backup. This removes the deterministic-signature derivation that passkeys cannot provide. The same goes for the Shamir share keys (a re-share ceremony with the new attesters).
 
-**Undeployed accounts:** 10 of 53 citizen legacy accounts are counterfactual on Gnosis. Their first migration op must include `AccountFactory.createAccount(adminEOA, "")` (permissionless). The sponsor policy must allow exactly that factory call when its result equals the request's `legacy`.
+**Undeployed accounts:** 10 of 53 citizen legacy accounts are counterfactual on Gnosis. Their first migration op must include `AccountFactory.createAccount(adminEOA, "")` (permissionless). The sponsor policy allows exactly that factory call as call #0 when its result equals the request's `legacy` (built 2026-09-26; verified on the real counterfactual holder `0xEbf3…5227`).
 
 ## NFT ownership path (Max, 2026-09-26)
 
@@ -111,6 +111,7 @@ v2 *could* be reused, because approvals are plain `msg.sender` checks and passke
 - **v3 drops yearly re-verification entirely:** no `validityPeriod`/`validUntil`/`setValidityPeriod`/`isActive`. Citizenship is valid until revoked.
 
 ## Open items
+- **New-user registration is not sponsored** (no citizenship yet; attesters come first).
 - **Pimlico's minimum paymaster stake on Gnosis is unknown.** The preview paymaster is planned with 0.05 xDAI stake. If Pimlico needs more: `addStake` via the owner Safe, or self-bundle through a relayer (as the Netizen demo does).
 - **Persistent sponsor budget** (production gate).
 - **Backup of the PRF-wrapped secrets** + a restore path (production gate).
