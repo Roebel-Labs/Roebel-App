@@ -4,7 +4,7 @@
 import { getApiBaseUrl, type SigningAccount } from '@/lib/signed-request';
 import { clearChatSession, ensureChatSession, ChatSessionError } from './session';
 import { consumeSSEResponse, postSSE, type ChatStreamEvent } from './stream';
-import type { BotAvatarSpec, ChatBot, ChatMessage, ChatThread } from './types';
+import type { BotAvatarSpec, CalendarContextEvent, ChatBot, ChatMessage, ChatThread } from './types';
 
 const JSON_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 90_000;
@@ -33,6 +33,8 @@ export interface SendMessageBody {
   replyToId?: string;
   mentionBotIds?: string[];
   optionAnswer?: { messageId: string; key: string };
+  /** Upcoming device-calendar events for calendar bots; omitted without read access. */
+  calendarContext?: CalendarContextEvent[];
 }
 
 export interface ChatFile {
@@ -174,13 +176,13 @@ export function fetchMessages(
   account: SigningAccount,
   threadId: string,
   opts?: { before?: string; limit?: number },
-): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+): Promise<{ messages: ChatMessage[]; hasMore: boolean; thread?: ChatThread }> {
   const q: string[] = [`limit=${opts?.limit ?? 50}`];
   if (opts?.before) q.push(`before=${enc(opts.before)}`);
   return request(account, 'GET', `/api/chat/threads/${enc(threadId)}/messages?${q.join('&')}`);
 }
 
-export function markThreadRead(account: SigningAccount, threadId: string): Promise<{ ok: boolean }> {
+export function markThreadRead(account: SigningAccount, threadId: string): Promise<{ ok: boolean; lastReadAt?: string }> {
   return request(account, 'POST', `/api/chat/threads/${enc(threadId)}/read`);
 }
 
@@ -203,6 +205,22 @@ export async function dismissOptions(account: SigningAccount, messageId: string)
     account,
     'POST',
     `/api/chat/messages/${enc(messageId)}/dismiss-options`,
+  );
+  return res.message;
+}
+
+/** Sets the status of one part (calendar_event: proposed|added|dismissed · integration: pending|connected). */
+export async function setMessagePartStatus(
+  account: SigningAccount,
+  messageId: string,
+  index: number,
+  status: string,
+): Promise<ChatMessage> {
+  const res = await request<{ message: ChatMessage }>(
+    account,
+    'PATCH',
+    `/api/chat/messages/${enc(messageId)}/parts/${index}`,
+    { json: { status } },
   );
   return res.message;
 }
@@ -253,9 +271,16 @@ export async function transcribeAudio(account: SigningAccount, uri: string): Pro
   return res.text ?? '';
 }
 
-export async function fetchRoutines(account: SigningAccount): Promise<ChatRoutine[]> {
-  const res = await request<{ routines?: ChatRoutine[] }>(account, 'GET', '/api/chat/routines');
+export async function fetchRoutines(account: SigningAccount, threadId?: string): Promise<ChatRoutine[]> {
+  const q = threadId ? `?threadId=${enc(threadId)}` : '';
+  const res = await request<{ routines?: ChatRoutine[] }>(account, 'GET', `/api/chat/routines${q}`);
   return res.routines ?? [];
+}
+
+export type UpdateRoutineInput = Partial<Pick<ChatRoutine, 'enabled' | 'title' | 'prompt' | 'schedule'>>;
+
+export async function updateRoutine(account: SigningAccount, id: string, patch: UpdateRoutineInput): Promise<ChatRoutine> {
+  return (await request<{ routine: ChatRoutine }>(account, 'PATCH', `/api/chat/routines/${enc(id)}`, { json: patch })).routine;
 }
 
 export async function createRoutine(
@@ -266,7 +291,7 @@ export async function createRoutine(
 }
 
 export function deleteRoutine(account: SigningAccount, id: string): Promise<{ ok: boolean }> {
-  return request(account, 'DELETE', `/api/chat/routines?id=${enc(id)}`);
+  return request(account, 'DELETE', `/api/chat/routines/${enc(id)}`);
 }
 
 /**

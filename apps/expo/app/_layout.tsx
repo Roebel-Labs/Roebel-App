@@ -92,6 +92,8 @@ function NotificationHandler() {
         router.push(`/forum/thread/${data.threadId}` as any);
       } else if (data?.type === 'direct_message' && data?.conversationId) {
         router.push(`/messages/${data.conversationId}` as any);
+      } else if (data?.type === 'chat_thread' && data?.threadId) {
+        router.push(`/chat/${data.threadId}` as any);
       } else if (data?.type === 'org_invite') {
         router.push('/notifications' as any);
       } else if (data?.type === 'reward') {
@@ -123,6 +125,10 @@ function NotificationHandler() {
         } else if (data?.type === 'direct_message' && data?.conversationId) {
           setTimeout(() => {
             router.push(`/messages/${data.conversationId}` as any);
+          }, 100);
+        } else if (data?.type === 'chat_thread' && data?.threadId) {
+          setTimeout(() => {
+            router.push(`/chat/${data.threadId}` as any);
           }, 100);
         } else if (data?.type === 'org_invite') {
           setTimeout(() => {

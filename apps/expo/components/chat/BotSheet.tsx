@@ -8,6 +8,7 @@ import type { BotAvatarSpec, ChatBot } from '@/lib/chat/types';
 import { BotAvatar, BOT_COLOR_LIST, BOT_SHAPES } from './BotAvatar';
 import { BlackPillButton } from './BlackPillButton';
 import { GlassCircleButton } from './GlassCircleButton';
+import { RoutinesSection } from './RoutinesSection';
 import { chatFont, useChatTokens } from './tokens';
 
 export type BotSheetPatch = {
@@ -24,10 +25,12 @@ export type BotSheetProps = {
   bots: ChatBot[];
   /** Saves an own (non-preset) bot. Rejects with a German message on failure. */
   onSave?: (botId: string, patch: BotSheetPatch) => Promise<void>;
+  /** When set, the sheet lists this thread's routines (toggle + delete). */
+  threadId?: string;
 };
 
 /** Bot sheet (tap on the chat header pill): big avatar, name, description; own bots are editable. */
-export function BotSheet({ visible, onClose, bots, onSave }: BotSheetProps) {
+export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetProps) {
   const t = useChatTokens();
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['80%'], []);
@@ -236,6 +239,7 @@ export function BotSheet({ visible, onClose, bots, onSave }: BotSheetProps) {
             {bot.isPreset ? (
               <Text style={[styles.footnote, { color: t.textTertiary }]}>Vorlage von Mecky · nicht bearbeitbar</Text>
             ) : null}
+            {threadId ? <RoutinesSection threadId={threadId} botId={bots.length > 1 ? bot.id : null} /> : null}
           </>
         )}
       </BottomSheetScrollView>

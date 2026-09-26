@@ -63,7 +63,7 @@ export interface MessageRow {
   created_at: string;
 }
 
-interface RoutineRow {
+export interface RoutineRow {
   id: string;
   owner_wallet: string;
   thread_id: string;
@@ -94,13 +94,17 @@ export function rowToBot(row: BotRow, opts: { includeInstructions?: boolean } = 
     avatar: normalizeAvatar(row.avatar),
     isPreset: row.is_preset,
     modelRoute: row.model_route,
+    tools: row.tools ?? [],
   };
   // Preset instructions are house IP-ish and long; only user-owned bots expose them.
   if (opts.includeInstructions && !row.is_preset) bot.instructions = row.instructions ?? "";
   return bot;
 }
 
-function rowToThread(row: ThreadRow): ChatThread {
+/** Enabled-routine info per thread: the first enabled routine's title names the thread topic. */
+export type ThreadRoutineInfo = Map<string, { title: string }>;
+
+function rowToThread(row: ThreadRow, routines?: ThreadRoutineInfo): ChatThread {
   const bots = (row.chat_thread_bots ?? [])
     .map((tb) => (Array.isArray(tb.chat_bots) ? tb.chat_bots[0] : tb.chat_bots))
     .filter((b): b is BotRow => Boolean(b))
@@ -109,12 +113,14 @@ function rowToThread(row: ThreadRow): ChatThread {
   return {
     id: row.id,
     title: row.title,
-    topic: row.topic,
+    topic: routines?.get(row.id)?.title ?? row.topic,
     kind: row.kind,
     bots,
     lastMessageAt: row.last_message_at,
     lastMessagePreview: row.last_message_preview ?? "",
     unread: new Date(row.last_message_at).getTime() > new Date(row.last_read_at).getTime(),
+    lastReadAt: row.last_read_at,
+    hasActiveRoutine: Boolean(routines?.has(row.id)),
   };
 }
 
@@ -132,6 +138,7 @@ export function previewOfParts(parts: ChatPart[], max = 120): string {
     if (p.type === "image") return "📷 Bild";
     if (p.type === "integration") return p.title;
     if (p.type === "sources") return "🔗 Quellen";
+    if (p.type === "calendar_event") return clip(`📅 ${p.title}`, max);
   }
   return "";
 }
@@ -248,14 +255,16 @@ export async function listThreads(wallet: string): Promise<ChatThread[]> {
   const res = await db().from("chat_threads").select(THREAD_SELECT)
     .eq("owner_wallet", wallet).eq("archived", false)
     .order("last_message_at", { ascending: false }).limit(200);
-  return (must(res, "threads") as ThreadRow[]).map(rowToThread);
+  const rows = must(res, "threads") as ThreadRow[];
+  const routines = await activeRoutinesByThread(wallet);
+  return rows.map((r) => rowToThread(r, routines));
 }
 
 export async function getThread(wallet: string, id: string): Promise<ChatThread | null> {
   if (!isUuid(id)) return null;
   const res = await db().from("chat_threads").select(THREAD_SELECT).eq("id", id).eq("owner_wallet", wallet).maybeSingle();
   const row = must(res, "thread") as ThreadRow | null;
-  return row ? rowToThread(row) : null;
+  return row ? rowToThread(row, await activeRoutinesByThread(wallet, id)) : null;
 }
 
 /** Bot rows of a thread (with instructions + tools), sorted like the UI. */
@@ -291,10 +300,12 @@ export async function setThreadTopic(threadId: string, topic: string | null): Pr
   must(await db().from("chat_threads").update({ topic }).eq("id", threadId), "thread topic");
 }
 
-export async function markThreadRead(wallet: string, threadId: string): Promise<boolean> {
+/** Marks the thread read; returns the stored last_read_at, or null when the thread is not the wallet's. */
+export async function markThreadRead(wallet: string, threadId: string): Promise<string | null> {
   const res = await db().from("chat_threads").update({ last_read_at: new Date().toISOString() })
-    .eq("id", threadId).eq("owner_wallet", wallet).select("id");
-  return (must(res, "mark read") as unknown[]).length > 0;
+    .eq("id", threadId).eq("owner_wallet", wallet).select("last_read_at");
+  const rows = must(res, "mark read") as { last_read_at: string }[];
+  return rows[0]?.last_read_at ?? null;
 }
 
 // ---- messages --------------------------------------------------------------
@@ -405,10 +416,45 @@ export async function createRoutine(wallet: string, input: {
   return rowToRoutine(must(res, "create routine") as RoutineRow);
 }
 
+export async function getRoutine(wallet: string, id: string): Promise<ChatRoutine | null> {
+  if (!isUuid(id)) return null;
+  const res = await db().from("chat_routines").select("*").eq("id", id).eq("owner_wallet", wallet).maybeSingle();
+  const row = must(res, "routine") as RoutineRow | null;
+  return row ? rowToRoutine(row) : null;
+}
+
+export async function listThreadRoutines(wallet: string, threadId: string): Promise<ChatRoutine[]> {
+  const res = await db().from("chat_routines").select("*")
+    .eq("owner_wallet", wallet).eq("thread_id", threadId).order("created_at");
+  return (must(res, "thread routines") as RoutineRow[]).map(rowToRoutine);
+}
+
+export async function updateRoutine(wallet: string, id: string, patch: Partial<{
+  title: string; prompt: string; schedule: RoutineSchedule; enabled: boolean; nextRunAt: string | null;
+}>): Promise<ChatRoutine | null> {
+  if (!isUuid(id)) return null;
+  const update: Record<string, unknown> = {};
+  if (patch.title !== undefined) update.title = patch.title;
+  if (patch.prompt !== undefined) update.prompt = patch.prompt;
+  if (patch.schedule !== undefined) update.schedule = patch.schedule;
+  if (patch.enabled !== undefined) update.enabled = patch.enabled;
+  if (patch.nextRunAt !== undefined) update.next_run_at = patch.nextRunAt;
+  const res = await db().from("chat_routines").update(update)
+    .eq("id", id).eq("owner_wallet", wallet).select("*").maybeSingle();
+  const row = must(res, "update routine") as RoutineRow | null;
+  return row ? rowToRoutine(row) : null;
+}
+
+/** Deletes a routine; a thread topic that only named this routine is cleared. */
 export async function deleteRoutine(wallet: string, id: string): Promise<boolean> {
   if (!isUuid(id)) return false;
-  const res = await db().from("chat_routines").delete().eq("id", id).eq("owner_wallet", wallet).select("id");
-  return (must(res, "delete routine") as unknown[]).length > 0;
+  const res = await db().from("chat_routines").delete().eq("id", id).eq("owner_wallet", wallet).select("thread_id, title");
+  const rows = must(res, "delete routine") as { thread_id: string; title: string }[];
+  for (const r of rows) {
+    must(await db().from("chat_threads").update({ topic: null })
+      .eq("id", r.thread_id).eq("owner_wallet", wallet).eq("topic", r.title), "clear topic");
+  }
+  return rows.length > 0;
 }
 
 export async function dueRoutineRows(now: Date, limit = 20): Promise<RoutineRow[]> {
@@ -425,6 +471,18 @@ export async function claimRoutine(row: RoutineRow, nextRunAt: string, now: Date
   q = row.next_run_at ? q.eq("next_run_at", row.next_run_at) : q.is("next_run_at", null);
   const res = await q.select("id");
   return (must(res, "claim routine") as unknown[]).length > 0;
+}
+
+/** Enabled routines per thread (oldest first wins the topic), optionally for one thread. */
+async function activeRoutinesByThread(wallet: string, threadId?: string): Promise<ThreadRoutineInfo> {
+  let q = db().from("chat_routines").select("thread_id, title")
+    .eq("owner_wallet", wallet).eq("enabled", true).order("created_at");
+  if (threadId) q = q.eq("thread_id", threadId);
+  const out: ThreadRoutineInfo = new Map();
+  for (const r of must(await q, "active routines") as { thread_id: string; title: string }[]) {
+    if (!out.has(r.thread_id)) out.set(r.thread_id, { title: r.title });
+  }
+  return out;
 }
 
 /** Thread ids with at least one enabled routine (online dot). */

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as store from "@/lib/chat/store";
 import { ChatInputError, runUserTurn } from "@/lib/chat/runtime";
 import { createSSEStream, SSE_HEADERS } from "@/lib/chat/sse";
+import { sanitizeCalendarContext } from "@/lib/chat/calendar";
 import type { SendMessageInput } from "@/lib/chat/types";
 import { badRequest, handleError, notFound, readJson, requireWallet, unauthorized } from "../../../_lib/http";
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-/** GET /api/chat/threads/:id/messages?before=<iso>&limit=50 — ascending page. */
+/** GET /api/chat/threads/:id/messages?before=<iso>&limit=50 — ascending page + the thread. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
@@ -22,7 +23,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (before && Number.isNaN(Date.parse(before))) return badRequest("Ungültiger Zeitpunkt.");
     const limit = Number(url.searchParams.get("limit") ?? 50);
     const page = await store.listMessages(thread.id, { before, limit: Number.isFinite(limit) ? limit : 50 });
-    return NextResponse.json(page);
+    // The thread rides along so a chat opened from a push has fresh lastReadAt / routine state.
+    return NextResponse.json({ ...page, thread });
   } catch (err) {
     return handleError(err, "threads/:id/messages");
   }
@@ -47,6 +49,9 @@ function parseSendBody(body: Record<string, unknown>): SendMessageInput | string
     if (!oa || !store.isUuid(oa.messageId) || typeof oa.key !== "string") return "Ungültige Auswahl.";
     input.optionAnswer = { messageId: oa.messageId, key: oa.key };
   }
+  const calendar = sanitizeCalendarContext(body.calendarContext);
+  if (calendar === "invalid") return "Ungültiger Kalender.";
+  if (calendar) input.calendarContext = calendar;
   return input;
 }
 

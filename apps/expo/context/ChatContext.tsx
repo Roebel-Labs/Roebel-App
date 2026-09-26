@@ -8,7 +8,11 @@ import {
   ChatApiError,
   createBot as apiCreateBot,
   createThread as apiCreateThread,
+  deleteRoutine as apiDeleteRoutine,
+  fetchRoutines as apiFetchRoutines,
+  updateRoutine as apiUpdateRoutine,
   dismissOptions as apiDismissOptions,
+  setMessagePartStatus as apiSetMessagePartStatus,
   fetchBootstrap,
   fetchFile as apiFetchFile,
   fetchMessages,
@@ -20,6 +24,8 @@ import {
   uploadImage as apiUploadImage,
   type ChatBootstrap,
   type ChatFile,
+  type ChatRoutine,
+  type UpdateRoutineInput,
   type ChatTier,
   type CreateBotInput,
   type SendMessageBody,
@@ -35,7 +41,15 @@ import {
   type ThreadError,
   type ThreadState,
 } from '@/lib/chat/reducer';
-import type { ChatBot, ChatMessage, ChatThread } from '@/lib/chat/types';
+import { markThreadReadIn, mergeThreadIn } from '@/lib/chat/unread';
+import type { CalendarEventStatus, ChatBot, ChatMessage, ChatThread } from '@/lib/chat/types';
+import { isCalendarThread, withPartStatus } from '@/lib/chat/calendar';
+import {
+  addEventWithSystemSheet,
+  readCalendarContext,
+  requestCalendarReadAccess,
+  type CalendarReadAccess,
+} from '@/lib/chat/device-calendar';
 import type { SigningAccount } from '@/lib/signed-request';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -60,7 +74,8 @@ type StoreAction =
   | { type: 'bootstrap_ok'; data: ChatBootstrap }
   | { type: 'bootstrap_failed'; error: string }
   | { type: 'upsert_thread'; thread: ChatThread }
-  | { type: 'thread_read'; threadId: string }
+  | { type: 'thread_read'; threadId: string; lastReadAt?: string }
+  | { type: 'merge_thread'; thread: ChatThread }
   | { type: 'upsert_bot'; bot: ChatBot }
   | { type: 'thread'; threadId: string; action: ThreadAction };
 
@@ -83,8 +98,12 @@ function storeReducer(state: StoreState, action: StoreAction): StoreState {
     }
     case 'thread_read': {
       if (!state.data) return state;
-      const threads = state.data.threads.map((t) => (t.id === action.threadId ? { ...t, unread: false } : t));
+      const threads = markThreadReadIn(state.data.threads, action.threadId, action.lastReadAt);
       return { ...state, data: { ...state.data, threads } };
+    }
+    case 'merge_thread': {
+      if (!state.data) return state;
+      return { ...state, data: { ...state.data, threads: mergeThreadIn(state.data.threads, action.thread) } };
     }
     case 'upsert_bot': {
       if (!state.data) return state;
@@ -276,11 +295,13 @@ export function useThread(threadId: string) {
     if (current().streaming) return; // the stream owns the tail right now
     try {
       const res = await fetchMessages(account, threadId, { limit: 50 });
+      // Fresh thread (lastReadAt, routine state) lands in the same render as the page.
+      if (res.thread) dispatch({ type: 'merge_thread', thread: res.thread });
       local({ type: 'loaded', messages: res.messages, hasMore: res.hasMore });
     } catch (err) {
       local({ type: 'load_failed', code: errorCode(err), message: errorMessage(err) });
     }
-  }, [account, threadId, current, local]);
+  }, [account, threadId, current, local, dispatch]);
 
   useFocusEffect(
     useCallback(() => {
@@ -337,7 +358,12 @@ export function useThread(threadId: string) {
         local({ type: 'send_failed', code: errorCode(err), message: errorMessage(err), body: draft });
         return;
       }
-      const body: SendMessageBody = imageUrls.length ? { ...draft, imageUrls } : draft;
+      let body: SendMessageBody = imageUrls.length ? { ...draft, imageUrls } : draft;
+      // Calendar bots get the next 7 days of the device calendar when read access is granted.
+      if (isCalendarThread(storeRef.current.data?.threads.find((t) => t.id === threadId))) {
+        const calendarContext = await readCalendarContext();
+        if (calendarContext) body = { ...body, calendarContext };
+      }
 
       const controller = new AbortController();
       aborters.current.get(threadId)?.abort();
@@ -357,7 +383,7 @@ export function useThread(threadId: string) {
         if (aborters.current.get(threadId) === controller) aborters.current.delete(threadId);
       }
     },
-    [account, threadId, current, local, dispatch, aborters, uploadCache, lastInputs],
+    [account, threadId, current, local, dispatch, aborters, uploadCache, lastInputs, storeRef],
   );
 
   const send = useCallback((input: SendInput) => runSend(input), [runSend]);
@@ -417,11 +443,54 @@ export function useThread(threadId: string) {
     [account, local],
   );
 
+  /** Optimistic part-status update (calendar_event / integration) + PATCH; refresh on failure. */
+  const setPartStatus = useCallback(
+    async (messageId: string, index: number, status: CalendarEventStatus | 'pending' | 'connected') => {
+      if (!account) throw notSignedIn();
+      const message = current().messages.find((m) => m.id === messageId);
+      if (message) local({ type: 'message_replaced', message: withPartStatus(message, index, status) });
+      try {
+        local({ type: 'message_replaced', message: await apiSetMessagePartStatus(account, messageId, index, status) });
+      } catch {
+        refresh();
+      }
+    },
+    [account, current, local, refresh],
+  );
+
+  /** Opens the OS "new event" sheet for a proposed event; marks it added when saved. */
+  const addCalendarEvent = useCallback(
+    async (messageId: string, index: number): Promise<boolean> => {
+      const part = current().messages.find((m) => m.id === messageId)?.parts[index];
+      if (!part || part.type !== 'calendar_event') return false;
+      const saved = await addEventWithSystemSheet(part);
+      if (saved) await setPartStatus(messageId, index, 'added');
+      return saved;
+    },
+    [current, setPartStatus],
+  );
+
+  /**
+   * "Autorisieren" on a device_calendar card: asks for read access (only when the OS can still
+   * prompt), marks the card connected and re-sends so the bot sees the calendar.
+   */
+  const authorizeDeviceCalendar = useCallback(
+    async (messageId: string, index: number): Promise<CalendarReadAccess> => {
+      const access = await requestCalendarReadAccess();
+      if (access !== 'granted') return access;
+      await setPartStatus(messageId, index, 'connected');
+      await runSend({ text: 'Ich habe meinen Kalender freigegeben.' });
+      return access;
+    },
+    [setPartStatus, runSend],
+  );
+
   const markRead = useCallback(async () => {
     if (!account || !threadId) return;
     dispatch({ type: 'thread_read', threadId });
     try {
-      await markThreadRead(account, threadId);
+      const res = await markThreadRead(account, threadId);
+      if (res?.lastReadAt) dispatch({ type: 'thread_read', threadId, lastReadAt: res.lastReadAt });
     } catch {
       // Unread flag is cosmetic; the next bootstrap reconciles.
     }
@@ -432,6 +501,8 @@ export function useThread(threadId: string) {
     messages: state.messages,
     hasMore: state.hasMore,
     loaded: state.loaded,
+    /** Increments after each finished first-page fetch (see ThreadState.loadSeq). */
+    loadSeq: state.loadSeq,
     loadingOlder: state.loadingOlder,
     isStreaming: state.streaming !== null,
     /** Bot currently writing (typing indicator); null between bubbles or before the first bot_start. */
@@ -447,13 +518,16 @@ export function useThread(threadId: string) {
     answerOption,
     react,
     dismissOptions,
+    setPartStatus,
+    addCalendarEvent,
+    authorizeDeviceCalendar,
     markRead,
   };
 }
 
 /** Mutations that are not bound to one open thread. All throw ChatApiError (German `message`). */
 export function useChatActions() {
-  const { account, dispatch } = useChatContext();
+  const { account, dispatch, refreshBootstrap } = useChatContext();
 
   const createBot = useCallback(
     async (input: CreateBotInput): Promise<ChatBot> => {
@@ -514,5 +588,37 @@ export function useChatActions() {
     [account],
   );
 
-  return { createBot, updateBot, createThread, uploadImage, transcribe, fetchFile };
+  /** Routines of one thread (bot sheet). */
+  const fetchRoutines = useCallback(
+    async (threadId: string): Promise<ChatRoutine[]> => {
+      if (!account) throw notSignedIn();
+      return apiFetchRoutines(account, threadId);
+    },
+    [account],
+  );
+
+  /** Pause/resume or edit a routine; the chat list's online dot + topic follow via refetch. */
+  const updateRoutine = useCallback(
+    async (id: string, patch: UpdateRoutineInput): Promise<ChatRoutine> => {
+      if (!account) throw notSignedIn();
+      const routine = await apiUpdateRoutine(account, id, patch);
+      refreshBootstrap();
+      return routine;
+    },
+    [account, refreshBootstrap],
+  );
+
+  const deleteRoutine = useCallback(
+    async (id: string): Promise<void> => {
+      if (!account) throw notSignedIn();
+      await apiDeleteRoutine(account, id);
+      refreshBootstrap();
+    },
+    [account, refreshBootstrap],
+  );
+
+  return {
+    createBot, updateBot, createThread, uploadImage, transcribe, fetchFile,
+    fetchRoutines, updateRoutine, deleteRoutine,
+  };
 }

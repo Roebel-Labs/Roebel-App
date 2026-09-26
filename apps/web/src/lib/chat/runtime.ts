@@ -7,13 +7,16 @@ import { generateText, hasToolCall, stepCountIs, streamText, tool } from "ai";
 import type { ModelMessage, ToolSet, UserContent } from "ai";
 import { z } from "zod";
 import { estimateCostMicros, resolveModel } from "./models";
+import { calendarPromptBlock, formatEventWhen, toCalendarEventPart } from "./calendar";
 import { buildSystemPrompt, fallbackGreeting, greetingInstruction } from "./prompts";
 import { quotaState } from "./quota";
 import { nextRunAt, validateSchedule } from "./schedule";
+import { sendChatPush } from "./push";
+import { addRoutineTools } from "./routine-tools";
 import { SplitStreamer, splitBubbles } from "./split";
 import * as store from "./store";
 import type { BotRow, MessageRow } from "./store";
-import type { ChatMessage, ChatPart, ChatStreamEvent, ChatThread, SendMessageInput } from "./types";
+import type { CalendarContextEvent, ChatMessage, ChatPart, ChatStreamEvent, ChatThread, SendMessageInput } from "./types";
 
 export type Emit = (e: ChatStreamEvent) => void;
 
@@ -43,6 +46,10 @@ function describePartForModel(p: ChatPart): string | null {
     case "image": return null;
     case "integration": return `(Integration: ${p.title} — ${p.status === "connected" ? "verbunden" : "noch nicht verbunden"})`;
     case "sources": return p.items.length ? `(Quellen: ${p.items.map((s) => s.url).join(", ")})` : null;
+    case "calendar_event": {
+      const state = p.status === "added" ? "im Kalender" : p.status === "dismissed" ? "verworfen" : "vorgeschlagen";
+      return `(Terminvorschlag: ${p.title}, ${formatEventWhen(p.start, p.end)}${p.location ? `, ${p.location}` : ""} — ${state})`;
+    }
   }
 }
 
@@ -118,6 +125,10 @@ interface BotTurnContext {
   emit: Emit;
   hasImages?: boolean;
   extraUserText?: string;
+  /** Device-calendar events sent by the app; null/undefined = no read access. */
+  calendarContext?: CalendarContextEvent[] | null;
+  /** Scheduled routine run (no routine tools, no human watching). */
+  routineRun?: boolean;
 }
 
 interface BotTurnResult {
@@ -144,7 +155,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   ]);
   const botNames = new Map(ctx.threadBots.map((b) => [b.id, b.name]));
   const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText);
-  const system = buildSystemPrompt({
+  const baseSystem = buildSystemPrompt({
     botName: bot.name,
     instructions: bot.instructions,
     otherBots: ctx.threadBots.filter((b) => b.id !== bot.id).map((b) => b.name),
@@ -152,12 +163,51 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     now: new Date(),
     canSearch,
   });
+  const hasCalendar = enabled.has("calendar");
+  const system = hasCalendar ? `${baseSystem}\n\n${calendarPromptBlock(ctx.calendarContext)}` : baseSystem;
 
   // Non-text parts collected during the run; attached to the last bubble.
   const extraParts: ChatPart[] = [];
   const sources = new Map<string, string>();
 
   const tools: ToolSet = {};
+  if (hasCalendar) {
+    tools.propose_calendar_event = tool({
+      description: "Schlägt dem Menschen einen konkreten Termin vor. Er sieht eine Terminkarte und kann ihn mit einem Tipp seinem Kalender hinzufügen.",
+      inputSchema: z.object({
+        title: z.string().min(1).max(200).describe("Kurzer Titel des Termins"),
+        start: z.string().describe("Beginn, ISO 8601 mit Offset, z. B. 2026-09-26T10:00:00+02:00"),
+        end: z.string().optional().describe("Ende, ISO 8601 mit Offset; ohne Angabe 1 Stunde nach Beginn"),
+        location: z.string().max(200).optional().describe("Ort, falls bekannt"),
+        notes: z.string().max(1000).optional().describe("Kurze Notiz zum Termin"),
+      }),
+      execute: async (input) => {
+        const part = toCalendarEventPart(input);
+        if ("error" in part) return { error: part.error };
+        extraParts.push(part);
+        return { ok: true, shown: `${part.title}, ${formatEventWhen(part.start, part.end)}` };
+      },
+    });
+    if (!ctx.calendarContext) {
+      tools.request_calendar_access = tool({
+        description: "Zeigt eine Karte, mit der der Mensch seinen Gerätekalender (Google/iCloud auf dem Handy) für dich freigeben kann. Nur nutzen, wenn du seine Termine wirklich brauchst.",
+        inputSchema: z.object({}),
+        execute: async () => {
+          const alreadyShown = [...rows.slice(-10).flatMap((r) => store.partsOf(r.parts)), ...extraParts]
+            .some((p) => p.type === "integration" && p.provider === "device_calendar" && p.status === "pending");
+          if (alreadyShown) return { ok: true, note: "Die Freigabe-Karte ist schon sichtbar. Bitte alternativ ums Diktieren der Termine." };
+          extraParts.push({
+            type: "integration",
+            provider: "device_calendar",
+            title: "Kalender",
+            description: "Erlaube den Zugriff auf deinen Kalender, damit ich deine Termine der nächsten 7 Tage sehe.",
+            status: "pending",
+          });
+          return { ok: true, note: "Karte wird angezeigt. Biete an, die Termine alternativ zu diktieren." };
+        },
+      });
+    }
+  }
   if (enabled.has("ask_options")) {
     tools.ask_options = tool({
       description: "Zeigt dem Menschen eine Auswahlkarte mit 2–5 Optionen (A–E). Danach die Antwort beenden und auf die Wahl warten.",
@@ -205,27 +255,8 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
       },
     });
   }
-  tools.create_routine = tool({
-    description: "Legt eine wiederkehrende Routine an: Zur geplanten Zeit schreibst du automatisch in diesen Chat.",
-    inputSchema: z.object({
-      title: z.string().min(1).max(60).describe("Kurzer Titel, z. B. 'Wöchentliche Essensplanung'"),
-      prompt: z.string().min(1).max(1000).describe("Was du zur geplanten Zeit tun sollst"),
-      kind: z.enum(["daily", "weekly"]),
-      weekday: z.number().int().min(0).max(6).optional().describe("Nur bei weekly: 0 = Sonntag … 6 = Samstag"),
-      hour: z.number().int().min(0).max(23),
-      minute: z.number().int().min(0).max(59).default(0),
-    }),
-    execute: async (input) => {
-      const schedule = validateSchedule({ ...input, tz: "Europe/Berlin" });
-      if (!schedule) return { error: "Ungültiger Zeitplan (bei weekly fehlt weekday?)." };
-      const r = await store.createRoutine(wallet, {
-        threadId, botId: bot.id, title: input.title, schedule, prompt: input.prompt,
-        nextRunAt: nextRunAt(schedule).toISOString(),
-      });
-      await store.setThreadTopic(threadId, input.title);
-      return { ok: true, routineId: r.id, nextRunAt: r.nextRunAt };
-    },
-  });
+  // create_routine / list_routines / delete_routine (not during a routine run itself).
+  if (!ctx.routineRun) addRoutineTools(tools, { wallet, threadId, botId: bot.id });
   if (canSearch) {
     tools.web_search = anthropic.tools.webSearch_20250305({
       maxUses: 5,
@@ -419,7 +450,10 @@ export async function runUserTurn(opts: {
   for (const botId of responders) {
     const bot = threadBots.find((b) => b.id === botId)!;
     if (spent > 0 && quota.used + spent >= quota.limit) break;
-    const res = await runBotTurn({ wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0 });
+    const res = await runBotTurn({
+      wallet, threadId: thread.id, bot, threadBots, emit, hasImages: imageUrls.length > 0,
+      calendarContext: input.calendarContext ?? null,
+    });
     spent += res.inputTokens + res.outputTokens;
     if (res.messages.length) last = res.messages[res.messages.length - 1];
   }
@@ -499,33 +533,60 @@ async function generateGreeting(wallet: string, threadId: string, bot: BotRow, a
 
 // ---- routines ------------------------------------------------------------------------
 
-/** Runs every due routine once; returns a short report. */
-export async function runDueRoutines(now: Date = new Date()): Promise<{ ran: number; skipped: number; failed: number }> {
+/** Stop claiming new routines after this long; the rest run on the next 5-minute tick. */
+export const ROUTINE_BUDGET_MS = 200_000;
+
+export interface RoutineReport { ran: number; skipped: number; quota: number; failed: number; pushed: number; deferred: number }
+
+/**
+ * Runs every due routine once (Vercel cron, every 5 min). Each routine is
+ * claimed first (next_run_at moves forward, optimistic lock), so overlapping
+ * ticks never double-post. Over quota → recorded as a 'quota' run and skipped.
+ * After a post the thread owner gets a push that opens the thread.
+ */
+export async function runDueRoutines(now: Date = new Date()): Promise<RoutineReport> {
+  const started = Date.now();
   const due = await store.dueRoutineRows(now);
-  let ran = 0; let skipped = 0; let failed = 0;
+  const report: RoutineReport = { ran: 0, skipped: 0, quota: 0, failed: 0, pushed: 0, deferred: 0 };
   for (const row of due) {
+    if (Date.now() - started > ROUTINE_BUDGET_MS) { report.deferred++; continue; }
     const schedule = validateSchedule(row.schedule);
     const next = schedule ? nextRunAt(schedule, now).toISOString() : new Date(now.getTime() + 86_400_000).toISOString();
-    if (!(await store.claimRoutine(row, next, now))) { skipped++; continue; }
+    if (!(await store.claimRoutine(row, next, now))) { report.skipped++; continue; }
     try {
       const thread = await store.getThread(row.owner_wallet, row.thread_id);
       const threadBots = thread ? await store.getThreadBotRows(thread.id) : [];
       const bot = threadBots.find((b) => b.id === row.bot_id) ?? (await store.getBotRow(row.bot_id));
-      if (!thread || !bot || !schedule) { skipped++; continue; }
+      if (!thread || !bot || !schedule) { report.skipped++; continue; }
       const quota = await checkQuota(row.owner_wallet);
-      if (quota.exceeded) { skipped++; continue; }
+      if (quota.exceeded) {
+        await store.recordRun({
+          wallet: row.owner_wallet, threadId: thread.id, botId: bot.id, route: "routine",
+          inputTokens: 0, outputTokens: 0, costMicros: 0, status: "quota", error: `routine ${row.id} skipped: quota`,
+        });
+        report.quota++;
+        continue;
+      }
       const res = await runBotTurn({
         wallet: row.owner_wallet, threadId: thread.id, bot, threadBots: threadBots.length ? threadBots : [bot],
         emit: () => {},
+        routineRun: true,
         extraUserText: `(Automatische Routine „${row.title}“ – der Mensch hat das so geplant, er schreibt gerade nicht aktiv.) ${row.prompt}`,
       });
       const last = res.messages[res.messages.length - 1];
-      if (last) await store.touchThread(thread.id, previewForThread(last, threadBots), last.createdAt);
-      ran++;
+      if (last) {
+        const preview = store.previewOfParts(last.parts);
+        await store.touchThread(thread.id, previewForThread(last, threadBots), last.createdAt);
+        const pushed = await sendChatPush({
+          wallet: row.owner_wallet, threadId: thread.id, title: `${bot.name} · ${row.title}`, body: preview,
+        });
+        if (pushed) report.pushed++;
+      }
+      report.ran++;
     } catch (err) {
       console.error("[chat/runtime] routine failed", row.id, err);
-      failed++;
+      report.failed++;
     }
   }
-  return { ran, skipped, failed };
+  return report;
 }

@@ -8,13 +8,14 @@ import { chatFont, chatSize, useChatTokens } from './tokens';
 
 export type ChatListRowProps = {
   title: string;
-  /** Optional grey chip after the name ("Essensplanung"). */
+  /** Optional grey chip after the name ("Essensplanung"); the server fills it with the active routine's title. */
   topic?: string | null;
   /** Preformatted time label — see formatListTime(). */
   time: string;
   preview?: string | null;
   /** One spec = single avatar, 2+ = group stack. */
   avatars: BotAvatarSpec[];
+  /** Green dot: the thread has an enabled routine. */
   online?: boolean;
   unread?: boolean;
   onPress: () => void;
@@ -46,7 +47,15 @@ export function ChatListRow({
     >
       <View style={styles.avatar}>
         {avatars.length > 1 ? (
-          <BotAvatarStack specs={avatars} size={chatSize.listAvatar} />
+          <>
+            <BotAvatarStack specs={avatars} size={chatSize.listAvatar} />
+            {online ? (
+              <View
+                accessibilityLabel="Routine aktiv"
+                style={[styles.groupDot, { borderColor: t.background, backgroundColor: t.online }]}
+              />
+            ) : null}
+          </>
         ) : avatars[0] ? (
           <BotAvatar spec={avatars[0]} size={chatSize.listAvatar} online={online} />
         ) : null}
@@ -88,6 +97,7 @@ export function formatListTime(iso: string, now: Date = new Date()): string {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 23, paddingVertical: 15, minHeight: 80 },
   avatar: { width: chatSize.listAvatar, height: chatSize.listAvatar, marginTop: 2 },
+  groupDot: { position: 'absolute', right: -3, bottom: -3, width: 16, height: 16, borderRadius: 8, borderWidth: 2.5 },
   body: { flex: 1, marginLeft: 17, minWidth: 0 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },

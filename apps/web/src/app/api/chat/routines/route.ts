@@ -8,12 +8,15 @@ export const maxDuration = 60;
 
 const MAX_ROUTINES = 20;
 
-/** GET /api/chat/routines — own routines. */
+/** GET /api/chat/routines[?threadId=<uuid>] — own routines, optionally of one thread. */
 export async function GET(request: Request) {
   const wallet = await requireWallet(request);
   if (!wallet) return unauthorized();
+  const threadId = new URL(request.url).searchParams.get("threadId");
+  if (threadId && !store.isUuid(threadId)) return badRequest("Ungültiger Chat.");
   try {
-    return NextResponse.json({ routines: await store.listRoutines(wallet) });
+    const routines = threadId ? await store.listThreadRoutines(wallet, threadId) : await store.listRoutines(wallet);
+    return NextResponse.json({ routines });
   } catch (err) {
     return handleError(err, "routines");
   }

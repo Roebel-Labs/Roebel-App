@@ -6,6 +6,7 @@ import { MessageBubble, BubbleText } from './MessageBubble';
 import { OptionsCard } from './OptionsCard';
 import { FileCard } from './FileCard';
 import { IntegrationCard } from './IntegrationCard';
+import { CalendarEventCard } from './CalendarEventCard';
 import { SourcesLinks } from './SourcesLinks';
 import { ReplyQuote } from './ReplyQuote';
 import { chatFont, useChatTokens } from './tokens';
@@ -20,7 +21,10 @@ export type MessagePartsProps = {
   onLongPress?: (message: ChatMessage) => void;
   onOptionSelect?: (message: ChatMessage, key: string) => void;
   onFilePress?: (part: FilePart) => void;
-  onIntegrationAuthorize?: (part: IntegrationPart) => void;
+  onIntegrationAuthorize?: (part: IntegrationPart, message: ChatMessage, index: number) => void;
+  /** calendar_event part: "Zum Kalender hinzufügen" (resolves when the OS sheet closed). */
+  onCalendarAdd?: (message: ChatMessage, index: number) => Promise<unknown> | void;
+  onCalendarDismiss?: (message: ChatMessage, index: number) => void;
   onImagePress?: (url: string) => void;
   onLinkPress?: (url: string) => void;
   /** Reaction chips below the message. */
@@ -86,6 +90,7 @@ export function messagePreview(parts: ChatPart[]): string {
     if (p.type === 'file') return p.name;
     if (p.type === 'image') return 'Bild';
     if (p.type === 'integration') return p.title;
+    if (p.type === 'calendar_event') return p.title;
   }
   return '';
 }
@@ -101,6 +106,8 @@ export function MessageParts({
   onOptionSelect,
   onFilePress,
   onIntegrationAuthorize,
+  onCalendarAdd,
+  onCalendarDismiss,
   onImagePress,
   onLinkPress,
   onReactionPress,
@@ -177,7 +184,21 @@ export function MessageParts({
                 title={part.title}
                 description={part.description}
                 status={part.status}
-                onAuthorize={() => onIntegrationAuthorize?.(part)}
+                onAuthorize={() => onIntegrationAuthorize?.(part, message, i)}
+              />
+            );
+          case 'calendar_event':
+            return (
+              <CalendarEventCard
+                key={key}
+                title={part.title}
+                start={part.start}
+                end={part.end}
+                location={part.location}
+                status={part.status}
+                onAdd={onCalendarAdd ? () => onCalendarAdd(message, i) : undefined}
+                onDismiss={onCalendarDismiss ? () => onCalendarDismiss(message, i) : undefined}
+                onLongPress={lp}
               />
             );
           case 'sources':

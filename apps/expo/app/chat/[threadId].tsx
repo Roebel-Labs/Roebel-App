@@ -4,6 +4,7 @@ import {
   Dimensions,
   FlatList,
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -32,6 +33,7 @@ import { useChatActions, useChatBootstrap, useThread } from '@/context/ChatConte
 import { ChatApiError } from '@/lib/chat/api';
 import { isTempId } from '@/lib/chat/reducer';
 import { threadTitle } from '@/lib/chat/format';
+import { firstNewMessageId } from '@/lib/chat/unread';
 import { showChatMenu } from '@/lib/chat/menu';
 import type { BotAvatarSpec, ChatBot, ChatMessage, ChatPart } from '@/lib/chat/types';
 import {
@@ -89,16 +91,6 @@ function copyText(message: ChatMessage): string {
     .map((p) => (p.type === 'text' ? p.text : p.type === 'options' ? p.question : p.type === 'file' ? p.name : ''))
     .filter(Boolean)
     .join('\n\n');
-}
-
-/** First bot message after the user's last message = where unread replies start. */
-function firstUnreadId(messages: ChatMessage[]): string | null {
-  let lastUser = -1;
-  messages.forEach((m, i) => {
-    if (m.role === 'user') lastUser = i;
-  });
-  const next = messages.slice(lastUser + 1).find((m) => m.role === 'bot');
-  return next ? next.id : null;
 }
 
 function useKeyboardHeight(): number {
@@ -159,16 +151,19 @@ export default function ChatThreadScreen() {
     error: string | null;
   } | null>(null);
 
-  // ── "NEU" divider: captured once on open (render-phase adjust), then the thread is marked read ──
-  const { loaded, messages, markRead } = th;
+  // ── "NEU" divider: captured once on open (render-phase adjust), then the thread is marked read.
+  // Waits for a page fetched after this mount (cached pages miss routine posts), then places the
+  // divider before the first bot message newer than the server's lastReadAt. ──
+  const { loaded, loadSeq, messages, markRead } = th;
+  const [mountLoadSeq] = useState(loadSeq);
   const [divider, setDivider] = useState<{
     captured: boolean;
     beforeId: string | null;
   }>({ captured: false, beforeId: null });
-  if (!divider.captured && loaded && thread) {
+  if (!divider.captured && thread && (th.isStreaming || (loaded && loadSeq > mountLoadSeq))) {
     setDivider({
       captured: true,
-      beforeId: thread.unread ? firstUnreadId(messages) : null,
+      beforeId: th.isStreaming ? null : firstNewMessageId(messages, thread.lastReadAt),
     });
   }
   const newBeforeId = divider.beforeId;
@@ -451,6 +446,47 @@ export default function ChatThreadScreen() {
 
   const soon = useCallback((message = 'Bald verfügbar') => showSnackbar({ message }), [showSnackbar]);
 
+  // ── Device calendar (phase 3) ──
+  const { addCalendarEvent, authorizeDeviceCalendar, setPartStatus } = th;
+  const onCalendarAdd = useCallback(
+    async (m: ChatMessage, index: number) => {
+      if (isTempId(m.id)) return;
+      try {
+        await addCalendarEvent(m.id, index);
+      } catch {
+        showSnackbar({ message: 'Kalender konnte nicht geöffnet werden.' });
+      }
+    },
+    [addCalendarEvent, showSnackbar]
+  );
+  const onCalendarDismiss = useCallback(
+    (m: ChatMessage, index: number) => {
+      if (!isTempId(m.id)) setPartStatus(m.id, index, 'dismissed').catch(() => {});
+    },
+    [setPartStatus]
+  );
+  const onIntegrationAuthorize = useCallback(
+    async (part: Extract<ChatPart, { type: 'integration' }>, m: ChatMessage, index: number) => {
+      if (part.provider !== 'device_calendar') {
+        soon('Kalender-Verbindung kommt bald');
+        return;
+      }
+      if (isTempId(m.id)) return;
+      const access = await authorizeDeviceCalendar(m.id, index).catch(() => 'blocked' as const);
+      if (access === 'granted') setTimeout(scrollToBottom, 50);
+      else if (access === 'blocked') {
+        showSnackbar({
+          message: 'Kalenderzugriff ist aus. Du kannst ihn in den Einstellungen erlauben – oder mir die Termine diktieren.',
+          actionLabel: 'Einstellungen',
+          onAction: () => {
+            Linking.openSettings().catch(() => {});
+          },
+        });
+      }
+    },
+    [authorizeDeviceCalendar, soon, showSnackbar, scrollToBottom]
+  );
+
   // ── List items (chronological, then reversed for the inverted list) ──
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
@@ -528,7 +564,9 @@ export default function ChatThreadScreen() {
                 onLongPress={onLongPress}
                 onOptionSelect={onOptionSelect}
                 onFilePress={openFile}
-                onIntegrationAuthorize={() => soon('Kalender-Verbindung kommt bald')}
+                onIntegrationAuthorize={onIntegrationAuthorize}
+                onCalendarAdd={onCalendarAdd}
+                onCalendarDismiss={onCalendarDismiss}
                 onImagePress={openLink}
                 onLinkPress={openLink}
                 onReactionPress={(emoji) => {
@@ -539,7 +577,7 @@ export default function ChatThreadScreen() {
           );
       }
     },
-    [t, retry, discardFailed, onLongPress, onOptionSelect, openFile, openLink, react, soon]
+    [t, retry, discardFailed, onLongPress, onOptionSelect, openFile, openLink, react, onIntegrationAuthorize, onCalendarAdd, onCalendarDismiss]
   );
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -726,6 +764,7 @@ export default function ChatThreadScreen() {
           visible
           onClose={() => setBotSheetOpen(false)}
           bots={bots}
+          threadId={threadId}
           onSave={async (id, patch) => {
             await actions.updateBot(id, patch);
           }}

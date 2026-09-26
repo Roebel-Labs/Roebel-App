@@ -17,6 +17,8 @@ export interface ThreadState {
   hasMore: boolean;
   /** First page arrived at least once. */
   loaded: boolean;
+  /** Counts finished first-page fetches (ok or failed); screens wait for a fetch newer than their mount. */
+  loadSeq: number;
   loadingOlder: boolean;
   /** Non-null while a send is in flight; botId/messageId name the bot currently writing. */
   streaming: { botId: string | null; messageId: string | null } | null;
@@ -31,6 +33,7 @@ export const initialThreadState: ThreadState = {
   messages: [],
   hasMore: false,
   loaded: false,
+  loadSeq: 0,
   loadingOlder: false,
   streaming: null,
   pendingTempId: null,
@@ -79,6 +82,7 @@ export function messagePreview(message: ChatMessage, max = 80): string {
     else if (part.type === 'file') text = part.name;
     else if (part.type === 'image') text = 'Bild';
     else if (part.type === 'integration') text = part.title;
+    else if (part.type === 'calendar_event') text = part.title;
     if (text.trim()) {
       const flat = text.replace(/\s+/g, ' ').trim();
       return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -196,12 +200,24 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         ? state.messages.filter((m) => !ids.has(m.id) && (isTempId(m.id) || m.id === state.streaming?.messageId))
         : [];
       const error = state.error && state.error.retry === null ? null : state.error;
-      return { ...state, messages: [...action.messages, ...tail], hasMore: action.hasMore, loaded: true, error };
+      return {
+        ...state,
+        messages: [...action.messages, ...tail],
+        hasMore: action.hasMore,
+        loaded: true,
+        loadSeq: state.loadSeq + 1,
+        error,
+      };
     }
     case 'load_failed':
       return state.loaded
-        ? state
-        : { ...state, loaded: true, error: { code: action.code, message: action.message, retry: null } };
+        ? { ...state, loadSeq: state.loadSeq + 1 }
+        : {
+            ...state,
+            loaded: true,
+            loadSeq: state.loadSeq + 1,
+            error: { code: action.code, message: action.message, retry: null },
+          };
     case 'stream_cancelled':
       return { ...state, streaming: null, lastSend: null };
     case 'load_older_start':

@@ -5,7 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { chatFont, chatSize, chatType, useChatTokens } from './tokens';
 
 export type IntegrationCardProps = {
-  provider: 'google_calendar';
+  provider: 'google_calendar' | 'device_calendar';
   title: string;
   description: string;
   status: 'pending' | 'connected';
@@ -13,7 +13,15 @@ export type IntegrationCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-function ProviderIcon() {
+function ProviderIcon({ provider }: { provider: IntegrationCardProps['provider'] }) {
+  if (provider === 'device_calendar') {
+    // Generic calendar tile (device calendar = Google/iCloud calendars synced on the phone).
+    return (
+      <View style={styles.iconTile}>
+        <Feather name="calendar" size={17} color="#E5483E" />
+      </View>
+    );
+  }
   // Google-Calendar-like tile ("31" on blue) — no brand asset shipped.
   return (
     <View style={styles.iconTile}>
@@ -25,12 +33,12 @@ function ProviderIcon() {
 }
 
 /** Integration request card with black "Autorisieren" (ref 8). */
-export function IntegrationCard({ title, description, status, onAuthorize, style }: IntegrationCardProps) {
+export function IntegrationCard({ provider, title, description, status, onAuthorize, style }: IntegrationCardProps) {
   const t = useChatTokens();
   return (
     <View style={[styles.card, { backgroundColor: t.bubbleBot }, style]}>
       <View style={styles.head}>
-        <ProviderIcon />
+        <ProviderIcon provider={provider} />
         <Text numberOfLines={1} style={[styles.title, { color: t.textPrimary }]}>
           {title}
         </Text>

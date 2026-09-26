@@ -441,6 +441,7 @@ function ChatList({
               time={item.lastMessageAt ? formatListTime(item.lastMessageAt) : ''}
               preview={item.lastMessagePreview}
               avatars={item.bots.map((b) => b.avatar)}
+              online={item.hasActiveRoutine}
               unread={item.unread}
               onPress={() => router.push(`/chat/${item.id}` as Href)}
             />
