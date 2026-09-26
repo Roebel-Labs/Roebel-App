@@ -182,6 +182,8 @@ export type RestaurantRecord = {
   created_at: string;
   updated_at: string;
   account_id: string | null;
+  /** Linked org account, when embedded (Erkunden rail). */
+  account?: Pick<Account, 'cover_url' | 'avatar_url' | 'address' | 'opening_hours'> | null;
 };
 
 export type BusinessCategory =

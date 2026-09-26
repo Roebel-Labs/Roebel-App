@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { StarIcon } from '@/components/Icons';
-import { describeOpenState, formatRating } from '@/lib/org-profile';
+import { describeOpenState, formatAddress, formatRating } from '@/lib/org-profile';
 import type { AccountRatingSummary, RestaurantRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
 
@@ -28,7 +28,13 @@ function GastroCard({ restaurant, ratingSummary }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const openState = describeOpenState(restaurant.opening_hours);
+  // The detail page renders the linked org account, so prefer its cover,
+  // logo, address and hours; the restaurant row is the fallback.
+  const account = restaurant.account ?? null;
+  const cover = account?.cover_url || restaurant.cover_image_url;
+  const logo = account?.avatar_url || restaurant.logo_url;
+  const address = formatAddress(account?.address || restaurant.address);
+  const openState = describeOpenState(account?.opening_hours ?? restaurant.opening_hours ?? null);
   const ratingCount = ratingSummary?.rating_count ?? 0;
   const hasRatings = ratingCount > 0;
   const ratingText = ratingSummary ? formatRating(ratingSummary.avg_stars) : '';
@@ -50,22 +56,22 @@ function GastroCard({ restaurant, ratingSummary }: Props) {
           { backgroundColor: restaurant.background_color || colors.cardPlaceholder },
         ]}
       >
-        {restaurant.cover_image_url ? (
+        {cover ? (
           <Image
-            source={{ uri: transformedImageUrl(restaurant.cover_image_url, { width: 840 }) ?? undefined }}
+            source={{ uri: transformedImageUrl(cover, { width: 840 }) ?? undefined }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             cachePolicy="memory-disk"
-            recyclingKey={restaurant.cover_image_url ?? undefined}
+            recyclingKey={cover}
             accessibilityIgnoresInvertColors
           />
-        ) : restaurant.logo_url ? (
+        ) : logo ? (
           <Image
-            source={{ uri: transformedImageUrl(restaurant.logo_url, { width: 220 }) ?? undefined }}
+            source={{ uri: transformedImageUrl(logo, { width: 220 }) ?? undefined }}
             style={styles.logo}
             contentFit="cover"
             cachePolicy="memory-disk"
-            recyclingKey={restaurant.logo_url ?? undefined}
+            recyclingKey={logo}
             accessibilityIgnoresInvertColors
           />
         ) : null}
@@ -93,9 +99,9 @@ function GastroCard({ restaurant, ratingSummary }: Props) {
           </View>
         ) : null}
       </View>
-      {restaurant.address ? (
+      {address ? (
         <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
-          {restaurant.address}
+          {address}
         </Text>
       ) : null}
       <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>

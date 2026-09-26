@@ -103,10 +103,14 @@ async function fetchExploreMovies() {
 async function fetchExploreRestaurants() {
   const { data } = await supabase
     .from('restaurants')
-    // NOTE: no opening_hours here — that column does not exist on the
-    // restaurants table (GastroCard tolerates it being undefined). A
-    // nonexistent column 42703-fails the whole select and hides the section.
-    .select('id, slug, name, cover_image_url, logo_url, background_color, account_id')
+    // NOTE: no opening_hours/address here — restaurants has no opening_hours
+    // column, and a nonexistent column 42703-fails the whole select and hides
+    // the section. Cover, logo, address and hours come from the linked org
+    // account (what the detail page shows); the FK is pinned (PGRST201).
+    .select(
+      'id, slug, name, cover_image_url, logo_url, background_color, account_id, ' +
+        'account:accounts!restaurants_account_id_fkey(cover_url, avatar_url, address, opening_hours)'
+    )
     .eq('status', 'published')
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })

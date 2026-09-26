@@ -144,3 +144,12 @@ export const MEMBER_ROLE_LABELS: Record<'owner' | 'admin' | 'member', string> = 
   admin: 'Admin',
   member: 'Team',
 };
+
+/**
+ * Address as shown in the app: geocoder results end in ", Germany" /
+ * ", Deutschland", which is noise for a town app.
+ */
+export function formatAddress(address: string | null | undefined): string | null {
+  if (!address) return null;
+  return address.replace(/,\s*(Germany|Deutschland)\s*$/i, '').trim() || null;
+}

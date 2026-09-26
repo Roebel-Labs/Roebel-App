@@ -7,7 +7,7 @@ import { StarIcon } from '@/components/Icons';
 import BadgeCheckIcon from '@/assets/icons/badge-check.svg';
 import { VERIFIED_GOLD } from '@/components/profile/IdentityRow';
 import { placeCardStyles as styles } from '@/components/GastroCard';
-import { formatRating } from '@/lib/org-profile';
+import { formatAddress, formatRating } from '@/lib/org-profile';
 import type { AccountRatingSummary, OrgAccountCardRecord } from '@/lib/types';
 import { transformedImageUrl } from '@/lib/image-url';
 
@@ -91,7 +91,7 @@ function OrgAccountCard({ account, upCount, ratingSummary }: Props) {
       </View>
       {account.address ? (
         <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>
-          {account.address}
+          {formatAddress(account.address)}
         </Text>
       ) : null}
       <Text style={[styles.line, { color: colors.textSecondary }]} numberOfLines={1}>

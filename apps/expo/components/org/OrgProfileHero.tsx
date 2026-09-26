@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { transformedImageUrl } from '@/lib/image-url';
-import { formatRating, type OpenState } from '@/lib/org-profile';
+import { formatAddress, formatRating, type OpenState } from '@/lib/org-profile';
 import type { AccountRatingSummary } from '@/lib/types';
 import {
   ArrowLeftIcon,
@@ -41,6 +41,8 @@ export type HeroAction = {
 
 type Props = {
   images: string[];
+  /** Org logo, shown as a round badge overlapping the photo. */
+  logoUrl?: string | null;
   name: string;
   verified: boolean;
   category: string | null;
@@ -65,6 +67,7 @@ type Props = {
  */
 function OrgProfileHero({
   images,
+  logoUrl,
   name,
   verified,
   category,
@@ -178,6 +181,15 @@ function OrgProfileHero({
       </View>
 
       <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+        {logoUrl ? (
+          <Image
+            source={{ uri: transformedImageUrl(logoUrl, { width: 240 }) ?? logoUrl }}
+            style={[styles.logo, { borderColor: colors.background, backgroundColor: colors.surface }]}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
         <Text style={[styles.name, { color: colors.textPrimary }]}>
           {name}
           {verified ? (
@@ -245,7 +257,7 @@ function OrgProfileHero({
           >
             <LocationIcon size={20} color={colors.textPrimary} />
             <Text style={[styles.locationText, { color: colors.textPrimary }]} numberOfLines={2}>
-              {address || 'Auf der Karte ansehen'}
+              {formatAddress(address) || 'Auf der Karte ansehen'}
             </Text>
           </Pressable>
         ) : null}
@@ -351,9 +363,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginTop: 8,
   },
+  logo: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    marginTop: -62,
+    marginBottom: 2,
+  },
   locationText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'MonaSans-Regular',
   },
 });

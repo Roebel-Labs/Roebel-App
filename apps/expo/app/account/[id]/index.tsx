@@ -32,7 +32,7 @@ import OrgProfileHero, { HERO_HEIGHT, SHEET_OVERLAP, type HeroAction } from '@/c
 import BusinessProfileView from '@/components/org/BusinessProfileView';
 import { SearchIcon } from '@/components/Icons';
 import { useOrgSheetData } from '@/hooks/useOrgSheetData';
-import { describeOpenState, formatListingPrice as formatPrice, orgCategoryLabel, orgShareUrl } from '@/lib/org-profile';
+import { describeOpenState, formatAddress, formatListingPrice as formatPrice, orgCategoryLabel, orgShareUrl } from '@/lib/org-profile';
 import StickyCategoryBar from '@/components/StickyCategoryBar';
 import MenuCategoriesSheet from '@/components/MenuCategoriesSheet';
 import { useAccountRating } from '@/hooks/useAccountRating';
@@ -131,6 +131,7 @@ function PublicAccountScreenInner() {
   const [categoriesSheetOpen, setCategoriesSheetOpen] = useState(false);
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
   const [isBarStuck, setIsBarStuck] = useState(false);
+  const [pastHero, setPastHero] = useState(false);
   const categoryYsRef = React.useRef<Record<string, number>>({});
   const scrollRef = React.useRef<ScrollView>(null);
   // Hoisted from below — these MUST live above any conditional return to keep
@@ -359,7 +360,7 @@ function PublicAccountScreenInner() {
     Number.isFinite(orgLocation.lat) &&
     Number.isFinite(orgLocation.lon);
 
-  const address = orgLocation?.address ?? account.address ?? null;
+  const address = formatAddress(orgLocation?.address ?? account.address);
   const heroImages = [
     ...new Set(
       [account.cover_url, ...sheet.photos.map((p) => p.url)].filter((u): u is string => !!u)
@@ -404,6 +405,7 @@ function PublicAccountScreenInner() {
   const hero = (
     <OrgProfileHero
       images={heroImages}
+      logoUrl={account.avatar_url ?? orgLocation?.restaurant?.logo_url ?? null}
       name={account.name}
       verified={account.is_verified}
       category={orgCategoryLabel(account, orgLocation?.business)}
@@ -742,7 +744,7 @@ function PublicAccountScreenInner() {
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Standort</Text>
             {orgLocation.address ? (
               <Text style={[styles.bioText, { color: colors.textPrimary, marginBottom: 12 }]}>
-                {orgLocation.address}
+                {formatAddress(orgLocation.address)}
               </Text>
             ) : null}
             {hasValidCoords ? (
@@ -784,6 +786,9 @@ function PublicAccountScreenInner() {
     // the in-flow slot has scrolled off the top.
     const shouldStick = y >= slot5Y.current - STICKY_OFFSET;
     if (shouldStick !== isBarStuck) setIsBarStuck(shouldStick);
+    // Solid status-bar backdrop once content scrolls under the clock.
+    const overContent = y >= HERO_HEIGHT - insets.top;
+    if (overContent !== pastHero) setPastHero(overContent);
 
     if (activeTab !== 'menu' || !gastroData.categories.length) return;
     const adjusted = y + STICKY_OFFSET;
@@ -1001,6 +1006,13 @@ function PublicAccountScreenInner() {
           />
         </View>
       )}
+
+      {pastHero ? (
+        <View
+          pointerEvents="none"
+          style={[styles.statusBarBackdrop, { height: insets.top, backgroundColor: colors.background }]}
+        />
+      ) : null}
 
       <RatingModal
         visible={ratingModalOpen}
@@ -1317,6 +1329,13 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 8,
+  },
+  statusBarBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 101,
   },
   stickyOverlay: {
     position: 'absolute',
