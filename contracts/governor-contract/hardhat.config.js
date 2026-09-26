@@ -46,7 +46,13 @@ module.exports = {
       chainId: 31337,
       // GNOSIS_FORK=1 → fork mainnet Gnosis for a deploy dry-run against real on-chain state.
       ...(process.env.GNOSIS_FORK === "1"
-        ? { forking: { url: process.env.GNOSIS_RPC_URL || "https://rpc.gnosischain.com" } }
+        ? {
+            forking: { url: process.env.GNOSIS_RPC_URL || "https://rpc.gnosischain.com" },
+            // Hardhat ships no hardfork history for chain 100; without it every call on
+            // the fork fails with "No known hardfork". Gnosis runs Prague (Pectra).
+            hardfork: "prague",
+            chains: { 100: { hardforkHistory: { cancun: 0, prague: 1 } } },
+          }
         : {}),
     },
     base: {
