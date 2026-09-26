@@ -9,6 +9,8 @@ export const HERO_CAROUSEL_GAP = 8;
  * of the contrast test.
  */
 export const HERO_AMBIENT_MAX_OPACITY = 0.3;
+/** Dark mode reads the same wash as a glow, so it runs at half (Max 2026-09-26). */
+export const HERO_AMBIENT_MAX_OPACITY_DARK = 0.15;
 /** Fixed card height; the skeleton reserves the same box so nothing shifts. */
 export const HERO_CAROUSEL_CARD_HEIGHT = 500;
 

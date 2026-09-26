@@ -20,6 +20,7 @@ import HeroEventCard from '@/components/HeroEventCard';
 import { transformedImageUrl } from '@/lib/image-url';
 import {
   HERO_AMBIENT_MAX_OPACITY,
+  HERO_AMBIENT_MAX_OPACITY_DARK,
   HERO_CAROUSEL_CARD_HEIGHT,
   activeIndexFromOffset,
   ambientWeight,
@@ -62,7 +63,8 @@ type Props = {
  */
 export default function HeroCarousel({ events, showPagination = false, containerStyle }: Props) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const ambientMax = isDark ? HERO_AMBIENT_MAX_OPACITY_DARK : HERO_AMBIENT_MAX_OPACITY;
   const { width: screenWidth } = useWindowDimensions();
   const layout = useMemo(() => heroCarouselLayout(screenWidth), [screenWidth]);
   const count = events.length;
@@ -148,6 +150,7 @@ export default function HeroCarousel({ events, showPagination = false, container
               slots={slots}
               interval={interval}
               offset={offset}
+              maxOpacity={ambientMax}
               uri={transformedImageUrl(event.image_url, { width: 64, quality: 40 }) ?? event.image_url}
             />
           );
@@ -268,6 +271,7 @@ type AmbientLayerProps = {
   slots: number;
   interval: number;
   offset: SharedValue<number>;
+  maxOpacity: number;
   uri: string;
 };
 
@@ -276,12 +280,13 @@ const HeroAmbientLayer = memo(function HeroAmbientLayer({
   slots,
   interval,
   offset,
+  maxOpacity,
   uri,
 }: AmbientLayerProps) {
   const animatedStyle = useAnimatedStyle(() => {
     const loopLength = slots * interval;
     const relative = wrapOffset(slot * interval - offset.value, loopLength);
-    return { opacity: HERO_AMBIENT_MAX_OPACITY * ambientWeight(relative, interval) };
+    return { opacity: maxOpacity * ambientWeight(relative, interval) };
   });
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
