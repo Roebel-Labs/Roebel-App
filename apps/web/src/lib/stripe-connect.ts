@@ -39,3 +39,16 @@ export function platformFeeCents(amountCents: number): number {
 export function webBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_WEB_BASE_URL ?? "https://www.roebel.app").replace(/\/$/, "");
 }
+
+/**
+ * Publishable key of the same Stripe account and mode as the Connect secret key. Public by design
+ * (it can only create client-side tokens), served by /api/connect/session so a sandbox→live switch
+ * needs no app update. Returns null when missing or when its mode does not match the secret key.
+ */
+export function connectPublishableKey(): string | null {
+  const pk = process.env.STRIPE_CONNECT_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLIC_KEY_SANDBOX ?? "";
+  if (!/^pk_(live|test)_/.test(pk)) return null;
+  const live = isConnectLivemode();
+  if (pk.startsWith("pk_live_") !== live) return null;
+  return pk;
+}

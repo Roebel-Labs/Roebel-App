@@ -9,7 +9,7 @@ export const SIGNED_SCOPE = "roebel-tickets-v1" as const;
 export const MAX_SIGNED_AGE_SECONDS = 300;
 
 export type TicketAction =
-  | "connect_onboard" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
+  | "connect_onboard" | "connect_session" | "connect_status" | "ticket_types_upsert" | "ticket_types_list" | "checkout"
   | "order_status" | "tickets_list" | "orders_list" | "checkin" | "refund_order";
 
 export function buildSignedMessage(
