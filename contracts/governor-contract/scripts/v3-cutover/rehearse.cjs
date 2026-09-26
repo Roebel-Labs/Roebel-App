@@ -62,7 +62,12 @@ async function expectRevert(promise) {
   try { await promise; return { reverted: false }; } catch (e) { return { reverted: true, reason: e.shortMessage || e.message }; }
 }
 
-async function rehearse(hre, { log = console.log } = {}) {
+/**
+ * @param realSafe  optional: rehearse with a REAL Safe that already exists on Gnosis (e.g. Max's
+ *   0xbCAb… 1.5.0 Safe). Its current owner is impersonated to turn it into a 3-of-5 with contract
+ *   owners (2 thirdweb legacy accounts + 3 Safes), exactly the state D5 asks for.
+ */
+async function rehearse(hre, { log = console.log, realSafe = null } = {}) {
   const { ethers, network } = hre;
   if (network.name !== "hardhat" || !network.config.forking?.url) {
     throw new Error("rehearse.cjs only runs on the in-process hardhat network forking Gnosis (GNOSIS_FORK=1).");
@@ -103,13 +108,32 @@ async function rehearse(hre, { log = console.log } = {}) {
     return (await s.execTransaction(to, value, data, operation, 0, 0, 0, ethers.ZeroAddress, ethers.ZeroAddress, sig)).wait();
   }
 
-  /** Executes one Transaction Builder file through the 3-of-5 Safe with `approvers` owner Safes. */
-  async function execBatchViaSafe(safeAddr, approvers, batch) {
-    const tx = L.batchToSafeTx(ethers, batch);
+  // Owner stand-ins. Each has `address` and `approve(safe, hash)` = an on-chain approveHash sent
+  // FROM the owner contract (pre-validated signature, identical in Safe 1.4.1 and 1.5.0).
+  const twFactory = new ethers.Contract(TW_FACTORY, TW_FACTORY_ABI, deployer);
+  async function makeSafeOwner() {
+    const wallet = await newWallet();
+    const address = await deploySafe([wallet.address], 1);
+    return { kind: "safe", address, wallet,
+      approve: (target, h) => execFromOwnerSafe(address, wallet, target, safeAt(target).interface.encodeFunctionData("approveHash", [h])) };
+  }
+  async function makeThirdwebOwner() {
+    const wallet = await newWallet();
+    const address = await twFactory.createAccount.staticCall(wallet.address, "0x");
+    await (await twFactory.createAccount(wallet.address, "0x")).wait();
+    const acct = new ethers.Contract(address, TW_ACCOUNT_ABI, wallet);
+    return { kind: "thirdweb", address, wallet,
+      approve: async (target, h) => (await acct.execute(target, 0, safeAt(target).interface.encodeFunctionData("approveHash", [h]))).wait() };
+  }
+
+  /** Executes one Transaction Builder file through a Safe with `approvers` (owner stand-ins). */
+  let multiSendForAttesterSafe = L.SAFE_MULTISEND_CALL_ONLY;
+  async function execBatchViaSafe(safeAddr, approvers, batch, multiSend = multiSendForAttesterSafe) {
+    const tx = L.batchToSafeTx(ethers, batch, multiSend);
     const s = safeAt(safeAddr);
     const h = await s.getTransactionHash(tx.to, tx.value, tx.data, tx.operation, 0, 0, 0, ethers.ZeroAddress, ethers.ZeroAddress, await s.nonce());
-    for (const a of approvers) await execFromOwnerSafe(a.safe, a.wallet, safeAddr, s.interface.encodeFunctionData("approveHash", [h]));
-    const sorted = [...approvers].map((a) => a.safe).sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1));
+    for (const a of approvers) await a.approve(safeAddr, h);
+    const sorted = [...approvers].map((a) => a.address).sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1));
     const sigs = ethers.concat(sorted.map((o) => ethers.concat([ethers.zeroPadValue(o, 32), ethers.ZeroHash, "0x01"])));
     const rc = await (await s.execTransaction(tx.to, tx.value, tx.data, tx.operation, 0, 0, 0, ethers.ZeroAddress, ethers.ZeroAddress, sigs)).wait();
     const ok = rc.logs.some((l) => { try { return s.interface.parseLog(l)?.name === "ExecutionSuccess"; } catch { return false; } });
@@ -130,18 +154,85 @@ async function rehearse(hre, { log = console.log } = {}) {
   check("guard: old 1-of-4 Attester Safe 0x3A08 rejected as NEW_ATTESTER_SAFE", oldSafeCheck.reverted, oldSafeCheck.reason?.slice(0, 90));
 
   // ---------------------------------------------------------------- new 3-of-5 Attester Safe
-  const owners = [];
-  for (let i = 0; i < 5; i++) {
-    const wallet = await newWallet();
-    owners.push({ wallet, safe: await deploySafe([wallet.address], 1) });
+  let attesterSafe, approvers;
+  if (!realSafe) {
+    const owners = [];
+    for (let i = 0; i < 5; i++) owners.push(await makeSafeOwner());
+    const weak = await deploySafe(owners.map((o) => o.address), 2);
+    check("guard: 2-of-5 Safe rejected", (await expectRevert(L.assertAttesterSafe(hre, weak))).reverted);
+    const eoaOwned = await deploySafe([...owners.slice(0, 4).map((o) => o.address), owners[4].wallet.address], 3);
+    check("guard: Safe with an EOA owner rejected", (await expectRevert(L.assertAttesterSafe(hre, eoaOwned))).reverted);
+    attesterSafe = await deploySafe(owners.map((o) => o.address), 3);
+    approvers = owners.slice(0, 3);
+    log(`new Attester Safe (3-of-5, owners = 5 Safes): ${attesterSafe}`);
+  } else {
+    attesterSafe = ethers.getAddress(realSafe);
+    const s = new ethers.Contract(attesterSafe, [...SAFE_ABI,
+      "function VERSION() view returns (string)",
+      "function addOwnerWithThreshold(address owner, uint256 _threshold)",
+      "function swapOwner(address prevOwner, address oldOwner, address newOwner)",
+      "function changeThreshold(uint256 _threshold)"], provider);
+    const version = await s.VERSION();
+    const initialOwners = [...(await s.getOwners())].map((a) => ethers.getAddress(a));
+    log(`REAL Safe ${attesterSafe}: v${version}, ${await s.getThreshold()}-of-${initialOwners.length} [${initialOwners.join(", ")}], nonce ${await s.nonce()}`);
+    const initialRefusal = await expectRevert(L.assertAttesterSafe(hre, attesterSafe));
+    check("real Safe: current 1-of-1 EOA-owned state is refused as NEW_ATTESTER_SAFE", initialRefusal.reverted, initialRefusal.reason?.slice(0, 90));
+    if (initialOwners.length !== 1) throw new Error("real-Safe rehearsal expects the Safe's creation state (1 owner)");
+    const creator = initialOwners[0];
+    const creatorSigner = await impersonate(creator);
+    // Owner by msg.sender: signature (r = owner, s = 0, v = 1) is valid when msg.sender == owner.
+    const selfSig = ethers.concat([ethers.zeroPadValue(creator, 32), ethers.ZeroHash, "0x01"]);
+    const execAsCreator = async (tx) => {
+      const rc = await (await s.connect(creatorSigner).execTransaction(tx.to, tx.value, tx.data, tx.operation, 0, 0, 0,
+        ethers.ZeroAddress, ethers.ZeroAddress, selfSig)).wait();
+      return rc.logs.some((l) => { try { return s.interface.parseLog(l)?.name === "ExecutionSuccess"; } catch { return false; } });
+    };
+
+    // Owner stand-ins: two attesters join with their legacy thirdweb accounts, three with Safes.
+    const tw = [await makeThirdwebOwner(), await makeThirdwebOwner()];
+    const sf = [await makeSafeOwner(), await makeSafeOwner(), await makeSafeOwner()];
+    const joiners = [...tw, ...sf];
+    const setupCalls = (keepCreator) => {
+      const calls = joiners.slice(0, 4).map((o) => ({ to: attesterSafe, data: s.interface.encodeFunctionData("addOwnerWithThreshold", [o.address, 1]) }));
+      if (!keepCreator) {
+        // Owners are a linked list; addOwner prepends, so the creator is last and its prev is joiners[0].
+        calls.push({ to: attesterSafe, data: s.interface.encodeFunctionData("swapOwner", [joiners[0].address, creator, joiners[4].address]) });
+      } else {
+        calls.push({ to: attesterSafe, data: s.interface.encodeFunctionData("addOwnerWithThreshold", [joiners[4].address, 1]) });
+      }
+      calls.push({ to: attesterSafe, data: s.interface.encodeFunctionData("changeThreshold", [3]) });
+      return { transactions: calls.map((c) => ({ ...c, value: "0" })), meta: { name: "owner setup" } };
+    };
+
+    // Guard: 3-of-6 with contract owners but the creator EOA still in → refused (then rolled back).
+    const snap = await network.provider.send("evm_snapshot", []);
+    const okKeep = await execAsCreator(L.batchToSafeTx(ethers, setupCalls(true), L.SAFE_MULTISEND_CALL_ONLY));
+    const keepRefusal = await expectRevert(L.assertAttesterSafe(hre, attesterSafe));
+    check("real Safe: 3-of-6 that still contains the EOA 0x1C11 is refused", okKeep && keepRefusal.reverted, keepRefusal.reason?.slice(0, 90));
+    await network.provider.send("evm_revert", [snap]);
+
+    // The real setup, executed through the 1.4.1 MultiSendCallOnly on the 1.5.0 Safe.
+    const okSetup = await execAsCreator(L.batchToSafeTx(ethers, setupCalls(false), L.SAFE_MULTISEND_CALL_ONLY));
+    const finalOwners = [...(await s.getOwners())].map((a) => ethers.getAddress(a));
+    check("real Safe: creator adds 4 contract owners, swaps itself out, threshold 3 (one batch via MultiSendCallOnly 1.4.1)",
+      okSetup && (await s.getThreshold()) === 3n && finalOwners.length === 5 && !finalOwners.includes(creator) &&
+      joiners.every((o) => finalOwners.includes(o.address)),
+      `owners [${finalOwners.map((o) => o.slice(0, 8)).join(", ")}]`);
+    let accepted = null;
+    try { accepted = await L.assertAttesterSafe(hre, attesterSafe); } catch (e) { log("    " + e.message); }
+    check("real Safe: assertAttesterSafe ACCEPTS 3-of-5 whose owners include 2 thirdweb smart accounts",
+      !!accepted && accepted.eoaOwners.length === 0 && accepted.threshold === 3n);
+
+    // 1.5.0 MultiSendCallOnly: prove it is the call-only variant (an inner delegatecall is refused).
+    const inner = ethers.solidityPacked(["uint8", "address", "uint256", "uint256", "bytes"], [1, attesterSafe, 0, 4, "0x12345678"]);
+    const msIface = new ethers.Interface(["function multiSend(bytes transactions)"]);
+    const ms150 = new ethers.Contract(L.SAFE_MULTISEND_CALL_ONLY_150, msIface, deployer);
+    const rej = await expectRevert(ms150.multiSend.staticCall(inner));
+    check("MultiSendCallOnly 1.5.0 (0xA83c…) on Gnosis rejects an inner delegatecall (call-only verified on-chain)", rej.reverted);
+    multiSendForAttesterSafe = L.multiSendCallOnlyFor(version);
+    log(`  Attester Safe batches will use MultiSendCallOnly ${multiSendForAttesterSafe} (v${version})`);
+    approvers = [tw[0], sf[0], sf[1]]; // a thirdweb account co-signs every Safe tx below
   }
-  const weak = await deploySafe(owners.map((o) => o.safe), 2);
-  check("guard: 2-of-5 Safe rejected", (await expectRevert(L.assertAttesterSafe(hre, weak))).reverted);
-  const eoaOwned = await deploySafe([...owners.slice(0, 4).map((o) => o.safe), owners[4].wallet.address], 3);
-  check("guard: Safe with an EOA owner rejected", (await expectRevert(L.assertAttesterSafe(hre, eoaOwned))).reverted);
-  const attesterSafe = await deploySafe(owners.map((o) => o.safe), 3);
-  const approvers = owners.slice(0, 3);
-  log(`new Attester Safe (3-of-5, owners = 5 Safes): ${attesterSafe}`);
 
   // ---------------------------------------------------------------- 01
   const step01 = require("./01-deploy-identity.cjs");
@@ -256,7 +347,6 @@ async function rehearse(hre, { log = console.log } = {}) {
 
   // ---------------------------------------------------------------- moveTo via a real thirdweb account + EIP-712 handover
   const eoa = await newWallet();
-  const twFactory = new ethers.Contract(TW_FACTORY, TW_FACTORY_ABI, deployer);
   const legacyAddr = await twFactory.createAccount.staticCall(eoa.address, "0x");
   await (await twFactory.createAccount(eoa.address, "0x")).wait();
   const legacy = new ethers.Contract(legacyAddr, TW_ACCOUNT_ABI, eoa);
@@ -338,7 +428,8 @@ module.exports = { rehearse };
 
 if (require.main === module) {
   const hre = require("hardhat");
-  rehearse(hre)
+  // REHEARSE_REAL_SAFE=0xbCAb… → run against Max's real Safe on the fork (never broadcast).
+  rehearse(hre, { realSafe: process.env.REHEARSE_REAL_SAFE || null })
     .then(({ failed }) => process.exit(failed.length ? 1 : 0))
     .catch((e) => { console.error(e); process.exit(1); });
 }

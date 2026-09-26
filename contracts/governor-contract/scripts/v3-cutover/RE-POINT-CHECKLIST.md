@@ -32,7 +32,7 @@ Servers switch before clients, so no client can ever show a v3-only state that a
 | # | Step | Who |
 |---|---|---|
 | A0 | Run `GNOSIS_FORK=1 npx hardhat run scripts/v3-cutover/rehearse.cjs`; every assertion must pass | dev |
-| A1 | Create the new Attester Safe: **at least 3-of-5**, owners = the attesters' passkey Safes, no EOA owners, no modules. D5. | Max |
+| A1 | New Attester Safe: **at least 3-of-5**, owners = contracts only (the attesters' passkey Safes, or their thirdweb legacy accounts until they switch; a counterfactual thirdweb account must be deployed first), no EOA owners, no modules. D5. **Created 2026-09-26: `0xbCAbbAA26420e0A4771808F9639D4176355E5d4B`** (Safe 1.5.0, no modules; still 1-of-1 with EOA `0x1C11…` → 01/03 refuse it until the members are added, 0x1C11 is swapped out and the threshold is 3). Always pass it explicitly as `NEW_ATTESTER_SAFE`. Rehearse against it: `GNOSIS_FORK=1 REHEARSE_REAL_SAFE=0xbCAbbAA26420e0A4771808F9639D4176355E5d4B npx hardhat run scripts/v3-cutover/rehearse.cjs` | Max |
 | A2 | New Shamir ceremony: share keys wrapped under the passkey PRF (spec "New MACI keys"). Keep the pubkey X/Y. Details in **MACI** below. | Max + attesters |
 | A3 | `01-deploy-identity.cjs` → writes `deployments/gnosis-v3.json` | burner deployer |
 | A4 | `02-bootstrap-calldata.cjs` → the Safe signs and executes `02-bootstrap-part-*.json` in order | Safe (3/5) |

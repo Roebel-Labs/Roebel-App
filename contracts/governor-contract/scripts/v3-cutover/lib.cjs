@@ -17,8 +17,19 @@ const V2_MANIFEST = path.join(ROOT, "deployments/gnosis-v2.json");
 const DEFAULT_V3_MANIFEST = path.join(ROOT, "deployments/gnosis-v3.json");
 const DEFAULT_OUT_DIR = path.join(ROOT, "deployments/v3-safe-txs");
 
-// Canonical Safe 1.4.1 deployments on Gnosis (safe-global/safe-deployments).
-const SAFE_MULTISEND_CALL_ONLY = "0x9641d764fc13c8B624c04430C7356C1C7C8102e2";
+// Canonical MultiSendCallOnly deployments on Gnosis (safe-global/safe-deployments), both with
+// code on Gnosis (checked 2026-09-26). The Transaction Builder JSON itself is version-agnostic
+// (plain {to,value,data} list); the Safe UI picks the MultiSend matching the Safe's version.
+// Both libraries are stateless and delegatecalled, so either works with a 1.4.1 or 1.5.0 Safe
+// (rehearse.cjs --real-safe executes batches through both against the real 1.5.0 Safe).
+const SAFE_MULTISEND_CALL_ONLY = "0x9641d764fc13c8B624c04430C7356C1C7C8102e2"; // v1.4.1
+const SAFE_MULTISEND_CALL_ONLY_150 = "0xA83c336B20401Af773B6219BA5027174338D1836"; // v1.5.0
+function multiSendCallOnlyFor(version) {
+  return String(version).startsWith("1.5.") ? SAFE_MULTISEND_CALL_ONLY_150 : SAFE_MULTISEND_CALL_ONLY;
+}
+// The real new Attester Safe Max created on 2026-09-26 (Safe 1.5.0; 1-of-1 EOA at creation,
+// members join later). A HINT only: every script still requires NEW_ATTESTER_SAFE explicitly.
+const NEW_ATTESTER_SAFE_HINT = "0xbCAbbAA26420e0A4771808F9639D4176355E5d4B";
 const SAFE_SENTINEL = "0x0000000000000000000000000000000000000001";
 
 /**
@@ -65,7 +76,10 @@ function outDir(opts = {}) {
 
 function requireEnvAddress(hre, name, value) {
   const v = value ?? process.env[name];
-  if (!v) throw new Error(`${name} is required`);
+  if (!v) {
+    const hint = name === "NEW_ATTESTER_SAFE" ? ` (Max's new Attester Safe is ${NEW_ATTESTER_SAFE_HINT}; pass it explicitly)` : "";
+    throw new Error(`${name} is required${hint}`);
+  }
   if (!hre.ethers.isAddress(v)) throw new Error(`${name} is not an address: ${v}`);
   const a = hre.ethers.getAddress(v);
   if (a === hre.ethers.ZeroAddress) throw new Error(`${name} is the zero address`);
@@ -104,6 +118,9 @@ async function assertAttesterSafe(hre, safe, { minThreshold = 3, minOwners = 5 }
   if (modules.length && process.env.ALLOW_SAFE_MODULES !== "yes") {
     throw new Error(`Safe ${safe} has enabled modules ${modules.join(", ")} (they bypass the threshold). Set ALLOW_SAFE_MODULES=yes only if audited.`);
   }
+  // A contract owner may be a passkey Safe OR (during the transition) an attester's legacy
+  // thirdweb smart account; both have code. A COUNTERFACTUAL thirdweb account has no code
+  // yet and is counted as an EOA here: deploy it (AccountFactory.createAccount) first.
   const eoaOwners = [];
   for (const o of owners) if ((await ethers.provider.getCode(o)) === "0x") eoaOwners.push(o);
   if (eoaOwners.length && process.env.ALLOW_EOA_SAFE_OWNERS !== "yes") {
@@ -209,7 +226,7 @@ function safeBatch({ chainId, safe, name, description, txs, extra = {} }) {
 }
 
 /** Encodes a Transaction Builder batch into the single Safe tx the Safe UI would sign. */
-function batchToSafeTx(ethersLib, batch) {
+function batchToSafeTx(ethersLib, batch, multiSendCallOnly = SAFE_MULTISEND_CALL_ONLY) {
   const txs = batch.transactions;
   if (txs.length === 1) return { to: txs[0].to, value: BigInt(txs[0].value), data: txs[0].data, operation: 0 };
   const packed = ethersLib.concat(txs.map((t) => ethersLib.solidityPacked(
@@ -217,11 +234,12 @@ function batchToSafeTx(ethersLib, batch) {
     [0, t.to, BigInt(t.value), ethersLib.dataLength(t.data), t.data]
   )));
   const iface = new ethersLib.Interface(["function multiSend(bytes transactions)"]);
-  return { to: SAFE_MULTISEND_CALL_ONLY, value: 0n, data: iface.encodeFunctionData("multiSend", [packed]), operation: 1 };
+  return { to: multiSendCallOnly, value: 0n, data: iface.encodeFunctionData("multiSend", [packed]), operation: 1 };
 }
 
 module.exports = {
   CONFIRM_VALUE, ROOT, V2_MANIFEST, DEFAULT_V3_MANIFEST, DEFAULT_OUT_DIR, SAFE_MULTISEND_CALL_ONLY,
+  SAFE_MULTISEND_CALL_ONLY_150, multiSendCallOnlyFor, NEW_ATTESTER_SAFE_HINT,
   guardChain, readJson, writeJson, v3ManifestPath, outDir, requireEnvAddress, assertAttesterSafe,
   holdersFromLogs, safeBatch, batchToSafeTx, txBuilderChecksum,
 };

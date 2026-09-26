@@ -9,10 +9,14 @@
  *    no EOA owners (Max: "at least 3-of-5"; spec security finding on 0x3A08 = 1-of-4 + EOA).
  *  - Writes deployments/gnosis-v3.json (or V3_MANIFEST).
  *
+ * Max's new Attester Safe (created 2026-09-26, Safe 1.5.0): 0xbCAbbAA26420e0A4771808F9639D4176355E5d4B.
+ * It is a hint only (lib.NEW_ATTESTER_SAFE_HINT); NEW_ATTESTER_SAFE must still be passed, and the
+ * Safe is refused until it is >=3-of-5 with contract owners only.
+ *
  * Fork rehearsal (preferred, see rehearse.cjs which runs 01→04 in one process):
  *   GNOSIS_FORK=1 npx hardhat run scripts/v3-cutover/rehearse.cjs
  * Mainnet (only after the rehearsal passed):
- *   DEPLOYER_PRIVATE_KEY=<fresh burner, from your shell> NEW_ATTESTER_SAFE=0x… \
+ *   DEPLOYER_PRIVATE_KEY=<fresh burner, from your shell> NEW_ATTESTER_SAFE=0xbCAbbAA26420e0A4771808F9639D4176355E5d4B \
  *   CONFIRM_MAINNET=yes-i-mean-it npx hardhat run scripts/v3-cutover/01-deploy-identity.cjs --network gnosis
  */
 require("dotenv").config();
