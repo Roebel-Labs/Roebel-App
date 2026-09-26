@@ -27,3 +27,22 @@ export {
   type Role,
   type Stage,
 } from "./decisions.js";
+export {
+  KNOWN_ORG_TYPES,
+  ORG_ID_PREFIX,
+  ORG_ROLES,
+  ORG_TAG,
+  OrgMetadataSchema,
+  isOrgId,
+  orgIdFromUuid,
+  orgIdOfEvent,
+  orgRoleFromIndex,
+  pubkeyToBytes32,
+  safeParseOrgMetadata,
+  verifyOrgEvent,
+  type OrgEventLike,
+  type OrgEventVerdict,
+  type OrgKeyLookup,
+  type OrgMetadata,
+  type OrgRole,
+} from "./orgs.js";
