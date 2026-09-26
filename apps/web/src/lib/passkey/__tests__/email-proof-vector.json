@@ -1,0 +1,11 @@
+{
+  "_description": "Optional passkey email proof text. Shared byte-exact by apps/web/src/lib/passkey/email-proof.ts and apps/expo/lib/passkey/email.ts. addChallenge = Safe SafeMessage hash of hashMessage(addMessage) = the WebAuthn challenge the passkey signs.",
+  "safe": "0x24742A3505A84939d80dA82BBab0E103D2A44e6d",
+  "email": "max.muster@example.de",
+  "timestamp": 1790000000,
+  "addMessage": "Röbel: E-Mail für Warnungen\nAktion: hinzufügen\nKonto: 0x24742a3505a84939d80da82bbab0e103d2a44e6d\nE-Mail: max.muster@example.de\nZeit: 1790000000\nKeine Anmeldung. Nur für Warnungen.",
+  "removeMessage": "Röbel: E-Mail für Warnungen\nAktion: entfernen\nKonto: 0x24742a3505a84939d80da82bbab0e103d2a44e6d\nZeit: 1790000000\nKeine Anmeldung. Nur für Warnungen.",
+  "addMessageHash": "0xe1751a3a8c27c5281c947cd873edf8c7480c5cde31bf9ce69d6e32d73ca09e3f",
+  "addChallenge": "0xbb87ffc2dd3a1aa23f57f43b111b1679bda01e4f3b8e894c0fc5f773e3c01cf4",
+  "removeMessageHash": "0x23f057f2d1472a6a4179143447c3b6a3abdf449bf953c0f8070ed6a73ad0ce55"
+}
