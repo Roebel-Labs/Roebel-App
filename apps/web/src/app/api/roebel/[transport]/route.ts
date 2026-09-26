@@ -17,11 +17,23 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getNewsArticle,
+  listBusinesses,
+  listDeals,
+  listEvents,
+  listMarketplace,
+  listMiniApps,
+  listNews,
+  listProposals,
+  searchRoebel,
+} from "@/lib/roebel-data/public";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
 const SITE = "https://www.roebel.app";
+const TENANT = "roebel";
 
 function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
@@ -64,109 +76,21 @@ const handler = createMcpHandler(
       "search_roebel",
       "Volltextsuche über Veranstaltungen, Nachrichten, Gewerbe, Angebote, Marktplatz und Bürgervorschläge.",
       { query: z.string().min(2).max(120) },
-      async ({ query }) => {
-        const q = query.trim();
-        const like = `%${q}%`;
-        const supabase = db();
-        const [events, news, businesses, listings, proposals, deals] = await Promise.all([
-          supabase
-            .from("events")
-            .select("id, title, description, date, location")
-            .eq("status", "approved")
-            .or(`title.ilike.${like},description.ilike.${like},location.ilike.${like}`)
-            .order("date", { ascending: false })
-            .limit(5),
-          supabase
-            .from("news_articles")
-            .select("title, slug, excerpt, published_at")
-            .eq("status", "published")
-            .or(`title.ilike.${like},excerpt.ilike.${like}`)
-            .order("published_at", { ascending: false })
-            .limit(5),
-          supabase
-            .from("businesses")
-            .select("name, slug, description, category")
-            .eq("status", "published")
-            .or(`name.ilike.${like},description.ilike.${like}`)
-            .limit(5),
-          supabase
-            .from("marketplace_listings")
-            .select("id, title, description, price, listing_type")
-            .eq("status", "active")
-            .or(`title.ilike.${like},description.ilike.${like}`)
-            .order("created_at", { ascending: false })
-            .limit(5),
-          supabase
-            .from("proposals")
-            .select("proposal_id, proposal_number, title, summary, state")
-            .or(`title.ilike.${like},summary.ilike.${like}`)
-            .order("created_at", { ascending: false })
-            .limit(5),
-          supabase
-            .from("business_deals")
-            .select("id, title, description, businesses!inner(name)")
-            .eq("is_active", true)
-            .or(`title.ilike.${like},description.ilike.${like}`)
-            .limit(5),
-        ]);
-        return json({
-          events: (events.data ?? []).map((e) => ({ ...e, url: `${SITE}/app/events/${e.id}` })),
-          news: (news.data ?? []).map((n) => ({ ...n, url: `${SITE}/app/news/${n.slug}` })),
-          businesses: (businesses.data ?? []).map((b) => ({
-            ...b,
-            url: `${SITE}/app/gewerbe/${b.slug}`,
-          })),
-          marketplace: (listings.data ?? []).map((m) => ({
-            ...m,
-            url: `${SITE}/app/marktplatz/${m.id}`,
-          })),
-          proposals: (proposals.data ?? []).map((p) => ({
-            ...p,
-            url: `${SITE}/app/proposals/${p.proposal_id}`,
-          })),
-          deals: deals.data ?? [],
-        });
-      },
+      async ({ query }) => json(await searchRoebel(db(), TENANT, { query })),
     );
 
     server.tool(
       "list_events",
       "Veranstaltungen in Röbel/Müritz. upcoming=true (Standard) listet ab heute, sonst die neuesten.",
       { limit: limitParam, upcoming: z.boolean().default(true) },
-      async ({ limit, upcoming }) => {
-        let q = db()
-          .from("events")
-          .select("id, title, description, date, time, end_time, location, category, ticket_price, is_cancelled")
-          .eq("status", "approved");
-        if (upcoming) {
-          q = q.gte("date", new Date().toISOString().slice(0, 10)).order("date", { ascending: true });
-        } else {
-          q = q.order("date", { ascending: false });
-        }
-        const { data, error } = await q.limit(limit);
-        if (error) throw new Error(error.message);
-        return json({
-          events: (data ?? []).map((e) => ({ ...e, url: `${SITE}/app/events/${e.id}` })),
-        });
-      },
+      async ({ limit, upcoming }) => json(await listEvents(db(), TENANT, { limit, upcoming })),
     );
 
     server.tool(
       "list_news",
       "Die neuesten veröffentlichten Nachrichten aus Röbel.",
       { limit: limitParam },
-      async ({ limit }) => {
-        const { data, error } = await db()
-          .from("news_articles")
-          .select("title, slug, excerpt, category, published_at")
-          .eq("status", "published")
-          .order("published_at", { ascending: false })
-          .limit(limit);
-        if (error) throw new Error(error.message);
-        return json({
-          articles: (data ?? []).map((n) => ({ ...n, url: `${SITE}/app/news/${n.slug}` })),
-        });
-      },
+      async ({ limit }) => json(await listNews(db(), TENANT, { limit })),
     );
 
     server.tool(
@@ -174,15 +98,9 @@ const handler = createMcpHandler(
       "Einen Nachrichten-Artikel komplett lesen (per slug aus list_news/search_roebel).",
       { slug: z.string().min(1).max(200) },
       async ({ slug }) => {
-        const { data, error } = await db()
-          .from("news_articles")
-          .select("title, slug, excerpt, content, category, tags, author_name, published_at")
-          .eq("status", "published")
-          .eq("slug", slug)
-          .maybeSingle();
-        if (error) throw new Error(error.message);
-        if (!data) throw new Error(`Artikel "${slug}" nicht gefunden.`);
-        return json({ ...data, url: `${SITE}/app/news/${data.slug}` });
+        const article = await getNewsArticle(db(), TENANT, { slug });
+        if (!article) throw new Error(`Artikel "${slug}" nicht gefunden.`);
+        return json(article);
       },
     );
 
@@ -190,90 +108,35 @@ const handler = createMcpHandler(
       "list_proposals",
       "Bürgervorschläge (DAO-Governance) mit Zusammenfassung und Abstimmungsständen.",
       { limit: limitParam },
-      async ({ limit }) => {
-        const { data, error } = await db()
-          .from("proposals")
-          .select(
-            "proposal_id, proposal_number, title, summary, category, state, for_votes, against_votes, abstain_votes, created_at",
-          )
-          .order("created_at", { ascending: false })
-          .limit(limit);
-        if (error) throw new Error(error.message);
-        return json({
-          proposals: (data ?? []).map((p) => ({
-            ...p,
-            url: `${SITE}/app/proposals/${p.proposal_id}`,
-          })),
-        });
-      },
+      async ({ limit }) => json(await listProposals(db(), TENANT, { limit })),
     );
 
     server.tool(
       "list_businesses",
       "Lokale Gewerbe (optional nach Kategorie gefiltert).",
       { limit: limitParam, category: z.string().max(40).optional() },
-      async ({ limit, category }) => {
-        let q = db()
-          .from("businesses")
-          .select("name, slug, description, category, address, website_url, opening_hours, is_roebel_partner")
-          .eq("status", "published")
-          .order("is_featured", { ascending: false });
-        if (category) q = q.eq("category", category);
-        const { data, error } = await q.limit(limit);
-        if (error) throw new Error(error.message);
-        return json({
-          businesses: (data ?? []).map((b) => ({ ...b, url: `${SITE}/app/gewerbe/${b.slug}` })),
-        });
-      },
+      async ({ limit, category }) => json(await listBusinesses(db(), TENANT, { limit, category })),
     );
 
     server.tool(
       "list_deals",
       "Aktive Angebote/Deals der lokalen Gewerbe.",
       { limit: limitParam },
-      async ({ limit }) => {
-        const { data, error } = await db()
-          .from("business_deals")
-          .select("id, title, description, deal_type, deal_value, start_date, end_date, businesses!inner(name, slug)")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-        if (error) throw new Error(error.message);
-        return json({ deals: data ?? [] });
-      },
+      async ({ limit }) => json(await listDeals(db(), TENANT, { limit })),
     );
 
     server.tool(
       "list_marketplace",
       "Aktive Marktplatz-Anzeigen (Produkte, Dienstleistungen, Schwarzes Brett).",
       { limit: limitParam },
-      async ({ limit }) => {
-        const { data, error } = await db()
-          .from("marketplace_listings")
-          .select("id, title, description, price, price_type, category, condition, listing_type, created_at")
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-          .limit(limit);
-        if (error) throw new Error(error.message);
-        return json({
-          listings: (data ?? []).map((m) => ({ ...m, url: `${SITE}/app/marktplatz/${m.id}` })),
-        });
-      },
+      async ({ limit }) => json(await listMarketplace(db(), TENANT, { limit })),
     );
 
     server.tool(
       "list_mini_apps",
       "Live-Apps im Röbel Mini-App-Store.",
       {},
-      async () => {
-        const { data, error } = await db()
-          .from("mini_apps")
-          .select("name, slug, description, category, tags, home_url, featured")
-          .eq("status", "live")
-          .order("featured", { ascending: false });
-        if (error) throw new Error(error.message);
-        return json({ apps: data ?? [] });
-      },
+      async () => json(await listMiniApps(db(), TENANT)),
     );
   },
   {

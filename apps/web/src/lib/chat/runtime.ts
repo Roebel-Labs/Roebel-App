@@ -3,17 +3,20 @@
 // and serialize the emitted events (sse.ts).
 import { randomUUID } from "node:crypto";
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateText, hasToolCall, stepCountIs, streamText, tool } from "ai";
-import type { ModelMessage, ToolSet, UserContent } from "ai";
-import { z } from "zod";
+import { generateText, hasToolCall, stepCountIs, streamText } from "ai";
+import type { ModelMessage, StopCondition, ToolSet, UserContent } from "ai";
 import { estimateCostMicros, resolveModel } from "./models";
-import { calendarPromptBlock, formatEventWhen, toCalendarEventPart } from "./calendar";
+import { calendarPromptBlock, formatEventWhen } from "./calendar";
 import { buildSystemPrompt, fallbackGreeting, greetingInstruction } from "./prompts";
 import { quotaState } from "./quota";
 import { nextRunAt, validateSchedule } from "./schedule";
 import { sendChatPush } from "./push";
-import { addRoutineTools } from "./routine-tools";
 import { SplitStreamer, splitBubbles } from "./split";
+import { attachMessage } from "./harness/audit";
+import { describeApproval } from "./harness/approvals";
+import { buildHarnessContext, harnessSystemBlock } from "./harness/context";
+import { isAwaitingApproval, toolsFor } from "./harness/registry";
+import type { HarnessProfile } from "./harness/types";
 import * as store from "./store";
 import type { BotRow, MessageRow } from "./store";
 import type { CalendarContextEvent, ChatMessage, ChatPart, ChatStreamEvent, ChatThread, SendMessageInput } from "./types";
@@ -50,6 +53,8 @@ function describePartForModel(p: ChatPart): string | null {
       const state = p.status === "added" ? "im Kalender" : p.status === "dismissed" ? "verworfen" : "vorgeschlagen";
       return `(Terminvorschlag: ${p.title}, ${formatEventWhen(p.start, p.end)}${p.location ? `, ${p.location}` : ""} — ${state})`;
     }
+    case "approval": return describeApproval(p);
+    case "task": return `(Aufgabe: ${p.title} — ${p.status})`;
   }
 }
 
@@ -129,7 +134,15 @@ interface BotTurnContext {
   calendarContext?: CalendarContextEvent[] | null;
   /** Scheduled routine run (no routine tools, no human watching). */
   routineRun?: boolean;
+  /** Parts attached to the last bubble in addition to what tools emit (approval continuation). */
+  initialParts?: ChatPart[];
+  /** Pre-loaded profile (skips the DB read). */
+  profile?: HarnessProfile | null;
 }
+
+/** Stops the loop once a gated tool asked for approval: the human decides next. */
+const stopOnApproval: StopCondition<ToolSet> = ({ steps }) =>
+  (steps[steps.length - 1]?.toolResults ?? []).some((r) => isAwaitingApproval((r as { output?: unknown }).output));
 
 interface BotTurnResult {
   messages: ChatMessage[];
@@ -164,99 +177,27 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     canSearch,
   });
   const hasCalendar = enabled.has("calendar");
-  const system = hasCalendar ? `${baseSystem}\n\n${calendarPromptBlock(ctx.calendarContext)}` : baseSystem;
 
   // Non-text parts collected during the run; attached to the last bubble.
-  const extraParts: ChatPart[] = [];
+  const extraParts: ChatPart[] = [...(ctx.initialParts ?? [])];
   const sources = new Map<string, string>();
 
-  const tools: ToolSet = {};
-  if (hasCalendar) {
-    tools.propose_calendar_event = tool({
-      description: "Schlägt dem Menschen einen konkreten Termin vor. Er sieht eine Terminkarte und kann ihn mit einem Tipp seinem Kalender hinzufügen.",
-      inputSchema: z.object({
-        title: z.string().min(1).max(200).describe("Kurzer Titel des Termins"),
-        start: z.string().describe("Beginn, ISO 8601 mit Offset, z. B. 2026-09-26T10:00:00+02:00"),
-        end: z.string().optional().describe("Ende, ISO 8601 mit Offset; ohne Angabe 1 Stunde nach Beginn"),
-        location: z.string().max(200).optional().describe("Ort, falls bekannt"),
-        notes: z.string().max(1000).optional().describe("Kurze Notiz zum Termin"),
-      }),
-      execute: async (input) => {
-        const part = toCalendarEventPart(input);
-        if ("error" in part) return { error: part.error };
-        extraParts.push(part);
-        return { ok: true, shown: `${part.title}, ${formatEventWhen(part.start, part.end)}` };
-      },
-    });
-    if (!ctx.calendarContext) {
-      tools.request_calendar_access = tool({
-        description: "Zeigt eine Karte, mit der der Mensch seinen Gerätekalender (Google/iCloud auf dem Handy) für dich freigeben kann. Nur nutzen, wenn du seine Termine wirklich brauchst.",
-        inputSchema: z.object({}),
-        execute: async () => {
-          const alreadyShown = [...rows.slice(-10).flatMap((r) => store.partsOf(r.parts)), ...extraParts]
-            .some((p) => p.type === "integration" && p.provider === "device_calendar" && p.status === "pending");
-          if (alreadyShown) return { ok: true, note: "Die Freigabe-Karte ist schon sichtbar. Bitte alternativ ums Diktieren der Termine." };
-          extraParts.push({
-            type: "integration",
-            provider: "device_calendar",
-            title: "Kalender",
-            description: "Erlaube den Zugriff auf deinen Kalender, damit ich deine Termine der nächsten 7 Tage sehe.",
-            status: "pending",
-          });
-          return { ok: true, note: "Karte wird angezeigt. Biete an, die Termine alternativ zu diktieren." };
-        },
-      });
-    }
-  }
-  if (enabled.has("ask_options")) {
-    tools.ask_options = tool({
-      description: "Zeigt dem Menschen eine Auswahlkarte mit 2–5 Optionen (A–E). Danach die Antwort beenden und auf die Wahl warten.",
-      inputSchema: z.object({
-        question: z.string().min(1).max(200).describe("Kurze Frage über der Karte"),
-        options: z.array(z.string().min(1).max(80)).min(2).max(5).describe("Die Optionen als kurze Beschriftungen"),
-      }),
-      execute: async ({ question, options }) => {
-        extraParts.push({
-          type: "options",
-          question,
-          options: options.map((label, i) => ({ key: String.fromCharCode(65 + i), label })),
-          selected: null,
-        });
-        return "Auswahlkarte wird angezeigt. Beende jetzt deine Antwort ohne die Frage zu wiederholen.";
-      },
-    });
-  }
-  if (enabled.has("files")) {
-    tools.write_file = tool({
-      description: "Legt eine neue Markdown-Datei im Chat an (für lange oder strukturierte Inhalte). Der Mensch sieht eine Dateikarte.",
-      inputSchema: z.object({
-        name: z.string().min(1).max(80).describe("Dateiname ohne Endung, z. B. 'Wochenplan'"),
-        content: z.string().min(1).max(100_000).describe("Vollständiger Markdown-Inhalt"),
-      }),
-      execute: async ({ name, content }) => {
-        const clean = name.replace(/\.(md|markdown|txt)$/i, "").replace(/[/\\]/g, "-").trim() || "Notiz";
-        const f = await store.createFile(wallet, threadId, clean, "md", content);
-        extraParts.push({ type: "file", fileId: f.id, name: f.name, ext: f.ext, size: f.size });
-        return { fileId: f.id, name: `${f.name}.${f.ext}` };
-      },
-    });
-    tools.update_file = tool({
-      description: "Ersetzt den Inhalt einer bestehenden Datei dieses Chats (vollständiger neuer Inhalt).",
-      inputSchema: z.object({
-        fileId: z.string().describe("id der Datei"),
-        content: z.string().min(1).max(100_000),
-      }),
-      execute: async ({ fileId, content }) => {
-        if (!store.isUuid(fileId)) return { error: "Unbekannte Datei-id." };
-        const f = await store.updateFileContent(wallet, threadId, fileId, content);
-        if (!f) return { error: "Datei nicht gefunden." };
-        extraParts.push({ type: "file", fileId: f.id, name: f.name, ext: f.ext, size: f.size });
-        return { fileId: f.id, name: `${f.name}.${f.ext}`, updated: true };
-      },
-    });
-  }
-  // create_routine / list_routines / delete_routine (not during a routine run itself).
-  if (!ctx.routineRun) addRoutineTools(tools, { wallet, threadId, botId: bot.id });
+  const harness = await buildHarnessContext({
+    wallet, threadId, botId: bot.id,
+    emitPart: (part) => { extraParts.push(part); },
+    profile: ctx.profile,
+    turn: {
+      calendarContext: ctx.calendarContext ?? null,
+      routineRun: Boolean(ctx.routineRun),
+      recentParts: rows.slice(-10).flatMap((r) => store.partsOf(r.parts)),
+      emitted: extraParts,
+    },
+  });
+  const harnessBlock = await harnessSystemBlock(harness, { withMemory: enabled.has("memory") });
+  const system = [baseSystem, hasCalendar ? calendarPromptBlock(ctx.calendarContext) : null, harnessBlock]
+    .filter(Boolean).join("\n\n");
+
+  const tools: ToolSet = await toolsFor({ bot, ctx: harness });
   if (canSearch) {
     tools.web_search = anthropic.tools.webSearch_20250305({
       maxUses: 5,
@@ -269,7 +210,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     system,
     messages,
     tools,
-    stopWhen: [stepCountIs(MAX_STEPS), hasToolCall("ask_options")],
+    stopWhen: [stepCountIs(MAX_STEPS), hasToolCall("ask_options"), stopOnApproval],
     maxOutputTokens: 4000,
   });
 
@@ -305,6 +246,10 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
       return false;
     }
     const row = await store.insertMessage({ id: messageId, threadId, role: "bot", botId: bot.id, parts });
+    if (final) {
+      const actionIds = parts.flatMap((p) => (p.type === "approval" ? [p.actionId] : []));
+      await attachMessage(actionIds, messageId);
+    }
     const msg = await store.toMessage(row);
     done.push(msg);
     emit({ event: "bot_done", data: { message: msg } });
@@ -459,6 +404,35 @@ export async function runUserTurn(opts: {
   }
   if (last) await store.touchThread(thread.id, previewForThread(last, threadBots), last.createdAt);
 
+  const fresh = await store.getThread(wallet, thread.id);
+  if (fresh) emit({ event: "done", data: { thread: fresh } });
+}
+
+/**
+ * Continues a thread after an approval decision (approve / reject / complete):
+ * the bot of the action answers once with `note` as a hidden system hint.
+ * Emits bot_start/delta/part/bot_done and finally done {thread}. No user message.
+ */
+export async function runContinuationTurn(opts: {
+  wallet: string; thread: ChatThread; botId: string | null; note: string; emit: Emit; initialParts?: ChatPart[];
+}): Promise<void> {
+  const { wallet, thread, emit } = opts;
+  const threadBots = await store.getThreadBotRows(thread.id);
+  const bot = threadBots.find((b) => b.id === opts.botId) ?? threadBots[0];
+  if (bot) {
+    const quota = await checkQuota(wallet);
+    if (quota.exceeded) {
+      emit({ event: "error", data: { code: "quota", message: QUOTA_MESSAGE } });
+      return;
+    }
+    const res = await runBotTurn({
+      wallet, threadId: thread.id, bot, threadBots, emit,
+      extraUserText: `(Systemhinweis, nicht vom Menschen geschrieben: ${opts.note})`,
+      initialParts: opts.initialParts,
+    });
+    const last = res.messages[res.messages.length - 1];
+    if (last) await store.touchThread(thread.id, previewForThread(last, threadBots), last.createdAt, { read: true });
+  }
   const fresh = await store.getThread(wallet, thread.id);
   if (fresh) emit({ event: "done", data: { thread: fresh } });
 }

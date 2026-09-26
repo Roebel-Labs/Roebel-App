@@ -8,6 +8,8 @@ import { FileCard } from './FileCard';
 import { IntegrationCard } from './IntegrationCard';
 import { CalendarEventCard } from './CalendarEventCard';
 import { SourcesLinks } from './SourcesLinks';
+import { ApprovalCard, type ApprovalPart } from './ApprovalCard';
+import { TaskCard } from './TaskCard';
 import { ReplyQuote } from './ReplyQuote';
 import { chatFont, useChatTokens } from './tokens';
 
@@ -25,6 +27,11 @@ export type MessagePartsProps = {
   /** calendar_event part: "Zum Kalender hinzufügen" (resolves when the OS sheet closed). */
   onCalendarAdd?: (message: ChatMessage, index: number) => Promise<unknown> | void;
   onCalendarDismiss?: (message: ChatMessage, index: number) => void;
+  /** approval part: "Freigeben" / "Mit Wallet bestätigen" (resolves when the stream ended). */
+  onApprovalApprove?: (part: ApprovalPart, message: ChatMessage, opts: { alwaysAllow: boolean }) => Promise<unknown> | void;
+  onApprovalReject?: (part: ApprovalPart, message: ChatMessage) => Promise<unknown> | void;
+  /** A turn is streaming in this thread: approval buttons are inactive. */
+  approvalsDisabled?: boolean;
   onImagePress?: (url: string) => void;
   onLinkPress?: (url: string) => void;
   /** Reaction chips below the message. */
@@ -91,6 +98,8 @@ export function messagePreview(parts: ChatPart[]): string {
     if (p.type === 'image') return 'Bild';
     if (p.type === 'integration') return p.title;
     if (p.type === 'calendar_event') return p.title;
+    if (p.type === 'approval') return p.title;
+    if (p.type === 'task') return p.title;
   }
   return '';
 }
@@ -108,6 +117,9 @@ export function MessageParts({
   onIntegrationAuthorize,
   onCalendarAdd,
   onCalendarDismiss,
+  onApprovalApprove,
+  onApprovalReject,
+  approvalsDisabled,
   onImagePress,
   onLinkPress,
   onReactionPress,
@@ -201,6 +213,19 @@ export function MessageParts({
                 onLongPress={lp}
               />
             );
+          case 'approval':
+            return (
+              <ApprovalCard
+                key={key}
+                part={part}
+                disabled={approvalsDisabled}
+                onApprove={onApprovalApprove ? (opts) => onApprovalApprove(part, message, opts) : undefined}
+                onReject={onApprovalReject ? () => onApprovalReject(part, message) : undefined}
+                onLongPress={lp}
+              />
+            );
+          case 'task':
+            return <TaskCard key={key} part={part} onLongPress={lp} />;
           case 'sources':
             if (!part.items.length) return null;
             return (

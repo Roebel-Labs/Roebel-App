@@ -21,7 +21,7 @@ import * as Haptics from 'expo-haptics';
 import LoginDrawer from '@/components/LoginDrawer';
 import { useUser } from '@/context/UserContext';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { useChatActions, useChatBootstrap } from '@/context/ChatContext';
+import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
 import { showChatMenu } from '@/lib/chat/menu';
 import { threadTitle } from '@/lib/chat/format';
@@ -32,6 +32,7 @@ import {
   BOT_SHAPES,
   BlackPillButton,
   BotAvatar,
+  InspirationEntryRow,
   ChatListRow,
   FloatingMascots,
   GlassCircleButton,
@@ -404,6 +405,17 @@ function ChatList({
           <GlassCircleButton accessibilityLabel="Neuer Chat" onPress={() => setSheetOpen(true)}>
             <Feather name="plus" size={26} color={t.icon} />
           </GlassCircleButton>
+          <GlassCircleButton
+            accessibilityLabel="Mehr"
+            onPress={() =>
+              showChatMenu([
+                { label: 'Gedächtnis', run: () => router.push('/chat/settings/memory' as Href) },
+                { label: 'Aktivität', run: () => router.push('/chat/settings/activity' as Href) },
+              ])
+            }
+          >
+            <Feather name="more-horizontal" size={24} color={t.icon} />
+          </GlassCircleButton>
         </View>
       </View>
 
@@ -433,6 +445,7 @@ function ChatList({
           paddingTop: 8,
           paddingBottom: insets.bottom + 24,
         }}
+        ListHeaderComponent={query.trim() ? null : <ForYouEntry />}
         renderItem={({ item }) => (
           <Animated.View entering={FadeIn.duration(180)}>
             <ChatListRow
@@ -599,6 +612,31 @@ function NewChatSheet({
         />
       </View>
     </BottomSheet>
+  );
+}
+
+/** "Für dich · N Ideen" above the threads; hidden until the first feed arrives. */
+function ForYouEntry() {
+  const router = useRouter();
+  const { status, tasks } = useInspiration('me');
+  const avatars = useMemo(() => {
+    const seen = new Set<string>();
+    const out: BotAvatarSpec[] = [];
+    for (const task of tasks) {
+      if (!task.bot || seen.has(task.bot.id)) continue;
+      seen.add(task.bot.id);
+      out.push(task.bot.avatar);
+    }
+    return out;
+  }, [tasks]);
+  if (status !== 'ready' || !tasks.length) return null;
+  return (
+    <InspirationEntryRow
+      count={tasks.length}
+      avatars={avatars}
+      preview={tasks[0]?.title}
+      onPress={() => router.push('/chat/inspiration' as Href)}
+    />
   );
 }
 

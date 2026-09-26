@@ -31,9 +31,40 @@ export type ChatPart =
       location?: string;
       notes?: string;
       status: CalendarEventStatus;
+    }
+  | {
+      type: 'approval';
+      actionId: string;
+      tool: string;
+      risk: 'public' | 'money' | 'external';
+      title: string;
+      summary: string;
+      preview: ApprovalPreview;
+      status: ApprovalStatus;
+      resultNote?: string;
+      canAlwaysAllow: boolean;
+      // money only; toWallet (lower-case) is for signing on the device, never displayed
+      signRequest?: { kind: 'muenzen_transfer'; toName: string; amount: string; toWallet?: string };
+    }
+  | {
+      type: 'task';
+      taskId: string;
+      title: string;
+      status: 'queued' | 'running' | 'waiting_approval' | 'done' | 'failed' | 'cancelled';
+      steps: { label: string; status: 'pending' | 'running' | 'done' | 'failed' }[];
     };
 
 export type CalendarEventStatus = 'proposed' | 'added' | 'dismissed';
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired';
+
+/** Rich preview on an approval card (agent harness spec §3). */
+export interface ApprovalPreview {
+  kind: 'text' | 'post' | 'event' | 'listing' | 'message' | 'email' | 'transfer' | 'generic';
+  fields: { label: string; value: string }[];
+  body?: string; // main text (post body, email body)
+  imageUrl?: string;
+}
 
 /** One upcoming device-calendar event the app sends along (send body `calendarContext`). */
 export interface CalendarContextEvent {

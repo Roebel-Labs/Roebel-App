@@ -6,6 +6,17 @@ import { useFocusEffect } from 'expo-router';
 import { useActiveAccount } from 'thirdweb/react';
 import {
   ChatApiError,
+  approveAction as apiApproveAction,
+  rejectAction as apiRejectAction,
+  completeAction as apiCompleteAction,
+  fetchMemories as apiFetchMemories,
+  deleteMemory as apiDeleteMemory,
+  fetchBotGrants as apiFetchBotGrants,
+  putBotGrants as apiPutBotGrants,
+  fetchAgentActions as apiFetchAgentActions,
+  type AgentActionRecord,
+  type BotGrants,
+  type ChatMemory,
   createBot as apiCreateBot,
   createThread as apiCreateThread,
   deleteRoutine as apiDeleteRoutine,
@@ -32,8 +43,11 @@ import {
   type UpdateBotInput,
   type UploadedImage,
 } from '@/lib/chat/api';
+import { dismissInspiration, fetchInspiration } from '@/lib/chat/api';
+import { withoutTask, type InspirationFeed } from '@/lib/chat/inspiration';
 import { ensureChatSession, hasStoredChatSession } from '@/lib/chat/session';
 import {
+  findApproval,
   initialThreadState,
   threadReducer,
   TEMP_ID_PREFIX,
@@ -51,6 +65,7 @@ import {
   type CalendarReadAccess,
 } from '@/lib/chat/device-calendar';
 import type { SigningAccount } from '@/lib/signed-request';
+import type { ChatStreamEvent } from '@/lib/chat/stream';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -485,6 +500,83 @@ export function useThread(threadId: string) {
     [setPartStatus, runSend],
   );
 
+  /**
+   * Runs one approve/reject/complete stream into the thread exactly like a send (isStreaming,
+   * streaming bubble, error state). `optimistic` is applied to the approval part first and rolled
+   * back when the stream fails; the thread refetches afterwards so the card matches the server.
+   * Throws ChatApiError (German message) when the stream ended in an error.
+   */
+  const runActionStream = useCallback(
+    async (
+      actionId: string,
+      optimistic: 'approved' | 'rejected' | null,
+      open: (onEvent: (event: ChatStreamEvent) => void, signal: AbortSignal) => Promise<void>,
+    ): Promise<void> => {
+      if (!account) throw notSignedIn();
+      if (current().streaming) {
+        throw new ChatApiError('busy', 'Einen Moment – die Antwort läuft noch.');
+      }
+      const before = findApproval(current(), actionId)?.part.status ?? null;
+      if (optimistic) local({ type: 'approval_status', actionId, status: optimistic });
+      local({ type: 'continuation_start' });
+
+      const controller = new AbortController();
+      aborters.current.get(threadId)?.abort();
+      aborters.current.set(threadId, controller);
+      let failure: { code: string; message: string } | null = null;
+      try {
+        await open((event) => {
+          local({ type: 'stream_event', event });
+          if (event.type === 'done') dispatch({ type: 'upsert_thread', thread: event.thread });
+          if (event.type === 'error') failure = { code: event.code, message: event.message };
+        }, controller.signal);
+      } finally {
+        if (aborters.current.get(threadId) === controller) aborters.current.delete(threadId);
+      }
+      const failed = failure as { code: string; message: string } | null;
+      if (failed && optimistic && before) local({ type: 'approval_status', actionId, status: before });
+      // The server owns the final part state (executed / failed / resultNote): reconcile. Fetched
+      // directly because `refresh` skips while storeRef still shows the (just finished) stream.
+      if (!controller.signal.aborted) {
+        fetchMessages(account, threadId, { limit: 50 })
+          .then((res) => {
+            if (res.thread) dispatch({ type: 'merge_thread', thread: res.thread });
+            if (!current().streaming) local({ type: 'loaded', messages: res.messages, hasMore: res.hasMore });
+          })
+          .catch(() => {});
+      }
+      if (failed) throw new ChatApiError(failed.code, failed.message);
+    },
+    [account, current, local, dispatch, aborters, threadId],
+  );
+
+  /** "Freigeben" on an approval card (non-money): executes server-side, bot continues. */
+  const approveAction = useCallback(
+    (actionId: string, opts?: { alwaysAllow?: boolean }) =>
+      runActionStream(actionId, 'approved', (onEvent, signal) =>
+        apiApproveAction(account as SigningAccount, actionId, { alwaysAllow: !!opts?.alwaysAllow }, onEvent, signal),
+      ),
+    [account, runActionStream],
+  );
+
+  /** "Ablehnen": the bot acknowledges briefly. */
+  const rejectAction = useCallback(
+    (actionId: string, reason?: string) =>
+      runActionStream(actionId, 'rejected', (onEvent, signal) =>
+        apiRejectAction(account as SigningAccount, actionId, reason ? { reason } : {}, onEvent, signal),
+      ),
+    [account, runActionStream],
+  );
+
+  /** Money approvals: reports the device-signed transfer (txHash) or its failure (error). */
+  const completeAction = useCallback(
+    (actionId: string, result: { txHash?: string; error?: string }) =>
+      runActionStream(actionId, result.txHash ? 'approved' : null, (onEvent, signal) =>
+        apiCompleteAction(account as SigningAccount, actionId, result, onEvent, signal),
+      ),
+    [account, runActionStream],
+  );
+
   const markRead = useCallback(async () => {
     if (!account || !threadId) return;
     dispatch({ type: 'thread_read', threadId });
@@ -521,6 +613,9 @@ export function useThread(threadId: string) {
     setPartStatus,
     addCalendarEvent,
     authorizeDeviceCalendar,
+    approveAction,
+    rejectAction,
+    completeAction,
     markRead,
   };
 }
@@ -617,8 +712,139 @@ export function useChatActions() {
     [account, refreshBootstrap],
   );
 
+  /** Agent memory facts ("Gedächtnis"). */
+  const fetchMemories = useCallback(async (): Promise<ChatMemory[]> => {
+    if (!account) throw notSignedIn();
+    return apiFetchMemories(account);
+  }, [account]);
+
+  const deleteMemory = useCallback(
+    async (id: string): Promise<void> => {
+      if (!account) throw notSignedIn();
+      await apiDeleteMemory(account, id);
+    },
+    [account],
+  );
+
+  /** Always-allowed gated tools of one bot ("Berechtigungen"). */
+  const fetchBotGrants = useCallback(
+    async (botId: string): Promise<BotGrants> => {
+      if (!account) throw notSignedIn();
+      return apiFetchBotGrants(account, botId);
+    },
+    [account],
+  );
+
+  const setBotGrants = useCallback(
+    async (botId: string, tools: string[]): Promise<string[]> => {
+      if (!account) throw notSignedIn();
+      return apiPutBotGrants(account, botId, tools);
+    },
+    [account],
+  );
+
+  /** Audit list ("Aktivität"), newest first. */
+  const fetchAgentActions = useCallback(
+    async (limit = 50): Promise<AgentActionRecord[]> => {
+      if (!account) throw notSignedIn();
+      return apiFetchAgentActions(account, limit);
+    },
+    [account],
+  );
+
   return {
     createBot, updateBot, createThread, uploadImage, transcribe, fetchFile,
     fetchRoutines, updateRoutine, deleteRoutine,
+    fetchMemories, deleteMemory, fetchBotGrants, setBotGrants, fetchAgentActions,
+  };
+}
+
+// ---- "Für dich" inspiration ----------------------------------------------------
+
+/** Last feed per wallet + audience, so the chat list row and the screen open without a spinner. */
+const inspirationCache = new Map<string, InspirationFeed>();
+
+/**
+ * "Für dich" cards for one audience chip ("me" or "org:<id>"). Refetches on focus; the chat
+ * list and the inspiration screen share the cached feed.
+ */
+export function useInspiration(audienceKey: string) {
+  const { account, hasSession } = useChatContext();
+  const wallet = account?.address.toLowerCase() ?? '';
+  const cacheKey = `${wallet}|${audienceKey}`;
+  const [feed, setFeed] = useState<InspirationFeed | null>(() => inspirationCache.get(cacheKey) ?? null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(feed ? 'ready' : 'idle');
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  // Switching chips: show that chip's cached feed right away (or the spinner).
+  const [shownKey, setShownKey] = useState(cacheKey);
+  if (shownKey !== cacheKey) {
+    setShownKey(cacheKey);
+    const cached = inspirationCache.get(cacheKey) ?? null;
+    setFeed(cached);
+    setStatus(cached ? 'ready' : 'idle');
+    setError(null);
+  }
+
+  const refresh = useCallback(async () => {
+    if (!account || !hasSession) return;
+    const mine = ++seq.current;
+    setStatus((s) => (s === 'ready' ? 'ready' : 'loading'));
+    try {
+      const data = await fetchInspiration(account, audienceKey);
+      if (mine !== seq.current) return;
+      inspirationCache.set(cacheKey, data);
+      setFeed(data);
+      setStatus('ready');
+      setError(null);
+    } catch (err) {
+      if (mine !== seq.current) return;
+      setError(errorMessage(err));
+      setStatus((s) => (s === 'ready' ? 'ready' : 'error'));
+    }
+  }, [account, hasSession, audienceKey, cacheKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
+
+  /** "Nicht relevant": optimistic removal, restored when the server refuses. */
+  const dismiss = useCallback(
+    async (taskId: string) => {
+      if (!account) throw notSignedIn();
+      const before = inspirationCache.get(cacheKey) ?? feed;
+      if (before) {
+        const next = withoutTask(before, taskId);
+        inspirationCache.set(cacheKey, next);
+        setFeed(next);
+      }
+      try {
+        await dismissInspiration(account, taskId);
+        // Other chips may still hold the card.
+        for (const key of [...inspirationCache.keys()]) {
+          if (key !== cacheKey && key.startsWith(`${wallet}|`)) inspirationCache.delete(key);
+        }
+      } catch (err) {
+        if (before) {
+          inspirationCache.set(cacheKey, before);
+          setFeed(before);
+        }
+        throw err;
+      }
+    },
+    [account, cacheKey, feed, wallet],
+  );
+
+  return {
+    status,
+    error,
+    audiences: feed?.audiences ?? [],
+    tasks: feed?.tasks ?? [],
+    tier: feed?.tier ?? 'free',
+    refresh,
+    dismiss,
   };
 }

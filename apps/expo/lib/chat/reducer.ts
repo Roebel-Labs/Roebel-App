@@ -3,7 +3,7 @@
 // option-card state. No React, no I/O — the ChatContext dispatches, tests drive it directly.
 import type { SendMessageBody } from './api';
 import type { ChatStreamEvent } from './stream';
-import type { ChatMessage, ChatPart } from './types';
+import type { ApprovalStatus, ChatMessage, ChatPart } from './types';
 
 export interface ThreadError {
   code: string;
@@ -65,7 +65,11 @@ export type ThreadAction =
   | { type: 'reactions'; messageId: string; reactions: Record<string, number> }
   | { type: 'dismiss_options'; messageId: string }
   | { type: 'option_answered'; messageId: string; key: string }
-  | { type: 'message_replaced'; message: ChatMessage };
+  | { type: 'message_replaced'; message: ChatMessage }
+  /** An approve/reject/complete stream opens: bot turn without an optimistic user message. */
+  | { type: 'continuation_start' }
+  /** Optimistic (or server-confirmed) status of the approval part with this actionId. */
+  | { type: 'approval_status'; actionId: string; status: ApprovalStatus; resultNote?: string };
 
 export const TEMP_ID_PREFIX = 'temp-';
 
@@ -83,6 +87,8 @@ export function messagePreview(message: ChatMessage, max = 80): string {
     else if (part.type === 'image') text = 'Bild';
     else if (part.type === 'integration') text = part.title;
     else if (part.type === 'calendar_event') text = part.title;
+    else if (part.type === 'approval') text = part.title;
+    else if (part.type === 'task') text = part.title;
     if (text.trim()) {
       const flat = text.replace(/\s+/g, ' ').trim();
       return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -115,6 +121,60 @@ function upsert(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
 
 function mapOptions(message: ChatMessage, fn: (p: Extract<ChatPart, { type: 'options' }>) => ChatPart): ChatMessage {
   return { ...message, parts: message.parts.map((p) => (p.type === 'options' ? fn(p) : p)) };
+}
+
+/** Key that identifies a part which is updated in place (approval by actionId, task by taskId). */
+function liveKey(part: ChatPart): string | null {
+  if (part.type === 'approval') return `approval:${part.actionId}`;
+  if (part.type === 'task') return `task:${part.taskId}`;
+  return null;
+}
+
+/** Replaces an existing approval/task part with the same id anywhere in the thread; null when none. */
+function replaceLivePart(state: ThreadState, part: ChatPart): ThreadState | null {
+  const key = liveKey(part);
+  if (!key) return null;
+  let hit = false;
+  const messages = state.messages.map((m) => {
+    if (!m.parts.some((p) => liveKey(p) === key)) return m;
+    hit = true;
+    return { ...m, parts: m.parts.map((p) => (liveKey(p) === key ? part : p)) };
+  });
+  return hit ? { ...state, messages } : null;
+}
+
+/** Sets the status of the approval part with `actionId` (all messages). */
+export function withApprovalStatus(
+  state: ThreadState,
+  actionId: string,
+  status: ApprovalStatus,
+  resultNote?: string,
+): ThreadState {
+  let hit = false;
+  const messages = state.messages.map((m) => {
+    if (!m.parts.some((p) => p.type === 'approval' && p.actionId === actionId)) return m;
+    hit = true;
+    return {
+      ...m,
+      parts: m.parts.map((p) =>
+        p.type === 'approval' && p.actionId === actionId
+          ? { ...p, status, ...(resultNote !== undefined ? { resultNote } : {}) }
+          : p,
+      ),
+    };
+  });
+  return hit ? { ...state, messages } : state;
+}
+
+/** The approval part with `actionId`, if loaded. */
+export function findApproval(
+  state: ThreadState,
+  actionId: string,
+): { message: ChatMessage; part: Extract<ChatPart, { type: 'approval' }> } | null {
+  for (const message of state.messages) {
+    for (const p of message.parts) if (p.type === 'approval' && p.actionId === actionId) return { message, part: p };
+  }
+  return null;
 }
 
 function applyStreamEvent(state: ThreadState, event: ChatStreamEvent): ThreadState {
@@ -162,7 +222,11 @@ function applyStreamEvent(state: ThreadState, event: ChatStreamEvent): ThreadSta
         return { ...m, parts };
       });
     case 'part':
-      return mapMessage(state, event.messageId, (m) => ({ ...m, parts: [...m.parts, event.part] }));
+      // An approval/task part that already exists (e.g. the approval being executed) updates in place.
+      return (
+        replaceLivePart(state, event.part) ??
+        mapMessage(state, event.messageId, (m) => ({ ...m, parts: [...m.parts, event.part] }))
+      );
     case 'bot_done': {
       const messages = upsert(state.messages, event.message);
       const stillWriting = state.streaming?.messageId === event.message.id;
@@ -286,5 +350,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       return mapMessage(state, action.messageId, (m) => mapOptions(m, (p) => ({ ...p, selected: action.key })));
     case 'message_replaced':
       return mapMessage(state, action.message.id, () => action.message);
+    case 'continuation_start':
+      return { ...state, streaming: { botId: null, messageId: null }, lastSend: null, error: null };
+    case 'approval_status':
+      return withApprovalStatus(state, action.actionId, action.status, action.resultNote);
   }
 }

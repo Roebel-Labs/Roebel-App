@@ -141,3 +141,119 @@ describe('messagePreview', () => {
     expect(messagePreview(m('m1', { parts: [{ type: 'image', url: 'u' }] }))).toBe('Bild');
   });
 });
+
+describe('threadReducer · approvals (agent harness)', () => {
+  type ApprovalPart = Extract<ChatMessage['parts'][number], { type: 'approval' }>;
+  const approval = (over: Partial<ApprovalPart> = {}): ApprovalPart => ({
+    type: 'approval',
+    actionId: 'a1',
+    tool: 'create_feed_post',
+    risk: 'public',
+    title: 'Beitrag veröffentlichen',
+    summary: 'Beitrag im Röbel-Feed veröffentlichen',
+    preview: { kind: 'post', fields: [], body: 'Hallo Röbel' },
+    status: 'pending',
+    canAlwaysAllow: true,
+    ...over,
+  });
+  const withApproval = () =>
+    loaded([m('m1'), m('m2', { parts: [{ type: 'text', text: 'Soll ich?' }, approval()] })]);
+  const partOf = (s: ThreadState) => s.messages[1].parts[1] as ApprovalPart;
+
+  it('sets the approval status by actionId and keeps other parts', () => {
+    const s = run(withApproval(), { type: 'approval_status', actionId: 'a1', status: 'approved' });
+    expect(partOf(s).status).toBe('approved');
+    expect(s.messages[1].parts[0]).toEqual({ type: 'text', text: 'Soll ich?' });
+  });
+
+  it('stores a result note with the status', () => {
+    const s = run(withApproval(), { type: 'approval_status', actionId: 'a1', status: 'failed', resultNote: 'Zu lang' });
+    expect(partOf(s)).toMatchObject({ status: 'failed', resultNote: 'Zu lang' });
+  });
+
+  it('is a no-op for an unknown actionId', () => {
+    const before = withApproval();
+    expect(run(before, { type: 'approval_status', actionId: 'nope', status: 'rejected' })).toBe(before);
+  });
+
+  it('continuation_start opens a stream without an optimistic user message', () => {
+    const s = run(withApproval(), { type: 'continuation_start' });
+    expect(s.streaming).toEqual({ botId: null, messageId: null });
+    expect(s.pendingTempId).toBeNull();
+    expect(s.messages).toHaveLength(2);
+  });
+
+  it('streams a continuation reply and ends on done', () => {
+    let s = run(
+      withApproval(),
+      { type: 'approval_status', actionId: 'a1', status: 'approved' },
+      { type: 'continuation_start' },
+      { type: 'stream_event', event: { type: 'bot_start', botId: 'b1', messageId: 'm3' } },
+      { type: 'stream_event', event: { type: 'delta', messageId: 'm3', text: 'Erledigt.' } },
+    );
+    expect(s.messages.map((x) => x.id)).toEqual(['m1', 'm2', 'm3']);
+    expect(s.streaming).toEqual({ botId: 'b1', messageId: 'm3' });
+    s = run(s, {
+      type: 'stream_event',
+      event: { type: 'done', thread: {} as unknown as import('../types').ChatThread },
+    });
+    expect(s.streaming).toBeNull();
+    expect(s.error).toBeNull();
+  });
+
+  it('a continuation error sets a non-retryable error', () => {
+    const s = run(withApproval(), { type: 'continuation_start' }, {
+      type: 'stream_event',
+      event: { type: 'error', code: 'expired', message: 'Die Freigabe ist abgelaufen.' },
+    });
+    expect(s.streaming).toBeNull();
+    expect(s.error).toEqual({ code: 'expired', message: 'Die Freigabe ist abgelaufen.', retry: null });
+  });
+
+  it('a streamed approval part with a known actionId updates in place instead of appending', () => {
+    const s = run(
+      withApproval(),
+      { type: 'continuation_start' },
+      { type: 'stream_event', event: { type: 'bot_start', botId: 'b1', messageId: 'm3' } },
+      {
+        type: 'stream_event',
+        event: { type: 'part', messageId: 'm3', part: approval({ status: 'executed', resultNote: 'Veröffentlicht' }) },
+      },
+    );
+    expect(partOf(s)).toMatchObject({ status: 'executed', resultNote: 'Veröffentlicht' });
+    expect(s.messages[2].parts).toEqual([]);
+  });
+
+  it('a new approval part is appended to the streaming message', () => {
+    const s = run(
+      withApproval(),
+      { type: 'continuation_start' },
+      { type: 'stream_event', event: { type: 'bot_start', botId: 'b1', messageId: 'm3' } },
+      { type: 'stream_event', event: { type: 'part', messageId: 'm3', part: approval({ actionId: 'a2' }) } },
+    );
+    expect(s.messages[2].parts).toHaveLength(1);
+    expect(partOf(s).status).toBe('pending');
+  });
+
+  it('task parts update in place by taskId', () => {
+    const task = (status: 'running' | 'done') => ({
+      type: 'task' as const,
+      taskId: 't1',
+      title: 'Recherche',
+      status,
+      steps: [{ label: 'Suchen', status: status === 'done' ? ('done' as const) : ('running' as const) }],
+    });
+    const s = run(
+      loaded([m('m1', { parts: [task('running')] })]),
+      { type: 'continuation_start' },
+      { type: 'stream_event', event: { type: 'bot_start', botId: 'b1', messageId: 'm2' } },
+      { type: 'stream_event', event: { type: 'part', messageId: 'm2', part: task('done') } },
+    );
+    expect(s.messages[0].parts[0]).toMatchObject({ status: 'done' });
+    expect(s.messages[1].parts).toEqual([]);
+  });
+
+  it('previews approvals by title', () => {
+    expect(messagePreview(m('m9', { parts: [approval()] }))).toBe('Beitrag veröffentlichen');
+  });
+});

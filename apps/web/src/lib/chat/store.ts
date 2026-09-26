@@ -139,6 +139,8 @@ export function previewOfParts(parts: ChatPart[], max = 120): string {
     if (p.type === "integration") return p.title;
     if (p.type === "sources") return "🔗 Quellen";
     if (p.type === "calendar_event") return clip(`📅 ${p.title}`, max);
+    if (p.type === "approval") return clip(`✋ ${p.summary}`, max);
+    if (p.type === "task") return clip(`🗂️ ${p.title}`, max);
   }
   return "";
 }

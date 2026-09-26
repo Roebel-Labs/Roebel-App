@@ -5,6 +5,7 @@ import { getApiBaseUrl, type SigningAccount } from '@/lib/signed-request';
 import { clearChatSession, ensureChatSession, ChatSessionError } from './session';
 import { consumeSSEResponse, postSSE, type ChatStreamEvent } from './stream';
 import type { BotAvatarSpec, CalendarContextEvent, ChatBot, ChatMessage, ChatThread } from './types';
+import { inspirationQuery, type InspirationFeed } from './inspiration';
 
 const JSON_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 90_000;
@@ -114,7 +115,7 @@ async function withAuth<R extends { status: number }>(
 
 async function request<T>(
   account: SigningAccount,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   opts?: { json?: unknown; form?: () => FormData; timeoutMs?: number },
 ): Promise<T> {
@@ -299,15 +300,26 @@ export function deleteRoutine(account: SigningAccount, id: string): Promise<{ ok
  * `done`/`error` is reported as a synthetic `error {code:'stream_closed'}` so the UI never hangs.
  * Aborting via `signal` resolves silently.
  */
-export async function sendThreadMessage(
+export function sendThreadMessage(
   account: SigningAccount,
   threadId: string,
   body: SendMessageBody,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const url = `${getApiBaseUrl()}/api/chat/threads/${enc(threadId)}/messages`;
-  const payload = JSON.stringify(body);
+  return streamPost(account, `/api/chat/threads/${enc(threadId)}/messages`, body, onEvent, signal);
+}
+
+/** Shared SSE POST: same event types, same error mapping, same synthetic `stream_closed`. */
+async function streamPost(
+  account: SigningAccount,
+  path: string,
+  body: unknown,
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const url = `${getApiBaseUrl()}${path}`;
+  const payload = JSON.stringify(body ?? {});
   try {
     const res = await withAuth(account, (token) =>
       postSSE(url, { headers: { Authorization: `Bearer ${token}` }, body: payload, signal }),
@@ -326,4 +338,119 @@ export async function sendThreadMessage(
     const apiErr = toApiError(err);
     onEvent({ type: 'error', code: apiErr.code, message: apiErr.message });
   }
+}
+
+// ─── Agent harness (spec 2026-09-26 §3.2) ────────────────────────────────────
+
+/**
+ * "Freigeben" on an approval card. Streams the continuation: the server executes the action,
+ * updates the approval part and the bot finishes its turn with the result.
+ */
+export function approveAction(
+  account: SigningAccount,
+  actionId: string,
+  body: { alwaysAllow?: boolean },
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost(account, `/api/chat/actions/${enc(actionId)}/approve`, body, onEvent, signal);
+}
+
+/** "Ablehnen": the bot acknowledges briefly (SSE). */
+export function rejectAction(
+  account: SigningAccount,
+  actionId: string,
+  body: { reason?: string },
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost(account, `/api/chat/actions/${enc(actionId)}/reject`, body, onEvent, signal);
+}
+
+/** Money actions: the device reports the signed transfer (or its failure) → SSE continuation. */
+export function completeAction(
+  account: SigningAccount,
+  actionId: string,
+  body: { txHash?: string; error?: string },
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost(account, `/api/chat/actions/${enc(actionId)}/complete`, body, onEvent, signal);
+}
+
+export interface ChatMemory {
+  id: string;
+  botId: string | null;
+  fact: string;
+  createdAt: string;
+}
+
+export async function fetchMemories(account: SigningAccount): Promise<ChatMemory[]> {
+  const res = await request<{ memories?: ChatMemory[] }>(account, 'GET', '/api/chat/memory');
+  return res?.memories ?? [];
+}
+
+export function deleteMemory(account: SigningAccount, id: string): Promise<{ ok: boolean }> {
+  return request(account, 'DELETE', `/api/chat/memory/${enc(id)}`);
+}
+
+/** One gated tool the server may list next to the grants (label/risk for the switch row). */
+export interface GrantableTool {
+  tool: string;
+  label: string;
+  risk: 'public' | 'external';
+}
+
+export interface BotGrants {
+  /** Always-allowed gated tools for this bot. */
+  tools: string[];
+  /** Grantable tools the server offers for this bot; absent → the app falls back to its own list. */
+  available?: GrantableTool[];
+}
+
+export async function fetchBotGrants(account: SigningAccount, botId: string): Promise<BotGrants> {
+  const res = await request<BotGrants | null>(account, 'GET', `/api/chat/bots/${enc(botId)}/grants`);
+  return { tools: res?.tools ?? [], ...(res?.available ? { available: res.available } : {}) };
+}
+
+export async function putBotGrants(account: SigningAccount, botId: string, tools: string[]): Promise<string[]> {
+  const res = await request<{ tools?: string[] } | null>(account, 'PUT', `/api/chat/bots/${enc(botId)}/grants`, {
+    json: { tools },
+  });
+  return res?.tools ?? tools;
+}
+
+export type AgentActionStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired';
+
+export interface AgentActionRecord {
+  id: string;
+  tool: string;
+  risk: 'read' | 'private' | 'public' | 'money' | 'external';
+  summary: string;
+  status: AgentActionStatus;
+  botId?: string | null;
+  threadId?: string | null;
+  error?: string | null;
+  createdAt: string;
+}
+
+export async function fetchAgentActions(account: SigningAccount, limit = 50): Promise<AgentActionRecord[]> {
+  const res = await request<{ actions?: AgentActionRecord[] }>(account, 'GET', `/api/chat/actions?limit=${limit}`);
+  return res?.actions ?? [];
+}
+
+// ---- "Für dich" inspiration ----------------------------------------------------
+
+export async function fetchInspiration(account: SigningAccount, audienceKey: string): Promise<InspirationFeed> {
+  const res = await request<InspirationFeed | null>(account, 'GET', `/api/chat/inspiration${inspirationQuery(audienceKey)}`);
+  return {
+    audiences: res?.audiences ?? [],
+    audienceKey: res?.audienceKey ?? 'me',
+    tier: res?.tier ?? 'free',
+    tasks: res?.tasks ?? [],
+  };
+}
+
+export function dismissInspiration(account: SigningAccount, taskId: string): Promise<{ ok: boolean }> {
+  return request(account, 'POST', '/api/chat/inspiration/dismiss', { json: { taskId } });
 }

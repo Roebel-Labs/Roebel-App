@@ -9,6 +9,7 @@ import { BotAvatar, BOT_COLOR_LIST, BOT_SHAPES } from './BotAvatar';
 import { BlackPillButton } from './BlackPillButton';
 import { GlassCircleButton } from './GlassCircleButton';
 import { RoutinesSection } from './RoutinesSection';
+import { PermissionsSection } from './PermissionsSection';
 import { chatFont, useChatTokens } from './tokens';
 
 export type BotSheetPatch = {
@@ -240,6 +241,7 @@ export function BotSheet({ visible, onClose, bots, onSave, threadId }: BotSheetP
               <Text style={[styles.footnote, { color: t.textTertiary }]}>Vorlage von Mecky · nicht bearbeitbar</Text>
             ) : null}
             {threadId ? <RoutinesSection threadId={threadId} botId={bots.length > 1 ? bot.id : null} /> : null}
+            <PermissionsSection key={bot.id} botId={bot.id} />
           </>
         )}
       </BottomSheetScrollView>

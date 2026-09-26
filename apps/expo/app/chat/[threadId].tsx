@@ -60,6 +60,7 @@ import {
 } from '@/components/chat';
 
 type FilePart = Extract<ChatPart, { type: 'file' }>;
+type ApprovalPart = Extract<ChatPart, { type: 'approval' }>;
 
 type Item =
   | { kind: 'day'; key: string; iso: string }
@@ -118,8 +119,11 @@ function useKeyboardHeight(): number {
 
 /** One Mecky chat (refs 4, 7–16). */
 export default function ChatThreadScreen() {
-  const params = useLocalSearchParams<{ threadId: string }>();
+  const params = useLocalSearchParams<{ threadId: string; prefill?: string; autoSend?: string }>();
   const threadId = typeof params.threadId === 'string' ? params.threadId : '';
+  // Starter prompt handed over by "Für dich" (app/chat/inspiration.tsx).
+  const prefill = typeof params.prefill === 'string' ? params.prefill : '';
+  const autoSend = params.autoSend === '1';
   const t = useChatTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -400,6 +404,18 @@ export default function ChatThreadScreen() {
   const isStreamingRef = useRef(th.isStreaming);
   isStreamingRef.current = th.isStreaming;
 
+  // "Für dich" starter: once the first page is there, send it (autoSend=1) or leave it in the
+  // composer. Handled once per mount; the params are cleared so a re-render never re-sends.
+  const starterHandled = useRef(false);
+  useEffect(() => {
+    if (starterHandled.current || !prefill.trim()) return;
+    if (!thread || !loaded || th.isStreaming) return;
+    starterHandled.current = true;
+    router.setParams({ prefill: undefined, autoSend: undefined });
+    if (autoSend) sendRef.current({ text: prefill.trim(), images: [] });
+    else setDraft(prefill);
+  }, [prefill, autoSend, thread, loaded, th.isStreaming, router]);
+
   // ── Message interactions ──
   const openLink = useCallback((url: string) => {
     if (!/^https?:\/\//i.test(url)) return;
@@ -487,6 +503,41 @@ export default function ChatThreadScreen() {
     [authorizeDeviceCalendar, soon, showSnackbar, scrollToBottom]
   );
 
+  // ── Agent approvals (harness wave 1) ──
+  const { approveAction, rejectAction } = th;
+  const onApprovalApprove = useCallback(
+    async (part: ApprovalPart, m: ChatMessage, opts: { alwaysAllow: boolean }) => {
+      if (isTempId(m.id)) return;
+      if (part.signRequest?.kind === 'muenzen_transfer' || part.risk === 'money') {
+        // TODO(harness wave 2): sign the Röbel-Münzen transfer on the device with
+        // useRoebelTaler().send(toWallet, parseTalerAmount(amount)) and report the result via
+        // th.completeAction(part.actionId, { txHash } | { error }). The part's signRequest only
+        // carries `toName` + `amount` — no recipient wallet — so the transfer cannot be wired
+        // safely yet (no client-side name → address resolution by design).
+        soon('Überweisungen kommen bald');
+        return;
+      }
+      try {
+        await approveAction(part.actionId, { alwaysAllow: opts.alwaysAllow });
+        setTimeout(scrollToBottom, 50);
+      } catch (err) {
+        showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Freigabe fehlgeschlagen.' });
+      }
+    },
+    [approveAction, soon, showSnackbar, scrollToBottom]
+  );
+  const onApprovalReject = useCallback(
+    async (part: ApprovalPart, m: ChatMessage) => {
+      if (isTempId(m.id)) return;
+      try {
+        await rejectAction(part.actionId);
+      } catch (err) {
+        showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Ablehnen fehlgeschlagen.' });
+      }
+    },
+    [rejectAction, showSnackbar]
+  );
+
   // ── List items (chronological, then reversed for the inverted list) ──
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
@@ -520,6 +571,7 @@ export default function ChatThreadScreen() {
   }, [th.messages, th.error, th.isStreaming, th.streamingMessageId, th.streamingBotId, thread, bots, newBeforeId]);
 
   const { retry, discardFailed } = th;
+  const isStreamingNow = th.isStreaming;
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
       switch (item.kind) {
@@ -567,6 +619,9 @@ export default function ChatThreadScreen() {
                 onIntegrationAuthorize={onIntegrationAuthorize}
                 onCalendarAdd={onCalendarAdd}
                 onCalendarDismiss={onCalendarDismiss}
+                onApprovalApprove={onApprovalApprove}
+                onApprovalReject={onApprovalReject}
+                approvalsDisabled={isStreamingNow}
                 onImagePress={openLink}
                 onLinkPress={openLink}
                 onReactionPress={(emoji) => {
@@ -577,7 +632,22 @@ export default function ChatThreadScreen() {
           );
       }
     },
-    [t, retry, discardFailed, onLongPress, onOptionSelect, openFile, openLink, react, onIntegrationAuthorize, onCalendarAdd, onCalendarDismiss]
+    [
+      t,
+      retry,
+      discardFailed,
+      onLongPress,
+      onOptionSelect,
+      openFile,
+      openLink,
+      react,
+      onIntegrationAuthorize,
+      onCalendarAdd,
+      onCalendarDismiss,
+      onApprovalApprove,
+      onApprovalReject,
+      isStreamingNow,
+    ]
   );
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
