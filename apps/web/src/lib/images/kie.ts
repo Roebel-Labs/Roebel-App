@@ -80,9 +80,16 @@ export async function createKieImageTask(input: KieCreateInput): Promise<string>
     console.error("[images/kie] createTask failed:", res.status, txt.slice(0, 300));
     throw new KieImageError("Bildgenerierung konnte nicht gestartet werden.");
   }
-  const json = (await res.json()) as { data?: { taskId?: string } };
+  const json = (await res.json().catch(() => ({}))) as { code?: number; msg?: string; data?: { taskId?: string } };
   const taskId = json.data?.taskId;
-  if (!taskId) throw new KieImageError("Bildgenerierung konnte nicht gestartet werden.");
+  if (!taskId) {
+    // kie.ai reports business errors (credits, model, payload) as HTTP 200 with a body code.
+    console.error("[images/kie] createTask returned no taskId:", json.code, String(json.msg ?? "").slice(0, 300));
+    if (json.code === 402 || /credit|balance|insufficient/i.test(String(json.msg ?? ""))) {
+      throw new KieImageError("Das Bild-Guthaben ist gerade aufgebraucht. Bitte später noch einmal versuchen.");
+    }
+    throw new KieImageError("Bildgenerierung konnte nicht gestartet werden.");
+  }
   return taskId;
 }
 
