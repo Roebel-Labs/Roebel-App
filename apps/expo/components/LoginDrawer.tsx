@@ -5,6 +5,7 @@ import { client, chain } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
 import BottomDrawer from './BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
+import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 
 type Props = {
   visible: boolean;
@@ -47,6 +48,7 @@ export default function LoginDrawer({ visible, onClose }: Props) {
             }}
           />
         </View>
+        <PasskeyEntryLinks onNavigate={onClose} />
 
         {/* Additional Info */}
         <View style={styles.infoContainer}>

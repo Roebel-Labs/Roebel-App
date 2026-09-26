@@ -52,6 +52,7 @@ import { PostHogTelemetry } from '@/components/consent/PostHogTelemetry';
 import { AppUpdateGate } from '@/components/AppUpdateGate';
 import AnimatedSplash from '@/components/AnimatedSplash';
 import { bootState } from '@/lib/navigation/bootPathname';
+import PasskeyRecoveryWatch from '@/components/passkey/PasskeyRecoveryWatch';
 // DISABLED — debug-log FAB kept for later (also re-enable the capture in index.js):
 // import DebugLogOverlay from '@/components/DebugLogOverlay';
 
@@ -344,6 +345,8 @@ function ThemedLayout() {
           <TransitionStack.Screen name="rewards" options={{ headerShown: false }} />
         </TransitionStack>
       </View>
+      {/* Preview-only: gate checked first, renders nothing in production. */}
+      <PasskeyRecoveryWatch />
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}

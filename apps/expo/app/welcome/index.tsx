@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
 
 export default function WelcomeIntroScreen() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function WelcomeIntroScreen() {
           >
             <Text style={[styles.primaryButtonText, { color: colors.onPrimary }]}>Loslegen</Text>
           </Pressable>
+          <PasskeyEntryLinks />
         </View>
       </ImageBackground>
     </View>

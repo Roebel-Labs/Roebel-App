@@ -12,6 +12,8 @@ import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MigrationSteps, { stepStates } from '@/components/passkey/MigrationSteps';
 import EmailRow from '@/components/passkey/EmailRow';
+import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
+import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
 import {
   loadMigrationRecord,
@@ -154,6 +156,8 @@ export default function PasskeySettingsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <RecoveryBanner record={connected ? record : null} />
+
           <Text style={[styles.lede, { color: colors.textPrimary }]}>Dein Konto, mit Passkey gesichert.</Text>
           <Text style={[styles.subLede, { color: colors.textSecondary }]}>
             Dein Konto bleibt dasselbe. Dein Passkey wird zusätzlicher Verwalter — die E-Mail-Anmeldung
@@ -197,11 +201,7 @@ export default function PasskeySettingsScreen() {
           )}
 
           <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>WIEDERHERSTELLUNG</Text>
-          <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.body, { color: colors.textSecondary }]}>
-              Vertrauenspersonen einrichten — kommt im nächsten Schritt
-            </Text>
-          </View>
+          <PasskeyRecoverySection record={record} connected={connected} />
 
           {connected && <EmailRow />}
 
