@@ -176,6 +176,7 @@ const config: ExpoConfig = {
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
+      'webcredentials:roebel.app',
       'applinks:thirdweb.com',
       'applinks:roebel.app',
       'applinks:www.roebel.app'

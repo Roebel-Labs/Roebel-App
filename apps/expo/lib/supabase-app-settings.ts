@@ -101,3 +101,12 @@ export async function fetchChatSuiteEnabled(): Promise<boolean> {
   const value = await fetchAppSetting('chat_suite_enabled');
   return value !== 'false';
 }
+
+/**
+ * Preview gate for passkey sovereign accounts (tranche 1). A NEW surface: missing key = OFF,
+ * only an explicit 'true' enables it. The screen is additionally fenced to non-production
+ * update channels (lib/passkey/gate.ts).
+ */
+export async function fetchPasskeyAccountsEnabled(): Promise<boolean> {
+  return (await fetchAppSetting('passkey_accounts_enabled')) === 'true';
+}

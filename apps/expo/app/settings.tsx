@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Linking, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ import type { PreferredRole } from '@/context/WelcomeWizardContext';
 import { CustomToggle } from '@/components/consent/CustomToggle';
 import { updateUserOnboarding } from '@/lib/supabase-users';
 import { deleteUserAccount, DeleteAccountError } from '@/lib/supabase-account-deletion';
+import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
 import BottomDrawer from '@/components/BottomDrawer';
 import InstallAppCard from '@/components/InstallAppCard';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
@@ -100,6 +101,20 @@ export default function SettingsScreen() {
   const [showMembershipMenu, setShowMembershipMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
+
+  // Preview-only (flag + non-production channel): passkey sovereign accounts, tranche 1.
+  const [showPasskey, setShowPasskey] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    isPasskeyPreviewAllowed()
+      .then((ok) => {
+        if (!cancelled) setShowPasskey(ok);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const canRequestAttester = hasCitizenNFT && !hasAttesterNFT;
   const currentRoleLabel =
@@ -240,7 +255,10 @@ export default function SettingsScreen() {
             <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
           </Pressable>
           <Pressable
-            style={styles.themeOptionRow}
+            style={[
+              styles.themeOptionRow,
+              showPasskey ? { borderBottomWidth: 1, borderBottomColor: colors.borderSecondary } : undefined,
+            ]}
             onPress={() => router.push('/settings/nostr' as any)}
           >
             <View style={styles.themeOptionTextContainer}>
@@ -253,6 +271,22 @@ export default function SettingsScreen() {
             </View>
             <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
           </Pressable>
+          {showPasskey ? (
+            <Pressable
+              style={styles.themeOptionRow}
+              onPress={() => router.push('/settings/passkey' as any)}
+            >
+              <View style={styles.themeOptionTextContainer}>
+                <Text style={[styles.themeOptionLabel, { color: colors.textPrimary }]}>
+                  Passkey & Wiederherstellung
+                </Text>
+                <Text style={[styles.themeOptionDescription, { color: colors.textSecondary }]}>
+                  Vorschau: Passkey als zusätzlichen Verwalter deines Kontos einrichten.
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textTertiary }]}>›</Text>
+            </Pressable>
+          ) : null}
         </Section>
 
         {hasAnyNFT ? (
