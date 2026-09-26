@@ -17,7 +17,7 @@ import { base64UrlDecode, base64UrlEncode, concatBytes, utf8Encode } from './enc
 import { randomBytes } from './random';
 
 export const PRF_VAULT_VERSION = 'pkv1';
-export const PRF_VAULT_HKDF_INFO = 'roebel.app/passkey-vault/v1';
+export const PRF_VAULT_HKDF_INFO = 'id.ortis.app/passkey-vault/v1';
 const IV_LENGTH = 12;
 
 function deriveKey(prf: Hex, label: string): Uint8Array {
