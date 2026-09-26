@@ -141,6 +141,7 @@ export function messagePreview(message: ChatMessage, max = 80): string {
     else if (part.type === 'calendar_event') text = part.title;
     else if (part.type === 'approval') text = part.title;
     else if (part.type === 'task') text = part.title;
+    else if (part.type === 'generated_image') text = 'Bild';
     if (text.trim()) {
       const flat = text.replace(/\s+/g, ' ').trim();
       return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -175,14 +176,15 @@ function mapOptions(message: ChatMessage, fn: (p: Extract<ChatPart, { type: 'opt
   return { ...message, parts: message.parts.map((p) => (p.type === 'options' ? fn(p) : p)) };
 }
 
-/** Key that identifies a part which is updated in place (approval by actionId, task by taskId). */
-function liveKey(part: ChatPart): string | null {
+/** Key that identifies a part which is updated in place (approval by actionId, task by taskId, image by imageId). */
+export function liveKey(part: ChatPart): string | null {
   if (part.type === 'approval') return `approval:${part.actionId}`;
   if (part.type === 'task') return `task:${part.taskId}`;
+  if (part.type === 'generated_image') return `generated_image:${part.imageId}`;
   return null;
 }
 
-/** Replaces an existing approval/task part with the same id anywhere in the thread; null when none. */
+/** Replaces an existing approval/task/generated-image part with the same id anywhere in the thread; null when none. */
 function replaceLivePart(state: ThreadState, part: ChatPart): ThreadState | null {
   const key = liveKey(part);
   if (!key) return null;
@@ -274,7 +276,8 @@ function applyStreamEvent(state: ThreadState, event: ChatStreamEvent): ThreadSta
         return { ...m, parts };
       });
     case 'part':
-      // An approval/task part that already exists (e.g. the approval being executed) updates in place.
+      // An approval/task/generated-image part that already exists (e.g. the approval being executed,
+      // an image going generating → done) updates in place.
       return (
         replaceLivePart(state, event.part) ??
         mapMessage(state, event.messageId, (m) => ({ ...m, parts: [...m.parts, event.part] }))

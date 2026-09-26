@@ -1,5 +1,5 @@
 import { initialThreadState, messagePreview, threadReducer, type ThreadAction, type ThreadState } from '../reducer';
-import type { ChatMessage } from '../types';
+import type { ChatMessage, ChatPart } from '../types';
 
 const m = (id: string, over: Partial<ChatMessage> = {}): ChatMessage => ({
   id,
@@ -255,5 +255,50 @@ describe('threadReducer · approvals (agent harness)', () => {
 
   it('previews approvals by title', () => {
     expect(messagePreview(m('m9', { parts: [approval()] }))).toBe('Beitrag veröffentlichen');
+  });
+});
+
+describe('threadReducer generated_image', () => {
+  const img = (
+    over: Partial<Extract<ChatPart, { type: 'generated_image' }>> = {},
+  ): Extract<ChatPart, { type: 'generated_image' }> => ({
+    type: 'generated_image',
+    imageId: 'img1',
+    status: 'generating',
+    prompt: 'Laternenfest',
+    width: 896,
+    height: 1120,
+    ...over,
+  });
+  const part = (messageId: string, p: ChatPart): ThreadAction => ({
+    type: 'stream_event',
+    event: { type: 'part', messageId, part: p },
+  });
+
+  it('updates a generating image in place by imageId (no duplicate card)', () => {
+    let s = run(loaded([m('m1')]), { type: 'stream_event', event: { type: 'bot_start', botId: 'b1', messageId: 'm2' } });
+    s = run(s, part('m2', img()));
+    s = run(s, part('m2', img({ status: 'done', url: 'https://x.test/g.png', width: 1024, height: 1280 })));
+    const bot = s.messages.find((x) => x.id === 'm2')!;
+    const images = bot.parts.filter((p) => p.type === 'generated_image');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ status: 'done', url: 'https://x.test/g.png', width: 1024, height: 1280 });
+  });
+
+  it('replaces the image even when the final part arrives under a later bubble id', () => {
+    let s = run(loaded([m('m1', { parts: [img()] })]));
+    s = run(s, part('m9', img({ status: 'failed', error: 'Zu lange.' })));
+    expect(s.messages[0].parts[0]).toMatchObject({ status: 'failed', error: 'Zu lange.' });
+    expect(s.messages.some((x) => x.id === 'm9')).toBe(false);
+  });
+
+  it('keeps two different images apart', () => {
+    let s = run(loaded([m('m1', { parts: [img()] })]));
+    s = run(s, part('m1', img({ imageId: 'img2' })));
+    expect(s.messages[0].parts.filter((p) => p.type === 'generated_image')).toHaveLength(2);
+  });
+
+  it('previews a generated image as Bild', () => {
+    expect(messagePreview(m('m1', { parts: [img({ status: 'done', url: 'https://x.test/g.png' })] }))).toBe('Bild');
   });
 });

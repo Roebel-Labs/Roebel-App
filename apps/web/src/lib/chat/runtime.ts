@@ -16,6 +16,7 @@ import { attachMessage } from "./harness/audit";
 import { describeApproval } from "./harness/approvals";
 import { buildHarnessContext, harnessSystemBlock } from "./harness/context";
 import { isAwaitingApproval, toolsFor } from "./harness/registry";
+import { livePartKey, upsertLivePart } from "./harness/parts";
 import type { HarnessProfile } from "./harness/types";
 import * as store from "./store";
 import type { BotRow, MessageRow } from "./store";
@@ -55,7 +56,16 @@ function describePartForModel(p: ChatPart): string | null {
     }
     case "approval": return describeApproval(p);
     case "task": return `(Aufgabe: ${p.title} — ${p.status})`;
+    case "generated_image": return describeGeneratedImage(p);
   }
+}
+
+/** Generated images stay addressable for later turns (imageUrl for posts/events, sourceImageUrl). */
+export function describeGeneratedImage(p: Extract<ChatPart, { type: "generated_image" }>): string {
+  const prompt = p.prompt.length > 160 ? `${p.prompt.slice(0, 159)}…` : p.prompt;
+  if (p.status === "done" && p.url) return `(Erzeugtes Bild „${prompt}“ — Bild-URL: ${p.url})`;
+  if (p.status === "failed") return `(Bild „${prompt}“ konnte nicht erzeugt werden${p.error ? `: ${p.error}` : ""})`;
+  return `(Bild „${prompt}“ wird erzeugt …)`;
 }
 
 /**
@@ -66,6 +76,7 @@ function describePartForModel(p: ChatPart): string | null {
 export function rowsToModelMessages(
   rows: Pick<MessageRow, "id" | "role" | "bot_id" | "parts">[], botId: string, botNames: Map<string, string>,
   extraUserText?: string,
+  opts: { imageUrls?: boolean } = {},
 ): ModelMessage[] {
   const lastUserIdx = rows.map((r) => r.role).lastIndexOf("user");
   const out: ModelMessage[] = [];
@@ -87,6 +98,10 @@ export function rowsToModelMessages(
       return;
     }
     const content: Exclude<UserContent, string> = [];
+    // Bots with the images pack may edit the human's photos: they need the URL (sourceImageUrl).
+    if (opts.imageUrls && images.length) {
+      content.push({ type: "text", text: images.map((img) => `(Bild-URL: ${img.url})`).join("\n") });
+    }
     if (i === lastUserIdx) {
       for (const img of images.slice(0, MAX_IMAGES)) {
         try { content.push({ type: "image", image: new URL(img.url) }); } catch { /* bad url */ }
@@ -167,7 +182,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
     store.listThreadFiles(threadId),
   ]);
   const botNames = new Map(ctx.threadBots.map((b) => [b.id, b.name]));
-  const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText);
+  const messages = rowsToModelMessages(rows, bot.id, botNames, ctx.extraUserText, { imageUrls: enabled.has("images") });
   const baseSystem = buildSystemPrompt({
     botName: bot.name,
     instructions: bot.instructions,
@@ -181,6 +196,22 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
   // Non-text parts collected during the run; attached to the last bubble.
   const extraParts: ChatPart[] = [...(ctx.initialParts ?? [])];
   const sources = new Map<string, string>();
+  // Live parts (generated images) already persisted with a bubble: later updates patch the stored row.
+  const persistedLive = new Map<string, string>();
+  const updatePart = (part: ChatPart) => {
+    const key = livePartKey(part);
+    const storedIn = key ? persistedLive.get(key) : undefined;
+    if (storedIn && part.type === "generated_image") {
+      const { type: _type, imageId, ...patch } = part;
+      void store.patchStoredImagePart(storedIn, imageId, patch)
+        .then((p) => { if (p) emit({ event: "part", data: { messageId: storedIn, part: p } }); })
+        .catch((err) => console.error("[chat/runtime] patch image part failed", err));
+      return;
+    }
+    upsertLivePart(extraParts, part);
+    // Streamed now (the app updates it in place by imageId); persisted with the final bubble.
+    emit({ event: "part", data: { messageId, part } });
+  };
 
   const harness = await buildHarnessContext({
     wallet, threadId, botId: bot.id,
@@ -191,6 +222,7 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
       routineRun: Boolean(ctx.routineRun),
       recentParts: rows.slice(-10).flatMap((r) => store.partsOf(r.parts)),
       emitted: extraParts,
+      updatePart,
     },
   });
   const harnessBlock = await harnessSystemBlock(harness, { withMemory: enabled.has("memory") });
@@ -246,6 +278,10 @@ async function runBotTurn(ctx: BotTurnContext): Promise<BotTurnResult> {
       return false;
     }
     const row = await store.insertMessage({ id: messageId, threadId, role: "bot", botId: bot.id, parts });
+    for (const p of parts) {
+      const key = p.type === "generated_image" ? livePartKey(p) : null;
+      if (key) persistedLive.set(key, row.id);
+    }
     if (final) {
       const actionIds = parts.flatMap((p) => (p.type === "approval" ? [p.actionId] : []));
       await attachMessage(actionIds, messageId);

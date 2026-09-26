@@ -195,11 +195,45 @@ export function emailFooter(ctx: HarnessContext): string {
   return `\n\n--\nGesendet mit Mecky im Auftrag von ${authorName(ctx)}`;
 }
 
+/**
+ * Chat uploads live in the private chat-media bucket behind 7-day signed links.
+ * Anything published (post, event, listing) must outlive that, so an own chat
+ * upload is copied into the public images bucket at execution time. Other URLs
+ * (generated images, existing public files) pass through unchanged.
+ */
+export async function durableImageUrl(url: string | undefined, ctx: HarnessContext): Promise<string | undefined> {
+  if (!url) return url;
+  const { parseStorageUrl, IMAGE_BUCKET, IMAGE_PREFIX } = await import("./images");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const ref = parseStorageUrl(url, supabaseUrl);
+  if (!ref || ref.bucket !== "chat-media") return url;
+  if (!ref.path.startsWith(`${ctx.wallet.toLowerCase()}/`)) {
+    throw new ToolInputError("Ich kann nur deine eigenen Fotos aus diesem Chat verwenden.");
+  }
+  const storage = (await adminDb()).storage;
+  const dl = await storage.from("chat-media").download(ref.path);
+  if (dl.error || !dl.data) throw new Error(`[actions] copy chat image: ${dl.error?.message ?? "empty"}`);
+  const type = dl.data.type || "image/jpeg";
+  const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+  const path = `${IMAGE_PREFIX}/${ctx.threadId}/${crypto.randomUUID()}.${ext}`;
+  // max-age=31536000 marks the object as processed so the weekly re-encode job skips it.
+  const up = await storage.from(IMAGE_BUCKET).upload(path, dl.data, { contentType: type, cacheControl: "31536000", upsert: false });
+  if (up.error) throw new Error(`[actions] copy chat image: ${up.error.message}`);
+  return storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+const IMAGE_URL_HINT = "Optional: https-Bild-URL aus der Röbel-App (z. B. imageUrl von generate_image)";
+
+/** Optional image of events/listings: our storage only (same rule as feed posts). */
+function checkImageUrl(imageUrl: string | undefined): void {
+  if (imageUrl && !allowedImageHost(imageUrl)) throw new ToolInputError("Bilder gehen nur als Datei aus der Röbel-App (https).");
+}
+
 // ---- create_feed_post ----------------------------------------------------------------
 
 const feedInput = z.object({
   text: z.string().min(1).max(500).describe("Der Beitragstext (max. 500 Zeichen)"),
-  imageUrl: z.string().url().max(1000).optional().describe("Optional: https-Bild-URL aus der Röbel-App"),
+  imageUrl: z.string().url().max(1000).optional().describe(IMAGE_URL_HINT),
 });
 type FeedInput = z.infer<typeof feedInput>;
 
@@ -242,7 +276,7 @@ export const createFeedPost: HarnessTool<FeedInput> = {
       category: "generell",
       feed_type: "main",
       post_type: "user",
-      media_urls: input.imageUrl ? [input.imageUrl] : [],
+      media_urls: input.imageUrl ? [(await durableImageUrl(input.imageUrl, ctx))!] : [],
       status: "published",
     }).select("id").single();
     if (res.error) throw new Error(`[actions] create post: ${res.error.message}`);
@@ -309,14 +343,17 @@ const eventInput = z.object({
   location: z.string().min(2).max(200).describe("Ort, z. B. 'Marktplatz Röbel'"),
   description: z.string().min(1).max(3000).describe("Beschreibung"),
   category: z.string().optional().describe(`Kategorie: ${EVENT_CATEGORIES.join(", ")}`),
+  imageUrl: z.string().url().max(1000).optional().describe(`${IMAGE_URL_HINT}, als Titelbild`),
 });
 type EventInput = z.infer<typeof eventInput>;
 
 function normalizeEvent(i: EventInput) {
   assertNoAddress(i.title, i.description, i.location);
+  checkImageUrl(i.imageUrl);
   return {
     title: i.title.trim(), date: validateEventDate(i.date), time: validateTime(i.time),
     location: i.location.trim(), description: i.description.trim(), category: normalizeEventCategory(i.category),
+    imageUrl: i.imageUrl ?? null,
   };
 }
 
@@ -331,6 +368,7 @@ function eventPreview(e: ReturnType<typeof normalizeEvent>, extra: { label: stri
       ...extra,
     ],
     body: e.description,
+    ...(e.imageUrl ? { imageUrl: e.imageUrl } : {}),
   };
 }
 
@@ -386,6 +424,7 @@ export const submitEvent: HarnessTool<EventInput> = {
       organizer_name: authorName(ctx),
       organizer_email: email,
       category: e.category,
+      image_url: (await durableImageUrl(e.imageUrl ?? undefined, ctx)) ?? null,
       ticket_price: 0,
       status: "pending",
       is_recurring: false,
@@ -466,6 +505,7 @@ export const createOrgEvent: HarnessTool<OrgEventInput> = {
       time: e.time,
       location: e.location,
       category: e.category,
+      image_url: (await durableImageUrl(e.imageUrl ?? undefined, ctx)) ?? null,
       organizer_name: org.name,
       organizer_email: email,
       ticket_price: input.ticketPrice ?? 0,
@@ -486,6 +526,7 @@ const listingInput = z.object({
   description: z.string().min(1).max(3000).describe("Beschreibung"),
   price: z.number().min(0).max(1_000_000).optional().describe("Preis in Euro; 0 = zu verschenken; weglassen = Verhandlungssache"),
   category: z.string().describe(`Kategorie: ${LISTING_CATEGORIES.join(", ")}`),
+  imageUrl: z.string().url().max(1000).optional().describe(IMAGE_URL_HINT),
 });
 type ListingInput = z.infer<typeof listingInput>;
 
@@ -502,6 +543,7 @@ export const createListing: HarnessTool<ListingInput> = {
   summarize: ({ title }) => `Inserat im Marktplatz veröffentlichen: „${clip(title, 70)}“`,
   preview: async (input, ctx) => {
     assertNoAddress(input.title, input.description);
+    checkImageUrl(input.imageUrl);
     const f = listingFields(input);
     await requirePersonalAccount(ctx);
     await checkLimit("create_listing", ctx);
@@ -514,10 +556,12 @@ export const createListing: HarnessTool<ListingInput> = {
         { label: "Von", value: authorName(ctx) },
       ],
       body: input.description.trim(),
+      ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
     };
   },
   execute: async (input, ctx) => {
     assertNoAddress(input.title, input.description);
+    checkImageUrl(input.imageUrl);
     const f = listingFields(input);
     await requirePersonalAccount(ctx);
     await checkLimit("create_listing", ctx);
@@ -531,7 +575,7 @@ export const createListing: HarnessTool<ListingInput> = {
       category: f.category,
       listing_type: f.listing_type,
       condition: null,
-      media_urls: [],
+      media_urls: input.imageUrl ? [(await durableImageUrl(input.imageUrl, ctx))!] : [],
       status: "active",
     }).select("id").single();
     if (res.error) throw new Error(`[actions] listing: ${res.error.message}`);

@@ -8,6 +8,8 @@ import type {
   BotAvatarSpec, ChatBot, ChatMessage, ChatPart, ChatRoutine, ChatThread, ChatTier, RoutineSchedule,
 } from "./types";
 import { effectiveTier, quotaWindowStart, sumTokens } from "./quota";
+import { patchImagePart } from "./harness/parts";
+import type { GeneratedImagePart } from "./harness/parts";
 
 let client: SupabaseClient | null = null;
 export function db(): SupabaseClient {
@@ -141,6 +143,7 @@ export function previewOfParts(parts: ChatPart[], max = 120): string {
     if (p.type === "calendar_event") return clip(`📅 ${p.title}`, max);
     if (p.type === "approval") return clip(`✋ ${p.summary}`, max);
     if (p.type === "task") return clip(`🗂️ ${p.title}`, max);
+    if (p.type === "generated_image") return p.status === "failed" ? "🖼️ Bild fehlgeschlagen" : "🖼️ Bild";
   }
   return "";
 }
@@ -359,6 +362,24 @@ export async function insertMessage(input: {
 export async function updateMessageParts(id: string, parts: ChatPart[]): Promise<MessageRow> {
   const res = await db().from("chat_messages").update({ parts }).eq("id", id).select("*").single();
   return must(res, "update parts") as MessageRow;
+}
+
+/**
+ * Patches the generated_image part `imageId` inside a stored message (images
+ * pack). Returns the patched part (to stream as a `part` event) or null when
+ * the message or part does not exist.
+ */
+export async function patchStoredImagePart(
+  messageId: string, imageId: string, patch: Parameters<typeof patchImagePart>[2],
+): Promise<GeneratedImagePart | null> {
+  if (!isUuid(messageId)) return null;
+  const res = await db().from("chat_messages").select("id, parts").eq("id", messageId).maybeSingle();
+  const row = must(res, "message parts") as { id: string; parts: unknown } | null;
+  if (!row) return null;
+  const hit = patchImagePart(partsOf(row.parts), imageId, patch);
+  if (!hit) return null;
+  await updateMessageParts(row.id, hit.parts);
+  return hit.part;
 }
 
 export async function setMessageReactions(id: string, reactions: Record<string, number>): Promise<void> {

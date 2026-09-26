@@ -48,7 +48,21 @@ export type ChatPart =
       title: string;
       status: 'queued' | 'running' | 'waiting_approval' | 'done' | 'failed' | 'cancelled';
       steps: { label: string; status: 'pending' | 'running' | 'done' | 'failed' }[];
+    }
+  | {
+      // AI-generated image (images pack). Updated in place by imageId: generating → done | failed.
+      // width/height = target size while generating (aspect for the placeholder), real size when done.
+      type: 'generated_image';
+      imageId: string;
+      status: GeneratedImageStatus;
+      prompt: string;
+      url?: string;
+      width?: number;
+      height?: number;
+      error?: string; // German reason when failed
     };
+
+export type GeneratedImageStatus = 'generating' | 'done' | 'failed';
 
 export type CalendarEventStatus = 'proposed' | 'added' | 'dismissed';
 

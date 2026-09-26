@@ -17,6 +17,7 @@ export * from './IntegrationCard';
 export * from './CalendarEventCard';
 export * from './ApprovalCard';
 export * from './TaskCard';
+export * from './GeneratedImageCard';
 export * from './SourcesLinks';
 export * from './ReplyQuote';
 export * from './TypingIndicator';

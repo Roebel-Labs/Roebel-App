@@ -153,3 +153,22 @@ test("no preview or summary contains 0x", async () => {
     }
   } finally { restore(); }
 });
+
+test("submit_event / create_listing carry a generated image into the approval preview", async () => {
+  const restore = stub();
+  const prev = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://abcd.supabase.co";
+  try {
+    const img = "https://abcd.supabase.co/storage/v1/object/public/images/chat/agents/t/g.png";
+    const future = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const ev = await submitEvent.preview!({ title: "Laternenfest", date: future, location: "Markt", description: "d", imageUrl: img }, ctx());
+    assert.equal(ev.imageUrl, img);
+    const li = await createListing.preview!({ title: "Fahrrad", description: "gut", price: 50, category: "sport", imageUrl: img }, ctx());
+    assert.equal(li.imageUrl, img);
+    await assert.rejects(() => submitEvent.preview!({ title: "Fest", date: future, location: "Markt", description: "d", imageUrl: "https://example.com/x.png" }, ctx()), /Röbel-App/);
+    await assert.rejects(() => createListing.preview!({ title: "Rad", description: "d", category: "sport", imageUrl: "https://example.com/x.png" }, ctx()), /Röbel-App/);
+  } finally {
+    if (prev === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = prev;
+    restore();
+  }
+});

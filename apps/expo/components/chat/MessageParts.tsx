@@ -10,6 +10,7 @@ import { CalendarEventCard } from './CalendarEventCard';
 import { SourcesLinks } from './SourcesLinks';
 import { ApprovalCard, type ApprovalPart } from './ApprovalCard';
 import { TaskCard } from './TaskCard';
+import { GeneratedImageCard } from './GeneratedImageCard';
 import { ReplyQuote } from './ReplyQuote';
 import { chatFont, useChatTokens } from './tokens';
 
@@ -102,6 +103,7 @@ export function messagePreview(parts: ChatPart[]): string {
     if (p.type === 'calendar_event') return p.title;
     if (p.type === 'approval') return p.title;
     if (p.type === 'task') return p.title;
+    if (p.type === 'generated_image') return 'Bild';
   }
   return '';
 }
@@ -236,6 +238,8 @@ export function MessageParts({
                 onCancel={onTaskCancel ? async () => { await onTaskCancel(part.taskId); } : undefined}
               />
             );
+          case 'generated_image':
+            return <GeneratedImageCard key={`${message.id}-img-${part.imageId}`} part={part} onPress={onImagePress} />;
           case 'sources':
             if (!part.items.length) return null;
             return (

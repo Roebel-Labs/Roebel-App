@@ -105,7 +105,10 @@ export function finalMessageParts(
     });
   }
   for (const f of cp.files ?? []) parts.push({ type: "file", fileId: f.fileId, name: f.name, ext: f.ext, size: f.size });
-  for (const p of extra) if (p.type === "calendar_event" || p.type === "sources") parts.push(p);
+  for (const p of extra) {
+    if (p.type === "calendar_event" || p.type === "sources") parts.push(p);
+    else if (p.type === "generated_image" && p.status === "done") parts.push(p);
+  }
   return parts;
 }
 
@@ -227,7 +230,7 @@ async function runClaimed(row: TaskRow, budgetMs: number): Promise<TickOutcome> 
   }
 
   const botNames = new Map(threadBots.map((b) => [b.id, b.name]));
-  const messages = rowsToModelMessages(rows, bot.id, botNames, taskNote(row));
+  const messages = rowsToModelMessages(rows, bot.id, botNames, taskNote(row), { imageUrls: enabled.has("images") });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), budgetMs);

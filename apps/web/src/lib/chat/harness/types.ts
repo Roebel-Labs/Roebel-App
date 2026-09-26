@@ -48,9 +48,15 @@ export interface HarnessTurn {
   recentParts?: ChatPart[];
   /** Parts emitted so far in this turn (same array emitPart pushes into). */
   emitted?: ChatPart[];
+  /**
+   * Live part update (images pack): replaces the emitted part with the same live
+   * key (generated_image by imageId) — or attaches it — and streams it to the app
+   * right away instead of at the end of the turn. Absent outside a streamed chat turn.
+   */
+  updatePart?(part: ChatPart): void;
 }
 
-export type ToolPack = 'roebel' | 'user' | 'web' | 'memory' | 'chat' | 'actions' | 'money' | 'connectors' | 'tasks';
+export type ToolPack = 'roebel' | 'user' | 'web' | 'memory' | 'chat' | 'actions' | 'money' | 'connectors' | 'tasks' | 'images';
 
 export interface HarnessTool<I = any> {
   name: string;               // snake_case, unique

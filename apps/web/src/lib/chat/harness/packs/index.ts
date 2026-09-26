@@ -11,9 +11,10 @@ import * as connectors from "./connectors";
 import * as tasks from "./tasks";
 import * as actions from "./actions";
 import * as money from "./money";
+import * as images from "./images";
 
 const PACKS: { register: (registry: ToolRegistry) => void }[] = [
-  chat, memory, roebelRead, userPrivate, web, actionsTest, tasks, connectors, actions, money,
+  chat, memory, roebelRead, userPrivate, web, actionsTest, tasks, connectors, actions, money, images,
 ];
 
 export function registerAllPacks(registry: ToolRegistry): void {

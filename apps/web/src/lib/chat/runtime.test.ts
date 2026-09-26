@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickResponders, rowsToModelMessages } from "./runtime";
+import { describeGeneratedImage, pickResponders, rowsToModelMessages } from "./runtime";
 
 const A = { id: "a", name: "Mecky" };
 const B = { id: "b", name: "Recherche" };
@@ -33,4 +33,22 @@ test("rowsToModelMessages: own bot = assistant, others prefixed, starts with use
   assert.deepEqual(msgs[3], { role: "user", content: "[Recherche]: Ein Hafen." });
   const last = msgs[4] as { role: string; content: { type: string }[] };
   assert.equal(last.content[0].type, "image");
+});
+
+test("rowsToModelMessages: image URLs are named only for bots with the images pack", () => {
+  const rows = [
+    { id: "1", role: "user" as const, bot_id: null, parts: [{ type: "image", url: "https://x.test/me.jpg" }, { type: "text", text: "Mach es bunter" }] },
+  ];
+  const withUrls = rowsToModelMessages(rows, "a", new Map(), undefined, { imageUrls: true });
+  const content = (withUrls[0] as { content: { type: string; text?: string }[] }).content;
+  assert.deepEqual(content[0], { type: "text", text: "(Bild-URL: https://x.test/me.jpg)" });
+  const without = rowsToModelMessages(rows, "a", new Map());
+  assert.ok(!(without[0] as { content: { text?: string }[] }).content.some((c) => c.text?.includes("Bild-URL")));
+});
+
+test("describeGeneratedImage keeps the URL addressable for later turns", () => {
+  const base = { type: "generated_image" as const, imageId: "i", prompt: "Laternenfest" };
+  assert.match(describeGeneratedImage({ ...base, status: "done", url: "https://x.test/g.png" }), /Bild-URL: https:\/\/x\.test\/g\.png/);
+  assert.match(describeGeneratedImage({ ...base, status: "failed", error: "Zu lange." }), /nicht erzeugt werden: Zu lange\./);
+  assert.match(describeGeneratedImage({ ...base, status: "generating" }), /wird erzeugt/);
 });
