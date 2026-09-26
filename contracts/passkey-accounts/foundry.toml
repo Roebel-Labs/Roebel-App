@@ -1,0 +1,15 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+fs_permissions = [{ access = "read-write", path = "./test/fixtures" }]
+remappings = ["forge-std/=lib/forge-std/src/"]
+
+[rpc_endpoints]
+gnosis = "https://gnosis-rpc.publicnode.com"
