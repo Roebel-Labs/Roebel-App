@@ -95,7 +95,8 @@ New users (tranche 3): Safe-only, no legacy account.
   `associatedDomains` (AASA already lists the app) → new preview EAS build.
 - Android: `delegate_permission/common.get_login_creds` in `assetlinks.json`
   must be live on roebel.app (merge of that one file to main).
-- Vercel Preview env: `PASSKEY_SPONSOR_ENABLED=1`, `PASSKEY_SPONSOR_KEY`
-  (= paymaster `sponsorSigner` key from `netizen_labs/demo/.env`
-  `SIGNER_SPONSOR_KEY`).
+- Vercel Preview env: `PASSKEY_SPONSOR_ENABLED=1`, `PASSKEY_PAYMASTER_ADDRESS`
+  (a DEDICATED preview paymaster) and `PASSKEY_SPONSOR_KEY` (its own
+  `sponsorSigner` key; the production signer is refused). See
+  `docs/PASSKEY_ACCOUNTS_STATE.md`.
 - Sponsorship budget persistence before any prod use (preview uses caps only).
