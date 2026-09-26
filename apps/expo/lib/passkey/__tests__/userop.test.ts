@@ -187,6 +187,12 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
           return ok({ baseFeePerGas: numberToHex(500_000_000n) });
         case 'eth_maxPriorityFeePerGas':
           return ok(numberToHex(1_000_000_000n));
+        case 'pimlico_getUserOperationGasPrice':
+          return ok({
+            slow: { maxFeePerGas: numberToHex(1_500_000_000n), maxPriorityFeePerGas: numberToHex(1_000_000_000n) },
+            standard: { maxFeePerGas: numberToHex(1_800_000_000n), maxPriorityFeePerGas: numberToHex(1_000_000_000n) },
+            fast: { maxFeePerGas: numberToHex(2_000_000_000n), maxPriorityFeePerGas: numberToHex(1_000_000_000n) },
+          });
         case 'eth_estimateUserOperationGas':
           return ok({
             callGasLimit: numberToHex(500_000n),
@@ -220,10 +226,12 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
         x: key.x,
         y: key.y,
         deployed: false,
+        legacy: vector.handover.legacyAccount as Hex,
         calls: [{ to: vector.handover.legacyAccount as Hex, data: vector.handover.setPermissionsForSignerCallData as Hex }],
       },
       {
         fetch: fetchMock as any,
+        paymaster: NETIZEN_VERIFYING_PAYMASTER,
         sign,
         apiUrl: 'https://preview.example',
         bundlerUrl: 'https://preview.example/api/bundler',
@@ -234,7 +242,14 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
 
     expect(result).toEqual({ userOpHash: `0x${'ee'.repeat(32)}`, txHash: `0x${'dd'.repeat(32)}` });
     const order = calls.map((c) => c.method).filter((m) => m !== 'eth_call' && m !== 'eth_getBlockByNumber' && m !== 'eth_maxPriorityFeePerGas');
-    expect(order).toEqual(['eth_estimateUserOperationGas', 'sponsor', 'eth_sendUserOperation', 'eth_getUserOperationReceipt']);
+    // Fees come from the bundler BEFORE estimation and sponsoring.
+    expect(order).toEqual([
+      'pimlico_getUserOperationGasPrice',
+      'eth_estimateUserOperationGas',
+      'sponsor',
+      'eth_sendUserOperation',
+      'eth_getUserOperationReceipt',
+    ]);
 
     const est = calls.find((c) => c.method === 'eth_estimateUserOperationGas')!.body.params[0];
     expect(est.paymaster).toBe(NETIZEN_VERIFYING_PAYMASTER);
@@ -246,6 +261,11 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
     expect(sponsorBody.userOp.sender).toBe(u.sender);
     expect(sponsorBody.userOp.callData).toBe(u.callData);
     expect(sponsorBody.userOp.factory).toBe(SAFE_PROXY_FACTORY);
+    // C1: the sponsor needs the passkey key and the citizen's legacy account.
+    expect(sponsorBody.x).toBe(key.x);
+    expect(sponsorBody.y).toBe(key.y);
+    expect(sponsorBody.legacy).toBe(vector.handover.legacyAccount);
+    expect(sponsorBody.userOp.maxFeePerGas).toBe(numberToHex(2_000_000_000n));
 
     const sent = calls.find((c) => c.method === 'eth_sendUserOperation')!.body.params;
     expect(sent[1]).toBe('0x0000000071727De22E5E9d8BAf0edAc6f37da032');
@@ -258,10 +278,121 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
   it('refuses to run without a sponsor API URL', async () => {
     await expect(
       sendPasskeyUserOp(
-        { credentialId: 'c', x: key.x, y: key.y, deployed: true, calls: [] },
-        { apiUrl: '', fetch: jest.fn() as any },
+        { credentialId: 'c', x: key.x, y: key.y, deployed: true, legacy: vector.handover.legacyAccount as Hex, calls: [] },
+        { apiUrl: '', fetch: jest.fn() as any, paymaster: NETIZEN_VERIFYING_PAYMASTER },
       ),
     ).rejects.toThrow();
+  });
+});
+
+// ---- fees (H2) + paymaster gas floors (M1) ----
+
+type Mock = {
+  gasPrice?: 'unsupported' | { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+  baseFee?: bigint;
+  priority?: bigint;
+  pmVerif?: bigint;
+  pmPost?: bigint | null;
+};
+
+/** Runs sendPasskeyUserOp up to the sponsor call and returns what was estimated / sent to the sponsor. */
+async function runToSponsor(m: Mock, paymaster: Hex | '' = NETIZEN_VERIFYING_PAYMASTER) {
+  const calls: { method: string; body: any }[] = [];
+  const fetchMock = jest.fn(async (url: string, init: any) => {
+    const body = JSON.parse(init.body);
+    calls.push({ method: body.method ?? 'sponsor', body });
+    const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
+    if (url.endsWith('/api/passkey/sponsor')) return { ok: false, status: 403, json: async () => ({ error: 'stop here' }) };
+    switch (body.method) {
+      case 'eth_call':
+        return ok(numberToHex(0n, { size: 32 }));
+      case 'eth_getBlockByNumber':
+        return ok({ baseFeePerGas: numberToHex(m.baseFee ?? 7n) });
+      case 'eth_maxPriorityFeePerGas':
+        return ok(numberToHex(m.priority ?? 10n));
+      case 'pimlico_getUserOperationGasPrice':
+        if (!m.gasPrice || m.gasPrice === 'unsupported') {
+          return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, error: { code: -32601, message: 'Method not found' } }) };
+        }
+        return ok({
+          standard: { maxFeePerGas: numberToHex(m.gasPrice.maxFeePerGas), maxPriorityFeePerGas: numberToHex(m.gasPrice.maxPriorityFeePerGas) },
+        });
+      case 'eth_estimateUserOperationGas':
+        return ok({
+          callGasLimit: numberToHex(200_000n),
+          verificationGasLimit: numberToHex(600_000n),
+          preVerificationGas: numberToHex(80_000n),
+          paymasterVerificationGasLimit: numberToHex(m.pmVerif ?? 40_000n),
+          ...(m.pmPost === null ? {} : { paymasterPostOpGasLimit: numberToHex(m.pmPost ?? 0n) }),
+        });
+      default:
+        throw new Error(`unexpected ${body.method}`);
+    }
+  });
+  const promise = sendPasskeyUserOp(
+    { credentialId: 'c', x: key.x, y: key.y, deployed: true, legacy: vector.handover.legacyAccount as Hex, calls: [{ to: vector.handover.legacyAccount as Hex, data: '0x1234' }] },
+    { fetch: fetchMock as any, sign: jest.fn(), apiUrl: 'https://preview.example', bundlerUrl: 'https://b.example', rpcUrl: 'https://rpc.example', paymaster },
+  );
+  const error = await promise.then(() => null, (e: Error) => e);
+  const est = calls.find((c) => c.method === 'eth_estimateUserOperationGas')?.body.params[0];
+  const sponsor = calls.find((c) => c.method === 'sponsor')?.body;
+  return { error, est, sponsor, calls };
+}
+
+describe('sendPasskeyUserOp — fees from the bundler (H2)', () => {
+  it('floors the bundler price at 1.5 gwei (Gnosis Pimlico minimum), never ~24 wei', async () => {
+    const { est, sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 24n, maxPriorityFeePerGas: 10n } });
+    expect(BigInt(est.maxFeePerGas)).toBe(1_500_000_000n);
+    expect(BigInt(est.maxPriorityFeePerGas)).toBe(10n);
+    expect(sponsor.userOp.maxFeePerGas).toBe(est.maxFeePerGas);
+  });
+
+  it('uses the bundler price when above the floor', async () => {
+    const { est } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_200_000_000n, maxPriorityFeePerGas: 2_000_000_000n } });
+    expect(BigInt(est.maxFeePerGas)).toBe(2_200_000_000n);
+    expect(BigInt(est.maxPriorityFeePerGas)).toBe(2_000_000_000n);
+  });
+
+  it('errors clearly when the bundler demands more than the 3 gwei sponsor cap', async () => {
+    const { error, sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 5_000_000_000n, maxPriorityFeePerGas: 1n } });
+    expect(error?.message).toMatch(/3 gwei/);
+    expect(sponsor).toBeUndefined();
+  });
+
+  it('falls back to max(1.5 gwei, 2*baseFee + priority) when the bundler lacks the method', async () => {
+    expect(BigInt((await runToSponsor({ gasPrice: 'unsupported', baseFee: 7n, priority: 10n })).est.maxFeePerGas)).toBe(1_500_000_000n);
+    const mid = await runToSponsor({ gasPrice: 'unsupported', baseFee: 500_000_000n, priority: 1_000_000_000n });
+    expect(BigInt(mid.est.maxFeePerGas)).toBe(2_000_000_000n);
+    expect(BigInt(mid.est.maxPriorityFeePerGas)).toBe(1_000_000_000n);
+    // A spike above the cap is clamped to 3 gwei (the chain may then just be slow).
+    const hi = await runToSponsor({ gasPrice: 'unsupported', baseFee: 10_000_000_000n, priority: 1_000_000_000n });
+    expect(BigInt(hi.est.maxFeePerGas)).toBe(3_000_000_000n);
+  });
+});
+
+describe('sendPasskeyUserOp — paymaster gas floors (M1)', () => {
+  it('raises an under-estimated paymaster verification / postOp gas to 150k / 50k', async () => {
+    const { sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n }, pmVerif: 40_000n, pmPost: null });
+    expect(BigInt(sponsor.userOp.paymasterVerificationGasLimit)).toBe(150_000n);
+    expect(BigInt(sponsor.userOp.paymasterPostOpGasLimit)).toBe(50_000n);
+  });
+
+  it('keeps a larger estimate', async () => {
+    const { sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n }, pmVerif: 210_000n, pmPost: 60_000n });
+    expect(BigInt(sponsor.userOp.paymasterVerificationGasLimit)).toBe(210_000n);
+    expect(BigInt(sponsor.userOp.paymasterPostOpGasLimit)).toBe(60_000n);
+  });
+
+  it('refuses estimates above the sponsor route caps (300k / 100k)', async () => {
+    const { error, sponsor } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n }, pmVerif: 300_001n });
+    expect(error?.message).toMatch(/paymaster/);
+    expect(sponsor).toBeUndefined();
+  });
+
+  it('refuses to run without a configured paymaster', async () => {
+    const { error, calls } = await runToSponsor({ gasPrice: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n } }, '');
+    expect(error?.message).toMatch(/PAYMASTER/);
+    expect(calls).toHaveLength(0);
   });
 });
 

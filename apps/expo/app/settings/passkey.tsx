@@ -107,6 +107,15 @@ export default function PasskeySettingsScreen() {
         setNotice({ tone: 'error', text: res.message });
         if (__DEV__) console.warn('[passkey] migration failed:', res.detail);
       }
+    } catch (e) {
+      // Never an unhandled rejection (e.g. SecureStore failing after the passkey was created).
+      setStep('error');
+      setFailedAt(lastStep.current === 'idle' ? 'creatingPasskey' : lastStep.current);
+      setNotice({
+        tone: 'error',
+        text: 'Etwas ist schiefgelaufen. Dein Passkey-Status konnte nicht gespeichert werden. Bitte versuche es erneut.',
+      });
+      if (__DEV__) console.warn('[passkey] migration threw:', e instanceof Error ? e.name : typeof e);
     } finally {
       setRunning(false);
     }

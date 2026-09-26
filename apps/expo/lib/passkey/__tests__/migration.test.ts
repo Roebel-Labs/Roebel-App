@@ -118,7 +118,7 @@ describe('runPasskeyMigration', () => {
     expect(deps.isSafeDeployed).toHaveBeenCalledWith(safe);
     expect(deps.sendPasskeyUserOp).toHaveBeenCalledTimes(1);
     const args = (deps.sendPasskeyUserOp as jest.Mock).mock.calls[0][0];
-    expect(args).toMatchObject({ credentialId: 'cred-1', x, y, deployed: false });
+    expect(args).toMatchObject({ credentialId: 'cred-1', x, y, deployed: false, legacy });
     expect(args.calls).toHaveLength(1);
     expect(args.calls[0].to).toBe(legacy);
 
@@ -220,5 +220,35 @@ describe('runPasskeyMigration', () => {
     const res = await runPasskeyMigration({ legacy, userName: 'Max' }, deps);
     expect(res).toMatchObject({ status: 'idle', reason: 'cancelled' });
     expect(await loadMigrationRecord(deps.storage)).toMatchObject({ credentialId: 'cred-1', status: 'passkeyCreated' });
+  });
+
+  it('SecureStore failure right after passkey creation → German error state, never a throw', async () => {
+    const { deps } = makeDeps();
+    (deps.storage.setItem as jest.Mock).mockImplementation(async () => {
+      throw new Error('SecureStore: keychain unavailable');
+    });
+    const steps: MigrationStep[] = [];
+    const res = await runPasskeyMigration({ legacy, userName: 'Max' }, deps, (p) => steps.push(p.step));
+    expect(res.status).toBe('error');
+    expect(res.status === 'error' && res.message).toMatch(/gespeichert/);
+    expect(res.status === 'error' && res.detail).toMatch(/keychain/);
+    expect(steps[steps.length - 1]).toBe('error');
+    expect(deps.sendPasskeyUserOp).not.toHaveBeenCalled();
+  });
+
+  it('SecureStore failure after the handover landed → German error state (the chain is already done)', async () => {
+    const { deps, store } = makeDeps();
+    let writes = 0;
+    (deps.storage.setItem as jest.Mock).mockImplementation(async (k: string, v: string) => {
+      // allow the passkey record, the wrapped secrets and the rewrap record; fail the final 'done'
+      if (k === 'passkey_migration_v1' && JSON.parse(v).status === 'done') throw new Error('SecureStore full');
+      writes++;
+      store.set(k, v);
+    });
+    const res = await runPasskeyMigration({ legacy, userName: 'Max' }, deps);
+    expect(writes).toBeGreaterThan(0);
+    expect(deps.sendPasskeyUserOp).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe('error');
+    expect(res.status === 'error' && res.message).toMatch(/verbunden/);
   });
 });

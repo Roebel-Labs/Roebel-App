@@ -63,6 +63,12 @@ export const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2
 export const PAYMASTER_DATA_LENGTH = 320;
 export const PAYMASTER_AND_DATA_LENGTH = 20 + 16 + 16 + PAYMASTER_DATA_LENGTH; // 372
 
+/**
+ * The DEDICATED preview paymaster the sponsor route signs for (web env PASSKEY_PAYMASTER_ADDRESS).
+ * No default: the production NetizenVerifyingPaymaster must not sponsor passkey ops.
+ */
+export const PASSKEY_PAYMASTER: string = process.env.EXPO_PUBLIC_PASSKEY_PAYMASTER_ADDRESS ?? '';
+
 export const PASSKEY_API_URL: string = process.env.EXPO_PUBLIC_PASSKEY_API_URL ?? '';
 export const PASSKEY_BUNDLER_URL: string =
   process.env.EXPO_PUBLIC_PASSKEY_BUNDLER_URL || (PASSKEY_API_URL ? `${PASSKEY_API_URL}/api/bundler` : '');

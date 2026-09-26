@@ -32,6 +32,7 @@ import {
   MULTI_SEND_CALL_ONLY,
   NETIZEN_VERIFYING_PAYMASTER,
   PASSKEY_API_URL,
+  PASSKEY_PAYMASTER,
   PASSKEY_BUNDLER_URL,
   PASSKEY_CHAIN_ID,
   PASSKEY_RP_ID,
@@ -163,9 +164,13 @@ export function safeOpHash(op: UnpackedUserOp, validAfter: number, validUntil: n
 // Paymaster
 // ---------------------------------------------------------------------------
 
-export function stubPaymasterAndData(pmVerificationGasLimit: bigint, pmPostOpGasLimit: bigint): Hex {
+export function stubPaymasterAndData(
+  pmVerificationGasLimit: bigint,
+  pmPostOpGasLimit: bigint,
+  paymaster: Address = NETIZEN_VERIFYING_PAYMASTER,
+): Hex {
   return concatHex([
-    NETIZEN_VERIFYING_PAYMASTER,
+    paymaster,
     u128(pmVerificationGasLimit),
     u128(pmPostOpGasLimit),
     `0x${'00'.repeat(PAYMASTER_DATA_LENGTH)}`,
@@ -197,7 +202,9 @@ export function applySponsorship(op: UnpackedUserOp, reply: SponsorResponse): Un
     throw new Error(`sponsor returned paymasterAndData of unexpected length (want ${PAYMASTER_AND_DATA_LENGTH} bytes)`);
   }
   const parts = splitPaymasterAndData(pmd);
-  if (parts.paymaster.toLowerCase() !== NETIZEN_VERIFYING_PAYMASTER.toLowerCase()) {
+  // The sponsor must sign for the paymaster the op was estimated with.
+  const expected = op.paymaster ?? NETIZEN_VERIFYING_PAYMASTER;
+  if (parts.paymaster.toLowerCase() !== expected.toLowerCase()) {
     throw new Error('sponsor returned an unexpected paymaster');
   }
   const pmVerif = BigInt(reply.paymasterVerificationGasLimit);
@@ -299,6 +306,8 @@ type FetchLike = (url: string, init: { method: string; headers: Record<string, s
 
 export type UserOpDeps = {
   fetch?: FetchLike;
+  /** Paymaster the sponsor route signs for (default EXPO_PUBLIC_PASSKEY_PAYMASTER_ADDRESS). */
+  paymaster?: Address | '';
   sign?: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
   apiUrl?: string;
   bundlerUrl?: string;
@@ -424,18 +433,70 @@ export async function isSafeDeployed(safe: Address, deps: UserOpDeps = {}): Prom
   return !!code && code !== '0x';
 }
 
-// Estimation stub for the paymaster gas when the bundler does not return it.
-const STUB_PM_VERIFICATION_GAS = 150_000n;
-const STUB_PM_POST_OP_GAS = 50_000n;
+/**
+ * Paymaster gas. The estimate runs against a zero-filled stub voucher, so the paymaster's
+ * signature check short-circuits and the bundler under-reports verification gas. Floors = the
+ * limits the fork proofs actually ran with (contracts/passkey-accounts PasskeySafeBase:
+ * PM_VERIFICATION_GAS 150_000, PM_POST_OP_GAS 50_000); caps = the sponsor route's CAPS.
+ */
+export const PM_VERIFICATION_GAS_FLOOR = 150_000n;
+export const PM_POST_OP_GAS_FLOOR = 50_000n;
+export const PM_VERIFICATION_GAS_CAP = 300_000n;
+export const PM_POST_OP_GAS_CAP = 100_000n;
+
+/** Pimlico on Gnosis rejects maxFeePerGas below 1.5 gwei (see apps/web/src/lib/highgas-bundler.ts). */
+export const GAS_PRICE_FLOOR = 1_500_000_000n;
+/** The sponsor route refuses maxFeePerGas above 3 gwei. */
+export const MAX_FEE_CAP = 3_000_000_000n;
+
+const maxBig = (a: bigint, b: bigint) => (a > b ? a : b);
+const minBig = (a: bigint, b: bigint) => (a < b ? a : b);
+
+type GasTier = { maxFeePerGas?: Hex; maxPriorityFeePerGas?: Hex };
+
+/**
+ * userOp fees, decided BEFORE estimation and sponsoring (the voucher covers them).
+ * Bundler `pimlico_getUserOperationGasPrice` (.fast, else .standard), floored at 1.5 gwei; if the
+ * bundler lacks the method, max(1.5 gwei, 2*baseFee + priority) clamped to the 3 gwei cap. A
+ * bundler that DEMANDS more than the cap is an error: the sponsor would refuse the op anyway.
+ */
+export async function resolveUserOpFees(
+  fetchImpl: FetchLike,
+  bundlerUrl: string,
+  rpcUrl: string,
+  timeoutMs: number,
+): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  let tier: GasTier | undefined;
+  try {
+    const res = await rpc<{ fast?: GasTier; standard?: GasTier }>(fetchImpl, bundlerUrl, 'pimlico_getUserOperationGasPrice', [], timeoutMs);
+    tier = res?.fast?.maxFeePerGas ? res.fast : res?.standard;
+  } catch {
+    tier = undefined; // not a Pimlico-compatible bundler: fall back to the chain
+  }
+  if (tier?.maxFeePerGas && tier.maxPriorityFeePerGas) {
+    const maxFeePerGas = maxBig(BigInt(tier.maxFeePerGas), GAS_PRICE_FLOOR);
+    if (maxFeePerGas > MAX_FEE_CAP) {
+      throw new Error(`bundler requires maxFeePerGas ${maxFeePerGas} wei, above the 3 gwei sponsor cap; try again later`);
+    }
+    return { maxFeePerGas, maxPriorityFeePerGas: minBig(BigInt(tier.maxPriorityFeePerGas), maxFeePerGas) };
+  }
+  const block = await rpc<{ baseFeePerGas?: Hex }>(fetchImpl, rpcUrl, 'eth_getBlockByNumber', ['latest', false], timeoutMs);
+  const priority = BigInt(await rpc<Hex>(fetchImpl, rpcUrl, 'eth_maxPriorityFeePerGas', [], timeoutMs));
+  const baseFee = block?.baseFeePerGas ? BigInt(block.baseFeePerGas) : 0n;
+  const maxFeePerGas = minBig(maxBig(GAS_PRICE_FLOOR, baseFee * 2n + priority), MAX_FEE_CAP);
+  return { maxFeePerGas, maxPriorityFeePerGas: minBig(priority, maxFeePerGas) };
+}
 
 export async function sendPasskeyUserOp(
-  args: { credentialId: string; x: Hex; y: Hex; calls: SponsoredCall[]; deployed: boolean },
+  args: { credentialId: string; x: Hex; y: Hex; legacy: Address; calls: SponsoredCall[]; deployed: boolean },
   deps: UserOpDeps = {},
 ): Promise<{ userOpHash: Hex; txHash: Hex }> {
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
   const sign = deps.sign ?? signWithPasskey;
   const apiUrl = deps.apiUrl ?? PASSKEY_API_URL;
   if (!apiUrl) throw new Error('EXPO_PUBLIC_PASSKEY_API_URL is not configured');
+  const paymaster = (deps.paymaster ?? PASSKEY_PAYMASTER) as Address | '';
+  if (!paymaster) throw new Error('EXPO_PUBLIC_PASSKEY_PAYMASTER_ADDRESS is not configured');
   const bundlerUrl = deps.bundlerUrl ?? (PASSKEY_BUNDLER_URL || `${apiUrl}/api/bundler`);
   const rpcUrl = deps.rpcUrl ?? DEFAULT_GNOSIS_RPC_URL;
   const timeout = deps.requestTimeoutMs ?? 20_000;
@@ -444,7 +505,7 @@ export async function sendPasskeyUserOp(
   const sender = predictSafeAddress(key);
   const callData = buildCallData(args.calls);
 
-  // 1. nonce + fees
+  // 1. nonce + fees (fees are fixed here, before estimation and sponsoring)
   const nonceData = await rpc<Hex>(
     fetchImpl,
     rpcUrl,
@@ -453,10 +514,7 @@ export async function sendPasskeyUserOp(
     timeout,
   );
   const nonce = decodeFunctionResult({ abi: getNonceAbi, functionName: 'getNonce', data: nonceData });
-  const block = await rpc<{ baseFeePerGas?: Hex }>(fetchImpl, rpcUrl, 'eth_getBlockByNumber', ['latest', false], timeout);
-  const priority = BigInt(await rpc<Hex>(fetchImpl, rpcUrl, 'eth_maxPriorityFeePerGas', [], timeout));
-  const baseFee = block?.baseFeePerGas ? BigInt(block.baseFeePerGas) : 0n;
-  const maxFeePerGas = baseFee * 2n + priority;
+  const { maxFeePerGas, maxPriorityFeePerGas } = await resolveUserOpFees(fetchImpl, bundlerUrl, rpcUrl, timeout);
 
   // 2. unsigned op with the 372-byte stub + realistic dummy signature → estimate
   let op: UnpackedUserOp = {
@@ -468,10 +526,10 @@ export async function sendPasskeyUserOp(
     verificationGasLimit: 0n,
     preVerificationGas: 0n,
     maxFeePerGas,
-    maxPriorityFeePerGas: priority,
-    paymaster: NETIZEN_VERIFYING_PAYMASTER,
-    paymasterVerificationGasLimit: STUB_PM_VERIFICATION_GAS,
-    paymasterPostOpGasLimit: STUB_PM_POST_OP_GAS,
+    maxPriorityFeePerGas,
+    paymaster,
+    paymasterVerificationGasLimit: PM_VERIFICATION_GAS_FLOOR,
+    paymasterPostOpGasLimit: PM_POST_OP_GAS_FLOOR,
     paymasterData: `0x${'00'.repeat(PAYMASTER_DATA_LENGTH)}`,
     signature: dummyUserOpSignature(),
   };
@@ -482,20 +540,25 @@ export async function sendPasskeyUserOp(
     [toRpcUserOp(op), ENTRY_POINT_V07],
     timeout,
   );
+  const pmVerification = maxBig(BigInt(est.paymasterVerificationGasLimit ?? '0x0'), PM_VERIFICATION_GAS_FLOOR);
+  const pmPostOp = maxBig(BigInt(est.paymasterPostOpGasLimit ?? '0x0'), PM_POST_OP_GAS_FLOOR);
+  if (pmVerification > PM_VERIFICATION_GAS_CAP || pmPostOp > PM_POST_OP_GAS_CAP) {
+    throw new Error('estimated paymaster gas exceeds the sponsor caps (300k verification / 100k postOp)');
+  }
   op = {
     ...op,
     callGasLimit: BigInt(est.callGasLimit ?? '0x0'),
     verificationGasLimit: BigInt(est.verificationGasLimit ?? '0x0'),
     preVerificationGas: BigInt(est.preVerificationGas ?? '0x0'),
-    paymasterVerificationGasLimit: est.paymasterVerificationGasLimit ? BigInt(est.paymasterVerificationGasLimit) : STUB_PM_VERIFICATION_GAS,
-    paymasterPostOpGasLimit: est.paymasterPostOpGasLimit ? BigInt(est.paymasterPostOpGasLimit) : STUB_PM_POST_OP_GAS,
+    paymasterVerificationGasLimit: pmVerification,
+    paymasterPostOpGasLimit: pmPostOp,
   };
 
   // 3. sponsor — echoed paymaster limits are voucher-covered: use them verbatim, never re-estimate
   const reply = (await postJson(
     fetchImpl,
     `${apiUrl}/api/passkey/sponsor`,
-    { chainId: PASSKEY_CHAIN_ID, userOp: toSponsorUserOp(op) },
+    { chainId: PASSKEY_CHAIN_ID, userOp: toSponsorUserOp(op), x: args.x, y: args.y, legacy: args.legacy },
     timeout,
   )) as SponsorResponse;
   op = applySponsorship(op, reply);

@@ -89,6 +89,8 @@ export type MigrationDeps = {
     credentialId: string;
     x: Hex;
     y: Hex;
+    /** The citizen's legacy account: the sponsor binds the op to it. */
+    legacy: Address;
     calls: SponsoredCall[];
     deployed: boolean;
   }) => Promise<{ userOpHash: Hex; txHash: Hex }>;
@@ -108,6 +110,25 @@ export async function loadMigrationRecord(storage: KeyValueStorage): Promise<Mig
 
 async function saveRecord(storage: KeyValueStorage, rec: MigrationRecord): Promise<void> {
   await storage.setItem(MIGRATION_STORE_KEY, JSON.stringify(rec));
+}
+
+const SAVE_FAILED_MESSAGE =
+  'Der Passkey-Status konnte auf diesem Gerät nicht gespeichert werden. Bitte versuche es erneut.';
+const SAVE_FAILED_AFTER_DONE_MESSAGE =
+  'Dein Passkey ist verbunden, aber der Status konnte auf diesem Gerät nicht gespeichert werden. Öffne die Seite erneut.';
+
+/** saveRecord that never throws: a SecureStore failure becomes an error result (null = saved). */
+async function trySaveRecord(
+  storage: KeyValueStorage,
+  rec: MigrationRecord,
+  message = SAVE_FAILED_MESSAGE,
+): Promise<MigrationResult | null> {
+  try {
+    await saveRecord(storage, rec);
+    return null;
+  } catch (e) {
+    return { status: 'error', message, detail: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 function errorName(e: unknown): string | undefined {
@@ -173,7 +194,11 @@ export async function runPasskeyMigration(
     }
     const safe = predictSafeAddress({ x: cred.x, y: cred.y });
     rec = { credentialId: cred.credentialId, x: cred.x, y: cred.y, safe, legacy, status: 'passkeyCreated' };
-    await saveRecord(deps.storage, rec);
+    const saveErr = await trySaveRecord(deps.storage, rec);
+    if (saveErr) {
+      report('error');
+      return saveErr;
+    }
   }
   const current: MigrationRecord = rec;
   const safe = current.safe;
@@ -192,7 +217,11 @@ export async function runPasskeyMigration(
       report('error');
       return idleOrError(e, 'Deine Schlüssel konnten nicht geschützt werden.');
     }
-    await saveRecord(deps.storage, current);
+    const saveErr = await trySaveRecord(deps.storage, current);
+    if (saveErr) {
+      report('error', current.rewrap);
+      return saveErr;
+    }
   }
   const rewrap = current.rewrap;
 
@@ -207,7 +236,11 @@ export async function runPasskeyMigration(
   }
   if (alreadyAdmin) {
     const done: MigrationRecord = { ...current, status: 'done', txHash: current.txHash ?? null };
-    await saveRecord(deps.storage, done);
+    const saveErr = await trySaveRecord(deps.storage, done, SAVE_FAILED_AFTER_DONE_MESSAGE);
+    if (saveErr) {
+      report('error', rewrap);
+      return saveErr;
+    }
     report('done', rewrap);
     return { status: 'done', safe, rewrap, txHash: done.txHash ?? null, alreadyAdmin: true };
   }
@@ -233,6 +266,7 @@ export async function runPasskeyMigration(
       credentialId: current.credentialId,
       x: current.x,
       y: current.y,
+      legacy,
       calls: [call],
       deployed,
     }));
@@ -242,7 +276,11 @@ export async function runPasskeyMigration(
     return res;
   }
 
-  await saveRecord(deps.storage, { ...current, status: 'done', txHash });
+  const saveErr = await trySaveRecord(deps.storage, { ...current, status: 'done', txHash }, SAVE_FAILED_AFTER_DONE_MESSAGE);
+  if (saveErr) {
+    report('error', rewrap);
+    return saveErr;
+  }
   report('done', rewrap);
   return { status: 'done', safe, rewrap, txHash, alreadyAdmin: false };
 }
