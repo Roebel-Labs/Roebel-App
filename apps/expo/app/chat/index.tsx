@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  type GestureResponderEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
@@ -21,7 +22,6 @@ import LoginDrawer from '@/components/LoginDrawer';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
-import { showChatMenu } from '@/lib/chat/menu';
 import { threadTitle } from '@/lib/chat/format';
 import type { BotAvatarSpec, ChatBot, ChatThread } from '@/lib/chat/types';
 import {
@@ -37,6 +37,7 @@ import {
   GlassCircleButton,
   PagerDots,
   chatFont,
+  useChatSheets,
   formatListTime,
   useChatTokens,
 } from '@/components/chat';
@@ -194,6 +195,7 @@ function Onboarding({
 }) {
   const t = useChatTokens();
   const router = useRouter();
+  const { openMenu: openSheetMenu } = useChatSheets();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
   const { createBot, createThread } = useChatActions();
@@ -245,11 +247,18 @@ function Onboarding({
     }
   };
 
-  const openMenu = () =>
-    showChatMenu([
-      { label: startOnCreate ? 'Abbrechen' : 'Überspringen', run: onSkip },
-      { label: 'Mecky Ultra', run: () => router.push('/chat/ultra' as Href) },
-    ]);
+  const openMenu = (e: GestureResponderEvent) =>
+    openSheetMenu({
+      anchor: e,
+      items: [
+        [
+          startOnCreate
+            ? { label: 'Abbrechen', icon: 'close-outline', onPress: onSkip }
+            : { label: 'Überspringen', icon: 'play-skip-forward-outline', onPress: onSkip },
+        ],
+        [{ label: 'Mecky Ultra', icon: 'diamond-outline', onPress: () => router.push('/chat/ultra' as Href) }],
+      ],
+    });
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -341,6 +350,7 @@ function ChatList({
 }) {
   const t = useChatTokens();
   const router = useRouter();
+  const { openMenu: openSheetMenu } = useChatSheets();
   const insets = useSafeAreaInsets();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -382,12 +392,18 @@ function ChatList({
           </GlassCircleButton>
           <GlassCircleButton
             accessibilityLabel="Mehr"
-            onPress={() =>
-              showChatMenu([
-                { label: 'Gedächtnis', run: () => router.push('/chat/settings/memory' as Href) },
-                { label: 'Aktivität', run: () => router.push('/chat/settings/activity' as Href) },
-                { label: 'Verbindungen', run: () => router.push('/chat/settings/connections' as Href) },
-              ])
+            onPress={(e) =>
+              openSheetMenu({
+                anchor: e,
+                items: [
+                  [
+                    { label: 'Gedächtnis', icon: 'bulb-outline', onPress: () => router.push('/chat/settings/memory' as Href) },
+                    { label: 'Aktivität', icon: 'pulse-outline', onPress: () => router.push('/chat/settings/activity' as Href) },
+                    { label: 'Verbindungen', icon: 'link-outline', onPress: () => router.push('/chat/settings/connections' as Href) },
+                  ],
+                  [{ label: 'Mecky Ultra', icon: 'diamond-outline', onPress: () => router.push('/chat/ultra' as Href) }],
+                ],
+              })
             }
           >
             <Feather name="more-horizontal" size={24} color={t.icon} />

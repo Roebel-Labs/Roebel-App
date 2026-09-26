@@ -1,10 +1,11 @@
 import React from 'react';
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { chatSize, haloShadow, useChatTokens } from './tokens';
 
 export type GlassCircleButtonProps = {
-  onPress?: () => void;
+  /** Receives the press event so header menus can anchor a popover under the control. */
+  onPress?: (e: GestureResponderEvent) => void;
   accessibilityLabel: string;
   children: React.ReactNode;
   /** Diameter, default 44 (refs). */
@@ -30,9 +31,9 @@ export function GlassCircleButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       disabled={!onPress}
-      onPress={() => {
+      onPress={(e) => {
         Haptics.selectionAsync().catch(() => {});
-        onPress?.();
+        onPress?.(e);
       }}
       hitSlop={6}
       style={({ pressed }) => [

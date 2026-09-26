@@ -8,7 +8,6 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useInspiration } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
-import { showChatMenu } from '@/lib/chat/menu';
 import {
   ME_AUDIENCE,
   findDirectThread,
@@ -22,6 +21,7 @@ import {
   InspirationCard,
   chatFont,
   chatSize,
+  useChatSheets,
   useChatTokens,
   InspirationSkeleton,
 } from '@/components/chat';
@@ -32,6 +32,7 @@ export default function ChatInspirationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
+  const { openMenu } = useChatSheets();
   const params = useLocalSearchParams<{ audience?: string }>();
   const [audienceKey, setAudienceKey] = useState(
     typeof params.audience === 'string' && params.audience ? params.audience : ME_AUDIENCE,
@@ -80,12 +81,14 @@ export default function ChatInspirationScreen() {
   );
 
   const askDismiss = (task: InspirationTask) => {
-    showChatMenu(
-      [
+    openMenu({
+      title: task.title,
+      items: [
         {
           label: 'Nicht relevant',
+          icon: 'eye-off-outline',
           destructive: true,
-          run: () => {
+          onPress: () => {
             insp
               .dismiss(task.id)
               .then(() => showSnackbar({ message: 'Idee ausgeblendet' }))
@@ -95,8 +98,7 @@ export default function ChatInspirationScreen() {
           },
         },
       ],
-      task.title,
-    );
+    });
   };
 
   const onRefresh = async () => {

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
+  KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions } from '@/context/ChatContext';
 import { ChatApiError, type ChatConnector } from '@/lib/chat/api';
 import { buildMcpHeaders, connectorSubtitle, googleResultFromUrl, isLikelyMcpUrl } from '@/lib/chat/connections';
-import { BlackPillButton, SettingsListSkeleton, ShimmerLine, chatFont, chatSize, useChatTokens, type ChatTokens } from '@/components/chat';
+import { BlackPillButton, SettingsListSkeleton, ShimmerLine, chatFont, chatSize, useChatSheets, useChatTokens, type ChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const GOOGLE_MESSAGES = {
@@ -35,6 +35,7 @@ export default function ChatConnectionsScreen() {
   const t = useChatTokens();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
+  const { confirm } = useChatSheets();
   const { fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect } = useChatActions();
   const params = useLocalSearchParams<{ google?: string }>();
 
@@ -108,28 +109,27 @@ export default function ChatConnectionsScreen() {
     }
   };
 
-  const remove = (c: ChatConnector) => {
+  const remove = async (c: ChatConnector) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    Alert.alert('Verbindung trennen?', `„${c.name}“ wird entfernt. Deine Bots können sie dann nicht mehr nutzen.`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Trennen',
-        style: 'destructive',
-        onPress: async () => {
-          setBusyId(c.id);
-          const prev = items;
-          setItems((list) => list?.filter((x) => x.id !== c.id) ?? null);
-          try {
-            await deleteConnector(c.id);
-          } catch (err) {
-            setItems(prev);
-            showSnackbar({ message: errorText(err, 'Trennen fehlgeschlagen.') });
-          } finally {
-            setBusyId(null);
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Verbindung trennen?',
+      message: `„${c.name}“ wird entfernt. Deine Bots können sie dann nicht mehr nutzen.`,
+      confirmLabel: 'Trennen',
+      destructive: true,
+      icon: 'link-outline',
+    });
+    if (!ok) return;
+    setBusyId(c.id);
+    const prev = items;
+    setItems((list) => list?.filter((x) => x.id !== c.id) ?? null);
+    try {
+      await deleteConnector(c.id);
+    } catch (err) {
+      setItems(prev);
+      showSnackbar({ message: errorText(err, 'Trennen fehlgeschlagen.') });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const refresh = async (c: ChatConnector) => {

@@ -33,7 +33,6 @@ import { ChatApiError } from '@/lib/chat/api';
 import { isTempId } from '@/lib/chat/reducer';
 import { threadTitle } from '@/lib/chat/format';
 import { firstNewMessageId } from '@/lib/chat/unread';
-import { showChatMenu } from '@/lib/chat/menu';
 import { planMuenzenTransfer, transferErrorMessage } from '@/lib/chat/transfer';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { parseTalerAmount } from '@/lib/roebel-taler';
@@ -56,6 +55,7 @@ import {
   chatFont,
   chatSize,
   formatDayStamp,
+  useChatSheets,
   haloShadow,
   messagePreview,
   useChatTokens,
@@ -132,6 +132,15 @@ export default function ChatThreadScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
+  const { openMenu: openSheetMenu, confirm } = useChatSheets();
+  /** Permission denied → designed sheet with a direct way into the OS settings. */
+  const askOpenSettings = useCallback(
+    async (title: string, message: string) => {
+      const ok = await confirm({ title, message, confirmLabel: 'Einstellungen öffnen', icon: 'settings-outline' });
+      if (ok) Linking.openSettings().catch(() => {});
+    },
+    [confirm]
+  );
   const boot = useChatBootstrap();
   const th = useThread(threadId);
   const actions = useChatActions();
@@ -263,9 +272,10 @@ export default function ChatThreadScreen() {
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
-        showSnackbar({
-          message: 'Bitte erlaube den Mikrofon-Zugriff in den Einstellungen.',
-        });
+        askOpenSettings(
+          'Mikrofon-Zugriff erlauben',
+          'Für Sprachnachrichten braucht Mecky Zugriff auf dein Mikrofon. Du kannst ihn in den Einstellungen erlauben.'
+        );
         return;
       }
       await setAudioModeAsync({
@@ -334,9 +344,10 @@ export default function ChatThreadScreen() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        showSnackbar({
-          message: 'Bitte erlaube den Kamera-Zugriff in den Einstellungen.',
-        });
+        askOpenSettings(
+          'Kamera-Zugriff erlauben',
+          'Um ein Foto aufzunehmen, braucht Mecky Zugriff auf deine Kamera. Du kannst ihn in den Einstellungen erlauben.'
+        );
         return;
       }
       const res = await ImagePicker.launchCameraAsync({
@@ -495,16 +506,13 @@ export default function ChatThreadScreen() {
       const access = await authorizeDeviceCalendar(m.id, index).catch(() => 'blocked' as const);
       if (access === 'granted') setTimeout(scrollToBottom, 50);
       else if (access === 'blocked') {
-        showSnackbar({
-          message: 'Kalenderzugriff ist aus. Du kannst ihn in den Einstellungen erlauben – oder mir die Termine diktieren.',
-          actionLabel: 'Einstellungen',
-          onAction: () => {
-            Linking.openSettings().catch(() => {});
-          },
-        });
+        askOpenSettings(
+          'Kalenderzugriff ist aus',
+          'Du kannst ihn in den Einstellungen erlauben – oder mir die Termine diktieren.'
+        );
       }
     },
-    [authorizeDeviceCalendar, soon, showSnackbar, scrollToBottom]
+    [authorizeDeviceCalendar, soon, askOpenSettings, scrollToBottom]
   );
 
   // ── Agent approvals (harness wave 1; money = wave 2) ──
@@ -652,13 +660,13 @@ export default function ChatThreadScreen() {
                 retry().catch(() => {});
               }}
               onLongPress={() =>
-                showChatMenu([
-                  {
-                    label: 'Nachricht verwerfen',
-                    destructive: true,
-                    run: discardFailed,
-                  },
-                ])
+                openSheetMenu({
+                  title: 'Nicht gesendet',
+                  items: [
+                    [{ label: 'Erneut versuchen', icon: 'refresh-outline', onPress: () => retry().catch(() => {}) }],
+                    [{ label: 'Nachricht verwerfen', icon: 'trash-outline', destructive: true, onPress: discardFailed }],
+                  ],
+                })
               }
               style={styles.failedRow}
             >
@@ -698,6 +706,7 @@ export default function ChatThreadScreen() {
       t,
       retry,
       discardFailed,
+      openSheetMenu,
       onLongPress,
       onOptionSelect,
       openFile,

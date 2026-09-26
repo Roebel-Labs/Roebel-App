@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useChatActions } from '@/context/ChatContext';
@@ -7,6 +7,7 @@ import type { ChatRoutine } from '@/lib/chat/api';
 import { formatSchedule } from '@/lib/chat/routines';
 import { chatFont, useChatTokens } from './tokens';
 import { SettingsListSkeleton } from './Shimmer';
+import { useChatSheets } from './ChatSheetsProvider';
 
 export type RoutinesSectionProps = {
   threadId: string;
@@ -18,6 +19,7 @@ export type RoutinesSectionProps = {
 export function RoutinesSection({ threadId, botId }: RoutinesSectionProps) {
   const t = useChatTokens();
   const { fetchRoutines, updateRoutine, deleteRoutine } = useChatActions();
+  const { confirm } = useChatSheets();
   const [routines, setRoutines] = useState<ChatRoutine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -51,27 +53,26 @@ export function RoutinesSection({ threadId, botId }: RoutinesSectionProps) {
     }
   };
 
-  const confirmDelete = (routine: ChatRoutine) => {
+  const confirmDelete = async (routine: ChatRoutine) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    Alert.alert('Routine löschen?', `„${routine.title}“ wird nicht mehr automatisch ausgeführt.`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Löschen',
-        style: 'destructive',
-        onPress: async () => {
-          setBusyId(routine.id);
-          try {
-            await deleteRoutine(routine.id);
-            setRoutines((list) => list?.filter((r) => r.id !== routine.id) ?? null);
-            setError(null);
-          } catch (err) {
-            setError(err instanceof Error && err.message ? err.message : 'Löschen fehlgeschlagen.');
-          } finally {
-            setBusyId(null);
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Routine löschen?',
+      message: `„${routine.title}“ wird nicht mehr automatisch ausgeführt.`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+      icon: 'trash-outline',
+    });
+    if (!ok) return;
+    setBusyId(routine.id);
+    try {
+      await deleteRoutine(routine.id);
+      setRoutines((list) => list?.filter((r) => r.id !== routine.id) ?? null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : 'Löschen fehlgeschlagen.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const shown = routines?.filter((r) => !botId || r.botId === botId) ?? null;

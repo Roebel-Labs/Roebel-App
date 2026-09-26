@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap } from '@/context/ChatContext';
 import type { ChatMemory } from '@/lib/chat/api';
 import type { BotAvatarSpec } from '@/lib/chat/types';
-import { BOT_COLORS, BotAvatar, BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatTokens } from '@/components/chat';
+import { BOT_COLORS, BotAvatar, BlackPillButton, SettingsListSkeleton, chatFont, chatSize, useChatSheets, useChatTokens } from '@/components/chat';
 import { SettingsHeader } from '@/components/chat/SettingsHeader';
 
 const FALLBACK_AVATAR: BotAvatarSpec = { shape: 'circle', color: BOT_COLORS.black, eyes: 'dots' };
@@ -24,6 +24,7 @@ export default function ChatMemoryScreen() {
   const t = useChatTokens();
   const insets = useSafeAreaInsets();
   const { showSnackbar } = useSnackbar();
+  const { confirm } = useChatSheets();
   const { fetchMemories, deleteMemory } = useChatActions();
   const { presets, bots } = useChatBootstrap();
   const [items, setItems] = useState<ChatMemory[] | null>(null);
@@ -58,28 +59,27 @@ export default function ChatMemoryScreen() {
     setRefreshing(false);
   };
 
-  const forget = (m: ChatMemory) => {
+  const forget = async (m: ChatMemory) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    Alert.alert('Vergessen?', `„${m.fact}“`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Vergessen',
-        style: 'destructive',
-        onPress: async () => {
-          setBusyId(m.id);
-          const prev = items;
-          setItems((list) => list?.filter((x) => x.id !== m.id) ?? null);
-          try {
-            await deleteMemory(m.id);
-          } catch (err) {
-            setItems(prev);
-            showSnackbar({ message: err instanceof Error && err.message ? err.message : 'Löschen fehlgeschlagen.' });
-          } finally {
-            setBusyId(null);
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Vergessen?',
+      message: `„${m.fact}“`,
+      confirmLabel: 'Vergessen',
+      destructive: true,
+      icon: 'trash-outline',
+    });
+    if (!ok) return;
+    setBusyId(m.id);
+    const prev = items;
+    setItems((list) => list?.filter((x) => x.id !== m.id) ?? null);
+    try {
+      await deleteMemory(m.id);
+    } catch (err) {
+      setItems(prev);
+      showSnackbar({ message: err instanceof Error && err.message ? err.message : 'Löschen fehlgeschlagen.' });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   let body: React.ReactNode;

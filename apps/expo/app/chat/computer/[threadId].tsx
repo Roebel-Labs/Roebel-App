@@ -7,8 +7,16 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatBootstrap } from '@/context/ChatContext';
 import { threadTitle } from '@/lib/chat/format';
-import { showChatMenu } from '@/lib/chat/menu';
-import { BOT_COLORS, BotAvatar, GlassCircleButton, GlassPillHeader, ShimmerBlock, chatFont, chatSize } from '@/components/chat';
+import {
+  BOT_COLORS,
+  BotAvatar,
+  GlassCircleButton,
+  GlassPillHeader,
+  ShimmerBlock,
+  chatFont,
+  chatSize,
+  useChatSheets,
+} from '@/components/chat';
 
 /** The bot's computer (ref 18). Until phase 5 there is no VM → empty state; with `vmUrl` a noVNC WebView. */
 export default function ChatComputerScreen() {
@@ -19,6 +27,7 @@ export default function ChatComputerScreen() {
   const insets = useSafeAreaInsets();
   const win = useWindowDimensions();
   const { showSnackbar } = useSnackbar();
+  const { openMenu } = useChatSheets();
   const { threads } = useChatBootstrap();
   const thread = threads.find((th) => th.id === threadId) ?? null;
   const bots = thread?.bots ?? [];
@@ -41,7 +50,12 @@ export default function ChatComputerScreen() {
           accessibilityLabel="Mehr"
           tone="dark"
           style={styles.gap}
-          onPress={() => showChatMenu([{ label: 'Mecky Ultra', run: () => router.push('/chat/ultra' as Href) }])}
+          onPress={(e) =>
+            openMenu({
+              anchor: e,
+              items: [{ label: 'Mecky Ultra', icon: 'diamond-outline', onPress: () => router.push('/chat/ultra' as Href) }],
+            })
+          }
         >
           <Feather name="more-horizontal" size={24} color="#FFFFFF" />
         </GlassCircleButton>
