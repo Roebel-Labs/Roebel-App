@@ -22,6 +22,7 @@ Röbel Münzen are still not covered — see [Out of scope](#out-of-scope).
 |---|---|
 | **AttesterNFTv2 (test)** | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` |
 | **CitizenNFTv2 (test)** | `0x0Be374808A567c9088aC8208B90a4239432B3220` |
+| **OrgRegistry (test, NSP-14)** | `0xBEf890406FBABAe1FcdedBC46E61F25B5535040d` |
 | Owner (burner EOA) | `0xd5028284017A32C672CbD73Fe35aCD897bA874cf` |
 
 Manifest: [`contracts/governor-contract/deployments/gnosis-test.json`](../contracts/governor-contract/deployments/gnosis-test.json)
@@ -155,6 +156,7 @@ production stack. Run them from `contracts/governor-contract/`.
 | `simulate-applicant.cjs` | Creates a citizenship request from a throwaway derived EOA, without opening the app. `--index N` for a fresh applicant. |
 | `set-bands.cjs --fast\|--prod` | Retunes thresholds. `--fast` makes every gate 1-of-1 for quick UI loops. |
 | `deploy.cjs` | Deploys a fresh environment. `--dry-run`, `--fast-bands`. |
+| `org-registry-e2e.cjs` | NSP-14: deploys/reuses the test **OrgRegistry** and drives two Safe orgs through register → key → role → revoke. `--dry-run`. `ORG_E2E_REHEARSAL=1 GNOSIS_FORK=1 npx hardhat run …` rehearses on a fork. |
 | `rehearse.cjs` | Runs the whole thing on a local Hardhat chain (`npx hardhat run scripts/test-env/rehearse.cjs`). Run before any real deploy. |
 
 ---

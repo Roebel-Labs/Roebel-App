@@ -1,6 +1,6 @@
 # NSP-14 — Organisations as Safes (Org Identity)
 
-**2026-09-26.** Status: **slice 1 built on `feat/org-safe-protocol`, nothing deployed.**
+**2026-09-26.** Status: **slice 1 built on `feat/org-safe-protocol`, audited and hardened. R1 LIVE on the onchain test environment. Nothing in production.**
 First step of the move from "the database is the truth" to "the protocol is the truth"
 (see [Data placement](../../DATA_PLACEMENT_AND_CRUD.md) §1). Companion to the passkey
 work on `feat/passkey-accounts` ([spec](2026-09-26-passkey-sovereign-accounts-design.md)),
@@ -25,7 +25,8 @@ itself (`packages/nostr/src/org.ts`).
 | How does a reader check an event? | The event carries `["netizen_org", <orgId>]` and its pubkey is authorised for that org | `verifyOrgEvent` (`@netizen-labs/protocol`) |
 | Canonical id | `keccak256("netizen:org:v1:" + lowercase uuid)`, **frozen**. tokenId = uint256(orgId) | `orgIdFromUuid` |
 | Can the community remove an org? | Yes: attester revocation (67 %/floor 3 by default). Its generation bumps, so old keys and roles never come back | `requestRevocation` |
-| Can an org change Safes? | `rotateSafe`, called by the current Safe. This is the only way the NFT ever moves | |
+| Can an org change Safes? | Two steps: the current Safe calls `proposeRotation` and the new Safe calls `acceptRotation`. This is the only way the NFT ever moves | |
+| Can someone squat an id? | No. A request does not reserve the id: competing Safes may claim it, attesters approve the right one, the first to execute wins and the others close as `Superseded`. A rejected Safe waits 7 days. Requests expire after 30 days (`expireRequest`, callable by anyone) | |
 
 The registry owner (the Attester Safe during bootstrap) can tune bands and run a
 one-time `migrationRegister`. It **cannot** touch any org's keys, roles or metadata.
@@ -82,7 +83,7 @@ and the onboarding account stays only as long as the org wants it.
 | Stage | What | Gate |
 |---|---|---|
 | R0 | This slice: contract + spec + reader + planner | done |
-| R1 | Deploy `OrgRegistry` on the **onchain test environment** (burner AttesterNFTv2), register two test Safes end to end | Max OK + deployer key |
+| R1 | Deploy `OrgRegistry` on the **onchain test environment** (burner AttesterNFTv2), register two test Safes end to end | **done 2026-09-26**, see §8 |
 | R2 | Owner hand-over: each onboarding-owned org gets its real operator as owner | Per-org contact; no chain needed yet |
 | R3 | Deploy Safes (Safe 1.4.1 on Gnosis, shared with the passkey stack) and `migrationRegister` all 36 from the planner output, node keys authorised. Then `finalizeMigration` | Passkey tranche 1 settled (owner addresses stable), Max OK, audit of the contract |
 | R4 | Readers: indexer ingests registry logs, `verifyOrgEvent` gates org events in the index. Publisher adds the `netizen_org` tag | Flag, preview first |
@@ -95,5 +96,32 @@ and the onboarding account stays only as long as the org wants it.
   instead of adding a second copy.
 - No Supabase migration. The `accounts` ↔ orgId mapping is derivable (`orgIdFromUuid`),
   so no column is needed yet.
-- No contract audit. **Required before R3.** The contract holds no funds, but it is
-  the root of org authority.
+- An external audit is still recommended before R3. The internal audit is in §8.
+
+## 8. Audit and R1 record (2026-09-26)
+
+**Internal audit** (independent review agent, with PoC tests):
+- No critical findings.
+- 2 high, 4 medium, 5 low and 4 info findings. **All fixed** in `30cd35bb`, with a regression test for each. There are now 23 contract tests.
+- High findings:
+  - a revocation could wedge forever when the attester set shrank. Fixed with a 30-day expiry and thresholds clamped to the attester count;
+  - anyone could squat a public orgId. Fixed by keying requests per Safe, superseding losers and adding a cooldown.
+- Medium findings:
+  - rotation without the successor's consent. Now two-step;
+  - log-only indexers could not reproduce request state. Now `RequestClosed`, and the events carry thresholds, expiry and generation;
+  - an org's own owner-attesters could veto its revocation. `SelfVote` now blocks both approving and rejecting;
+  - stale claims survived migration. Migration now supersedes them.
+- A re-audit of the fixes is in progress.
+
+**R1 on the onchain test environment (Gnosis mainnet, burner-owned):**
+- OrgRegistry `0xBEf890406FBABAe1FcdedBC46E61F25B5535040d` (block 48452410), wired to the test AttesterNFTv2 `0x5983…30F3`.
+- Org A: Safe 1.4.1 `0x9316…d0E0`. Registered by 3 co-signer approvals, Nostr key authorised by the Safe, and co-signer 1 made admin.
+- Org B: Safe `0xA441…0189`. Registered, then revoked with 4 of 5 attester votes.
+- Record: `contracts/governor-contract/deployments/gnosis-test.json` → `orgRegistry`, `testOrgs`.
+- Rebuilt from chain logs alone:
+  ```
+  pnpm --filter @netizen-labs/org-registry exec tsx src/directory-cli.ts \
+    --registry 0xBEf890406FBABAe1FcdedBC46E61F25B5535040d --from-block 48452410
+  ```
+  This returns exactly org A (key, admin role, metadata) and no org B.
+- Re-run or rehearse: `scripts/test-env/org-registry-e2e.cjs`. It is idempotent, and `ORG_E2E_REHEARSAL=1` runs it on a Gnosis fork.
