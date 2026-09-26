@@ -14,6 +14,14 @@ import {
   fetchBotGrants as apiFetchBotGrants,
   putBotGrants as apiPutBotGrants,
   fetchAgentActions as apiFetchAgentActions,
+  fetchConnectors as apiFetchConnectors,
+  addMcpConnector as apiAddMcpConnector,
+  deleteConnector as apiDeleteConnector,
+  refreshConnector as apiRefreshConnector,
+  startGoogleConnect as apiStartGoogleConnect,
+  type AddMcpConnectorInput,
+  type ChatConnector,
+  type ChatConnectorList,
   type AgentActionRecord,
   type BotGrants,
   type ChatMemory,
@@ -44,11 +52,15 @@ import {
   type UploadedImage,
 } from '@/lib/chat/api';
 import { dismissInspiration, fetchInspiration } from '@/lib/chat/api';
+import { cancelTask as apiCancelTask, fetchTask as apiFetchTask } from '@/lib/chat/api';
 import { withoutTask, type InspirationFeed } from '@/lib/chat/inspiration';
 import { ensureChatSession, hasStoredChatSession } from '@/lib/chat/session';
 import {
   findApproval,
   initialThreadState,
+  isLiveTaskStatus,
+  liveTaskIds,
+  type TaskPartStatus,
   threadReducer,
   TEMP_ID_PREFIX,
   type ThreadAction,
@@ -620,6 +632,90 @@ export function useThread(threadId: string) {
   };
 }
 
+// ---- background tasks (agent harness wave 2) ------------------------------------
+
+/** Poll interval for live task cards while the thread screen is focused. */
+export const TASK_POLL_MS = 4000;
+
+/**
+ * Live task cards of one thread: while the screen is focused and a task part is queued / running /
+ * waiting for approval, polls GET /api/chat/tasks/:id every 4 s and patches the part in place.
+ * Stops once every task is terminal. When a task finishes or starts waiting for an approval the
+ * worker posts a bot message, so the thread page is refetched then.
+ */
+export function useTaskPolling(threadId: string) {
+  const { account, store, storeRef, dispatch } = useChatContext();
+  const state = store.threads[threadId] ?? initialThreadState;
+  const liveIds = liveTaskIds(state);
+  const liveKey = liveIds.join(',');
+  const [focused, setFocused] = useState(false);
+  const lastStatus = useRef(new Map<string, TaskPartStatus>());
+
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!account || !focused || !liveKey) return;
+    const ids = liveKey.split(',');
+    let stopped = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight || stopped) return;
+      inFlight = true;
+      let reload = false;
+      try {
+        await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const task = await apiFetchTask(account, id);
+              if (stopped || !task) return;
+              const before = lastStatus.current.get(id);
+              lastStatus.current.set(id, task.status);
+              if (before !== task.status && (task.status === 'waiting_approval' || !isLiveTaskStatus(task.status))) {
+                reload = true;
+              }
+              dispatch({ type: 'thread', threadId, action: { type: 'task_update', task } });
+            } catch {
+              // Transient: the next tick retries.
+            }
+          }),
+        );
+        if (reload && !stopped && !storeRef.current.threads[threadId]?.streaming) {
+          const res = await fetchMessages(account, threadId, { limit: 50 }).catch(() => null);
+          if (res && !stopped && !storeRef.current.threads[threadId]?.streaming) {
+            if (res.thread) dispatch({ type: 'merge_thread', thread: res.thread });
+            dispatch({ type: 'thread', threadId, action: { type: 'loaded', messages: res.messages, hasMore: res.hasMore } });
+          }
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(tick, TASK_POLL_MS);
+    tick();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [account, focused, liveKey, threadId, dispatch, storeRef]);
+
+  /** "Abbrechen" on a running task card. Throws ChatApiError (German message). */
+  const cancelTask = useCallback(
+    async (taskId: string) => {
+      if (!account) throw notSignedIn();
+      const task = await apiCancelTask(account, taskId);
+      if (task) dispatch({ type: 'thread', threadId, action: { type: 'task_update', task } });
+    },
+    [account, dispatch, threadId],
+  );
+
+  return { liveTaskIds: liveIds, cancelTask };
+}
+
 /** Mutations that are not bound to one open thread. All throw ChatApiError (German `message`). */
 export function useChatActions() {
   const { account, dispatch, refreshBootstrap } = useChatContext();
@@ -752,10 +848,49 @@ export function useChatActions() {
     [account],
   );
 
+  /** Connectors ("Verbindungen"): MCP servers + Google. */
+  const fetchConnectors = useCallback(async (): Promise<ChatConnectorList> => {
+    if (!account) throw notSignedIn();
+    return apiFetchConnectors(account);
+  }, [account]);
+
+  const addMcpConnector = useCallback(
+    async (input: AddMcpConnectorInput): Promise<ChatConnector> => {
+      if (!account) throw notSignedIn();
+      return apiAddMcpConnector(account, input);
+    },
+    [account],
+  );
+
+  const deleteConnector = useCallback(
+    async (id: string): Promise<void> => {
+      if (!account) throw notSignedIn();
+      await apiDeleteConnector(account, id);
+    },
+    [account],
+  );
+
+  const refreshConnector = useCallback(
+    async (id: string): Promise<ChatConnector> => {
+      if (!account) throw notSignedIn();
+      return apiRefreshConnector(account, id);
+    },
+    [account],
+  );
+
+  const startGoogleConnect = useCallback(
+    async (returnUrl: string): Promise<string> => {
+      if (!account) throw notSignedIn();
+      return apiStartGoogleConnect(account, returnUrl);
+    },
+    [account],
+  );
+
   return {
     createBot, updateBot, createThread, uploadImage, transcribe, fetchFile,
     fetchRoutines, updateRoutine, deleteRoutine,
     fetchMemories, deleteMemory, fetchBotGrants, setBotGrants, fetchAgentActions,
+    fetchConnectors, addMcpConnector, deleteConnector, refreshConnector, startGoogleConnect,
   };
 }
 

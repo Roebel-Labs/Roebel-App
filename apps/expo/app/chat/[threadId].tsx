@@ -29,12 +29,15 @@ import {
   type RecordingOptions,
 } from 'expo-audio';
 import { useSnackbar } from '@/context/SnackbarContext';
-import { useChatActions, useChatBootstrap, useThread } from '@/context/ChatContext';
+import { useChatActions, useChatBootstrap, useTaskPolling, useThread } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
 import { isTempId } from '@/lib/chat/reducer';
 import { threadTitle } from '@/lib/chat/format';
 import { firstNewMessageId } from '@/lib/chat/unread';
 import { showChatMenu } from '@/lib/chat/menu';
+import { planMuenzenTransfer, transferErrorMessage } from '@/lib/chat/transfer';
+import { useRoebelTaler } from '@/hooks/useRoebelTaler';
+import { parseTalerAmount } from '@/lib/roebel-taler';
 import type { BotAvatarSpec, ChatBot, ChatMessage, ChatPart } from '@/lib/chat/types';
 import {
   BOT_COLORS,
@@ -503,18 +506,62 @@ export default function ChatThreadScreen() {
     [authorizeDeviceCalendar, soon, showSnackbar, scrollToBottom]
   );
 
-  // ── Agent approvals (harness wave 1) ──
-  const { approveAction, rejectAction } = th;
+  // ── Agent approvals (harness wave 1; money = wave 2) ──
+  const { approveAction, rejectAction, completeAction } = th;
+  const taler = useRoebelTaler();
+  const talerSend = taler.send;
+  const talerAvailable = taler.groupBalanceRaw;
+  const talerLoading = taler.loading;
+  const signingRef = useRef(false);
+  /**
+   * Money card: the server resolved the recipient into signRequest.toWallet (never displayed).
+   * Approve (server marks it approved) → sign the Röbel Münzen transfer on this device →
+   * report txHash or error via /complete; the bot then continues.
+   */
+  const approveMoney = useCallback(
+    async (part: ApprovalPart) => {
+      if (signingRef.current) return;
+      const plan = planMuenzenTransfer(part, parseTalerAmount, talerLoading ? undefined : talerAvailable);
+      if (!plan.ok) {
+        showSnackbar({ message: plan.error });
+        return;
+      }
+      signingRef.current = true;
+      try {
+        if (part.status === 'pending') {
+          try {
+            await approveAction(part.actionId, { alwaysAllow: false });
+          } catch (err) {
+            showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Freigabe fehlgeschlagen.' });
+            return;
+          }
+        }
+        showSnackbar({ message: 'Wird signiert …' });
+        let result: { txHash: string } | { error: string };
+        try {
+          result = { txHash: await talerSend(plan.to, plan.amount) };
+        } catch (err) {
+          result = { error: transferErrorMessage(err) };
+        }
+        if ('error' in result) showSnackbar({ message: result.error });
+        else showSnackbar({ message: `${plan.amountLabel} Röbel Münzen an ${plan.toName} gesendet` });
+        try {
+          await completeAction(part.actionId, result);
+          setTimeout(scrollToBottom, 50);
+        } catch (err) {
+          showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Ergebnis konnte nicht gemeldet werden.' });
+        }
+      } finally {
+        signingRef.current = false;
+      }
+    },
+    [approveAction, completeAction, talerSend, talerAvailable, talerLoading, showSnackbar, scrollToBottom]
+  );
   const onApprovalApprove = useCallback(
     async (part: ApprovalPart, m: ChatMessage, opts: { alwaysAllow: boolean }) => {
       if (isTempId(m.id)) return;
       if (part.signRequest?.kind === 'muenzen_transfer' || part.risk === 'money') {
-        // TODO(harness wave 2): sign the Röbel-Münzen transfer on the device with
-        // useRoebelTaler().send(toWallet, parseTalerAmount(amount)) and report the result via
-        // th.completeAction(part.actionId, { txHash } | { error }). The part's signRequest only
-        // carries `toName` + `amount` — no recipient wallet — so the transfer cannot be wired
-        // safely yet (no client-side name → address resolution by design).
-        soon('Überweisungen kommen bald');
+        await approveMoney(part);
         return;
       }
       try {
@@ -524,7 +571,7 @@ export default function ChatThreadScreen() {
         showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Freigabe fehlgeschlagen.' });
       }
     },
-    [approveAction, soon, showSnackbar, scrollToBottom]
+    [approveAction, approveMoney, showSnackbar, scrollToBottom]
   );
   const onApprovalReject = useCallback(
     async (part: ApprovalPart, m: ChatMessage) => {
@@ -536,6 +583,19 @@ export default function ChatThreadScreen() {
       }
     },
     [rejectAction, showSnackbar]
+  );
+
+  // Background tasks: live task cards poll while this screen is focused.
+  const { cancelTask } = useTaskPolling(threadId);
+  const onTaskCancel = useCallback(
+    async (taskId: string) => {
+      try {
+        await cancelTask(taskId);
+      } catch (err) {
+        showSnackbar({ message: err instanceof ChatApiError ? err.message : 'Abbrechen fehlgeschlagen.' });
+      }
+    },
+    [cancelTask, showSnackbar]
   );
 
   // ── List items (chronological, then reversed for the inverted list) ──
@@ -621,6 +681,7 @@ export default function ChatThreadScreen() {
                 onCalendarDismiss={onCalendarDismiss}
                 onApprovalApprove={onApprovalApprove}
                 onApprovalReject={onApprovalReject}
+                onTaskCancel={onTaskCancel}
                 approvalsDisabled={isStreamingNow}
                 onImagePress={openLink}
                 onLinkPress={openLink}
@@ -646,6 +707,7 @@ export default function ChatThreadScreen() {
       onCalendarDismiss,
       onApprovalApprove,
       onApprovalReject,
+      onTaskCancel,
       isStreamingNow,
     ]
   );

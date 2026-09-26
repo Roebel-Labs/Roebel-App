@@ -9,8 +9,12 @@ export type TaskPart = Extract<ChatPart, { type: 'task' }>;
 export type TaskCardProps = {
   part: TaskPart;
   onLongPress?: () => void;
+  /** "Abbrechen" on live tasks; omitted → no button. */
+  onCancel?: () => void | Promise<void>;
   style?: StyleProp<ViewStyle>;
 };
+
+const LIVE: readonly TaskPart['status'][] = ['queued', 'running', 'waiting_approval'];
 
 const STATUS_LABEL: Record<TaskPart['status'], string> = {
   queued: 'Wartet',
@@ -42,10 +46,23 @@ function StepIcon({ status, t }: { status: TaskPart['steps'][number]['status']; 
   );
 }
 
-/** Durable agent task (spec 2026-09-26 §6): title, status and the step list. Render only (wave 1). */
-export function TaskCard({ part, onLongPress, style }: TaskCardProps) {
+/** Durable agent task (spec 2026-09-26 §6): title, status, step list and "Abbrechen" while live. */
+export function TaskCard({ part, onLongPress, onCancel, style }: TaskCardProps) {
   const t = useChatTokens();
   const faded = part.status === 'cancelled';
+  const [cancelling, setCancelling] = React.useState(false);
+  const live = LIVE.includes(part.status);
+  const cancel = React.useCallback(async () => {
+    if (!onCancel || cancelling) return;
+    setCancelling(true);
+    try {
+      await onCancel();
+    } catch {
+      // The caller shows the error; the button becomes tappable again.
+    } finally {
+      setCancelling(false);
+    }
+  }, [onCancel, cancelling]);
   return (
     <Pressable onLongPress={onLongPress} style={[styles.card, { backgroundColor: t.bubbleBot }, faded && styles.faded, style]}>
       <View style={styles.head}>
@@ -72,6 +89,20 @@ export function TaskCard({ part, onLongPress, style }: TaskCardProps) {
           ))}
         </View>
       ) : null}
+      {live && onCancel ? (
+        <Pressable
+          onPress={cancel}
+          disabled={cancelling}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Aufgabe abbrechen"
+          style={styles.cancel}
+        >
+          <Text style={[styles.cancelText, { color: t.textSecondary }, cancelling && styles.faded]}>
+            {cancelling ? 'Wird abgebrochen …' : 'Abbrechen'}
+          </Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -90,6 +121,8 @@ const styles = StyleSheet.create({
   pendingWrap: { alignItems: 'center', justifyContent: 'center' },
   pendingCircle: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   stepText: { fontFamily: chatFont.regular, fontSize: 16, lineHeight: 22, flex: 1 },
+  cancel: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 2 },
+  cancelText: { fontFamily: chatFont.medium, fontSize: 15 },
 });
 
 export default TaskCard;

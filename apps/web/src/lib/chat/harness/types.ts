@@ -5,6 +5,9 @@ import type { ApprovalPreview, CalendarContextEvent, ChatPart } from "../types";
 
 export type { ApprovalPreview } from "../types";
 
+/** Device signing request carried by a money approval card (spec §3). */
+export type SignRequest = NonNullable<Extract<ChatPart, { type: "approval" }>["signRequest"]>;
+
 export type Risk = 'read' | 'private' | 'public' | 'money' | 'external';
 
 export interface TenantConfig {
@@ -59,6 +62,12 @@ export interface HarnessTool<I = any> {
   summarize(input: I, ctx: HarnessContext): string;
   /** Rich preview for the approval card (gated tools). */
   preview?(input: I, ctx: HarnessContext): Promise<ApprovalPreview> | ApprovalPreview;
+  /**
+   * Money tools only: the device signing request for the approval card
+   * (resolved server-side; toWallet is never model-visible). Throwing a
+   * ToolInputError turns into a model-facing error instead of a card.
+   */
+  signRequest?(input: I, ctx: HarnessContext): Promise<SignRequest> | SignRequest;
   execute(input: I, ctx: HarnessContext): Promise<unknown>;
   /** Tool is only offered when this returns true (e.g. user owns an org). */
   available?(ctx: HarnessContext): boolean;

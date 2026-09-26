@@ -411,6 +411,7 @@ function ChatList({
               showChatMenu([
                 { label: 'Gedächtnis', run: () => router.push('/chat/settings/memory' as Href) },
                 { label: 'Aktivität', run: () => router.push('/chat/settings/activity' as Href) },
+                { label: 'Verbindungen', run: () => router.push('/chat/settings/connections' as Href) },
               ])
             }
           >

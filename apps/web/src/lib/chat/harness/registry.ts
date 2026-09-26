@@ -11,7 +11,8 @@ import {
 } from "./policy";
 import type { PolicyState } from "./policy";
 import { registerAllPacks } from "./packs/index";
-import type { HarnessContext, HarnessTool, ToolRegistry } from "./types";
+import { isToolInputError } from "./errors";
+import type { ApprovalPreview, HarnessContext, HarnessTool, SignRequest, ToolRegistry } from "./types";
 
 // Stored on globalThis so a pack that calls registerTool() at module load
 // (import cycle registry → packs → registry) never hits an uninitialised binding.
@@ -44,6 +45,61 @@ export function getTool(name: string): HarnessTool | null {
 export function allTools(): HarnessTool[] {
   ensurePacks();
   return [...toolMap().values()];
+}
+
+// ---- dynamic tool sources (per-wallet tools, e.g. connectors) ---------------------
+
+/**
+ * Tools that exist only per wallet (user-added MCP servers, Google). Loaded
+ * per turn when the bot enables `key`; `find` resolves one for the approve route.
+ */
+export interface DynamicToolSource {
+  id: string;
+  /** bot.tools key that enables this source (skips the load otherwise). */
+  key?: string;
+  load(ctx: HarnessContext): Promise<HarnessTool[]>;
+  find(name: string, wallet: string): Promise<HarnessTool | null>;
+}
+
+const DYNAMIC_KEY = Symbol.for("ortis.harness.dynamicSources");
+function dynamicSources(): Map<string, DynamicToolSource> {
+  const g = globalThis as unknown as Record<symbol, Map<string, DynamicToolSource> | undefined>;
+  return (g[DYNAMIC_KEY] ??= new Map());
+}
+
+export function registerDynamicSource(source: DynamicToolSource): void {
+  dynamicSources().set(source.id, source);
+}
+
+/** Dynamic tools for this turn (failures of one source never break the turn). */
+export async function dynamicToolsFor(ctx: HarnessContext, botKeys: readonly string[] | null | undefined): Promise<HarnessTool[]> {
+  ensurePacks();
+  const keys = new Set(botKeys ?? []);
+  const lists = await Promise.all([...dynamicSources().values()].map(async (s) => {
+    if (s.key && !keys.has(s.key)) return [];
+    try {
+      return (await s.load(ctx)).filter((t) => /^[a-z][a-z0-9_]*$/.test(t.name) && !toolMap().has(t.name));
+    } catch (err) {
+      console.error(`[harness/registry] dynamic source ${s.id} failed`, err);
+      return [];
+    }
+  }));
+  return lists.flat();
+}
+
+/** Static tool by name, else a wallet's dynamic tool (approve route). */
+export async function findTool(name: string, wallet: string): Promise<HarnessTool | null> {
+  const t = getTool(name);
+  if (t) return t;
+  for (const s of dynamicSources().values()) {
+    try {
+      const found = await s.find(name, wallet);
+      if (found) return found;
+    } catch (err) {
+      console.error(`[harness/registry] dynamic find ${s.id} failed`, err);
+    }
+  }
+  return null;
 }
 
 // ---- bot.tools keys → tools -------------------------------------------------------
@@ -113,19 +169,32 @@ async function runAndAudit(t: HarnessTool, input: unknown, ctx: HarnessContext, 
   } catch (err) {
     console.error(`[harness] tool ${t.name} failed`, err);
     await auditExecuted({ ...base, status: "failed", error: errorText(err), executed: true });
+    if (isToolInputError(err)) return { error: err.message };
     return { error: "Das Werkzeug ist gerade fehlgeschlagen. Sag das kurz und biete eine Alternative an." };
   }
 }
 
 /** Creates the pending action + approval card; returns the model-facing marker. */
-async function requestApproval(t: HarnessTool, input: unknown, ctx: HarnessContext, summary: string): Promise<AwaitingApproval> {
+async function requestApproval(
+  t: HarnessTool, input: unknown, ctx: HarnessContext, summary: string,
+): Promise<AwaitingApproval | { error: string }> {
   const risk = asGatedRisk(t.risk)!;
-  const preview = t.preview ? await t.preview(input, ctx) : null;
+  let preview: ApprovalPreview | null;
+  let signRequest: SignRequest | undefined;
+  try {
+    // Preview + sign request validate the input (recipient, gates) before any card exists.
+    preview = t.preview ? await t.preview(input, ctx) : null;
+    signRequest = risk === "money" && t.signRequest ? await t.signRequest(input, ctx) : undefined;
+  } catch (err) {
+    if (isToolInputError(err)) return { error: err.message };
+    throw err;
+  }
+  if (risk === "money" && !signRequest) return { error: "Diese Zahlung kann gerade nicht vorbereitet werden." };
   const row = await insertAction({
     wallet: ctx.wallet, threadId: ctx.threadId, botId: ctx.botId, taskId: ctx.taskId,
     tool: t.name, risk: t.risk, input, summary, status: "pending",
   });
-  ctx.emitPart(buildApprovalPart({ actionId: row.id, tool: t.name, risk, summary, preview }));
+  ctx.emitPart(buildApprovalPart({ actionId: row.id, tool: t.name, risk, summary, preview, signRequest }));
   return { status: "awaiting_approval", actionId: row.id, note: AWAITING_NOTE };
 }
 
@@ -156,7 +225,7 @@ export async function toolsFor({ bot, ctx }: {
   bot: { id: string; tools: string[] | null };
   ctx: HarnessContext;
 }): Promise<ToolSet> {
-  const tools = allTools();
+  const tools = [...allTools(), ...(await dynamicToolsFor(ctx, bot.tools))];
   const needsPolicy = tools.some((t) => isGated(t.risk));
   const policy: PolicyState = needsPolicy
     ? await loadPolicyState(ctx.wallet).catch((err) => {

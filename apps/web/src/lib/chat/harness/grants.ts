@@ -1,8 +1,8 @@
 // "Immer erlauben" surface (GET/PUT /api/chat/bots/:id/grants): which gated
 // tools a bot could use that may be always-allowed (public/external, never money).
 import { isGrantable } from "./policy";
-import { allTools, enableKeyFor } from "./registry";
-import type { HarnessTool, Risk } from "./types";
+import { allTools, dynamicToolsFor, enableKeyFor } from "./registry";
+import type { HarnessContext, HarnessTool, Risk } from "./types";
 
 export interface GrantableTool { tool: string; label: string; risk: Risk }
 
@@ -23,4 +23,13 @@ export function grantableFrom(tools: HarnessTool[], botKeys: readonly string[] |
 
 export function grantableToolsFor(botKeys: readonly string[] | null | undefined): GrantableTool[] {
   return grantableFrom(allTools(), botKeys);
+}
+
+/** Static + the wallet's dynamic tools (connectors: MCP servers, Google). */
+export async function grantableToolsForWallet(
+  botKeys: readonly string[] | null | undefined, wallet: string,
+): Promise<GrantableTool[]> {
+  // Dynamic sources list by ctx.wallet only.
+  const dynamic = await dynamicToolsFor({ wallet } as HarnessContext, botKeys);
+  return grantableFrom([...allTools(), ...dynamic], botKeys);
 }

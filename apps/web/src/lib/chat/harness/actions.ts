@@ -11,7 +11,8 @@ import { APPROVAL_TTL_MS, getAction, transitionAction } from "./audit";
 import type { ActionRow } from "./audit";
 import { buildHarnessContext } from "./context";
 import { BLOCKED_MESSAGES, addGrant, decide, isGated, isGrantable, loadPolicyState } from "./policy";
-import { executeApproved, getTool } from "./registry";
+import { executeApproved, findTool } from "./registry";
+import { resumeTaskAfterDecision } from "./tasks";
 
 export class ActionError extends Error {
   constructor(public code: string, message: string, public status = 400) { super(message); }
@@ -79,6 +80,28 @@ async function finishWithoutTurn(wallet: string, thread: ChatThread, emit: Emit)
   if (fresh) emit({ event: "done", data: { thread: fresh } });
 }
 
+/**
+ * The decision's follow-up: an action a background task asked for re-queues
+ * that task (the worker continues with the outcome in its checkpoint);
+ * otherwise the bot continues the chat turn.
+ */
+async function continueAfterDecision(opts: {
+  wallet: string; row: ActionRow; thread: ChatThread; note: string; emit: Emit; initialParts?: ChatPart[];
+}): Promise<void> {
+  const { wallet, row, thread, emit } = opts;
+  if (row.task_id) {
+    const resumed = await resumeTaskAfterDecision(row.task_id, `Freigabe „${row.summary}“: ${opts.note}`)
+      .catch((err) => { console.error("[harness/actions] resume task", err); return false; });
+    if (resumed) {
+      const { kickTask } = await import("./task-worker");
+      await kickTask(row.task_id);
+      await finishWithoutTurn(wallet, thread, emit);
+      return;
+    }
+  }
+  await runContinuationTurn({ wallet, thread, botId: row.bot_id, note: opts.note, emit, initialParts: opts.initialParts });
+}
+
 export async function approveAction(opts: {
   wallet: string; row: ActionRow; thread: ChatThread; alwaysAllow: boolean; emit: Emit;
 }): Promise<void> {
@@ -114,7 +137,7 @@ export async function approveAction(opts: {
     return;
   }
 
-  const tool = getTool(row.tool);
+  const tool = await findTool(row.tool, wallet);
   const emitted: ChatPart[] = [];
   let status: ApprovalStatus;
   let note: string;
@@ -145,7 +168,7 @@ export async function approveAction(opts: {
     }
   }
   await emitCard(emit, await updateCard(wallet, row, status, resultNote), row.id);
-  await runContinuationTurn({ wallet, thread, botId: row.bot_id, note, emit, initialParts: emitted });
+  await continueAfterDecision({ wallet, row, thread, note, emit, initialParts: emitted });
 }
 
 export async function rejectAction(opts: {
@@ -163,7 +186,7 @@ export async function rejectAction(opts: {
   await emitCard(emit, await updateCard(wallet, row, "rejected", reason ? `Abgelehnt: ${reason}` : "Abgelehnt."), row.id);
   const note = `Der Mensch hat die Aktion „${row.summary}“ abgelehnt${reason ? ` (Begründung: ${reason})` : ""}. ` +
     "Bestätige das in einem kurzen Satz, führe die Aktion nicht aus und biete höchstens eine Alternative an.";
-  await runContinuationTurn({ wallet, thread, botId: row.bot_id, note, emit });
+  await continueAfterDecision({ wallet, row, thread, note, emit });
 }
 
 export async function completeAction(opts: {
@@ -182,5 +205,5 @@ export async function completeAction(opts: {
   const note = ok
     ? `Die Aktion „${row.summary}“ wurde auf dem Gerät des Menschen bestätigt und ausgeführt. Bestätige das kurz.`
     : `Die Aktion „${row.summary}“ wurde auf dem Gerät nicht ausgeführt (${(opts.error ?? "abgebrochen").slice(0, 200)}). Sag das kurz.`;
-  await runContinuationTurn({ wallet, thread, botId: row.bot_id, note, emit });
+  await continueAfterDecision({ wallet, row, thread, note, emit });
 }

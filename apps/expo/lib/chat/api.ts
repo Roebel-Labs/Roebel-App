@@ -6,6 +6,7 @@ import { clearChatSession, ensureChatSession, ChatSessionError } from './session
 import { consumeSSEResponse, postSSE, type ChatStreamEvent } from './stream';
 import type { BotAvatarSpec, CalendarContextEvent, ChatBot, ChatMessage, ChatThread } from './types';
 import { inspirationQuery, type InspirationFeed } from './inspiration';
+import type { TaskSnapshot } from './reducer';
 
 const JSON_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 90_000;
@@ -439,6 +440,61 @@ export async function fetchAgentActions(account: SigningAccount, limit = 50): Pr
   return res?.actions ?? [];
 }
 
+// ---- Connectors ("Verbindungen") ----------------------------------------------
+
+export interface ChatConnector {
+  id: string;
+  kind: 'mcp' | 'google';
+  name: string;
+  url: string | null;
+  status: 'active' | 'error' | 'disabled';
+  toolCount: number;
+  lastError: string | null;
+}
+
+export interface ChatConnectorList {
+  connectors: ChatConnector[];
+  /** False until the server has Google OAuth credentials ("Bald verfügbar"). */
+  googleAvailable: boolean;
+}
+
+export async function fetchConnectors(account: SigningAccount): Promise<ChatConnectorList> {
+  const res = await request<Partial<ChatConnectorList> | null>(account, 'GET', '/api/chat/connectors');
+  return { connectors: res?.connectors ?? [], googleAvailable: Boolean(res?.googleAvailable) };
+}
+
+export interface AddMcpConnectorInput {
+  name: string;
+  url: string;
+  headers?: Record<string, string>;
+}
+
+export async function addMcpConnector(account: SigningAccount, input: AddMcpConnectorInput): Promise<ChatConnector> {
+  // Connecting + listing tools can take a while on the server.
+  const res = await request<{ connector: ChatConnector }>(account, 'POST', '/api/chat/connectors', {
+    json: { kind: 'mcp', ...input },
+    timeoutMs: 40_000,
+  });
+  return res.connector;
+}
+
+export function deleteConnector(account: SigningAccount, id: string): Promise<{ ok: boolean }> {
+  return request(account, 'DELETE', `/api/chat/connectors?id=${enc(id)}`);
+}
+
+export async function refreshConnector(account: SigningAccount, id: string): Promise<ChatConnector> {
+  const res = await request<{ connector: ChatConnector }>(account, 'POST', `/api/chat/connectors/${enc(id)}/refresh`, {
+    timeoutMs: 40_000,
+  });
+  return res.connector;
+}
+
+/** Google consent URL; throws ChatApiError status 503 while Google is not set up on the server. */
+export async function startGoogleConnect(account: SigningAccount, returnUrl: string): Promise<string> {
+  const res = await request<{ url: string }>(account, 'GET', `/api/chat/connectors/google/start?return=${enc(returnUrl)}`);
+  return res.url;
+}
+
 // ---- "Für dich" inspiration ----------------------------------------------------
 
 export async function fetchInspiration(account: SigningAccount, audienceKey: string): Promise<InspirationFeed> {
@@ -453,4 +509,18 @@ export async function fetchInspiration(account: SigningAccount, audienceKey: str
 
 export function dismissInspiration(account: SigningAccount, taskId: string): Promise<{ ok: boolean }> {
   return request(account, 'POST', '/api/chat/inspiration/dismiss', { json: { taskId } });
+}
+
+// ---- background tasks (agent harness wave 2) -------------------------------------
+
+export async function fetchTask(account: SigningAccount, taskId: string): Promise<TaskSnapshot | null> {
+  const res = await request<{ task?: TaskSnapshot } | null>(account, 'GET', `/api/chat/tasks/${enc(taskId)}`);
+  return res?.task ?? null;
+}
+
+export async function cancelTask(account: SigningAccount, taskId: string): Promise<TaskSnapshot | null> {
+  const res = await request<{ task?: TaskSnapshot } | null>(account, 'POST', `/api/chat/tasks/${enc(taskId)}/cancel`, {
+    json: {},
+  });
+  return res?.task ?? null;
 }

@@ -69,7 +69,59 @@ export type ThreadAction =
   /** An approve/reject/complete stream opens: bot turn without an optimistic user message. */
   | { type: 'continuation_start' }
   /** Optimistic (or server-confirmed) status of the approval part with this actionId. */
-  | { type: 'approval_status'; actionId: string; status: ApprovalStatus; resultNote?: string };
+  | { type: 'approval_status'; actionId: string; status: ApprovalStatus; resultNote?: string }
+  /** Polled snapshot of a background task (GET /api/chat/tasks/:id): patches its task part in place. */
+  | { type: 'task_update'; task: TaskSnapshot };
+
+/** GET /api/chat/tasks/:id → task (agent harness wave 2). */
+export interface TaskSnapshot {
+  id: string;
+  title: string;
+  status: TaskPartStatus;
+  steps: Extract<ChatPart, { type: 'task' }>['steps'];
+  error: string | null;
+  updatedAt: string;
+}
+
+export type TaskPartStatus = Extract<ChatPart, { type: 'task' }>['status'];
+
+export const LIVE_TASK_STATUSES: readonly TaskPartStatus[] = ['queued', 'running', 'waiting_approval'];
+
+export function isLiveTaskStatus(status: TaskPartStatus): boolean {
+  return LIVE_TASK_STATUSES.includes(status);
+}
+
+/** Task ids whose card is still live (queued / running / waiting for approval), in thread order. */
+export function liveTaskIds(state: Pick<ThreadState, 'messages'>): string[] {
+  const ids: string[] = [];
+  for (const m of state.messages) {
+    for (const p of m.parts) {
+      if (p.type === 'task' && isLiveTaskStatus(p.status) && !ids.includes(p.taskId)) ids.push(p.taskId);
+    }
+  }
+  return ids;
+}
+
+/** Applies a task snapshot to every task part with that taskId; unchanged state when nothing differs. */
+export function withTaskSnapshot(state: ThreadState, task: TaskSnapshot): ThreadState {
+  let hit = false;
+  const messages = state.messages.map((m) => {
+    if (!m.parts.some((p) => p.type === 'task' && p.taskId === task.id)) return m;
+    let changed = false;
+    const parts = m.parts.map((p) => {
+      if (p.type !== 'task' || p.taskId !== task.id) return p;
+      if (p.status === task.status && p.title === task.title && JSON.stringify(p.steps) === JSON.stringify(task.steps)) {
+        return p;
+      }
+      changed = true;
+      return { ...p, title: task.title || p.title, status: task.status, steps: task.steps };
+    });
+    if (!changed) return m;
+    hit = true;
+    return { ...m, parts };
+  });
+  return hit ? { ...state, messages } : state;
+}
 
 export const TEMP_ID_PREFIX = 'temp-';
 
@@ -354,5 +406,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       return { ...state, streaming: { botId: null, messageId: null }, lastSend: null, error: null };
     case 'approval_status':
       return withApprovalStatus(state, action.actionId, action.status, action.resultNote);
+    case 'task_update':
+      return withTaskSnapshot(state, action.task);
   }
 }

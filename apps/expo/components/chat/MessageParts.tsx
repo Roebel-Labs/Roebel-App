@@ -30,6 +30,8 @@ export type MessagePartsProps = {
   /** approval part: "Freigeben" / "Mit Wallet bestätigen" (resolves when the stream ended). */
   onApprovalApprove?: (part: ApprovalPart, message: ChatMessage, opts: { alwaysAllow: boolean }) => Promise<unknown> | void;
   onApprovalReject?: (part: ApprovalPart, message: ChatMessage) => Promise<unknown> | void;
+  /** "Abbrechen" on a live task card (background task). */
+  onTaskCancel?: (taskId: string) => Promise<unknown> | void;
   /** A turn is streaming in this thread: approval buttons are inactive. */
   approvalsDisabled?: boolean;
   onImagePress?: (url: string) => void;
@@ -119,6 +121,7 @@ export function MessageParts({
   onCalendarDismiss,
   onApprovalApprove,
   onApprovalReject,
+  onTaskCancel,
   approvalsDisabled,
   onImagePress,
   onLinkPress,
@@ -225,7 +228,14 @@ export function MessageParts({
               />
             );
           case 'task':
-            return <TaskCard key={key} part={part} onLongPress={lp} />;
+            return (
+              <TaskCard
+                key={key}
+                part={part}
+                onLongPress={lp}
+                onCancel={onTaskCancel ? async () => { await onTaskCancel(part.taskId); } : undefined}
+              />
+            );
           case 'sources':
             if (!part.items.length) return null;
             return (

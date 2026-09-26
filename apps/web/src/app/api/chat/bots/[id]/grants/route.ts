@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import * as store from "@/lib/chat/store";
-import { grantableToolsFor } from "@/lib/chat/harness/grants";
+import { grantableToolsForWallet } from "@/lib/chat/harness/grants";
 import { listGrants, setGrants } from "@/lib/chat/harness/policy";
 import { badRequest, handleError, notFound, readJson, requireWallet, unauthorized } from "../../../_lib/http";
 
@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const bot = await usableBot(wallet, id);
     if (!bot) return notFound("Der Bot");
-    const available = grantableToolsFor(bot.tools);
+    const available = await grantableToolsForWallet(bot.tools, wallet);
     const allowed = new Set(available.map((a) => a.tool));
     const tools = (await listGrants(wallet, bot.id)).filter((t) => allowed.has(t));
     return NextResponse.json({ tools, available });
@@ -43,7 +43,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     const bot = await usableBot(wallet, id);
     if (!bot) return notFound("Der Bot");
-    const available = grantableToolsFor(bot.tools);
+    const available = await grantableToolsForWallet(bot.tools, wallet);
     const allowed = new Set(available.map((a) => a.tool));
     const requested = body.tools as string[];
     const unknown = requested.filter((t) => !allowed.has(t));

@@ -24,6 +24,19 @@ export function showChatMenu(items: ChatMenuItem[], title?: string): void {
     );
     return;
   }
+  // Android alerts show at most 3 buttons: page longer menus behind "Mehr …".
+  if (items.length > 2) {
+    Alert.alert(
+      title ?? '',
+      undefined,
+      [
+        ...items.slice(0, 2).map((i) => ({ text: i.label, style: i.destructive ? ('destructive' as const) : ('default' as const), onPress: i.run })),
+        { text: 'Mehr …', onPress: () => showChatMenu(items.slice(2), title) },
+      ],
+      { cancelable: true },
+    );
+    return;
+  }
   Alert.alert(
     title ?? '',
     undefined,
