@@ -1,0 +1,52 @@
+{
+  "_description": "Golden vector for NetizenVerifyingPaymaster. One complete, self-describing worked example proving the Solidity contract and the TypeScript signer (Task 2) produce byte-identical hashStableFields, EIP-712 digest, and paymasterData. All uint256-range numeric fields are decimal STRINGS (not JSON numbers) so parsing in JavaScript/TypeScript cannot silently lose precision above 2^53. All byte fields are 0x-prefixed lowercase hex strings.",
+  "_privateKeyNote": "signerPrivateKey is Anvil/Hardhat well-known test account #0 -- publicly known, dev-only, MUST NEVER hold real funds or sign anything off this vector.",
+  "_verifyingContractNote": "The paymaster was deployed by a fixed synthetic deployer (address(0xBEEF)) at a pinned nonce, purely so verifyingContract is a reproducible constant here. It is NOT a real deployment and implies nothing about the production paymaster address.",
+  "chainId": "31337",
+  "domain": {
+    "name": "NetizenSponsorship",
+    "version": "2",
+    "chainId": "31337",
+    "verifyingContract": "0x657Da1235e7DA3ADCAB6B43Fbb4358c06FEeBe1c"
+  },
+  "entryPoint": "0x29ced945BB6A5acc52d2A29C7c7e8E5f84Cf299d",
+  "types": {
+    "SponsorshipVoucher": [
+      { "name": "userOpHash", "type": "bytes32" },
+      { "name": "subjectHash", "type": "bytes32" },
+      { "name": "maxCostWei", "type": "uint256" },
+      { "name": "validAfter", "type": "uint48" },
+      { "name": "validUntil", "type": "uint48" },
+      { "name": "nonce", "type": "bytes32" }
+    ]
+  },
+  "userOp": {
+    "sender": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "nonce": "0",
+    "initCode": "0x",
+    "callData": "0xdeadbeef",
+    "accountGasLimits": "0x000000000000000000000000000186a000000000000000000000000000030d40",
+    "_accountGasLimits_decoded": "verificationGasLimit=100000 (hi128), callGasLimit=200000 (lo128)",
+    "preVerificationGas": "21000",
+    "gasFees": "0x0000000000000000000000003b9aca0000000000000000000000000077359400",
+    "_gasFees_decoded": "maxPriorityFeePerGas=1000000000 (hi128), maxFeePerGas=2000000000 (lo128)",
+    "paymasterVerificationGasLimit": "80000",
+    "paymasterPostOpGasLimit": "40000"
+  },
+  "voucher": {
+    "validAfter": "1700000000",
+    "validUntil": "1700003600",
+    "voucherNonce": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "subjectHash": "0x000000000000000000000000000000000000000000000000000000000000002a",
+    "maxCostWei": "10000000000000000"
+  },
+  "hashStableFields": "0x2d7715be4cbda6d23bd9d31a8905a292bb3e6d1ad4a0de450151bfe465cfad2a",
+  "eip712Digest": "0x5ae0f401091e5226e27078d62c1d5e472c155dfab4dc4e9a837c20efff6c5cce",
+  "signerPrivateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "signerAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "signature": "0xf35375cca431f6ee6636c3c1da85c87ff328b160479b732125647c161bb87e3c3d9bcddefbbe80962831cb76cb1c005143714cf106082d6220730b95480a49301c",
+  "_paymasterAndData_header_note": "paymasterAndData = verifyingContract (20 bytes) ++ paymasterVerificationGasLimit (16 bytes) ++ paymasterPostOpGasLimit (16 bytes) ++ paymasterData",
+  "paymasterData": "0x000000000000000000000000000000000000000000000000000000006553f100000000000000000000000000000000000000000000000000000000006553ff100000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000041f35375cca431f6ee6636c3c1da85c87ff328b160479b732125647c161bb87e3c3d9bcddefbbe80962831cb76cb1c005143714cf106082d6220730b95480a49301c00000000000000000000000000000000000000000000000000000000000000",
+  "_paymasterAndData_note": "The full, ready-to-submit paymasterAndData: verifyingContract ++ paymasterVerificationGasLimit ++ paymasterPostOpGasLimit ++ paymasterData concatenated (372 bytes total). Task 2 should assert byte-equality against this field directly rather than reconstructing it from the separate pieces above.",
+  "paymasterAndData": "0x657da1235e7da3adcab6b43fbb4358c06feebe1c0000000000000000000000000001388000000000000000000000000000009c40000000000000000000000000000000000000000000000000000000006553f100000000000000000000000000000000000000000000000000000000006553ff100000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000041f35375cca431f6ee6636c3c1da85c87ff328b160479b732125647c161bb87e3c3d9bcddefbbe80962831cb76cb1c005143714cf106082d6220730b95480a49301c00000000000000000000000000000000000000000000000000000000000000"
+}
