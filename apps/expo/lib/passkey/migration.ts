@@ -11,6 +11,13 @@
  * Every side effect is injected (`MigrationDeps`) so the flow is unit-tested without native code;
  * `migration-runtime.ts` wires the real library, SecureStore and a Gnosis public client.
  *
+ * A legacy account that is COUNTERFACTUAL on Gnosis (never deployed) is deployed in the same op:
+ * [AccountFactory.createAccount(adminEoa, 0x), handover] (needs `needsLegacyDeploy` + `adminAddress`).
+ *
+ * The record persists the Safe address AND its owner (review L4): after a guardian recovery the
+ * owner is the new passkey's per-key SafeWebAuthnSignerFactory signer and the Safe address is no
+ * longer derivable from the key, so every later userOp uses `sender: rec.safe, owner: rec.owner`.
+ *
  * Persistence: `passkey_migration_v1` is written only AFTER passkey creation succeeded, so a
  * cancelled or unsupported passkey sheet leaves no trace. A persisted credential is reused on the
  * next run (never a second passkey). The MACI / Nostr originals are never touched — the wrapped
@@ -18,14 +25,16 @@
  */
 import type { Address, Hex, TypedDataDefinition } from 'viem';
 import { isAddressEqual } from 'viem';
+import { SAFE_WEBAUTHN_SHARED_SIGNER } from './constants';
 import {
   buildAddAdminRequest,
   encodeSetPermissions,
   signerPermissionTypedData,
   type SignerPermissionRequest,
 } from './legacy-handover';
+import { buildCreateLegacyAccountCall } from './migration-v3';
 import { predictSafeAddress } from './safe-address';
-import type { SponsoredCall } from './userop';
+import type { PasskeyUserOpArgs, SponsoredCall } from './userop';
 import type { PasskeyCredential } from './webauthn';
 
 export const MIGRATION_STORE_KEY = 'passkey_migration_v1';
@@ -47,13 +56,23 @@ export type MigrationStep =
 /** 'done' = secrets wrapped under the passkey PRF; 'skipped' = PRF unavailable, NOT passkey-protected. */
 export type RewrapStatus = 'done' | 'skipped';
 
+/**
+ * How the passkey signs for the Safe: through the SafeWebAuthnSharedSigner (a Safe created with
+ * this passkey) or through its own SafeWebAuthnSignerFactory signer (a Safe recovered to it).
+ */
+export type SafeOwnerType = 'sharedSigner' | 'webauthnSigner';
+
 export type MigrationRecord = {
   credentialId: string;
   x: Hex;
   y: Hex;
   safe: Address;
-  /** The thirdweb smart account this passkey Safe was created for. */
-  legacy: Address;
+  /** Absent in records written before 2026-09-26: read them as 'sharedSigner'. */
+  ownerType: SafeOwnerType;
+  /** The Safe owner userOp / ERC-1271 signatures name (SharedSigner or the per-key signer). */
+  owner: Address;
+  /** The thirdweb smart account this passkey Safe was created for (unknown after a recovery on a new device). */
+  legacy?: Address;
   status: 'passkeyCreated' | 'done';
   rewrap?: RewrapStatus;
   txHash?: Hex | null;
@@ -85,15 +104,12 @@ export type MigrationDeps = {
   /** EIP-712 signature by the thirdweb ADMIN EOA (not the smart account — 1271 would fail). */
   signTypedData: (typed: TypedDataDefinition<any, any>) => Promise<Hex>;
   isSafeDeployed: (safe: Address) => Promise<boolean>;
-  sendPasskeyUserOp: (args: {
-    credentialId: string;
-    x: Hex;
-    y: Hex;
-    /** The citizen's legacy account: the sponsor binds the op to it. */
-    legacy: Address;
-    calls: SponsoredCall[];
-    deployed: boolean;
-  }) => Promise<{ userOpHash: Hex; txHash: Hex }>;
+  /** `legacy` passes the citizen's legacy account: the sponsor binds the op to it. */
+  sendPasskeyUserOp: (args: PasskeyUserOpArgs) => Promise<{ userOpHash: Hex; txHash: Hex }>;
+  /** true when the legacy account is counterfactual on Gnosis (then it is deployed in the handover op). */
+  needsLegacyDeploy?: (legacy: Address) => Promise<boolean>;
+  /** The thirdweb admin EOA address (the `createAccount` admin for a counterfactual legacy account). */
+  adminAddress?: () => Promise<Address>;
   now?: () => number;
 };
 
@@ -101,8 +117,13 @@ export async function loadMigrationRecord(storage: KeyValueStorage): Promise<Mig
   const raw = await storage.getItem(MIGRATION_STORE_KEY);
   if (!raw) return null;
   try {
-    const rec = JSON.parse(raw) as MigrationRecord;
-    return rec?.credentialId && rec.x && rec.y && rec.safe ? rec : null;
+    const rec = JSON.parse(raw) as Partial<MigrationRecord>;
+    if (!rec?.credentialId || !rec.x || !rec.y || !rec.safe) return null;
+    // Records from before owner persistence were all created with the SharedSigner.
+    if (rec.ownerType !== 'webauthnSigner') {
+      return { ...rec, ownerType: 'sharedSigner', owner: SAFE_WEBAUTHN_SHARED_SIGNER } as MigrationRecord;
+    }
+    return rec.owner ? (rec as MigrationRecord) : null;
   } catch {
     return null;
   }
@@ -110,6 +131,24 @@ export async function loadMigrationRecord(storage: KeyValueStorage): Promise<Mig
 
 async function saveRecord(storage: KeyValueStorage, rec: MigrationRecord): Promise<void> {
   await storage.setItem(MIGRATION_STORE_KEY, JSON.stringify(rec));
+}
+
+/**
+ * Persists a Safe recovered to this device's passkey (after `finalizeRecovery`): the address is the
+ * OLD Safe, the owner is `readWebAuthnSigner(x, y)`. Replaces any record on this device.
+ */
+export async function saveRecoveredRecord(
+  storage: KeyValueStorage,
+  rec: { credentialId: string; x: Hex; y: Hex; safe: Address; owner: Address; legacy?: Address },
+): Promise<MigrationRecord> {
+  const full: MigrationRecord = { ...rec, ownerType: 'webauthnSigner', status: 'done', txHash: null };
+  await saveRecord(storage, full);
+  return full;
+}
+
+/** `sendPasskeyUserOp` sender/owner/deployed for a persisted record. */
+export function userOpTargetFor(rec: MigrationRecord): { sender: Address; owner: Address } {
+  return { sender: rec.safe, owner: rec.owner };
 }
 
 const SAVE_FAILED_MESSAGE =
@@ -193,7 +232,16 @@ export async function runPasskeyMigration(
       return res;
     }
     const safe = predictSafeAddress({ x: cred.x, y: cred.y });
-    rec = { credentialId: cred.credentialId, x: cred.x, y: cred.y, safe, legacy, status: 'passkeyCreated' };
+    rec = {
+      credentialId: cred.credentialId,
+      x: cred.x,
+      y: cred.y,
+      safe,
+      ownerType: 'sharedSigner',
+      owner: SAFE_WEBAUTHN_SHARED_SIGNER,
+      legacy,
+      status: 'passkeyCreated',
+    };
     const saveErr = await trySaveRecord(deps.storage, rec);
     if (saveErr) {
       report('error');
@@ -228,8 +276,16 @@ export async function runPasskeyMigration(
   // 3. idempotence + admin EOA signature
   report('signingHandover', rewrap);
   let alreadyAdmin: boolean;
+  let deployLegacyAdmin: Address | null = null;
   try {
-    alreadyAdmin = await deps.readIsAdmin(legacy, safe);
+    // A counterfactual legacy account has no admins yet: deploy it in the handover op.
+    if (deps.needsLegacyDeploy && (await deps.needsLegacyDeploy(legacy))) {
+      if (!deps.adminAddress) throw new Error('legacy account is not deployed and no admin address is available');
+      deployLegacyAdmin = await deps.adminAddress();
+      alreadyAdmin = false;
+    } else {
+      alreadyAdmin = await deps.readIsAdmin(legacy, safe);
+    }
   } catch (e) {
     report('error', rewrap);
     return idleOrError(e, 'Der Kontostatus konnte nicht gelesen werden. Bitte prüfe deine Verbindung.');
@@ -262,13 +318,16 @@ export async function runPasskeyMigration(
   try {
     const deployed = await deps.isSafeDeployed(safe);
     const call: SponsoredCall = { to: legacy, data: encodeSetPermissions(req, sig) };
+    const calls = deployLegacyAdmin ? [buildCreateLegacyAccountCall(deployLegacyAdmin), call] : [call];
     ({ txHash } = await deps.sendPasskeyUserOp({
       credentialId: current.credentialId,
       x: current.x,
       y: current.y,
       legacy,
-      calls: [call],
+      calls,
       deployed,
+      sender: current.safe,
+      owner: current.owner,
     }));
   } catch (e) {
     const res = idleOrError(e, 'Das Passkey-Konto konnte nicht verbunden werden. Bitte versuche es erneut.');

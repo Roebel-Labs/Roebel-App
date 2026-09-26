@@ -413,3 +413,136 @@ describe('buildCallData batching', () => {
     expect(decoded.args[3]).toBe(1);
   });
 });
+
+// ---- recovered Safe: the owner is the new passkey's per-key signer (review L4) ----
+
+import rv from './recovery-vector.json';
+import { sponsorRequestBody, userOpSignatureFromAssertion } from '../userop';
+import { SAFE_WEBAUTHN_SHARED_SIGNER } from '../constants';
+import { encodeCancelRecovery } from '../guardians';
+
+const pr = rv.postRecoveryUserOp;
+const recoveredWallet = pr.sender as Hex;
+const newSigner = rv.guardianApproval.newOwner as Hex;
+const prClientDataJSON = hexToString(pr.clientDataJSONHex as Hex);
+
+function recoveredOp(): UnpackedUserOp {
+  return {
+    sender: recoveredWallet,
+    nonce: BigInt(pr.nonce),
+    callData: pr.callData as Hex,
+    callGasLimit: BigInt(pr.callGasLimit),
+    verificationGasLimit: BigInt(pr.verificationGasLimit),
+    preVerificationGas: BigInt(pr.preVerificationGas),
+    maxFeePerGas: BigInt(pr.maxFeePerGas),
+    maxPriorityFeePerGas: BigInt(pr.maxPriorityFeePerGas),
+    paymaster: NETIZEN_VERIFYING_PAYMASTER,
+    paymasterVerificationGasLimit: 150_000n,
+    paymasterPostOpGasLimit: 50_000n,
+    paymasterData: `0x${'00'.repeat(320)}`,
+    signature: '0x',
+  };
+}
+
+describe('userop — post-recovery signature vector', () => {
+  it('op hash and signature (owner = per-key signer) match the fork fixture', () => {
+    expect(packUserOp(recoveredOp()).paymasterAndData).toBe(pr.paymasterAndData);
+    expect(safeOpHash(recoveredOp(), 0, 0)).toBe(pr.safeOpHash);
+    const assertion = { authenticatorData: pr.authenticatorData as Hex, clientDataJSON: prClientDataJSON, r: BigInt(pr.r), s: BigInt(pr.s) };
+    const sig = userOpSignatureFromAssertion(assertion, pr.safeOpHash as Hex, newSigner);
+    expect(sig).toBe(pr.userOpSignature);
+    // The static part names the signer, not the SharedSigner.
+    expect(sig.slice(2 + 24 + 24, 2 + 24 + 64).toLowerCase()).toBe(newSigner.slice(2).toLowerCase());
+    expect(userOpSignatureFromAssertion(assertion, pr.safeOpHash as Hex)).not.toBe(pr.userOpSignature);
+    expect(userOpSignatureFromAssertion(assertion, pr.safeOpHash as Hex, SAFE_WEBAUTHN_SHARED_SIGNER).slice(2 + 24 + 24, 2 + 24 + 64)).toBe(
+      SAFE_WEBAUTHN_SHARED_SIGNER.slice(2).toLowerCase(),
+    );
+  });
+
+  it('sendPasskeyUserOp signs a recovered Safe through its signer and sends no legacy', async () => {
+    const calls: { method: string; body: any }[] = [];
+    const fetchMock = jest.fn(async (url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      calls.push({ method: body.method ?? 'sponsor', body });
+      const ok = (result: unknown) => ({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: body.id, result }) });
+      if (url.endsWith('/api/passkey/sponsor')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            paymasterAndData: pr.paymasterAndData,
+            paymasterVerificationGasLimit: numberToHex(150_000n),
+            paymasterPostOpGasLimit: numberToHex(50_000n),
+            validUntil: 1,
+          }),
+        };
+      }
+      switch (body.method) {
+        case 'eth_call':
+          return ok(numberToHex(BigInt(pr.nonce), { size: 32 }));
+        case 'pimlico_getUserOperationGasPrice':
+          return ok({ fast: { maxFeePerGas: numberToHex(BigInt(pr.maxFeePerGas)), maxPriorityFeePerGas: numberToHex(BigInt(pr.maxPriorityFeePerGas)) } });
+        case 'eth_estimateUserOperationGas':
+          expect(body.params[0].signature.slice(2 + 24 + 24, 2 + 24 + 64).toLowerCase()).toBe(newSigner.slice(2).toLowerCase());
+          return ok({
+            callGasLimit: numberToHex(BigInt(pr.callGasLimit)),
+            verificationGasLimit: numberToHex(BigInt(pr.verificationGasLimit)),
+            preVerificationGas: numberToHex(BigInt(pr.preVerificationGas)),
+          });
+        case 'eth_sendUserOperation':
+          return ok(`0x${'ee'.repeat(32)}`);
+        case 'eth_getUserOperationReceipt':
+          return ok({ success: true, receipt: { transactionHash: `0x${'dd'.repeat(32)}` } });
+        default:
+          throw new Error(`unexpected ${body.method}`);
+      }
+    });
+    const sign = jest.fn(async (_c: string, challenge: Hex) => {
+      expect(challenge).toBe(pr.safeOpHash);
+      return { authenticatorData: pr.authenticatorData as Hex, clientDataJSON: prClientDataJSON, r: BigInt(pr.r), s: BigInt(pr.s) };
+    });
+    await sendPasskeyUserOp(
+      {
+        credentialId: 'new',
+        x: rv.newX as Hex,
+        y: rv.newY as Hex,
+        calls: [encodeCancelRecovery()],
+        deployed: true,
+        sender: recoveredWallet,
+        owner: newSigner,
+      },
+      {
+        fetch: fetchMock as any,
+        paymaster: NETIZEN_VERIFYING_PAYMASTER,
+        sign,
+        apiUrl: 'https://preview.example',
+        bundlerUrl: 'https://preview.example/api/bundler',
+        rpcUrl: 'https://rpc.example',
+        pollIntervalMs: 1,
+      },
+    );
+    const sponsorBody = calls.find((c) => c.method === 'sponsor')!.body;
+    expect(sponsorBody.legacy).toBeUndefined();
+    expect('legacy' in sponsorBody).toBe(false);
+    expect(sponsorBody.userOp.sender).toBe(recoveredWallet);
+    const sent = calls.find((c) => c.method === 'eth_sendUserOperation')!.body.params[0];
+    expect(sent.signature).toBe(pr.userOpSignature);
+  });
+
+  it('refuses to deploy a sender that is not the passkey Safe for (x, y)', async () => {
+    await expect(
+      sendPasskeyUserOp(
+        { credentialId: 'c', x: key.x, y: key.y, deployed: false, sender: rv.newSafe as Hex, calls: [{ to: recoveredWallet, data: '0x' }] },
+        { apiUrl: 'https://a', fetch: jest.fn() as any, paymaster: NETIZEN_VERIFYING_PAYMASTER },
+      ),
+    ).rejects.toThrow(/deployed by its first userOp/);
+  });
+
+  it('sponsorRequestBody carries legacy / recoveryLegacy only when set', () => {
+    const b = sponsorRequestBody(recoveredOp(), { x: key.x, y: key.y });
+    expect(Object.keys(b).sort()).toEqual(['chainId', 'userOp', 'x', 'y']);
+    const r = sponsorRequestBody(recoveredOp(), { x: key.x, y: key.y, recoveryLegacy: recoveredWallet });
+    expect(r.recoveryLegacy).toBe(recoveredWallet);
+    expect((r.userOp as any).signature).toBeUndefined();
+  });
+});

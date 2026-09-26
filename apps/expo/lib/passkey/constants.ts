@@ -32,6 +32,11 @@ export const P256_PRECOMPILE: Address = '0x0000000000000000000000000000000000000
 
 export const SOCIAL_RECOVERY_MODULE: Address = '0x38275826E1933303E508433dD5f289315Da2541c';
 export const SOCIAL_RECOVERY_PERIOD_SEC = 259200;
+/** Candide GuardianStorage linked-list sentinel: the `prevGuardian` of the first guardian. */
+export const SOCIAL_RECOVERY_SENTINEL: Address = '0x0000000000000000000000000000000000000001';
+
+/** CitizenNFTv2 on Gnosis (soulbound; stays on the legacy account forever). */
+export const CITIZEN_NFT_V2: Address = '0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5';
 
 export const NETIZEN_VERIFYING_PAYMASTER: Address = '0x11ed03Db610c88b010FfE38B13142D3657f2E84f';
 export const NETIZEN_SPONSOR_SIGNER: Address = '0x218B0a592f2078Aa542d7B981638595DF6bA8bF7';
@@ -68,6 +73,13 @@ export const PAYMASTER_AND_DATA_LENGTH = 20 + 16 + 16 + PAYMASTER_DATA_LENGTH; /
  * No default: the production NetizenVerifyingPaymaster must not sponsor passkey ops.
  */
 export const PASSKEY_PAYMASTER: string = process.env.EXPO_PUBLIC_PASSKEY_PAYMASTER_ADDRESS ?? '';
+
+/**
+ * v3 identity contracts (CitizenNFTv3 / AttesterNFTv3, self-serve `moveTo`). Empty = the v3
+ * flows are hidden. Must match the sponsor route's PASSKEY_CITIZEN_NFT_V3 / PASSKEY_ATTESTER_NFT_V3.
+ */
+export const PASSKEY_CITIZEN_NFT_V3: string = process.env.EXPO_PUBLIC_PASSKEY_CITIZEN_NFT_V3 ?? '';
+export const PASSKEY_ATTESTER_NFT_V3: string = process.env.EXPO_PUBLIC_PASSKEY_ATTESTER_NFT_V3 ?? '';
 
 export const PASSKEY_API_URL: string = process.env.EXPO_PUBLIC_PASSKEY_API_URL ?? '';
 export const PASSKEY_BUNDLER_URL: string =

@@ -274,24 +274,42 @@ export function encodeUserOpSignature(validAfter: number, validUntil: number, sa
   return encodePacked(['uint48', 'uint48', 'bytes'], [validAfter, validUntil, safeSignature]);
 }
 
-/** Full userOp signature from a passkey assertion over `challenge` (= Safe op hash). */
-export function userOpSignatureFromAssertion(assertion: PasskeyAssertion, challenge: Hex): Hex {
+/**
+ * One-owner Safe contract signature from a passkey assertion over `challenge`. `owner` is the
+ * Safe's owner the passkey signs through: SafeWebAuthnSharedSigner for a Safe created with this
+ * passkey, or the per-key SafeWebAuthnSignerFactory signer after a guardian recovery.
+ * Used for userOps (challenge = Safe op hash) and ERC-1271 (challenge = SafeMessage hash).
+ */
+export function safeSignatureFromAssertion(
+  assertion: PasskeyAssertion,
+  challenge: Hex,
+  owner: Address = SAFE_WEBAUTHN_SHARED_SIGNER,
+): Hex {
   const flags = parseInt(assertion.authenticatorData.slice(2 + 64, 2 + 66), 16);
   if (!(flags & 0x04)) throw new Error('passkey assertion lacks user verification (UV)');
   const fields = extractClientDataFields(assertion.clientDataJSON, challenge);
   const s = assertion.s > P256_N / 2n ? P256_N - assertion.s : assertion.s;
-  return encodeUserOpSignature(0, 0, encodeSafeSignature(encodeWebAuthnSignature(assertion.authenticatorData, fields, assertion.r, s)));
+  return encodeSafeSignature(encodeWebAuthnSignature(assertion.authenticatorData, fields, assertion.r, s), owner);
+}
+
+/** Full userOp signature from a passkey assertion over `challenge` (= Safe op hash). */
+export function userOpSignatureFromAssertion(
+  assertion: PasskeyAssertion,
+  challenge: Hex,
+  owner: Address = SAFE_WEBAUTHN_SHARED_SIGNER,
+): Hex {
+  return encodeUserOpSignature(0, 0, safeSignatureFromAssertion(assertion, challenge, owner));
 }
 
 /**
  * Dummy signature for gas estimation: same layout, realistic (slightly pessimistic) sizes and
  * non-zero bytes so preVerificationGas is not under-estimated.
  */
-export function dummyUserOpSignature(): Hex {
+export function dummyUserOpSignature(owner: Address = SAFE_WEBAUTHN_SHARED_SIGNER): Hex {
   const authData = concatHex([sha256(stringToHex(PASSKEY_RP_ID)), '0x05', '0x00000000']);
   const fields = `"origin":"android:apk-key-hash:${'A'.repeat(43)}","androidPackageName":"app.roebel.dummy.estimate"`;
   const rs = P256_N / 2n - 1n;
-  return encodeUserOpSignature(0, 0, encodeSafeSignature(encodeWebAuthnSignature(authData, fields, rs, rs)));
+  return encodeUserOpSignature(0, 0, encodeSafeSignature(encodeWebAuthnSignature(authData, fields, rs, rs), owner));
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +414,24 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
   return r;
 }
 
+/**
+ * POST /api/passkey/sponsor body: { chainId, userOp, x, y, legacy?, recoveryLegacy? }. Optional
+ * identity hints are omitted (not null) when unset.
+ */
+export function sponsorRequestBody(
+  op: UnpackedUserOp,
+  args: Pick<PasskeyUserOpArgs, 'x' | 'y' | 'legacy' | 'recoveryLegacy'>,
+): Record<string, unknown> {
+  return {
+    chainId: PASSKEY_CHAIN_ID,
+    userOp: toSponsorUserOp(op),
+    x: args.x,
+    y: args.y,
+    ...(args.legacy ? { legacy: args.legacy } : {}),
+    ...(args.recoveryLegacy ? { recoveryLegacy: args.recoveryLegacy } : {}),
+  };
+}
+
 /** Safe4337Module callData: one call = CALL; several = DELEGATECALL MultiSendCallOnly 1.4.1. */
 export function buildCallData(calls: SponsoredCall[]): Hex {
   if (calls.length === 0) throw new Error('no calls');
@@ -487,8 +523,30 @@ export async function resolveUserOpFees(
   return { maxFeePerGas, maxPriorityFeePerGas: minBig(priority, maxFeePerGas) };
 }
 
+export type PasskeyUserOpArgs = {
+  credentialId: string;
+  x: Hex;
+  y: Hex;
+  /**
+   * The citizen's legacy thirdweb account the op drives (sponsor mode "legacy"). Omit when the
+   * Safe itself holds citizenship (after a v3 moveTo) or for recovery ops.
+   */
+  legacy?: Address;
+  /** Recovery ops: the legacy account the wallet being recovered administers (if the wallet holds no CitizenNFT). */
+  recoveryLegacy?: Address;
+  calls: SponsoredCall[];
+  deployed: boolean;
+  /**
+   * The Safe sending the op. Default: the counterfactual passkey Safe for (x, y). A RECOVERED Safe
+   * keeps its old address, which is no longer derivable from the new key: pass the persisted one.
+   */
+  sender?: Address;
+  /** The Safe owner the passkey signs through (default SharedSigner; per-key signer after recovery). */
+  owner?: Address;
+};
+
 export async function sendPasskeyUserOp(
-  args: { credentialId: string; x: Hex; y: Hex; legacy: Address; calls: SponsoredCall[]; deployed: boolean },
+  args: PasskeyUserOpArgs,
   deps: UserOpDeps = {},
 ): Promise<{ userOpHash: Hex; txHash: Hex }> {
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
@@ -502,7 +560,12 @@ export async function sendPasskeyUserOp(
   const timeout = deps.requestTimeoutMs ?? 20_000;
 
   const key = { x: args.x, y: args.y };
-  const sender = predictSafeAddress(key);
+  const predicted = predictSafeAddress(key);
+  const sender = args.sender ?? predicted;
+  if (!args.deployed && getAddress(sender) !== getAddress(predicted)) {
+    throw new Error('only the passkey Safe for (x, y) can be deployed by its first userOp');
+  }
+  const owner = args.owner ?? SAFE_WEBAUTHN_SHARED_SIGNER;
   const callData = buildCallData(args.calls);
 
   // 1. nonce + fees (fees are fixed here, before estimation and sponsoring)
@@ -531,7 +594,7 @@ export async function sendPasskeyUserOp(
     paymasterVerificationGasLimit: PM_VERIFICATION_GAS_FLOOR,
     paymasterPostOpGasLimit: PM_POST_OP_GAS_FLOOR,
     paymasterData: `0x${'00'.repeat(PAYMASTER_DATA_LENGTH)}`,
-    signature: dummyUserOpSignature(),
+    signature: dummyUserOpSignature(owner),
   };
   const est = await rpc<Record<string, Hex | undefined>>(
     fetchImpl,
@@ -558,7 +621,7 @@ export async function sendPasskeyUserOp(
   const reply = (await postJson(
     fetchImpl,
     `${apiUrl}/api/passkey/sponsor`,
-    { chainId: PASSKEY_CHAIN_ID, userOp: toSponsorUserOp(op), x: args.x, y: args.y, legacy: args.legacy },
+    sponsorRequestBody(op, args),
     timeout,
   )) as SponsorResponse;
   op = applySponsorship(op, reply);
@@ -566,7 +629,7 @@ export async function sendPasskeyUserOp(
   // 4. sign the Safe op hash with the passkey
   const hash = safeOpHash(op, 0, 0);
   const assertion = await sign(args.credentialId, hash);
-  op = { ...op, signature: userOpSignatureFromAssertion(assertion, hash) };
+  op = { ...op, signature: userOpSignatureFromAssertion(assertion, hash, owner) };
 
   // 5. submit + wait for the receipt
   const userOpHash = await rpc<Hex>(fetchImpl, bundlerUrl, 'eth_sendUserOperation', [toRpcUserOp(op), ENTRY_POINT_V07], timeout);

@@ -9,10 +9,13 @@ import {
   WRAPPED_NOSTR_KEY,
   runPasskeyMigration,
   loadMigrationRecord,
+  saveRecoveredRecord,
+  userOpTargetFor,
   type MigrationDeps,
   type MigrationStep,
 } from '../migration';
 import vector from './passkey-safe-vector.json';
+import { SAFE_WEBAUTHN_SHARED_SIGNER, THIRDWEB_ACCOUNT_FACTORY } from '../constants';
 
 const legacy = getAddress(vector.handover.legacyAccount);
 const x = vector.x as Hex;
@@ -250,5 +253,65 @@ describe('runPasskeyMigration', () => {
     expect(deps.sendPasskeyUserOp).toHaveBeenCalledTimes(1);
     expect(res.status).toBe('error');
     expect(res.status === 'error' && res.message).toMatch(/verbunden/);
+  });
+
+  it('persists the Safe owner (SharedSigner) and signs through it', async () => {
+    const { deps } = makeDeps();
+    await runPasskeyMigration({ legacy, userName: 'Max' }, deps);
+    const rec = await loadMigrationRecord(deps.storage);
+    expect(rec).toMatchObject({ safe, ownerType: 'sharedSigner', owner: SAFE_WEBAUTHN_SHARED_SIGNER });
+    expect((deps.sendPasskeyUserOp as jest.Mock).mock.calls[0][0]).toMatchObject({ sender: safe, owner: SAFE_WEBAUTHN_SHARED_SIGNER });
+  });
+
+  it('counterfactual legacy account → createAccount(admin, 0x) first, then the handover; no isAdmin read', async () => {
+    const ADMIN = getAddress('0x21e70901AbC2656641d08F4eB326484b5Df50e90');
+    const { deps } = makeDeps({
+      needsLegacyDeploy: jest.fn(async () => true),
+      adminAddress: jest.fn(async () => ADMIN),
+    });
+    const res = await runPasskeyMigration({ legacy, userName: 'Max' }, deps);
+    expect(res).toMatchObject({ status: 'done', alreadyAdmin: false });
+    expect(deps.readIsAdmin).not.toHaveBeenCalled();
+    const args = (deps.sendPasskeyUserOp as jest.Mock).mock.calls[0][0];
+    expect(args.calls.map((c: { to: string }) => c.to)).toEqual([THIRDWEB_ACCOUNT_FACTORY, legacy]);
+    expect(args.calls[0].data.slice(0, 10)).toBe('0xd8fd8f44');
+    expect(args.calls[0].data.toLowerCase()).toContain(ADMIN.slice(2).toLowerCase());
+  });
+
+  it('counterfactual legacy account without an admin address → error, nothing signed', async () => {
+    const { deps } = makeDeps({ needsLegacyDeploy: jest.fn(async () => true) });
+    const res = await runPasskeyMigration({ legacy, userName: 'Max' }, deps);
+    expect(res.status).toBe('error');
+    expect(deps.signTypedData).not.toHaveBeenCalled();
+    expect(deps.sendPasskeyUserOp).not.toHaveBeenCalled();
+  });
+});
+
+describe('migration record — owner persistence (review L4)', () => {
+  const memory = () => {
+    const m = new Map<string, string>();
+    return { getItem: async (k: string) => m.get(k) ?? null, setItem: async (k: string, v: string) => void m.set(k, v) };
+  };
+
+  it('a record written before owner persistence reads as SharedSigner', async () => {
+    const storage = memory();
+    await storage.setItem(MIGRATION_STORE_KEY, JSON.stringify({ credentialId: 'c', x, y, safe, legacy, status: 'done' }));
+    expect(await loadMigrationRecord(storage)).toMatchObject({ ownerType: 'sharedSigner', owner: SAFE_WEBAUTHN_SHARED_SIGNER });
+  });
+
+  it('a recovered Safe persists its per-key signer; userOps target the OLD address through it', async () => {
+    const storage = memory();
+    const wallet = getAddress('0x417979e5F0B2281C4f1C64Ab18E772d1A50dBc98');
+    const signer = getAddress('0xAc480943ae1e61B8695E8D3D5F8542676D58eE6f');
+    await saveRecoveredRecord(storage, { credentialId: 'new', x, y, safe: wallet, owner: signer });
+    const rec = await loadMigrationRecord(storage);
+    expect(rec).toMatchObject({ safe: wallet, ownerType: 'webauthnSigner', owner: signer, status: 'done' });
+    expect(userOpTargetFor(rec!)).toEqual({ sender: wallet, owner: signer });
+  });
+
+  it('a webauthnSigner record without an owner is rejected', async () => {
+    const storage = memory();
+    await storage.setItem(MIGRATION_STORE_KEY, JSON.stringify({ credentialId: 'c', x, y, safe, ownerType: 'webauthnSigner' }));
+    expect(await loadMigrationRecord(storage)).toBeNull();
   });
 });

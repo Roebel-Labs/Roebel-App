@@ -8,6 +8,7 @@ import * as SecureStore from '@/lib/storage/secureStorage';
 import { loadStoredIdentity } from '@/lib/nostr/identity';
 import { legacyAccountReadAbi } from './legacy-handover';
 import type { MigrationDeps } from './migration';
+import { needsLegacyDeploy } from './migration-v3';
 import { wrapSecret } from './prf-vault';
 import { DEFAULT_GNOSIS_RPC_URL, isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { createPasskey, getPrfSecret } from './webauthn';
@@ -31,6 +32,8 @@ export function createMigrationDeps(p: {
   signTypedData: (typed: TypedDataDefinition<any, any>) => Promise<Hex>;
   /** The persisted MACI keypair as stored by MaciContext (JSON string), or null. */
   maciKeypairJson: string | null;
+  /** The thirdweb admin EOA address; needed only when the legacy account is counterfactual on Gnosis. */
+  adminAddress?: Address;
 }): MigrationDeps {
   return {
     storage: secureKeyValueStorage,
@@ -43,5 +46,7 @@ export function createMigrationDeps(p: {
     signTypedData: p.signTypedData,
     isSafeDeployed: (safe) => isSafeDeployed(safe),
     sendPasskeyUserOp: (args) => sendPasskeyUserOp(args),
+    needsLegacyDeploy: (legacy) => needsLegacyDeploy(legacy, gnosisClient),
+    ...(p.adminAddress ? { adminAddress: async () => p.adminAddress as Address } : {}),
   };
 }
