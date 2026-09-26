@@ -77,9 +77,33 @@ The Röbel app is **live**. Max will ship one more EAS build when this is done, 
 
 A passkey only works for apps associated with `id.ortis.app`, and that is exactly what makes it phishing-proof. A third-party or AI-generated client reaches the same identity through (a) the Ortis wallet flow, where the user sees and confirms each request, or (b) a scoped session key the user granted. The passkey never leaves the user's device. The data layer stays open: governance on-chain, public record on Nostr, DMs on XMTP, Röbel MCP.
 
-## Open items
+## D2 verdict (2026-09-26): v3
 
-- **D2 verdict:** pending (research running 2026-09-26).
+v2 *could* be reused, because approvals are plain `msg.sender` checks and passkey Safes can approve. It is the wrong trade, though:
+
+- **The v2 migration mint is finalized forever and tokens are soulbound.** Moving on v2 means per person a new attestation (2 attesters + 1 citizen) plus a revocation (4 attesters + 1 citizen): ~106 requests, ~424 approvals.
+- **MACI must be redeployed anyway.** Burning a v2 token does not remove the old MACI state leaf, so a migrated citizen would hold two ballots in every later poll. New gatekeeper + MACI + Governor are needed either way.
+
+**v3 design** (building on this branch):
+- `Ownable2Step`.
+- `bootstrapFromV2(holders)` mints to the SAME addresses (checked against v2 on-chain; one-way finalize). The cutover works before anyone has a passkey, so production keeps working.
+- Self-serve `moveTo(newAccount)` burns + mints atomically, gated by the on-chain link `legacy.isAdmin(newAccount)`. One-way window close.
+
+**Re-point list for the v3 cutover:**
+- SignUpTokenGatekeeper + MACI + MaciAttesterGovernor (+ PROPOSER on the Timelock).
+- Circles `CitizenMembershipCondition`, set on the group by its owner Safe.
+- Supabase `circles-invite` + `create-reward-event`, the auto-invite bot, roebel-id env.
+- `packages/blockchain`, web/Expo constants, relay-sync, CLI render, mini-apps, manifests + CommunityRegistry record.
+
+**Security findings to fix with D5:**
+- The current NFT owner Safe `0x3A08…` is **1-of-4 with a plain EOA owner**. The new Attester Safe must be >1-of-4 with no EOA owners.
+- The MACI gatekeeper is owned by the deployer EOA.
+
+**New MACI keys:** random, wrapped under the passkey PRF, with a backup. This removes the deterministic-signature derivation that passkeys cannot provide. The same goes for the Shamir share keys (a re-share ceremony with the new attesters).
+
+**Undeployed accounts:** 10 of 53 citizen legacy accounts are counterfactual on Gnosis. Their first migration op must include `AccountFactory.createAccount(adminEOA, "")` (permissionless). The sponsor policy must allow exactly that factory call when its result equals the request's `legacy`.
+
+## Open items
 - **Pimlico's minimum paymaster stake on Gnosis is unknown.** The preview paymaster is planned with 0.05 xDAI stake. If Pimlico needs more: `addStake` via the owner Safe, or self-bundle through a relayer (as the Netizen demo does).
 - **Persistent sponsor budget** (production gate).
 - **Backup of the PRF-wrapped secrets** + a restore path (production gate).
