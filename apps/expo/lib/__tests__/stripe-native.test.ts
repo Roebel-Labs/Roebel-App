@@ -34,4 +34,13 @@ describe('stripe-native', () => {
     });
     expect(isStripeNativeAvailable()).toBe(false);
   });
+
+  it('falls back when the bundle carries an empty stub instead of the package', () => {
+    getSpy.mockReturnValue({} as never);
+    jest.isolateModules(() => {
+      jest.doMock('@stripe/stripe-react-native', () => ({}), { virtual: true });
+      const fresh = require('../stripe-native');
+      expect(fresh.loadStripeNative()).toBeNull();
+    });
+  });
 });

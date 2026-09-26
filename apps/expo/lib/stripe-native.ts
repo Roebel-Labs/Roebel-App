@@ -26,7 +26,10 @@ export function loadStripeNative(): StripeNative | null {
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    cached = require('@stripe/stripe-react-native') as StripeNative;
+    const mod = require('@stripe/stripe-react-native') as Partial<StripeNative>;
+    // metro.config.js resolves the package to an empty module when an OTA was exported from a
+    // checkout without it installed; treat that like "no SDK" so callers use the hosted fallback.
+    cached = typeof mod?.loadConnectAndInitialize === 'function' ? (mod as StripeNative) : null;
   } catch (err) {
     console.warn('[stripe-native] native module present but package failed to load', err);
     cached = null;
