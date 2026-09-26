@@ -73,6 +73,7 @@ export const ORG_REGISTRY_ABI = [
       { name: "orgId", type: "bytes32", indexed: true },
       { name: "safe", type: "address", indexed: true },
       { name: "requestId", type: "uint256", indexed: true },
+      { name: "generation", type: "uint64", indexed: false },
     ],
   },
   {
@@ -82,6 +83,7 @@ export const ORG_REGISTRY_ABI = [
       { name: "orgId", type: "bytes32", indexed: true },
       { name: "safe", type: "address", indexed: true },
       { name: "requestId", type: "uint256", indexed: true },
+      { name: "generation", type: "uint64", indexed: false },
     ],
   },
   {
