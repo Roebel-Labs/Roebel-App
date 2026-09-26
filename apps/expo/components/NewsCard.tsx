@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   cardCompact: {
-    width: 240,
+    width: 300,
     marginRight: 12,
   },
   pressed: {
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   imageContainerCompact: {
     width: '100%',
-    height: 140,
+    height: 188,
     position: 'relative',
     borderRadius: 12,
     overflow: 'hidden',
@@ -139,10 +139,10 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   titleCompact: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: 'Inter-Medium',
     marginBottom: 8,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   excerpt: {
     fontSize: 14,

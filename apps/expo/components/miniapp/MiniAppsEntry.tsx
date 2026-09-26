@@ -1,7 +1,7 @@
 /**
  * MiniAppsEntry — the discovery entry point for the Mini App store on the
- * Explore tab, styled after the reference home surface: a 4-column launcher
- * grid of app icons (up to 7 + an "Alle ansehen" tile with mini icons) under
+ * Explore tab, styled after the reference home surface: a 3x3 launcher
+ * grid of app icons (up to 8 + an "Alle ansehen" tile with mini icons) under
  * a "Mini-Apps · Mehr entdecken ›" header. Falls back to a promo banner when
  * no live apps exist.
  */
@@ -19,7 +19,8 @@ import { MiniAppGridTile } from '@/components/miniapp/MiniAppCard';
 import MiniAppHost from '@/components/miniapp/MiniAppHost';
 
 const GRID_GAP = 12;
-const MAX_TILES = 7;
+const GRID_COLUMNS = 3;
+const MAX_TILES = GRID_COLUMNS * GRID_COLUMNS - 1;
 const STORE_ICON = require('@/assets/illustration/mini-app-store.png');
 
 export default function MiniAppsEntry() {
@@ -57,8 +58,8 @@ export default function MiniAppsEntry() {
   // Until we know, render nothing (avoids layout flash).
   if (isPending) return null;
 
-  const tileW = Math.floor((width - 32 - 3 * GRID_GAP) / 4);
-  const iconSize = Math.min(tileW, 64);
+  const tileW = Math.floor((width - 32 - (GRID_COLUMNS - 1) * GRID_GAP) / GRID_COLUMNS);
+  const iconSize = Math.min(tileW, 80);
   const shown = apps.slice(0, MAX_TILES);
 
   return (

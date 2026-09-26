@@ -91,11 +91,14 @@ const styles = StyleSheet.create({
   },
 });
 
+// Explore shows the rail larger than the 150px default card.
+const RAIL_CARD_STYLE = { width: 190 };
+
 const renderRailItem = ({ item }: { item: RailItem }) =>
   item.kind === 'deal' ? (
-    <BusinessDealCard deal={item.data} compact />
+    <BusinessDealCard deal={item.data} compact style={RAIL_CARD_STYLE} />
   ) : (
-    <MarketplaceCard listing={item.data} compact />
+    <MarketplaceCard listing={item.data} compact style={RAIL_CARD_STYLE} />
   );
 const railItemKey = (item: RailItem) => item.id;
 

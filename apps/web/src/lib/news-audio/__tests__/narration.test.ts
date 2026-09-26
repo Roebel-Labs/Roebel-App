@@ -18,6 +18,21 @@ test("htmlToSpeechText drops figures and scripts", () => {
   assert.equal(htmlToSpeechText("<p>A</p><figure><img/><figcaption>Foto</figcaption></figure><p>B</p>"), "A\n\nB");
 });
 
+test("htmlToSpeechText never reads links", () => {
+  const html =
+    '<p>Mehr Infos <a href="https://roebel.de/x">auf der Website</a>.</p>' +
+    '<p>Siehe <a href="https://roebel.de">www.roebel.de</a> oder https://example.com/a?b=1 (www.test.de).</p>' +
+    "<p>Fragen an info@roebel.de bitte.</p>";
+  assert.equal(htmlToSpeechText(html), "Mehr Infos auf der Website.\n\nSiehe oder.\n\nFragen an bitte.");
+});
+
+test("buildNarrationText strips URLs from title and dek", () => {
+  assert.equal(
+    buildNarrationText({ title: "Neu: roebel.app", excerpt: "Alles unter https://roebel.app/news", content: null }),
+    "Neu:\n\nAlles unter.",
+  );
+});
+
 test("buildNarrationText adds full stops between title, dek and body", () => {
   const text = buildNarrationText({ title: "Titel", excerpt: "Kurz gesagt", content: "<p>Text.</p>" });
   assert.equal(text, "Titel.\n\nKurz gesagt.\n\nText.");

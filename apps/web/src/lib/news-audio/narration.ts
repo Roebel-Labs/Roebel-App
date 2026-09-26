@@ -46,18 +46,41 @@ function decodeEntities(text: string): string {
   });
 }
 
-/** Rich-text HTML → plain paragraphs separated by blank lines. */
+// URLs, www. hosts, e-mail addresses and bare domains on common TLDs
+// ("roebel.app/news"): never read out.
+// A URL's tail stops before closing punctuation, so "(www.x.de)." keeps ")."
+const URL_TAIL = String.raw`(?:\S*[^\s.,;:!?)\]"'»“”])?`;
+const URL_LIKE = new RegExp(
+  [
+    String.raw`\b(?:https?:\/\/|www\.)` + URL_TAIL,
+    String.raw`\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b`,
+    String.raw`\b(?:[\w-]+\.)+(?:de|com|org|net|app|eu|info|io|site|xyz|online|shop)\b(?:\/` + URL_TAIL + ")?",
+  ].join("|"),
+  "gi",
+);
+// Visible link text that is itself just an address ("roebel.de", "example.com/x").
+const DOMAIN_ONLY = /^\s*(?:https?:\/\/)?(?:www\.)?[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}(?:\/\S*)?\s*$/i;
+
+/** Drops links: anchors whose text is an address vanish, others keep their words. */
+function stripLinks(html: string): string {
+  return html.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, (_m, inner: string) =>
+    DOMAIN_ONLY.test(inner.replace(/<[^>]+>/g, "")) ? " " : inner,
+  );
+}
+
+/** Rich-text HTML → plain paragraphs separated by blank lines, without links. */
 export function htmlToSpeechText(html: string | null | undefined): string {
   if (!html) return "";
-  const text = html
+  const text = stripLinks(html)
     .replace(/<(script|style|figure|figcaption|iframe)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|h[1-6]|li|blockquote|ul|ol|tr)>/gi, "\n\n")
     .replace(/<li[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ");
   return decodeEntities(text)
+    .replace(URL_LIKE, " ")
     .split(/\n{2,}/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
+    .map((p) => p.replace(/\(\s*\)/g, "").replace(/\s+/g, " ").replace(/\s+([.,;:!?)])/g, "$1").trim())
     .filter(Boolean)
     .join("\n\n");
 }
@@ -69,7 +92,8 @@ export function buildNarrationText(article: {
   content: string | null;
 }): string {
   const stop = (s: string) => (/[.!?…:]$/.test(s) ? s : `${s}.`);
-  const parts = [article.title.trim(), article.excerpt?.trim() ?? "", htmlToSpeechText(article.content)]
+  const plain = (s: string | null | undefined) => (s ?? "").replace(URL_LIKE, " ").replace(/\s+/g, " ").trim();
+  const parts = [plain(article.title), plain(article.excerpt), htmlToSpeechText(article.content)]
     .filter(Boolean)
     .map(stop);
   const text = parts.join("\n\n");

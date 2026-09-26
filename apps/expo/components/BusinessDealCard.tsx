@@ -47,8 +47,8 @@ function BusinessDealCard({ deal, compact = true, style }: Props) {
             </View>
           )}
           {deal.deal_value && (
-            <View style={[styles.priceTag, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.priceTagText, { color: colors.onPrimary }]}>{deal.deal_value}</Text>
+            <View style={styles.priceTag}>
+              <Text style={styles.priceTagText}>{deal.deal_value}</Text>
             </View>
           )}
         </View>
@@ -89,7 +89,7 @@ function BusinessDealCard({ deal, compact = true, style }: Props) {
           </View>
         )}
         {deal.deal_value && (
-          <View style={[styles.dealBadge, { backgroundColor: colors.primary }]}>
+          <View style={styles.dealBadge}>
             <Text style={styles.dealBadgeText}>{deal.deal_value}</Text>
           </View>
         )}
@@ -197,6 +197,7 @@ const styles = StyleSheet.create({
   },
   priceTag: {
     position: 'absolute',
+    backgroundColor: '#FFFFFF',
     top: 8,
     right: 8,
     paddingHorizontal: 8,
@@ -204,6 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   priceTagText: {
+    color: '#000000',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },
