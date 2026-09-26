@@ -63,7 +63,9 @@ describe("OrgRegistry — registration", function () {
     expect(await registry.isRegistered(ORG_A)).to.equal(false);
     await expect(registry.connect(a2).approveRequest(0))
       .to.emit(registry, "OrgRegistered")
-      .withArgs(ORG_A, await safe.getAddress(), 0);
+      .withArgs(ORG_A, await safe.getAddress(), 0)
+      .and.to.emit(registry, "MetadataURIChanged")
+      .withArgs(ORG_A, "ipfs://meta");
 
     expect(await registry.ownerOf(BigInt(ORG_A))).to.equal(await safe.getAddress());
     expect(await registry.orgIdOfSafe(await safe.getAddress())).to.equal(ORG_A);
