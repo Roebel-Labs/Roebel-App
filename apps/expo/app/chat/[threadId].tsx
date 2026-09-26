@@ -20,7 +20,13 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
-import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  type RecordingOptions,
+} from 'expo-audio';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useChatActions, useChatBootstrap, useThread } from '@/context/ChatContext';
 import { ChatApiError } from '@/lib/chat/api';
@@ -66,6 +72,12 @@ const FALLBACK_AVATAR: BotAvatarSpec = {
   eyes: 'dots',
 };
 const MAX_RECORDING_SECONDS = 180;
+
+const VOICE_RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  numberOfChannels: 1,
+  bitRate: 64000,
+};
 
 function dayKey(iso: string): string {
   const d = new Date(iso);
@@ -183,7 +195,9 @@ export default function ChatThreadScreen() {
   }, [th.error, router]);
 
   // ── Voice recording ──
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Mono 64 kbit/s AAC (.m4a): speech stays clear and 3 minutes fit well under
+  // Vercel's 4.5 MB request limit.
+  const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
@@ -217,8 +231,19 @@ export default function ChatThreadScreen() {
       setTranscribing(true);
       try {
         const text = (await actions.transcribe(uri)).trim();
-        if (text) setDraft((d) => (d.trim() ? `${d.trim()} ${text}` : text));
-        else showSnackbar({ message: 'Ich konnte nichts verstehen.' });
+        if (!text) {
+          showSnackbar({ message: 'Ich konnte nichts verstehen.' });
+          return;
+        }
+        const typed = draftRef.current.trim();
+        const full = typed ? `${typed} ${text}` : text;
+        if (isStreamingRef.current) {
+          // A bot is still answering — keep the words in the composer instead of dropping them.
+          setDraft(full);
+          showSnackbar({ message: 'Text eingefügt – sende ihn, sobald die Antwort fertig ist.' });
+          return;
+        }
+        sendRef.current({ text: full, images: imagesRef.current });
       } catch (err) {
         showSnackbar({
           message: err instanceof ChatApiError ? err.message : 'Transkription fehlgeschlagen.',
@@ -369,6 +394,16 @@ export default function ChatThreadScreen() {
     setDraft('');
     setTimeout(scrollToBottom, 50);
   };
+
+  // The recorder callback outlives renders; it reads the latest composer state through refs.
+  const sendRef = useRef(onSend);
+  sendRef.current = onSend;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  const isStreamingRef = useRef(th.isStreaming);
+  isStreamingRef.current = th.isStreaming;
 
   // ── Message interactions ──
   const openLink = useCallback((url: string) => {
