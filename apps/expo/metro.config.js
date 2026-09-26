@@ -51,6 +51,8 @@ config.resolver.blockList = [
 ];
 
 // Custom resolver to exclude problematic modules from bundle
+const OTA_OPTIONAL_NATIVE = ['@stripe/stripe-react-native'];
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   // Web: node's `crypto` must NOT resolve to react-native-quick-crypto — the
   // extraNodeModules alias above applies to every platform and quick-crypto's
@@ -86,6 +88,19 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       'react-native-pager-view',
     ];
     if (webExclude.some(pkg => moduleName === pkg || moduleName.startsWith(pkg + '/'))) {
+      return { type: 'empty' };
+    }
+  }
+
+  // Native SDKs that are only loaded behind a runtime check (lib/stripe-native.ts).
+  // An OTA export from a checkout that has not installed them yet still bundles:
+  // the require resolves to an empty module, which the guard never reaches on
+  // binaries without the native side. Real builds install the package and
+  // resolve it normally.
+  if (OTA_OPTIONAL_NATIVE.some((name) => moduleName === name || moduleName.startsWith(`${name}/`))) {
+    try {
+      return context.resolveRequest(context, moduleName, platform);
+    } catch {
       return { type: 'empty' };
     }
   }
