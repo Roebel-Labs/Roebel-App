@@ -8,6 +8,8 @@ import { useAccount } from '@/context/AccountContext';
 import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import { connectOnboard, connectStatus, openConnectOnboarding, type ConnectStatus } from '@/lib/stripe-connect';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
+import ConnectOnboardingModal from '@/components/payments/ConnectOnboardingModal';
+import { isStripeNativeAvailable } from '@/lib/stripe-native';
 
 /** Known `currently_due` keys mapped to German labels; anything else falls back to the raw key. */
 const CURRENTLY_DUE_LABELS: Record<string, string> = {
@@ -31,6 +33,8 @@ export default function OrgPaymentsScreen() {
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
+  // In-app Stripe onboarding (native SDK builds); older binaries use the hosted browser flow.
+  const [nativeOnboardingOpen, setNativeOnboardingOpen] = useState(false);
 
   const canManage = roleInActiveAccount === 'owner' || roleInActiveAccount === 'admin';
 
@@ -68,6 +72,10 @@ export default function OrgPaymentsScreen() {
 
   const handleOnboard = useCallback(async () => {
     if (!activeAccount || !thirdwebAccount || onboarding) return;
+    if (isStripeNativeAvailable()) {
+      setNativeOnboardingOpen(true);
+      return;
+    }
     setOnboarding(true);
     try {
       const result = await connectOnboard(thirdwebAccount, activeAccount.id);
@@ -83,6 +91,16 @@ export default function OrgPaymentsScreen() {
       setOnboarding(false);
     }
   }, [activeAccount, thirdwebAccount, onboarding, load]);
+
+  const handleNativeClose = useCallback(() => {
+    setNativeOnboardingOpen(false);
+    void load();
+  }, [load]);
+
+  const handleNativeError = useCallback((message: string) => {
+    setNativeOnboardingOpen(false);
+    Alert.alert('Fehler', message);
+  }, []);
 
   if (!activeAccount || activeAccount.account_type !== 'organisation') {
     return null;
@@ -137,7 +155,8 @@ export default function OrgPaymentsScreen() {
                   <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
                     Verkaufe Tickets für deine Veranstaltungen. Das Geld landet direkt auf dem
                     Stripe-Konto deiner Organisation. Stripe prüft die Organisation
-                    (Vereinsregisterauszug, Vorstand mit Ausweis, IBAN auf den Verein).
+                    (Vereinsregisterauszug, Vorstand mit Ausweis, IBAN auf den Verein). Die Angaben gehen
+                    verschlüsselt direkt an Stripe und werden nicht bei der Röbel App gespeichert.
                   </Text>
                   {canManage && (
                     <Pressable
@@ -225,6 +244,15 @@ export default function OrgPaymentsScreen() {
           </>
         )}
       </ScrollView>
+      {thirdwebAccount && (
+        <ConnectOnboardingModal
+          visible={nativeOnboardingOpen}
+          accountId={activeAccount.id}
+          signer={thirdwebAccount}
+          onClose={handleNativeClose}
+          onError={handleNativeError}
+        />
+      )}
     </SafeAreaView>
   );
 }

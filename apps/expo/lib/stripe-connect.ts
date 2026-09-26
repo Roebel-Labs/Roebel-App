@@ -8,6 +8,13 @@ export interface ConnectStatus {
 export function connectOnboard(account: SigningAccount, accountId: string): Promise<ApiResult<{ url: string }>> {
   return postSigned('/api/connect/onboard', account, 'connect_onboard', { account_id: accountId });
 }
+/** Short-lived Stripe AccountSession for the in-app onboarding component (owner/admin only). */
+export function connectSession(
+  account: SigningAccount,
+  accountId: string,
+): Promise<ApiResult<{ client_secret: string; publishable_key: string }>> {
+  return postSigned('/api/connect/session', account, 'connect_session', { account_id: accountId });
+}
 export function connectStatus(account: SigningAccount, accountId: string): Promise<ApiResult<ConnectStatus>> {
   return postSigned('/api/connect/status', account, 'connect_status', { account_id: accountId });
 }
