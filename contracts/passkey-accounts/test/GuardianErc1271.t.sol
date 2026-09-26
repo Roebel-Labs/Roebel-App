@@ -360,7 +360,9 @@ contract GuardianErc1271Test is PasskeySafeBase {
             abi.encodeCall(ISocialRecoveryModule.multiConfirmRecovery, (wallet, newOwners, 1, sigs, true));
 
         // Post-recovery userOp vector: fixed op from the recovered wallet, signed through newSigner.
-        PackedUserOperation memory op = _buildOp(wallet, 7, "", _executeUserOpCallData(makeAddr("recipient"), 1, ""));
+        PackedUserOperation memory op = _buildOp(
+            wallet, 7, "", _executeUserOpCallData(SOCIAL_RECOVERY, 0, abi.encodeCall(ISocialRecoveryModule.cancelRecovery, ()))
+        );
         op.paymasterAndData = abi.encodePacked(PAYMASTER, PM_VERIFICATION_GAS, PM_POST_OP_GAS, new bytes(320));
         op.signature = abi.encodePacked(uint48(0), uint48(0));
         bytes32 opHash = module4337.getOperationHash(op);
@@ -408,7 +410,7 @@ contract GuardianErc1271Test is PasskeySafeBase {
         string memory mJson = vm.serializeBytes(m, "callData", multiConfirm);
 
         string memory u = "postRecoveryUserOp";
-        vm.serializeString(u, "_note", "Fixed op from the RECOVERED wallet (owner = per-key signer newOwner). The Safe contract signature's static part names newOwner, not the SharedSigner. paymasterAndData = 372-byte stub; validAfter = validUntil = 0.");
+        vm.serializeString(u, "_note", "Fixed op from the RECOVERED wallet (owner = per-key signer newOwner): executeUserOp(SRM, 0, cancelRecovery(), 0), nonce 7. The Safe contract signature's static part names newOwner, not the SharedSigner. paymasterAndData = 372-byte stub; validAfter = validUntil = 0.");
         vm.serializeAddress(u, "sender", op.sender);
         vm.serializeString(u, "nonce", vm.toString(op.nonce));
         vm.serializeBytes(u, "callData", op.callData);
