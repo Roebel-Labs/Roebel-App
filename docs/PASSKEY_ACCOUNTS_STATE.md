@@ -47,6 +47,22 @@ New env: web `PASSKEY_CITIZEN_NFT_V3`, `PASSKEY_ATTESTER_NFT_V3`; Expo `EXPO_PUB
 
 Tests: 21 forge, 96 web node:test (+4 live), 96 Expo jest.
 
+## Optional warning email (D6, built 2026-09-26, not deployed)
+
+A passkey user MAY add an email. It is used ONLY for recovery alerts ("Jemand stellt dein Konto wieder her. Du hast bis … Zeit, das abzubrechen") and, later, notifications they opt into. It is never a login or a key, and it never reaches the newsletter: it lives in new `passkey_*` tables, not `users.email` (the `trg_newsletter_auto_enroll` trigger sits on `users`; live 2026-09-26 it is enabled but a no-op because `app_settings.newsletter_auto_enroll = 'off'`).
+
+- **Web** (`apps/web/src/lib/passkey/email-*.ts`, routes `api/passkey/email/{start,verify,remove}`, 503 unless `PASSKEY_EMAIL_ENABLED=1`): add/remove need an ERC-1271 proof by the Safe over a fixed EIP-191 text (`email-proof.ts`, byte-exact with Expo via `email-proof-vector.json`), ±10 min, replay-guarded, checked with viem `verifyMessage` on Gnosis. **Counterfactual Safes are refused (409)**, not ERC-6492: every migrated Safe is deployed by its handover op, and an undeployed Safe has no guardians to warn about. 6-digit code via Resend from `konto@roebel.app`, only a hash stored, 10 min, 5 attempts, constant-time compare. Rate limits in memory (3/h per address, 5/h per Safe).
+- **Recovery alerts** (`GET /api/passkey/recovery-alerts`, `CRON_SECRET` bearer): scans the SRM for `RecoveryExecuted` since a cursor (first run looks back 60k blocks ≈ 3.5 days), mails verified contacts whose delay is still running, idempotent per (wallet, recovery nonce), holds the cursor when a send fails. Refuses the in-memory store.
+- **Expo**: `lib/passkey/email.ts` (proof text, ERC-1271 signing via `safeMessageHash` + `safeSignatureFromAssertion`, AbortController timeouts, German errors; the device remembers its email in SecureStore because the server has no status endpoint) + `components/passkey/EmailRow.tsx`, mounted in `app/settings/passkey.tsx` once the Safe is connected.
+- **Migration file** `supabase/migrations/20260927_passkey_contact_email.sql` — **NOT applied**. RLS on, no policies, all privileges revoked from anon/authenticated, no functions.
+- Tests: 39 web node:test (incl. an offline passkey-Safe ERC-1271 emulator checked against the fork-proven recovery vector), 14 Expo jest.
+
+**Gates (Max):**
+1. Apply `20260927_passkey_contact_email.sql`.
+2. Vercel Preview env: `PASSKEY_EMAIL_ENABLED=1`, `PASSKEY_EMAIL_STORE=supabase` (only after gate 1; unset = in-memory, which breaks when start and verify hit different instances), confirm `RESEND_API_KEY` is present on Preview, `CRON_SECRET` for the alert route.
+3. Add the cron to `vercel.json`, e.g. `{"path": "/api/passkey/recovery-alerts", "schedule": "*/10 * * * *"}` (the 3-day window needs a frequent scan, not a daily one).
+4. Production gates: a shared rate limiter (Postgres or Upstash) instead of the in-memory one; privacy text (Datenschutzerklärung) naming this purpose-bound address.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.

@@ -11,6 +11,7 @@ import { useMaci } from '@/context/MaciContext';
 import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MigrationSteps, { stepStates } from '@/components/passkey/MigrationSteps';
+import EmailRow from '@/components/passkey/EmailRow';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
 import {
   loadMigrationRecord,
@@ -201,6 +202,8 @@ export default function PasskeySettingsScreen() {
               Vertrauenspersonen einrichten — kommt im nächsten Schritt
             </Text>
           </View>
+
+          {connected && <EmailRow />}
 
           <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>ANMELDUNG</Text>
           <View
