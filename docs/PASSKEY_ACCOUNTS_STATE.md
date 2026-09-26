@@ -20,12 +20,12 @@ working; nothing is removed.
 | Area | Where | Proof |
 |---|---|---|
 | Onchain path, forked from Gnosis | `contracts/passkey-accounts/` | 12 forge tests: contract-admin `execute`, EOA removal (after which the legacy account's ERC-1271 check reverts), sponsored passkey deploy+handover, wrong passkey → AA24, guardian recovery + owner cancel |
-| Golden vector | `contracts/passkey-accounts/test/fixtures/passkey-safe-vector.json` | TS reproduces it byte-for-byte |
+| Golden vector | `contracts/passkey-accounts/test/fixtures/passkey-safe-vector.json` | TS reproduces it byte-for-byte. rpId `id.ortis.app`, origin `https://id.ortis.app` |
 | Sponsor route | `apps/web/src/app/api/passkey/sponsor` + `apps/web/src/lib/passkey/` | 66 node:test tests (+3 live Gnosis, `PASSKEY_LIVE_TEST=1`). Body `{chainId, userOp, x, y, legacy}`. Sender must be the genuine passkey Safe for (x, y) (exact factoryData + predicted address, or deployed proxy/singleton/4337 handler+module/single owner bound to (x, y)); `legacy` must be a thirdweb Account proxy holding CitizenNFTv2; handovers verified by eth_call `verifySignerPermissionRequest` + `isAdmin(signer)`; execute/SRM need an existing admin or a verified handover; one legacy per op; maxFee ≤ 3 gwei; daily budget per legacy (0.01 xDAI) + global (0.05 xDAI), 429 when exhausted; fails closed (503) on RPC errors; logs carry no RPC URLs |
 | Expo library | `apps/expo/lib/passkey/` | WebAuthn + PRF, counterfactual Safe, sponsored userOps, handover, PRF vault (AES-256-GCM, HKDF) |
 | Migration screen | `apps/expo/app/settings/passkey.tsx` | Gated: `app_settings.passkey_accounts_enabled = 'true'` AND channel ≠ production (dev builds allowed) |
 
-Expo passkey tests: 66 (`cd apps/expo && ./node_modules/.bin/jest lib/passkey --watchAll=false --no-watchman --ci`; watchman hangs jest).
+Expo passkey tests: 70 (`cd apps/expo && ./node_modules/.bin/jest lib/passkey --watchAll=false --no-watchman --ci`; watchman hangs jest).
 
 ## Measured / verified facts
 
@@ -38,8 +38,10 @@ Expo passkey tests: 66 (`cd apps/expo && ./node_modules/.bin/jest lib/passkey --
 
 ## Gates before a device test (Max)
 
-1. **Preview EAS build** — `webcredentials:roebel.app` was added to iOS `associatedDomains`, which is a native change, so an OTA update isn't enough.
-2. **Android** — `get_login_creds` was added to `apps/web/public/.well-known/assetlinks.json`. It only counts once it is live on roebel.app, which means that one file has to reach `main`.
+Passkeys use the rpId **`id.ortis.app`** (decided 2026-09-26): the neutral Ortis identity domain shared by all communities, not `roebel.app`. It is served by the Fly app `ortis-id`, built from `apps/roebel-id` with `fly.ortis.toml`. `roebel.app` hosts no passkey association any more (this branch's `get_login_creds` on roebel.app was reverted).
+
+1. **iOS: preview EAS build.** `webcredentials:id.ortis.app` is in iOS `associatedDomains`. That is a native change, so an OTA update isn't enough. It also needs gate 2, since iOS fetches the AASA from `id.ortis.app`.
+2. **AASA + assetlinks live on id.ortis.app.** `apps/roebel-id/src/well-known/app-associations.ts` serves `/.well-known/apple-app-site-association` (`webcredentials` → `88879TXSXK.com.maxbrych.roebelonchain`) and `/.well-known/assetlinks.json` (`handle_all_urls` + `get_login_creds` for `com.maxbrych.roebelonchain`). They are **not deployed yet**. Deploy from this branch with `cd apps/roebel-id && fly deploy -c fly.ortis.toml` (app `ortis-id`), then check with `curl -si https://id.ortis.app/.well-known/apple-app-site-association` and `curl -si https://id.ortis.app/.well-known/assetlinks.json` (both must return 200 + `application/json` with no redirect). Android: `get_login_creds` on id.ortis.app is the only Android association gate.
 3. **Vercel Preview env** (this branch only):
    - `PASSKEY_SPONSOR_ENABLED=1`
    - `PASSKEY_PAYMASTER_ADDRESS` = a **dedicated preview paymaster** (deploy a fresh NetizenVerifyingPaymaster, fund it modestly). Required; there is no default.

@@ -66,7 +66,7 @@ config = precompile `0x100` with FCL `0xA86e…5DBA` as fallback.
 ## Migration ceremony (per citizen, opt-in)
 
 1. Logged in with thirdweb as today.
-2. Create passkey (rpId `roebel.app`, PRF extension). Derive Safe address
+2. Create passkey (rpId `id.ortis.app`, the neutral Ortis identity domain shared by all communities, decided 2026-09-26; PRF extension). Derive Safe address
    counterfactually.
 3. Re-wrap signature-derived secrets (MACI voting key, Nostr key) under an
    AES-GCM key from HKDF(PRF output) — keeps MACI sign-ups; no ceremony.
@@ -91,10 +91,12 @@ New users (tranche 3): Safe-only, no legacy account.
 
 ## Known gates (Max)
 
-- Native build: `webcredentials:roebel.app` in `app.config.ts`
-  `associatedDomains` (AASA already lists the app) → new preview EAS build.
-- Android: `delegate_permission/common.get_login_creds` in `assetlinks.json`
-  must be live on roebel.app (merge of that one file to main).
+- Native build: `webcredentials:id.ortis.app` in `app.config.ts`
+  `associatedDomains` → new preview EAS build. The AASA on `id.ortis.app`
+  (served by `apps/roebel-id`, Fly app `ortis-id`) must list the app under
+  `webcredentials`.
+- Android: `delegate_permission/common.get_login_creds` in the
+  `assetlinks.json` on `id.ortis.app` (same deploy: `fly deploy -c fly.ortis.toml`).
 - Vercel Preview env: `PASSKEY_SPONSOR_ENABLED=1`, `PASSKEY_PAYMASTER_ADDRESS`
   (a DEDICATED preview paymaster) and `PASSKEY_SPONSOR_KEY` (its own
   `sponsorSigner` key; the production signer is refused). See
