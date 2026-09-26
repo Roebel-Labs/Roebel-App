@@ -1,4 +1,5 @@
-import * as Calendar from 'expo-calendar';
+// expo-calendar 56: the function API on the root import throws at runtime; it lives under /legacy.
+import * as Calendar from 'expo-calendar/legacy';
 import { Platform } from 'react-native';
 import { parseISO } from 'date-fns';
 
