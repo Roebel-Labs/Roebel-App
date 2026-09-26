@@ -15,6 +15,9 @@ import {
 import {
   ADDRESSES,
   CAPS,
+  ChainReadError,
+  LEGACY_ACCOUNT_PROXY_CODE,
+  type ChainReader,
   evaluateSponsorPolicy,
   parseSponsorUserOp,
   toPackedUserOperation,
@@ -51,15 +54,16 @@ const LEGACY = "0x1111111111111111111111111111111111111111" as Hex;
 const SAFE = "0x2222222222222222222222222222222222222222" as Hex;
 const RECIPIENT = "0x3333333333333333333333333333333333333333" as Hex;
 const GUARDIAN = "0x4444444444444444444444444444444444444444" as Hex;
+const OTHER_LEGACY = "0x5555555555555555555555555555555555555555" as Hex;
 const SIG65 = `0x${"ab".repeat(65)}` as Hex;
 
-function permReq(isAdmin: number) {
+function permReq(isAdmin: number, signer: Hex = SAFE) {
   return encodeFunctionData({
     abi: account,
     functionName: "setPermissionsForSigner",
     args: [
       {
-        signer: SAFE,
+        signer,
         isAdmin,
         approvedTargets: [],
         nativeTokenLimitPerTransaction: 0n,
@@ -79,6 +83,26 @@ const execLegacy = (target: Hex, value: bigint, data: Hex) =>
 
 const outer = (to: Hex, data: Hex, operation = 0, value = 0n, fn: "executeUserOp" | "executeUserOpWithErrorString" = "executeUserOp") =>
   encodeFunctionData({ abi: safe4337, functionName: fn, args: [to, value, data, operation] });
+
+/** In-memory chain: LEGACY + OTHER_LEGACY are real thirdweb proxies; SAFE is admin of LEGACY only;
+ * RECIPIENT is some other contract. */
+function fakeReader(over: { admins?: string[]; codes?: Record<string, Hex> } = {}): ChainReader {
+  const codes: Record<string, Hex> = {
+    [LEGACY.toLowerCase()]: LEGACY_ACCOUNT_PROXY_CODE,
+    [OTHER_LEGACY.toLowerCase()]: LEGACY_ACCOUNT_PROXY_CODE,
+    [RECIPIENT.toLowerCase()]: "0x6080604052348015600f57600080fd5b50",
+    ...over.codes,
+  };
+  const admins = new Set((over.admins ?? [`${LEGACY}:${SAFE}`]).map((x) => x.toLowerCase()));
+  return {
+    async getCode(addr) {
+      return codes[addr.toLowerCase()];
+    },
+    async isAdmin(account, signer) {
+      return admins.has(`${account}:${signer}`.toLowerCase());
+    },
+  };
+}
 
 type Inner = { operation?: number; to: Hex; value?: bigint; data: Hex };
 function packMultiSend(txs: Inner[]): Hex {
@@ -110,32 +134,32 @@ function op(callData: Hex, over: Partial<SponsorUserOp> = {}): SponsorUserOp {
   };
 }
 
-function ok(o: SponsorUserOp) {
-  const r = evaluateSponsorPolicy(o);
+async function ok(o: SponsorUserOp, reader: ChainReader = fakeReader()) {
+  const r = await evaluateSponsorPolicy(o, reader);
   assert.deepEqual(r, { ok: true });
 }
-function rejected(o: SponsorUserOp, re?: RegExp) {
-  const r = evaluateSponsorPolicy(o);
+async function rejected(o: SponsorUserOp, re?: RegExp, reader: ChainReader = fakeReader()) {
+  const r = await evaluateSponsorPolicy(o, reader);
   assert.equal(r.ok, false, "expected rejection");
   if (!r.ok && re) assert.match(r.reason, re);
 }
 
 // ---- allowed shapes ----
 
-test("allows setPermissionsForSigner(isAdmin=1) on the legacy account", () => {
-  ok(op(outer(LEGACY, permReq(1))));
+test("allows setPermissionsForSigner(isAdmin=1) on the legacy account", async () => {
+  await ok(op(outer(LEGACY, permReq(1))));
 });
 
-test("allows executeUserOpWithErrorString too", () => {
-  ok(op(outer(LEGACY, permReq(1), 0, 0n, "executeUserOpWithErrorString")));
+test("allows executeUserOpWithErrorString too", async () => {
+  await ok(op(outer(LEGACY, permReq(1), 0, 0n, "executeUserOpWithErrorString")));
 });
 
-test("allows legacy execute (value inside the legacy call is the legacy account's own)", () => {
-  ok(op(outer(LEGACY, execLegacy(RECIPIENT, 1n, "0x"))));
+test("allows legacy execute (value inside the legacy call is the legacy account's own)", async () => {
+  await ok(op(outer(LEGACY, execLegacy(RECIPIENT, 1n, "0x"))));
 });
 
-test("allows legacy executeBatch", () => {
-  ok(
+test("allows legacy executeBatch", async () => {
+  await ok(
     op(
       outer(
         LEGACY,
@@ -149,7 +173,7 @@ test("allows legacy executeBatch", () => {
   );
 });
 
-test("allows each SRM guardian-management selector on the exact SRM address", () => {
+test("allows each SRM guardian-management selector on the exact SRM address", async () => {
   const calls: Hex[] = [
     encodeFunctionData({ abi: srm, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }),
     encodeFunctionData({ abi: srm, functionName: "revokeGuardianWithThreshold", args: [zeroAddress, GUARDIAN, 1n] }),
@@ -157,16 +181,16 @@ test("allows each SRM guardian-management selector on the exact SRM address", ()
     encodeFunctionData({ abi: srm, functionName: "confirmRecovery", args: [SAFE, [GUARDIAN], 1n, false] }),
     encodeFunctionData({ abi: srm, functionName: "cancelRecovery" }),
   ];
-  for (const c of calls) ok(op(outer(ADDRESSES.socialRecoveryModule, c)));
+  for (const c of calls) await ok(op(outer(ADDRESSES.socialRecoveryModule, c)));
 });
 
-test("allows the deploy+handover op: delegatecall MultiSendCallOnly with allowlisted inner calls", () => {
+test("allows the deploy+handover op: delegatecall MultiSendCallOnly with allowlisted inner calls", async () => {
   const factoryData = encodeFunctionData({
     abi: proxyFactoryAbi,
     functionName: "createProxyWithNonce",
     args: [ADDRESSES.safeL2Singleton, "0x1234", 0n],
   });
-  ok(
+  await ok(
     op(
       viaMultiSend([
         { to: LEGACY, data: permReq(1) },
@@ -182,103 +206,103 @@ test("allows the deploy+handover op: delegatecall MultiSendCallOnly with allowli
 
 // ---- rejections ----
 
-test("rejects removal requests (isAdmin=2), directly, via execute and inside multisend", () => {
-  rejected(op(outer(LEGACY, permReq(2))), /isAdmin/);
-  rejected(op(outer(LEGACY, execLegacy(LEGACY, 0n, permReq(2)))), /isAdmin/);
-  rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(2) }])), /isAdmin/);
+test("rejects removal requests (isAdmin=2), directly, via execute and inside multisend", async () => {
+  await rejected(op(outer(LEGACY, permReq(2))), /isAdmin/);
+  await rejected(op(outer(LEGACY, execLegacy(LEGACY, 0n, permReq(2)))), /isAdmin/);
+  await rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(2) }])), /isAdmin/);
 });
 
-test("rejects isAdmin=0 (plain session-key grant) in tranche 1", () => {
-  rejected(op(outer(LEGACY, permReq(0))), /isAdmin/);
+test("rejects isAdmin=0 (plain session-key grant) in tranche 1", async () => {
+  await rejected(op(outer(LEGACY, permReq(0))), /isAdmin/);
 });
 
-test("rejects an arbitrary ERC-20 transfer", () => {
+test("rejects an arbitrary ERC-20 transfer", async () => {
   const t = encodeFunctionData({ abi: erc20, functionName: "transfer", args: [RECIPIENT, 1n] });
-  rejected(op(outer(RECIPIENT, t)));
-  rejected(op(viaMultiSend([{ to: RECIPIENT, data: t }])));
+  await rejected(op(outer(RECIPIENT, t)));
+  await rejected(op(viaMultiSend([{ to: RECIPIENT, data: t }])));
 });
 
-test("rejects delegatecall to anything but MultiSendCallOnly", () => {
-  rejected(op(outer(LEGACY, permReq(1), 1)), /delegatecall/);
-  rejected(op(outer(ADDRESSES.multiSend141, packMultiSend([{ to: LEGACY, data: permReq(1) }]), 1)), /delegatecall/);
+test("rejects delegatecall to anything but MultiSendCallOnly", async () => {
+  await rejected(op(outer(LEGACY, permReq(1), 1)), /delegatecall/);
+  await rejected(op(outer(ADDRESSES.multiSend141, packMultiSend([{ to: LEGACY, data: permReq(1) }]), 1)), /delegatecall/);
 });
 
-test("rejects a plain call to MultiSendCallOnly (operation must be delegatecall)", () => {
-  rejected(op(outer(ADDRESSES.multiSendCallOnly, packMultiSend([{ to: LEGACY, data: permReq(1) }]), 0)));
+test("rejects a plain call to MultiSendCallOnly (operation must be delegatecall)", async () => {
+  await rejected(op(outer(ADDRESSES.multiSendCallOnly, packMultiSend([{ to: LEGACY, data: permReq(1) }]), 0)));
 });
 
-test("rejects non-multiSend calldata delegatecalled into MultiSendCallOnly", () => {
-  rejected(op(outer(ADDRESSES.multiSendCallOnly, permReq(1), 1)));
+test("rejects non-multiSend calldata delegatecalled into MultiSendCallOnly", async () => {
+  await rejected(op(outer(ADDRESSES.multiSendCallOnly, permReq(1), 1)));
 });
 
-test("rejects inner delegatecall or inner value in multisend", () => {
-  rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(1), operation: 1 }])));
-  rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(1), value: 1n }])));
+test("rejects inner delegatecall or inner value in multisend", async () => {
+  await rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(1), operation: 1 }])));
+  await rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(1), value: 1n }])));
 });
 
-test("rejects malformed multisend packing and empty batches", () => {
+test("rejects malformed multisend packing and empty batches", async () => {
   // Inner tx claims 100 data bytes but only 2 follow.
   const truncated = encodeFunctionData({
     abi: multiSendAbi,
     functionName: "multiSend",
     args: [concatHex([encodePacked(["uint8", "address", "uint256", "uint256"], [0, LEGACY, 0n, 100n]), "0x1234"])],
   });
-  rejected(op(outer(ADDRESSES.multiSendCallOnly, truncated, 1)));
-  rejected(op(viaMultiSend([])));
+  await rejected(op(outer(ADDRESSES.multiSendCallOnly, truncated, 1)));
+  await rejected(op(viaMultiSend([])));
 });
 
-test("rejects non-zero outer value", () => {
-  rejected(op(outer(LEGACY, permReq(1), 0, 1n)), /value/);
+test("rejects non-zero outer value", async () => {
+  await rejected(op(outer(LEGACY, permReq(1), 0, 1n)), /value/);
 });
 
-test("rejects SRM selectors on a foreign address and non-guardian SRM functions", () => {
-  rejected(
+test("rejects SRM selectors on a foreign address and non-guardian SRM functions", async () => {
+  await rejected(
     op(outer(RECIPIENT, encodeFunctionData({ abi: srm, functionName: "addGuardianWithThreshold", args: [GUARDIAN, 1n] }))),
   );
-  rejected(
+  await rejected(
     op(outer(ADDRESSES.socialRecoveryModule, encodeFunctionData({ abi: srm, functionName: "executeRecovery", args: [SAFE, [GUARDIAN], 1n] }))),
   );
-  rejected(
+  await rejected(
     op(outer(ADDRESSES.socialRecoveryModule, encodeFunctionData({ abi: srm, functionName: "finalizeRecovery", args: [SAFE] }))),
   );
 });
 
-test("rejects unknown outer selectors", () => {
-  rejected(op(execLegacy(RECIPIENT, 0n, "0x")));
-  rejected(op("0x"));
+test("rejects unknown outer selectors", async () => {
+  await rejected(op(execLegacy(RECIPIENT, 0n, "0x")));
+  await rejected(op("0x"));
 });
 
-test("rejects gas over each cap", () => {
+test("rejects gas over each cap", async () => {
   const c = outer(LEGACY, permReq(1));
-  rejected(op(c, { callGasLimit: CAPS.callGasLimit + 1n }), /callGasLimit/);
-  rejected(op(c, { verificationGasLimit: CAPS.verificationGasLimit + 1n }), /verificationGasLimit/);
-  rejected(op(c, { preVerificationGas: CAPS.preVerificationGas + 1n }), /preVerificationGas/);
-  rejected(op(c, { maxFeePerGas: CAPS.maxFeePerGas + 1n }), /maxFeePerGas/);
-  rejected(op(c, { paymasterVerificationGasLimit: CAPS.paymasterVerificationGasLimit + 1n }), /paymasterVerificationGasLimit/);
-  rejected(op(c, { paymasterPostOpGasLimit: CAPS.paymasterPostOpGasLimit + 1n }), /paymasterPostOpGasLimit/);
-  rejected(op(c, { maxPriorityFeePerGas: 3_000_000_000n }), /maxPriorityFeePerGas/);
+  await rejected(op(c, { callGasLimit: CAPS.callGasLimit + 1n }), /callGasLimit/);
+  await rejected(op(c, { verificationGasLimit: CAPS.verificationGasLimit + 1n }), /verificationGasLimit/);
+  await rejected(op(c, { preVerificationGas: CAPS.preVerificationGas + 1n }), /preVerificationGas/);
+  await rejected(op(c, { maxFeePerGas: CAPS.maxFeePerGas + 1n }), /maxFeePerGas/);
+  await rejected(op(c, { paymasterVerificationGasLimit: CAPS.paymasterVerificationGasLimit + 1n }), /paymasterVerificationGasLimit/);
+  await rejected(op(c, { paymasterPostOpGasLimit: CAPS.paymasterPostOpGasLimit + 1n }), /paymasterPostOpGasLimit/);
+  await rejected(op(c, { maxPriorityFeePerGas: 3_000_000_000n }), /maxPriorityFeePerGas/);
 });
 
-test("caps are the plan's values", () => {
+test("caps are the plan's values", async () => {
   assert.equal(CAPS.callGasLimit, 1_500_000n);
   assert.equal(CAPS.verificationGasLimit, 1_000_000n);
   assert.equal(CAPS.preVerificationGas, 200_000n);
   assert.equal(CAPS.maxFeePerGas, 50_000_000_000n);
 });
 
-test("rejects a foreign factory, a foreign singleton, and factoryData without factory", () => {
+test("rejects a foreign factory, a foreign singleton, and factoryData without factory", async () => {
   const c = outer(LEGACY, permReq(1));
   const fd = (singleton: Hex) =>
     encodeFunctionData({ abi: proxyFactoryAbi, functionName: "createProxyWithNonce", args: [singleton, "0x", 0n] });
-  rejected(op(c, { factory: RECIPIENT, factoryData: fd(ADDRESSES.safeL2Singleton) }), /factory/);
-  rejected(op(c, { factory: ADDRESSES.safeProxyFactory, factoryData: fd(RECIPIENT) }), /singleton/);
-  rejected(op(c, { factory: ADDRESSES.safeProxyFactory, factoryData: "0xdeadbeef" }), /factory/);
-  rejected(op(c, { factoryData: fd(ADDRESSES.safeL2Singleton) }), /factory/);
+  await rejected(op(c, { factory: RECIPIENT, factoryData: fd(ADDRESSES.safeL2Singleton) }), /factory/);
+  await rejected(op(c, { factory: ADDRESSES.safeProxyFactory, factoryData: fd(RECIPIENT) }), /singleton/);
+  await rejected(op(c, { factory: ADDRESSES.safeProxyFactory, factoryData: "0xdeadbeef" }), /factory/);
+  await rejected(op(c, { factoryData: fd(ADDRESSES.safeL2Singleton) }), /factory/);
 });
 
 // ---- parsing / packing ----
 
-test("parseSponsorUserOp reads hex numerics and rejects malformed input", () => {
+test("parseSponsorUserOp reads hex numerics and rejects malformed input", async () => {
   const parsed = parseSponsorUserOp({
     sender: SAFE,
     nonce: "0x1",
@@ -301,10 +325,130 @@ test("parseSponsorUserOp reads hex numerics and rejects malformed input", () => 
   );
 });
 
-test("toPackedUserOperation packs gas words and initCode = factory ++ factoryData", () => {
+test("toPackedUserOperation packs gas words and initCode = factory ++ factoryData", async () => {
   const p = toPackedUserOperation(op("0x12", { factory: ADDRESSES.safeProxyFactory, factoryData: "0xabcd" }));
   assert.equal(p.accountGasLimits, packUint128Pair(500_000n, 300_000n));
   assert.equal(p.gasFees, packUint128Pair(1_000_000_000n, 2_000_000_000n));
   assert.equal(p.initCode.toLowerCase(), `${ADDRESSES.safeProxyFactory.toLowerCase()}abcd`);
   assert.equal(toPackedUserOperation(op("0x12")).initCode, "0x");
+});
+
+// ---- binding to the sender's own legacy thirdweb account ----
+
+test("proxy code constant is the EIP-1167 clone of the live Account impl", () => {
+  assert.equal(
+    LEGACY_ACCOUNT_PROXY_CODE,
+    "0x363d3d373d3d3d363d73f22175c80c6e074c171811c59c6c0087e2a6a3465af43d82803e903d91602b57fd5bf3",
+  );
+});
+
+test("rejects execute / executeBatch / setPermissionsForSigner on a non-thirdweb contract", async () => {
+  const reader = fakeReader({ admins: [`${RECIPIENT}:${SAFE}`] });
+  await rejected(op(outer(RECIPIENT, execLegacy(RECIPIENT, 0n, "0x"))), /legacy thirdweb account/, reader);
+  await rejected(op(outer(RECIPIENT, permReq(1))), /legacy thirdweb account/, reader);
+  // An address with no code at all is rejected too.
+  await rejected(op(outer(GUARDIAN, execLegacy(RECIPIENT, 0n, "0x"))), /legacy thirdweb account/, reader);
+});
+
+test("rejects execute on another user's legacy account (sender is not admin)", async () => {
+  await rejected(op(outer(OTHER_LEGACY, execLegacy(RECIPIENT, 1n, "0x"))), /not an admin/);
+  await rejected(
+    op(
+      outer(
+        OTHER_LEGACY,
+        encodeFunctionData({ abi: account, functionName: "executeBatch", args: [[RECIPIENT], [0n], ["0x"]] }),
+      ),
+    ),
+    /not an admin/,
+  );
+});
+
+test("rejects a handover whose req.signer is not the sender", async () => {
+  await rejected(op(outer(LEGACY, permReq(1, GUARDIAN))), /signer/);
+  await rejected(op(viaMultiSend([{ to: OTHER_LEGACY, data: permReq(1, GUARDIAN) }])), /signer/);
+});
+
+test("rejects a nested setPermissionsForSigner (inside execute) for a foreign signer", async () => {
+  await rejected(op(outer(LEGACY, execLegacy(LEGACY, 0n, permReq(1, GUARDIAN)))), /signer/);
+});
+
+test("allows handover + execute on the same account in one batch (handover first)", async () => {
+  const reader = fakeReader({ admins: [] }); // SAFE is not yet admin of anything
+  await ok(
+    op(
+      viaMultiSend([
+        { to: OTHER_LEGACY, data: permReq(1) },
+        { to: OTHER_LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+      ]),
+    ),
+    reader,
+  );
+});
+
+test("rejects execute BEFORE the handover in the same batch", async () => {
+  const reader = fakeReader({ admins: [] });
+  await rejected(
+    op(
+      viaMultiSend([
+        { to: OTHER_LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: OTHER_LEGACY, data: permReq(1) },
+      ]),
+    ),
+    /not an admin/,
+    reader,
+  );
+});
+
+test("a handover for account A does not unlock execute on account B", async () => {
+  const reader = fakeReader({ admins: [] });
+  await rejected(
+    op(
+      viaMultiSend([
+        { to: LEGACY, data: permReq(1) },
+        { to: OTHER_LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+      ]),
+    ),
+    /not an admin/,
+    reader,
+  );
+});
+
+test("chain read failure fails closed with ChainReadError (never ok)", async () => {
+  const broken: ChainReader = {
+    async getCode() {
+      throw new Error("rpc down");
+    },
+    async isAdmin() {
+      throw new Error("rpc down");
+    },
+  };
+  await assert.rejects(evaluateSponsorPolicy(op(outer(LEGACY, permReq(1))), broken), ChainReadError);
+  const adminBroken: ChainReader = {
+    async getCode() {
+      return LEGACY_ACCOUNT_PROXY_CODE;
+    },
+    async isAdmin() {
+      throw new Error("timeout");
+    },
+  };
+  await assert.rejects(
+    evaluateSponsorPolicy(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), adminBroken),
+    ChainReadError,
+  );
+});
+
+test("structural rejections do not touch the chain", async () => {
+  let calls = 0;
+  const counting: ChainReader = {
+    async getCode() {
+      calls++;
+      return LEGACY_ACCOUNT_PROXY_CODE;
+    },
+    async isAdmin() {
+      calls++;
+      return true;
+    },
+  };
+  await rejected(op(outer(LEGACY, permReq(2))), /isAdmin/, counting);
+  assert.equal(calls, 0);
 });

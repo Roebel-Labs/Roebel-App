@@ -5,8 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionData, parseAbi, recoverTypedDataAddress, type Hex } from "viem";
-import { POST } from "../../../app/api/passkey/sponsor/route";
-import { ADDRESSES } from "../sponsor-policy";
+import { POST as routePOST } from "../../../app/api/passkey/sponsor/route";
+import { ADDRESSES, LEGACY_ACCOUNT_PROXY_CODE, type ChainReader } from "../sponsor-policy";
+import { handleSponsorRequest } from "../sponsor-handler";
 
 // Anvil/Hardhat well-known test key #0 - publicly known, test-only.
 const TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -19,6 +20,19 @@ const safe4337 = parseAbi(["function executeUserOp(address to, uint256 value, by
 const erc20 = parseAbi(["function transfer(address to, uint256 amount)"]);
 
 const LEGACY = "0x1111111111111111111111111111111111111111" as Hex;
+const SENDER = "0x2222222222222222222222222222222222222222" as Hex;
+
+/** SENDER is admin of LEGACY, which carries the real thirdweb proxy code. */
+const goodChain: ChainReader = {
+  async getCode(a) {
+    return a.toLowerCase() === LEGACY ? LEGACY_ACCOUNT_PROXY_CODE : undefined;
+  },
+  async isAdmin(account, signer) {
+    return account.toLowerCase() === LEGACY && signer.toLowerCase() === SENDER;
+  },
+};
+let chain: ChainReader = goodChain;
+const POST = (r: Request) => handleSponsorRequest(r, { chain });
 
 const goodCall = encodeFunctionData({
   abi: safe4337,
@@ -28,7 +42,7 @@ const goodCall = encodeFunctionData({
 
 function userOp(callData: Hex = goodCall) {
   return {
-    sender: "0x2222222222222222222222222222222222222222",
+    sender: SENDER,
     nonce: "0x0",
     callData,
     callGasLimit: "0x493e0",
@@ -53,6 +67,12 @@ function enable(key: string | null = TEST_KEY) {
   if (key === null) delete process.env.PASSKEY_SPONSOR_KEY;
   else process.env.PASSKEY_SPONSOR_KEY = key;
 }
+
+test("the real route handler (no chain) is 503 when disabled", async () => {
+  delete process.env.PASSKEY_SPONSOR_ENABLED;
+  const res = await routePOST(req({ chainId: 100, userOp: userOp() }));
+  assert.equal(res.status, 503);
+});
 
 test("503 unless PASSKEY_SPONSOR_ENABLED === '1'", async () => {
   process.env.PASSKEY_SPONSOR_KEY = TEST_KEY;
@@ -136,4 +156,37 @@ test("200 issues a voucher for the live paymaster, echoing gas limits verbatim",
     signature: sig,
   });
   assert.equal(recovered, TEST_ADDR);
+});
+
+test("403 when the execute target is someone else's legacy account", async () => {
+  enable();
+  chain = { ...goodChain, isAdmin: async () => false };
+  try {
+    const res = await POST(req({ chainId: 100, userOp: userOp() }));
+    assert.equal(res.status, 403);
+    assert.match((await res.json()).reason, /not an admin/);
+  } finally {
+    chain = goodChain;
+  }
+});
+
+test("RPC failure fails closed: 503 chain_unavailable, never a voucher", async () => {
+  enable();
+  chain = {
+    async getCode() {
+      throw new Error("rpc down");
+    },
+    async isAdmin() {
+      throw new Error("rpc down");
+    },
+  };
+  try {
+    const res = await POST(req({ chainId: 100, userOp: userOp() }));
+    assert.equal(res.status, 503);
+    const body = await res.json();
+    assert.deepEqual(body, { error: "chain_unavailable" });
+    assert.equal("paymasterAndData" in body, false);
+  } finally {
+    chain = goodChain;
+  }
 });

@@ -1,12 +1,19 @@
 /**
  * Sponsorship policy for the preview-only passkey sponsor route
- * (/api/passkey/sponsor). Pure: no env, no RPC, no clock.
+ * (/api/passkey/sponsor). No env, no clock; chain reads go through an
+ * injected `ChainReader` so the policy stays unit-testable.
  *
  * A passkey Safe (Safe 1.4.1 + Safe4337Module v0.3.0, EntryPoint v0.7) may
  * get a gasless userOp ONLY for:
- *   - driving the legacy thirdweb Account as its admin:
+ *   - driving the SENDER'S OWN legacy thirdweb Account:
  *       setPermissionsForSigner(req, sig) with req.isAdmin == 1 (adds only;
- *       removals are rejected in tranche 1), execute(...), executeBatch(...)
+ *       removals and isAdmin 0 are rejected in tranche 1) AND
+ *       req.signer == userOp.sender (the handover makes the Safe itself admin);
+ *       execute(...) / executeBatch(...) only where the sender is already an
+ *       admin of that account (eth_call isAdmin), or where an EARLIER call in
+ *       the same multiSend batch is a valid handover of that account to the
+ *       sender. Every such target must carry exactly the EIP-1167 proxy code
+ *       of the live thirdweb Account impl (LEGACY_ACCOUNT_PROXY_CODE).
  *   - guardian management on the Candide SocialRecoveryModule (exact address):
  *       addGuardianWithThreshold, revokeGuardianWithThreshold, changeThreshold,
  *       confirmRecovery, cancelRecovery
@@ -15,10 +22,13 @@
  * MultiSendCallOnly 1.4.1 with multiSend(bytes), where every packed inner tx
  * is operation 0, value 0 and itself on the allowlist above.
  *
+ * Structural checks run first and never touch the chain. Any chain read
+ * failure throws `ChainReadError` - callers must fail closed (never sponsor).
+ *
  * Selectors were checked against deployed bytecode on Gnosis (chain 100):
  *   executeUserOp 0x7bb37428, executeUserOpWithErrorString 0x541d63c8,
  *   multiSend 0x8d80ff0a, setPermissionsForSigner 0x5892e236,
- *   execute 0xb61d27f6, executeBatch 0x47e1da2a,
+ *   execute 0xb61d27f6, executeBatch 0x47e1da2a, isAdmin 0x24d7806c,
  *   addGuardianWithThreshold 0xbe0e54d7, revokeGuardianWithThreshold 0x936f7d86,
  *   changeThreshold 0x694e80c3, confirmRecovery 0x064e2d0e,
  *   cancelRecovery 0x0ba234d6, createProxyWithNonce 0x1688f0b9.
@@ -44,7 +54,12 @@ export const ADDRESSES = {
   safeL2Singleton: "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
   socialRecoveryModule: "0x38275826E1933303E508433dD5f289315Da2541c",
   paymaster: "0x11ed03Db610c88b010FfE38B13142D3657f2E84f",
+  legacyAccountImpl: "0xf22175c80c6e074c171811c59c6c0087e2a6a346",
 } as const satisfies Record<string, Hex>;
+
+/** EIP-1167 minimal proxy to the thirdweb Account impl. Verified 2026-09-26
+ * against live accounts from AccountFactory 0x85e2…DF00 getAccounts(0,3). */
+export const LEGACY_ACCOUNT_PROXY_CODE: Hex = `0x363d3d373d3d3d363d73${ADDRESSES.legacyAccountImpl.slice(2)}5af43d82803e903d91602b57fd5bf3`;
 
 export const CAPS = {
   callGasLimit: 1_500_000n,
@@ -72,6 +87,22 @@ export interface SponsorUserOp {
 }
 
 export type PolicyResult = { ok: true } | { ok: false; reason: string };
+
+/** The two chain reads the policy needs. Implementations must throw (not
+ * return a default) on RPC failure. */
+export interface ChainReader {
+  getCode(address: Hex): Promise<Hex | undefined>;
+  isAdmin(account: Hex, signer: Hex): Promise<boolean>;
+}
+
+/** A chain read failed; the request must NOT be sponsored. */
+export class ChainReadError extends Error {
+  constructor(cause: unknown) {
+    super("chain read failed");
+    this.name = "ChainReadError";
+    this.cause = cause;
+  }
+}
 
 const safe4337Abi = parseAbi([
   "function executeUserOp(address to, uint256 value, bytes data, uint8 operation)",
@@ -106,22 +137,35 @@ function tryDecode<T>(fn: () => T): T | null {
   }
 }
 
-/** Nested data handed to the legacy account's execute/executeBatch: anything
- * goes (the Safe is a full admin of the legacy account) EXCEPT a signer
- * permission change that is not an add. */
-function checkLegacyInnerData(data: Hex): PolicyResult {
-  if (size(data) < 4) return OK;
-  const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
-  if (perm?.functionName === "setPermissionsForSigner") return checkPermissionRequest(perm.args[0].isAdmin);
+/** Chain facts the structural pass needs verified, in call order. */
+interface ScanState {
+  sender: Hex;
+  /** Every thirdweb-selector target: must have LEGACY_ACCOUNT_PROXY_CODE. */
+  legacyTargets: Set<string>;
+  /** Targets already handed over to the sender earlier in this op. */
+  handedOver: Set<string>;
+  /** execute/executeBatch targets not covered by an earlier handover: sender must be admin. */
+  needsAdmin: Set<string>;
+}
+
+function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): PolicyResult {
+  if (req.isAdmin !== 1) return deny(`setPermissionsForSigner isAdmin=${req.isAdmin} not sponsorable (only 1 = add)`);
+  if (!isAddressEqual(req.signer, sender)) return deny("setPermissionsForSigner req.signer must be the sender");
   return OK;
 }
 
-function checkPermissionRequest(isAdmin: number): PolicyResult {
-  return isAdmin === 1 ? OK : deny(`setPermissionsForSigner isAdmin=${isAdmin} not sponsorable (only 1 = add)`);
+/** Nested data handed to the legacy account's execute/executeBatch: anything
+ * goes (the sender is an admin of that account) EXCEPT a signer permission
+ * change that is not "add the sender as admin". */
+function checkLegacyInnerData(data: Hex, sender: Hex): PolicyResult {
+  if (size(data) < 4) return OK;
+  const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
+  if (perm?.functionName === "setPermissionsForSigner") return checkPermissionRequest(perm.args[0], sender);
+  return OK;
 }
 
 /** A single plain call (operation 0, value 0) the Safe makes. */
-function checkAllowedCall(to: Hex, data: Hex): PolicyResult {
+function checkAllowedCall(to: Hex, data: Hex, st: ScanState): PolicyResult {
   if (size(data) < 4) return deny("call without a function selector");
 
   if (isAddressEqual(to, ADDRESSES.socialRecoveryModule)) {
@@ -131,23 +175,32 @@ function checkAllowedCall(to: Hex, data: Hex): PolicyResult {
 
   const d = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
   if (!d) return deny("call target/selector not allowlisted");
-  switch (d.functionName) {
-    case "setPermissionsForSigner":
-      return checkPermissionRequest(d.args[0].isAdmin);
-    case "execute":
-      return checkLegacyInnerData(d.args[2]);
-    case "executeBatch": {
-      const [targets, values, datas] = d.args;
-      if (targets.length !== values.length || targets.length !== datas.length) {
-        return deny("executeBatch array length mismatch");
-      }
-      for (const inner of datas) {
-        const r = checkLegacyInnerData(inner);
-        if (!r.ok) return r;
-      }
-      return OK;
+  const key = to.toLowerCase();
+
+  if (d.functionName === "setPermissionsForSigner") {
+    const r = checkPermissionRequest(d.args[0], st.sender);
+    if (!r.ok) return r;
+    st.legacyTargets.add(key);
+    st.handedOver.add(key);
+    return OK;
+  }
+
+  if (d.functionName === "execute") {
+    const r = checkLegacyInnerData(d.args[2], st.sender);
+    if (!r.ok) return r;
+  } else {
+    const [targets, values, datas] = d.args;
+    if (targets.length !== values.length || targets.length !== datas.length) {
+      return deny("executeBatch array length mismatch");
+    }
+    for (const inner of datas) {
+      const r = checkLegacyInnerData(inner, st.sender);
+      if (!r.ok) return r;
     }
   }
+  st.legacyTargets.add(key);
+  if (!st.handedOver.has(key)) st.needsAdmin.add(key);
+  return OK;
 }
 
 /** Safe MultiSend packed encoding: uint8 op ++ address to ++ uint256 value ++ uint256 len ++ bytes data. */
@@ -172,7 +225,7 @@ export function decodeMultiSendPacked(
   return txs;
 }
 
-function checkCallData(callData: Hex): PolicyResult {
+function checkCallData(callData: Hex, st: ScanState): PolicyResult {
   const outer = tryDecode(() => decodeFunctionData({ abi: safe4337Abi, data: callData }));
   if (!outer) return deny("callData is not Safe4337Module.executeUserOp[WithErrorString]");
   const [to, value, data, operation] = outer.args;
@@ -182,7 +235,7 @@ function checkCallData(callData: Hex): PolicyResult {
     if (isAddressEqual(to, ADDRESSES.multiSendCallOnly)) {
       return deny("MultiSendCallOnly must be reached via delegatecall");
     }
-    return checkAllowedCall(to, data);
+    return checkAllowedCall(to, data, st);
   }
   if (operation !== 1) return deny(`unknown operation ${operation}`);
   if (!isAddressEqual(to, ADDRESSES.multiSendCallOnly)) {
@@ -196,7 +249,7 @@ function checkCallData(callData: Hex): PolicyResult {
   for (const tx of txs) {
     if (tx.operation !== 0) return deny("inner multiSend tx must be a call (operation 0)");
     if (tx.value !== 0n) return deny("inner multiSend value must be 0");
-    const r = checkAllowedCall(tx.to, tx.data);
+    const r = checkAllowedCall(tx.to, tx.data, st);
     if (!r.ok) return r;
   }
   return OK;
@@ -220,12 +273,46 @@ function checkGas(op: SponsorUserOp): PolicyResult {
   return OK;
 }
 
-export function evaluateSponsorPolicy(op: SponsorUserOp): PolicyResult {
+async function read<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    throw new ChainReadError(err);
+  }
+}
+
+/**
+ * Resolves to { ok } or { ok: false, reason }. Throws ChainReadError when a
+ * chain read fails - the caller must treat that as "do not sponsor".
+ */
+export async function evaluateSponsorPolicy(op: SponsorUserOp, chain: ChainReader): Promise<PolicyResult> {
   for (const check of [checkGas, checkFactory]) {
     const r = check(op);
     if (!r.ok) return r;
   }
-  return checkCallData(op.callData);
+  const st: ScanState = {
+    sender: op.sender,
+    legacyTargets: new Set(),
+    handedOver: new Set(),
+    needsAdmin: new Set(),
+  };
+  const structural = checkCallData(op.callData, st);
+  if (!structural.ok) return structural;
+
+  const targets = [...st.legacyTargets];
+  const codes = await Promise.all(targets.map((t) => read(() => chain.getCode(t as Hex))));
+  for (let i = 0; i < targets.length; i++) {
+    if ((codes[i] ?? "0x").toLowerCase() !== LEGACY_ACCOUNT_PROXY_CODE.toLowerCase()) {
+      return deny(`target ${targets[i]} is not a legacy thirdweb account`);
+    }
+  }
+
+  const needAdmin = [...st.needsAdmin];
+  const admins = await Promise.all(needAdmin.map((t) => read(() => chain.isAdmin(t as Hex, op.sender))));
+  for (let i = 0; i < needAdmin.length; i++) {
+    if (admins[i] !== true) return deny(`sender is not an admin of ${needAdmin[i]}`);
+  }
+  return OK;
 }
 
 // ---- request parsing / packing ----
