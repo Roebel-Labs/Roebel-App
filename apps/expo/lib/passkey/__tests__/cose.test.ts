@@ -25,9 +25,9 @@ function cbor(v: CborValue): number[] {
   return out;
 }
 
-const RP_ID_HASH = Array.from(hexToBytes(sha256(stringToBytes('roebel.app'))));
+const RP_ID_HASH = Array.from(hexToBytes(sha256(stringToBytes('id.ortis.app'))));
 
-function buildAttestationObject(x: Uint8Array, y: Uint8Array, credentialId: Uint8Array, rpId = 'roebel.app'): Uint8Array {
+function buildAttestationObject(x: Uint8Array, y: Uint8Array, credentialId: Uint8Array, rpId = 'id.ortis.app'): Uint8Array {
   const coseKey = new Map<CborValue, CborValue>([
     [1, 2], // kty: EC2
     [3, -7], // alg: ES256
@@ -112,9 +112,14 @@ describe('cose / attestationObject parsing', () => {
     expect(() => parseAttestationObject(att)).toThrow(/P-256/);
   });
 
-  it('rejects a credential created for another rpId (rpIdHash != sha256("roebel.app"))', () => {
+  it('rejects a credential created for another rpId (rpIdHash != sha256("id.ortis.app"))', () => {
     const att = buildAttestationObject(x, y, credentialId, 'evil.example');
     expect(() => parseAttestationObject(att)).toThrow(/rpId/);
     expect(() => publicKeyFromAttestationObject(base64UrlEncode(att))).toThrow(/rpId/);
+  });
+
+  it('rejects a credential scoped to the retired rpId roebel.app', () => {
+    const att = buildAttestationObject(x, y, credentialId, 'roebel.app');
+    expect(() => parseAttestationObject(att)).toThrow(/rpId/);
   });
 });

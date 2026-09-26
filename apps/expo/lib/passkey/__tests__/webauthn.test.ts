@@ -36,9 +36,9 @@ describe('webauthn (react-native-passkey mocked)', () => {
 
   it('decodes an assertion: DER → low-s (r,s), authData hex, clientDataJSON text, PRF', async () => {
     const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-    const authData = Uint8Array.from([...hexToBytes(sha256(stringToBytes('roebel.app'))), 0x05, 0, 0, 0, 1]);
+    const authData = Uint8Array.from([...hexToBytes(sha256(stringToBytes('id.ortis.app'))), 0x05, 0, 0, 0, 1]);
     const challenge: Hex = `0x${'ab'.repeat(32)}`;
-    const clientDataJSON = `{"type":"webauthn.get","challenge":"${base64UrlEncode(hexToBytes(challenge))}","origin":"https://roebel.app"}`;
+    const clientDataJSON = `{"type":"webauthn.get","challenge":"${base64UrlEncode(hexToBytes(challenge))}","origin":"https://id.ortis.app"}`;
     const signer = createSign('sha256');
     signer.update(Buffer.concat([Buffer.from(authData), Buffer.from(hexToBytes(sha256(stringToBytes(clientDataJSON))))]));
     const der = signer.sign(privateKey); // DER
@@ -56,7 +56,7 @@ describe('webauthn (react-native-passkey mocked)', () => {
     });
     const a = await signWithPasskey('cred', challenge);
     expect(mockGet.mock.calls[0][0].challenge).toBe(base64UrlEncode(hexToBytes(challenge)));
-    expect(mockGet.mock.calls[0][0].rpId).toBe('roebel.app');
+    expect(mockGet.mock.calls[0][0].rpId).toBe('id.ortis.app');
     expect(a.authenticatorData).toBe(bytesToHex(authData));
     expect(a.clientDataJSON).toBe(clientDataJSON);
     expect(a.s <= P256_N / 2n).toBe(true);

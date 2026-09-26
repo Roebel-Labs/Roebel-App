@@ -1,5 +1,5 @@
 /**
- * Native passkey calls (react-native-passkey 3.3.2) for rpId roebel.app.
+ * Native passkey calls (react-native-passkey 3.3.2) for rpId id.ortis.app (the neutral Ortis identity domain).
  *
  * PRF encoding differs per platform in react-native-passkey:
  *  - iOS decodes `prf.eval.first` from the JSON of a Uint8Array ({"0":b0,"1":b1,…}) and returns

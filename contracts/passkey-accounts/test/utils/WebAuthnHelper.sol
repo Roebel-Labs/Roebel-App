@@ -17,7 +17,7 @@ library WebAuthnHelper {
     uint256 internal constant P256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
 
     /// @dev Default additional client-data fields (everything after the challenge, minus the closing brace).
-    string internal constant DEFAULT_CLIENT_DATA_FIELDS = '"origin":"https://roebel.app"';
+    string internal constant DEFAULT_CLIENT_DATA_FIELDS = '"origin":"https://id.ortis.app"';
 
     bytes internal constant B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 

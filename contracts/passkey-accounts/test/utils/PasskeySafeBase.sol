@@ -41,7 +41,7 @@ abstract contract PasskeySafeBase is Test {
     /// @dev precompile 0x100 (hi 16 bits) | FCL fallback (lo 160 bits).
     uint176 internal constant VERIFIERS = (uint176(0x0100) << 160) | uint176(uint160(FCL_VERIFIER));
 
-    string internal constant RP_ID = "roebel.app";
+    string internal constant RP_ID = "id.ortis.app";
     uint256 internal constant PASSKEY_PK = 0xC0FFEE;
     uint256 internal constant SAFE_SALT_NONCE = 0;
     uint256 internal constant TEST_SPONSOR_KEY = 0x5905;
