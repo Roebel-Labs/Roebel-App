@@ -10,35 +10,37 @@ interface IAttesterSet {
     function attesterCount() external view returns (uint256);
 }
 
-interface ISafeOwners {
-    function isOwner(address owner) external view returns (bool);
-}
-
 /**
  * @title OrgRegistry (NSP-14 — Org Identity)
- * @notice Organisations as onchain actors. An org IS a Safe (or any contract
+ * @notice Organisations as onchain actors. An org IS a Safe (or another contract
  *         account); the registry mints that Safe a soulbound OrgNFT once the
  *         community's attesters approve it, exactly like a Citizen is attested.
  *
  *         The Safe then governs its own record, with no admin in between:
  *           - which Nostr keys may publish as the org (a SET, so every admin
- *             device can hold its own key and be revoked alone — never a shared
- *             secret that a departing member keeps forever),
+ *             device holds its own key and can be revoked alone — never a shared
+ *             secret a departing member keeps forever),
  *           - member/admin roles (owners are the Safe's own owners),
  *           - an optional metadata URI,
- *           - rotation to a new Safe.
+ *           - rotation to a new Safe (two-step: the new Safe must accept).
  *
- *         Everything is emitted as events, so any indexer can rebuild the full
- *         org directory from the chain alone.
+ *         Every state change is emitted, so a log-only indexer reproduces every
+ *         view, including request status and thresholds.
  *
  *         Canonical id: orgId = keccak256("netizen:org:v1:" + lowercase uuid),
- *         tokenId = uint256(orgId). The uuid is the org's existing database id
- *         (migration) or a fresh random uuid (new orgs) — the chain never needs
- *         the database, but existing records keep a stable, derivable id.
+ *         tokenId = uint256(orgId). Ids are PUBLIC (they derive from database
+ *         uuids), so a registration request does not reserve an id: any number
+ *         of Safes may claim the same id, attesters approve the right one, and
+ *         the first to execute wins while the others close. A squatter can
+ *         therefore waste attention, never block an org.
+ *
+ *         Requests expire after REQUEST_TTL; anyone may close an expired one,
+ *         so no request can ever wedge an org (e.g. after the attester set shrinks).
  *
  *         `owner()` (the community's Attester Safe during bootstrap) may only
  *         tune thresholds and run the one-time migration; it cannot touch an
- *         org's keys, roles or metadata.
+ *         org's keys, roles or metadata. Run finalizeMigration() in the same
+ *         Safe batch as the last migrationRegister().
  */
 contract OrgRegistry is ERC721, Ownable {
     using ThresholdBands for ThresholdBands.Band;
@@ -46,6 +48,7 @@ contract OrgRegistry is ERC721, Ownable {
     enum Role { None, Member, Admin }
     enum RequestType { Registration, Revocation }
     enum RequestStatus { Pending, Rejected, Executed }
+    enum CloseReason { Approved, Rejected, Withdrawn, Expired, Superseded }
 
     struct Org {
         address safe;          // address(0) == not registered (or revoked)
@@ -66,7 +69,16 @@ contract OrgRegistry is ERC721, Ownable {
         uint32 requiredApprovals;  // snapshot at creation
         uint32 requiredRejections; // snapshot at creation
         uint64 createdAt;
+        uint64 expiresAt;
     }
+
+    uint256 public constant REQUEST_TTL = 30 days;
+    uint256 public constant REJECTION_COOLDOWN = 7 days;
+    uint256 public constant MAX_URI_BYTES = 512;
+    uint16 public constant MAX_BAND_FLOOR = 50;
+    /// @notice requestId recorded for orgs imported by migrationRegister.
+    uint256 public constant MIGRATION_REQUEST_ID = type(uint256).max;
+    uint256 private constant SAFE_CALL_GAS = 30_000;
 
     IAttesterSet public immutable attesters;
 
@@ -76,8 +88,13 @@ contract OrgRegistry is ERC721, Ownable {
 
     mapping(bytes32 => Org) private _orgs;
     mapping(address => bytes32) public orgIdOfSafe;
-    /// @notice Open request per orgId (0 = none). Stored as requestId + 1.
-    mapping(bytes32 => uint256) private _openRequest;
+    /// @notice pending rotation target per org (address(0) = none).
+    mapping(bytes32 => address) public pendingSafe;
+
+    /// @dev Open-request slots store requestId + 1 (0 = none).
+    mapping(address => uint256) private _openRegistrationOfSafe;
+    mapping(bytes32 => uint256) private _openRevocationOfOrg;
+    mapping(address => uint256) public cooldownUntil;
 
     mapping(bytes32 => mapping(uint64 => mapping(bytes32 => bool))) private _nostrKeys;
     mapping(bytes32 => mapping(uint64 => mapping(address => Role))) private _roles;
@@ -89,19 +106,29 @@ contract OrgRegistry is ERC721, Ownable {
     bool public migrationFinalized;
     bool private _rotating;
 
-    event RegistrationRequested(uint256 indexed requestId, bytes32 indexed orgId, address indexed safe, string metadataURI);
-    event RevocationRequested(uint256 indexed requestId, bytes32 indexed orgId, address indexed requester, string evidenceURI);
+    event RegistrationRequested(
+        uint256 indexed requestId, bytes32 indexed orgId, address indexed safe,
+        string metadataURI, uint32 requiredApprovals, uint32 requiredRejections, uint64 expiresAt
+    );
+    event RevocationRequested(
+        uint256 indexed requestId, bytes32 indexed orgId, address indexed requester,
+        string evidenceURI, uint32 requiredApprovals, uint32 requiredRejections, uint64 expiresAt
+    );
     event RequestApproved(uint256 indexed requestId, address indexed attester);
     event RequestRejected(uint256 indexed requestId, address indexed attester);
-    event RequestWithdrawn(uint256 indexed requestId);
-    event OrgRegistered(bytes32 indexed orgId, address indexed safe, uint256 indexed requestId);
-    event OrgRevoked(bytes32 indexed orgId, address indexed safe, uint256 indexed requestId);
+    /// @notice Every terminal transition, exactly once per request.
+    event RequestClosed(uint256 indexed requestId, RequestStatus status, CloseReason reason);
+    event OrgRegistered(bytes32 indexed orgId, address indexed safe, uint256 indexed requestId, uint64 generation);
+    event OrgRevoked(bytes32 indexed orgId, address indexed safe, uint256 indexed requestId, uint64 generation);
+    event RotationProposed(bytes32 indexed orgId, address indexed current, address indexed next);
     event SafeRotated(bytes32 indexed orgId, address indexed previous, address indexed next);
     event MetadataURIChanged(bytes32 indexed orgId, string metadataURI);
     event NostrKeySet(bytes32 indexed orgId, bytes32 indexed pubkey, bool authorized);
     event RoleSet(bytes32 indexed orgId, address indexed account, Role role);
-    event BandsChanged();
+    event BandsChanged(ThresholdBands.Band approval, ThresholdBands.Band rejection, ThresholdBands.Band revocation);
     event MigrationFinalized();
+    /// @notice ERC-5192: the token is locked (soulbound) from mint.
+    event Locked(uint256 tokenId);
 
     error NotAttester(address caller);
     error NotOrgSafe(bytes32 orgId, address caller);
@@ -109,13 +136,19 @@ contract OrgRegistry is ERC721, Ownable {
     error OrgExists(bytes32 orgId);
     error UnknownOrg(bytes32 orgId);
     error SafeInUse(address safe);
-    error RequestOpen(bytes32 orgId, uint256 requestId);
+    error RequestOpen(uint256 requestId);
     error NotPending(uint256 requestId);
+    error NotExpired(uint256 requestId);
+    error Expired(uint256 requestId);
     error AlreadyVoted(uint256 requestId, address attester);
+    error SelfVote(uint256 requestId, address attester);
+    error CoolingDown(address safe, uint256 until);
+    error NoPendingRotation(bytes32 orgId);
     error MigrationClosed();
     error Soulbound();
     error ZeroPubkey();
-    error SelfApproval(uint256 requestId, address attester);
+    error UriTooLong();
+    error BandTooHigh();
 
     constructor(
         address initialOwner,
@@ -145,27 +178,42 @@ contract OrgRegistry is ERC721, Ownable {
     }
 
     // ---------------------------------------------------------------------
-    // Registration — the Safe asks, attesters decide
+    // Requests — the Safe asks (or an attester, for revocation), attesters decide
     // ---------------------------------------------------------------------
 
-    /// @notice Called BY the org's Safe (msg.sender is the Safe), which proves
-    ///         the Safe consents. Attesters then approve or reject.
-    function requestRegistration(bytes32 orgId, string calldata metadataURI) external returns (uint256) {
-        if (msg.sender.code.length == 0) revert NotContract(msg.sender);
+    /// @notice Called BY the org's Safe (msg.sender is the Safe), which proves the
+    ///         Safe consents. Does not reserve the id — see the contract notice.
+    function requestRegistration(bytes32 orgId, string calldata metadataURI) external returns (uint256 id) {
+        _requireContractAccount(msg.sender);
+        _requireUri(metadataURI);
         if (_orgs[orgId].safe != address(0)) revert OrgExists(orgId);
         if (orgIdOfSafe[msg.sender] != bytes32(0)) revert SafeInUse(msg.sender);
-        uint256 id = _newRequest(RequestType.Registration, orgId, msg.sender, metadataURI, approvalBand);
-        emit RegistrationRequested(id, orgId, msg.sender, metadataURI);
-        return id;
+        if (block.timestamp < cooldownUntil[msg.sender]) revert CoolingDown(msg.sender, cooldownUntil[msg.sender]);
+        uint256 open = _openRegistrationOfSafe[msg.sender];
+        if (open != 0) revert RequestOpen(open - 1);
+
+        id = _newRequest(RequestType.Registration, orgId, msg.sender, metadataURI, approvalBand);
+        _openRegistrationOfSafe[msg.sender] = id + 1;
+        Request storage r = _requests[id];
+        emit RegistrationRequested(
+            id, orgId, msg.sender, metadataURI, r.requiredApprovals, r.requiredRejections, r.expiresAt
+        );
     }
 
     /// @notice Any attester may open a revocation of a registered org.
-    function requestRevocation(bytes32 orgId, string calldata evidenceURI) external onlyAttester returns (uint256) {
+    function requestRevocation(bytes32 orgId, string calldata evidenceURI) external onlyAttester returns (uint256 id) {
+        _requireUri(evidenceURI);
         address safe = _orgs[orgId].safe;
         if (safe == address(0)) revert UnknownOrg(orgId);
-        uint256 id = _newRequest(RequestType.Revocation, orgId, safe, evidenceURI, revocationBand);
-        emit RevocationRequested(id, orgId, msg.sender, evidenceURI);
-        return id;
+        uint256 open = _openRevocationOfOrg[orgId];
+        if (open != 0) revert RequestOpen(open - 1);
+
+        id = _newRequest(RequestType.Revocation, orgId, safe, evidenceURI, revocationBand);
+        _openRevocationOfOrg[orgId] = id + 1;
+        Request storage r = _requests[id];
+        emit RevocationRequested(
+            id, orgId, msg.sender, evidenceURI, r.requiredApprovals, r.requiredRejections, r.expiresAt
+        );
     }
 
     /// @notice The requesting Safe may withdraw its own pending registration.
@@ -174,16 +222,18 @@ contract OrgRegistry is ERC721, Ownable {
         if (r.requestType != RequestType.Registration || r.safe != msg.sender) {
             revert NotOrgSafe(r.orgId, msg.sender);
         }
-        r.status = RequestStatus.Rejected;
-        delete _openRequest[r.orgId];
-        emit RequestWithdrawn(requestId);
+        _close(requestId, r, RequestStatus.Rejected, CloseReason.Withdrawn);
+    }
+
+    /// @notice Anyone may close a request past its expiry, so none can wedge an org.
+    function expireRequest(uint256 requestId) external {
+        Request storage r = _pending(requestId);
+        if (block.timestamp <= r.expiresAt) revert NotExpired(requestId);
+        _close(requestId, r, RequestStatus.Rejected, CloseReason.Expired);
     }
 
     function approveRequest(uint256 requestId) external onlyAttester {
         Request storage r = _vote(requestId);
-        if (r.requestType == RequestType.Registration && _isSafeOwner(r.safe, msg.sender)) {
-            revert SelfApproval(requestId, msg.sender);
-        }
         r.approvals++;
         emit RequestApproved(requestId, msg.sender);
         if (r.approvals >= r.requiredApprovals) _execute(requestId, r);
@@ -194,8 +244,10 @@ contract OrgRegistry is ERC721, Ownable {
         r.rejections++;
         emit RequestRejected(requestId, msg.sender);
         if (r.rejections >= r.requiredRejections) {
-            r.status = RequestStatus.Rejected;
-            delete _openRequest[r.orgId];
+            if (r.requestType == RequestType.Registration) {
+                cooldownUntil[r.safe] = block.timestamp + REJECTION_COOLDOWN;
+            }
+            _close(requestId, r, RequestStatus.Rejected, CloseReason.Rejected);
         }
     }
 
@@ -215,19 +267,37 @@ contract OrgRegistry is ERC721, Ownable {
     }
 
     function setMetadataURI(bytes32 orgId, string calldata metadataURI) external onlyOrgSafe(orgId) {
+        _requireUri(metadataURI);
         _orgs[orgId].metadataURI = metadataURI;
         emit MetadataURIChanged(orgId, metadataURI);
     }
 
-    /// @notice Move the org (and its NFT) to a new Safe — the only way the
+    /// @notice Step 1 of a rotation: the current Safe names its successor.
+    ///         address(0) cancels a pending proposal.
+    function proposeRotation(bytes32 orgId, address next) external onlyOrgSafe(orgId) {
+        if (next != address(0)) _requireContractAccount(next);
+        pendingSafe[orgId] = next;
+        emit RotationProposed(orgId, msg.sender, next);
+    }
+
+    /// @notice Step 2: the successor Safe accepts. This is the only way the
     ///         soulbound token ever changes hands. Keys and roles carry over.
-    function rotateSafe(bytes32 orgId, address next) external onlyOrgSafe(orgId) {
-        if (next.code.length == 0) revert NotContract(next);
+    function acceptRotation(bytes32 orgId) external {
+        address next = pendingSafe[orgId];
+        if (next == address(0) || next != msg.sender) revert NoPendingRotation(orgId);
         if (orgIdOfSafe[next] != bytes32(0)) revert SafeInUse(next);
-        address previous = msg.sender;
+        // The successor's own pending registration (if any) is superseded.
+        uint256 open = _openRegistrationOfSafe[next];
+        if (open != 0) _close(open - 1, _requests[open - 1], RequestStatus.Rejected, CloseReason.Superseded);
+
+        address previous = _orgs[orgId].safe;
+        delete pendingSafe[orgId];
         _orgs[orgId].safe = next;
         delete orgIdOfSafe[previous];
         orgIdOfSafe[next] = orgId;
+        uint256 rev = _openRevocationOfOrg[orgId];
+        if (rev != 0) _requests[rev - 1].safe = next;
+
         _rotating = true;
         _transfer(previous, next, uint256(orgId));
         _rotating = false;
@@ -239,7 +309,7 @@ contract OrgRegistry is ERC721, Ownable {
     // ---------------------------------------------------------------------
 
     /// @notice One-time import of orgs that already exist offchain. Each entry
-    ///         still lands as a normal, Safe-governed record.
+    ///         lands as a normal, Safe-governed record.
     function migrationRegister(
         bytes32[] calldata orgIds,
         address[] calldata safes,
@@ -252,10 +322,13 @@ contract OrgRegistry is ERC721, Ownable {
             "length mismatch"
         );
         for (uint256 i = 0; i < orgIds.length; i++) {
-            if (safes[i].code.length == 0) revert NotContract(safes[i]);
+            _requireContractAccount(safes[i]);
+            _requireUri(metadataURIs[i]);
             if (_orgs[orgIds[i]].safe != address(0)) revert OrgExists(orgIds[i]);
             if (orgIdOfSafe[safes[i]] != bytes32(0)) revert SafeInUse(safes[i]);
-            _register(orgIds[i], safes[i], metadataURIs[i], 0);
+            uint256 open = _openRegistrationOfSafe[safes[i]];
+            if (open != 0) _close(open - 1, _requests[open - 1], RequestStatus.Rejected, CloseReason.Superseded);
+            _register(orgIds[i], safes[i], metadataURIs[i], MIGRATION_REQUEST_ID);
             if (nostrPubkeys[i] != bytes32(0)) {
                 _nostrKeys[orgIds[i]][_orgs[orgIds[i]].generation][nostrPubkeys[i]] = true;
                 emit NostrKeySet(orgIds[i], nostrPubkeys[i], true);
@@ -309,9 +382,14 @@ contract OrgRegistry is ERC721, Ownable {
         return _isSafeOwner(safe, account);
     }
 
-    function openRequestOf(bytes32 orgId) external view returns (bool open, uint256 requestId) {
-        uint256 stored = _openRequest[orgId];
-        return (stored != 0, stored == 0 ? 0 : stored - 1);
+    function openRegistrationOf(address safe) external view returns (bool open, uint256 requestId) {
+        uint256 s = _openRegistrationOfSafe[safe];
+        return (s != 0, s == 0 ? 0 : s - 1);
+    }
+
+    function openRevocationOf(bytes32 orgId) external view returns (bool open, uint256 requestId) {
+        uint256 s = _openRevocationOfOrg[orgId];
+        return (s != 0, s == 0 ? 0 : s - 1);
     }
 
     function getRequest(uint256 requestId) external view returns (Request memory) {
@@ -326,6 +404,40 @@ contract OrgRegistry is ERC721, Ownable {
         return _voted[requestId][attester];
     }
 
+    /// @notice The org's metadata URI (empty when it keeps its profile on Nostr only).
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        _requireOwned(tokenId);
+        return _orgs[bytes32(tokenId)].metadataURI;
+    }
+
+    /// @notice ERC-5192: every OrgNFT is locked.
+    function locked(uint256 tokenId) external view returns (bool) {
+        _requireOwned(tokenId);
+        return true;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == 0xb45a3c0e || super.supportsInterface(interfaceId); // ERC-5192
+    }
+
+    // ---------------------------------------------------------------------
+    // Soulbound: no approvals, no transfers (except acceptRotation)
+    // ---------------------------------------------------------------------
+
+    function approve(address, uint256) public pure override {
+        revert Soulbound();
+    }
+
+    function setApprovalForAll(address, bool) public pure override {
+        revert Soulbound();
+    }
+
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0) && !_rotating) revert Soulbound();
+        return super._update(to, tokenId, auth);
+    }
+
     // ---------------------------------------------------------------------
     // Internals
     // ---------------------------------------------------------------------
@@ -338,10 +450,12 @@ contract OrgRegistry is ERC721, Ownable {
         a.validate();
         rj.validate();
         rv.validate();
+        // A floor above any realistic attester set would silently freeze a gate.
+        if (a.floor > MAX_BAND_FLOOR || rj.floor > MAX_BAND_FLOOR || rv.floor > MAX_BAND_FLOOR) revert BandTooHigh();
         approvalBand = a;
         rejectionBand = rj;
         revocationBand = rv;
-        emit BandsChanged();
+        emit BandsChanged(a, rj, rv);
     }
 
     function _newRequest(
@@ -351,9 +465,14 @@ contract OrgRegistry is ERC721, Ownable {
         string calldata uri,
         ThresholdBands.Band memory band
     ) internal returns (uint256 id) {
-        uint256 open = _openRequest[orgId];
-        if (open != 0) revert RequestOpen(orgId, open - 1);
         uint256 size = attesters.attesterCount();
+        // Never demand more votes than there are attesters, or the request is dead on arrival.
+        uint256 cap = size == 0 ? 1 : size;
+        uint256 approvalsNeeded = band.required(size);
+        uint256 rejectionsNeeded = rejectionBand.required(size);
+        if (approvalsNeeded > cap) approvalsNeeded = cap;
+        if (rejectionsNeeded > cap) rejectionsNeeded = cap;
+
         id = _requests.length;
         _requests.push(
             Request({
@@ -365,12 +484,12 @@ contract OrgRegistry is ERC721, Ownable {
                 uri: uri,
                 approvals: 0,
                 rejections: 0,
-                requiredApprovals: uint32(band.required(size)),
-                requiredRejections: uint32(rejectionBand.required(size)),
-                createdAt: uint64(block.timestamp)
+                requiredApprovals: uint32(approvalsNeeded),
+                requiredRejections: uint32(rejectionsNeeded),
+                createdAt: uint64(block.timestamp),
+                expiresAt: uint64(block.timestamp + REQUEST_TTL)
             })
         );
-        _openRequest[orgId] = id + 1;
     }
 
     function _pending(uint256 requestId) internal view returns (Request storage r) {
@@ -380,33 +499,47 @@ contract OrgRegistry is ERC721, Ownable {
 
     function _vote(uint256 requestId) internal returns (Request storage r) {
         r = _pending(requestId);
+        if (block.timestamp > r.expiresAt) revert Expired(requestId);
         if (_voted[requestId][msg.sender]) revert AlreadyVoted(requestId, msg.sender);
+        // Nobody votes on an org whose Safe they co-own — neither to admit it nor
+        // to shield it from revocation. Best-effort: a hostile contract can lie.
+        address subject = r.requestType == RequestType.Registration ? r.safe : _orgs[r.orgId].safe;
+        if (_isSafeOwner(subject, msg.sender)) revert SelfVote(requestId, msg.sender);
         _voted[requestId][msg.sender] = true;
     }
 
-    function _execute(uint256 requestId, Request storage r) internal {
-        r.status = RequestStatus.Executed;
-        delete _openRequest[r.orgId];
+    function _close(uint256 requestId, Request storage r, RequestStatus status, CloseReason reason) internal {
+        r.status = status;
         if (r.requestType == RequestType.Registration) {
-            // The Safe or the id may have been claimed (migration) while this was
-            // pending. Close the request instead of reverting, or the final
-            // approval could never land and the id would stay blocked forever.
+            if (_openRegistrationOfSafe[r.safe] == requestId + 1) delete _openRegistrationOfSafe[r.safe];
+        } else {
+            if (_openRevocationOfOrg[r.orgId] == requestId + 1) delete _openRevocationOfOrg[r.orgId];
+        }
+        emit RequestClosed(requestId, status, reason);
+    }
+
+    function _execute(uint256 requestId, Request storage r) internal {
+        if (r.requestType == RequestType.Registration) {
+            // Another Safe may have won this id (or this Safe another id) meanwhile.
             if (orgIdOfSafe[r.safe] != bytes32(0) || _orgs[r.orgId].safe != address(0)) {
-                r.status = RequestStatus.Rejected;
-                emit RequestRejected(requestId, address(0));
+                _close(requestId, r, RequestStatus.Rejected, CloseReason.Superseded);
                 return;
             }
+            _close(requestId, r, RequestStatus.Executed, CloseReason.Approved);
             _register(r.orgId, r.safe, r.uri, requestId);
         } else {
+            _close(requestId, r, RequestStatus.Executed, CloseReason.Approved);
             Org storage o = _orgs[r.orgId];
             address safe = o.safe;
+            uint64 generation = o.generation;
             _burn(uint256(r.orgId));
             delete orgIdOfSafe[safe];
+            delete pendingSafe[r.orgId];
             o.safe = address(0);
-            o.generation++;
+            o.generation = generation + 1;
             o.metadataURI = "";
             orgCount--;
-            emit OrgRevoked(r.orgId, safe, requestId);
+            emit OrgRevoked(r.orgId, safe, requestId, generation);
         }
     }
 
@@ -418,23 +551,37 @@ contract OrgRegistry is ERC721, Ownable {
         orgIdOfSafe[safe] = orgId;
         orgCount++;
         _mint(safe, uint256(orgId));
-        emit OrgRegistered(orgId, safe, requestId);
+        emit Locked(uint256(orgId));
+        emit OrgRegistered(orgId, safe, requestId, o.generation);
         // Emitted so a log-only indexer reproduces the record without a view call.
         if (bytes(metadataURI).length != 0) emit MetadataURIChanged(orgId, metadataURI);
     }
 
-    function _isSafeOwner(address safe, address account) internal view returns (bool) {
-        try ISafeOwners(safe).isOwner(account) returns (bool ok) {
-            return ok;
-        } catch {
-            return false;
+    function _requireUri(string memory uri) internal pure {
+        if (bytes(uri).length > MAX_URI_BYTES) revert UriTooLong();
+    }
+
+    /// @dev A deployed contract, and not an EIP-7702-delegated EOA (code 0xef0100‖addr),
+    ///      which would put an org behind one private key.
+    function _requireContractAccount(address account) internal view {
+        uint256 size = account.code.length;
+        if (size == 0) revert NotContract(account);
+        if (size == 23) {
+            bytes3 prefix;
+            assembly {
+                let ptr := mload(0x40)
+                extcodecopy(account, ptr, 0, 3)
+                prefix := mload(ptr)
+            }
+            if (prefix == 0xef0100) revert NotContract(account);
         }
     }
 
-    /// @dev Soulbound: mint, burn, and rotateSafe only.
-    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
-        address from = _ownerOf(tokenId);
-        if (from != address(0) && to != address(0) && !_rotating) revert Soulbound();
-        return super._update(to, tokenId, auth);
+    /// @dev Bounded-gas staticcall; anything but a clean 32-byte `true` is "not an owner".
+    function _isSafeOwner(address safe, address account) internal view returns (bool) {
+        if (safe == address(0)) return false;
+        (bool ok, bytes memory ret) =
+            safe.staticcall{gas: SAFE_CALL_GAS}(abi.encodeWithSignature("isOwner(address)", account));
+        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == 1;
     }
 }

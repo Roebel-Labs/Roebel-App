@@ -39,3 +39,20 @@ contract MockAttesterSet {
         else attesterCount--;
     }
 }
+
+/// @dev Hostile Safe whose isOwner returns one byte (malformed ABI).
+contract MockMalformedSafe {
+    fallback(bytes calldata) external returns (bytes memory) {
+        return hex"01";
+    }
+
+    function exec(address target, bytes calldata data) external returns (bytes memory) {
+        (bool ok, bytes memory ret) = target.call(data);
+        if (!ok) {
+            assembly {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+        return ret;
+    }
+}
