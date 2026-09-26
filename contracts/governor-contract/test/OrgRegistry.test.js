@@ -99,12 +99,49 @@ describe("OrgRegistry — registration", function () {
     await expect(registry.connect(a1).rejectRequest(0)).to.be.revertedWithCustomError(registry, "AlreadyVoted");
   });
 
-  it("an attester who co-owns the Safe can neither approve nor reject it", async function () {
+  it("an attester who co-owns the Safe cannot approve it, but may reject it", async function () {
     const { registry, attesters, safe, orgOwner } = await deploy();
     await attesters.set(orgOwner.address, true);
     await asSafe(safe, orgOwner, registry, "requestRegistration", [ORG_A, ""]);
     await expect(registry.connect(orgOwner).approveRequest(0)).to.be.revertedWithCustomError(registry, "SelfVote");
-    await expect(registry.connect(orgOwner).rejectRequest(0)).to.be.revertedWithCustomError(registry, "SelfVote");
+    await expect(registry.connect(orgOwner).rejectRequest(0)).to.emit(registry, "RequestRejected");
+  });
+
+  it("an expired claim is closed inline when its Safe asks again", async function () {
+    const { registry, safe, orgOwner } = await deploy();
+    await asSafe(safe, orgOwner, registry, "requestRegistration", [ORG_A, ""]);
+    await time.increase(30 * DAY + 1);
+    await expect(asSafe(safe, orgOwner, registry, "requestRegistration", [ORG_A, ""]))
+      .to.emit(registry, "RequestClosed").withArgs(0, Status.Rejected, Close.Expired);
+    expect((await registry.openRegistrationOf(await safe.getAddress())).requestId).to.equal(1n);
+  });
+
+  it("anyone closes claims on a taken id (closeStale); live claims cannot be closed that way", async function () {
+    const { registry, safe, squatter, orgOwner, stranger, a1, a2 } = await deploy();
+    await asSafe(squatter, stranger, registry, "requestRegistration", [ORG_A, ""]); // #0
+    await expect(registry.connect(stranger).closeStale(0)).to.be.revertedWithCustomError(registry, "NotStale");
+    await asSafe(safe, orgOwner, registry, "requestRegistration", [ORG_A, ""]); // #1
+    await registry.connect(a1).approveRequest(1);
+    await registry.connect(a2).approveRequest(1);
+    await expect(registry.connect(stranger).closeStale(0))
+      .to.emit(registry, "RequestClosed").withArgs(0, Status.Rejected, Close.Superseded);
+  });
+
+  it("a claim made before a revocation can never win the id afterwards", async function () {
+    const { registry, safe, squatter, orgOwner, stranger, a1, a2, a3, a4 } = await deploy();
+    await asSafe(squatter, stranger, registry, "requestRegistration", [ORG_A, ""]); // #0 stale-to-be
+    await registry.connect(a4).approveRequest(0); // one mistaken approval
+    await asSafe(safe, orgOwner, registry, "requestRegistration", [ORG_A, ""]); // #1
+    await registry.connect(a1).approveRequest(1);
+    await registry.connect(a2).approveRequest(1);
+    await registry.connect(a1).requestRevocation(ORG_A, ""); // #2
+    await registry.connect(a1).approveRequest(2);
+    await registry.connect(a2).approveRequest(2);
+    await registry.connect(a3).approveRequest(2);
+    expect(await registry.isRegistered(ORG_A)).to.equal(false);
+    await expect(registry.connect(a3).approveRequest(0))
+      .to.emit(registry, "RequestClosed").withArgs(0, Status.Rejected, Close.Superseded);
+    expect(await registry.isRegistered(ORG_A)).to.equal(false);
   });
 
   it("rejection closes the request and puts the Safe on a 7-day cooldown", async function () {
@@ -317,6 +354,18 @@ describe("OrgRegistry — revocation", function () {
       .to.emit(registry, "OrgRegistered").withArgs(ORG_A, await safe.getAddress(), 2, 1);
     expect(await registry.isNostrKeyAuthorized(ORG_A, PUB_1)).to.equal(false);
     expect(await registry.roleOf(ORG_A, member.address)).to.equal(Role.None);
+  });
+
+  it("an org that makes every attester a Safe owner is still revocable", async function () {
+    const { registry, deployer, a1, a2, a3, a4 } = await deploy();
+    const stuffed = await (await ethers.getContractFactory("MockSafe")).deploy(
+      [a1, a2, a3, a4].map((a) => a.address),
+    );
+    await registry.connect(deployer).migrationRegister([ORG_A], [await stuffed.getAddress()], [""], [ethers.ZeroHash]);
+    await registry.connect(a1).requestRevocation(ORG_A, "");
+    await registry.connect(a1).approveRequest(0);
+    await registry.connect(a2).approveRequest(0);
+    await expect(registry.connect(a3).approveRequest(0)).to.emit(registry, "OrgRevoked");
   });
 
   it("an org's own owner-attesters cannot veto its revocation", async function () {

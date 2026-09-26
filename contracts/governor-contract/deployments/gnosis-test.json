@@ -70,24 +70,9 @@
   "contracts": {
     "attesterNFTv2": "0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3",
     "citizenNFTv2": "0x0Be374808A567c9088aC8208B90a4239432B3220",
-    "orgRegistry": "0xBEf890406FBABAe1FcdedBC46E61F25B5535040d"
+    "orgRegistry": "0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7"
   },
-  "orgRegistryDeployBlock": 48452410,
-  "testOrgs": {
-    "A": {
-      "uuid": "00000000-0000-4000-8000-0000000000a1",
-      "orgId": "0xf205f4f648e1cbd58a6e7cffa2ad0366cae1ae04e078e6b98afb6d3a582d4222",
-      "safe": "0x9316834404429Eb07077E65B6dBD0f1fC140d0E0",
-      "nostrKey": "0xd7261f236aa8b9773878591f36eb23275615a75608a89bbc423254e8d252f3a9",
-      "admin": "0x23C1A14d34E2Dd66DB272a916dDbf2a695366706"
-    },
-    "B": {
-      "uuid": "00000000-0000-4000-8000-0000000000b2",
-      "orgId": "0x35b8f3b22755d8ef4ccc22c470bc0ca04374f2419b1817e389fef8d469990f04",
-      "safe": "0xA441D653D3268721112e07aDf481C2AD71050189",
-      "revoked": true
-    }
-  },
+  "orgRegistryDeployBlock": 48452489,
   "orgRegistryBands": {
     "approval": {
       "percentBps": 5000,
@@ -103,6 +88,24 @@
       "percentBps": 6700,
       "floor": 3,
       "cap": 65535
+    }
+  },
+  "orgRegistryArchived": [
+    "0xBEf890406FBABAe1FcdedBC46E61F25B5535040d"
+  ],
+  "testOrgs": {
+    "A": {
+      "uuid": "00000000-0000-4000-8000-0000000000a1",
+      "orgId": "0xf205f4f648e1cbd58a6e7cffa2ad0366cae1ae04e078e6b98afb6d3a582d4222",
+      "safe": "0x9316834404429Eb07077E65B6dBD0f1fC140d0E0",
+      "nostrKey": "0xd7261f236aa8b9773878591f36eb23275615a75608a89bbc423254e8d252f3a9",
+      "admin": "0x23C1A14d34E2Dd66DB272a916dDbf2a695366706"
+    },
+    "B": {
+      "uuid": "00000000-0000-4000-8000-0000000000b2",
+      "orgId": "0x35b8f3b22755d8ef4ccc22c470bc0ca04374f2419b1817e389fef8d469990f04",
+      "safe": "0xA441D653D3268721112e07aDf481C2AD71050189",
+      "revoked": true
     }
   }
 }

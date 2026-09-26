@@ -40,7 +40,9 @@ interface IAttesterSet {
  *         `owner()` (the community's Attester Safe during bootstrap) may only
  *         tune thresholds and run the one-time migration; it cannot touch an
  *         org's keys, roles or metadata. Run finalizeMigration() in the same
- *         Safe batch as the last migrationRegister().
+ *         Safe batch as the last migrationRegister(). Band floors are capped at 50,
+ *         but the owner can still LOWER a band (e.g. 1-of-N approval): hand
+ *         ownership to the community Timelock once bootstrap is over.
  */
 contract OrgRegistry is ERC721, Ownable {
     using ThresholdBands for ThresholdBands.Band;
@@ -70,6 +72,7 @@ contract OrgRegistry is ERC721, Ownable {
         uint32 requiredRejections; // snapshot at creation
         uint64 createdAt;
         uint64 expiresAt;
+        uint64 claimGeneration;    // the id's generation when the claim was made
     }
 
     uint256 public constant REQUEST_TTL = 30 days;
@@ -139,6 +142,7 @@ contract OrgRegistry is ERC721, Ownable {
     error RequestOpen(uint256 requestId);
     error NotPending(uint256 requestId);
     error NotExpired(uint256 requestId);
+    error NotStale(uint256 requestId);
     error Expired(uint256 requestId);
     error AlreadyVoted(uint256 requestId, address attester);
     error SelfVote(uint256 requestId, address attester);
@@ -189,6 +193,7 @@ contract OrgRegistry is ERC721, Ownable {
         if (_orgs[orgId].safe != address(0)) revert OrgExists(orgId);
         if (orgIdOfSafe[msg.sender] != bytes32(0)) revert SafeInUse(msg.sender);
         if (block.timestamp < cooldownUntil[msg.sender]) revert CoolingDown(msg.sender, cooldownUntil[msg.sender]);
+        _closeIfExpired(_openRegistrationOfSafe[msg.sender]);
         uint256 open = _openRegistrationOfSafe[msg.sender];
         if (open != 0) revert RequestOpen(open - 1);
 
@@ -205,6 +210,7 @@ contract OrgRegistry is ERC721, Ownable {
         _requireUri(evidenceURI);
         address safe = _orgs[orgId].safe;
         if (safe == address(0)) revert UnknownOrg(orgId);
+        _closeIfExpired(_openRevocationOfOrg[orgId]);
         uint256 open = _openRevocationOfOrg[orgId];
         if (open != 0) revert RequestOpen(open - 1);
 
@@ -232,15 +238,23 @@ contract OrgRegistry is ERC721, Ownable {
         _close(requestId, r, RequestStatus.Rejected, CloseReason.Expired);
     }
 
+    /// @notice Anyone may close a registration claim that can no longer win: its
+    ///         id is taken, or was registered and revoked since the claim was made.
+    function closeStale(uint256 requestId) external {
+        Request storage r = _pending(requestId);
+        if (r.requestType != RequestType.Registration || !_isStaleClaim(r)) revert NotStale(requestId);
+        _close(requestId, r, RequestStatus.Rejected, CloseReason.Superseded);
+    }
+
     function approveRequest(uint256 requestId) external onlyAttester {
-        Request storage r = _vote(requestId);
+        Request storage r = _vote(requestId, true);
         r.approvals++;
         emit RequestApproved(requestId, msg.sender);
         if (r.approvals >= r.requiredApprovals) _execute(requestId, r);
     }
 
     function rejectRequest(uint256 requestId) external onlyAttester {
-        Request storage r = _vote(requestId);
+        Request storage r = _vote(requestId, false);
         r.rejections++;
         emit RequestRejected(requestId, msg.sender);
         if (r.rejections >= r.requiredRejections) {
@@ -376,6 +390,8 @@ contract OrgRegistry is ERC721, Ownable {
     }
 
     /// @notice Owners are the Safe's own owners — read live, never duplicated here.
+    ///         Only meaningful for that org's own record: a hostile contract org
+    ///         can answer true for everyone, so never use this as a wider authority.
     function isOrgOwner(bytes32 orgId, address account) external view returns (bool) {
         address safe = _orgs[orgId].safe;
         if (safe == address(0)) return false;
@@ -487,7 +503,8 @@ contract OrgRegistry is ERC721, Ownable {
                 requiredApprovals: uint32(approvalsNeeded),
                 requiredRejections: uint32(rejectionsNeeded),
                 createdAt: uint64(block.timestamp),
-                expiresAt: uint64(block.timestamp + REQUEST_TTL)
+                expiresAt: uint64(block.timestamp + REQUEST_TTL),
+                claimGeneration: _orgs[orgId].generation
             })
         );
     }
@@ -497,15 +514,36 @@ contract OrgRegistry is ERC721, Ownable {
         if (r.status != RequestStatus.Pending) revert NotPending(requestId);
     }
 
-    function _vote(uint256 requestId) internal returns (Request storage r) {
+    function _vote(uint256 requestId, bool approving) internal returns (Request storage r) {
         r = _pending(requestId);
         if (block.timestamp > r.expiresAt) revert Expired(requestId);
         if (_voted[requestId][msg.sender]) revert AlreadyVoted(requestId, msg.sender);
-        // Nobody votes on an org whose Safe they co-own — neither to admit it nor
-        // to shield it from revocation. Best-effort: a hostile contract can lie.
-        address subject = r.requestType == RequestType.Registration ? r.safe : _orgs[r.orgId].safe;
-        if (_isSafeOwner(subject, msg.sender)) revert SelfVote(requestId, msg.sender);
+        // A Safe co-owner may not cast a vote that FAVOURS their org (admit it, or
+        // shield it from revocation). Votes against it stay open: otherwise an org
+        // could add every attester as an owner and become unrevocable.
+        // Best-effort for favourable votes: a hostile contract can lie about owners.
+        bool favoursOrg = (r.requestType == RequestType.Registration) == approving;
+        if (favoursOrg) {
+            address subject = r.requestType == RequestType.Registration ? r.safe : _orgs[r.orgId].safe;
+            if (_isSafeOwner(subject, msg.sender)) revert SelfVote(requestId, msg.sender);
+        }
         _voted[requestId][msg.sender] = true;
+    }
+
+    /// @dev A claim loses if its Safe already holds an org, the id is taken, or the
+    ///      id changed generation (registered and revoked) since the claim was made.
+    function _isStaleClaim(Request storage r) internal view returns (bool) {
+        Org storage o = _orgs[r.orgId];
+        return orgIdOfSafe[r.safe] != bytes32(0) || o.safe != address(0) || o.generation != r.claimGeneration;
+    }
+
+    /// @dev Slot value is requestId + 1 (0 = none).
+    function _closeIfExpired(uint256 slot) internal {
+        if (slot == 0) return;
+        Request storage r = _requests[slot - 1];
+        if (r.status == RequestStatus.Pending && block.timestamp > r.expiresAt) {
+            _close(slot - 1, r, RequestStatus.Rejected, CloseReason.Expired);
+        }
     }
 
     function _close(uint256 requestId, Request storage r, RequestStatus status, CloseReason reason) internal {
@@ -520,8 +558,7 @@ contract OrgRegistry is ERC721, Ownable {
 
     function _execute(uint256 requestId, Request storage r) internal {
         if (r.requestType == RequestType.Registration) {
-            // Another Safe may have won this id (or this Safe another id) meanwhile.
-            if (orgIdOfSafe[r.safe] != bytes32(0) || _orgs[r.orgId].safe != address(0)) {
+            if (_isStaleClaim(r)) {
                 _close(requestId, r, RequestStatus.Rejected, CloseReason.Superseded);
                 return;
             }
@@ -567,13 +604,13 @@ contract OrgRegistry is ERC721, Ownable {
         uint256 size = account.code.length;
         if (size == 0) revert NotContract(account);
         if (size == 23) {
-            bytes3 prefix;
+            bool delegated;
             assembly {
                 let ptr := mload(0x40)
                 extcodecopy(account, ptr, 0, 3)
-                prefix := mload(ptr)
+                delegated := eq(shr(232, mload(ptr)), 0xef0100)
             }
-            if (prefix == 0xef0100) revert NotContract(account);
+            if (delegated) revert NotContract(account);
         }
     }
 

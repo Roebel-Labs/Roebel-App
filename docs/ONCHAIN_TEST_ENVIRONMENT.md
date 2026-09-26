@@ -22,7 +22,7 @@ Röbel Münzen are still not covered — see [Out of scope](#out-of-scope).
 |---|---|
 | **AttesterNFTv2 (test)** | `0x5983F6300bCE3D9C1336a858Bd73F259bB8330F3` |
 | **CitizenNFTv2 (test)** | `0x0Be374808A567c9088aC8208B90a4239432B3220` |
-| **OrgRegistry (test, NSP-14)** | `0xBEf890406FBABAe1FcdedBC46E61F25B5535040d` |
+| **OrgRegistry (test, NSP-14)** | `0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7` |
 | Owner (burner EOA) | `0xd5028284017A32C672CbD73Fe35aCD897bA874cf` |
 
 Manifest: [`contracts/governor-contract/deployments/gnosis-test.json`](../contracts/governor-contract/deployments/gnosis-test.json)

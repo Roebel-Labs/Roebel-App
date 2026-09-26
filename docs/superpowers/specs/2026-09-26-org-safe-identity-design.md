@@ -111,17 +111,27 @@ and the onboarding account stays only as long as the org wants it.
   - log-only indexers could not reproduce request state. Now `RequestClosed`, and the events carry thresholds, expiry and generation;
   - an org's own owner-attesters could veto its revocation. `SelfVote` now blocks both approving and rejecting;
   - stale claims survived migration. Migration now supersedes them.
-- A re-audit of the fixes is in progress.
+**Re-audit** of the fixes:
+- All 15 original findings are confirmed fixed; L5 is partly fixed, and its remainder is documented below.
+- It found 1 new high, 1 new medium and 2 new lows. All are fixed, with 27 contract tests:
+  - **N1 (high).** The M4 fix let an org make every attester a Safe owner and become unrevocable. Now the co-owner check blocks only votes that *favour* the org (approving its registration, rejecting its revocation).
+  - **M1.** A claim made before a revocation could win the id afterwards. Each claim now records the id's generation, and stale claims supersede.
+  - **L1.** `closeStale` lets anyone close claims on a taken id.
+  - **L2.** An expired request now closes inline when a new one is opened.
+- Remaining by design:
+  - the registry owner can *lower* bands. Hand ownership to the community Timelock after bootstrap;
+  - `isOrgOwner` is only meaningful for the org's own record.
+- The test registry `0xBEf8…040d` (pre-re-audit code) is archived in the manifest.
 
 **R1 on the onchain test environment (Gnosis mainnet, burner-owned):**
-- OrgRegistry `0xBEf890406FBABAe1FcdedBC46E61F25B5535040d` (block 48452410), wired to the test AttesterNFTv2 `0x5983…30F3`.
+- OrgRegistry `0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7` (block 48452489), wired to the test AttesterNFTv2 `0x5983…30F3`.
 - Org A: Safe 1.4.1 `0x9316…d0E0`. Registered by 3 co-signer approvals, Nostr key authorised by the Safe, and co-signer 1 made admin.
 - Org B: Safe `0xA441…0189`. Registered, then revoked with 4 of 5 attester votes.
 - Record: `contracts/governor-contract/deployments/gnosis-test.json` → `orgRegistry`, `testOrgs`.
 - Rebuilt from chain logs alone:
   ```
   pnpm --filter @netizen-labs/org-registry exec tsx src/directory-cli.ts \
-    --registry 0xBEf890406FBABAe1FcdedBC46E61F25B5535040d --from-block 48452410
+    --registry 0x5Ca513D9D593a2eCEA9F254901F2EA4F882D1eF7 --from-block 48452489
   ```
   This returns exactly org A (key, admin role, metadata) and no org B.
 - Re-run or rehearse: `scripts/test-env/org-registry-e2e.cjs`. It is idempotent, and `ORG_E2E_REHEARSAL=1` runs it on a Gnosis fork.
