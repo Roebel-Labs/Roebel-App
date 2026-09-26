@@ -1,0 +1,31 @@
+{
+  "name": "@netizen-labs/org-registry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NSP-14 org identity — OrgRegistry reader, event replay (rebuild the org directory from chain alone) and the Supabase→Safe migration planner.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "bin": {
+    "netizen-org-plan": "src/plan-cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "plan": "tsx src/plan-cli.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@netizen-labs/nostr": "workspace:*",
+    "@netizen-labs/protocol": "workspace:*",
+    "viem": "^2.47.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

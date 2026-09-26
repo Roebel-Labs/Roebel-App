@@ -419,6 +419,8 @@ contract OrgRegistry is ERC721, Ownable {
         orgCount++;
         _mint(safe, uint256(orgId));
         emit OrgRegistered(orgId, safe, requestId);
+        // Emitted so a log-only indexer reproduces the record without a view call.
+        if (bytes(metadataURI).length != 0) emit MetadataURIChanged(orgId, metadataURI);
     }
 
     function _isSafeOwner(address safe, address account) internal view returns (bool) {
