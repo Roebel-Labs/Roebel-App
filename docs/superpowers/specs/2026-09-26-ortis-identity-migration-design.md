@@ -103,6 +103,13 @@ v2 *could* be reused, because approvals are plain `msg.sender` checks and passke
 
 **Undeployed accounts:** 10 of 53 citizen legacy accounts are counterfactual on Gnosis. Their first migration op must include `AccountFactory.createAccount(adminEOA, "")` (permissionless). The sponsor policy must allow exactly that factory call when its result equals the request's `legacy`.
 
+## NFT ownership path (Max, 2026-09-26)
+
+- **v3 NFT owner during migration:** the new Attester Safe, **≥3-of-5**, owners = the attesters' passkey Safes, no EOAs.
+- **After the move window closes and governance v3 (MACI + Governor + Timelock) is live:** Safe → `transferOwnership(timelock)`, then a governance proposal executes `acceptOwnership()` (Ownable2Step). From then on, band changes need a citizen proposal + vote + Timelock delay.
+- **Threshold bands stay as in v2.** No stricter floors, by Max's decision.
+- **v3 drops yearly re-verification entirely:** no `validityPeriod`/`validUntil`/`setValidityPeriod`/`isActive`. Citizenship is valid until revoked.
+
 ## Open items
 - **Pimlico's minimum paymaster stake on Gnosis is unknown.** The preview paymaster is planned with 0.05 xDAI stake. If Pimlico needs more: `addStake` via the owner Safe, or self-bundle through a relayer (as the Netizen demo does).
 - **Persistent sponsor budget** (production gate).
