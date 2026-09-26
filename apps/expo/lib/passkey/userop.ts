@@ -29,7 +29,7 @@ import {
 } from 'viem';
 import {
   ENTRY_POINT_V07,
-  MULTI_SEND,
+  MULTI_SEND_CALL_ONLY,
   NETIZEN_VERIFYING_PAYMASTER,
   PASSKEY_API_URL,
   PASSKEY_BUNDLER_URL,
@@ -387,7 +387,7 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
   return r;
 }
 
-/** Safe4337Module callData: one call = CALL; several = DELEGATECALL MultiSend 1.4.1. */
+/** Safe4337Module callData: one call = CALL; several = DELEGATECALL MultiSendCallOnly 1.4.1. */
 export function buildCallData(calls: SponsoredCall[]): Hex {
   if (calls.length === 0) throw new Error('no calls');
   if (calls.length === 1) return encodeExecuteUserOp(calls[0].to, 0n, calls[0].data);
@@ -413,7 +413,7 @@ export function buildCallData(calls: SponsoredCall[]): Hex {
       },
     ] as const,
     functionName: 'executeUserOp',
-    args: [MULTI_SEND, 0n, multiSend, 1],
+    args: [MULTI_SEND_CALL_ONLY, 0n, multiSend, 1],
   });
 }
 

@@ -264,3 +264,21 @@ describe('sendPasskeyUserOp — sequence (estimate stub → sponsor → verbatim
     ).rejects.toThrow();
   });
 });
+
+describe('buildCallData batching', () => {
+  it('delegatecalls only into MultiSendCallOnly (the sponsor route rejects full MultiSend)', () => {
+    const { decodeFunctionData } = require('viem');
+    const { buildCallData } = require('../userop');
+    const { MULTI_SEND_CALL_ONLY } = require('../constants');
+    const call = { to: '0x0479b2020000000000000000000000000000eb8d', data: '0x1234' } as const;
+    const data = buildCallData([call, call]);
+    const decoded = decodeFunctionData({
+      abi: [{ type: 'function', name: 'executeUserOp', stateMutability: 'nonpayable', inputs: [
+        { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+        { name: 'data', type: 'bytes' }, { name: 'operation', type: 'uint8' }], outputs: [] }],
+      data,
+    });
+    expect(decoded.args[0].toLowerCase()).toBe(MULTI_SEND_CALL_ONLY.toLowerCase());
+    expect(decoded.args[3]).toBe(1);
+  });
+});

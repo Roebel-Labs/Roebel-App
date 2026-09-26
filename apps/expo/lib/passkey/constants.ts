@@ -19,6 +19,8 @@ export const THIRDWEB_ACCOUNT_IMPL: Address = '0xf22175c80c6e074c171811c59c6c008
 export const SAFE_L2_SINGLETON: Address = '0x29fcB43b46531BcA003ddC8FCB67FFE91900C762';
 export const SAFE_PROXY_FACTORY: Address = '0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67';
 export const MULTI_SEND: Address = '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526';
+/** Batches of user calls: the sponsor route only allows DELEGATECALL into the call-only variant. */
+export const MULTI_SEND_CALL_ONLY: Address = '0x9641d764fc13c8B624c04430C7356C1C7C8102e2';
 
 export const SAFE_4337_MODULE: Address = '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226';
 export const SAFE_MODULE_SETUP: Address = '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47';
