@@ -109,7 +109,11 @@ export default function EventTicketsScreen() {
   const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!id || !activeAccount) return;
+    if (!id || !activeAccount) {
+      // Without an org context there is nothing to load; never leave the spinner running.
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data: event, error } = await supabase
