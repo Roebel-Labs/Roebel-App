@@ -19,7 +19,7 @@ const RESERVE_ERRORS: Record<string, [number, string]> = {
 };
 
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["checkout"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["checkout"] });
   if (!v.ok) return failResponse(v);
 
   // Server-side pilot gate. The Expo flag only hides the buy button; this one closes the route,

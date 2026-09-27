@@ -6,7 +6,7 @@ import { parseTicketQrPayload, ticketQrPayload } from "@/lib/tickets/codes";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["checkin"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["checkin"] });
   if (!v.ok) return failResponse(v);
   const parsed = parseTicketQrPayload(String(v.payload.payload ?? ""));
   if (!parsed) return jsonOk({ result: "invalid" });

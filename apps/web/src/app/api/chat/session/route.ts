@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     const body = await readJson(request);
     if (!body) return jsonError(400, "bad_request", "Ungültige Anfrage.");
-    const res = await verifySessionRequest(body);
+    const res = await verifySessionRequest(body, Date.now(), { headers: request.headers });
     if (!res.ok) return jsonError(res.status, res.code, res.message);
     const { token, expiresAt } = await issueSessionToken(res.wallet);
     return NextResponse.json({ token, expiresAt });

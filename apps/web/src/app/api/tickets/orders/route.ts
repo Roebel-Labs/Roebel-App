@@ -20,7 +20,7 @@ export type OrgOrderView = {
 
 // POST signed { action: "orders_list", payload: { event_id } } → { orders: OrgOrderView[] }
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["orders_list"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["orders_list"] });
   if (!v.ok) return failResponse(v);
   const eventId = String(v.payload.event_id ?? "");
   if (!UUID_RE.test(eventId)) return jsonFail(400, "BAD_REQUEST", "event_id fehlt");

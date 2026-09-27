@@ -39,6 +39,11 @@ import {
 } from 'https://esm.sh/viem@2.21.45';
 import { makeAccountSignatureVerifier, type AccountSignatureClient } from '../_shared/verify-account-signature.ts';
 import { gnosis } from 'https://esm.sh/viem@2.21.45/chains';
+import {
+  authenticateEdgeSession,
+  supabasePasskeySessionLookup,
+  type SessionLookupClient,
+} from '../_shared/verify-session-token.ts';
 
 // ── Contract ──────────────────────────────────────────────────────────
 
@@ -92,7 +97,7 @@ const URL_FIELDS = ['avatar_url', 'cover_url'] as const;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-roebel-session, x-roebel-device',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -109,6 +114,18 @@ const verifyAccountSignature = makeAccountSignatureVerifier({
   client: gnosisClient as unknown as AccountSignatureClient,
   utils: { hashMessage, hashTypedData, recoverTypedDataAddress },
 });
+
+// Passkey API session token (x-roebel-session + x-roebel-device) as an alternative to a fresh
+// wallet signature: one signature per device session instead of one per request. Same HMAC secret
+// as the web app (edge secret PASSKEY_SESSION_SECRET); revocation in passkey_api_sessions. Unset
+// secret = off (every request needs its signature as before). See _shared/verify-session-token.ts.
+function sessionLookup() {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  const db = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  return supabasePasskeySessionLookup(db as unknown as SessionLookupClient);
+}
 
 type Admin = ReturnType<typeof createClient>;
 
@@ -903,14 +920,26 @@ serve(async (req: Request) => {
   if (typeof wallet !== 'string' || !WALLET_RE.test(wallet)) {
     return fail('BAD_WALLET', 400, 'wallet malformed');
   }
-  if (typeof signature !== 'string' || signature.length === 0) {
-    return fail('BAD_REQUEST', 400, 'signature required');
-  }
-  // Shape-check BEFORE calling any verifier: a malformed signature is a bad
-  // request, not a verifier outage — reject it as 401 here so it never
-  // reaches the try/catch below and gets misread as 503 VERIFY_UNAVAILABLE.
-  if (!isWellFormedSignature(signature)) {
-    return fail('BAD_SIGNATURE', 401, 'signature malformed');
+  // A request WITHOUT a signature may carry a passkey API session token for this wallet.
+  const session = await authenticateEdgeSession({
+    headers: req.headers,
+    wallet,
+    signature,
+    secret: Deno.env.get('PASSKEY_SESSION_SECRET'),
+    nowSec: Math.floor(Date.now() / 1000),
+    isActive: sessionLookup(),
+  });
+  if (session && !session.ok) return fail(session.code, session.status, 'session invalid or expired');
+  if (!session) {
+    if (typeof signature !== 'string' || signature.length === 0) {
+      return fail('BAD_REQUEST', 400, 'signature required');
+    }
+    // Shape-check BEFORE calling any verifier: a malformed signature is a bad
+    // request, not a verifier outage — reject it as 401 here so it never
+    // reaches the try/catch below and gets misread as 503 VERIFY_UNAVAILABLE.
+    if (!isWellFormedSignature(signature)) {
+      return fail('BAD_SIGNATURE', 401, 'signature malformed');
+    }
   }
 
   const ts = Number(timestampSec);
@@ -928,14 +957,17 @@ serve(async (req: Request) => {
   // Fast path: plain EOA recovery. Smart accounts (ERC-1271/6492) fall
   // through to viem's universal verifier, which checks against the
   // account contract on Gnosis.
-  let verified = false;
-  try {
-    const recovered = (
-      await recoverMessageAddress({ message, signature: signature as `0x${string}` })
-    ).toLowerCase();
-    verified = recovered === claimedWallet;
-  } catch {
-    // not an EOA signature — try the universal path
+  // A valid session token (checked above) authenticates the wallet; otherwise the signature does.
+  let verified = !!session?.ok;
+  if (!verified) {
+    try {
+      const recovered = (
+        await recoverMessageAddress({ message, signature: signature as `0x${string}` })
+      ).toLowerCase();
+      verified = recovered === claimedWallet;
+    } catch {
+      // not an EOA signature — try the universal path
+    }
   }
   if (!verified) {
     try {

@@ -6,7 +6,7 @@ import { stripeConnect } from "@/lib/stripe-connect";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["refund_order"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["refund_order"], requireSignature: true });
   if (!v.ok) return failResponse(v);
   const admin = createAdminClient();
   const { data: order } = await admin.from("ticket_orders").select("id, status, rail, account_id, stripe_account_id, stripe_payment_intent_id").eq("id", String(v.payload.order_id ?? "")).maybeSingle();

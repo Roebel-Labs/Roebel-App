@@ -4,7 +4,7 @@ import { verifySignedRequest, failResponse, jsonOk } from "@/lib/signed-request/
 import { orderViews } from "@/lib/tickets/views";
 export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["tickets_list"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["tickets_list"] });
   if (!v.ok) return failResponse(v);
   const admin = createAdminClient();
   return jsonOk({ orders: await orderViews(admin, { buyerWallet: v.wallet }) });

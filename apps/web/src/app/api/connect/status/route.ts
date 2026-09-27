@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // POST: signed { action: "connect_status", payload: { account_id } } → ConnectStatus (any org member may read).
 export async function POST(request: NextRequest) {
   if (!isConnectConfigured()) return jsonFail(503, "NOT_CONFIGURED", "Stripe Connect ist nicht konfiguriert.");
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["connect_status"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["connect_status"] });
   if (!v.ok) return failResponse(v);
   const accountId = String(v.payload.account_id ?? "");
   const admin = createAdminClient();

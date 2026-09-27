@@ -14,6 +14,7 @@ import { verifyAccountSignature } from "@/lib/auth/verify-account-signature";
 import type { KeyBackupDeps } from "./key-backup-handler";
 import type { KeyBackupStore } from "./key-backup-store";
 import { SupabaseKeyBackupStore } from "./key-backup-store-supabase";
+import { authenticatePasskeyRequest } from "./session-runtime";
 
 export const passkeyKeyBackupEnabled = () => process.env.PASSKEY_KEY_BACKUP_ENABLED === "1";
 
@@ -33,5 +34,6 @@ export function passkeyKeyBackupDeps(): KeyBackupDeps {
     store: keyBackupStore(),
     verify: ({ address, message, signature }) => verifyAccountSignature({ address, message, signature }),
     nowSec: () => Math.floor(Date.now() / 1000),
+    sessionAuth: (headers, identity) => authenticatePasskeyRequest(headers, identity),
   };
 }

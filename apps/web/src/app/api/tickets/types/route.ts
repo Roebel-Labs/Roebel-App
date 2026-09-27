@@ -36,7 +36,7 @@ function clean(t: unknown, i: number): TicketTypeInput | string {
 //   ticket_types_upsert { event_id, types } → { types }  (write)
 //   ticket_types_list   { event_id }        → { types }  (read, includes inactive rows)
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["ticket_types_upsert", "ticket_types_list"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["ticket_types_upsert", "ticket_types_list"] });
   if (!v.ok) return failResponse(v);
   const eventId = String(v.payload.event_id ?? "");
   if (!UUID_RE.test(eventId)) return jsonFail(400, "BAD_REQUEST", "event_id fehlt");

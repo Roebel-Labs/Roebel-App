@@ -5,7 +5,7 @@ import { orderViews } from "@/lib/tickets/views";
 import { settleOrder } from "@/lib/tickets/settle";
 export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["order_status"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["order_status"] });
   if (!v.ok) return failResponse(v);
   const orderId = String(v.payload.order_id ?? "");
   const admin = createAdminClient();

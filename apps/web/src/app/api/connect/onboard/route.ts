@@ -15,7 +15,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Fallback path for app binaries without the native Stripe SDK; newer binaries use /api/connect/session.
 export async function POST(request: NextRequest) {
   if (!isConnectConfigured()) return jsonFail(503, "NOT_CONFIGURED", "Stripe Connect ist nicht konfiguriert.");
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["connect_onboard"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["connect_onboard"] });
   if (!v.ok) return failResponse(v);
   const accountId = String(v.payload.account_id ?? "");
   if (!UUID_RE.test(accountId)) return jsonFail(400, "BAD_REQUEST", "account_id fehlt");

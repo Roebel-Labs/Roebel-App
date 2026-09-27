@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   const publishableKey = connectPublishableKey();
   if (!publishableKey) return jsonFail(503, "NOT_CONFIGURED", "Stripe Connect ist nicht vollständig konfiguriert.");
 
-  const v = await verifySignedRequest(await request.json().catch(() => null), { actions: ["connect_session"] });
+  const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["connect_session"] });
   if (!v.ok) return failResponse(v);
   const accountId = String(v.payload.account_id ?? "");
   if (!UUID_RE.test(accountId)) return jsonFail(400, "BAD_REQUEST", "account_id fehlt");

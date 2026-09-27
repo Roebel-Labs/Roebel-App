@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { buildSignedMessage, MAX_SIGNED_AGE_SECONDS, SIGNED_SCOPE, type TicketAction } from "./message";
 import { verifyWalletSignature } from "./signature";
+import { authenticatePasskeyRequest } from "../passkey/session-runtime";
+import type { PasskeySessionAuth } from "../passkey/session-token-core";
+
+type HeaderBag = { get(name: string): string | null };
+/** Session-token auth (null = no token on the request / tokens off). Injected in tests. */
+export type BearerAuth = (headers: HeaderBag | null | undefined, wallet: string) => Promise<PasskeySessionAuth | null>;
 
 export type VerifyOk = { ok: true; wallet: string; action: TicketAction; payload: Record<string, unknown> };
 export type VerifyFail = { ok: false; status: number; code: string; message: string };
@@ -8,8 +14,16 @@ export type VerifyFail = { ok: false; status: number; code: string; message: str
 const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
 const SIG_RE = /^0x[a-fA-F0-9]{130,}$/;
 
+/**
+ * A request is authenticated by EITHER a fresh wallet signature over the canonical message (as
+ * before) OR, when PASSKEY_SESSION_TOKENS_ENABLED=1, a passkey API session token for the same
+ * wallet (`Authorization: Bearer pst1.…` + `x-roebel-device`, lib/passkey/session-token-core.ts).
+ * A request that carries a token is decided by the token alone (a bad token is 401, never a
+ * silent fall-through to the signature).
+ */
 export async function verifySignedRequest(
-  body: unknown, opts: { actions: readonly TicketAction[] },
+  body: unknown,
+  opts: { actions: readonly TicketAction[]; headers?: HeaderBag | null; bearerAuth?: BearerAuth; requireSignature?: boolean },
 ): Promise<VerifyOk | VerifyFail> {
   const b = (body ?? {}) as Record<string, unknown>;
   const { scope, action, wallet, timestampSec, payload, signature } = b;
@@ -17,6 +31,17 @@ export async function verifySignedRequest(
     return { ok: false, status: 400, code: "BAD_REQUEST", message: "unknown scope or action" };
   }
   if (typeof wallet !== "string" || !WALLET_RE.test(wallet)) return { ok: false, status: 400, code: "BAD_REQUEST", message: "wallet malformed" };
+  const payloadObjEarly = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {};
+  // requireSignature: money-moving / irreversible actions (refunds) always need a fresh signature.
+  const session = opts.requireSignature ? null : await (opts.bearerAuth ?? authenticatePasskeyRequest)(opts.headers, wallet);
+  if (session) {
+    if (!session.ok) {
+      return session.status === 503
+        ? { ok: false, status: 503, code: "SESSION_UNAVAILABLE", message: "could not check the session" }
+        : { ok: false, status: 401, code: "SESSION_INVALID", message: "session invalid or expired" };
+    }
+    return { ok: true, wallet: wallet.toLowerCase(), action: action as TicketAction, payload: payloadObjEarly };
+  }
   if (typeof signature !== "string" || !SIG_RE.test(signature)) return { ok: false, status: 401, code: "BAD_SIGNATURE", message: "signature malformed" };
   const ts = Number(timestampSec);
   if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > MAX_SIGNED_AGE_SECONDS) {

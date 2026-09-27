@@ -40,6 +40,11 @@ import {
 } from 'https://esm.sh/viem@2.21.45';
 import { makeAccountSignatureVerifier, type AccountSignatureClient } from '../_shared/verify-account-signature.ts';
 import { gnosis } from 'https://esm.sh/viem@2.21.45/chains';
+import {
+  authenticateEdgeSession,
+  supabasePasskeySessionLookup,
+  type SessionLookupClient,
+} from '../_shared/verify-session-token.ts';
 
 const ACTIONS = ['upsert_account', 'link_entity'] as const;
 type MerchantAction = (typeof ACTIONS)[number];
@@ -65,7 +70,7 @@ const SIGNATURE_SHAPE_RE = /^0x[0-9a-fA-F]+$/;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-roebel-session, x-roebel-device',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -256,6 +261,18 @@ async function handleLinkEntity(
   return ok();
 }
 
+// Passkey API session token (x-roebel-session + x-roebel-device) as an alternative to a fresh
+// wallet signature: one signature per device session instead of one per request. Same HMAC secret
+// as the web app (edge secret PASSKEY_SESSION_SECRET); revocation in passkey_api_sessions. Unset
+// secret = off (every request needs its signature as before). See _shared/verify-session-token.ts.
+function sessionLookup() {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  const db = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  return supabasePasskeySessionLookup(db as unknown as SessionLookupClient);
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return fail('METHOD_NOT_ALLOWED', 405, 'Method not allowed');
@@ -284,7 +301,17 @@ serve(async (req: Request) => {
   if (typeof wallet !== 'string' || !WALLET_RE.test(wallet)) {
     return fail('BAD_WALLET', 400, 'wallet malformed');
   }
-  if (typeof signature !== 'string' || !SIGNATURE_SHAPE_RE.test(signature)) {
+  // A request WITHOUT a signature may carry a passkey API session token for this wallet.
+  const session = await authenticateEdgeSession({
+    headers: req.headers,
+    wallet,
+    signature,
+    secret: Deno.env.get('PASSKEY_SESSION_SECRET'),
+    nowSec: Math.floor(Date.now() / 1000),
+    isActive: sessionLookup(),
+  });
+  if (session && !session.ok) return fail(session.code, session.status, 'session invalid or expired');
+  if (!session && (typeof signature !== 'string' || !SIGNATURE_SHAPE_RE.test(signature))) {
     return fail('BAD_SIGNATURE', 401, 'signature malformed');
   }
 
@@ -300,14 +327,17 @@ serve(async (req: Request) => {
   const message = buildMerchantMessage(action, wallet, ts, await hashPayload(payloadObj));
   const claimedWallet = wallet.toLowerCase();
 
-  let verified = false;
-  try {
-    const recovered = (
-      await recoverMessageAddress({ message, signature: signature as `0x${string}` })
-    ).toLowerCase();
-    verified = recovered === claimedWallet;
-  } catch {
-    // not an EOA signature -- fall through to the universal verifier
+  // A valid session token (checked above) authenticates the wallet; otherwise the signature does.
+  let verified = !!session?.ok;
+  if (!verified) {
+    try {
+      const recovered = (
+        await recoverMessageAddress({ message, signature: signature as `0x${string}` })
+      ).toLowerCase();
+      verified = recovered === claimedWallet;
+    } catch {
+      // not an EOA signature -- fall through to the universal verifier
+    }
   }
   if (!verified) {
     try {

@@ -10,6 +10,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { hashPayload } from "../org-membership/message";
 import { verifyWalletSignature, VerifierUnavailableError } from "../signed-request/signature";
+import type { BearerAuth } from "../signed-request/verify";
 
 export const CHAT_SCOPE = "roebel-chat-v1" as const;
 export const CHAT_SESSION_ACTION = "session" as const;
@@ -36,12 +37,30 @@ export type SessionVerifyResult =
   | { ok: true; wallet: string }
   | { ok: false; status: number; code: string; message: string };
 
-/** Validates the `POST /api/chat/session` body and the wallet signature. */
-export async function verifySessionRequest(body: unknown, nowMs = Date.now()): Promise<SessionVerifyResult> {
+/**
+ * Validates the `POST /api/chat/session` body and the wallet signature. With a passkey API session
+ * token (`Authorization: Bearer pst1.…` + `x-roebel-device`, PASSKEY_SESSION_TOKENS_ENABLED=1) for
+ * the same wallet, the token replaces the signature.
+ */
+export async function verifySessionRequest(
+  body: unknown,
+  nowMs = Date.now(),
+  auth?: { headers?: { get(name: string): string | null } | null; bearerAuth?: BearerAuth },
+): Promise<SessionVerifyResult> {
   const b = (body ?? {}) as Record<string, unknown>;
   const { wallet, timestamp, signature } = b;
   if (typeof wallet !== "string" || !WALLET_RE.test(wallet)) {
     return { ok: false, status: 400, code: "bad_request", message: "Ungültige Wallet-Adresse." };
+  }
+  if (auth?.headers) {
+    const bearerAuth = auth.bearerAuth ?? (await import("../passkey/session-runtime")).authenticatePasskeyRequest;
+    const session = await bearerAuth(auth.headers, wallet);
+    if (session) {
+      if (session.ok) return { ok: true, wallet: wallet.toLowerCase() };
+      return session.status === 503
+        ? { ok: false, status: 503, code: "verify_unavailable", message: "Die Sitzung konnte gerade nicht geprüft werden. Bitte später erneut versuchen." }
+        : { ok: false, status: 401, code: "session_invalid", message: "Die Sitzung ist abgelaufen. Bitte erneut anmelden." };
+    }
   }
   if (typeof signature !== "string" || !SIG_RE.test(signature)) {
     return { ok: false, status: 401, code: "bad_signature", message: "Ungültige Signatur." };

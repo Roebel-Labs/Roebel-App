@@ -12,7 +12,12 @@
  *        409 { error: 'exists', slots } when a slot already holds a DIFFERENT blob and
  *        replace is not true (a new device must never silently overwrite the real key).
  *
- * Errors: 400 bad_request, 401 bad_proof | proof_expired, 409 exists,
+ * Passkey API session token (PASSKEY_SESSION_TOKENS_ENABLED=1, lib/passkey/session-token-core.ts):
+ * a request WITHOUT `proof` may instead carry `Authorization: Bearer pst1.…` + `x-roebel-device`
+ * for the same identity (read, and writes without `replace`). `replace: true` (the only way to
+ * overwrite a different blob) always needs a fresh proof.
+ *
+ * Errors: 400 bad_request, 401 bad_proof | proof_expired | session_invalid, 409 exists,
  * 503 disabled | chain_unavailable | store_unavailable.
  *
  * "Only the owner can read": the proof must verify for `identity` under the account-signature
@@ -32,6 +37,7 @@ import {
   type KeyBackupSlot,
 } from "./key-backup-proof";
 import type { KeyBackupStore } from "./key-backup-store";
+import type { PasskeySessionAuth } from "./session-token-core";
 
 const MAX_SIGNATURE_BYTES = 8192;
 
@@ -42,6 +48,8 @@ export type KeyBackupDeps = {
   store: KeyBackupStore | null;
   verify: KeyBackupVerify;
   nowSec: () => number;
+  /** Session-token auth for `identity` (null = no token on the request / tokens off). */
+  sessionAuth?: (headers: Headers, identity: string) => Promise<PasskeySessionAuth | null>;
 };
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
@@ -96,16 +104,30 @@ async function checkProof(
   return null;
 }
 
+/** A request without `proof` authenticated by a session token: null = ok, else the error response. */
+async function checkSession(deps: KeyBackupDeps, req: Request, identity: Address): Promise<NextResponse | "none" | null> {
+  const auth = deps.sessionAuth ? await deps.sessionAuth(req.headers, identity) : null;
+  if (!auth) return "none";
+  if (auth.ok) return null;
+  return auth.status === 503 ? err("store_unavailable", 503) : err("session_invalid", 401);
+}
+
 export async function handleKeyBackupGet(req: Request, deps: KeyBackupDeps): Promise<NextResponse> {
   if (!deps.enabled) return err("disabled", 503);
   if (!deps.store) return err("store_unavailable", 503);
   const body = await readBody(req);
   const identity = parseIdentity(body?.identity);
-  const proof = parseProof(body?.proof);
-  if (!identity || !proof) return err("bad_request", 400);
-
-  const bad = await checkProof(deps, identity, proof, buildKeyBackupProofMessage({ action: "read", identity, timestamp: proof.timestamp }));
-  if (bad) return bad;
+  if (!identity) return err("bad_request", 400);
+  if (body?.proof === undefined) {
+    const s = await checkSession(deps, req, identity);
+    if (s === "none") return err("bad_request", 400);
+    if (s) return s;
+  } else {
+    const proof = parseProof(body.proof);
+    if (!proof) return err("bad_request", 400);
+    const bad = await checkProof(deps, identity, proof, buildKeyBackupProofMessage({ action: "read", identity, timestamp: proof.timestamp }));
+    if (bad) return bad;
+  }
   try {
     return json({ blobs: await deps.store.get(identity) });
   } catch (e) {
@@ -119,19 +141,26 @@ export async function handleKeyBackupPut(req: Request, deps: KeyBackupDeps): Pro
   if (!deps.store) return err("store_unavailable", 503);
   const body = await readBody(req);
   const identity = parseIdentity(body?.identity);
-  const proof = parseProof(body?.proof);
   const blobs = parseBlobs(body?.blobs);
   const replace = body?.replace === undefined ? false : body.replace;
-  if (!identity || !proof || !blobs || typeof replace !== "boolean") return err("bad_request", 400);
+  if (!identity || !blobs || typeof replace !== "boolean") return err("bad_request", 400);
 
-  const message = buildKeyBackupProofMessage({
-    action: "write",
-    identity,
-    timestamp: proof.timestamp,
-    contentHash: keyBackupContentHash(blobs, replace),
-  });
-  const bad = await checkProof(deps, identity, proof, message);
-  if (bad) return bad;
+  if (body?.proof === undefined && !replace) {
+    const s = await checkSession(deps, req, identity);
+    if (s === "none") return err("bad_request", 400);
+    if (s) return s;
+  } else {
+    const proof = parseProof(body?.proof);
+    if (!proof) return err("bad_request", 400);
+    const message = buildKeyBackupProofMessage({
+      action: "write",
+      identity,
+      timestamp: proof.timestamp,
+      contentHash: keyBackupContentHash(blobs, replace),
+    });
+    const bad = await checkProof(deps, identity, proof, message);
+    if (bad) return bad;
+  }
 
   try {
     if (!replace) {
