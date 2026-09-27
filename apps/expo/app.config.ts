@@ -145,6 +145,15 @@ const config: ExpoConfig = {
         android: {
           minSdkVersion: 26,
           newArchEnabled: true,
+          // Ship ARM only — x86/x86_64 are emulator-on-Intel ABIs and were
+          // ~60 MB of native libs (XMTP + Mapbox) per build. Production keeps
+          // 32-bit ARM for older phones (Play delivers one ABI split per
+          // device); internal APKs are universal, so they carry arm64 only
+          // (all local AVDs are arm64-v8a).
+          buildArchs:
+            process.env.EAS_BUILD_PROFILE === 'production'
+              ? ['armeabi-v7a', 'arm64-v8a']
+              : ['arm64-v8a'],
           unstable_networkInspector: false,
           useLegacyPackaging: false,
           extraProguardRules: '-keep class androidx.** { *; }',
