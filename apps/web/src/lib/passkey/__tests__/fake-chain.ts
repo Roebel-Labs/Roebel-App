@@ -53,6 +53,8 @@ export interface FakeWorld {
   legacyAddresses: Map<string, Hex>;
   /** SRM guardians per lowercased wallet. */
   guardians: Map<string, Set<string>>;
+  /** SRM threshold per lowercased wallet (default 0 = none set). */
+  thresholds: Map<string, bigint>;
   recoveryRequests: Map<string, { executeAfter: bigint; newThreshold: bigint; newOwners: Hex[] }>;
   /** MACI.polls(pollId) by decimal poll id. */
   polls: Map<string, Hex>;
@@ -86,6 +88,7 @@ export function defaultWorld(): FakeWorld {
     executedUids: new Set(),
     legacyAddresses: new Map(),
     guardians: new Map(),
+    thresholds: new Map(),
     recoveryRequests: new Map(),
     polls: new Map(),
   };
@@ -146,6 +149,10 @@ export function fakeChain(mutate?: (w: FakeWorld) => void): FakeChain {
       reads.push("guardiansCount");
       return BigInt(w.guardians.get(wallet.toLowerCase())?.size ?? 0);
     },
+    async srmThreshold(wallet) {
+      reads.push("srmThreshold");
+      return w.thresholds.get(wallet.toLowerCase()) ?? 0n;
+    },
     async isGuardian(wallet, guardian) {
       reads.push("isGuardian");
       return w.guardians.get(wallet.toLowerCase())?.has(guardian.toLowerCase()) ?? false;
@@ -182,6 +189,7 @@ export function brokenChain(): ChainReader {
     getLegacyAccountAddress: fail,
     guardiansCount: fail,
     isGuardian: fail,
+    srmThreshold: fail,
     getRecoveryRequest: fail,
     maciPoll: fail,
     verifySignerPermissionRequest: fail,

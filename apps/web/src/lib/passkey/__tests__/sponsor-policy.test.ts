@@ -355,9 +355,11 @@ test("attack: a second legacy account in a batch (or any target other than the r
 // ---- structural rules kept from tranche 1 ----
 
 test("rejects removal requests (isAdmin=2), directly, via execute and inside multisend", async () => {
-  await rejected(op(outer(LEGACY, permReq(2))), /isAdmin/);
+  // Removing the sender Safe itself is never sponsored (the only removal shape is mode E detach,
+  // which removes ANOTHER admin: sponsor-policy-detach.test.ts).
+  await rejected(op(outer(LEGACY, permReq(2))), /must not remove the sender Safe/);
   await rejected(op(outer(LEGACY, execLegacy(LEGACY, 0n, permReq(2)))), /isAdmin/);
-  await rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(2) }])), /isAdmin/);
+  await rejected(op(viaMultiSend([{ to: LEGACY, data: permReq(2) }])), /must not remove the sender Safe/);
   await rejected(op(outer(LEGACY, permReq(0))), /isAdmin/);
 });
 
@@ -456,7 +458,7 @@ test("chain read failure fails closed with ChainReadError (never ok)", async () 
 
 test("structural rejections do not touch the chain", async () => {
   const chain = fakeChain();
-  await rejected(op(outer(LEGACY, permReq(2))), /isAdmin/, chain);
+  await rejected(op(outer(LEGACY, permReq(2))), /must not remove the sender Safe/, chain);
   await rejected(op(outer(OTHER_LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /legacy/, chain);
   await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT)), { maxFeePerGas: 50_000_000_000n }), /maxFeePerGas/, chain);
   await rejected(deployOp(outer(LEGACY, permReq(1)), { factoryData: "0x1234" }), /factoryData/, chain);

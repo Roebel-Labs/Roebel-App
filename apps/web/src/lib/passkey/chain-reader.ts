@@ -36,6 +36,7 @@ const accountFactoryAbi = parseAbi(["function getAddress(address adminSigner, by
 const srmAbi = parseAbi([
   "struct RecoveryRequest { uint256 guardiansApprovalCount; uint256 newThreshold; uint64 executeAfter; address[] newOwners; }",
   "function guardiansCount(address wallet) view returns (uint256)",
+  "function threshold(address wallet) view returns (uint256)",
   "function isGuardian(address wallet, address guardian) view returns (bool)",
   "function getRecoveryRequest(address wallet) view returns (RecoveryRequest request)",
 ]);
@@ -85,6 +86,8 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
       }),
     guardiansCount: (wallet) =>
       client.readContract({ address: ADDRESSES.socialRecoveryModule, abi: srmAbi, functionName: "guardiansCount", args: [wallet] }),
+    srmThreshold: (wallet) =>
+      client.readContract({ address: ADDRESSES.socialRecoveryModule, abi: srmAbi, functionName: "threshold", args: [wallet] }),
     isGuardian: (wallet, guardian) =>
       client.readContract({
         address: ADDRESSES.socialRecoveryModule,

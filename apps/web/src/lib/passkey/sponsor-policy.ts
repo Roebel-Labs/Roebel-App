@@ -27,6 +27,17 @@
  *     must equal MACI.polls(ctx.pollId). Budget key = the identity. Everyday
  *     calls may also ride along with mode A / B shapes (the mode then stays
  *     "legacy" / "safe").
+ *  E. detach ("thirdweb trennen", body names `legacy`): the op is EXACTLY ONE
+ *     call legacy.setPermissionsForSigner(req{isAdmin: 2}, sig) removing an
+ *     admin that is NOT the sender. Only when: the sender is a genuine passkey
+ *     Safe that is already admin of `legacy`; `legacy` is a deployed thirdweb
+ *     Account proxy holding CitizenNFT; req.signer is a current admin; the
+ *     signature verifies on chain (verifySignerPermissionRequest + isAdmin of
+ *     the recovered signer); the sender Safe's SocialRecoveryModule has >= 2
+ *     guardians AND threshold >= 2 (read on chain). The sender stays admin, so
+ *     >= 1 admin remains. Every other isAdmin != 1 request (inside execute, in a
+ *     batch, removing the sender, without guardians) is rejected. Budget key =
+ *     legacy.
  *  C. recovery (no `legacy`): the op helps recover `wallet`, a citizen identity
  *     (citizen(wallet), or `recoveryLegacy` is a citizen thirdweb account with
  *     isAdmin(recoveryLegacy, wallet)) that has at least one guardian.
@@ -180,7 +191,11 @@ export interface SponsorContext {
   pollId?: bigint;
 }
 
-export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday";
+export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday" | "detach";
+
+/** Detach (mode E) needs this many guardians AND this threshold on the sender Safe. */
+export const DETACH_MIN_GUARDIANS = 2n;
+export const DETACH_MIN_THRESHOLD = 2n;
 export type PolicyResult =
   | { ok: true; mode: SponsorMode; budgetKey: Hex; /** everyday mode only; "onboarding" = non-citizen Safe, tighter budget */ tier?: EverydayTier }
   | { ok: false; reason: string };
@@ -215,6 +230,8 @@ export interface ChainReader {
   getLegacyAccountAddress(admin: Hex): Promise<Hex>;
   /** SocialRecoveryModule.guardiansCount(wallet). */
   guardiansCount(wallet: Hex): Promise<bigint>;
+  /** SocialRecoveryModule.threshold(wallet). */
+  srmThreshold(wallet: Hex): Promise<bigint>;
   /** SocialRecoveryModule.isGuardian(wallet, guardian). */
   isGuardian(wallet: Hex, guardian: Hex): Promise<boolean>;
   /** MACI.polls(pollId) on the Röbel MACI core (zero address when unknown). */
@@ -332,11 +349,34 @@ interface ScanState {
   migration: boolean;
   /** Poll.publishMessage targets (verified against MACI.polls(ctx.pollId)). */
   polls: Hex[];
+  /** Plain calls scanned (a detach must be the only one). */
+  calls: number;
+  /** Detach requests (isAdmin 2) submitted directly to `legacy` (mode E). */
+  detaches: Array<{ req: SignerPermissionRequest; signature: Hex }>;
 }
 
 function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): Check {
   if (req.isAdmin !== 1) return deny(`setPermissionsForSigner isAdmin=${req.isAdmin} not sponsorable (only 1 = add)`);
   if (!isAddressEqual(req.signer, sender)) return deny("setPermissionsForSigner req.signer must be the sender");
+  return PASS;
+}
+
+/** Structural shape of a detach request (mode E): remove an admin that is not the sender. */
+function checkDetachRequest(
+  req: Pick<SignerPermissionRequest, "signer" | "approvedTargets" | "nativeTokenLimitPerTransaction" | "permissionStartTimestamp" | "permissionEndTimestamp" | "reqValidityStartTimestamp" | "reqValidityEndTimestamp">,
+  st: ScanState,
+): Check {
+  if (isAddressEqual(req.signer, st.sender)) return deny("a detach must not remove the sender Safe itself");
+  if (req.approvedTargets.length !== 0 || req.nativeTokenLimitPerTransaction !== 0n) {
+    return deny("a detach request carries no targets and no native limit");
+  }
+  if (req.permissionStartTimestamp !== 0n || req.permissionEndTimestamp !== 0n) {
+    return deny("a detach request carries no permission window");
+  }
+  const now = BigInt(st.nowSeconds);
+  if (!(req.reqValidityStartTimestamp <= now && now < req.reqValidityEndTimestamp)) {
+    return deny("detach request is outside its validity window");
+  }
   return PASS;
 }
 
@@ -443,6 +483,7 @@ function checkSrmCall(data: Hex, st: ScanState): Check {
 
 /** A single plain call (operation 0, value 0) the Safe makes. */
 function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
+  st.calls += 1;
   if (size(data) < 4) return deny("call without a function selector");
 
   if (isAddressEqual(to, ADDRESSES.socialRecoveryModule)) return checkSrmCall(data, st);
@@ -487,6 +528,12 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
   if (d.functionName === "setPermissionsForSigner") {
     st.migration = true;
     const [req, signature] = d.args;
+    if (req.isAdmin === 2) {
+      const r = checkDetachRequest(req, st);
+      if (!r.ok) return r;
+      st.detaches.push({ req, signature });
+      return PASS;
+    }
     const r = checkPermissionRequest(req, st.sender);
     if (!r.ok) return r;
     const now = BigInt(st.nowSeconds);
@@ -689,6 +736,7 @@ async function evaluateLegacyMode(
   st: ScanState,
   chain: ChainReader,
 ): Promise<PolicyResult> {
+  if (st.detaches.length > 0) return evaluateDetachMode(op, ctx, legacy, st, chain);
   const admin = st.createAccountAdmin;
   const needsAdmin = st.executeNeedsAdmin || (st.srm && st.handovers.length === 0);
   if (admin && needsAdmin) return deny("a legacy account deployed in this op needs the handover before any other call");
@@ -730,6 +778,45 @@ async function evaluateLegacyMode(
   if (!polls.ok) return polls;
   if (st.everyday && !st.migration) return { ok: true, mode: "everyday", budgetKey: legacy, tier: "citizen" };
   return { ok: true, mode: "legacy", budgetKey: legacy };
+}
+
+/** Mode E: remove the thirdweb admin EOA, leaving the passkey Safe (with >= 2 guardians, threshold >= 2) in control. */
+async function evaluateDetachMode(
+  op: SponsorUserOp,
+  ctx: SponsorContext,
+  legacy: Hex,
+  st: ScanState,
+  chain: ChainReader,
+): Promise<PolicyResult> {
+  // Structural: exactly one call, the detach itself (no batch, no deploy, nothing riding along).
+  if (st.calls !== 1 || st.detaches.length !== 1) return deny("a detach must be the only call of the op");
+  if (op.factory) return deny("a detach needs an already deployed passkey Safe");
+  const { req, signature } = st.detaches[0];
+
+  const [legacyCode, citizen] = await Promise.all([read(() => chain.getCode(legacy)), isCitizen(legacy, ctx.v3 ?? {}, chain)]);
+  if (!isLegacyProxyCode(legacyCode)) return deny(`${legacy} is not a legacy thirdweb account`);
+  if (!citizen) return deny("legacy account holds no CitizenNFT");
+
+  const sender = await checkSender(op, ctx, chain);
+  if (!sender.ok) return sender;
+
+  const [senderIsAdmin, signerIsAdmin, guardians, threshold] = await Promise.all([
+    read(() => chain.isAdmin(legacy, op.sender)),
+    read(() => chain.isAdmin(legacy, req.signer)),
+    read(() => chain.guardiansCount(op.sender)),
+    read(() => chain.srmThreshold(op.sender)),
+  ]);
+  // The sender stays admin after the removal, so at least one admin (the Safe) remains.
+  if (senderIsAdmin !== true) return deny(`sender is not an admin of ${legacy}`);
+  if (signerIsAdmin !== true) return deny("the admin to remove is not an admin of the legacy account");
+  if (guardians < DETACH_MIN_GUARDIANS) return deny("detach needs at least 2 guardians on the passkey Safe");
+  if (threshold < DETACH_MIN_THRESHOLD) return deny("detach needs a guardian threshold of at least 2");
+
+  const v = await read(() => chain.verifySignerPermissionRequest(legacy, req, signature));
+  if (!v || v.success !== true) return deny("detach signature is not a valid admin signature");
+  const recoveredIsAdmin = await read(() => chain.isAdmin(legacy, v.signer));
+  if (!recoveredIsAdmin) return deny("detach signature is not a valid admin signature");
+  return { ok: true, mode: "detach", budgetKey: legacy };
 }
 
 /** Every Poll.publishMessage target is MACI.polls(ctx.pollId). */
@@ -877,10 +964,13 @@ export async function evaluateSponsorPolicy(
     onboardingOnly: true,
     migration: false,
     polls: [],
+    calls: 0,
+    detaches: [],
   };
   const structural = checkCallData(op.callData, st);
   if (!structural.ok) return structural;
   if (st.identityOnly && st.recoveryOnly) return deny("identity calls and recovery calls cannot be mixed in one op");
+  if (st.detaches.length > 0 && !ctx.legacy) return deny("a detach must name its legacy account");
 
   // ---- mode ----
   if (st.recoveryOnly) {
