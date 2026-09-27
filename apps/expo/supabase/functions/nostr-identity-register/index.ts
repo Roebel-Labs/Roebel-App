@@ -25,11 +25,13 @@ import {
   createPublicClient,
   decodeAbiParameters,
   hashMessage,
+  hashTypedData,
   http,
   recoverAddress,
   recoverMessageAddress,
   recoverTypedDataAddress,
 } from "https://esm.sh/viem@2.21.0";
+import { makeAccountSignatureVerifier, type AccountSignatureClient } from "../_shared/verify-account-signature.ts";
 import { gnosis } from "https://esm.sh/viem@2.21.0/chains";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { schnorr } from "https://esm.sh/@noble/curves@1.9.7/secp256k1";
@@ -54,6 +56,14 @@ const db = createClient(
 const chainClient = createPublicClient({
   chain: gnosis,
   transport: http(Deno.env.get("GNOSIS_RPC_URL") || undefined),
+});
+
+// Shared server-side signature rule (see _shared/verify-account-signature.ts):
+// ERC-1271/6492 via chainClient.verifyHash, OR a passkey Safe that is admin of
+// the account (Safe-admin envelope), OR a thirdweb chainId-8453 admin signature.
+const verifyAccountSignature = makeAccountSignatureVerifier({
+  client: chainClient as unknown as AccountSignatureClient,
+  utils: { hashMessage, hashTypedData, recoverTypedDataAddress },
 });
 
 interface NostrEvent {
@@ -424,10 +434,10 @@ Deno.serve(async (request) => {
 
   let walletSignatureValid: boolean;
   try {
-    walletSignatureValid = await chainClient.verifyMessage({
-      address: wallet as `0x${string}`,
+    walletSignatureValid = await verifyAccountSignature({
+      address: wallet,
       message: bindingStatement(wallet, npub),
-      signature: ethSignature as `0x${string}`,
+      signature: ethSignature,
     });
   } catch (error) {
     // An unreachable RPC must not look like a bad signature — the caller should

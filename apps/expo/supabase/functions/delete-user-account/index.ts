@@ -17,7 +17,16 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { recoverMessageAddress, isAddress, createPublicClient, http } from 'https://esm.sh/viem@2.21.45';
+import {
+  recoverMessageAddress,
+  isAddress,
+  createPublicClient,
+  http,
+  hashMessage,
+  hashTypedData,
+  recoverTypedDataAddress,
+} from 'https://esm.sh/viem@2.21.45';
+import { makeAccountSignatureVerifier, type AccountSignatureClient } from '../_shared/verify-account-signature.ts';
 import { gnosis } from 'https://esm.sh/viem@2.21.45/chains';
 
 type Body = {
@@ -47,6 +56,14 @@ const MAX_MESSAGE_AGE_SECONDS = 300;
 const gnosisClient = createPublicClient({
   chain: gnosis,
   transport: http(Deno.env.get('GNOSIS_RPC_URL') ?? 'https://rpc.gnosischain.com'),
+});
+
+// Shared server-side signature rule (see _shared/verify-account-signature.ts):
+// ERC-1271/6492 via gnosisClient.verifyHash, OR a passkey Safe that is admin of
+// the account (Safe-admin envelope), OR a thirdweb chainId-8453 admin signature.
+const verifyAccountSignature = makeAccountSignatureVerifier({
+  client: gnosisClient as unknown as AccountSignatureClient,
+  utils: { hashMessage, hashTypedData, recoverTypedDataAddress },
 });
 
 function json(status: number, body: Record<string, unknown>) {
@@ -118,10 +135,10 @@ serve(async (req: Request) => {
   }
   if (!verified) {
     try {
-      verified = await gnosisClient.verifyMessage({
-        address: body.wallet as `0x${string}`,
+      verified = await verifyAccountSignature({
+        address: body.wallet,
         message: body.message,
-        signature: body.signature as `0x${string}`,
+        signature: body.signature,
       });
     } catch (err) {
       console.error('signature verification failed', err);

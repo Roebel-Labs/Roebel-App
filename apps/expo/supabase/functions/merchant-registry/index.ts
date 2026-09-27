@@ -30,7 +30,15 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { createPublicClient, http, recoverMessageAddress } from 'https://esm.sh/viem@2.21.45';
+import {
+  createPublicClient,
+  http,
+  recoverMessageAddress,
+  hashMessage,
+  hashTypedData,
+  recoverTypedDataAddress,
+} from 'https://esm.sh/viem@2.21.45';
+import { makeAccountSignatureVerifier, type AccountSignatureClient } from '../_shared/verify-account-signature.ts';
 import { gnosis } from 'https://esm.sh/viem@2.21.45/chains';
 
 const ACTIONS = ['upsert_account', 'link_entity'] as const;
@@ -64,6 +72,14 @@ const corsHeaders = {
 const gnosisClient = createPublicClient({
   chain: gnosis,
   transport: http(Deno.env.get('GNOSIS_RPC_URL') ?? 'https://rpc.gnosischain.com'),
+});
+
+// Shared server-side signature rule (see _shared/verify-account-signature.ts):
+// ERC-1271/6492 via gnosisClient.verifyHash, OR a passkey Safe that is admin of
+// the account (Safe-admin envelope), OR a thirdweb chainId-8453 admin signature.
+const verifyAccountSignature = makeAccountSignatureVerifier({
+  client: gnosisClient as unknown as AccountSignatureClient,
+  utils: { hashMessage, hashTypedData, recoverTypedDataAddress },
 });
 
 type Admin = ReturnType<typeof createClient>;
@@ -295,10 +311,10 @@ serve(async (req: Request) => {
   }
   if (!verified) {
     try {
-      verified = await gnosisClient.verifyMessage({
-        address: claimedWallet as `0x${string}`,
+      verified = await verifyAccountSignature({
+        address: claimedWallet,
         message,
-        signature: signature as `0x${string}`,
+        signature,
       });
     } catch (err) {
       console.error('merchant-registry: verification unavailable (RPC error)', err);

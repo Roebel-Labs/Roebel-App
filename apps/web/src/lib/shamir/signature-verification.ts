@@ -21,7 +21,10 @@
  * easy to find and review in code, not buried in config.
  */
 
-import { Contract, JsonRpcProvider, hashMessage, verifyMessage } from "ethers";
+import { verifyMessage } from "ethers";
+import { createPublicClient, http } from "viem";
+import { gnosis as viemGnosis } from "viem/chains";
+import { createAccountSignatureVerifier } from "@/lib/auth/verify-account-signature";
 import { readContract, getContract } from "thirdweb";
 import { gnosis } from "@/lib/gnosis";
 import { client } from "@/app/client";
@@ -56,10 +59,6 @@ const attesterNftContract = getContract({
   chain: gnosis,
 });
 
-// ERC-1271 magic value returned by `isValidSignature(hash, sig)` when the
-// signature is considered valid by the smart account contract.
-const ERC1271_MAGIC_VALUE = "0x1626ba7e";
-
 /**
  * Verify that `signature` is a valid signature over `message` produced
  * by `expectedAddress`. Handles both:
@@ -67,16 +66,17 @@ const ERC1271_MAGIC_VALUE = "0x1626ba7e";
  * 1. **EOA / EIP-191 personal_sign** — `ethers.verifyMessage` recovers
  *    the signing address; we compare it to `expectedAddress`.
  *
- * 2. **Smart-account / ERC-1271** — thirdweb's `inAppWallet + smartAccount`
+ * 2. **Smart account** — thirdweb's `inAppWallet + smartAccount`
  *    setup signs with the underlying inAppWallet EOA but `account.address`
  *    is the smart-account address. The raw EIP-191 recovery returns the
  *    EOA, not the smart account, so the comparison above fails. In that
- *    case we fall back to calling `isValidSignature(hash, signature)` on
- *    the smart account contract and check for the ERC-1271 magic value.
+ *    case we fall back to the shared account-signature rule
+ *    (lib/auth/verify-account-signature.ts): ERC-1271 / ERC-6492 on Gnosis,
+ *    a passkey Safe that is admin of the account, or a thirdweb chainId-8453
+ *    signature by a current admin.
  *
- * The fallback only triggers when EIP-191 recovery doesn't match the
- * expected address AND the expected address is a contract (`code.length
- * > 0`). We never make an RPC call for a plain EOA.
+ * The fallback only runs when EIP-191 recovery doesn't match the expected
+ * address. Any error in it is logged and treated as "invalid" (false).
  */
 export async function verifyWalletSignature(
   message: string,
@@ -93,38 +93,21 @@ export async function verifyWalletSignature(
     // fall through to ERC-1271
   }
 
-  // ERC-1271 fallback for smart accounts. Smart accounts now live on Gnosis
-  // (chainId 100), so the getCode/isValidSignature checks must hit a Gnosis
-  // RPC. Prefer GNOSIS_RPC_URL; fall back to the legacy BASE_RPC_URL env name
-  // and the public Gnosis RPC so the gate still works if only one is set.
+  // Smart-account fallback on Gnosis (chainId 100), through the shared
+  // account-signature rule (lib/auth/verify-account-signature.ts): ERC-1271 /
+  // ERC-6492, a passkey Safe that is admin of the account (Safe-admin
+  // envelope), or a thirdweb chainId-8453 signature by a current admin.
+  // Prefer GNOSIS_RPC_URL; fall back to the legacy BASE_RPC_URL env name and
+  // the public Gnosis RPC so the gate still works if only one is set.
   const rpcUrl =
     process.env.GNOSIS_RPC_URL ||
     process.env.BASE_RPC_URL ||
     "https://rpc.gnosischain.com";
-  if (!rpcUrl) {
-    console.warn(
-      "[signature-verification] no RPC URL configured — cannot do ERC-1271 fallback"
-    );
-    return false;
-  }
   try {
-    const provider = new JsonRpcProvider(rpcUrl, undefined, { batchMaxCount: 1 });
-    const code = await provider.getCode(expectedAddress);
-    if (!code || code === "0x") {
-      // EOA — and EIP-191 already failed. Signature is invalid.
-      return false;
-    }
-    const contract = new Contract(
-      expectedAddress,
-      ["function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"],
-      provider
+    const verify = createAccountSignatureVerifier(
+      createPublicClient({ chain: viemGnosis, transport: http(rpcUrl, { batch: false }) }),
     );
-    const hash = hashMessage(message);
-    const result: string = await contract.isValidSignature(hash, signature);
-    return (
-      typeof result === "string" &&
-      result.toLowerCase() === ERC1271_MAGIC_VALUE
-    );
+    return await verify({ address: expectedAddress, message, signature });
   } catch (err) {
     console.error("[signature-verification] ERC-1271 verify failed", err);
     return false;

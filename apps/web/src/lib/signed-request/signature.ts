@@ -1,14 +1,18 @@
 // Wallet-signature verification shared by the ticket signed-request path and
-// the chat session (lib/chat/session.ts). EOA recovery first, then ERC-1271 /
-// ERC-6492 via viem's verifyMessage on Gnosis (thirdweb smart accounts).
+// the chat session (lib/chat/session.ts). EOA recovery first, then the shared
+// account-signature rule on Gnosis (lib/auth/verify-account-signature.ts):
+// ERC-1271 / ERC-6492 (thirdweb smart accounts), a passkey Safe that is admin
+// of the account (Safe-admin envelope), or a thirdweb chainId-8453 signature.
 // No next/* imports so framework-agnostic modules can use it.
 import { createPublicClient, http, recoverMessageAddress } from "viem";
 import { gnosis } from "viem/chains";
+import { createAccountSignatureVerifier } from "../auth/verify-account-signature";
 
 const gnosisClient = createPublicClient({
   chain: gnosis,
   transport: http(process.env.GNOSIS_RPC_URL ?? "https://rpc.gnosischain.com"),
 });
+const verifyAccountSignature = createAccountSignatureVerifier(gnosisClient);
 
 export class VerifierUnavailableError extends Error {
   constructor(cause: unknown) {
@@ -29,7 +33,7 @@ export async function verifyWalletSignature(wallet: string, message: string, sig
     if (recovered.toLowerCase() === claimed) return true;
   } catch { /* not an EOA signature */ }
   try {
-    return await gnosisClient.verifyMessage({ address: claimed as `0x${string}`, message, signature: signature as `0x${string}` });
+    return await verifyAccountSignature({ address: claimed, message, signature });
   } catch (err) {
     throw new VerifierUnavailableError(err);
   }
