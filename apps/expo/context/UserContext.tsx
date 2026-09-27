@@ -115,6 +115,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             );
             authProvider = primary?.type;
           }
+        } else if (wallet && wallet.id === 'adapter') {
+          // Passkey session (lib/passkey/signin-runtime.ts). upsertUser only sets
+          // auth_provider on rows that have none, so a migrated account keeps its
+          // original provider; a passkey-only account is created with 'passkey'.
+          authProvider = 'passkey';
         }
 
         const userRecord = await upsertUser(account!.address, email, authProvider, account!);

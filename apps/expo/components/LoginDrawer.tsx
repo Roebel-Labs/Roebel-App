@@ -6,6 +6,7 @@ import { wallets } from '@/constants/wallets';
 import BottomDrawer from './BottomDrawer';
 import { useTheme } from '@/context/ThemeContext';
 import PasskeyEntryLinks from '@/components/passkey/PasskeyEntryLinks';
+import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 
 type Props = {
   visible: boolean;
@@ -25,6 +26,9 @@ export default function LoginDrawer({ visible, onClose }: Props) {
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Melden Sie sich an, um alle Funktionen zu nutzen
         </Text>
+
+        {/* Passkey "Unabhängiges Konto" — renders nothing unless the preview gate is open */}
+        <PasskeySignInOption onSignedIn={onClose} />
 
         {/* Thirdweb Connect Embed */}
         <View style={styles.connectContainer}>

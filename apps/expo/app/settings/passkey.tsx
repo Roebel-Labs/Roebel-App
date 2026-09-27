@@ -12,6 +12,7 @@ import { fontFamily } from '@/constants/theme';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MigrationSteps, { stepStates } from '@/components/passkey/MigrationSteps';
 import EmailRow from '@/components/passkey/EmailRow';
+import PasskeySessionSwitch from '@/components/passkey/PasskeySessionSwitch';
 import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
@@ -206,6 +207,7 @@ export default function PasskeySettingsScreen() {
           {connected && <EmailRow />}
 
           <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>ANMELDUNG</Text>
+          {connected && <PasskeySessionSwitch />}
           <View
             style={[styles.card, styles.disabledRow, { backgroundColor: colors.surface }]}
             accessibilityState={{ disabled: true }}

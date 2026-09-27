@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useSetActiveWallet } from 'thirdweb/react';
 import { client } from '@/constants/thirdweb';
 import { wallets } from '@/constants/wallets';
+import { bootWallets } from '@/lib/passkey/boot';
+import { passkeyChannelAllowed } from '@/lib/passkey/gate';
 
 interface WalletBootContextValue {
   /**
@@ -30,20 +32,33 @@ export function WalletBootProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let cancelled = false;
+    // The existing thirdweb restore, byte-for-byte as before.
+    const autoConnectThirdweb = async () => {
+      for (const wallet of wallets) {
+        try {
+          const account = await wallet.autoConnect({ client });
+          if (cancelled) return;
+          if (account) {
+            await setActiveWallet(wallet);
+            return;
+          }
+        } catch {
+          // No stored session for this wallet, or restore failed; try next.
+        }
+      }
+    };
     (async () => {
       try {
-        for (const wallet of wallets) {
-          try {
-            const account = await wallet.autoConnect({ client });
-            if (cancelled) return;
-            if (account) {
-              await setActiveWallet(wallet);
-              return;
-            }
-          } catch {
-            // No stored session for this wallet, or restore failed; try next.
-          }
-        }
+        // Passkey session first (preview channels only; production skips this without reading
+        // any storage), else the thirdweb path above. See lib/passkey/boot.ts.
+        await bootWallets({
+          channelAllowed: () => passkeyChannelAllowed(),
+          loadSession: async () => (await import('@/lib/passkey/signin-runtime')).loadStoredPasskeySession(),
+          connectPasskey: async (session) =>
+            (await import('@/lib/passkey/signin-runtime')).activatePasskeySession(session, setActiveWallet),
+          autoConnectThirdweb,
+          isCancelled: () => cancelled,
+        });
       } finally {
         if (!cancelled) setAutoConnectFinished(true);
       }
