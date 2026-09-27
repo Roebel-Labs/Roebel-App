@@ -14,8 +14,8 @@
  *  - `citizen`: the identity must hold a CitizenNFT (checked by the policy).
  *  - `onboarding`: allowed for a NON-citizen passkey Safe (a brand-new user),
  *    under a tighter per-identity budget. Only CitizenNFTv2.createAttestationRequest
- *    (asking the attesters to verify you). Circles registerHuman is NOT here:
- *    Röbel only invites citizens, and an invite needs an inviter's trust first.
+ *    (asking the attesters to verify you). Circles registerHuman is citizen-tier:
+ *    Röbel only invites citizens, and the Hub itself requires an inviter's trust.
  *
  * Addresses: packages/blockchain/src/index.ts (CONTRACTS) + apps/expo/constants/gnosis.ts
  * (Hub, group, NameRegistry). Selectors checked against deployed bytecode on
@@ -42,6 +42,7 @@ export const EVERYDAY_CONTRACTS = {
 
 export const hubAbi = parseAbi([
   "function personalMint()",
+  "function registerHuman(address inviter, bytes32 metadataDigest)",
   "function groupMint(address group, address[] collateralAvatars, uint256[] amounts, bytes data)",
   "function trust(address trustReceiver, uint96 expiry)",
   "function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes data)",
@@ -68,6 +69,7 @@ export const pollAbi = parseAbi([
 export const EVERYDAY_SELECTORS = {
   "Hub.personalMint()": "0x0d873a79",
   "Hub.groupMint(address,address[],uint256[],bytes)": "0x6cb498e5",
+  "Hub.registerHuman(address,bytes32)": "0xe76cec53",
   "Hub.trust(address,uint96)": "0x75dcebc7",
   "Hub.safeTransferFrom(address,address,uint256,uint256,bytes)": "0xf242432a",
   "NameRegistry.updateMetadataDigest(bytes32)": "0x3857d9d7",
@@ -131,6 +133,8 @@ export function classifyEverydayCall(to: Hex, value: bigint, data: Hex, identity
         return yes("Hub.groupMint");
       case "trust":
         return yes("Hub.trust");
+      case "registerHuman":
+        return yes("Hub.registerHuman");
       case "safeTransferFrom": {
         const [from, , id] = d.args;
         if (!isAddressEqual(from, identity)) return no("safeTransferFrom must spend the identity's own balance");

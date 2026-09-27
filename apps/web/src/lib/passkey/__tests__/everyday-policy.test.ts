@@ -33,6 +33,7 @@ const personalMint = encodeFunctionData({ abi: hubAbi, functionName: "personalMi
 const groupMint = (group: Hex = C.roebelGroup) =>
   encodeFunctionData({ abi: hubAbi, functionName: "groupMint", args: [group, [LEGACY], [5n], "0x"] });
 const trust = encodeFunctionData({ abi: hubAbi, functionName: "trust", args: [RECIPIENT, 4102444800n] });
+const registerHuman = encodeFunctionData({ abi: hubAbi, functionName: "registerHuman", args: [RECIPIENT, `0x${"00".repeat(32)}`] });
 const send = (from: Hex, id: bigint = BigInt(C.roebelGroup)) =>
   encodeFunctionData({ abi: hubAbi, functionName: "safeTransferFrom", args: [from, RECIPIENT, id, 10n ** 18n, "0x"] });
 const metadata = encodeFunctionData({ abi: nameRegistryAbi, functionName: "updateMetadataDigest", args: [`0x${"12".repeat(32)}`] });
@@ -87,6 +88,7 @@ test("every documented selector is what the ABIs encode", () => {
   assert.equal(sel(personalMint), EVERYDAY_SELECTORS["Hub.personalMint()"]);
   assert.equal(sel(groupMint()), EVERYDAY_SELECTORS["Hub.groupMint(address,address[],uint256[],bytes)"]);
   assert.equal(sel(trust), EVERYDAY_SELECTORS["Hub.trust(address,uint96)"]);
+  assert.equal(sel(registerHuman), EVERYDAY_SELECTORS["Hub.registerHuman(address,bytes32)"]);
   assert.equal(sel(send(LEGACY)), EVERYDAY_SELECTORS["Hub.safeTransferFrom(address,address,uint256,uint256,bytes)"]);
   assert.equal(sel(metadata), EVERYDAY_SELECTORS["NameRegistry.updateMetadataDigest(bytes32)"]);
   assert.equal(sel(askCitizen), EVERYDAY_SELECTORS["CitizenNFTv2.createAttestationRequest(string)"]);
@@ -127,6 +129,7 @@ test("legacy identity: every allowlisted action through legacy.execute", async (
     [C.circlesHub, personalMint],
     [C.circlesHub, groupMint()],
     [C.circlesHub, trust],
+    [C.circlesHub, registerHuman],
     [C.circlesHub, send(LEGACY)],
     [C.circlesNameRegistry, metadata],
     [C.citizenNft, revokeCitizen],
@@ -235,7 +238,7 @@ test("Safe identity (non-citizen): only createAttestationRequest, onboarding tie
     fakeChain(),
   );
   assert.ok(r.ok && r.mode === "everyday" && r.tier === "onboarding", JSON.stringify(r));
-  for (const data of [personalMint, trust]) {
+  for (const data of [personalMint, trust, registerHuman]) {
     await rejected(op(outer(C.circlesHub, data)), /citizen/, fakeChain(), NO_LEGACY);
   }
   await rejected(op(outer(C.maci, signUp)), /citizen/, fakeChain(), NO_LEGACY);
