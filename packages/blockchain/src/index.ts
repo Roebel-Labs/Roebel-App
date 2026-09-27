@@ -13,6 +13,10 @@ export const CONTRACTS = {
   attesterNFT: "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
   citizenNFT: "0x59aA26f499D7C2B3EC2c8524Ed06F54fc4E85dE5",
 
+  // NSP-14 OrgRegistry (2026-09-27, deploy block 48464904): orgs as attester-approved
+  // Safes. Owner = Attester Safe (bands + one-time migrationRegister only).
+  orgRegistry: "0x320b4ea2f4E31b81245e684D08AF593DE05E9919",
+
   // Legacy public-vote governance (read-only — old proposals still resolve here)
   legacyAttesterGovernor: "0x84D8ab0FcA4D0689e2E3F036dc461942343c2a5b",
   legacyTimelock: "0xed1680AFf2A4235421b209A1bf8C7f5760149cc0",

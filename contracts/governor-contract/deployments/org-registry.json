@@ -1,0 +1,30 @@
+{
+  "network": "gnosis",
+  "chainId": 100,
+  "deployedAt": "2026-09-27T11:50:58.260Z",
+  "deployer": "0xd5028284017A32C672CbD73Fe35aCD897bA874cf",
+  "orgRegistry": "0x320b4ea2f4E31b81245e684D08AF593DE05E9919",
+  "deployBlock": 48464904,
+  "txHash": "0x9300d963a85d4f5f3f7b2211e32f7212f9798d11266f3dc83fc396f4ee9d5317",
+  "owner": "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa",
+  "attesterNFT": "0xC587F383696D3c9DF7A6eE03A9160E40Ae1cdb82",
+  "bands": {
+    "approval": {
+      "percentBps": 5000,
+      "floor": 2,
+      "cap": 5
+    },
+    "rejection": {
+      "percentBps": 2500,
+      "floor": 2,
+      "cap": 5
+    },
+    "revocation": {
+      "percentBps": 6700,
+      "floor": 3,
+      "cap": 65535
+    }
+  },
+  "migrationFinalized": false,
+  "note": "NSP-14. Owner may only tune bands and run migrationRegister until finalizeMigration(); hand ownership to the Timelock after bootstrap."
+}

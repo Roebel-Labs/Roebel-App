@@ -43,13 +43,15 @@ export const isTestContractSet =
 export const attesterSafeGnosisAddress =
 	process.env.EXPO_PUBLIC_ATTESTER_SAFE_GNOSIS || "0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa";
 
-// NSP-14 OrgRegistry: orgs as attester-approved Safes. Empty until deployed; the
-// org-Safe settings section stays hidden while this is unset. The test registry
-// (docs/ONCHAIN_TEST_ENVIRONMENT.md) is selected by the env override.
+// NSP-14 OrgRegistry: orgs as attester-approved Safes (production, 2026-09-27;
+// owner = Attester Safe). The test registry (docs/ONCHAIN_TEST_ENVIRONMENT.md) is
+// selected by the env override — set BOTH vars together.
 export const orgRegistryGnosisAddress =
-	process.env.EXPO_PUBLIC_ORG_REGISTRY_GNOSIS || "";
+	process.env.EXPO_PUBLIC_ORG_REGISTRY_GNOSIS || "0x320b4ea2f4E31b81245e684D08AF593DE05E9919";
 /** First block to scan for OrgRegistry events. */
-export const orgRegistryDeployBlock = Number(process.env.EXPO_PUBLIC_ORG_REGISTRY_DEPLOY_BLOCK || 0);
+export const orgRegistryDeployBlock = Number(
+	process.env.EXPO_PUBLIC_ORG_REGISTRY_DEPLOY_BLOCK || (process.env.EXPO_PUBLIC_ORG_REGISTRY_GNOSIS ? 0 : 48464904),
+);
 
 // Röbeltaler Circles v2 BaseGroup (registered 2026-06-17; owner = Attester Safe,
 // standard mint policy, fee 0, citizen-gated via owner-curated trust of the 15

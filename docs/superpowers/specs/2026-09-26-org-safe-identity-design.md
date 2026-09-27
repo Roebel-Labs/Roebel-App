@@ -170,4 +170,9 @@ It prints every pending Safe with its owners and writes a Safe{Wallet} Transacti
 - `apps/expo/scripts/org-safe-fork-e2e.ts`: the app's own builders on a Gnosis fork, run as Max's real smart account (impersonated). It covers create + request, 3 attester approvals, a sync with a late owner plus admin and member roles, idempotency, and leave. All checks green.
 - `org-registry-batch-register.cjs` was run on a fork against the test registry. The org was registered to the app-created Safe and its claim was superseded.
 
-**Production registry:** `scripts/deploy-org-registry.cjs` sets owner = Attester Safe and attesters = production AttesterNFTv2, and writes `deployments/org-registry.json`. **Not yet run.** It needs Max to run it (see the hand-over).
+**Production registry: LIVE.** `0x320b4ea2f4E31b81245e684D08AF593DE05E9919`, deployed 2026-09-27 at block 48464904 by Max via `scripts/deploy-org-registry.cjs`.
+- Owner = Attester Safe `0x3A08…FDEa` (Safe 1.4.1, 4 owners, threshold 1).
+- Attesters = production AttesterNFTv2 (5).
+- Bands 50%/2/5 · 25%/2/5 · 67%/3/no cap.
+- Verified on chain after deploy.
+- The app uses it by default; `EXPO_PUBLIC_ORG_REGISTRY_GNOSIS` overrides it for the test env.
