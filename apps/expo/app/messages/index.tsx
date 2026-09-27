@@ -19,6 +19,7 @@ import ConversationListItem from '@/components/messages/ConversationListItem';
 import ConversationRowSkeleton from '@/components/messages/ConversationRowSkeleton';
 import XmtpActivationView from '@/components/messages/XmtpActivationView';
 import { useXmtp } from '@/context/XmtpContext';
+import { XMTP_PASSKEY_LINK_HINT } from '@/lib/xmtp/passkey-link';
 import { useNotificationsContext } from '@/context/NotificationsContext';
 import type { ConversationWithLastMessage } from '@/lib/supabase-messages';
 
@@ -71,7 +72,7 @@ export default function MessagesScreen() {
 
   // While this device hasn't registered its XMTP inbox yet, the screen shows
   // the one-time "Private Nachrichten aktivieren" view instead of the inbox.
-  const { activationAvailable } = useXmtp();
+  const { activationAvailable, passkeyLinkNeeded } = useXmtp();
 
   // DM pushes die silently when the OS permission is missing (e.g. a fresh
   // install leaves a stale token linked to the wallet). Opening the inbox is
@@ -147,6 +148,22 @@ export default function MessagesScreen() {
         </View>
       ) : (
         <>
+          {passkeyLinkNeeded && (
+            // Passkey session on a migrated account: the E2E rail waits for the Safe link; the
+            // Supabase rail below keeps working.
+            <Pressable
+              style={({ pressed }) => [
+                styles.pushBanner,
+                { backgroundColor: colors.surfaceSecondary, borderBottomColor: colors.border },
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => router.push('/settings/passkey' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Nachrichten auf Passkey übertragen"
+            >
+              <Text style={[styles.pushBannerText, { color: colors.textPrimary, flex: 1 }]}>{XMTP_PASSKEY_LINK_HINT}</Text>
+            </Pressable>
+          )}
           {permissionStatus !== 'granted' && (
             <Pressable
               style={({ pressed }) => [

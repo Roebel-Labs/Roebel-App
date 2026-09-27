@@ -17,8 +17,11 @@ import {
   bootXmtpClient,
   dropXmtpClient,
   getXmtpClient,
+  linkPasskeySafeToInbox,
+  xmtpPasskeyLinkNeeded,
   type XmtpClientHandle,
 } from '@/lib/xmtp/client';
+import type { PasskeySession } from '@/lib/passkey/session';
 import { XmtpChainLockedError, getXmtpChainLock } from '@/lib/xmtp/chain-lock';
 import { loadXmtp } from '@/lib/xmtp/native';
 import { registerForXmtpPush } from '@/lib/xmtp/pushRegistration';
@@ -41,6 +44,13 @@ interface XmtpContextValue {
    * DMs run on the Supabase rail.
    */
   chainLocked: boolean;
+  /**
+   * Passkey session on a migrated (legacy) identity whose passkey Safe is not yet part of the
+   * XMTP inbox: DMs stay on the Supabase rail and the UI shows XMTP_PASSKEY_LINK_HINT.
+   */
+  passkeyLinkNeeded: boolean;
+  /** "Nachrichten auf Passkey übertragen" (lib/xmtp/passkey-link.ts); re-boots on success. Throws German errors. */
+  linkPasskey: (session: PasskeySession) => Promise<void>;
   /** Explicit first-time registration ("Private Nachrichten aktivieren"). */
   activate: () => Promise<boolean>;
   /** Subscribe to every inbound/outbound streamed message. Returns unsubscribe. */
@@ -54,6 +64,8 @@ const XmtpContext = createContext<XmtpContextValue>({
   activating: false,
   activationError: null,
   chainLocked: false,
+  passkeyLinkNeeded: false,
+  linkPasskey: async () => {},
   activate: async () => false,
   subscribeMessages: () => () => {},
 });
@@ -84,6 +96,8 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
   const [activating, setActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [chainLocked, setChainLocked] = useState(false);
+  const [passkeyLinkNeeded, setPasskeyLinkNeeded] = useState(false);
+  const [bootNonce, setBootNonce] = useState(0);
   const subscribersRef = useRef<Set<(m: DecodedMessage<any>) => void>>(new Set());
   const streamingForRef = useRef<string | null>(null);
 
@@ -115,8 +129,12 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       setHandle(booted);
       setReady(true);
+      const linkNeeded = !booted && xmtpPasskeyLinkNeeded(activeAccount.address);
+      setPasskeyLinkNeeded(linkNeeded);
       if (booted) {
         setChainLocked(false);
+        setActivationAvailable(false);
+      } else if (linkNeeded) {
         setActivationAvailable(false);
       } else {
         const [sdk, enabled, lock] = await Promise.all([
@@ -135,7 +153,16 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnectFinished, activeAccount?.address]);
+  }, [autoConnectFinished, activeAccount?.address, bootNonce]);
+
+  const linkPasskey = useCallback(
+    async (session: PasskeySession) => {
+      await linkPasskeySafeToInbox(session);
+      setPasskeyLinkNeeded(false);
+      setBootNonce((n) => n + 1); // re-run the boot effect with the link in place
+    },
+    [],
+  );
 
   // ── Explicit activation ("Private Nachrichten aktivieren") ─────
   const activate = useCallback(async (): Promise<boolean> => {
@@ -253,10 +280,12 @@ export function XmtpProvider({ children }: { children: React.ReactNode }) {
       activating,
       activationError,
       chainLocked,
+      passkeyLinkNeeded,
+      linkPasskey,
       activate,
       subscribeMessages,
     }),
-    [handle, ready, activationAvailable, activating, activationError, chainLocked, activate, subscribeMessages]
+    [handle, ready, activationAvailable, activating, activationError, chainLocked, passkeyLinkNeeded, linkPasskey, activate, subscribeMessages]
   );
 
   return <XmtpContext.Provider value={value}>{children}</XmtpContext.Provider>;

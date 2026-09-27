@@ -33,6 +33,20 @@ import {
   setXmtpChainLock,
 } from './chain-lock';
 import { loadXmtp, type XmtpSdk } from './native';
+import {
+  XMTP_LINK_NEEDS_INSTALLATION_MESSAGE,
+  XMTP_LINK_SAFE_NOT_DEPLOYED_MESSAGE,
+  XmtpPasskeyLinkNeededError,
+  inboxHasIdentity,
+  isSafeLinked,
+  makeSafeScwSigner,
+  planXmtpForPasskey,
+  writePasskeyLinkMarker,
+  type XmtpPasskeyPlan,
+} from './passkey-link';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { loadDerivedKeysRuntime } from '@/lib/passkey/load-derived-keys';
+import type { PasskeySession } from '@/lib/passkey/session';
 import { RoebelStickerCodec, TransactionReferenceCodec } from './codecs';
 
 export interface XmtpClientHandle {
@@ -52,6 +66,13 @@ const DB_KEY_PREFIX = 'xmtp_dbkey_';
 
 let handleCache: XmtpClientHandle | null = null;
 let bootPromise: Promise<XmtpClientHandle | null> | null = null;
+/** Legacy wallets whose passkey session is waiting for "Nachrichten auf Passkey übertragen". */
+const passkeyLinkNeeded = new Set<string>();
+
+/** True when the last boot for `wallet` stopped because its passkey Safe is not linked to the inbox. */
+export function xmtpPasskeyLinkNeeded(wallet: string): boolean {
+  return passkeyLinkNeeded.has(wallet.toLowerCase());
+}
 
 export function getXmtpClient(): XmtpClientHandle | null {
   return handleCache;
@@ -251,6 +272,26 @@ export async function bootXmtpClient(
         throw new XmtpChainLockedError(chainLock);
       }
 
+      // Passkey session (lib/xmtp/passkey-link.ts). thirdweb sessions get { kind: 'thirdweb' } and
+      // run the unchanged flow below. A legacy identity needs its Safe linked to the inbox first.
+      const pk = passkeySessionOf<PasskeySession>(account);
+      let plan: XmtpPasskeyPlan = planXmtpForPasskey(pk, false);
+      if (pk && plan.kind === 'linkNeeded') {
+        const linked = await isSafeLinked({
+          legacy: pk.identity,
+          safe: pk.safe,
+          storage: AsyncStorage,
+          inboxIdOf: (a) =>
+            sdk.Client.getOrCreateInboxId(new sdk.PublicIdentity(a, 'ETHEREUM'), XMTP_ENV).catch(() => null),
+        });
+        if (!linked) {
+          passkeyLinkNeeded.add(wallet);
+          throw new XmtpPasskeyLinkNeededError();
+        }
+        plan = { kind: 'legacyViaSafe' };
+      }
+      passkeyLinkNeeded.delete(wallet);
+
       const dbEncryptionKey = await getOrCreateDbKey(wallet);
       const options = { env: XMTP_ENV, dbEncryptionKey, codecs: buildCodecs(sdk) };
       const flagKey = `${REGISTERED_FLAG_PREFIX}${wallet}`;
@@ -294,10 +335,29 @@ export async function bootXmtpClient(
         }
       }
 
+      // A passkey signature is a fingerprint prompt: never register silently at app start.
+      if (!xmtpClient && pk && !opts?.allowRegister) {
+        console.log('[xmtp] passkey session without a local installation — waiting for activation');
+        return null;
+      }
+
       if (!xmtpClient) {
-        await ensureDeployedForXmtp(account);
+        let signer: XmtpSigner;
+        if (!pk) {
+          await ensureDeployedForXmtp(account);
+          signer = makeScwSigner(sdk, account);
+        } else {
+          // The sponsor refuses the thirdweb "deploy by self-transfer"; a passkey Safe is deployed
+          // by its first sponsored action (the handover for migrated people).
+          const rt = await loadDerivedKeysRuntime();
+          if (!(await rt.isPasskeySafeDeployed(pk.safe))) throw new Error(XMTP_LINK_SAFE_NOT_DEPLOYED_MESSAGE);
+          signer =
+            plan.kind === 'safeIdentity'
+              ? makeScwSigner(sdk, account) // the adapter signs as the Safe itself
+              : (makeSafeScwSigner(sdk, pk.safe, (h) => rt.signHashAsSafe(pk, h)) as unknown as XmtpSigner);
+        }
         try {
-          xmtpClient = await sdk.Client.create(makeScwSigner(sdk, account), options);
+          xmtpClient = await sdk.Client.create(signer, options);
         } catch (err) {
           const lock = parseForeignChainLock(err);
           if (!lock) throw err;
@@ -326,7 +386,7 @@ export async function bootXmtpClient(
       console.log('[xmtp] client ready', { inboxId: xmtpClient.inboxId });
       return handleCache;
     } catch (err) {
-      if (err instanceof XmtpChainLockedError) {
+      if (err instanceof XmtpChainLockedError || err instanceof XmtpPasskeyLinkNeededError) {
         if (opts?.rethrow) throw err;
         return null;
       }
@@ -354,4 +414,65 @@ export async function dropXmtpClient(): Promise<void> {
   } catch (err) {
     console.warn('[xmtp] dropClient failed', err);
   }
+}
+
+/**
+ * "Nachrichten auf Passkey übertragen": adds the passkey Safe as a second SCW identity to the
+ * legacy account's EXISTING inbox (`client.addAccount`, SDK 5.7.0). Needs an installation of
+ * that inbox on this device (the booted client, or its local db via Client.build — no
+ * signature); the Safe signs once (fingerprint). Works from a thirdweb OR a passkey session.
+ * Idempotent: an already linked Safe only refreshes the device marker. Throws German errors.
+ */
+export async function linkPasskeySafeToInbox(session: PasskeySession): Promise<void> {
+  const sdk = await loadXmtp();
+  if (!sdk) throw new Error('Private Nachrichten brauchen die neueste App-Version.');
+  if (!(await fetchXmtpDmsEnabled())) throw new Error('Private Nachrichten sind gerade abgeschaltet.');
+  const wallet = session.identity.toLowerCase();
+  if (session.identity.toLowerCase() === session.safe.toLowerCase()) return; // Safe identity: nothing to link
+
+  let client: Client<any> | null = handleCache?.wallet === wallet ? handleCache.client : null;
+  if (!client) {
+    if (!(await AsyncStorage.getItem(`${REGISTERED_FLAG_PREFIX}${wallet}`))) {
+      throw new Error(XMTP_LINK_NEEDS_INSTALLATION_MESSAGE);
+    }
+    const dbEncryptionKey = await getOrCreateDbKey(wallet);
+    try {
+      client = await sdk.Client.build(new sdk.PublicIdentity(session.identity, 'ETHEREUM'), {
+        env: XMTP_ENV,
+        dbEncryptionKey,
+        codecs: buildCodecs(sdk),
+      });
+    } catch {
+      throw new Error(XMTP_LINK_NEEDS_INSTALLATION_MESSAGE);
+    }
+  }
+
+  const rt = await loadDerivedKeysRuntime();
+  if (!(await rt.isPasskeySafeDeployed(session.safe))) throw new Error(XMTP_LINK_SAFE_NOT_DEPLOYED_MESSAGE);
+
+  const before = await client.inboxState(true);
+  if (!inboxHasIdentity(before.identities, session.safe)) {
+    const signer = makeSafeScwSigner(sdk, session.safe, (h) => rt.signHashAsSafe(session, h));
+    // allowReassignInboxId = false: never move a Safe that already belongs to ANOTHER inbox.
+    await client.addAccount(signer as unknown as XmtpSigner, false);
+    const after = await client.inboxState(true);
+    if (!inboxHasIdentity(after.identities, session.safe)) {
+      throw new Error('Das Netzwerk hat die Übertragung nicht bestätigt. Bitte versuche es erneut.');
+    }
+  }
+  await writePasskeyLinkMarker(AsyncStorage, wallet, session.safe);
+  passkeyLinkNeeded.delete(wallet);
+}
+
+/** Is the Safe already linked to the legacy inbox (device marker or network lookup, no signature)? */
+export async function isPasskeySafeLinkedToInbox(session: PasskeySession): Promise<boolean | null> {
+  const sdk = await loadXmtp();
+  if (!sdk) return null;
+  if (session.identity.toLowerCase() === session.safe.toLowerCase()) return true;
+  return isSafeLinked({
+    legacy: session.identity,
+    safe: session.safe,
+    storage: AsyncStorage,
+    inboxIdOf: (a) => sdk.Client.getOrCreateInboxId(new sdk.PublicIdentity(a, 'ETHEREUM'), XMTP_ENV).catch(() => null),
+  });
 }

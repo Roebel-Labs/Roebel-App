@@ -27,7 +27,7 @@ import { unwrapSecret, wrapSecret } from './prf-vault';
 import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
 import { identityKind, type PasskeySession } from './session';
-import { signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
+import { signHashAsIdentity, signHashAsIdentityWithPrf, type AdapterDeps } from './thirdweb-adapter';
 import { isSafeDeployed, sendPasskeyUserOp } from './userop';
 import { getPrfSecret, signWithPasskey } from './webauthn';
 
@@ -143,3 +143,14 @@ export async function readBackupStatus(
   if (r.status === 'disabled') return { status: 'disabled' };
   return { status: 'ok', slots: r.status === 'found' ? (Object.keys(r.blobs) as KeyBackupSlot[]) : [], ...(r.prf ? { prf: r.prf } : {}) };
 }
+
+// ---------------------------------------------------------------------------
+// XMTP (lib/xmtp/passkey-link.ts): the Safe signs as ITSELF, never the legacy envelope
+// ---------------------------------------------------------------------------
+
+/** The passkey Safe's own ERC-1271 signature over `hash` (6492-wrapped while counterfactual). */
+export function signHashAsSafe(session: PasskeySession, hash: Hex): Promise<Hex> {
+  return signHashAsIdentity({ ...session, identity: session.safe }, hash, adapterDeps);
+}
+
+export const isPasskeySafeDeployed = (safe: Address) => isSafeDeployed(safe);
