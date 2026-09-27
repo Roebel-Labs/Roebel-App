@@ -349,6 +349,10 @@ interface ScanState {
   migration: boolean;
   /** Poll.publishMessage targets (verified against MACI.polls(ctx.pollId)). */
   polls: Hex[];
+  /** org-Safe execTransaction targets (a Safe L2 1.4.1 proxy, or created earlier in this batch). */
+  orgSafes: Hex[];
+  /** org Safes this batch deploys (CREATE2 addresses, in call order). */
+  createdSafes: Hex[];
   /** Plain calls scanned (a detach must be the only one). */
   calls: number;
   /** Detach requests (isAdmin 2) submitted directly to `legacy` (mode E). */
@@ -391,6 +395,11 @@ function recordEveryday(v: EverydayVerdict, st: ScanState): Check {
   st.identityOnly = true;
   if (v.tier !== "onboarding") st.onboardingOnly = false;
   if (v.poll) st.polls.push(v.poll);
+  if (v.createdSafe) st.createdSafes.push(v.createdSafe);
+  if (v.orgSafe) {
+    // Created earlier in THIS batch counts as verified (it has no code at validation time).
+    if (!st.createdSafes.some((c) => isAddressEqual(c, v.orgSafe as Hex))) st.orgSafes.push(v.orgSafe);
+  }
   return PASS;
 }
 
@@ -776,6 +785,8 @@ async function evaluateLegacyMode(
   }
   const polls = await checkPolls(st, ctx, chain);
   if (!polls.ok) return polls;
+  const orgSafes = await checkOrgSafes(st, chain);
+  if (!orgSafes.ok) return orgSafes;
   if (st.everyday && !st.migration) return { ok: true, mode: "everyday", budgetKey: legacy, tier: "citizen" };
   return { ok: true, mode: "legacy", budgetKey: legacy };
 }
@@ -819,6 +830,19 @@ async function evaluateDetachMode(
   return { ok: true, mode: "detach", budgetKey: legacy };
 }
 
+/** Every org-Safe target not created in this batch is a deployed Safe L2 1.4.1 proxy. */
+async function checkOrgSafes(st: ScanState, chain: ChainReader): Promise<Check> {
+  for (const safe of st.orgSafes) {
+    const code = await read(() => chain.getCode(safe));
+    if ((code ?? "0x").toLowerCase() !== SAFE_PROXY_RUNTIME_CODE.toLowerCase()) {
+      return deny("org Safe target is not a SafeProxy 1.4.1");
+    }
+    const singleton = await read(() => chain.getStorageAt(safe, SLOT_0));
+    if (!wordIsAddress(singleton, PASSKEY_SAFE.singletonL2)) return deny("org Safe singleton is not Safe L2 1.4.1");
+  }
+  return PASS;
+}
+
 /** Every Poll.publishMessage target is MACI.polls(ctx.pollId). */
 async function checkPolls(st: ScanState, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
   if (st.polls.length === 0) return PASS;
@@ -847,6 +871,8 @@ async function evaluateSafeEveryday(
   }
   const polls = await checkPolls(st, ctx, chain);
   if (!polls.ok) return polls;
+  const orgSafes = await checkOrgSafes(st, chain);
+  if (!orgSafes.ok) return orgSafes;
   if (st.migration) return { ok: true, mode: "safe", budgetKey: op.sender };
   return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "citizen" };
 }
@@ -964,6 +990,8 @@ export async function evaluateSponsorPolicy(
     onboardingOnly: true,
     migration: false,
     polls: [],
+    orgSafes: [],
+    createdSafes: [],
     calls: 0,
     detaches: [],
   };

@@ -31,7 +31,7 @@ import {
   SAFE_L2_SINGLETON,
   SAFE_PROXY_CREATION_CODE,
   SAFE_PROXY_FACTORY,
-} from '@/lib/passkey/constants';
+} from '../passkey/constants';
 
 /** CompatibilityFallbackHandler 1.4.1 (Gnosis). */
 export const SAFE_FALLBACK_HANDLER: Address = '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99';
