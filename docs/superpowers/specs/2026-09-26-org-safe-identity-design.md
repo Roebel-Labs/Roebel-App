@@ -176,3 +176,26 @@ It prints every pending Safe with its owners and writes a Safe{Wallet} Transacti
 - Bands 50%/2/5 · 25%/2/5 · 67%/3/no cap.
 - Verified on chain after deploy.
 - The app uses it by default; `EXPO_PUBLIC_ORG_REGISTRY_GNOSIS` overrides it for the test env.
+
+## 10. Bulk creation: few fingerprints (2026-09-27)
+
+Max's rule is as much on-chain as possible with as few passkey prompts as possible. So the section adds **"Safes für N Organisationen erstellen"**:
+- It covers every org the user owns that has no Safe yet: not registered, no claim, and no code at the predicted address.
+- It deploys those Safes in batches without a registration request.
+- Each batch is one sponsored op, which means one fingerprint.
+
+**Sizing, from Gnosis fork measurements:**
+- One org Safe deploy costs 259k gas (1 owner), 283k (2) or 306k (3).
+- Deploy + request costs about 480–530k.
+- With the sponsor's `callGasLimit` of 1.5M and a 1.2M planning budget, that is **4 deploy-only orgs per op**, so **about 9 prompts for 36 orgs**. Deploy + request would need 18.
+
+**How it fits together:**
+- Deploy-only Safes are found again from their CREATE2 address: salt = orgId, and the owners come from the database. The app shows them as "Safe erstellt, Bestätigung gesammelt".
+- `org-registry-batch-register.cjs --predict orgs.json` finds them the same way, and one Attester-Safe `migrationRegister` registers them all. On the fork that cost 436k gas for 3 orgs, so about 5M for all 36.
+- **Safety:** claims for org ids not named in `--only`/`--predict` are skipped by default. Anyone can file a claim, so this blocks squatters. `--all-claims` includes them.
+- **Proofs:**
+  - `org-safe-ops.test.ts` (11 tests);
+  - sponsor policy `org-safe-policy.test.ts` (9 tests, including 4 orgs in one op as `executeBatch` and as a MultiSend of executes);
+  - a fork run: bulk deploy as Max's account, then `--predict`, then execute as the impersonated Attester Safe against the production registry. All 3 orgs were registered.
+
+**Budget:** the sponsor's per-identity cap was raised temporarily to 0.15 xDAI/day. The preview paymaster needs a top-up before the 36 creations.

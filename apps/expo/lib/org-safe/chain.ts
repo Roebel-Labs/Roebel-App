@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createPublicClient, getAddress, http, parseAbiItem, type Address, type Hex } from 'viem';
 import { gnosis } from 'viem/chains';
 import { orgRegistryGnosisAddress, orgRegistryDeployBlock } from '@/constants/gnosis';
-import type { OrgChainState, OrgRole } from './ops';
+import { orgIdFromUuid, predictOrgSafeAddress, type BulkOrg, type OrgChainState, type OrgRole } from './ops';
 
 const RPC = process.env.EXPO_PUBLIC_GNOSIS_RPC_URL || 'https://rpc.gnosischain.com';
 const client = createPublicClient({ chain: gnosis, transport: http(RPC) });
@@ -81,9 +81,15 @@ export type OrgSafeStatus =
       expiresAt: number;
       open: boolean;
     }
-  | { kind: 'registered'; safe: Address };
+  | { kind: 'registered'; safe: Address }
+  /** Deployed (e.g. by the bulk action) but not registered and no open request. */
+  | { kind: 'deployed'; safe: Address };
 
-export async function readOrgSafeStatus(orgId: Hex): Promise<OrgSafeStatus> {
+/**
+ * `owners` = the org's current database owners: lets us find a Safe that was
+ * deployed without a registration request (bulk action) at its CREATE2 address.
+ */
+export async function readOrgSafeStatus(orgId: Hex, owners: readonly string[] = []): Promise<OrgSafeStatus> {
   const registry = orgRegistryGnosisAddress as Address;
   if (await client.readContract({ address: registry, abi: registryAbi, functionName: 'isRegistered', args: [orgId] })) {
     const org = await client.readContract({ address: registry, abi: registryAbi, functionName: 'getOrg', args: [orgId] });
@@ -99,6 +105,13 @@ export async function readOrgSafeStatus(orgId: Hex): Promise<OrgSafeStatus> {
     safe = null;
   }
   if (!safe) safe = await findRequestedSafe(orgId);
+  if (!safe && owners.length > 0) {
+    const predicted = predictOrgSafeAddress(orgId, owners);
+    if (await isContract(predicted)) {
+      await rememberOrgSafe(orgId, predicted);
+      return { kind: 'deployed', safe: predicted };
+    }
+  }
   if (!safe) return { kind: 'none' };
 
   const [open, requestId] = await client.readContract({
@@ -142,4 +155,32 @@ export async function readOrgChainState(orgId: Hex, safe: Address, accounts: rea
 
 export async function isDeployed(address: Address): Promise<boolean> {
   return isContract(address);
+}
+
+/**
+ * Which of these orgs still need a Safe: not registered, no Safe at the predicted
+ * address, no open registration claim. One multicall + one log sweep for all.
+ */
+export async function orgsNeedingSafe(orgs: readonly BulkOrg[]): Promise<BulkOrg[]> {
+  if (orgs.length === 0) return [];
+  const registry = orgRegistryGnosisAddress as Address;
+  const ids = orgs.map((o) => orgIdFromUuid(o.uuid));
+  const registered = await client.multicall({
+    contracts: ids.map((orgId) => ({ address: registry, abi: registryAbi, functionName: 'isRegistered', args: [orgId] }) as const),
+    allowFailure: false,
+  });
+  const claimed = new Set<string>();
+  const head = await client.getBlockNumber();
+  for (let from = BigInt(orgRegistryDeployBlock); from <= head; from += 10_000n) {
+    const to = from + 9_999n > head ? head : from + 9_999n;
+    const logs = await client.getLogs({ address: registry, event: registrationRequested, fromBlock: from, toBlock: to });
+    for (const l of logs) claimed.add(String(l.args.orgId).toLowerCase());
+  }
+  const out: BulkOrg[] = [];
+  for (let i = 0; i < orgs.length; i++) {
+    if (registered[i] || claimed.has(ids[i].toLowerCase())) continue;
+    if (await isContract(predictOrgSafeAddress(ids[i], orgs[i].owners))) continue;
+    out.push(orgs[i]);
+  }
+  return out;
 }

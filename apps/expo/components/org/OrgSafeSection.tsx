@@ -13,7 +13,8 @@ import BottomDrawer from '@/components/BottomDrawer';
 import { fetchMembersWithProfiles, leaveOrg } from '@/lib/supabase-member-management';
 import type { MemberWithProfile } from '@/lib/types';
 import { isOrgSafePreviewAllowed } from '@/lib/org-safe/gate';
-import { isDeployed, readOrgChainState, readOrgSafeStatus, rememberOrgSafe, type OrgSafeStatus } from '@/lib/org-safe/chain';
+import { isDeployed, orgsNeedingSafe, readOrgChainState, readOrgSafeStatus, rememberOrgSafe, type OrgSafeStatus } from '@/lib/org-safe/chain';
+import { fetchOwnedOrgsWithOwners, type OwnedOrg } from '@/lib/org-safe/members';
 import {
   createAndRequestCalls,
   isInSync,
@@ -21,6 +22,7 @@ import {
   leaveSafeCall,
   orgIdFromUuid,
   orgRegistryWriteAbi,
+  planBulkDeploy,
   planSync,
   safeExecCall,
   syncCall,
@@ -48,7 +50,9 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [status, setStatus] = useState<OrgSafeStatus | null>(null);
   const [chain, setChain] = useState<OrgChainState | null>(null);
-  const [busy, setBusy] = useState<null | 'create' | 'request' | 'sync' | 'leave'>(null);
+  const [busy, setBusy] = useState<null | 'create' | 'request' | 'sync' | 'leave' | 'bulk'>(null);
+  const [pendingOrgs, setPendingOrgs] = useState<OwnedOrg[]>([]);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
 
@@ -68,13 +72,21 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
     setError(null);
     const m = await fetchMembersWithProfiles(accountId);
     setMembers(m);
-    const s = await readOrgSafeStatus(orgId);
+    const s = await readOrgSafeStatus(
+      orgId,
+      m.filter((x) => x.role === 'owner').map((x) => x.wallet_address),
+    );
     setStatus(s);
     if (s.kind === 'registered') {
       const accounts = [...m.map((x) => x.wallet_address), ...(me ? [me] : [])];
       setChain(await readOrgChainState(orgId, s.safe, accounts));
     } else {
       setChain(null);
+    }
+    if (me) {
+      const owned = await fetchOwnedOrgsWithOwners(me);
+      const need = new Set((await orgsNeedingSafe(owned)).map((o) => o.uuid));
+      setPendingOrgs(owned.filter((o) => need.has(o.uuid)));
     }
   }, [accountId, orgId, me]);
 
@@ -134,6 +146,21 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
       await rememberOrgSafe(orgId, safe);
     });
 
+  // Plain value, not a hook: this runs after the early return above.
+  const bulkChunks = me && pendingOrgs.length ? planBulkDeploy(pendingOrgs, me) : [];
+
+  /** Deploy-only, several orgs per sponsored op: one fingerprint per chunk. */
+  const onBulk = () =>
+    run('bulk', async () => {
+      setBulkProgress({ done: 0, total: bulkChunks.length });
+      for (let i = 0; i < bulkChunks.length; i++) {
+        await send(bulkChunks[i].calls);
+        for (const o of bulkChunks[i].orgs) await rememberOrgSafe(orgIdFromUuid(o.uuid), o.safe);
+        setBulkProgress({ done: i + 1, total: bulkChunks.length });
+      }
+      setBulkProgress(null);
+    });
+
   const onRequestAgain = (safe: Address) =>
     run('request', async () => {
       const data = encodeFunctionData({ abi: orgRegistryWriteAbi, functionName: 'requestRegistration', args: [orgId, ''] });
@@ -189,6 +216,16 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
           Attester die Organisation, und Mitglieder und Rollen liegen offen und überprüfbar onchain.
         </Text>
         <Button label="Safe erstellen" onPress={onCreate} kind="create" />
+      </>
+    );
+  } else if (status?.kind === 'deployed') {
+    body = (
+      <>
+        <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
+          Safe erstellt. Die Bestätigung erfolgt gesammelt über den Attester-Safe. Du kannst sie auch einzeln bei den
+          Attestern beantragen.
+        </Text>
+        <Button label="Einzeln beantragen" onPress={() => onRequestAgain(status.safe)} kind="request" />
       </>
     );
   } else if (status?.kind === 'pending') {
@@ -257,6 +294,20 @@ export default function OrgSafeSection({ accountId, accountName }: Props) {
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Onchain-Organisation</Text>
       {body}
+      {pendingOrgs.length > 1 && (
+        <View style={[styles.leaveBox, { borderTopColor: colors.border }]}>
+          <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
+            {pendingOrgs.length} deiner Organisationen haben noch keinen Safe. Alle in {bulkChunks.length}{' '}
+            {bulkChunks.length === 1 ? 'Schritt' : 'Schritten'} erstellen, je eine Bestätigung.
+          </Text>
+          {bulkProgress && (
+            <Text style={[styles.sectionBody, { color: colors.textPrimary }]}>
+              Schritt {Math.min(bulkProgress.done + 1, bulkProgress.total)} von {bulkProgress.total} …
+            </Text>
+          )}
+          <Button label={`Safes für ${pendingOrgs.length} Organisationen erstellen`} onPress={onBulk} kind="bulk" />
+        </View>
+      )}
       {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
 
       <BottomDrawer visible={confirmLeave} onClose={() => busy !== 'leave' && setConfirmLeave(false)}>

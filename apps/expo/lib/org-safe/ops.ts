@@ -388,3 +388,54 @@ export function leaveSafeCall(state: OrgChainState, executor: string): Call {
   });
   return safeExecCall(state.safe, executor, state.safe, data);
 }
+
+// ---------------------------------------------------------------------------
+// Bulk: deploy many org Safes with few confirmations
+// ---------------------------------------------------------------------------
+
+/**
+ * Gas of one org-Safe deployment inside a batch, from a Gnosis fork measurement
+ * (2026-09-27: 259k with 1 owner, 283k with 2, 306k with 3) plus headroom.
+ */
+export function estimateDeployGas(ownerCount: number): number {
+  return 245_000 + 25_000 * Math.max(1, ownerCount);
+}
+
+/**
+ * The sponsor caps callGasLimit at 1.5M; the bundler's estimate adds its own
+ * buffer on top of the batch, so plan against 1.2M.
+ */
+export const BULK_GAS_BUDGET = 1_200_000;
+
+export type BulkOrg = { uuid: string; owners: readonly string[] };
+
+/**
+ * Deploy-only batches (no registration request: existing orgs are registered in
+ * one owner `migrationRegister`; a Safe is found again from its deterministic
+ * address). Each chunk is ONE sponsored op = ONE fingerprint.
+ */
+export function planBulkDeploy(
+  orgs: readonly BulkOrg[],
+  executor: string,
+  gasBudget = BULK_GAS_BUDGET,
+): { orgs: { uuid: string; safe: Address }[]; calls: Call[] }[] {
+  const chunks: { orgs: { uuid: string; safe: Address }[]; calls: Call[]; gas: number }[] = [];
+  let current = { orgs: [] as { uuid: string; safe: Address }[], calls: [] as Call[], gas: 0 };
+  for (const org of orgs) {
+    const owners = normalizeOwners(org.owners);
+    if (!owners.some((o) => o.toLowerCase() === executor.toLowerCase())) {
+      throw new Error(`executor is not an owner of org ${org.uuid}`);
+    }
+    const orgId = orgIdFromUuid(org.uuid);
+    const gas = estimateDeployGas(owners.length);
+    if (current.calls.length > 0 && current.gas + gas > gasBudget) {
+      chunks.push(current);
+      current = { orgs: [], calls: [], gas: 0 };
+    }
+    current.orgs.push({ uuid: org.uuid, safe: predictOrgSafeAddress(orgId, owners) });
+    current.calls.push(createOrgSafeCall(orgId, owners));
+    current.gas += gas;
+  }
+  if (current.calls.length > 0) chunks.push(current);
+  return chunks.map(({ orgs, calls }) => ({ orgs, calls }));
+}

@@ -1,6 +1,9 @@
 import { decodeFunctionData, getAddress, parseAbi, type Address } from 'viem';
 import {
+  BULK_GAS_BUDGET,
   createAndRequestCalls,
+  estimateDeployGas,
+  planBulkDeploy,
   isInSync,
   leaveBlocker,
   leaveSafeCall,
@@ -135,5 +138,25 @@ describe('leaving', () => {
     const middle = decodeFunctionData({ abi: safeAbi, data: decodeFunctionData({ abi: safeAbi, data: leaveSafeCall(state({ owners: [A, B, C] }), B).data }).args[2] as `0x${string}` });
     expect(middle.args).toEqual([A, B, 1n]);
     expect(() => leaveSafeCall(state({ owners: [A] }), A)).toThrow();
+  });
+});
+
+describe('bulk deploy', () => {
+  it('packs deploy-only calls into chunks within the gas budget (4 two-owner orgs per op)', () => {
+    const orgs = Array.from({ length: 9 }, (_, i) => ({
+      uuid: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      owners: [A, B],
+    }));
+    const chunks = planBulkDeploy(orgs, A);
+    expect(chunks.map((c) => c.calls.length)).toEqual([4, 4, 1]);
+    for (const c of chunks) {
+      expect(c.calls.every((x) => x.to === SAFE_PROXY_FACTORY)).toBe(true);
+      expect(c.calls.length * estimateDeployGas(2)).toBeLessThanOrEqual(BULK_GAS_BUDGET);
+    }
+    expect(chunks[0].orgs[0].safe).toBe(predictOrgSafeAddress(orgIdFromUuid(orgs[0].uuid), [A, B]));
+  });
+
+  it('refuses orgs the executor does not own', () => {
+    expect(() => planBulkDeploy([{ uuid: UUID, owners: [B] }], A)).toThrow();
   });
 });

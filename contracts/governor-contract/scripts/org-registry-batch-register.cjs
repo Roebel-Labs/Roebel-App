@@ -12,10 +12,16 @@
  *     table against the app, collect the signatures.
  *   test env (owner = burner): --send submits directly.
  *
- *   node scripts/org-registry-batch-register.cjs --registry 0x… --from-block N [--only uuid,uuid] [--send]
+ *   node scripts/org-registry-batch-register.cjs --registry 0x… --from-block N [--only uuid,uuid] [--predict orgs.json] [--send]
  *
- * --only restricts to the given org uuids (recommended: pass exactly the orgs you
- * created Safes for). Never registers a claim whose Safe has no code.
+ * --predict orgs.json: [{ "uuid": "…", "owners": ["0x…"] }] — also finds Safes the
+ * app's bulk action deployed WITHOUT a registration request, at their CREATE2
+ * address (same formula as apps/expo/lib/org-safe/ops.ts predictOrgSafeAddress).
+ *
+ * Only KNOWN orgs are registered: those named in --only or --predict. A claim for
+ * an org id nobody named (anyone can file one — e.g. a squatter) is listed as
+ * skipped; --all-claims includes them deliberately. Never registers a claim whose
+ * Safe has no code.
  */
 const fs = require("fs");
 const path = require("path");
@@ -27,6 +33,28 @@ function arg(name) {
 }
 
 const orgIdOf = (uuid) => ethers.id(`netizen:org:v1:${uuid.trim().toLowerCase()}`);
+
+// Safe 1.4.1 on Gnosis — identical to the app's org-Safe builder.
+const SAFE_L2_SINGLETON = "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762";
+const SAFE_PROXY_FACTORY = "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67";
+const FALLBACK_HANDLER = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99";
+const setupIface = new ethers.Interface([
+  "function setup(address[] _owners,uint256 _threshold,address to,bytes data,address fallbackHandler,address paymentToken,uint256 payment,address paymentReceiver)",
+]);
+
+/** predictOrgSafeAddress: owners checksummed, de-duplicated, sorted; threshold 1; salt = orgId. */
+async function predictOrgSafe(provider, orgId, owners) {
+  const list = [...new Map(owners.map((o) => [o.toLowerCase(), ethers.getAddress(o)])).values()].sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+  const initializer = setupIface.encodeFunctionData("setup", [
+    list, 1, ethers.ZeroAddress, "0x", FALLBACK_HANDLER, ethers.ZeroAddress, 0, ethers.ZeroAddress,
+  ]);
+  const factory = new ethers.Contract(SAFE_PROXY_FACTORY, ["function proxyCreationCode() pure returns (bytes)"], provider);
+  const salt = ethers.keccak256(ethers.solidityPacked(["bytes32", "uint256"], [ethers.keccak256(initializer), BigInt(orgId)]));
+  const initCode = ethers.concat([await factory.proxyCreationCode(), ethers.zeroPadValue(SAFE_L2_SINGLETON, 32)]);
+  return ethers.getCreate2Address(SAFE_PROXY_FACTORY, salt, ethers.keccak256(initCode));
+}
 
 async function main() {
   const registryAddr = arg("registry");
@@ -50,6 +78,18 @@ async function main() {
     }
   }
 
+  // Deploy-only Safes from the bulk action: no request event, found by prediction.
+  const predictFile = arg("predict");
+  const predicted = new Map(); // orgId -> { uuid, safe }
+  if (predictFile) {
+    for (const o of JSON.parse(fs.readFileSync(predictFile, "utf8"))) {
+      const orgId = orgIdOf(o.uuid);
+      const safe = await predictOrgSafe(provider, orgId, o.owners);
+      predicted.set(orgId, { uuid: o.uuid, safe });
+      if (only && !only.has(orgId)) only.set(orgId, o.uuid);
+    }
+  }
+
   const rows = [];
   for (const [orgId, c] of claims) {
     if (only && !only.has(orgId)) continue;
@@ -61,8 +101,22 @@ async function main() {
     const owners = await new ethers.Contract(c.safe, safeAbi, provider).getOwners();
     rows.push({ orgId, uuid: only?.get(orgId) ?? "?", safe: c.safe, owners, uri: req.uri });
   }
+  for (const [orgId, p] of predicted) {
+    if (rows.some((r) => r.orgId === orgId)) continue;
+    if (await registry.isRegistered(orgId)) continue;
+    if ((await provider.getCode(p.safe)) === "0x") continue;
+    if ((await registry.orgIdOfSafe(p.safe)) !== ethers.ZeroHash) continue;
+    const owners = await new ethers.Contract(p.safe, safeAbi, provider).getOwners();
+    rows.push({ orgId, uuid: p.uuid, safe: p.safe, owners, uri: "" });
+  }
   if (only) {
     for (const [id, uuid] of only) if (!rows.some((r) => r.orgId === id)) console.log(`  – ${uuid}: no open claim (not created yet, or already registered)`);
+  }
+  const unknown = rows.filter((r) => r.uuid === "?");
+  if (unknown.length && !process.argv.includes("--all-claims")) {
+    console.log(`\nskipped ${unknown.length} claim(s) for org ids not named in --only/--predict (pass --all-claims to include):`);
+    for (const r of unknown) console.log(`  ${r.orgId}  safe ${r.safe}`);
+    rows.splice(0, rows.length, ...rows.filter((r) => r.uuid !== "?"));
   }
   if (rows.length === 0) return console.log("nothing to register.");
 

@@ -12,6 +12,7 @@ import { EVERYDAY_CONTRACTS as C, classifyEverydayCall, orgRegistryAttesterAbi }
 import { PASSKEY_SAFE, SAFE_PROXY_RUNTIME_CODE } from "../safe-address";
 import { CONTRACTS } from "../../../../../../packages/blockchain/src/index";
 import {
+  planBulkDeploy,
   createAndRequestCalls,
   leaveSafeCall,
   planSync,
@@ -20,7 +21,7 @@ import {
   type Call,
 } from "../../../../../expo/lib/org-safe/ops";
 import { KEY, LEGACY, RECIPIENT, fakeChain } from "./fake-chain";
-import { NOW, account, execLegacy, op, outer } from "./policy-helpers";
+import { NOW, account, execLegacy, op, outer, viaMultiSend } from "./policy-helpers";
 
 const CTX: SponsorContext = { ...KEY, legacy: LEGACY, nowSeconds: NOW };
 const ORG_UUID = "6f1c2c7e-0d3a-4b5e-9a51-3f7a1d2b9c10";
@@ -122,4 +123,30 @@ test("attesters may approve org requests directly; other registry calls are not 
   const approve = encodeFunctionData({ abi: orgRegistryAttesterAbi, functionName: "approveRequest", args: [4n] });
   assert.equal(classifyEverydayCall(C.orgRegistry, 0n, approve, LEGACY).ok, true);
   assert.equal(classifyEverydayCall(C.orgRegistry, 0n, "0x12345678", LEGACY).ok, false);
+});
+
+test("bulk: several org Safes in ONE op (one fingerprint) — executeBatch and a multiSend of executes", async () => {
+  const orgs = Array.from({ length: 4 }, (_, i) => ({
+    uuid: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    owners: [LEGACY, OWNER2],
+  }));
+  const [chunk] = planBulkDeploy(orgs, LEGACY);
+  assert.equal(chunk.calls.length, 4);
+  await ok(op(outer(LEGACY, batchOf(chunk.calls)), { callGasLimit: 1_500_000n }), fakeChain());
+  await ok(
+    op(viaMultiSend(chunk.calls.map((c) => ({ to: LEGACY, data: execLegacy(c.to, 0n, c.data) }))), { callGasLimit: 1_500_000n }),
+    fakeChain(),
+  );
+});
+
+test("bulk: several orgs' deploy+request pairs in one op are sponsored too", async () => {
+  const calls = ["a1", "b2"].flatMap((x) =>
+    createAndRequestCalls({
+      orgUuid: `00000000-0000-4000-8000-0000000000${x}`,
+      owners: [LEGACY, OWNER2],
+      executor: LEGACY,
+      registry: C.orgRegistry,
+    }).calls,
+  );
+  await ok(op(outer(LEGACY, batchOf(calls)), { callGasLimit: 1_500_000n }), fakeChain());
 });
