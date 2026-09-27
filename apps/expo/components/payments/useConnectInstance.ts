@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { connectSession } from '@/lib/stripe-connect';
-import type { SigningAccount } from '@/lib/signed-request';
+import { canSignSilently, type SigningAccount } from '@/lib/signed-request';
 import { loadStripeNative } from '@/lib/stripe-native';
 
 export type StripeNativeModule = NonNullable<ReturnType<typeof loadStripeNative>>;
@@ -59,6 +59,12 @@ export function useConnectInstance(opts: {
           }
           const current = signerRef.current;
           if (!current) throw new Error('Nicht angemeldet');
+          // Stripe refreshes on its own: on a passkey session that must never raise a fingerprint
+          // prompt. With a cached passkey API session token it is silent; without one the person
+          // reopens the screen (the first session of a screen is fetched after their tap).
+          if (!(await canSignSilently(current))) {
+            throw new Error('Die Sitzung ist abgelaufen. Bitte öffne die Seite erneut.');
+          }
           const next = await connectSession(current, accountId);
           if (!next.ok) throw new Error(next.message);
           return next.data.client_secret;
