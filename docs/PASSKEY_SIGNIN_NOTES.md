@@ -436,3 +436,38 @@ the server refuses that shape. Measured on the fork (FCL fallback): the detach u
    - The test action passes the sponsor.
    - After `TRENNEN`, `getAllAdmins() == [Safe]` and the app is on the passkey session.
    - A Google login afterwards yields an account without control.
+
+## 10. Fewer prompts: API session token (2026-09-27, `feat/passkey-fewer-prompts`)
+
+Full audit (every prompt path, before/after): [`PASSKEY_PROMPT_AUDIT.md`](PASSKEY_PROMPT_AUDIT.md).
+
+- **One signature per device session.** The identity signs `Röbel Sitzung / Konto / Gerät / Nonce / Ausgestellt /
+  Gültig bis / …` (EIP-191, byte-exact vector `session-message-vector.json` in both apps).
+  `POST /api/passkey/session/start` checks it with `verifyAccountSignature` and returns
+  `pst1.<claims>.<HMAC-SHA256>`:
+  - secret `PASSKEY_SESSION_SECRET`, at least 32 chars;
+  - valid for 30 days at most;
+  - claims `sub` = identity, `dev` = device id, `jti` = the signed nonce.
+  The jti goes into `passkey_api_sessions`, the table for revocation. A replayed start message gets 409. A new
+  sign-in on the same device revokes older tokens. `POST /api/passkey/session/revoke` revokes the token (or with
+  `{all:true}`, and an active token, every token of the identity). `GET /api/passkey/session` answers
+  `{enabled}`, so the app never signs for a server that would not accept it.
+- **Accepted instead of a fresh signature** (only with `PASSKEY_SESSION_TOKENS_ENABLED=1`):
+  - Web, with `Authorization: Bearer <token>` + `x-roebel-device`:
+    - `/api/tickets/*` (except `refund`) and `/api/connect/*`, through `verifySignedRequest`;
+    - `/api/chat/session`;
+    - `/api/passkey/key-backup/{get,put}` (`replace: true` still needs a proof).
+  - Edge functions `org-membership` and `merchant-registry`, with `x-roebel-session` + `x-roebel-device`, because
+    their `Authorization` carries the anon key. They use `_shared/verify-session-token.ts`, byte-identical with
+    `apps/web/src/lib/passkey/session-token-core.ts` and free of viem.
+  - A request that carries a signature is always decided by the signature.
+- **Kept on fresh signatures:**
+  - `delete-user-account` (destructive);
+  - `nostr-identity-register` (the binding signature is a persisted public proof);
+  - the passkey warning email (the recovery-alert channel);
+  - ticket refunds (money-moving).
+- **App:**
+  - `lib/passkey/api-session.ts` (pure) + `api-session-runtime.ts` (SecureStore `passkey_api_session_v1`).
+  - Lazy (first signed request), refresh below 3 days left, 5 min cooldown after a failed start.
+  - `peek` never signs and is used by background work (`canSignSilently`).
+  - Sign-out revokes the token server-side (best effort) and deletes nothing else.

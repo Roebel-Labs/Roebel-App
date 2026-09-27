@@ -69,3 +69,51 @@ describe('postSigned signature queue', () => {
     await expect(next).resolves.toMatchObject({ ok: true });
   });
 });
+
+describe('signed-request on a passkey session (API session token)', () => {
+  const PASSKEY_SESSION_PROP = '__passkeySession';
+  const mem = new Map<string, string>();
+  beforeAll(() => {
+    jest.resetModules();
+  });
+
+  it('uses the session token (one signature per device session) instead of a signature per request', async () => {
+    jest.doMock('@/lib/storage/secureStorage', () => ({
+      getItemAsync: async (k: string) => mem.get(k) ?? null,
+      setItemAsync: async (k: string, v: string) => void mem.set(k, v),
+      deleteItemAsync: async (k: string) => void mem.delete(k),
+    }));
+    jest.doMock('@/lib/passkey/constants', () => ({ PASSKEY_API_URL: 'https://passkey.test' }));
+    const { postSigned: post } = require('../signed-request');
+    const account = {
+      address: '0xC49dE63CcfeE46C6C5c3E393293f66779799Fb28',
+      signMessage: jest.fn(async () => '0x' + 'ab'.repeat(65)),
+      [PASSKEY_SESSION_PROP]: { credentialId: 'c', safe: '0x1', identity: '0xc49d' },
+    };
+    const fetchMock = jest.fn(async (url: string, init: any) => {
+      if (url === 'https://passkey.test/api/passkey/session') return { ok: true, status: 200, json: async () => ({ enabled: true }) };
+      if (url === 'https://passkey.test/api/passkey/session/start') {
+        const b = JSON.parse(init.body);
+        return { ok: true, status: 200, json: async () => ({ token: 'pst1.t.m', jti: b.nonce, expiresAt: b.expiresAt }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, data: { n: 1 } }) };
+    });
+    (global as any).fetch = fetchMock;
+    for (let i = 0; i < 3; i++) {
+      expect(await post('/api/tickets/mine', account, 'tickets_list', {})).toEqual({ ok: true, data: { n: 1 } });
+    }
+    expect(account.signMessage).toHaveBeenCalledTimes(1);
+    const ticketCalls = fetchMock.mock.calls.filter((c: any) => String(c[0]).endsWith('/api/tickets/mine'));
+    expect(ticketCalls).toHaveLength(3);
+    for (const [, init] of ticketCalls as any) {
+      expect(init.headers.Authorization).toBe('Bearer pst1.t.m');
+      expect(init.headers['x-roebel-device']).toMatch(/^[0-9a-f]{32}$/);
+      expect(JSON.parse(init.body).signature).toBeUndefined();
+    }
+    // refunds always carry a fresh signature
+    await post('/api/tickets/refund', account, 'refund_order', { order_id: 'o' });
+    expect(account.signMessage).toHaveBeenCalledTimes(2);
+    const refund = fetchMock.mock.calls.find((c: any) => String(c[0]).endsWith('/api/tickets/refund')) as any;
+    expect(JSON.parse(refund[1].body).signature).toMatch(/^0x/);
+  });
+});

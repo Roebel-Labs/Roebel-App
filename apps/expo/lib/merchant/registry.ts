@@ -14,6 +14,8 @@ import Constants from 'expo-constants';
 import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 
 import { supabase } from '../supabase';
+import { passkeySessionOf } from '../passkey/active';
+import { signedOrSession } from '../passkey/api-session-runtime';
 import type {
   MerchantAccountStatus,
   MerchantEntityType,
@@ -76,17 +78,33 @@ async function postSigned(
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false, code: 'NOT_CONFIGURED', message: 'Supabase nicht konfiguriert' };
   }
-  try {
-    const body = await buildMerchantRequestBody(account, action, payload);
+  const post = async (body: unknown, extraHeaders: Record<string, string> = {}) => {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/merchant-registry`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
     });
-    return (await response.json()) as MerchantRegistryResponse;
+    return { status: response.status ?? 200, json: (await response.json()) as MerchantRegistryResponse };
+  };
+  try {
+    const withSignature = async () => (await post(await buildMerchantRequestBody(account, action, payload))).json;
+    if (!passkeySessionOf(account)) return await withSignature();
+    // Passkey session: the passkey API session token instead of one fingerprint per action.
+    return await signedOrSession<MerchantRegistryResponse>(account, {
+      kind: 'edge',
+      endpoint: 'edge:merchant-registry',
+      withToken: async (headers) => {
+        const wallet = account.address.toLowerCase();
+        const r = await post({ action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
+        const code = (r.json as { ok?: boolean; code?: string } | null)?.ok ? undefined : (r.json as { code?: string } | null)?.code;
+        return { status: r.status, code, value: r.json };
+      },
+      withSignature,
+    });
   } catch (error) {
     return {
       ok: false,

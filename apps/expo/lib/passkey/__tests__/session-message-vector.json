@@ -1,0 +1,9 @@
+{
+  "_description": "Passkey API session start message (one signature per device session). Shared byte-exact by apps/web/src/lib/passkey/session-token-core.ts (+ its edge copy) and apps/expo/lib/passkey/api-session.ts.",
+  "identity": "0xc49dE63CcfeE46C6C5c3E393293f66779799Fb28",
+  "deviceId": "dev_0123456789abcdefXYZ",
+  "nonce": "00112233445566778899aabbccddeeff",
+  "issuedAt": 1790000000,
+  "expiresAt": 1792592000,
+  "message": "Röbel Sitzung\nKonto: 0xc49de63ccfee46c6c5c3e393293f66779799fb28\nGerät: dev_0123456789abcdefXYZ\nNonce: 00112233445566778899aabbccddeeff\nAusgestellt: 1790000000\nGültig bis: 1792592000\nMeldet dieses Gerät für höchstens 30 Tage an. Abmelden beendet die Sitzung."
+}

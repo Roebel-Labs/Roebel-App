@@ -14,6 +14,7 @@ import { secureKeyValueStorage } from './migration-runtime';
 import { isV3Enabled, parseV3Config } from './migration-v3';
 import { randomBytes } from './random';
 import { findLinkedLegacies } from './recovery-lookup';
+import { passkeyApiSession } from './api-session-runtime';
 import { clearPasskeySession, loadPasskeySession, type PasskeySession, type SessionStorage } from './session';
 import { randomChallengeFrom, type IdentityChain, type KeyChain, type SignInDeps } from './signin';
 import { passkeyWalletOptions, type AdapterDeps } from './thirdweb-adapter';
@@ -104,7 +105,11 @@ export function createPasskeyWallet(session: PasskeySession): Wallet<'adapter'> 
     client,
     chain,
     deps: adapterDeps,
-    clearSession: () => clearPasskeySession(secureSessionStorage),
+    clearSession: async () => {
+      await clearPasskeySession(secureSessionStorage);
+      // Also end the API session token server-side (best effort, never blocks the sign-out).
+      void passkeyApiSession.revoke().catch(() => undefined);
+    },
   });
   return createWalletAdapter({ ...opts, adaptedAccount: opts.adaptedAccount as unknown as Account });
 }

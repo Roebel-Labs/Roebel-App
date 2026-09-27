@@ -19,6 +19,8 @@
  */
 import Constants from 'expo-constants';
 import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
+import { passkeySessionOf } from './passkey/active';
+import { signedOrSession } from './passkey/api-session-runtime';
 
 export type OrgAction =
   | 'create_invite'
@@ -121,25 +123,43 @@ export async function callOrgMembership<T = unknown>(
     };
   }
 
-  const body = await requestBody(account, action, payload);
+  const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/org-membership`;
+  const post = async (body: unknown, extraHeaders: Record<string, string> = {}) => {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status ?? 200, json: (await res.json()) as OrgMembershipResponse<T> };
+    } catch (err) {
+      console.error('callOrgMembership network error:', action, err);
+      const json: OrgMembershipResponse<T> = {
+        ok: false,
+        code: 'NETWORK_ERROR',
+        message: err instanceof Error ? err.message : 'Netzwerkfehler',
+      };
+      return { status: 0, json };
+    }
+  };
 
-  try {
-    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/org-membership`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify(body),
-    });
-    return (await res.json()) as OrgMembershipResponse<T>;
-  } catch (err) {
-    console.error('callOrgMembership network error:', action, err);
-    return {
-      ok: false,
-      code: 'NETWORK_ERROR',
-      message: err instanceof Error ? err.message : 'Netzwerkfehler',
-    };
-  }
+  // Signing errors propagate to the caller (as before); only transport errors become NETWORK_ERROR.
+  const withSignature = async () => (await post(await requestBody(account, action, payload))).json;
+  if (!passkeySessionOf(account)) return withSignature();
+  // Passkey session: the passkey API session token instead of one fingerprint per action.
+  return signedOrSession<OrgMembershipResponse<T>>(account, {
+    kind: 'edge',
+    endpoint: 'edge:org-membership',
+    withToken: async (headers) => {
+      const wallet = account.address.toLowerCase();
+      const r = await post({ action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
+      return { status: r.status, code: r.json?.ok ? undefined : r.json?.code, value: r.json };
+    },
+    withSignature,
+  });
 }

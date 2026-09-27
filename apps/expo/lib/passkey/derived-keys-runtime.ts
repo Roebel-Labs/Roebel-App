@@ -10,14 +10,16 @@ import { bytesToHex, hashMessage, type Address, type Hex } from 'viem';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { deriveMaciKeypairFromSeed } from '@/lib/maci';
 import { deriveNostrIdentity } from '@netizen-labs/nostr';
-import { loadCitizenPreimage, saltFromSignature } from '@/lib/citizen-commitment';
+import { loadCitizenPreimage, passkeySaltKey, saltFromSignature } from '@/lib/citizen-commitment';
 import { loadStoredIdentity } from '@/lib/nostr/identity';
 import { passkeySessionOf } from './active';
+import { passkeyApiSession } from './api-session-runtime';
 import { PASSKEY_API_URL } from './constants';
 import {
   backupDeviceSecrets,
   MACI_KEYPAIR_STORE_KEY,
   resolvePasskeySecret,
+  singleFlight,
   type BackupReport,
   type ResolveResult,
 } from './derived-keys';
@@ -62,10 +64,20 @@ export function requirePasskeySession(account: unknown): PasskeySession {
 }
 
 export function keyBackupFor(session: PasskeySession): RemoteBackup {
+  // The identity as a message signer (the adapter's signMessage) for the API session token.
+  const signer = {
+    address: session.identity,
+    signMessage: ({ message }: { message: string }) => signHashAsIdentity(session, hashMessage(message), adapterDeps),
+  };
   return createKeyBackupClient({
     apiUrl: PASSKEY_API_URL,
     identity: session.identity,
     sign: (message) => signHashAsIdentityWithPrf(session, hashMessage(message), adapterDeps),
+    session: {
+      peek: () => passkeyApiSession.peek(session.identity),
+      get: () => passkeyApiSession.get(signer),
+      invalidate: (token) => passkeyApiSession.invalidate(token),
+    },
   });
 }
 
@@ -75,13 +87,27 @@ export async function hasLegacyHistory(session: PasskeySession): Promise<boolean
   return (await findLinkedLegacies(session.safe as Address, lookupChain)).length > 0;
 }
 
-/** Resolves one slot for a passkey session: (a) local → (b) blob → (c) random → (d) KeyBackupNeededError. */
-export async function resolveSecretForAccount(
+const resolving = new Map<string, Promise<ResolveResult>>();
+
+/**
+ * Resolves one slot for a passkey session: (a) local → (b) blob → (c) random → (d) KeyBackupNeededError.
+ * Concurrent callers for the same identity + slot share ONE resolution (one PRF prompt at most);
+ * after it the key is persisted locally, so later calls need no prompt at all.
+ */
+export function resolveSecretForAccount(
   account: unknown,
   slot: KeyBackupSlot,
   local: { load: () => Promise<Uint8Array | null>; save: (secret: Uint8Array) => Promise<void> },
 ): Promise<ResolveResult> {
   const session = requirePasskeySession(account);
+  return singleFlight(resolving, `${session.identity.toLowerCase()}:${slot}`, () => resolveOnce(session, slot, local));
+}
+
+function resolveOnce(
+  session: PasskeySession,
+  slot: KeyBackupSlot,
+  local: { load: () => Promise<Uint8Array | null>; save: (secret: Uint8Array) => Promise<void> },
+): Promise<ResolveResult> {
   return resolvePasskeySecret({
     slot,
     loadLocal: local.load,
@@ -114,7 +140,7 @@ export function deviceSecretSources(identity: string) {
     {
       slot: 'salt' as const,
       loadLocal: async () => {
-        const salt = (await loadCitizenPreimage(identity))?.salt;
+        const salt = (await loadCitizenPreimage(identity))?.salt ?? (await SecureStore.getItemAsync(passkeySaltKey(identity)));
         return salt ? enc.encode(salt) : null;
       },
     },

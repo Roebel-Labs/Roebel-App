@@ -4,6 +4,8 @@
 import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import { getApiBaseUrl, type SigningAccount } from '@/lib/signed-request';
+import { passkeySessionOf } from '@/lib/passkey/active';
+import { passkeyApiSession, signedOrSession } from '@/lib/passkey/api-session-runtime';
 
 export const CHAT_SCOPE = 'roebel-chat-v1';
 export const CHAT_SESSION_ACTION = 'session';
@@ -91,7 +93,41 @@ async function storeChatSession(wallet: string, session: ChatSession): Promise<v
   }
 }
 
-async function signIn(account: SigningAccount): Promise<ChatSession> {
+async function postSession(body: Record<string, unknown>, headers: Record<string, string> = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/chat/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { token?: string; expiresAt?: unknown; error?: { code?: string; message?: string } }
+      | null;
+    return { status: res.status, json };
+  } catch {
+    throw new ChatSessionError('network', 'Keine Verbindung zum Chat-Server');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function finishSession(wallet: string, r: Awaited<ReturnType<typeof postSession>>): Promise<ChatSession> {
+  const json = r.json;
+  if (r.status < 200 || r.status >= 300 || !json || typeof json.token !== 'string') {
+    throw new ChatSessionError(
+      json?.error?.code ?? 'session_failed',
+      json?.error?.message ?? 'Anmeldung beim Chat fehlgeschlagen',
+    );
+  }
+  const session = { token: json.token, expiresAtMs: parseExpiresAt(json.expiresAt) };
+  await storeChatSession(wallet, session);
+  return session;
+}
+
+async function signInWithSignature(account: SigningAccount): Promise<ChatSession> {
   const wallet = account.address.toLowerCase();
   const timestamp = Math.floor(Date.now() / 1000);
   let signature: string;
@@ -100,44 +136,50 @@ async function signIn(account: SigningAccount): Promise<ChatSession> {
   } catch (err) {
     throw new ChatSessionError('sign_failed', err instanceof Error ? err.message : 'Signatur fehlgeschlagen');
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
+  return finishSession(wallet, await postSession({ wallet, timestamp, signature }));
+}
+
+/**
+ * thirdweb: one signature per 30-day chat token (as always). Passkey session: the passkey API
+ * session token replaces that signature (lib/passkey/api-session.ts); fallback = the signature.
+ */
+async function signIn(account: SigningAccount): Promise<ChatSession> {
+  if (!passkeySessionOf(account)) return signInWithSignature(account);
+  const wallet = account.address.toLowerCase();
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/chat/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet, timestamp, signature }),
-      signal: controller.signal,
+    return await signedOrSession<ChatSession>(account, {
+      kind: 'web',
+      endpoint: 'web:/api/chat/session',
+      withToken: async (headers) => {
+        const r = await postSession({ wallet }, headers);
+        if (r.status >= 200 && r.status < 300) return { status: r.status, value: await finishSession(wallet, r) };
+        return { status: r.status, code: r.json?.error?.code, value: null as unknown as ChatSession };
+      },
+      withSignature: () => signInWithSignature(account),
     });
-    const json = (await res.json().catch(() => null)) as
-      | { token?: string; expiresAt?: unknown; error?: { code?: string; message?: string } }
-      | null;
-    if (!res.ok || !json || typeof json.token !== 'string') {
-      throw new ChatSessionError(
-        json?.error?.code ?? 'session_failed',
-        json?.error?.message ?? 'Anmeldung beim Chat fehlgeschlagen',
-      );
-    }
-    const session = { token: json.token, expiresAtMs: parseExpiresAt(json.expiresAt) };
-    await storeChatSession(wallet, session);
-    return session;
   } catch (err) {
     if (err instanceof ChatSessionError) throw err;
-    throw new ChatSessionError('network', 'Keine Verbindung zum Chat-Server');
-  } finally {
-    clearTimeout(timer);
+    throw new ChatSessionError('sign_failed', err instanceof Error ? err.message : 'Signatur fehlgeschlagen');
   }
 }
 
 // One sign-in per wallet at a time: parallel callers (bootstrap + a send) share the same promise.
 const inFlight = new Map<string, Promise<ChatSession>>();
 
-/** Returns a valid Bearer token, signing in when none is stored (or `force` after a 401). */
-export async function ensureChatSession(account: SigningAccount, opts?: { force?: boolean }): Promise<string> {
+/**
+ * Returns a valid Bearer token, signing in when none is stored (or `force` after a 401).
+ * `background: true` (polling, focus refreshes): on a passkey session it never prompts; without a
+ * stored chat token or a cached passkey API token it throws `not_signed_in` and the Welcome
+ * screen's explicit "Los geht's" signs.
+ */
+export async function ensureChatSession(account: SigningAccount, opts?: { force?: boolean; background?: boolean }): Promise<string> {
   const wallet = account.address.toLowerCase();
   if (!opts?.force) {
     const stored = await getStoredChatSession(wallet);
     if (stored) return stored.token;
+  }
+  if (opts?.background && passkeySessionOf(account) && !(await passkeyApiSession.peek(wallet))) {
+    throw new ChatSessionError('not_signed_in', 'Bitte melde dich zuerst an.');
   }
   let pending = inFlight.get(wallet);
   if (!pending) {

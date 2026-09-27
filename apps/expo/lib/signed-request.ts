@@ -1,6 +1,8 @@
 // Wallet-signed requests to the web API (apps/web/src/lib/signed-request). Same grammar as the
 // org-membership edge function, with its own scope so a ticket signature can never replay as an org action.
 import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
+import { passkeySessionOf } from './passkey/active';
+import { signedOrSession } from './passkey/api-session-runtime';
 
 export const SIGNED_SCOPE = 'roebel-tickets-v1';
 export type TicketAction =
@@ -51,7 +53,26 @@ function enqueueSignature<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export async function postSigned<T>(path: string, account: SigningAccount, action: TicketAction, payload: Record<string, unknown>): Promise<ApiResult<T>> {
+
+async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: ApiResult<T> }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, signal: controller.signal,
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as ApiResult<T>;
+    if (json && typeof json === 'object' && 'ok' in json) return { status: res.status ?? 200, json };
+    return { status: res.status ?? 200, json: { ok: false, code: 'BAD_RESPONSE', message: 'Unerwartete Antwort vom Server' } };
+  } catch (err) {
+    return { status: 0, json: { ok: false, code: 'NETWORK_ERROR', message: err instanceof Error ? err.message : 'Netzwerkfehler' } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postWithSignature<T>(path: string, account: SigningAccount, action: TicketAction, payload: Record<string, unknown>): Promise<ApiResult<T>> {
   const wallet = account.address.toLowerCase();
   let timestampSec: number;
   let signature: string;
@@ -69,19 +90,40 @@ export async function postSigned<T>(path: string, account: SigningAccount, actio
   } catch (err) {
     return { ok: false, code: 'SIGN_FAILED', message: err instanceof Error ? err.message : 'Signatur fehlgeschlagen' };
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  return (await postJson<T>(path, { scope: SIGNED_SCOPE, action, wallet, timestampSec, payload, signature })).json;
+}
+
+/**
+ * One signed request. thirdweb session: a fresh wallet signature, as always. Passkey session:
+ * the passkey API session token (one fingerprint per device session, lib/passkey/api-session.ts);
+ * without a token (server off, refused) it falls back to the per-request signature.
+ * `refund_order` always signs (the server requires a fresh signature for refunds).
+ */
+export async function postSigned<T>(path: string, account: SigningAccount, action: TicketAction, payload: Record<string, unknown>): Promise<ApiResult<T>> {
+  if (action === 'refund_order' || !passkeySessionOf(account)) return postWithSignature<T>(path, account, action, payload);
+  const wallet = account.address.toLowerCase();
+  // The one session signature also waits its turn in the signature queue (one prompt at a time).
+  // No 30 s timeout here: it is a biometric prompt (WebAuthn allows 120 s), and parallel requests
+  // already share this single signature (api-session.ts single-flight).
+  const queued = { ...account, signMessage: (args: { message: string }) => enqueueSignature(() => account.signMessage(args)) };
   try {
-    const res = await fetch(`${getApiBaseUrl()}${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-      body: JSON.stringify({ scope: SIGNED_SCOPE, action, wallet, timestampSec, payload, signature }),
+    return await signedOrSession<ApiResult<T>>(queued, {
+      kind: 'web',
+      endpoint: `web:${path}`,
+      withToken: async (headers) => {
+        const r = await postJson<T>(path, { scope: SIGNED_SCOPE, action, wallet, timestampSec: Math.floor(Date.now() / 1000), payload }, headers);
+        return { status: r.status, code: r.json.ok ? undefined : r.json.code, value: r.json };
+      },
+      withSignature: () => postWithSignature<T>(path, account, action, payload),
     });
-    const json = (await res.json()) as ApiResult<T>;
-    if (json && typeof json === 'object' && 'ok' in json) return json;
-    return { ok: false, code: 'BAD_RESPONSE', message: 'Unerwartete Antwort vom Server' };
   } catch (err) {
-    return { ok: false, code: 'NETWORK_ERROR', message: err instanceof Error ? err.message : 'Netzwerkfehler' };
-  } finally {
-    clearTimeout(timer);
+    // The session signature itself failed or was cancelled.
+    return { ok: false, code: 'SIGN_FAILED', message: err instanceof Error ? err.message : 'Signatur fehlgeschlagen' };
   }
 }
+
+/**
+ * For polling / focus reloads: true when a request can be made without a fingerprint prompt
+ * (thirdweb session, or a passkey session holding a valid session token).
+ */
+export { canSignSilently } from './passkey/api-session-runtime';

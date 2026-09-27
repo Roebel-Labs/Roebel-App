@@ -101,6 +101,19 @@ export type ResolveDeps = {
 export type ResolveSource = 'local' | 'deviceBlob' | 'backup' | 'generated';
 export type ResolveResult = { secret: Uint8Array; source: ResolveSource; backedUp?: boolean };
 
+/**
+ * Runs `fn` once per key at a time: concurrent callers share the same promise (so two screens
+ * resolving the same slot cost ONE PRF prompt, not two).
+ */
+export function singleFlight<T>(inFlight: Map<string, Promise<T>>, key: string, fn: () => Promise<T>): Promise<T> {
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = fn().finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
 export async function resolvePasskeySecret(d: ResolveDeps): Promise<ResolveResult> {
   const local = await d.loadLocal();
   if (local && local.length > 0) return { secret: local, source: 'local' }; // (a)

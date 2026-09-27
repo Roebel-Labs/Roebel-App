@@ -106,11 +106,13 @@ async function withAuth<R extends { status: number }>(
   account: SigningAccount,
   attempt: (token: string) => Promise<R>,
 ): Promise<R> {
-  const token = await ensureChatSession(account);
+  // background: API calls never raise a passkey prompt on their own (polls, focus refreshes);
+  // only the explicit startSession signs (ChatContext).
+  const token = await ensureChatSession(account, { background: true });
   const first = await attempt(token);
   if (first.status !== 401) return first;
   await clearChatSession(account.address);
-  const fresh = await ensureChatSession(account, { force: true });
+  const fresh = await ensureChatSession(account, { force: true, background: true });
   return attempt(fresh);
 }
 

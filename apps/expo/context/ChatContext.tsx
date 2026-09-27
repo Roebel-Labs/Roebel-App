@@ -55,6 +55,7 @@ import { dismissInspiration, fetchInspiration } from '@/lib/chat/api';
 import { cancelTask as apiCancelTask, fetchTask as apiFetchTask } from '@/lib/chat/api';
 import { withoutTask, type InspirationFeed } from '@/lib/chat/inspiration';
 import { ensureChatSession, hasStoredChatSession } from '@/lib/chat/session';
+import { PASSKEY_SESSION_PROP } from '@/lib/passkey/active';
 import {
   findApproval,
   initialThreadState,
@@ -185,7 +186,15 @@ function notSignedIn(): ChatApiError {
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const active = useActiveAccount();
   const account = useMemo<SigningAccount | null>(
-    () => (active ? { address: active.address, signMessage: (args) => active.signMessage(args) } : null),
+    // Keep the passkey marker (PASSKEY_SESSION_PROP) so lib/chat can tell a passkey session apart.
+    () =>
+      active
+        ? ({
+            address: active.address,
+            signMessage: (args: { message: string }) => active.signMessage(args),
+            [PASSKEY_SESSION_PROP]: (active as unknown as Record<string, unknown>)[PASSKEY_SESSION_PROP],
+          } as SigningAccount)
+        : null,
     [active],
   );
   const wallet = account?.address.toLowerCase() ?? null;

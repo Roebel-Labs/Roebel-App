@@ -95,11 +95,12 @@ export async function deriveCommitmentSalt(account: Account): Promise<string> {
     const rt = await loadDerivedKeysRuntime();
     const { secret } = await rt.resolveSecretForAccount(account, 'salt', {
       load: async () => {
-        const salt = (await loadCitizenPreimage(account.address))?.salt;
+        const salt = (await loadCitizenPreimage(account.address))?.salt ?? (await SecureStore.getItemAsync(passkeySaltKey(account.address)));
         return salt ? new TextEncoder().encode(salt) : null;
       },
-      // Callers persist the preimage (with this salt) right after; nothing else to store here.
-      save: async () => undefined,
+      // Persist the unwrapped salt on the device: the next use needs no PRF prompt, even when no
+      // preimage gets written (e.g. a cancelled request).
+      save: (secret) => SecureStore.setItemAsync(passkeySaltKey(account.address), new TextDecoder().decode(secret)),
     });
     return rt.decodeSaltSecret(secret);
   }
@@ -111,6 +112,9 @@ export async function deriveCommitmentSalt(account: Account): Promise<string> {
   });
   return saltFromSignature(signature);
 }
+
+/** Passkey session: the commitment salt once unwrapped/generated on this device (SecureStore). */
+export const passkeySaltKey = (address: string) => `passkey_commitment_salt_v1.${address.toLowerCase()}`;
 
 // expo-secure-store keys must match [A-Za-z0-9._-]; a ':' separator is rejected
 // ("Invalid key provided to SecureStore"). Use '.' — the 0x… address is alphanumeric.
