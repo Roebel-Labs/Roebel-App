@@ -33,6 +33,7 @@ import { formatDate, formatTime } from '@/lib/utils';
 import { requestCalendarPermission, saveEventToCalendar } from '@/lib/calendar';
 import { logCalendarSave } from '@/lib/firebase';
 import { fetchOrder, orderStatusLabel, type OrderView, type TicketView } from '@/lib/tickets';
+import { canSignSilently } from '@/lib/signed-request';
 
 const POLL_INTERVAL_MS = 4000;
 const MAX_POLL_SECONDS = 180;
@@ -135,7 +136,11 @@ export default function TicketOrderDetailScreen() {
     if (!account || order?.status !== 'pending') return;
     setElapsed(0);
     pollingRef.current = setInterval(() => {
-      void load();
+      // A poll tick must never raise a fingerprint prompt: on a passkey session it only runs with
+      // a cached API session token (the manual "Neu laden" still works either way).
+      void canSignSilently(account).then((silent) => {
+        if (silent) void load();
+      });
     }, POLL_INTERVAL_MS);
     tickRef.current = setInterval(() => {
       setElapsed((e) => e + 1);

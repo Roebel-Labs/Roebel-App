@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useActiveAccount } from 'thirdweb/react';
+import { passkeySessionOf } from '@/lib/passkey/active';
 
 import { OnboardingStep } from '@/components/payments/OnboardingStep';
 import { useTheme } from '@/context/ThemeContext';
@@ -132,6 +133,9 @@ export default function MerchantOnboardingScreen() {
     let cancelled = false;
 
     (async () => {
+      // Passkey session: signing in to Gnosis Pay is a fingerprint prompt, so it never runs on its
+      // own when the screen opens. A stored token is used; otherwise the button signs in.
+      if (passkeySessionOf(account) && !(await getStoredToken(account.address))) return;
       setBusy(true);
       const jwt = await establishSession();
       if (cancelled) return;

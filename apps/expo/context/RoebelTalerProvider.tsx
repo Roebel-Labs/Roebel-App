@@ -31,6 +31,11 @@ export interface SettlementJob {
   settle: () => Promise<void>;
   onConfirmed?: () => void;
   onFailed?: () => void;
+  /**
+   * Attempts including the first (default 3). A passkey session passes 1: every attempt is a
+   * fingerprint prompt, so a cancelled or failed one must never re-prompt on its own.
+   */
+  attempts?: number;
 }
 
 interface RoebelTalerContextValue {
@@ -209,7 +214,7 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
       setPendingDeltas((m) => { const n = { ...m }; delete n[id]; return n; });
     void (async () => {
       try {
-        await runWithRetry(job.settle);
+        await runWithRetry(job.settle, { attempts: job.attempts ?? 3 });
         await reconcile();   // real balance now includes the mint…
         dropDelta();         // …drop the optimistic delta in the same async tick
         job.onConfirmed?.();

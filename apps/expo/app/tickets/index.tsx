@@ -2,7 +2,7 @@
 // für bevorstehende Termine ("Demnächst") und alles andere (vergangene
 // Termine, offene/abgelaufene/stornierte/erstattete Bestellungen). Lädt bei
 // jedem Fokus neu, damit eine gerade abgeschlossene Zahlung sofort auftaucht.
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import { useTheme } from '@/context/ThemeContext';
 import { formatDate, formatTime } from '@/lib/utils';
 import { fetchMyTickets, orderStatusLabel, type OrderView } from '@/lib/tickets';
+import { canSignSilently } from '@/lib/signed-request';
 
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E' },
@@ -53,10 +54,22 @@ export default function MyTicketsScreen() {
     setLoading(false);
   }, [account]);
 
+  // First focus always loads (the person opened the screen). Later focus refreshes only when
+  // they need no fingerprint (passkey session: a cached API session token); pull-to-refresh
+  // still works either way.
+  const loadedFor = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      const key = account?.address ?? null;
+      if (loadedFor.current !== key) {
+        loadedFor.current = key;
+        load();
+        return;
+      }
+      void canSignSilently(account).then((silent) => {
+        if (silent) load({ silent: true });
+      });
+    }, [load, account])
   );
 
   const handleRefresh = useCallback(async () => {

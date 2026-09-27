@@ -126,6 +126,30 @@ describe('passkey session: never derive from a signature', () => {
     expect(a.signMessage).not.toHaveBeenCalled();
   });
 
+  it('silent Nostr enrollment never prompts on a passkey session WITH a local, unregistered key', async () => {
+    mockMem.set('nostr_secret_key_v1', `0x${'01'.repeat(32)}`);
+    const a = passkeyAccount();
+    const fetchMock = jest.fn();
+    (global as any).fetch = fetchMock;
+    await ensureIdentitySilently(a);
+    expect(a.signMessage).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('passkey: the commitment salt is persisted on the device after the first resolve', async () => {
+    resolve.mockImplementation(async (_acc: unknown, _slot: string, local: any) => {
+      const have = await local.load();
+      if (have) return { secret: have, source: 'local' };
+      const secret = new TextEncoder().encode('4242');
+      await local.save(secret);
+      return { secret, source: 'deviceBlob' };
+    });
+    expect(await deriveCommitmentSalt(passkeyAccount())).toBe('4242');
+    expect(mockMem.get(`passkey_commitment_salt_v1.${ADDR.toLowerCase()}`)).toBe('4242');
+    // second call: served from the device (the runtime's (a) branch), no unwrap
+    expect(await deriveCommitmentSalt(passkeyAccount())).toBe('4242');
+  });
+
   it('evidence encryption refuses with a German message (no chain-8453 signature)', async () => {
     const a = passkeyAccount();
     await expect(deriveEncryptionKey(a)).rejects.toThrow(PASSKEY_EVIDENCE_KEY_MESSAGE);

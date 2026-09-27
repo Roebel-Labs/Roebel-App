@@ -19,6 +19,8 @@ export interface CelebrateSettlingOptions {
   onFailed?: () => void;
   loadingLabel?: string | string[];
   onClose?: () => void;
+  /** Settlement attempts (default 3); 1 on a passkey session (each attempt is a prompt). */
+  attempts?: number;
 }
 
 /**
@@ -46,6 +48,7 @@ export function useCelebrateSettling() {
       settle: opts.settle,
       onConfirmed: opts.onConfirmed,
       onFailed: opts.onFailed,
+      ...(opts.attempts !== undefined ? { attempts: opts.attempts } : {}),
     });
     // Reveal after the beat regardless of chain state. resolve(0) + a message
     // reveals the headline text; resolve(n>0) reveals the number.

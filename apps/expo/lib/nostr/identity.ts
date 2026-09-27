@@ -246,6 +246,10 @@ export async function clearIdentity(): Promise<void> {
  * Never throws; a failed enrollment simply retries on a later post.
  */
 export async function ensureIdentitySilently(account: SigningAccount): Promise<void> {
+  // A silent background step must never raise a fingerprint prompt. On a passkey session the
+  // binding signature (a persisted public proof, so no session token can stand in for it) is
+  // made from Einstellungen → Nostr, never from here — also when a local key already exists.
+  if (passkeySessionOf(account)) return;
   try {
     const existing = await loadStoredIdentity();
     if (existing) {
@@ -254,9 +258,6 @@ export async function ensureIdentitySilently(account: SigningAccount): Promise<v
       await registerIdentity(account, existing);
       return;
     }
-    // A silent background step must not raise fingerprint prompts or backup lookups: on a passkey
-    // session without a local key the person enrolls from Einstellungen → Nostr instead.
-    if (passkeySessionOf(account)) return;
     const identity = await deriveAndStoreIdentity(account);
     await registerIdentity(account, identity);
   } catch (err) {

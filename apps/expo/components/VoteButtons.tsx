@@ -31,6 +31,7 @@ import { SUPPORT_ACCOUNT_ID } from '@/lib/support-contact';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { claimReward } from '@/lib/rewards-claim';
 import { rememberPollId } from '@/lib/passkey/poll-hints';
+import { passkeySessionOf } from '@/lib/passkey/active';
 import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { Events, track } from '@/lib/analytics';
@@ -574,8 +575,14 @@ export default function VoteButtons({
       });
 
       // ---- Committed. The slow publish + mirror + claim run detached, with retry. ----
+      // The vote tx is sent at most once per tap: a retry after a later step failed (Supabase
+      // mirror, reward claim) reuses the receipt instead of publishing the vote again. On a
+      // passkey session the settlement runs ONE attempt (each attempt is a fingerprint prompt).
+      let sent: Awaited<ReturnType<typeof sendTransaction>> | undefined;
+      const attempts = passkeySessionOf(gAccount) ? 1 : undefined;
       const settle = async () => {
-        const receipt = await sendTransaction({ transaction: tx, account: gAccount });
+        sent ??= await sendTransaction({ transaction: tx, account: gAccount });
+        const receipt = sent;
         // Participation only — the CHOICE never leaves the device in plaintext
         // (MACI encrypts it on-chain; mirroring it to analytics would undo that).
         track(Events.PROPOSAL_VOTED, {
@@ -599,7 +606,7 @@ export default function VoteButtons({
 
       if (isChangingVote) {
         // A changed vote earns no reward — settle quietly, show the privacy sheet.
-        enqueueSettlement({ label: 'Stimme', amount: 0, settle });
+        enqueueSettlement({ label: 'Stimme', amount: 0, settle, ...(attempts ? { attempts } : {}) });
         showPrivacySheet();
       } else {
         celebrateSettling({
@@ -614,6 +621,7 @@ export default function VoteButtons({
           ],
           settle,
           onClose: showPrivacySheet,
+          ...(attempts ? { attempts } : {}),
         });
       }
     } catch (err) {

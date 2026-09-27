@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import { connectOnboard, connectStatus, openConnectOnboarding, type ConnectStatus } from '@/lib/stripe-connect';
+import { canSignSilently } from '@/lib/signed-request';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import ConnectOnboardingModal from '@/components/payments/ConnectOnboardingModal';
 import { isStripeNativeAvailable } from '@/lib/stripe-native';
@@ -68,7 +69,18 @@ export default function OrgPaymentsScreen() {
 
   // Re-check on mount and every time the screen regains focus — covers the
   // return from the Stripe onboarding browser sheet via the roebel:// deep link.
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  // On a passkey session a re-check on focus only runs without a fingerprint (cached API session
+  // token); the first check always runs.
+  const checkedFor = useRef<string | null>(null);
+  useFocusEffect(useCallback(() => {
+    const key = `${thirdwebAccount?.address ?? ''}:${activeAccount?.id ?? ''}`;
+    if (checkedFor.current !== key) {
+      checkedFor.current = key;
+      void load();
+      return;
+    }
+    void canSignSilently(thirdwebAccount).then((silent) => { if (silent) void load(); });
+  }, [load, thirdwebAccount, activeAccount?.id]));
 
   const handleOnboard = useCallback(async () => {
     if (!activeAccount || !thirdwebAccount || onboarding) return;

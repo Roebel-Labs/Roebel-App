@@ -10,6 +10,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useRewards } from '@/context/RewardsContext';
 import { useCirclesProfileSync } from '@/hooks/useCirclesProfileSync';
+import { isPasskeyWallet } from '@/lib/passkey/active';
 import { supabase } from '@/lib/supabase';
 import { compressImageForUpload } from '@/lib/utils/image-compression';
 import { Events, track } from '@/lib/analytics';
@@ -137,7 +138,13 @@ export default function EditProfileScreen() {
       });
       // Keep the public Circles profile in sync if the citizen opted in (best-effort:
       // never block the profile save on a Circles network hiccup).
-      if (circles.published) {
+      // On a passkey session the resync is an on-chain op (a fingerprint), so it only runs when
+      // what the Circles profile shows (name, bio, photo) actually changed.
+      const circlesFieldsChanged =
+        usernameChanged ||
+        (bio || '') !== (user?.bio || '') ||
+        (profilePicture || '') !== (user?.profile_picture_url || '');
+      if (circles.published && (!isPasskeyWallet(wallet) || circlesFieldsChanged)) {
         try {
           await circles.publish({
             name: username || user?.display_name || 'Röbel-Bürger:in',
