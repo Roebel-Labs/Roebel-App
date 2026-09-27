@@ -47,6 +47,7 @@ import {
 } from 'viem';
 import { PASSKEY_CHAIN_ID, SAFE_PROXY_FACTORY } from './constants';
 import { safeMessageHash } from './guardians';
+import { pollIdForTxs } from './poll-hints';
 import { predictSafeAddress, safeFactoryData } from './safe-address';
 import { identityKind, type PasskeySession } from './session';
 import { safeSignatureFromAssertion, type PasskeyUserOpArgs, type SponsoredCall } from './userop';
@@ -130,6 +131,8 @@ export type AdapterDeps = {
   sign: (credentialId: string, challenge: Hex) => Promise<PasskeyAssertion>;
   isSafeDeployed: (safe: Address) => Promise<boolean>;
   sendUserOp: (args: PasskeyUserOpArgs) => Promise<{ userOpHash: Hex; txHash: Hex }>;
+  /** MACI pollId for a Poll address (default: the hints the vote path records, poll-hints.ts). */
+  pollIdFor?: (poll: string) => bigint | undefined;
 };
 
 /**
@@ -166,12 +169,15 @@ export type PasskeyThirdwebAccount = {
 export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps): PasskeyThirdwebAccount {
   const send = async (txs: AdapterTx[]) => {
     const { calls, legacy } = buildAdapterCalls(session, txs);
+    // Poll.publishMessage needs the MACI pollId in the sponsor body (everyday mode).
+    const pollId = deps.pollIdFor ? pollIdForTxs(txs, deps.pollIdFor) : pollIdForTxs(txs);
     const deployed = await deps.isSafeDeployed(session.safe);
     const { txHash } = await deps.sendUserOp({
       credentialId: session.credentialId,
       x: session.x,
       y: session.y,
       ...(legacy ? { legacy } : {}),
+      ...(pollId !== undefined ? { pollId } : {}),
       calls,
       deployed,
       sender: session.safe,

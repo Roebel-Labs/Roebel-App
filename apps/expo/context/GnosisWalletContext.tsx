@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { Account } from "thirdweb/wallets";
-import { useActiveAccount } from "thirdweb/react";
+import { useActiveAccount, useActiveWallet } from "thirdweb/react";
+import { isPasskeyWallet } from "@/lib/passkey/active";
 import { client } from "@/constants/thirdweb";
 import { gnosisWallet } from "@/constants/wallets";
 
@@ -22,6 +23,10 @@ const GnosisWalletContext = createContext<GnosisWalletValue | undefined>(undefin
  */
 export function GnosisWalletProvider({ children }: { children: React.ReactNode }) {
 	const baseAccount = useActiveAccount();
+	const activeWallet = useActiveWallet();
+	// A passkey session (wallet id "adapter") already IS the Gnosis account: every write must go
+	// through the passkey Safe, never through a thirdweb login that may still sit on the device.
+	const passkey = isPasskeyWallet(activeWallet);
 	const [gnosisAccount, setGnosisAccount] = useState<Account | null>(null);
 	const [ready, setReady] = useState(false);
 
@@ -30,6 +35,11 @@ export function GnosisWalletProvider({ children }: { children: React.ReactNode }
 		(async () => {
 			if (!baseAccount?.address) {
 				setGnosisAccount(null);
+				return;
+			}
+			if (passkey) {
+				setGnosisAccount(baseAccount);
+				setReady(true);
 				return;
 			}
 			try {
@@ -43,7 +53,7 @@ export function GnosisWalletProvider({ children }: { children: React.ReactNode }
 			}
 		})();
 		return () => { cancelled = true; };
-	}, [baseAccount?.address]);
+	}, [baseAccount?.address, passkey]);
 
 	const value = useMemo<GnosisWalletValue>(
 		() => ({ gnosisAccount, gnosisAddress: gnosisAccount?.address ?? null, ready }),

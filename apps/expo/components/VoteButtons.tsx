@@ -30,6 +30,7 @@ import CitizenVerificationBanner from '@/components/profile/CitizenVerificationB
 import { SUPPORT_ACCOUNT_ID } from '@/lib/support-contact';
 import { recordVote as recordVoteToSupabase } from '@/lib/supabase-votes';
 import { claimReward } from '@/lib/rewards-claim';
+import { rememberPollId } from '@/lib/passkey/poll-hints';
 import { useCelebrateSettling } from '@/hooks/useCelebrateSettling';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import { Events, track } from '@/lib/analytics';
@@ -564,6 +565,8 @@ export default function VoteButtons({
       });
       // ABI requires uint256[10] (fixed length); coerce from bigint[] for TS.
       const messageFixed = message as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint];
+      // A passkey session's sponsor needs the MACI pollId for this Poll (no-op for thirdweb).
+      rememberPollId(pollAddr, pid);
       const tx = prepareContractCall({
         contract: poll,
         method: 'function publishMessage((uint256[10] data) _message, (uint256 x, uint256 y) _encPubKey)',

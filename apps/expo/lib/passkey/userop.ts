@@ -416,12 +416,12 @@ function toSponsorUserOp(op: UnpackedUserOp): Record<string, Hex> {
 }
 
 /**
- * POST /api/passkey/sponsor body: { chainId, userOp, x, y, legacy?, recoveryLegacy? }. Optional
+ * POST /api/passkey/sponsor body: { chainId, userOp, x, y, legacy?, recoveryLegacy?, pollId? }. Optional
  * identity hints are omitted (not null) when unset.
  */
 export function sponsorRequestBody(
   op: UnpackedUserOp,
-  args: Pick<PasskeyUserOpArgs, 'x' | 'y' | 'legacy' | 'recoveryLegacy'>,
+  args: Pick<PasskeyUserOpArgs, 'x' | 'y' | 'legacy' | 'recoveryLegacy' | 'pollId'>,
 ): Record<string, unknown> {
   return {
     chainId: PASSKEY_CHAIN_ID,
@@ -430,6 +430,8 @@ export function sponsorRequestBody(
     y: args.y,
     ...(args.legacy ? { legacy: args.legacy } : {}),
     ...(args.recoveryLegacy ? { recoveryLegacy: args.recoveryLegacy } : {}),
+    // 0x hex quantity, as the server's parseSponsorRequest expects.
+    ...(args.pollId !== undefined ? { pollId: `0x${args.pollId.toString(16)}` } : {}),
   };
 }
 
@@ -535,6 +537,8 @@ export type PasskeyUserOpArgs = {
   legacy?: Address;
   /** Recovery ops: the legacy account the wallet being recovered administers (if the wallet holds no CitizenNFT). */
   recoveryLegacy?: Address;
+  /** Everyday votes: the MACI poll id of the Poll the op publishes to (sponsor checks MACI.polls(pollId)). */
+  pollId?: bigint;
   calls: SponsoredCall[];
   deployed: boolean;
   /**
