@@ -160,6 +160,25 @@ test("legacy identity: executeBatch (mint + group mint) and a multiSend of execu
   );
 });
 
+test("Expo one-tap Münzen claim: ONE legacy.executeBatch([hub, hub], [0, 0], [personalMint, groupMint]) is sponsored", async () => {
+  // Exactly what apps/expo/lib/muenzen-claim.ts + the adapter send: amount = (personal + accrued) − 0.1 %.
+  const total = 5n * 10n ** 18n;
+  const amount = total - (total * 10n) / 10_000n;
+  const claim = encodeFunctionData({
+    abi: account,
+    functionName: "executeBatch",
+    args: [
+      [C.circlesHub, C.circlesHub],
+      [0n, 0n],
+      [personalMint, encodeFunctionData({ abi: hubAbi, functionName: "groupMint", args: [C.roebelGroup, [LEGACY], [amount], "0x"] })],
+    ],
+  });
+  assert.equal(claim.slice(0, 10), "0x47e1da2a");
+  await ok(op(outer(LEGACY, claim)), fakeChain(), CTX, LEGACY);
+  // Guest (not a group member): personalMint alone, a single legacy.execute.
+  await ok(op(outer(LEGACY, execLegacy(C.circlesHub, 0n, personalMint))), fakeChain(), CTX, LEGACY);
+});
+
 test("legacy identity: value, unknown targets and foreign balances are refused", async () => {
   const chain = fakeChain();
   await rejected(op(outer(LEGACY, execLegacy(C.circlesHub, 1n, personalMint))), /value 0/, chain, CTX);
