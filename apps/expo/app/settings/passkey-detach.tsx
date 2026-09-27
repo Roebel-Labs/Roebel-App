@@ -29,6 +29,9 @@ import {
   type ChecklistId,
 } from '@/lib/passkey/detach';
 import type { KeyBackupSlot } from '@/lib/passkey/key-backup';
+import { describeCompletion } from '@/lib/passkey/key-completion';
+import type { Account } from 'thirdweb/wallets';
+import ThirdwebConfirm from '@/components/passkey/ThirdwebConfirm';
 import type { PasskeySession } from '@/lib/passkey/session';
 
 type Busy = ChecklistId | 'detach' | null;
@@ -48,7 +51,11 @@ export default function PasskeyDetachScreen() {
   const [synced, setSynced] = useState(false);
   const [noDms, setNoDms] = useState(false);
   const [opOk, setOpOk] = useState(sponsoredOpSucceededThisSession());
-  const [keys, setKeys] = useState<{ local: KeyBackupSlot[]; backup: KeyBackupSlot[] | null }>({ local: [], backup: null });
+  const [keys, setKeys] = useState<{ local: KeyBackupSlot[]; backup: KeyBackupSlot[] | null; required?: KeyBackupSlot[] }>({
+    local: [],
+    backup: null,
+  });
+  const [keysNeedThirdweb, setKeysNeedThirdweb] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [typed, setTyped] = useState('');
@@ -96,6 +103,7 @@ export default function PasskeyDetachScreen() {
         sponsoredOpSucceeded: opOk,
         localKeySlots: keys.local,
         backupSlots: keys.backup,
+        requiredKeySlots: keys.required,
       }),
     [synced, guardians, xmtpLinked, noDms, opOk, keys],
   );
@@ -126,14 +134,18 @@ export default function PasskeyDetachScreen() {
       setXmtpLinked(true);
     });
 
-  const onBackup = () =>
+  // Completes MACI + Nostr (+ salt with a commitment); what the device lacks is re-derived with the
+  // thirdweb session (silent when stored here, else "Einmal mit Google/E-Mail bestätigen").
+  const onBackup = (thirdwebAccount?: Account) =>
     act('keyBackup', async () => {
-      const rt = await import('@/lib/passkey/detach-runtime');
-      const r = await rt.backupKeysForSession(session as PasskeySession);
+      setKeysNeedThirdweb(null);
+      const rt = await import('@/lib/passkey/key-completion-runtime');
+      const r = await rt.completeKeysForSession(session as PasskeySession, { activeAccount: account, thirdwebAccount });
       if (r.status === 'disabled') throw new Error('Die Schlüssel-Sicherung ist noch nicht freigeschaltet.');
-      if (r.conflicts.length > 0) throw new Error('Auf dem Server liegt bereits ein anderer Schlüssel. Bitte melde dich bei uns.');
-      // The report already says what the server holds for every slot this device has (no 3rd fingerprint).
-      setKeys({ local: [...r.saved, ...r.conflicts], backup: r.saved });
+      if (r.report.conflicts.length > 0) throw new Error(describeCompletion(r).text);
+      // The run already knows what the server holds per slot (no extra fingerprint).
+      setKeys({ local: [...r.report.saved, ...r.report.conflicts], backup: r.backedUp, required: r.required });
+      if (r.status === 'needsThirdweb') setKeysNeedThirdweb(describeCompletion(r).text);
     });
 
   const onDetach = () =>
@@ -230,7 +242,15 @@ export default function PasskeyDetachScreen() {
                 <ActionButton label="Test ausführen" busy={busy === 'testAction'} disabled={!!busy} onPress={onTest} />
               )}
               {item.id === 'keyBackup' && !item.ok && (
-                <ActionButton label="Schlüssel sichern & prüfen" busy={busy === 'keyBackup'} disabled={!!busy} onPress={onBackup} />
+                <>
+                  <ActionButton label="Schlüssel sichern & prüfen" busy={busy === 'keyBackup'} disabled={!!busy} onPress={() => onBackup()} />
+                  {keysNeedThirdweb && (
+                    <>
+                      <Text style={[styles.small, { color: colors.textSecondary }]}>{keysNeedThirdweb}</Text>
+                      <ThirdwebConfirm disabled={!!busy} onConfirmed={(tw) => onBackup(tw)} />
+                    </>
+                  )}
+                </>
               )}
             </View>
           ))}

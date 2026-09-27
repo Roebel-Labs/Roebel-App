@@ -12,9 +12,9 @@ import { useXmtp } from '@/context/XmtpContext';
 import { fontFamily } from '@/constants/theme';
 import { passkeySessionOf } from '@/lib/passkey/active';
 import type { PasskeySession } from '@/lib/passkey/session';
-
-const SLOT_NAMES: Record<string, string> = { maci: 'Abstimmungsschlüssel', nostr: 'Nostr-Schlüssel', salt: 'Bürger-Bestätigung' };
-const names = (slots: string[]) => slots.map((s) => SLOT_NAMES[s] ?? s).join(', ');
+import { describeCompletion } from '@/lib/passkey/key-completion';
+import type { Account } from 'thirdweb/wallets';
+import ThirdwebConfirm from './ThirdwebConfirm';
 
 type Status = { tone: 'info' | 'error' | 'success'; text: string } | null;
 
@@ -31,27 +31,20 @@ export default function KeysAndMessagesSection() {
     return rt.actingPasskeySession(passkeySessionOf<PasskeySession>(account), account?.address as Address | undefined);
   }, [account]);
 
-  const onBackup = async () => {
+  // "Schlüssel sichern" completes MACI + Nostr (+ salt): what the device lacks is re-derived with
+  // the thirdweb session (silent if stored on this device, else "Einmal mit Google/E-Mail bestätigen").
+  const [needsThirdweb, setNeedsThirdweb] = useState(false);
+  const onBackup = async (thirdwebAccount?: Account) => {
     if (busy) return;
     setBusy('keys');
     setKeysStatus(null);
     try {
       const s = await session();
       if (!s) throw new Error('Auf diesem Gerät ist kein verbundener Passkey eingerichtet.');
-      const rt = await import('@/lib/passkey/detach-runtime');
-      const r = await rt.backupKeysForSession(s);
-      if (r.status === 'disabled') {
-        setKeysStatus({ tone: 'info', text: 'Die Schlüssel-Sicherung ist noch nicht freigeschaltet.' });
-      } else if (r.conflicts.length > 0) {
-        setKeysStatus({
-          tone: 'error',
-          text: `Auf dem Server liegt bereits ein anderer ${names(r.conflicts)}. Er wurde nicht überschrieben – bitte melde dich bei uns.`,
-        });
-      } else if (r.saved.length === 0) {
-        setKeysStatus({ tone: 'info', text: 'Auf diesem Gerät gibt es keine Schlüssel zum Sichern.' });
-      } else {
-        setKeysStatus({ tone: 'success', text: `Gesichert: ${names(r.saved)}. Nur dein Passkey kann sie entsperren.` });
-      }
+      const rt = await import('@/lib/passkey/key-completion-runtime');
+      const r = await rt.completeKeysForSession(s, { activeAccount: account, thirdwebAccount });
+      setNeedsThirdweb(r.status === 'needsThirdweb');
+      setKeysStatus(describeCompletion(r));
     } catch (e) {
       setKeysStatus({ tone: 'error', text: e instanceof Error ? e.message : 'Sichern fehlgeschlagen.' });
     } finally {
@@ -82,11 +75,11 @@ export default function KeysAndMessagesSection() {
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Schlüssel sichern</Text>
         <Text style={[styles.small, { color: colors.textSecondary }]}>
-          Dein Abstimmungs- und Nostr-Schlüssel werden verschlüsselt gesichert. Entsperren kann sie nur dein
+          Dein Abstimmungs- und Nostr-Schlüssel (und deine Bürger-Bestätigung) werden verschlüsselt gesichert. Entsperren kann sie nur dein
           Passkey – so funktionieren sie auch auf einem neuen Gerät.
         </Text>
         <Pressable
-          onPress={onBackup}
+          onPress={() => onBackup()}
           disabled={!!busy}
           accessibilityRole="button"
           style={[styles.button, { backgroundColor: colors.primary, opacity: busy ? 0.5 : 1 }]}
@@ -94,6 +87,7 @@ export default function KeysAndMessagesSection() {
           {busy === 'keys' ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Schlüssel sichern</Text>}
         </Pressable>
         {keysStatus && <Text style={[styles.small, { color: tone(keysStatus) }]}>{keysStatus.text}</Text>}
+        {needsThirdweb && <ThirdwebConfirm disabled={!!busy} onConfirmed={(tw) => void onBackup(tw)} />}
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.surface }]}>

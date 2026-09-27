@@ -52,6 +52,17 @@ export type ChecklistInputs = {
   /** (5) slots this device holds locally, and the slots the server backup has (null = unknown / off). */
   localKeySlots: KeyBackupSlot[];
   backupSlots: KeyBackupSlot[] | null;
+  /**
+   * (5) slots a complete backup must hold (key-completion.requiredKeySlots): maci + nostr, plus
+   * salt when the citizen has a commitment. Default maci + nostr.
+   */
+  requiredKeySlots?: KeyBackupSlot[];
+};
+
+const SLOT_NAMES: Record<KeyBackupSlot, string> = {
+  maci: 'Abstimmungsschlüssel',
+  nostr: 'Nostr-Schlüssel',
+  salt: 'Bürger-Bestätigung',
 };
 
 export type ChecklistItem = { id: ChecklistId; ok: boolean; title: string; detail: string };
@@ -59,7 +70,9 @@ export type ChecklistItem = { id: ChecklistId; ok: boolean; title: string; detai
 export function evaluateDetachChecklist(i: ChecklistInputs): { items: ChecklistItem[]; allGreen: boolean } {
   const g = i.guardians;
   const guardiansOk = !!g && g.count >= DETACH_MIN_GUARDIANS && g.threshold >= DETACH_MIN_THRESHOLD;
-  const missingBackup = i.backupSlots ? i.localKeySlots.filter((s) => !i.backupSlots!.includes(s)) : i.localKeySlots;
+  const required = i.requiredKeySlots ?? (['maci', 'nostr'] as KeyBackupSlot[]);
+  const mustHave = [...new Set<KeyBackupSlot>([...required, ...i.localKeySlots])];
+  const missingBackup = i.backupSlots ? mustHave.filter((s) => !i.backupSlots!.includes(s)) : mustHave;
   const backupOk = i.backupSlots !== null && missingBackup.length === 0;
   const items: ChecklistItem[] = [
     {
@@ -106,7 +119,7 @@ export function evaluateDetachChecklist(i: ChecklistInputs): { items: ChecklistI
           ? 'Die Schlüssel-Sicherung ist nicht erreichbar.'
           : backupOk
             ? 'Abstimmungs- und Nostr-Schlüssel sind verschlüsselt gesichert.'
-            : 'Tippe auf „Schlüssel sichern“, damit Abstimmen und Beiträge auch auf einem neuen Gerät funktionieren.',
+            : `Noch nicht gesichert: ${missingBackup.map((s) => SLOT_NAMES[s]).join(', ')}. Tippe auf „Schlüssel sichern“, damit Abstimmen und Beiträge auch auf einem neuen Gerät funktionieren.`,
     },
   ];
   return { items, allGreen: items.every((it) => it.ok) };

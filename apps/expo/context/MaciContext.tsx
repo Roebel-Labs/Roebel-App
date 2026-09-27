@@ -26,28 +26,25 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "@/lib/storage/secureStorage";
 import { getContractEvents, prepareEvent } from "thirdweb";
-import { keccak256 } from "thirdweb/utils";
 import { getRpcClient, eth_blockNumber } from "thirdweb/rpc";
 import { useActiveAccount } from "thirdweb/react";
 import { client, MACI_DEPLOY_BLOCK, maciReadContract } from "@/constants/thirdweb";
 import { gnosisRead } from "@/constants/gnosis";
 import {
   deserializeKeypair,
-  deriveMaciKeypairFromSeed,
   type SerializedKeypair,
   Keypair,
 } from "@/lib/maci";
 import { passkeySessionOf } from "@/lib/passkey/active";
 import { loadDerivedKeysRuntime } from "@/lib/passkey/load-derived-keys";
 import { MACI_KEYPAIR_STORE_KEY } from "@/lib/passkey/derived-keys";
+import { deriveMaciKeypairFromWalletSignature } from "@/lib/maci-key-derivation";
 
 const SECURE_KEY = MACI_KEYPAIR_STORE_KEY; // "roebel.maci.keypair.v1"
 const VOTES_KEY = "roebel.maci.votes.v1";
 
-/** Fixed message signed once per device to deterministically derive the
- *  citizen's MACI voting key. Bump the version suffix only if the derivation
- *  scheme must change (it would mint a new key → requires a fresh signup). */
-const KEY_DERIVATION_MESSAGE = "Röbel Bürgerumfrage – Abstimmungsschlüssel v1";
+// The deterministic derivation (message "Röbel Bürgerumfrage – Abstimmungsschlüssel v1") lives in
+// lib/maci-key-derivation.ts, shared with the passkey "Schlüssel sichern" completion.
 
 type SignUpState =
   | { status: "unknown" } // not yet checked
@@ -349,9 +346,7 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
 
     // Derive the voting key deterministically from a wallet signature so the
     // same wallet reproduces the same key on every device / after a reinstall.
-    const signature = await account.signMessage({ message: KEY_DERIVATION_MESSAGE });
-    const seed = BigInt(keccak256(signature as `0x${string}`));
-    const derived = deriveMaciKeypairFromSeed(seed);
+    const derived = await deriveMaciKeypairFromWalletSignature(account);
 
     const persisted = await persistKeypair(derived);
     setSignUpState({
