@@ -1,6 +1,6 @@
 # Passkey Accounts — State
 
-**Status (2026-09-26):** tranche 1 built on `feat/passkey-accounts`, **preview-only, not merged, not device-tested.**
+**Status (2026-09-27):** preview-only. First device test on a Pixel 7 passed the everyday basics (see "Device test 2026-09-27"); tranche 1 originally built on `feat/passkey-accounts`.
 Spec: [`superpowers/specs/2026-09-26-passkey-sovereign-accounts-design.md`](superpowers/specs/2026-09-26-passkey-sovereign-accounts-design.md) ·
 Plan: [`superpowers/plans/2026-09-26-passkey-accounts-tranche-1.md`](superpowers/plans/2026-09-26-passkey-accounts-tranche-1.md)
 
@@ -62,6 +62,61 @@ A passkey user MAY add an email. It is used ONLY for recovery alerts ("Jemand st
 2. Vercel Preview env: `PASSKEY_EMAIL_ENABLED=1`, `PASSKEY_EMAIL_STORE=supabase` (only after gate 1; unset = in-memory, which breaks when start and verify hit different instances), confirm `RESEND_API_KEY` is present on Preview, `CRON_SECRET` for the alert route.
 3. Add the cron to `vercel.json`, e.g. `{"path": "/api/passkey/recovery-alerts", "schedule": "*/10 * * * *"}` (the 3-day window needs a frequent scan, not a daily one).
 4. Production gates: a shared rate limiter (Postgres or Upstash) instead of the in-memory one; privacy text (Datenschutzerklärung) naming this purpose-bound address.
+
+## Device test 2026-09-27 + polish (`feat/passkey-polish`)
+
+**Device test (Max, Pixel 7, passkey session on legacy `0xc49d…` via Safe `0xe3d1…`):**
+- Adding a guardian, getting Münzen and sending Münzen **work**.
+- Surprise: claiming Münzen sent **two separate sponsored ops** (`personalMint`, then `groupMint`), each with its own
+  fingerprint prompt, settled in the background after the tap (the settlement queue retries up to 3×, so up to
+  6 prompts).
+- "Schlüssel sichern" backed up only `nostr`. `maci` and `salt` were missing because this fresh install never had a
+  local MACI key (and no commitment preimage).
+
+**Changes:**
+1. **One tap → one fingerprint for Münzen (passkey sessions only).** `lib/muenzen-claim.ts`:
+   - No background claim under a passkey session: `useDailyMint.claim()` refuses, the profile pill reads
+     "Münzen abholen" and opens the Münzen page.
+   - The Münzen page's one primary "Münzen abholen" button claims in the foreground as ONE batch
+     (`personalMint` + `groupMint(group, [self], [amount], 0x)` for group members) → ONE userOp, no retries.
+     Pending: "Bestätige mit deinem Passkey…"; success in the same place: "+X Röbel Münzen"; errors as an alert,
+     cooldown/streak only move on success.
+   - `groupMint` amount = personal balance + accrued issuance − 0.1 % (covers the daily demurrage step if the op
+     lands after midnight; the dust stays personal and is swept next time).
+   - The adapter (`thirdweb-adapter.ts`) now sends a legacy identity's batch as ONE `legacy.executeBatch(targets,
+     values, datas)` call (was: a MultiSend of several `legacy.execute`). The sponsor's everyday mode already
+     accepted it; pinned in `everyday-policy.test.ts`. Also applies to the org-Safe batches (their test already
+     uses `executeBatch`).
+   - thirdweb sessions: unchanged (two gasless sends via the settlement queue).
+2. **"Schlüssel sichern" completes MACI + Nostr (+ salt).** `lib/passkey/key-completion.ts` +
+   `key-completion-runtime.ts`, used by Settings → Passkey and the "thirdweb trennen" checklist:
+   - A slot with no local key and no backup is derived with the EXISTING thirdweb derivation (MACI message
+     "Röbel Bürgerumfrage – Abstimmungsschlüssel v1", now in `lib/maci-key-derivation.ts`, shared with
+     `MaciContext`; salt typed data via `deriveCommitmentSalt`; Nostr via `deriveAndStoreIdentity`), persisted
+     locally like today (MACI → `roebel.maci.keypair.v1`; salt → PRF device blob, no preimage is written),
+     wrapped under the PRF and backed up. Never from a passkey signature.
+   - thirdweb source: the active account when it is a thirdweb one; else `wallets[0].autoConnect` from the stored
+     inApp session — outside the connection manager, so the active wallet stays the passkey adapter. A session of
+     another account is refused.
+   - No thirdweb session: what the device has is backed up, the rest is reported, and "Einmal mit Google/E-Mail
+     bestätigen" runs the existing thirdweb login (Google OAuth or E-Mail code) on the same wallet instance,
+     again outside the connection manager, then completes. The app stays on the passkey session.
+   - A backup-service error throws; it is never read as "no backup".
+   - Checklist "Schlüssel gesichert" is green only when maci + nostr (+ salt when the citizen has a commitment:
+     local preimage or a `request_evidence` row with `irys_id = 'commitment'`; a failed lookup counts as yes) are in
+     the backup. It names what is missing.
+
+**Needs a device test:**
+- Münzen: one fingerprint per claim, "+X Röbel Münzen" shown, balance updates; a guest (no group trust) claims
+  `personalMint` only. Profile pill opens the Münzen page. thirdweb session: pill still claims as before.
+- Keys, silent path (device still holds the thirdweb login): "Schlüssel sichern" → 2 fingerprints, no Google
+  prompt, backup has maci + nostr (+ salt), the app is still on the passkey session afterwards.
+- Keys, confirm path (thirdweb logged out on the device): Google and E-Mail code both work, no switch of the active
+  account, no redirect to `/profile` leaking into the router (Android).
+- **MACI key match (risk):** the derived key equals the one MACI knows only if this citizen's key was derived with
+  the same thirdweb signature (chainId 100 signing domain). Keys minted randomly by very old installs, or derived
+  while the wallet signed with Base (before 2026-07-27), will differ, exactly as for a thirdweb session on a fresh
+  install. Check the voting screen shows "signed up" after the restore.
 
 ## Measured / verified facts
 
