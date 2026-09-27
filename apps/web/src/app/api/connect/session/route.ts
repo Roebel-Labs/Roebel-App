@@ -14,7 +14,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Issues a short-lived Stripe AccountSession so the app can render Stripe's onboarding component
 // natively (no external browser). Security:
 // - only owner/admin of the org, behind the server-side stripe_connect_enabled gate;
-// - the session is scoped to that org's connected account and to the onboarding component only;
+// - the session is scoped to that org's connected account and to onboarding, payments (no refunds),
+//   payouts and the notification banner;
 // - the client secret is never logged or stored, and the response is marked no-store;
 // - Stripe user authentication stays ON (full-dashboard accounts cannot disable it), so sensitive
 //   steps such as bank details are confirmed by the account holder with Stripe itself.
@@ -44,6 +45,11 @@ export async function POST(request: NextRequest) {
       account: ensured.stripeAccountId,
       components: {
         account_onboarding: { enabled: true, features: { external_account_collection: true } },
+        // Org money dashboard (app/org/money.tsx). Refunds stay OFF here: the app's own order list
+        // refunds with refund_application_fee and voids the tickets; disputes are answered here.
+        payments: { enabled: true, features: { refund_management: false, dispute_management: true, capture_payments: false } },
+        payouts: { enabled: true, features: { standard_payouts: true, instant_payouts: false, edit_payout_schedule: true, external_account_collection: true } },
+        notification_banner: { enabled: true, features: { external_account_collection: true } },
       },
     });
     return NextResponse.json(

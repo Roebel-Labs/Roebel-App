@@ -213,8 +213,19 @@ export default function OrgPaymentsScreen() {
                   <Text style={[styles.sectionBody, { color: colors.textSecondary }]}>
                     Zahlungen möglich. Auszahlungen: {status.payouts_enabled ? 'aktiv' : 'ausstehend'}
                   </Text>
+                  {canManage && (
+                    <Pressable
+                      onPress={() => router.push('/org/money' as any)}
+                      style={({ pressed }) => [
+                        styles.primaryButton,
+                        { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+                      ]}
+                    >
+                      <Text style={styles.primaryButtonText}>Einnahmen & Auszahlungen</Text>
+                    </Pressable>
+                  )}
                   <Text style={[styles.hint, { color: colors.textTertiary }]}>
-                    Verwalten kannst du dein Konto unter dashboard.stripe.com
+                    Alles Weitere findest du jederzeit auch unter dashboard.stripe.com
                   </Text>
                 </>
               )}
