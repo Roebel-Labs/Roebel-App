@@ -576,6 +576,8 @@ export const NetizenManifestSchema = z.object({
     safe: address,
     circlesGroup: address.optional(),
     gatekeeper: address.optional(),
+    /** NSP-14 — the community's OrgRegistry. Absent means orgs are not yet onchain. */
+    orgRegistry: address.optional(),
   }).optional(),
 
   identity: Identity.optional(),

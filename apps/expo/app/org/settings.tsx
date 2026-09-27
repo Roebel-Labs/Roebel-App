@@ -7,6 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { isStripeConnectEnabled } from '@/lib/supabase-app-settings';
 import BottomDrawer from '@/components/BottomDrawer';
+import OrgSafeSection from '@/components/org/OrgSafeSection';
 import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 
 export default function OrgSettingsScreen() {
@@ -96,6 +97,8 @@ export default function OrgSettingsScreen() {
             </Pressable>
           </View>
         )}
+
+        <OrgSafeSection accountId={activeAccount.id} accountName={activeAccount.name} />
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Konto löschen</Text>

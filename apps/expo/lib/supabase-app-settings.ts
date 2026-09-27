@@ -110,3 +110,11 @@ export async function fetchChatSuiteEnabled(): Promise<boolean> {
 export async function fetchPasskeyAccountsEnabled(): Promise<boolean> {
   return (await fetchAppSetting('passkey_accounts_enabled')) === 'true';
 }
+
+/**
+ * Preview gate for NSP-14 org Safes. A NEW surface: missing key = OFF, only an
+ * explicit 'true' enables it. Also fenced to non-production channels (lib/org-safe/gate.ts).
+ */
+export async function fetchOrgSafesEnabled(): Promise<boolean> {
+  return (await fetchAppSetting('org_safes_enabled')) === 'true';
+}
