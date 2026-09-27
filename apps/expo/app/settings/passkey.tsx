@@ -13,6 +13,7 @@ import ChevronLeftIcon from '@/assets/icons/chevron-left.svg';
 import MigrationSteps, { stepStates } from '@/components/passkey/MigrationSteps';
 import EmailRow from '@/components/passkey/EmailRow';
 import PasskeySessionSwitch from '@/components/passkey/PasskeySessionSwitch';
+import KeysAndMessagesSection from '@/components/passkey/KeysAndMessagesSection';
 import PasskeyRecoverySection from '@/components/passkey/PasskeyRecoverySection';
 import { RecoveryBanner } from '@/components/passkey/RecoveryBanner';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
@@ -206,14 +207,34 @@ export default function PasskeySettingsScreen() {
 
           {connected && <EmailRow />}
 
+          {connected && (
+            <>
+              <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>SCHLÜSSEL & NACHRICHTEN</Text>
+              <KeysAndMessagesSection />
+            </>
+          )}
+
           <Text style={[styles.sectionHeading, { color: colors.textSecondary }]}>ANMELDUNG</Text>
           {connected && <PasskeySessionSwitch />}
-          <View
-            style={[styles.card, styles.disabledRow, { backgroundColor: colors.surface }]}
-            accessibilityState={{ disabled: true }}
-          >
-            <Text style={[styles.body, { color: colors.textTertiary }]}>E-Mail-Anmeldung entfernen — kommt bald</Text>
-          </View>
+          {connected ? (
+            <Pressable
+              style={[styles.card, { backgroundColor: colors.surface }]}
+              onPress={() => router.push('/settings/passkey-detach' as any)}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.body, { color: colors.textPrimary }]}>Google/E-Mail-Anmeldung trennen</Text>
+              <Text style={[styles.bodySmall, { color: colors.textSecondary }]}>
+                Endgültig. Erst möglich, wenn alle Punkte der Checkliste erfüllt sind.
+              </Text>
+            </Pressable>
+          ) : (
+            <View
+              style={[styles.card, styles.disabledRow, { backgroundColor: colors.surface }]}
+              accessibilityState={{ disabled: true }}
+            >
+              <Text style={[styles.body, { color: colors.textTertiary }]}>E-Mail-Anmeldung entfernen — erst nach der Einrichtung</Text>
+            </View>
+          )}
         </ScrollView>
       )}
     </SafeAreaView>

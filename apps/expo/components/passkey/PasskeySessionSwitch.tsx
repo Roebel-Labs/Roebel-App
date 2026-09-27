@@ -2,7 +2,7 @@
  * Settings → Passkey → ANMELDUNG: "Mit Passkey anmelden" for a person who already connected their
  * passkey Safe (tranche 1 handover). Switches the APP SESSION to the passkey adapter wallet; the
  * thirdweb login is NOT signed out and stays an admin of the account until the later
- * "thirdweb trennen" step (not built). Only mounted behind the preview gate (the screen is gated).
+ * "thirdweb trennen" step (app/settings/passkey-detach.tsx). Only mounted behind the preview gate (the screen is gated).
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';

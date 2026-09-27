@@ -3,8 +3,9 @@
  * `SignerPermissionRequest{signer: passkeySafe, isAdmin: 1}` and the passkey
  * Safe submits it via `setPermissionsForSigner` in its first sponsored userOp.
  *
- * Tranche 1 NEVER builds an `isAdmin: 2` (remove) request — there is
- * deliberately no helper for it here.
+ * This file never builds an `isAdmin: 2` (remove) request. The one removal the app knows is the
+ * "thirdweb trennen" step in detach.ts (removes the thirdweb admin EOA, never the Safe), behind a
+ * checklist and a matching narrow server policy (sponsor mode "detach").
  */
 import { bytesToHex, encodeFunctionData, type Address, type Hex, type TypedDataDefinition } from 'viem';
 import { PASSKEY_CHAIN_ID } from './constants';
@@ -12,7 +13,8 @@ import { randomBytes } from './random';
 
 export type SignerPermissionRequest = {
   signer: Address;
-  isAdmin: 1;
+  /** 1 = add admin (handover); 2 = remove admin (detach.ts only). */
+  isAdmin: 1 | 2;
   approvedTargets: Address[];
   nativeTokenLimitPerTransaction: bigint;
   permissionStartTimestamp: bigint;

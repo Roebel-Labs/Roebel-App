@@ -47,6 +47,7 @@ import {
 } from 'viem';
 import { PASSKEY_CHAIN_ID, SAFE_PROXY_FACTORY } from './constants';
 import { safeMessageHash } from './guardians';
+import { markSponsoredOpSucceeded } from './detach';
 import { pollIdForTxs } from './poll-hints';
 import { predictSafeAddress, safeFactoryData } from './safe-address';
 import { PASSKEY_SESSION_PROP } from './active';
@@ -198,6 +199,7 @@ export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps)
       sender: session.safe,
       owner: session.owner,
     });
+    markSponsoredOpSucceeded(); // "thirdweb trennen" checklist item (4)
     return { transactionHash: txHash };
   };
   return {
