@@ -237,3 +237,90 @@ a provider, so migrated accounts keep theirs. The optimistic cached-user hydrati
   passkey-only person it shows its existing error.
 - Circles for a passkey-only (Safe) identity: registration and invite flows were built for thirdweb accounts (see
   `docs/CIRCLES_ROEBEL_MUENZEN_STATE.md`).
+
+## 8. Server side (web + edge, built 2026-09-27, not deployed)
+
+### 8a. Signature rule (`apps/web/src/lib/auth/account-signature-core.ts`)
+
+One dependency-free module, byte-identical copy at `apps/expo/supabase/functions/_shared/verify-account-signature.ts`
+(a web test fails if they differ). `verifyAccountSignature({ address, message | typedData | hash, signature })` on
+Gnosis is true when:
+
+- **(a)** viem universal verification passes for `address` (`client.verifyHash`: EOA, ERC-1271, ERC-6492). For a
+  non-envelope signature this is exactly the call every verifier made before, so all existing signatures still pass.
+- **(b)** the signature is a **Safe-admin envelope** and the inner signature is valid for `safe` (`client.verifyHash`,
+  so a counterfactual Safe's 6492 wrapper works too) AND (`safe == address` OR `ILegacyAccount(address).isAdmin(safe)`).
+- **(c)** a 65-byte signature (or the inner one of a 6492 wrapper) recovers under the thirdweb `Account` domain
+  `("Account", "1", chainId, address)`, `AccountMessage{message: hash}`, for **chainId 100 or 8453**, to a current
+  admin (`isAdmin` on Gnosis). Covers signatures the app made with the Base chainId before 2026-07-27.
+
+**Envelope bytes (strict):**
+
+```
+0xc147971c4ed41e39ec9a286f1686117a7a3e33a2a5a6bcd0ec1881c11ac60de5   // keccak256("roebel.safe-admin-signature.v1")
+++ abi.encode(address safe, bytes safeSignature)                      // head: safe word, offset 0x40, len, data, zero padding
+```
+
+The decoder refuses a wrong offset, non-zero padding, trailing bytes, dirty address words and an empty inner
+signature. An envelope is only ever checked by (b). `encodeSafeAdminSignature(safe, sig)` in the core is the
+reference encoder. `address` is lowercased first, so a bad EIP-55 checksum is not an error.
+
+Errors: RPC transport failures **throw** (each caller keeps its own mapping: 503 / 400 / false). A revert or "no
+contract" on `isAdmin` is `false`.
+
+### 8b. Verifiers switched to the rule (only the smart-account call changed; EOA fast paths untouched)
+
+| Where | Before | Callers |
+|---|---|---|
+| web `lib/signed-request/signature.ts` `verifyWalletSignature` | `gnosisClient.verifyMessage` | tickets (`/api/tickets/*`), Stripe Connect (`/api/connect/*`), chat session (`/api/chat/session`) |
+| web `lib/shamir/signature-verification.ts` `verifyWalletSignature` | ethers raw `isValidSignature` (no 6492, `getCode` shortcut) | `/api/coordinator/share-keys`, `key-generations`, `key-generations/[id]/proposal`, `key-generations/[id]/executed`, `sessions`. Errors still = false. Now also accepts 6492 and (b)/(c). |
+| edge `org-membership` | `gnosisClient.verifyMessage` | all org actions incl. `create_account` at sign-up |
+| edge `merchant-registry` | `gnosisClient.verifyMessage` | merchant actions |
+| edge `delete-user-account` | `gnosisClient.verifyMessage` (throw still = 400) | account deletion |
+| edge `nostr-identity-register` | `chainClient.verifyMessage` (its `diagnoseSignature` fallbacks stay) | Nostr binding |
+
+Not changed: `lib/passkey/email-verifier.ts` (the Safe proves itself, (a) already covers it), the sponsor policy's
+handover check (on-chain semantics), `lib/shamir/tally-session.ts` (runs in the browser), `apps/roebel-id` SIWE
+(`src/lib/gnosis.ts`, Fly `ortis-id`), `apps/coordinator` reconstructor (Fly), `packages/relay-sync` (already has
+(c); no (b)). Those are follow-ups if passkey sessions must reach them.
+
+### 8c. Sponsor mode `everyday` (`apps/web/src/lib/passkey/everyday-allowlist.ts` + `sponsor-policy.ts`)
+
+- **Legacy identity:** body names `legacy`; calls are `legacy.execute(to, 0, data)` / `executeBatch` (single or via
+  MultiSendCallOnly). The sender must already be an admin (`isAdmin(legacy, sender)`), `legacy` must carry the
+  thirdweb proxy code and hold CitizenNFTv2 (or v3). A direct call from the Safe while `legacy` is named is refused
+  (wrong `msg.sender`).
+- **Safe identity:** no `legacy`; direct calls. Citizen Safe: every allowlisted action. **Non-citizen Safe
+  (onboarding tier):** only `CitizenNFTv2.createAttestationRequest(string)`, budget
+  `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI` (default 0.002 xDAI/day per Safe, never above the normal cap). A deploy op
+  (factory + factoryData) may carry it.
+- **Allowlist** = the table in §3 minus the dead/dormant rows, with argument rules: `groupMint` only into the Röbel
+  group; `safeTransferFrom` only `from == identity` and `id == uint256(RöbelGroup)`; value 0 everywhere.
+  `registerHuman` and `trust` are citizen-tier. Not sponsored: native sends, mini-app transactions, governor
+  `propose*`/`queue`/`execute` (~15.7M gas), `castVote` (dead), Deliberate (dormant), `publishMessageBatch`, the
+  XMTP self-call.
+- **Votes:** a `publishMessage` call needs **`pollId` in the request body** (0x hex quantity, the first field of
+  `governor.proposalPolls(proposalId)`); the server checks `MACI.polls(pollId) == target`. One poll per op.
+- **Tightened:** `legacy.execute` in the migration mode no longer sponsors arbitrary inner calls; allowed inner calls
+  are add-sender permission, v3 `moveTo`, `SRM.confirmRecovery`, and everyday actions.
+- Everyday calls ride along with migration/guardian shapes (the mode then stays `legacy` / `safe`) but never with
+  recovery calls.
+
+### 8d. Persistent budget
+
+`PASSKEY_SPONSOR_BUDGET_STORE=supabase` switches to `SupabaseSponsorBudget`: one RPC `passkey_sponsor_reserve(key,
+cost, key_cap, global_cap)` (security definer, `search_path = ''`, EXECUTE revoked from public/anon/authenticated)
+that row-locks the UTC day's `global` row and the identity row, checks both caps and adds the cost atomically.
+Table `passkey_sponsor_budget` (RLS on, no policies, grants revoked). Migration
+`supabase/migrations/20260927_passkey_sponsor_budget.sql`, **not applied** (checked in PGlite: caps, grants, key
+validation). Unset or missing Supabase env = the old in-memory budget.
+
+### 8e. Gates for Max
+
+1. Apply `supabase/migrations/20260927_passkey_sponsor_budget.sql`, then set `PASSKEY_SPONSOR_BUDGET_STORE=supabase`
+   on the Vercel **Preview** env (needs `SUPABASE_SERVICE_ROLE_KEY` there). Optional
+   `PASSKEY_SPONSOR_ONBOARDING_DAILY_WEI`.
+2. Redeploy the edge functions `org-membership`, `merchant-registry`, `delete-user-account`,
+   `nostr-identity-register` (they now import `_shared/verify-account-signature.ts`). Until then passkey sessions
+   on a legacy identity fail there with a bad-signature error; thirdweb users are unaffected either way.
+3. The web verifiers ship with the Vercel preview of this branch; production only after a merge.
