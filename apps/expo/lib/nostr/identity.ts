@@ -8,6 +8,8 @@ import {
   npubEncode,
 } from '@netizen-labs/nostr';
 import { supabase } from '../supabase';
+import { passkeySessionOf } from '../passkey/active';
+import { loadDerivedKeysRuntime } from '../passkey/load-derived-keys';
 
 /**
  * The Citizen's Nostr identity — derived on this device, stored on this device.
@@ -69,6 +71,19 @@ export async function loadStoredIdentity(): Promise<NostrIdentity | null> {
 export async function deriveAndStoreIdentity(account: SigningAccount): Promise<NostrIdentity> {
   const existing = await loadStoredIdentity();
   if (existing) return existing;
+
+  // Passkey session: never derive from a randomized passkey signature. Restore the PRF-wrapped
+  // key (device blob / server backup), mint a random one for a passkey-only person, or throw a
+  // German KeyBackupNeededError for a migrated person on a new device (lib/passkey/derived-keys.ts).
+  if (passkeySessionOf(account)) {
+    const rt = await loadDerivedKeysRuntime();
+    const { secret } = await rt.resolveSecretForAccount(account, 'nostr', {
+      load: async () => (await loadStoredIdentity())?.secretKey ?? null,
+      save: (secretKey) => SecureStore.setItemAsync(SECRET_KEY_STORE, toHex(secretKey)),
+    });
+    const publicKey = getPublicKeyHex(secret);
+    return { secretKey: secret, publicKey, npub: npubEncode(publicKey) };
+  }
 
   const signature = await account.signMessage({ message: NOSTR_KEY_DERIVATION_MESSAGE });
   const identity = deriveNostrIdentity(signature);
@@ -239,6 +254,9 @@ export async function ensureIdentitySilently(account: SigningAccount): Promise<v
       await registerIdentity(account, existing);
       return;
     }
+    // A silent background step must not raise fingerprint prompts or backup lookups: on a passkey
+    // session without a local key the person enrolls from Einstellungen → Nostr instead.
+    if (passkeySessionOf(account)) return;
     const identity = await deriveAndStoreIdentity(account);
     await registerIdentity(account, identity);
   } catch (err) {

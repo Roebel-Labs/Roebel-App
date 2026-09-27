@@ -49,6 +49,7 @@ import { PASSKEY_CHAIN_ID, SAFE_PROXY_FACTORY } from './constants';
 import { safeMessageHash } from './guardians';
 import { pollIdForTxs } from './poll-hints';
 import { predictSafeAddress, safeFactoryData } from './safe-address';
+import { PASSKEY_SESSION_PROP } from './active';
 import { identityKind, type PasskeySession } from './session';
 import { safeSignatureFromAssertion, type PasskeyUserOpArgs, type SponsoredCall } from './userop';
 import type { PasskeyAssertion } from './webauthn';
@@ -141,6 +142,18 @@ export type AdapterDeps = {
  * the identity is a legacy account.
  */
 export async function signHashAsIdentity(session: PasskeySession, hash: Hex, deps: AdapterDeps): Promise<Hex> {
+  return (await signHashAsIdentityWithPrf(session, hash, deps)).signature;
+}
+
+/**
+ * `signHashAsIdentity` plus the passkey PRF output of the SAME assertion (when the authenticator
+ * returns one): the key backup signs its request and unwraps the blobs with one fingerprint.
+ */
+export async function signHashAsIdentityWithPrf(
+  session: PasskeySession,
+  hash: Hex,
+  deps: AdapterDeps,
+): Promise<{ signature: Hex; prf?: Hex }> {
   const challenge = safeMessageHash(session.safe, hash);
   const assertion = await deps.sign(session.credentialId, challenge);
   let sig = safeSignatureFromAssertion(assertion, challenge, session.owner);
@@ -150,7 +163,8 @@ export async function signHashAsIdentity(session: PasskeySession, hash: Hex, dep
     if (!isAddressEqual(predictSafeAddress(key), session.safe)) throw new Error('passkey Safe is not deployed');
     sig = serializeErc6492Signature({ address: SAFE_PROXY_FACTORY, data: safeFactoryData(key), signature: sig });
   }
-  return identityKind(session) === 'legacy' ? encodeOnBehalfSignature(session.safe, sig) : sig;
+  const signature = identityKind(session) === 'legacy' ? encodeOnBehalfSignature(session.safe, sig) : sig;
+  return assertion.prf ? { signature, prf: assertion.prf } : { signature };
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +174,7 @@ export async function signHashAsIdentity(session: PasskeySession, hash: Hex, dep
 /** Structural subset of thirdweb's `Account` that this adapter implements. */
 export type PasskeyThirdwebAccount = {
   address: Address;
+  [PASSKEY_SESSION_PROP]: PasskeySession;
   sendTransaction: (tx: AdapterTx & Record<string, unknown>) => Promise<{ transactionHash: Hex }>;
   sendBatchTransaction: (txs: Array<AdapterTx & Record<string, unknown>>) => Promise<{ transactionHash: Hex }>;
   signMessage: (args: { message: SignableMessage; originalMessage?: string; chainId?: number }) => Promise<Hex>;
@@ -187,6 +202,7 @@ export function createPasskeyAccount(session: PasskeySession, deps: AdapterDeps)
   };
   return {
     address: session.identity,
+    [PASSKEY_SESSION_PROP]: session,
     sendTransaction: (tx) => send([tx]),
     sendBatchTransaction: (txs) => send(txs),
     signMessage: ({ message, chainId }) => {

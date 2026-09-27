@@ -37,8 +37,11 @@ import {
   type SerializedKeypair,
   Keypair,
 } from "@/lib/maci";
+import { passkeySessionOf } from "@/lib/passkey/active";
+import { loadDerivedKeysRuntime } from "@/lib/passkey/load-derived-keys";
+import { MACI_KEYPAIR_STORE_KEY } from "@/lib/passkey/derived-keys";
 
-const SECURE_KEY = "roebel.maci.keypair.v1";
+const SECURE_KEY = MACI_KEYPAIR_STORE_KEY; // "roebel.maci.keypair.v1"
 const VOTES_KEY = "roebel.maci.votes.v1";
 
 /** Fixed message signed once per device to deterministically derive the
@@ -318,6 +321,30 @@ export function MaciProvider({ children }: { children: React.ReactNode }) {
 
     if (!account) {
       throw new Error("Bitte verbinde zuerst dein Wallet.");
+    }
+
+    // Passkey session: a WebAuthn signature is randomized, so deriving from it would mint a NEW
+    // key every time (= unusable votes). Resolve the key instead: this device's key → the
+    // PRF-wrapped blob (device or server backup) → a random key for a passkey-only person →
+    // otherwise a German "needs your old device / key backup" error. lib/passkey/derived-keys.ts
+    if (passkeySessionOf(account)) {
+      const rt = await loadDerivedKeysRuntime();
+      let restored = null as SerializedKeypair | null;
+      const res = await rt.resolveSecretForAccount(account, "maci", {
+        load: async () => {
+          const raw = await SecureStore.getItemAsync(SECURE_KEY);
+          return raw ? new TextEncoder().encode(raw) : null;
+        },
+        save: async (secret) => {
+          restored = await persistKeypair(JSON.parse(rt.decodeMaciSecret(secret)) as SerializedKeypair);
+        },
+      });
+      const kp = restored ?? (JSON.parse(rt.decodeMaciSecret(res.secret)) as SerializedKeypair);
+      if (!restored) setSerializedKeypair(kp);
+      if (res.source === "generated") {
+        setSignUpState({ status: "needs-signup", pubKeyHash: deserializeKeypair(kp).pubKey.hash() as bigint });
+      }
+      return kp;
     }
 
     // Derive the voting key deterministically from a wallet signature so the

@@ -16,6 +16,11 @@ import {
   decodeBase64,
 } from 'tweetnacl-util';
 import type { Account } from 'thirdweb/wallets';
+import { passkeySessionOf } from './passkey/active';
+
+/** Legacy V1 evidence keys come from a (chainId 8453) signature a passkey cannot reproduce. */
+export const PASSKEY_EVIDENCE_KEY_MESSAGE =
+  'Diese älteren verschlüsselten Nachweise lassen sich nur mit deiner Google-/E-Mail-Anmeldung öffnen, nicht mit dem Passkey.';
 import type {
   PersonalData,
   EncryptedBlob,
@@ -69,6 +74,9 @@ export async function deriveEncryptionKey(
   account: Account,
   timestamp?: number
 ): Promise<KeyDerivationResult> {
+  // Never derive from a randomized passkey signature: the key would not match the ciphertext
+  // (and the adapter refuses chainId 8453 anyway). Say so plainly instead of a chain error.
+  if (passkeySessionOf(account)) throw new Error(PASSKEY_EVIDENCE_KEY_MESSAGE);
   console.log('🔐 Deriving encryption key from EIP-712 typed data signature...');
 
   try {

@@ -1,0 +1,16 @@
+{
+  "_description": "Passkey key-backup proof text. Shared byte-exact by apps/web/src/lib/passkey/key-backup-proof.ts and apps/expo/lib/passkey/key-backup.ts.",
+  "identity": "0xc49dE63CcfeE46C6C5c3E393293f66779799Fb28",
+  "timestamp": 1790000000,
+  "blobs": {
+    "nostr": "pkv1:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "maci": "pkv1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "replace": false,
+  "content": "maci=pkv1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nnostr=pkv1:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\nreplace=0",
+  "contentHash": "aa9a7c55019334e02009460474628f65d3ca3ce64162b0e524e7dc73b1fefcc6",
+  "readMessage": "Röbel: Schlüssel-Sicherung\nAktion: lesen\nKonto: 0xc49de63ccfee46c6c5c3e393293f66779799fb28\nZeit: 1790000000\nNur verschlüsselte Daten. Entsperren kann nur dein Passkey.",
+  "writeMessage": "Röbel: Schlüssel-Sicherung\nAktion: speichern\nKonto: 0xc49de63ccfee46c6c5c3e393293f66779799fb28\nInhalt: aa9a7c55019334e02009460474628f65d3ca3ce64162b0e524e7dc73b1fefcc6\nZeit: 1790000000\nNur verschlüsselte Daten. Entsperren kann nur dein Passkey.",
+  "readMessageHash": "0x90640fbb4e01f1b47e8142664de2c7476d973fa27888a798f756c8bb55ebb141",
+  "writeMessageHash": "0xb6918d444519850b07d60b9ab2ae01008f382c84fd2de82ca06ca039af81cd48"
+}

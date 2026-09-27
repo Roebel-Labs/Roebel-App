@@ -16,6 +16,8 @@ import { hash5, SNARK_FIELD_SIZE } from 'maci-crypto';
 import * as SecureStore from '@/lib/storage/secureStorage';
 import type { Account } from 'thirdweb/wallets';
 import type { CitizenIdentity, CitizenPreimage, CommitmentEvidence } from './verification-types';
+import { passkeySessionOf } from './passkey/active';
+import { loadDerivedKeysRuntime } from './passkey/load-derived-keys';
 
 /** Fixed EIP-712 domain/message for deterministic salt derivation (NO timestamp). */
 const SALT_DOMAIN = {
@@ -86,6 +88,21 @@ export function computeCommitment(preimage: CitizenPreimage): string {
  * Reuses the same deterministic-signing approach as the MACI voter keys.
  */
 export async function deriveCommitmentSalt(account: Account): Promise<string> {
+  // Passkey session: the signature is randomized, so the salt is NOT derived. It comes from this
+  // device's preimage, the PRF-wrapped backup, or (passkey-only person) a random field element;
+  // a migrated person on a new device gets a German KeyBackupNeededError (lib/passkey/derived-keys.ts).
+  if (passkeySessionOf(account)) {
+    const rt = await loadDerivedKeysRuntime();
+    const { secret } = await rt.resolveSecretForAccount(account, 'salt', {
+      load: async () => {
+        const salt = (await loadCitizenPreimage(account.address))?.salt;
+        return salt ? new TextEncoder().encode(salt) : null;
+      },
+      // Callers persist the preimage (with this salt) right after; nothing else to store here.
+      save: async () => undefined,
+    });
+    return rt.decodeSaltSecret(secret);
+  }
   const signature = await account.signTypedData({
     domain: SALT_DOMAIN,
     types: SALT_TYPES,
