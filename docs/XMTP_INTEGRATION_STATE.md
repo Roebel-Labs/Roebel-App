@@ -51,6 +51,24 @@ lock is discovered mid-activation the view shows an honest German notice
 instead of "try again". DMs run on the Supabase rail, the documented fallback.
 Affected at the time of the decision: 25 of 38 registered wallets.
 
+## Passkey sessions (feat/passkey-signin, 2026-09-27, preview-gated, not device-tested)
+
+A migrated person's inbox belongs to the legacy thirdweb account, which cannot sign under a passkey session
+(its `isValidSignature` is ECDSA-only).
+
+- **Linking.** "Nachrichten auf Passkey übertragen" adds the passkey **Safe** as a second SCW identity to that
+  inbox:
+  - `client.addAccount(safeSigner, allowReassignInboxId = false)`, chain 100, with the Safe's own ERC-1271
+    signature.
+  - It needs this device's existing installation, via the booted client or `Client.build`.
+  - It is verified via `inboxState`.
+- **Until linked**, a legacy passkey session keeps XMTP **off** (`XmtpContext.passkeyLinkNeeded`, a German hint in
+  the inbox). The Supabase rail keeps working.
+- **After linking:** `Client.build(legacy)`, or `Client.create(Safe signer)` for a new installation.
+- **Passkey sessions never register silently** at app start. Registering needs a fingerprint.
+- **Unchanged:** the thirdweb path, the kill switch and the chain-lock handling.
+- Details and the device-test list: [`PASSKEY_SIGNIN_NOTES.md`](PASSKEY_SIGNIN_NOTES.md) §9.
+
 ## What it needs from Max (operational gates)
 
 1. **New EAS build** (`eas build`) — the SDK + expo-secure-store are native

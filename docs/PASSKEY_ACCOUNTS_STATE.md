@@ -100,10 +100,15 @@ Passkeys use the rpId **`id.ortis.app`** (decided 2026-09-26): the neutral Ortis
 
 ## Tranche 2 (not built)
 
-- XMTP: associate the Safe with the inbox **before** the EOA is removed.
+- XMTP: associate the Safe with the inbox **before** the EOA is removed. **Built on `feat/passkey-signin`**
+  (`client.addAccount`, "Nachrichten auf Passkey übertragen", [`PASSKEY_SIGNIN_NOTES.md`](PASSKEY_SIGNIN_NOTES.md) §9).
 - Route every app write through the Safe → `legacy.execute`, via an account adapter. **Built on `feat/passkey-signin`** (sponsor mode `everyday`, see [`PASSKEY_SIGNIN_NOTES.md`](PASSKEY_SIGNIN_NOTES.md) §3, §8c).
 - Verifiers we control (Supabase login, delete-user-account, signed-request, Shamir submissions) accept "Safe signed + `legacy.isAdmin(safe)`". **Built on `feat/passkey-signin`** (Safe-admin envelope, §8a–b; edge functions need a redeploy).
-- EOA removal (`isAdmin: 2`). After it, thirdweb has no control and the legacy admin set is frozen.
+- EOA removal (`isAdmin: 2`). After it, thirdweb has no control and the legacy admin set is frozen. **Built on
+  `feat/passkey-signin`**: "thirdweb trennen" behind a live checklist, sponsor mode `detach`, fork proof
+  `PasskeyDetach.t.sol` (§8g, §9).
+- Signature-derived keys (MACI, Nostr, commitment salt) under a passkey session: PRF-wrapped + server key backup,
+  never re-derived. **Built on `feat/passkey-signin`** (§2b, §8f; migration not applied).
 - Guardian setup UI, with the attesters who vouched for the citizen as default guardians (library + sponsor policy ready, see above).
 - Persistent per-account sponsor budget (today: in-memory, preview-only). **Built on `feat/passkey-signin`** (Supabase RPC, migration not applied, §8d).
 - New users: Safe-only onboarding, with no thirdweb account.

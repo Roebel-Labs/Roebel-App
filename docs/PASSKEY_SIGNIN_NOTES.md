@@ -82,21 +82,9 @@ Not ours to change:
 - **Mini-app `personal_sign` / `eth_signTypedData*` passthrough** (`lib/miniapp-wallet.ts`) returns the envelope
   for a legacy identity. Third-party mini-app servers will not accept it.
 - **XMTP** (`lib/xmtp/client.ts`, SCW signer) verifies ERC-1271 **on the identity address**. For a legacy identity
-  it fails; per the spec, phase 3 adds the Safe to the inbox before EOA removal. **Do not open DMs on a legacy
-  passkey session until that exists.** For a Safe identity it works once the Safe is deployed; a counterfactual
-  Safe returns 6492, whose XMTP support is unverified.
-
-### 2b. Deterministic derivations that a passkey cannot reproduce
-
-These derive keys from a signature. WebAuthn signatures are randomized, so with the adapter they produce a
-different key every time.
-
-| Where | Message | Effect with the adapter |
-|---|---|---|
-| `context/MaciContext.tsx:325` | `"Röbel Bürgerumfrage – Abstimmungsschlüssel v1"` → MACI keypair | An existing SecureStore key is kept (shim). On a fresh device the key is random-per-signature: fine for a first signUp, but not reproducible on another device. Spec: move to random keys wrapped under the passkey PRF. |
-| `lib/nostr/identity.ts:73` | `"Netizen Nostr-Identität v1"` | same (the existing key is reused) |
-| `lib/citizen-commitment.ts:89` | EIP-712 `CommitmentSalt` (chainId 100) | the salt is not reproducible; the preimage is cached in SecureStore |
-| `lib/encryption.ts:85` | EIP-712 `KeyDerivation`, **chainId 8453** | **refused** by the adapter (wrong chain, German error), so evidence is never encrypted to a key that can't be re-derived |
+  that fails, so the passkey Safe is **added to the same inbox** ("Nachrichten auf Passkey übertragen", §9). Until
+  then a legacy passkey session keeps XMTP off and shows a hint. A Safe identity signs as itself once it is
+  deployed.
 
 ## 3. Transactions and the sponsor allowlist
 
@@ -108,6 +96,12 @@ Every write is one sponsored userOp from the Safe (`sendPasskeyUserOp` → `POST
   (DELEGATECALL).
 - **Value:** the app sends `value` through, and `SponsoredCall.value` is new. The server's everyday mode requires
   value 0.
+- **Votes:** `components/VoteButtons.tsx` records `rememberPollId(pollAddr, pollId)` (`lib/passkey/poll-hints.ts`).
+  For every `publishMessage` (`0x27bea0da`) call, the adapter adds `pollId` (0x quantity) to the sponsor body. A vote
+  whose poll is unknown, or an op that touches two polls, is refused before it is sent.
+- **Gnosis account:** `GnosisWalletProvider` (`gnosisAccount`, used by votes and Münzen) returns the adapter
+  account on a passkey session. Before 2026-09-27 it autoconnected the thirdweb Gnosis wallet even then, so those
+  writes bypassed the Safe.
 
 All on Gnosis (100). Selectors computed with viem `toFunctionSelector`.
 
@@ -179,8 +173,8 @@ Safe-only account.
 done.
 - It switches the app session to the adapter without a prompt. The record has x, y and the Safe; the identity is
   re-resolved on chain.
-- The thirdweb login is **not** signed out and stays an admin until the later "thirdweb trennen" step. That step is
-  not built, and nothing here builds an `isAdmin: 2` request.
+- The thirdweb login is **not** signed out and stays an admin until the "thirdweb trennen" step (§8g, §9), the only
+  place that builds an `isAdmin: 2` request.
 
 ### userHandle — deviation from the brief
 
@@ -324,3 +318,121 @@ validation). Unset or missing Supabase env = the old in-memory budget.
    `nostr-identity-register` (they now import `_shared/verify-account-signature.ts`). Until then passkey sessions
    on a legacy identity fail there with a bad-signature error; thirdweb users are unaffected either way.
 3. The web verifiers ship with the Vercel preview of this branch; production only after a merge.
+4. **Key backup:** apply `supabase/migrations/20260927_passkey_key_backup.sql`, then set
+   `PASSKEY_KEY_BACKUP_ENABLED=1` on Vercel **Preview**. Supabase env must be there too. Until then the app treats
+   the backup as off:
+   - "Schlüssel sichern" says it is not enabled yet;
+   - checklist item 5 stays red;
+   - passkey-only keys are wrapped on the device only.
+5. **Detach:** no new env. It needs the sponsor route (`PASSKEY_SPONSOR_ENABLED=1`, preview paymaster) that is
+   already gated. It ships with the Vercel preview of this branch (the sponsor-policy change).
+6. **No edge function changes** in this round, so there is nothing new to redeploy beyond gate 2. The app needs no
+   native change: XMTP and passkey are already in the preview build, so an OTA to the preview channel is enough.
+
+### 8f. Key backup (`apps/web/src/lib/passkey/key-backup-*.ts`, routes `api/passkey/key-backup/{get,put}`)
+
+- **Off by default.** Both routes return 503 `disabled` unless `PASSKEY_KEY_BACKUP_ENABLED=1`. They also need
+  Supabase (`NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`). There is deliberately **no in-memory
+  fallback**: a backup that vanishes on a cold start would tell people their keys are safe when they are not.
+- **Contents.** The table `passkey_key_backups` (`identity_address`, `slot` ∈ maci/nostr/salt, `blob` = `pkv1:…`)
+  holds ciphertext only. It is useless without the passkey's PRF.
+- **Proof.** Every request carries a signature by the identity over a fixed text, checked with
+  `verifyAccountSignature` (Safe 1271/6492, Safe-admin envelope, thirdweb admin):
+  - read: `Röbel: Schlüssel-Sicherung / Aktion: lesen / Konto / Zeit / …`
+  - write: the same text with `Aktion: speichern` and `Inhalt: sha256(content)`
+  - The text is byte-exact in both apps (`key-backup-vector.json`), and the signature must be within ±10 min.
+- **No silent overwrite.** A write never replaces a different blob unless `replace: true` (409 `exists`). The app's
+  "Schlüssel sichern" never sends `replace`. It compares an existing server copy by plaintext: the same key counts as
+  saved, a different one is reported as a conflict.
+- **Replays.** A replayed proof can only re-read ciphertext or rewrite the same content, because the content hash
+  is signed. So there is no replay store.
+- **Migration.** `supabase/migrations/20260927_passkey_key_backup.sql`, **not applied**:
+  - RLS on, no policies, all privileges revoked from anon/authenticated, service_role granted.
+  - Checked in PGlite. Postgres caps regex repetition at 255, so the blob length is a separate check.
+
+### 8g. Sponsor mode `detach` (mode E, "thirdweb trennen")
+
+The only shape allowed: the op's single call is `legacy.setPermissionsForSigner(req{isAdmin: 2}, sig)`, with the
+body naming `legacy`. All of these must hold:
+
+- **Request fields:** `req.signer != sender`, no targets, no native limit, no permission window, inside the
+  validity window.
+- **Sender:** a deployed, genuine passkey Safe that is already `isAdmin(legacy)`. It stays admin, so at least one
+  admin remains.
+- **Legacy account:** a thirdweb Account proxy holding CitizenNFT.
+- **Signer:** `req.signer` is a current admin, and the signature verifies on chain
+  (`verifySignerPermissionRequest` + `isAdmin` of the recovered signer).
+- **Guardians:** the Safe's SocialRecoveryModule has `guardiansCount >= 2` AND `threshold >= 2`, both read on
+  chain.
+
+Everything else stays rejected. That covers:
+
+- removing the Safe itself;
+- a detach sent through `execute`, inside a batch, or from a counterfactual Safe;
+- any other `isAdmin` value;
+- a non-admin Safe;
+- fewer than 2 guardians, or threshold 1.
+
+Tests: `sponsor-policy-detach.test.ts` (15). Fork proof: `contracts/passkey-accounts/test/PasskeyDetach.t.sol`
+(4 tests). It shows that `getAllAdmins() == [Safe]` afterwards, the Safe still executes, the EOA cannot, and the
+legacy ERC-1271 path is dead. It also shows that the chain itself would let the EOA remove the Safe, which is why
+the server refuses that shape. Measured on the fork (FCL fallback): the detach userOp costs about 425k gas.
+
+## 9. XMTP on passkey sessions, detach flow (app, 2026-09-27)
+
+**XMTP: "Nachrichten auf Passkey übertragen"** (`lib/xmtp/passkey-link.ts`, `client.ts` `linkPasskeySafeToInbox`):
+
+- **Linking.** `client.addAccount(safeSigner, false)` (`@xmtp/react-native-sdk` 5.7.0):
+  - The legacy account's existing installation on this device signs as the existing member. The Safe signs as an
+    SCW on chain 100 with its own ERC-1271 signature (never the envelope).
+  - `allowReassignInboxId = false`, so a Safe that belongs to another inbox is never moved.
+  - The result is verified with `inboxState(true).identities`.
+- **Where it works.** From a thirdweb session, or from a passkey session on a device that has the local XMTP db
+  (`Client.build`, no signature). XMTP verifies SCW signatures on Gnosis already: every legacy identity has been
+  registered on chain 100 since 2026-07-27.
+- **Boot on a legacy passkey session:**
+  - Not linked (device marker, or the Safe and the legacy account resolve to different inbox ids) → XMTP stays off.
+    `XmtpContext.passkeyLinkNeeded` makes the inbox show a hint that links to Settings. The Supabase rail keeps
+    working.
+  - Linked → `Client.build(legacy)`, or `Client.create(Safe signer)` for a new installation.
+  - A passkey session never registers silently at app start (that would be a fingerprint prompt). It also never
+    uses the thirdweb "deploy by self-transfer".
+- **Unchanged:** the thirdweb path, the kill switch and the fallback rail.
+
+**"thirdweb trennen"** (`app/settings/passkey-detach.tsx`, `lib/passkey/detach.ts`, preview-gated):
+
+- **Live checklist:**
+  1. Passkey sync, as an explicit confirmation.
+  2. At least 2 guardians AND threshold at least 2.
+  3. XMTP linked, or "Ich nutze keine Direktnachrichten".
+  4. A sponsored passkey op in this session. The test action is `SRM.changeThreshold(current)`, a no-op.
+  5. The key backup covers every key on this device.
+- **When all are green:** the plain-German explanation, typing `TRENNEN`, then a fingerprint.
+- **Mechanics (`runDetach`):**
+  - If `getAllAdmins()` shows an admin other than the EOA and the Safe, the flow lists it and stops before signing.
+  - Guardians are checked again.
+  - The thirdweb admin EOA (`wallet.getAdminAccount()`) signs `isAdmin: 2` for itself. This step needs an active
+    Google/E-Mail session.
+  - The Safe submits the op, and the result is verified on chain.
+  - Only then does the app save and activate the passkey session and disconnect the inApp wallet on this device.
+
+### 9a. Needs a device test
+
+1. **Key backup:** "Schlüssel sichern" on Max's Pixel.
+   - It should upload the existing migration blobs with at most 2 fingerprints.
+   - Then sign in with the passkey on a second device with no local keys. Voting must restore the MACI key from the
+     backup (one fingerprint) with the same `stateIndex`, with no new signUp.
+2. **Passkey-only voting:** a passkey-only account votes.
+   - The random key is backed up and `signUp` is sponsored.
+   - `publishMessage` passes the sponsor with `pollId`.
+3. **XMTP link:** "Nachrichten auf Passkey übertragen" on Max's Pixel.
+   - The addAccount signature prompt must appear, and the Safe must be listed in `inboxState`.
+   - Afterwards, on a passkey session: send and receive DMs, check history and Münzen payments.
+   - On a fresh install, `Client.create(Safe signer)` must join the same inbox (same inboxId), and peers must still
+     reach the legacy address.
+4. **XMTP hint:** a legacy passkey session that is not linked shows the hint and Supabase DMs still work.
+5. **Detach, on the test world first (burner CitizenNFTv2 on Gnosis), never Max's live account first:**
+   - The checklist reads live.
+   - The test action passes the sponsor.
+   - After `TRENNEN`, `getAllAdmins() == [Safe]` and the app is on the passkey session.
+   - A Google login afterwards yields an account without control.
