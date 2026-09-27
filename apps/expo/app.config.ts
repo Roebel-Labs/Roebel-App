@@ -20,7 +20,12 @@ const config: ExpoConfig = {
   //
   // 3.7.0 = first SDK 56 runtime (RN 0.85, expo-observe 56 API). JS from the
   // SDK 56 tree must never be published to runtime 3.6.0 — same fence again.
-  version: '3.7.0',
+  //
+  // 3.8.0 = first binary with the Stripe native SDK (in-app Connect onboarding) and
+  // the passkey entitlements (webcredentials:id.ortis.app, ortis:// scheme). The JS
+  // guards both (lib/stripe-native.ts, passkey preview gate), but 3.7.0 is already
+  // released in the stores, so a new version is required anyway.
+  version: '3.8.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
@@ -182,8 +187,8 @@ const config: ExpoConfig = {
     // app.json, which this file overrides, so it re-incremented from the same
     // stale base on every run — v3.4.0 and v3.5.0 each shipped two production
     // builds sharing one number, and App Store Connect rejects duplicates.
-    // Last submitted: 32 (v3.5.0).
-    buildNumber: '34',
+    // Last submitted: 34 (v3.7.0).
+    buildNumber: '35',
     supportsTablet: true,
     associatedDomains: [
       'webcredentials:thirdweb.com',
@@ -204,7 +209,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.maxbrych.roebelonchain',
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './keys/google-services.json',
-    versionCode: 39,
+    versionCode: 40,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#00498B'
