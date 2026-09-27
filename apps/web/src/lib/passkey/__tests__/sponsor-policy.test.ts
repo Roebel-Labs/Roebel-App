@@ -28,6 +28,7 @@ import {
 } from "../sponsor-policy";
 import { FALLBACK_HANDLER_SLOT, PASSKEY_SAFE, WEBAUTHN_VERIFIERS, safeFactoryData } from "../safe-address";
 import { packUint128Pair } from "../voucher";
+import { HUB, PERSONAL_MINT } from "./policy-helpers";
 import {
   BAD_SIG,
   EOA,
@@ -164,8 +165,8 @@ async function rejected(o: SponsorUserOp, re?: RegExp, chain: ChainReader = fake
 // ---- happy paths ----
 
 test("deployed passkey Safe (admin of its legacy account) may execute through it", async () => {
-  await ok(op(outer(LEGACY, execLegacy(RECIPIENT, 1n, "0x"))));
-  await ok(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"), 0, 0n, "executeUserOpWithErrorString")));
+  await ok(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))));
+  await ok(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT), 0, 0n, "executeUserOpWithErrorString")));
   await ok(
     op(
       outer(
@@ -173,7 +174,7 @@ test("deployed passkey Safe (admin of its legacy account) may execute through it
         encodeFunctionData({
           abi: account,
           functionName: "executeBatch",
-          args: [[RECIPIENT, RECIPIENT], [0n, 1n], ["0x", "0x1234"]],
+          args: [[HUB, HUB], [0n, 0n], [PERSONAL_MINT, PERSONAL_MINT]],
         }),
       ),
     ),
@@ -194,7 +195,7 @@ test("deploy + handover + guardian setup + execute in one batch", async () => {
       viaMultiSend([
         { to: LEGACY, data: permReq(1) },
         { to: ADDRESSES.socialRecoveryModule, data: srmCall.add() },
-        { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
       ]),
     ),
     undeployed(),
@@ -219,9 +220,9 @@ test("a recovered Safe (owner = SafeWebAuthnSignerFactory signer for the new key
     w.codes.set(RECOVERED_SIGNER.toLowerCase(), "0x60806040");
     w.webauthnSigners.set(`${BigInt(newKey.x)}:${BigInt(newKey.y)}:${WEBAUTHN_VERIFIERS}`, RECOVERED_SIGNER);
   });
-  await ok(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), chain, { ...CTX, ...newKey });
+  await ok(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), chain, { ...CTX, ...newKey });
   // ...but not with some other key.
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /owner/, chain);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /owner/, chain);
 });
 
 // ---- reviewer attack cases ----
@@ -241,7 +242,7 @@ test("attack B: multiSend of a handover with a garbage signature + execute", asy
     op(
       viaMultiSend([
         { to: LEGACY, data: permReq(1, SAFE, BAD_SIG) },
-        { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
       ]),
     ),
     /handover signature/,
@@ -297,7 +298,7 @@ test("attack: deploy op with a foreign initializer / salt / singleton / factory"
 });
 
 test("attack: a deployed sender that is not a passkey Safe", async () => {
-  const c = outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"));
+  const c = outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT));
   const variants: Array<[string, (w: FakeChain["world"]) => void, RegExp]> = [
     ["no code", (w) => w.codes.delete(SAFE.toLowerCase()), /not a passkey Safe/],
     ["other code", (w) => w.codes.set(SAFE.toLowerCase(), "0x6080604052"), /not a passkey Safe/],
@@ -318,7 +319,7 @@ test("attack: a deployed sender that is not a passkey Safe", async () => {
 
 test("attack: a non-citizen legacy account", async () => {
   const chain = fakeChain((w) => w.citizens.delete(LEGACY.toLowerCase()));
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /CitizenNFT/, chain);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /CitizenNFT/, chain);
   await rejected(deployOp(outer(LEGACY, permReq(1))), /CitizenNFT/, fakeChain((w) => {
     w.citizens.delete(LEGACY.toLowerCase());
     w.codes.delete(SAFE.toLowerCase());
@@ -329,26 +330,26 @@ test("attack: the legacy account in the request is not a thirdweb account", asyn
   const chain = fakeChain((w) => {
     w.codes.set(LEGACY.toLowerCase(), "0x6080604052");
   });
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /legacy thirdweb account/, chain);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /legacy thirdweb account/, chain);
 });
 
 test("attack: maxFeePerGas 50 gwei", async () => {
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x")), { maxFeePerGas: 50_000_000_000n }), /maxFeePerGas/);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT)), { maxFeePerGas: 50_000_000_000n }), /maxFeePerGas/);
 });
 
 test("attack: a second legacy account in a batch (or any target other than the request's legacy)", async () => {
   await rejected(
     op(
       viaMultiSend([
-        { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
-        { to: OTHER_LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
+        { to: OTHER_LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
       ]),
     ),
     /request's legacy account/,
   );
-  await rejected(op(outer(OTHER_LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /request's legacy account/);
+  await rejected(op(outer(OTHER_LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /request's legacy account/);
   await rejected(op(outer(OTHER_LEGACY, permReq(1))), /request's legacy account/);
-  await rejected(op(outer(RECIPIENT, execLegacy(RECIPIENT, 0n, "0x"))), /request's legacy account/);
+  await rejected(op(outer(RECIPIENT, execLegacy(HUB, 0n, PERSONAL_MINT))), /request's legacy account/);
 });
 
 // ---- structural rules kept from tranche 1 ----
@@ -399,12 +400,12 @@ test("rejects SRM selectors on a foreign address and non-guardian SRM functions"
   await rejected(
     op(outer(ADDRESSES.socialRecoveryModule, encodeFunctionData({ abi: srm, functionName: "finalizeRecovery", args: [SAFE] }))),
   );
-  await rejected(op(execLegacy(RECIPIENT, 0n, "0x")));
+  await rejected(op(execLegacy(HUB, 0n, PERSONAL_MINT)));
   await rejected(op("0x"));
 });
 
 test("rejects gas over each cap and priority above maxFee", async () => {
-  const c = outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"));
+  const c = outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT));
   await rejected(op(c, { callGasLimit: CAPS.callGasLimit + 1n }), /callGasLimit/);
   await rejected(op(c, { verificationGasLimit: CAPS.verificationGasLimit + 1n }), /verificationGasLimit/);
   await rejected(op(c, { preVerificationGas: CAPS.preVerificationGas + 1n }), /preVerificationGas/);
@@ -428,7 +429,7 @@ test("execute before the handover in the same batch needs the sender to already 
   await rejected(
     op(
       viaMultiSend([
-        { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
         { to: LEGACY, data: permReq(1) },
       ]),
     ),
@@ -439,7 +440,7 @@ test("execute before the handover in the same batch needs the sender to already 
     op(
       viaMultiSend([
         { to: LEGACY, data: permReq(1) },
-        { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") },
+        { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) },
       ]),
     ),
     fakeChain((w) => w.admins.delete(`${LEGACY}:${SAFE}`.toLowerCase())),
@@ -449,15 +450,15 @@ test("execute before the handover in the same batch needs the sender to already 
 // ---- fail closed / no reads before structure ----
 
 test("chain read failure fails closed with ChainReadError (never ok)", async () => {
-  await assert.rejects(evaluateSponsorPolicy(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), CTX, brokenChain()), ChainReadError);
+  await assert.rejects(evaluateSponsorPolicy(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), CTX, brokenChain()), ChainReadError);
   await assert.rejects(evaluateSponsorPolicy(deployOp(outer(LEGACY, permReq(1))), CTX, brokenChain()), ChainReadError);
 });
 
 test("structural rejections do not touch the chain", async () => {
   const chain = fakeChain();
   await rejected(op(outer(LEGACY, permReq(2))), /isAdmin/, chain);
-  await rejected(op(outer(OTHER_LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /legacy/, chain);
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x")), { maxFeePerGas: 50_000_000_000n }), /maxFeePerGas/, chain);
+  await rejected(op(outer(OTHER_LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /legacy/, chain);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT)), { maxFeePerGas: 50_000_000_000n }), /maxFeePerGas/, chain);
   await rejected(deployOp(outer(LEGACY, permReq(1)), { factoryData: "0x1234" }), /factoryData/, chain);
   assert.deepEqual(chain.reads, []);
 });
@@ -485,7 +486,7 @@ test("parseSponsorUserOp reads hex numerics and rejects malformed input", () => 
 });
 
 test("parseSponsorRequest requires 32-byte x, y; legacy / recoveryLegacy are optional addresses", () => {
-  const userOp = { ...toRpc(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x")))) };
+  const userOp = { ...toRpc(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT)))) };
   const good = parseSponsorRequest({ chainId: 100, userOp, x: KEY.x, y: KEY.y, legacy: LEGACY });
   assert.equal(good.chainId, 100);
   assert.equal(good.x, KEY.x);

@@ -113,3 +113,7 @@ export function op(callData: Hex, over: Partial<SponsorUserOp> = {}): SponsorUse
 /** First op of the passkey Safe for `key` (factory + factoryData). */
 export const deployOp = (key: PasskeyPublicKey, sender: Hex, callData: Hex, over: Partial<SponsorUserOp> = {}) =>
   op(callData, { sender, factory: PASSKEY_SAFE.proxyFactory, factoryData: safeFactoryData(key), ...over });
+
+/** An everyday allowlisted action (Circles Hub personalMint), for tests that need "some legacy.execute". */
+export const HUB = "0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8" as Hex;
+export const PERSONAL_MINT = "0x0d873a79" as Hex;

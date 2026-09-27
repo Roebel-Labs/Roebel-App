@@ -9,7 +9,8 @@
  *   - a handover signature is valid iff it equals GOOD_SIG (anything else
  *     makes verifySignerPermissionRequest revert, like ECDSA.recover does);
  *   - v3 CitizenNFT / AttesterNFT live at V3_CITIZEN / V3_ATTESTER with no holders;
- *   - no guardians, no recovery requests, AccountFactory.getAddress knows no admins.
+ *   - no guardians, no recovery requests, AccountFactory.getAddress knows no admins;
+ *   - MACI.polls(id) knows no polls (zero address).
  */
 import { getAddress, zeroAddress, type Hex } from "viem";
 import vector from "./passkey-safe-vector.json";
@@ -53,6 +54,8 @@ export interface FakeWorld {
   /** SRM guardians per lowercased wallet. */
   guardians: Map<string, Set<string>>;
   recoveryRequests: Map<string, { executeAfter: bigint; newThreshold: bigint; newOwners: Hex[] }>;
+  /** MACI.polls(pollId) by decimal poll id. */
+  polls: Map<string, Hex>;
 }
 
 export function makePasskeySafe(w: FakeWorld, safe: Hex, key = KEY) {
@@ -84,6 +87,7 @@ export function defaultWorld(): FakeWorld {
     legacyAddresses: new Map(),
     guardians: new Map(),
     recoveryRequests: new Map(),
+    polls: new Map(),
   };
   makePasskeySafe(w, SAFE);
   return w;
@@ -150,6 +154,10 @@ export function fakeChain(mutate?: (w: FakeWorld) => void): FakeChain {
       reads.push("getRecoveryRequest");
       return w.recoveryRequests.get(wallet.toLowerCase()) ?? { executeAfter: 0n, newThreshold: 0n, newOwners: [] };
     },
+    async maciPoll(pollId) {
+      reads.push("maciPoll");
+      return w.polls.get(pollId.toString()) ?? zeroAddress;
+    },
     async verifySignerPermissionRequest(account, req, signature) {
       reads.push("verifySignerPermissionRequest");
       if (signature.toLowerCase() !== GOOD_SIG) return null; // ECDSA.recover reverts
@@ -175,6 +183,7 @@ export function brokenChain(): ChainReader {
     guardiansCount: fail,
     isGuardian: fail,
     getRecoveryRequest: fail,
+    maciPoll: fail,
     verifySignerPermissionRequest: fail,
   };
 }

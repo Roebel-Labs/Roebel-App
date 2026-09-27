@@ -44,7 +44,7 @@ const POST = (r: Request) => handleSponsorRequest(r, { chain, budget });
 const executeCall = encodeFunctionData({
   abi: safe4337,
   functionName: "executeUserOp",
-  args: [LEGACY, 0n, encodeFunctionData({ abi: account, functionName: "execute", args: [LEGACY, 1n, "0x"] }), 0],
+  args: [LEGACY, 0n, encodeFunctionData({ abi: account, functionName: "execute", args: ["0xc12C1E50ABB450d6205Ea2C3Fa861b3B834d13e8", 0n, "0x0d873a79"] }), 0],
 });
 
 function handoverCall(): Hex {

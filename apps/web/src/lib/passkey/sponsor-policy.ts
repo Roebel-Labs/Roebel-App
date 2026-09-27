@@ -18,6 +18,15 @@
  *     verified handover earlier in the batch. Budget key = legacy.
  *  B. identity = the sender Safe itself (no `legacy`, citizen(sender), e.g.
  *     after a v3 `moveTo`). Only Candide guardian management. Budget key = sender.
+ *  D. everyday (see everyday-allowlist.ts): the op is ONLY allowlisted Röbel
+ *     citizen actions (value 0). Identity = `legacy` (calls wrapped in
+ *     legacy.execute / executeBatch, the sender an admin, legacy a citizen) or
+ *     the sender Safe itself (direct calls; a citizen, or a NON-citizen Safe
+ *     whose calls are all onboarding-tier = CitizenNFTv2.createAttestationRequest,
+ *     result tier "onboarding" -> tighter budget). A Poll.publishMessage target
+ *     must equal MACI.polls(ctx.pollId). Budget key = the identity. Everyday
+ *     calls may also ride along with mode A / B shapes (the mode then stays
+ *     "legacy" / "safe").
  *  C. recovery (no `legacy`): the op helps recover `wallet`, a citizen identity
  *     (citizen(wallet), or `recoveryLegacy` is a citizen thirdweb account with
  *     isAdmin(recoveryLegacy, wallet)) that has at least one guardian.
@@ -43,7 +52,10 @@
  *     for a legacy deployed in this batch, ECDSA-recovered == the createAccount
  *     admin, low-s); legacy.execute/executeBatch (inner permission changes
  *     must be add-sender; an inner `moveTo(newAccount)` only to the configured
- *     CitizenNFTv3 / AttesterNFTv3 with newAccount == sender and value 0);
+ *     CitizenNFTv3 / AttesterNFTv3 with newAccount == sender and value 0; an
+ *     inner SRM.confirmRecovery with value 0 (a legacy account as guardian);
+ *     every OTHER inner call must be an everyday allowlisted action - since
+ *     2026-09-27 legacy.execute no longer sponsors arbitrary calls);
  *     AccountFactory.createAccount(admin, 0x) as call #0; SRM guardian
  *     management (addGuardianWithThreshold, revokeGuardianWithThreshold,
  *     changeThreshold, cancelRecovery) and confirmRecovery.
@@ -97,6 +109,7 @@ import {
   safeFactoryData,
 } from "./safe-address";
 import { packUint128Pair, type UserOperationV07 } from "./voucher";
+import { classifyEverydayCall, type EverydayTier, type EverydayVerdict } from "./everyday-allowlist";
 
 export const ADDRESSES = {
   safe4337Module: PASSKEY_SAFE.safe4337Module,
@@ -163,11 +176,13 @@ export interface SponsorContext {
   /** Unix seconds, for the handover validity window and the recovery delay. */
   nowSeconds: number;
   v3?: V3Config;
+  /** Everyday mode: the MACI poll id whose Poll the op votes in (MACI.polls(pollId) must equal the target). */
+  pollId?: bigint;
 }
 
-export type SponsorMode = "legacy" | "safe" | "recovery";
+export type SponsorMode = "legacy" | "safe" | "recovery" | "everyday";
 export type PolicyResult =
-  | { ok: true; mode: SponsorMode; budgetKey: Hex }
+  | { ok: true; mode: SponsorMode; budgetKey: Hex; /** everyday mode only; "onboarding" = non-citizen Safe, tighter budget */ tier?: EverydayTier }
   | { ok: false; reason: string };
 
 export interface SignerPermissionRequest {
@@ -202,6 +217,8 @@ export interface ChainReader {
   guardiansCount(wallet: Hex): Promise<bigint>;
   /** SocialRecoveryModule.isGuardian(wallet, guardian). */
   isGuardian(wallet: Hex, guardian: Hex): Promise<boolean>;
+  /** MACI.polls(pollId) on the Röbel MACI core (zero address when unknown). */
+  maciPoll(pollId: bigint): Promise<Hex>;
   /** SocialRecoveryModule.getRecoveryRequest(wallet). */
   getRecoveryRequest(wallet: Hex): Promise<{ executeAfter: bigint; newThreshold: bigint; newOwners: readonly Hex[] }>;
   /** legacy.verifySignerPermissionRequest(req, sig); null when the CALL REVERTS (e.g. a malformed
@@ -305,6 +322,16 @@ interface ScanState {
   ownerBound: boolean;
   /** finalizeRecovery present. */
   finalize: boolean;
+  /** Any everyday allowlisted action present. */
+  everyday: boolean;
+  /** Everyday actions called directly by the Safe (identity = the Safe). */
+  directEveryday: boolean;
+  /** Every everyday action so far is onboarding-tier. */
+  onboardingOnly: boolean;
+  /** Any mode A / B shape present (handover, createAccount, moveTo, SRM). */
+  migration: boolean;
+  /** Poll.publishMessage targets (verified against MACI.polls(ctx.pollId)). */
+  polls: Hex[];
 }
 
 function checkPermissionRequest(req: { signer: Hex; isAdmin: number }, sender: Hex): Check {
@@ -317,22 +344,47 @@ const isV3Target = (to: Hex, v3: V3Config) =>
   (v3.citizenNft !== undefined && isAddressEqual(to, v3.citizenNft)) ||
   (v3.attesterNft !== undefined && isAddressEqual(to, v3.attesterNft));
 
-/** Nested call the legacy account makes via execute/executeBatch: anything goes
- * (the sender is an admin of that account) EXCEPT a signer permission change
- * that is not "add the sender as admin", and a v3 `moveTo` that does not move
- * the identity to the sender itself on a configured v3 contract. */
-function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanState): Check {
-  if (size(data) < 4) return PASS;
-  const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
-  if (perm?.functionName === "setPermissionsForSigner") return checkPermissionRequest(perm.args[0], st.sender);
-  const move = tryDecode(() => decodeFunctionData({ abi: v3Abi, data }));
-  if (move) {
-    if (!st.v3.citizenNft && !st.v3.attesterNft) return deny("v3 moveTo is not enabled (PASSKEY_*_NFT_V3 unset)");
-    if (!isV3Target(target, st.v3)) return deny("moveTo target is not the configured CitizenNFTv3 / AttesterNFTv3");
-    if (!isAddressEqual(move.args[0], st.sender)) return deny("moveTo must move the identity to the sender Safe");
-    if (value !== 0n) return deny("moveTo value must be 0");
-  }
+/** Records an everyday verdict in the scan state. */
+function recordEveryday(v: EverydayVerdict, st: ScanState): Check {
+  if (!v.ok) return v;
+  st.everyday = true;
+  st.identityOnly = true;
+  if (v.tier !== "onboarding") st.onboardingOnly = false;
+  if (v.poll) st.polls.push(v.poll);
   return PASS;
+}
+
+/** Nested call the legacy account makes via execute/executeBatch. Allowed:
+ * a signer permission change that is "add the sender as admin"; a v3 `moveTo`
+ * that moves the identity to the sender itself on a configured v3 contract;
+ * SRM.confirmRecovery (the legacy account is a guardian); an everyday
+ * allowlisted action (everyday-allowlist.ts). Everything else is refused. */
+function checkLegacyInnerCall(target: Hex, value: bigint, data: Hex, st: ScanState): Check {
+  if (size(data) >= 4) {
+    const perm = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
+    if (perm?.functionName === "setPermissionsForSigner") {
+      st.migration = true;
+      return checkPermissionRequest(perm.args[0], st.sender);
+    }
+    const move = tryDecode(() => decodeFunctionData({ abi: v3Abi, data }));
+    if (move) {
+      if (!st.v3.citizenNft && !st.v3.attesterNft) return deny("v3 moveTo is not enabled (PASSKEY_*_NFT_V3 unset)");
+      if (!isV3Target(target, st.v3)) return deny("moveTo target is not the configured CitizenNFTv3 / AttesterNFTv3");
+      if (!isAddressEqual(move.args[0], st.sender)) return deny("moveTo must move the identity to the sender Safe");
+      if (value !== 0n) return deny("moveTo value must be 0");
+      st.migration = true;
+      return PASS;
+    }
+    if (isAddressEqual(target, ADDRESSES.socialRecoveryModule)) {
+      const d = tryDecode(() => decodeFunctionData({ abi: srmAbi, data }));
+      if (d?.functionName !== "confirmRecovery") return deny("only confirmRecovery may be sent to the SRM through legacy.execute");
+      if (value !== 0n) return deny("confirmRecovery value must be 0");
+      st.migration = true;
+      return PASS;
+    }
+  }
+  // st.legacy is set: thirdweb-account calls are only accepted for the request's legacy.
+  return recordEveryday(classifyEverydayCall(target, value, data, st.legacy as Hex), st);
 }
 
 function checkRecoveryOwners(newOwners: readonly Hex[], threshold: bigint): Check {
@@ -343,6 +395,7 @@ function checkRecoveryOwners(newOwners: readonly Hex[], threshold: bigint): Chec
 function checkSrmCall(data: Hex, st: ScanState): Check {
   const d = tryDecode(() => decodeFunctionData({ abi: srmAbi, data }));
   if (!d) return deny("SocialRecoveryModule function not allowlisted");
+  st.migration = true;
   switch (d.functionName) {
     case "addGuardianWithThreshold":
     case "revokeGuardianWithThreshold":
@@ -413,17 +466,26 @@ function checkAllowedCall(to: Hex, data: Hex, st: ScanState): Check {
     if (d.args[1] !== "0x") return deny("createAccount data must be empty");
     st.createAccountAdmin = d.args[0];
     st.identityOnly = true;
+    st.migration = true;
     return PASS;
   }
 
   const d = tryDecode(() => decodeFunctionData({ abi: legacyAccountAbi, data }));
-  if (!d) return deny("call target/selector not allowlisted");
+  if (!d) {
+    // Everyday action called by the Safe itself: identity = the Safe.
+    const v = classifyEverydayCall(to, 0n, data, st.sender);
+    if (!v.ok) return v;
+    if (st.legacy) return deny("with a legacy identity, citizen actions must go through legacy.execute");
+    st.directEveryday = true;
+    return recordEveryday(v, st);
+  }
   if (!st.legacy || !isAddressEqual(to, st.legacy)) {
     return deny("thirdweb account call must target the request's legacy account");
   }
   st.identityOnly = true;
 
   if (d.functionName === "setPermissionsForSigner") {
+    st.migration = true;
     const [req, signature] = d.args;
     const r = checkPermissionRequest(req, st.sender);
     if (!r.ok) return r;
@@ -664,7 +726,42 @@ async function evaluateLegacyMode(
     const isAdmin = await read(() => chain.isAdmin(legacy, op.sender));
     if (isAdmin !== true) return deny(`sender is not an admin of ${legacy}`);
   }
+  const polls = await checkPolls(st, ctx, chain);
+  if (!polls.ok) return polls;
+  if (st.everyday && !st.migration) return { ok: true, mode: "everyday", budgetKey: legacy, tier: "citizen" };
   return { ok: true, mode: "legacy", budgetKey: legacy };
+}
+
+/** Every Poll.publishMessage target is MACI.polls(ctx.pollId). */
+async function checkPolls(st: ScanState, ctx: SponsorContext, chain: ChainReader): Promise<Check> {
+  if (st.polls.length === 0) return PASS;
+  const pollId = ctx.pollId;
+  if (pollId === undefined) return deny("a Poll vote needs the request's pollId");
+  const poll = await read(() => chain.maciPoll(pollId));
+  if (st.polls.some((p) => !isAddressEqual(p, poll))) return deny("vote target is not the MACI poll for pollId");
+  return PASS;
+}
+
+/** Everyday actions called directly by the sender Safe (identity = the Safe). */
+async function evaluateSafeEveryday(
+  op: SponsorUserOp,
+  ctx: SponsorContext,
+  st: ScanState,
+  chain: ChainReader,
+): Promise<PolicyResult> {
+  const sender = await checkSender(op, ctx, chain);
+  if (!sender.ok) return sender;
+  const citizen = await isCitizen(op.sender, ctx.v3 ?? {}, chain);
+  if (!citizen) {
+    if (st.migration || !st.onboardingOnly) {
+      return deny("this action requires a citizen identity (the sender Safe holds no CitizenNFT)");
+    }
+    return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "onboarding" };
+  }
+  const polls = await checkPolls(st, ctx, chain);
+  if (!polls.ok) return polls;
+  if (st.migration) return { ok: true, mode: "safe", budgetKey: op.sender };
+  return { ok: true, mode: "everyday", budgetKey: op.sender, tier: "citizen" };
 }
 
 /** Mode C: help recover `wallet`, a citizen identity with guardians. */
@@ -775,6 +872,11 @@ export async function evaluateSponsorPolicy(
     confirms: false,
     ownerBound: false,
     finalize: false,
+    everyday: false,
+    directEveryday: false,
+    onboardingOnly: true,
+    migration: false,
+    polls: [],
   };
   const structural = checkCallData(op.callData, st);
   if (!structural.ok) return structural;
@@ -786,6 +888,7 @@ export async function evaluateSponsorPolicy(
     return evaluateRecoveryMode(op, ctx, st, chain);
   }
   if (ctx.legacy) return evaluateLegacyMode(op, ctx, ctx.legacy, st, chain);
+  if (st.directEveryday) return evaluateSafeEveryday(op, ctx, st, chain);
 
   // No legacy: identity = the sender Safe itself (mode B), or - for an op that
   // is only confirmRecovery calls - a guardian helping a citizen (mode C).
@@ -862,7 +965,7 @@ function word32(obj: Record<string, unknown>, key: string): Hex {
   return v as Hex;
 }
 
-/** The full request body: { chainId, userOp, x, y, legacy?, recoveryLegacy? }. Throws on malformed input. */
+/** The full request body: { chainId, userOp, x, y, legacy?, recoveryLegacy?, pollId? }. Throws on malformed input. */
 export function parseSponsorRequest(input: unknown): {
   chainId: unknown;
   userOp: SponsorUserOp;
@@ -870,6 +973,7 @@ export function parseSponsorRequest(input: unknown): {
   y: Hex;
   legacy?: Hex;
   recoveryLegacy?: Hex;
+  pollId?: bigint;
 } {
   if (!input || typeof input !== "object") throw new Error("body must be an object");
   const o = input as Record<string, unknown>;
@@ -880,6 +984,7 @@ export function parseSponsorRequest(input: unknown): {
     y: word32(o, "y"),
     legacy: optionalAddress(o, "legacy"),
     recoveryLegacy: optionalAddress(o, "recoveryLegacy"),
+    pollId: o.pollId === undefined || o.pollId === null ? undefined : quantity(o, "pollId", (1n << 256n) - 1n),
   };
 }
 

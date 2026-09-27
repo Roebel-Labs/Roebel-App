@@ -9,6 +9,7 @@ import {
 import { gnosis } from "viem/chains";
 import { PASSKEY_SAFE } from "./safe-address";
 import { ADDRESSES, type ChainReader, type SignerPermissionRequest } from "./sponsor-policy";
+import { EVERYDAY_CONTRACTS } from "./everyday-allowlist";
 
 const DEFAULT_GNOSIS_RPC = "https://gnosis-rpc.publicnode.com";
 const RPC_TIMEOUT_MS = 8_000;
@@ -30,6 +31,7 @@ const signerFactoryAbi = parseAbi([
   "function getSigner(uint256 x, uint256 y, uint176 verifiers) view returns (address signer)",
 ]);
 const citizenNftAbi = parseAbi(["function hasCitizenNFT(address account) view returns (bool)"]);
+const maciAbi = parseAbi(["function polls(uint256 pollId) view returns (address)"]);
 const accountFactoryAbi = parseAbi(["function getAddress(address adminSigner, bytes data) view returns (address)"]);
 const srmAbi = parseAbi([
   "struct RecoveryRequest { uint256 guardiansApprovalCount; uint256 newThreshold; uint64 executeAfter; address[] newOwners; }",
@@ -90,6 +92,8 @@ export function createGnosisChainReader(rpcUrl = process.env.GNOSIS_RPC_URL || D
         functionName: "isGuardian",
         args: [wallet, guardian],
       }),
+    maciPoll: (pollId) =>
+      client.readContract({ address: EVERYDAY_CONTRACTS.maci, abi: maciAbi, functionName: "polls", args: [pollId] }),
     async getRecoveryRequest(wallet) {
       const r = await client.readContract({
         address: ADDRESSES.socialRecoveryModule,

@@ -40,6 +40,9 @@ export const DEFAULT_PER_KEY_DAILY_WEI = 10n ** 16n;
 /** 0.05 xDAI across all accounts per UTC day. */
 export const DEFAULT_GLOBAL_DAILY_WEI = 5n * 10n ** 16n;
 
+/** 0.002 xDAI per NON-citizen passkey Safe per UTC day (everyday mode, onboarding tier). */
+export const DEFAULT_ONBOARDING_DAILY_WEI = 2n * 10n ** 15n;
+
 const DAY_MS = 86_400_000;
 
 export class InMemorySponsorBudget implements SponsorBudget {
@@ -115,7 +118,7 @@ export class SupabaseSponsorBudget implements SponsorBudget {
   }
 }
 
-function weiFromEnv(v: string | undefined, fallback: bigint): bigint {
+export function weiFromEnv(v: string | undefined, fallback: bigint): bigint {
   if (!v || !/^[0-9]{1,40}$/.test(v)) return fallback;
   return BigInt(v);
 }

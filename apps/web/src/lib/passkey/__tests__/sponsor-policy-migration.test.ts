@@ -33,6 +33,8 @@ import {
 } from "./fake-chain";
 import {
   NOW,
+  HUB,
+  PERSONAL_MINT,
   createAccount,
   createSigner,
   deployOp,
@@ -260,7 +262,7 @@ test("attack: a fresh legacy with a foreign / high-s handover signature, or exec
   await rejected(op(viaMultiSend([first, { to: LEGACY, data: handover(otherUid) }])), /handover signature/, counterfactualLegacy(), CTX);
   // execute / SRM before any handover on a fresh account.
   await rejected(
-    op(viaMultiSend([first, { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") }, { to: LEGACY, data: handover(sig) }])),
+    op(viaMultiSend([first, { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) }, { to: LEGACY, data: handover(sig) }])),
     /handover before/,
     counterfactualLegacy(),
     CTX,
@@ -422,7 +424,7 @@ test("attack: recovery ops mixing wallets, identity calls, a legacy, or targetin
     NEW_CTX,
   );
   await rejected(
-    firstRecoveryOp([{ to: SRM, data: multiConfirm() }, { to: LEGACY, data: execLegacy(RECIPIENT, 0n, "0x") }]),
+    firstRecoveryOp([{ to: SRM, data: multiConfirm() }, { to: LEGACY, data: execLegacy(HUB, 0n, PERSONAL_MINT) }]),
     /legacy|mixed/,
     recoveryWorld(),
     { ...NEW_CTX, legacy: LEGACY },
@@ -470,7 +472,7 @@ test("attack: a family Safe trying anything other than confirmRecovery", async (
   const world = recoveryWorld();
   // Guardian management / legacy calls: it is no citizen and names no legacy.
   for (const c of guardianCalls) await rejected(op(outer(SRM, c)), /no CitizenNFT/, world, NO_LEGACY);
-  await rejected(op(outer(LEGACY, execLegacy(RECIPIENT, 0n, "0x"))), /legacy account/, world, NO_LEGACY);
+  await rejected(op(outer(LEGACY, execLegacy(HUB, 0n, PERSONAL_MINT))), /legacy account/, world, NO_LEGACY);
   // Driving the recovery to its own key or to someone else's: its key's signer is not the new owner.
   await rejected(op(outer(SRM, multiConfirm())), /submitter's own passkey signer/, world, NO_LEGACY);
   await rejected(op(outer(SRM, executeRecovery())), /submitter's own passkey signer/, world, NO_LEGACY);
