@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import NodeIrys from "@irys/sdk";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 
 // Hard cap per call to limit blast radius. The user can call repeatedly.
 // 0.005 ETH is enough to cover ~hundreds of small text uploads.
@@ -13,8 +14,15 @@ const MAX_FUND_ETH = 0.005;
  * Moves Base ETH from the server wallet (IRYS_UPLOAD_PRIVATE_KEY) onto
  * the Irys node so subsequent /api/irys/upload calls have credit. Caps
  * the per-call amount at MAX_FUND_ETH for safety.
+ *
+ * Admin only (2026-09-27): requires the signed admin-dashboard session cookie. Before, anyone
+ * could move the server wallet's ETH onto the Irys node.
  */
 export async function POST(request: NextRequest) {
+  const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  if (!session) {
+    return NextResponse.json({ error: "Nur für Admins (bitte im Admin-Dashboard anmelden)." }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const requestedAmount = Number(body?.amountEth);

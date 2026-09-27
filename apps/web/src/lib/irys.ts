@@ -6,6 +6,7 @@ import { ethers6Adapter } from "thirdweb/adapters/ethers6";
 import { client } from "@/app/client";
 import { activeChain } from "@/lib/chains";
 import type { Account } from "thirdweb/wallets";
+import { buildIrysUploadMessage } from "@/lib/irys/upload-message";
 
 /**
  * Custom provider wrapper for Irys that wraps thirdweb signer
@@ -110,6 +111,13 @@ export async function uploadToIrys(
     // Call server-side API for upload
     console.log("🌐 Calling /api/irys/upload...");
 
+    // The server wallet pays for the upload, so the route requires the uploader's signature
+    // over this exact content + tags (lib/irys/upload-message.ts).
+    const timestampSec = Math.floor(Date.now() / 1000);
+    const signature = await account.signMessage({
+      message: buildIrysUploadMessage(account.address, timestampSec, content, tags ?? []),
+    });
+
     const response = await fetch("/api/irys/upload", {
       method: "POST",
       headers: {
@@ -117,8 +125,9 @@ export async function uploadToIrys(
       },
       body: JSON.stringify({
         content,
-        tags,
+        tags: tags ?? [],
         userAddress: account.address,
+        auth: { timestampSec, signature },
       }),
     });
 
