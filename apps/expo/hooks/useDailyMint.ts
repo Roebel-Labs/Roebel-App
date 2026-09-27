@@ -19,9 +19,13 @@ export type DailyMintState = 'hidden' | 'idle' | 'claimable';
  * mint has accrued; `claim()` writes the same optimistic cooldown/streak the
  * Münzen page writes and hands the mint to the provider's settlement queue
  * (no full-screen overlay — the button animates instead).
+ *
+ * Passkey session (`passkey`): NO claim from here. A background settlement would pop two
+ * fingerprint prompts (plus retries) long after the tap. `claim()` refuses and the profile opens
+ * the Münzen page, whose one "Münzen abholen" button claims in the foreground as one batch.
  */
 export function useDailyMint(opts: { isCitizen: boolean }) {
-  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account } = useRoebelTaler();
+  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account, passkeyClaim } = useRoebelTaler();
   const address = account?.address ?? null;
 
   // Last claim per wallet, loaded from the same key the Münzen page writes.
@@ -73,6 +77,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
         : 'hidden';
 
   const claim = useCallback((): boolean => {
+    if (passkeyClaim) return false; // never a background claim under a passkey session
     if (!address || !claimable) return false;
     const ts = Date.now();
     const prevLastClaim = lastClaim;
@@ -107,7 +112,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
       },
     });
     return true;
-  }, [address, amount, claimable, dailyMint, enqueueSettlement, lastClaim]);
+  }, [address, amount, claimable, dailyMint, enqueueSettlement, lastClaim, passkeyClaim]);
 
-  return { state, amount, claim, cooldownEnd };
+  return { state, amount, claim, cooldownEnd, passkey: passkeyClaim };
 }

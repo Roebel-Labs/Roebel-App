@@ -112,9 +112,18 @@ export default function ProfileScreen() {
       <MuenzenButton
         state={mint.state}
         amount={mint.amount}
-        onClaim={mint.claim}
+        onClaim={
+          mint.passkey
+            ? () => {
+                // Passkey session: claim only on the Münzen page (one tap, one fingerprint).
+                router.push('/rewards' as any);
+                return false;
+              }
+            : mint.claim
+        }
         onOpen={() => router.push('/rewards' as any)}
         cooldownEnd={mint.cooldownEnd}
+        claimLabel={mint.passkey ? 'Münzen abholen' : undefined}
       />
     );
 

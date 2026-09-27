@@ -32,6 +32,8 @@ type Props = {
   onOpen: () => void;
   /** Set only while the hourly cooldown runs: the idle label alternates with a MM:SS clock. */
   cooldownEnd?: number | null;
+  /** Replaces the gold "+N Münzen" label (passkey session: "Münzen abholen" opens the Münzen page). */
+  claimLabel?: string;
 };
 
 const HEIGHT = 44;
@@ -55,7 +57,7 @@ const GOLD = {
  * pushes down on press; on release coins flip up out of it and it morphs into
  * the neutral "Münzen ›" pill that opens the Münzen page.
  */
-export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldownEnd = null }: Props) {
+export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldownEnd = null, claimLabel }: Props) {
   const { colors, isDark } = useTheme();
   const reducedMotion = useReducedMotion();
 
@@ -116,7 +118,7 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
 
   const handleBurstDone = useCallback(() => setBurstCount(0), []);
 
-  const label = isGold ? (amount === 1 ? '+1 Münze' : `+${amount} Münzen`) : 'Münzen';
+  const label = isGold ? (claimLabel ?? (amount === 1 ? '+1 Münze' : `+${amount} Münzen`)) : 'Münzen';
   const neutralBorder = isDark ? (['#4A4D52', '#2D2E31'] as const) : (['#E9E9E9', '#CFCFCF'] as const);
   const neutralFill = isDark ? ([colors.surfaceSecondary, colors.surface] as const) : (['#FFFFFF', '#F4F4F5'] as const);
   const neutralShadow = isDark ? '0px 2px 6px rgba(0,0,0,0.35)' : '0px 2px 6px rgba(0,0,0,0.10)';
@@ -132,7 +134,7 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
       onPressOut={handlePressOut}
       disabled={claiming}
       accessibilityRole="button"
-      accessibilityLabel={isGold ? `${label} abholen` : 'Münzen anzeigen'}
+      accessibilityLabel={isGold ? (claimLabel ?? `${label} abholen`) : 'Münzen anzeigen'}
       style={styles.root}
     >
       {/* Static shadow layer: the surface sinks onto it while it fades. */}

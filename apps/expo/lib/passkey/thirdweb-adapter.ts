@@ -13,7 +13,9 @@
  *   - identity = legacy: the Safe calls `legacy.execute(to, value, data)` (thirdweb Account,
  *     contract admins may call it directly) and the sponsor body names `legacy`;
  *   - identity = Safe: the Safe calls `to` directly.
- *   Batches become several calls in one op (MultiSendCallOnly), never mixed identities.
+ *   Batches are ONE op: identity = legacy → one `legacy.executeBatch(targets, values, datas)`
+ *   call (one fingerprint, one sponsor check); identity = Safe → several direct calls
+ *   (MultiSendCallOnly). Never mixed identities.
  *
  * signMessage / signTypedData — ERC-1271 by the Safe: WebAuthn challenge =
  * safeMessageHash(safe, hash) (fork-proven in contracts/passkey-accounts/test/GuardianErc1271.t.sol,
@@ -77,6 +79,17 @@ const legacyExecuteAbi = [
     ],
     outputs: [],
   },
+  {
+    type: 'function',
+    name: 'executeBatch',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: '_target', type: 'address[]' },
+      { name: '_value', type: 'uint256[]' },
+      { name: '_calldata', type: 'bytes[]' },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 /** A transaction as thirdweb hands it to `Account.sendTransaction` (the fields we use). */
@@ -87,8 +100,18 @@ export function encodeLegacyExecute(to: Address, value: bigint, data: Hex): Hex 
   return encodeFunctionData({ abi: legacyExecuteAbi, functionName: 'execute', args: [to, value, data] });
 }
 
+/** `legacy.executeBatch(targets, values, datas)` — a legacy identity's batch as ONE call (selector 0x47e1da2a). */
+export function encodeLegacyExecuteBatch(calls: readonly { to: Address; value: bigint; data: Hex }[]): Hex {
+  return encodeFunctionData({
+    abi: legacyExecuteAbi,
+    functionName: 'executeBatch',
+    args: [calls.map((c) => c.to), calls.map((c) => c.value), calls.map((c) => c.data)],
+  });
+}
+
 /**
  * The Safe's calls for thirdweb transactions, plus the sponsor's `legacy` hint.
+ * A legacy identity's batch (2+ txs) becomes ONE `legacy.executeBatch` call.
  * Throws a German error for another chain or a contract deployment (no `to`).
  */
 export function buildAdapterCalls(
@@ -97,15 +120,17 @@ export function buildAdapterCalls(
 ): { calls: SponsoredCall[]; legacy?: Address } {
   if (txs.length === 0) throw new Error('no transactions');
   const kind = identityKind(session);
-  const calls = txs.map((tx): SponsoredCall => {
+  const inner = txs.map((tx) => {
     if (tx.chainId !== undefined && tx.chainId !== PASSKEY_CHAIN_ID) throw new Error(WRONG_CHAIN_MESSAGE);
     if (!tx.to) throw new Error(NO_TARGET_MESSAGE);
-    const value = tx.value ?? 0n;
-    const data = (tx.data ?? '0x') as Hex;
-    if (kind === 'legacy') return { to: session.identity, data: encodeLegacyExecute(tx.to, value, data) };
-    return value > 0n ? { to: tx.to, data, value } : { to: tx.to, data };
+    return { to: tx.to, value: tx.value ?? 0n, data: (tx.data ?? '0x') as Hex };
   });
-  return kind === 'legacy' ? { calls, legacy: session.identity } : { calls };
+  if (kind === 'legacy') {
+    const data =
+      inner.length === 1 ? encodeLegacyExecute(inner[0].to, inner[0].value, inner[0].data) : encodeLegacyExecuteBatch(inner);
+    return { calls: [{ to: session.identity, data }], legacy: session.identity };
+  }
+  return { calls: inner.map(({ to, value, data }): SponsoredCall => (value > 0n ? { to, data, value } : { to, data })) };
 }
 
 // ---------------------------------------------------------------------------

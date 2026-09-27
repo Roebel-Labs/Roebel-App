@@ -20,6 +20,7 @@ import {
   createPasskeyAccount,
   decodeOnBehalfSignature,
   encodeLegacyExecute,
+  encodeLegacyExecuteBatch,
   signHashAsIdentity,
   WRONG_CHAIN_MESSAGE,
   type AdapterDeps,
@@ -44,6 +45,17 @@ const legacyExecuteAbi = [
       { name: '_target', type: 'address' },
       { name: '_value', type: 'uint256' },
       { name: '_calldata', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'executeBatch',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: '_target', type: 'address[]' },
+      { name: '_value', type: 'uint256[]' },
+      { name: '_calldata', type: 'bytes[]' },
     ],
     outputs: [],
   },
@@ -114,6 +126,29 @@ describe('sendTransaction / sendBatchTransaction', () => {
     expect(res).toEqual({ transactionHash: `0x${'bb'.repeat(32)}` });
     expect(sent[0]).toMatchObject({ credentialId: 'cred', x, y, legacy: LEGACY, deployed: true, sender: SAFE, owner: SAFE_WEBAUTHN_SHARED_SIGNER });
     expect(sent[0].calls[0].data).toBe(encodeLegacyExecute(TARGET, 0n, '0x0d873a79'));
+  });
+
+  it('a legacy identity sends a batch as ONE legacy.executeBatch call in ONE op', async () => {
+    const { d, sent } = deps();
+    const acc = createPasskeyAccount(session(LEGACY), d);
+    await acc.sendBatchTransaction([
+      { chainId: 100, to: TARGET, data: '0x0d873a79' },
+      { chainId: 100, to: TARGET, value: 0n, data: '0x6cb498e5' },
+    ]);
+    expect(d.sendUserOp).toHaveBeenCalledTimes(1);
+    expect(sent[0].legacy).toBe(LEGACY);
+    expect(sent[0].calls).toHaveLength(1);
+    expect(sent[0].calls[0].to).toBe(LEGACY);
+    expect(sent[0].calls[0].data.slice(0, 10)).toBe('0x47e1da2a');
+    const dec = decodeFunctionData({ abi: legacyExecuteAbi, data: sent[0].calls[0].data });
+    expect(dec.functionName).toBe('executeBatch');
+    expect(dec.args).toEqual([[TARGET, TARGET], [0n, 0n], ['0x0d873a79', '0x6cb498e5']]);
+    expect(sent[0].calls[0].data).toBe(
+      encodeLegacyExecuteBatch([
+        { to: TARGET, value: 0n, data: '0x0d873a79' },
+        { to: TARGET, value: 0n, data: '0x6cb498e5' },
+      ]),
+    );
   });
 
   it('a Safe identity sends the call itself, without a legacy hint; batches go in one op', async () => {

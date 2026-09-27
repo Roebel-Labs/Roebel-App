@@ -98,9 +98,18 @@ export default function RewardsIndexScreen() {
     minting: talerMinting,
     onboarding: talerOnboarding,
     dailyMint,
+    passkeyClaim,
+    claimNow,
     onboard,
     account: talerAccount,
   } = useRoebelTaler();
+  // Passkey session: success line "+X Röbel Münzen" shown in the button's place after a claim.
+  const [passkeyClaimed, setPasskeyClaimed] = useState<number | null>(null);
+  useEffect(() => {
+    if (passkeyClaimed == null) return;
+    const id = setTimeout(() => setPasskeyClaimed(null), 4000);
+    return () => clearTimeout(id);
+  }, [passkeyClaimed]);
   // Stadtkasse euro figure (same source as the old TreasuryCard).
   const [stadtkasseEuro, setStadtkasseEuro] = useState<number | null>(null);
   useEffect(() => {
@@ -187,9 +196,38 @@ export default function RewardsIndexScreen() {
     })();
   }, [talerAccount?.address]);
 
+  // Passkey session: ONE tap → ONE batch (personalMint + groupMint) → ONE fingerprint, awaited
+  // here in the foreground. No optimistic celebration, no background settlement, no retries —
+  // each retry would be another surprise prompt. The cooldown/streak only move on success.
+  const onPasskeyClaim = useCallback(async () => {
+    const addr = talerAccount?.address;
+    if (!addr) return;
+    setPasskeyClaimed(null);
+    try {
+      const received = await claimNow();
+      const ts = Date.now();
+      const nextStreak = computeNextStreak(rtStreak, lastClaim, ts);
+      setLastClaim(ts);
+      setNowTs(ts);
+      setRtStreak(nextStreak);
+      AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
+      AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: nextStreak, lastDay: dayStart(ts) })).catch(() => {});
+      setPasskeyClaimed(received);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+    } catch (e: any) {
+      Alert.alert('Münzen abholen', e?.message ?? 'Das hat nicht geklappt. Bitte versuche es erneut.');
+    }
+  }, [claimNow, talerAccount, rtStreak, lastClaim]);
+
   const onDailyMint = useCallback(() => {
     if (!talerAccount) {
       Alert.alert('Heute abholen', 'Dein Konto wird noch geladen. Bitte gleich erneut versuchen.');
+      return;
+    }
+    if (passkeyClaim) {
+      void onPasskeyClaim();
       return;
     }
     // Capture what's accruing now — that's the amount the mint lands.
@@ -235,7 +273,7 @@ export default function RewardsIndexScreen() {
         else AsyncStorage.removeItem(rtClaimKey(addr)).catch(() => {});
       },
     });
-  }, [dailyMint, talerAccount, talerMintable, lastClaim, rtStreak, celebrateSettling]);
+  }, [dailyMint, talerAccount, talerMintable, lastClaim, rtStreak, celebrateSettling, passkeyClaim, onPasskeyClaim]);
 
   const onJoin = useCallback(async () => {
     try {
@@ -455,7 +493,20 @@ export default function RewardsIndexScreen() {
             <View style={[styles.talerCta, { backgroundColor: colors.primary, opacity: 0.6 }]}>
               <View style={styles.ctaRow}>
                 <ActivityIndicator color="#fff" />
-                <Text style={styles.talerCtaText}>Wird abgeholt…</Text>
+                <Text style={styles.talerCtaText}>{passkeyClaim ? 'Bestätige mit deinem Passkey…' : 'Wird abgeholt…'}</Text>
+              </View>
+            </View>
+          ) : passkeyClaimed != null ? (
+            // Passkey session: the claim landed — success in the button's place.
+            <View
+              style={[styles.talerCta, styles.talerCtaCountdown, { backgroundColor: isDark ? colors.card : '#FFFFFF', borderColor: colors.success }]}
+              accessibilityLiveRegion="polite"
+            >
+              <View style={styles.ctaRow}>
+                <CoinsIcon width={20} height={20} color={colors.success} />
+                <Text style={[styles.talerCtaText, { color: colors.success }]}>
+                  +{passkeyClaimed.toLocaleString('de-DE')} Röbel {passkeyClaimed === 1 ? 'Münze' : 'Münzen'}
+                </Text>
               </View>
             </View>
           ) : talerInCooldown ? (
@@ -483,7 +534,9 @@ export default function RewardsIndexScreen() {
               <View style={styles.ctaRow}>
                 <CoinsIcon width={20} height={20} color="#fff" />
                 <Text style={styles.talerCtaText}>
-                  {talerMintable.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Röbel Münzen abholen
+                  {passkeyClaim
+                    ? 'Münzen abholen'
+                    : `${talerMintable.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Röbel Münzen abholen`}
                 </Text>
               </View>
             </Pressable>

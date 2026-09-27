@@ -10,6 +10,18 @@ import {
   getMintableTaler, formatTaler, prepareDailyMint, prepareOnboard,
   prepareContributeToRoebelTaler, prepareSendRoebelTaler, isGroupMember,
 } from '@/lib/roebel-taler';
+import { circlesHubAddress, roebeltalerGroupAddress } from '@/constants/gnosis';
+import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount } from '@/lib/muenzen-claim';
+
+const CLAIM_READS = {
+  isGroupMember,
+  personalBalance: getPersonalCrcBalance,
+  mintable: getMintableTaler,
+};
+const CLAIM_ADDRS = {
+  hub: circlesHubAddress as `0x${string}`,
+  group: roebeltalerGroupAddress as `0x${string}`,
+};
 
 export interface SettlementJob {
   /** Soft-notice noun, e.g. "Münzen" | "Stimme". Never expose CRC/Circles. */
@@ -35,6 +47,13 @@ interface RoebelTalerContextValue {
   onboarding: boolean;
   sending: boolean;
   dailyMint: () => Promise<void>;
+  /**
+   * Passkey session: claims run ONLY in the foreground from an explicit tap, as one batch
+   * (one fingerprint), never through the background settlement queue. false for thirdweb.
+   */
+  passkeyClaim: boolean;
+  /** Passkey session only: the one-batch claim; resolves with the whole Münzen landed. */
+  claimNow: () => Promise<number>;
   onboard: () => Promise<void>;
   /** Resolves with the transaction hash (used by in-chat payment receipts). */
   send: (to: string, amount: bigint) => Promise<string>;
@@ -104,11 +123,18 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(id);
   }, [address, onboarded]);
 
+  const passkeyClaim = claimsAsOneBatch(gnosisAccount);
+
   // Two gasless sends only — NO refresh. The settlement queue reconciles after.
+  // A passkey session never takes this two-send path: it sends the same claim as ONE batch.
   const dailyMint = useCallback(async () => {
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
     setMinting(true);
     try {
+      if (claimsAsOneBatch(gnosisAccount)) {
+        await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
+        return;
+      }
       await sendTransaction({ account: gnosisAccount, transaction: prepareDailyMint() });
       // Citizens (trusted by the group) convert to the shared Röbel Münzen;
       // guests keep their personal Münzen — the group would revert their mint.
@@ -126,6 +152,20 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
       setMinting(false);
     }
   }, [gnosisAccount]);
+
+  // Passkey session: one tap → one batch → one fingerprint, awaited in the foreground.
+  const claimNow = useCallback(async (): Promise<number> => {
+    if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
+    if (!claimsAsOneBatch(gnosisAccount)) throw new Error('claimNow is for passkey sessions only');
+    setMinting(true);
+    try {
+      const { mintedRaw } = await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
+      await reconcile().catch(() => {});
+      return wholeMuenzen(mintedRaw);
+    } finally {
+      setMinting(false);
+    }
+  }, [gnosisAccount, reconcile]);
 
   const onboard = useCallback(async () => {
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
@@ -205,13 +245,15 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
     onboarding,
     sending,
     dailyMint,
+    passkeyClaim,
+    claimNow,
     onboard,
     send,
     refresh,
     enqueueSettlement,
     account: gnosisAccount,
   }), [optimisticRaw, groupRaw, mintableRaw, onboarded, loading, ready, minting, onboarding,
-       sending, dailyMint, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
+       sending, dailyMint, passkeyClaim, claimNow, onboard, send, refresh, enqueueSettlement, gnosisAccount]);
 
   return <RoebelTalerContext.Provider value={value}>{children}</RoebelTalerContext.Provider>;
 }
