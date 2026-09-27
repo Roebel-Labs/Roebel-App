@@ -59,7 +59,14 @@ export const THIRDWEB_SIGNING_CHAIN_IDS: readonly number[] = [100, 8453];
 
 /** The viem public client (Gnosis) surface this module needs. */
 export interface AccountSignatureClient {
-  verifyHash(args: { address: Hex; hash: Hex; signature: Hex }): Promise<boolean>;
+  /**
+   * viem >= 2.22. The edge functions pin viem 2.21.x via esm.sh, whose public client has no
+   * verifyHash; there verifyMessage / verifyTypedData (same universal EOA / ERC-1271 / ERC-6492
+   * check over the same digest) are used instead. See verifyAt below.
+   */
+  verifyHash?(args: { address: Hex; hash: Hex; signature: Hex }): Promise<boolean>;
+  verifyMessage?(args: { address: Hex; message: string | { raw: Hex | Uint8Array }; signature: Hex }): Promise<boolean>;
+  verifyTypedData?(args: any): Promise<boolean>;
   readContract(args: {
     address: Hex;
     abi: readonly unknown[];
@@ -236,6 +243,18 @@ export function makeAccountSignatureVerifier(deps: { client: AccountSignatureCli
     return false;
   }
 
+  /** Universal check of `signature` by `addr` over the input's digest, on whatever the client offers. */
+  function verifyAt(addr: Hex, hash: Hex, signature: Hex, input: AccountSignatureInput): Promise<boolean> {
+    if (typeof client.verifyHash === "function") return client.verifyHash({ address: addr, hash, signature });
+    if (input.message !== undefined && typeof client.verifyMessage === "function") {
+      return client.verifyMessage({ address: addr, message: input.message as string | { raw: Hex | Uint8Array }, signature });
+    }
+    if (input.typedData !== undefined && typeof client.verifyTypedData === "function") {
+      return client.verifyTypedData({ ...input.typedData, address: addr, signature });
+    }
+    throw new Error("verifyAccountSignature: client offers no verifyHash / verifyMessage / verifyTypedData for this input");
+  }
+
   return async function verifyAccountSignature(input: AccountSignatureInput): Promise<boolean> {
     if (!ADDRESS.test(input.address)) return false;
     if (!HEX.test(input.signature) || input.signature.length % 2 !== 0 || input.signature.length <= 2) return false;
@@ -249,10 +268,10 @@ export function makeAccountSignatureVerifier(deps: { client: AccountSignatureCli
     if (envelope) {
       // (b)
       if (!sameAddress(envelope.safe, address) && !(await isAdmin(address, envelope.safe))) return false;
-      return client.verifyHash({ address: envelope.safe, hash, signature: envelope.safeSignature });
+      return verifyAt(envelope.safe, hash, envelope.safeSignature, input);
     }
     // (a)
-    if (await client.verifyHash({ address, hash, signature })) return true;
+    if (await verifyAt(address, hash, signature, input)) return true;
     // (c)
     return thirdwebDomainFallback(address, hash, signature);
   };
