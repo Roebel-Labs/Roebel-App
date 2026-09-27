@@ -135,3 +135,39 @@ and the onboarding account stays only as long as the org wants it.
   ```
   This returns exactly org A (key, admin role, metadata) and no org B.
 - Re-run or rehearse: `scripts/test-env/org-registry-e2e.cjs`. It is idempotent, and `ORG_E2E_REHEARSAL=1` runs it on a Gnosis fork.
+
+## 9. R2/R3 in the app: "Onchain-Organisation" (2026-09-27)
+
+**Where:** Expo → org account → Einstellungen → **Onchain-Organisation**.
+- Only org **owners** see it.
+- It's preview-only: `app_settings.org_safes_enabled = 'true'` AND a non-production update channel.
+- It stays hidden until an OrgRegistry address is configured: `EXPO_PUBLIC_ORG_REGISTRY_GNOSIS` plus `EXPO_PUBLIC_ORG_REGISTRY_DEPLOY_BLOCK`. Point them at the test registry to try it on the test env.
+
+**The three steps.** All are sent from the owner's own Gnosis account (thirdweb smart account, sponsored). Each Safe transaction is executed by one owner with a pre-validated (v=1) signature, so no Safe signing UI is needed.
+1. **Safe erstellen.** In one batch, the app deploys a Safe 1.4.1 and the Safe files `requestRegistration`.
+   - Safe owners = the org's `owner` rows; threshold 1 (today's parity).
+   - salt = orgId, so the Safe address is deterministic.
+   - No database column: the app finds the Safe in the registry, or from its `RegistrationRequested` event while pending.
+2. **Mitglieder übertragen** (after registration). One Safe transaction, a DELEGATECALL into MultiSendCallOnly, that:
+   - adds database owners missing from the Safe;
+   - sets admin/member roles in the registry;
+   - clears stale roles.
+   It never removes a Safe owner. It is idempotent, and the screen shows "Alle Mitglieder sind übertragen" when in sync.
+3. **Übergeben & austreten.**
+   - Enabled only when another database owner is in the Safe and nothing is left to sync.
+   - The owner removes themself from the Safe (`removeOwner`), then leaves the org through the existing `org-membership` `leave` action.
+
+**Registering the 36 existing orgs** (instead of attesters approving each one):
+```
+node scripts/org-registry-batch-register.cjs --registry <OrgRegistry> --from-block <deployBlock> --only <uuid,uuid,…>
+```
+It prints every pending Safe with its owners and writes a Safe{Wallet} Transaction Builder file with one `migrationRegister` call. The Attester Safe signs it. A registration request filed by the app is then closed as `Superseded` automatically. On the test env (owner = burner), `--send` submits directly.
+
+**Why not attester approvals for these:** Max co-owns every org Safe, so `SelfVote` stops him approving any of them. The other attesters would have to approve 36 × 3 times. New orgs later use the normal request → approve path.
+
+**Proofs:**
+- `apps/expo/lib/__tests__/org-safe-ops.test.ts` (9 tests).
+- `apps/expo/scripts/org-safe-fork-e2e.ts`: the app's own builders on a Gnosis fork, run as Max's real smart account (impersonated). It covers create + request, 3 attester approvals, a sync with a late owner plus admin and member roles, idempotency, and leave. All checks green.
+- `org-registry-batch-register.cjs` was run on a fork against the test registry. The org was registered to the app-created Safe and its claim was superseded.
+
+**Production registry:** `scripts/deploy-org-registry.cjs` sets owner = Attester Safe and attesters = production AttesterNFTv2, and writes `deployments/org-registry.json`. **Not yet run.** It needs Max to run it (see the hand-over).
