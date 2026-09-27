@@ -108,3 +108,16 @@ Passkeys use the rpId **`id.ortis.app`** (decided 2026-09-26): the neutral Ortis
 - Persistent per-account sponsor budget (today: in-memory, preview-only).
 - New users: Safe-only onboarding, with no thirdweb account.
 - Re-key the Shamir attester share keys, which derive from deterministic thirdweb signatures.
+
+## Preview paymaster (deployed 2026-09-27)
+
+| | |
+|---|---|
+| NetizenVerifyingPaymaster (passkey preview) | `0xFAFDb13C6Bce27C64B4Ff7Cc69927b2Bf1Bc24B5` (Gnosis, block 48461811) |
+| EntryPoint | v0.7 `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| sponsorSigner | `0xB758acEcb85AFFf3Fa02dB374FD10ee9A6EBC1bD`. Unfunded; its key is `PASSKEY_PREVIEW_SPONSOR_KEY` in `contracts/governor-contract/.env` (gitignored) and `PASSKEY_SPONSOR_KEY` on Vercel. |
+| owner | Attester Safe `0x3A08c86Efc5ff38CC35d850F1D4d564e497bFDEa`. Move it to the new Attester Safe `0xbCAb…5d4B` once that Safe is ≥3-of-5. |
+| stake / deposit | 0.05 xDAI (1-day unstake delay) / 0.06 xDAI |
+| deploy txs | `0x364652ed…` (deploy), `0x00c19ee0…` (stake), `0xdf9553aa…` (deposit), `0x4ed73c97…` (transferOwnership) |
+
+It is separate from the Netizen Accounts production paymaster `0x11ed03Db…`. The sponsor route refuses that one's signer.
