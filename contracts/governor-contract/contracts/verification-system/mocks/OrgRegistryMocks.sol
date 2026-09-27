@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 /// @notice Test-only stand-ins for OrgRegistry. Never deployed.
 
 /// @dev Minimal Safe: fixed owners, any owner may execute a call as the Safe.
-contract MockSafe {
+contract OrgMockSafe {
     mapping(address => bool) public isOwner;
 
     constructor(address[] memory owners) {
@@ -28,7 +28,7 @@ contract MockSafe {
 }
 
 /// @dev Attester set with a settable roster.
-contract MockAttesterSet {
+contract OrgMockAttesterSet {
     mapping(address => bool) public hasAttesterNFT;
     uint256 public attesterCount;
 
@@ -41,7 +41,7 @@ contract MockAttesterSet {
 }
 
 /// @dev Hostile Safe whose isOwner returns one byte (malformed ABI).
-contract MockMalformedSafe {
+contract OrgMockMalformedSafe {
     fallback(bytes calldata) external returns (bytes memory) {
         return hex"01";
     }

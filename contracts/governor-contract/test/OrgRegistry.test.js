@@ -23,7 +23,7 @@ const REVOCATION = band(6700, 3, 65535);
 
 async function deploy() {
   const [deployer, a1, a2, a3, a4, orgOwner, orgOwner2, member, stranger] = await ethers.getSigners();
-  const attesters = await (await ethers.getContractFactory("MockAttesterSet")).deploy();
+  const attesters = await (await ethers.getContractFactory("OrgMockAttesterSet")).deploy();
   for (const a of [a1, a2, a3, a4]) await attesters.set(a.address, true);
 
   const registry = await (await ethers.getContractFactory("OrgRegistry")).deploy(
@@ -33,7 +33,7 @@ async function deploy() {
     REJECTION,
     REVOCATION,
   );
-  const Safe = await ethers.getContractFactory("MockSafe");
+  const Safe = await ethers.getContractFactory("OrgMockSafe");
   const safe = await Safe.deploy([orgOwner.address, orgOwner2.address]);
   const safe2 = await Safe.deploy([orgOwner.address]);
   const squatter = await Safe.deploy([stranger.address]);
@@ -281,7 +281,7 @@ describe("OrgRegistry — self-sovereign record", function () {
     expect(await registry.isOrgOwner(ORG_A, orgOwner2.address)).to.equal(true);
     expect(await registry.isOrgOwner(ORG_A, member.address)).to.equal(false);
 
-    const bad = await (await ethers.getContractFactory("MockMalformedSafe")).deploy();
+    const bad = await (await ethers.getContractFactory("OrgMockMalformedSafe")).deploy();
     await registry.connect(deployer).migrationRegister([ORG_B], [await bad.getAddress()], [""], [ethers.ZeroHash]);
     expect(await registry.isOrgOwner(ORG_B, orgOwner.address)).to.equal(false); // no revert
   });
@@ -358,7 +358,7 @@ describe("OrgRegistry — revocation", function () {
 
   it("an org that makes every attester a Safe owner is still revocable", async function () {
     const { registry, deployer, a1, a2, a3, a4 } = await deploy();
-    const stuffed = await (await ethers.getContractFactory("MockSafe")).deploy(
+    const stuffed = await (await ethers.getContractFactory("OrgMockSafe")).deploy(
       [a1, a2, a3, a4].map((a) => a.address),
     );
     await registry.connect(deployer).migrationRegister([ORG_A], [await stuffed.getAddress()], [""], [ethers.ZeroHash]);
