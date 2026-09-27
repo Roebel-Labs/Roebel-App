@@ -48,7 +48,8 @@ import { encodeExecuteUserOp } from './legacy-handover';
 import { encodeMultiSendTx, predictSafeAddress, safeFactoryData } from './safe-address';
 import { signWithPasskey, type PasskeyAssertion } from './webauthn';
 
-export type SponsoredCall = { to: Address; data: Hex };
+/** One call from the Safe. `value` (native xDAI from the Safe) defaults to 0. */
+export type SponsoredCall = { to: Address; data: Hex; value?: bigint };
 
 /** Unpacked EntryPoint v0.7 userOp (the RPC shape), numeric fields as bigint. */
 export type UnpackedUserOp = {
@@ -435,8 +436,8 @@ export function sponsorRequestBody(
 /** Safe4337Module callData: one call = CALL; several = DELEGATECALL MultiSendCallOnly 1.4.1. */
 export function buildCallData(calls: SponsoredCall[]): Hex {
   if (calls.length === 0) throw new Error('no calls');
-  if (calls.length === 1) return encodeExecuteUserOp(calls[0].to, 0n, calls[0].data);
-  const txs = concatHex(calls.map((c) => encodeMultiSendTx(0, c.to, 0n, c.data)));
+  if (calls.length === 1) return encodeExecuteUserOp(calls[0].to, calls[0].value ?? 0n, calls[0].data);
+  const txs = concatHex(calls.map((c) => encodeMultiSendTx(0, c.to, c.value ?? 0n, c.data)));
   const multiSend = encodeFunctionData({
     abi: [{ type: 'function', name: 'multiSend', stateMutability: 'payable', inputs: [{ name: 'transactions', type: 'bytes' }], outputs: [] }] as const,
     functionName: 'multiSend',

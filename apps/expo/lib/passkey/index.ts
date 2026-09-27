@@ -7,6 +7,7 @@ export {
   createPasskey,
   signWithPasskey,
   getPrfSecret,
+  getDiscoverableAssertion,
   decodePrfOutput,
   PasskeyCancelledError,
   PasskeyNotSupportedError,
@@ -78,3 +79,34 @@ export {
   type SignerPermissionRequest,
 } from './legacy-handover';
 export { wrapSecret, unwrapSecret, PRF_VAULT_VERSION } from './prf-vault';
+export {
+  PASSKEY_SESSION_KEY,
+  identityKind,
+  parsePasskeySession,
+  loadPasskeySession,
+  savePasskeySession,
+  clearPasskeySession,
+  type PasskeySession,
+  type IdentityKind,
+} from './session';
+export { recoverP256PublicKeys, intersectKeys } from './p256-recover';
+export {
+  buildAdapterCalls,
+  createPasskeyAccount,
+  encodeLegacyExecute,
+  encodeOnBehalfSignature,
+  decodeOnBehalfSignature,
+  passkeyWalletOptions,
+  signHashAsIdentity,
+  SAFE_ADMIN_SIGNATURE_MAGIC,
+  type AdapterDeps,
+} from './thirdweb-adapter';
+export {
+  resolveIdentity,
+  resolveCredentialKey,
+  signInWithPasskey,
+  signUpWithPasskey,
+  signInFromMigrationRecord,
+  type SignInResult,
+} from './signin';
+export { bootWallets } from './boot';

@@ -32,3 +32,22 @@ export async function isPasskeyPreviewAllowed(): Promise<boolean> {
   }
   return passkeyPreviewAllowed({ flag, channel, dev });
 }
+
+/**
+ * Synchronous channel fence for restoring a passkey session at boot (no network, no storage
+ * read). The app-settings flag is deliberately NOT checked here: turning the flag off must hide
+ * the sign-in option, never sign out someone already running on a passkey session.
+ */
+export function passkeyChannelAllowed(p?: { channel: string | null | undefined; dev: boolean }): boolean {
+  let channel: string | null | undefined = p?.channel;
+  if (!p) {
+    try {
+      channel = Updates.channel ?? null;
+    } catch {
+      channel = null;
+    }
+  }
+  const dev = p ? p.dev : typeof __DEV__ !== 'undefined' && __DEV__;
+  if (dev) return channel !== 'production';
+  return !!channel && channel !== 'production';
+}

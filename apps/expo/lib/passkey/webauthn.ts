@@ -125,6 +125,43 @@ export async function signWithPasskey(credentialId: string, challenge: Hex): Pro
   };
 }
 
+export type DiscoverableAssertion = PasskeyAssertion & {
+  /** The credential the person picked in the system sheet. */
+  credentialId: string;
+  /** WebAuthn userHandle (base64url) as stored at creation, or null when the platform omits it. */
+  userHandle: string | null;
+};
+
+/**
+ * Sign-in: an assertion WITHOUT allowCredentials, so the system sheet offers every passkey this
+ * app may use for id.ortis.app (discoverable / resident credentials). The public key is not part
+ * of the response: callers resolve it from a local record or recover it from the signature.
+ */
+export async function getDiscoverableAssertion(challenge: Hex): Promise<DiscoverableAssertion> {
+  if (!Passkey.isSupported()) throw new PasskeyNotSupportedError();
+  let result;
+  try {
+    result = await Passkey.get({
+      challenge: base64UrlEncode(hexToBytes(challenge)),
+      rpId: PASSKEY_RP_ID,
+      timeout: 120_000,
+      userVerification: 'required',
+    });
+  } catch (e) {
+    throw mapPasskeyError(e);
+  }
+  const { r, s } = parseDerSignature(base64UrlDecode(result.response.signature));
+  const userHandle = (result.response as { userHandle?: string | null }).userHandle;
+  return {
+    credentialId: result.id,
+    userHandle: typeof userHandle === 'string' && userHandle ? userHandle : null,
+    authenticatorData: bytesToHex(base64UrlDecode(result.response.authenticatorData)),
+    clientDataJSON: utf8Decode(base64UrlDecode(result.response.clientDataJSON)),
+    r,
+    s,
+  };
+}
+
 /** PRF secret for the credential (one assertion with a random challenge); null when unsupported. */
 export async function getPrfSecret(credentialId: string): Promise<Hex | null> {
   const { prf } = await signWithPasskey(credentialId, bytesToHex(randomBytes(32)));
