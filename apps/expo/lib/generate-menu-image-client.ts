@@ -1,16 +1,5 @@
-import Constants from 'expo-constants';
-
-const extra = (Constants.expoConfig?.extra ?? (Constants as any).manifest?.extra) as
-  | { SUPABASE_URL?: string }
-  | undefined;
-
-const SUPABASE_URL =
-  extra?.SUPABASE_URL ??
-  process.env.NEXT_PUBLIC_SUPABASE_URL ??
-  process.env.EXPO_PUBLIC_SUPABASE_URL ??
-  '';
-
-const SEED_TOKEN = process.env.EXPO_PUBLIC_SEED_TOKEN ?? '';
+import { MENU_IMAGE_PATH, postAi, AiAuthError } from '@/lib/ai/proxy';
+import type { SigningAccount } from '@/lib/signed-request';
 
 export type GenerateMenuImageInput = {
   menu_item_id: string;
@@ -25,37 +14,26 @@ export type GenerateMenuImageResult =
   | { ok: false; code: string; error?: string; task_id?: string };
 
 /**
- * Invoke the `generate-menu-image` Edge Function. Blocks until the kie.ai
- * task completes or the function's 50 s budget expires. On timeout the
- * caller can retry — kie.ai keeps the task and a second call usually
- * succeeds (the function generates a fresh image each invocation).
+ * Generate a menu item photo. Blocks until the kie.ai task completes or the
+ * edge function's 50 s budget expires. On timeout the caller can retry — kie.ai
+ * keeps the task and a second call usually succeeds.
  *
- * Auth: bundles the SEED_TOKEN from `EXPO_PUBLIC_SEED_TOKEN`. The token is
- * extractable from the JS bundle — acceptable for early-access. When the
- * app moves to production add a proxy that verifies wallet→account ownership.
+ * Auth (since 2026-09-27): goes through the web route POST /api/ai/menu-image
+ * with the chat-session token. The route holds the seed token server-side and
+ * checks that the wallet belongs to the org owning the menu item. The app no
+ * longer bundles EXPO_PUBLIC_SEED_TOKEN.
  */
 export async function regenerateMenuItemImage(
+  account: SigningAccount | null,
   input: GenerateMenuImageInput,
 ): Promise<GenerateMenuImageResult> {
-  if (!SUPABASE_URL) {
-    return { ok: false, code: 'NO_SUPABASE_URL' };
-  }
-  if (!SEED_TOKEN) {
-    return { ok: false, code: 'NO_SEED_TOKEN' };
-  }
-  const url = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/generate-menu-image`;
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-seed-token': SEED_TOKEN,
-      },
-      body: JSON.stringify(input),
-    });
-    const json = await res.json();
-    return json as GenerateMenuImageResult;
+    const res = await postAi(MENU_IMAGE_PATH, account, input, { timeoutMs: 95_000 });
+    const json = (await res.json().catch(() => null)) as GenerateMenuImageResult | null;
+    if (json && typeof json === 'object' && 'ok' in json) return json;
+    return { ok: false, code: `HTTP_${res.status}` };
   } catch (err) {
+    if (err instanceof AiAuthError) return { ok: false, code: 'NOT_SIGNED_IN', error: err.message };
     return { ok: false, code: 'NETWORK_ERROR', error: err instanceof Error ? err.message : String(err) };
   }
 }

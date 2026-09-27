@@ -8,6 +8,7 @@ import type { AnthropicToolDefinition, ToolResult } from "../types/anthropic";
 import { zodToToolInputSchema } from "../utils/zod-to-json-schema";
 import { geocodeLocation } from "../utils/geocoding";
 import { extractEventFromFlyer, isEventFlyer } from "../utils/flyer-extraction";
+import { getCurrentAiAccount } from "../ai/proxy";
 import { eventSchema, placeDataSchema } from "../schemas/event-schema";
 import { supabase } from "../supabase";
 
@@ -106,13 +107,14 @@ export async function executeExtractFlyer(input: z.infer<typeof extractFlyerSche
     const { imageUrl } = input;
     console.log("Extracting flyer information from URL:", imageUrl);
 
-    const anthropicApiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!anthropicApiKey) {
-      throw new Error("Anthropic API key not configured");
+    // Through the web proxy (no API key in the app); the chat's wallet authenticates.
+    const aiAccount = getCurrentAiAccount();
+    if (!aiAccount) {
+      throw new Error("Not signed in: the AI proxy needs a wallet session");
     }
 
     // Check if it's actually a flyer using Claude Vision
-    const isFlyer = await isEventFlyer(imageUrl, anthropicApiKey);
+    const isFlyer = await isEventFlyer(imageUrl, aiAccount);
 
     if (!isFlyer) {
       return {
@@ -125,7 +127,7 @@ export async function executeExtractFlyer(input: z.infer<typeof extractFlyerSche
     }
 
     // Extract information using Claude Vision
-    const extractedData = await extractEventFromFlyer(imageUrl, anthropicApiKey);
+    const extractedData = await extractEventFromFlyer(imageUrl, aiAccount);
 
     if (!extractedData) {
       return {

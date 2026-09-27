@@ -309,8 +309,12 @@ export async function parseSSEStreamWithLibrary(
     eventSource.addEventListener("error", (error: any) => {
       console.error("SSE error:", error);
       eventSource.close();
+      // Keep the HTTP status (react-native-sse reports it as xhrStatus) so callers can react to
+      // a 401 from the AI proxy.
       handlers.onError(
-        error instanceof Error ? error : new Error("SSE connection error")
+        error instanceof Error
+          ? error
+          : Object.assign(new Error("SSE connection error"), { xhrStatus: error?.xhrStatus })
       );
       reject(error);
     });

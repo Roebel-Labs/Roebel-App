@@ -16,7 +16,8 @@ type Props = {
 
 export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onChange }: Props) {
   const { colors } = useTheme();
-  const wallet = useActiveAccount()?.address ?? '';
+  const activeAccount = useActiveAccount();
+  const wallet = activeAccount?.address ?? '';
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [promptHint, setPromptHint] = useState('');
@@ -56,10 +57,15 @@ export default function MenuImageBlock({ menuItemId, restaurantId, imageUrl, onC
       return;
     }
     setGenerating(true);
-    const result = await regenerateMenuItemImage({
-      menu_item_id: menuItemId,
-      prompt_hint: promptHint.trim() || undefined,
-    });
+    const result = await regenerateMenuItemImage(
+      activeAccount
+        ? { address: activeAccount.address, signMessage: (args) => activeAccount.signMessage(args) }
+        : null,
+      {
+        menu_item_id: menuItemId,
+        prompt_hint: promptHint.trim() || undefined,
+      },
+    );
     setGenerating(false);
     if (!result.ok) {
       const code = (result as any).code ?? 'UNKNOWN';

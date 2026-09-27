@@ -33,6 +33,8 @@ import { logEventSubmission } from '@/lib/firebase';
 import { Events, track } from '@/lib/analytics';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
+import { useActiveAccount } from 'thirdweb/react';
+import { createAnthropicMessage } from '@/lib/ai/proxy';
 import { useUser } from '@/context/UserContext';
 import { claimReward, rewardAmountToMuenzen } from '@/lib/rewards-claim';
 import { useRewardCelebration } from '@/context/RewardCelebrationContext';
@@ -115,6 +117,7 @@ const validateEndTimeAfterStart = (startTime: string, endTime: string): string |
 };
 
 export default function SubmitEventScreen() {
+  const thirdwebAccount = useActiveAccount();
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -416,36 +419,21 @@ export default function SubmitEventScreen() {
     setIsGeneratingDescription(true);
 
     try {
-      const anthropicApiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_ANTHROPIC_API_KEY ||
-                              process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-
-      if (!anthropicApiKey) {
-        throw new Error('API key not configured');
-      }
-
       const prompt = form.description.trim()
         ? `Erweitere und verbessere diese Event-Beschreibung für "${form.title}". Die bestehende Beschreibung: "${form.description}". Schreibe eine ansprechende, informative Beschreibung auf Deutsch (2-3 Sätze). Gib NUR die Beschreibung zurück, ohne zusätzliche Erklärungen.`
         : `Schreibe eine kurze, ansprechende Event-Beschreibung für "${form.title}" auf Deutsch (2-3 Sätze). Gib NUR die Beschreibung zurück, ohne zusätzliche Erklärungen.`;
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
+      // Through the web proxy (POST /api/ai/anthropic): the app holds no API key.
+      const data = await createAnthropicMessage(
+        thirdwebAccount
+          ? { address: thirdwebAccount.address, signMessage: (args) => thirdwebAccount.signMessage(args) }
+          : null,
+        {
           model: 'claude-sonnet-4-6',
           max_tokens: 300,
           messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('API request failed');
-      }
-
-      const data = await response.json();
+        },
+      );
       const generatedText = data.content?.[0]?.text || '';
 
       if (generatedText) {

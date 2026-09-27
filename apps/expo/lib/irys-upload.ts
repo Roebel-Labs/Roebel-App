@@ -1,11 +1,11 @@
 /**
  * Irys Upload Utilities (React Native Compatible)
  *
- * Temporary solution: Store in Supabase until backend proxy is set up
- * Irys integration requires backend to avoid exposing private key
+ * Temporary solution: Store in Supabase until backend proxy is set up.
+ * The app never holds an Irys key: real uploads go through the web route
+ * POST /api/irys/upload (wallet-signed, key server-side). IRYS_UPLOAD_PRIVATE_KEY was
+ * removed from app.config.ts `extra` on 2026-09-27 (it was public in every manifest).
  */
-
-import Constants from 'expo-constants';
 
 const IRYS_NODE_URL = 'https://node2.irys.xyz';
 

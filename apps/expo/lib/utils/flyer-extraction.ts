@@ -2,6 +2,8 @@ import { eventSchemaBase } from "@/lib/schemas/event-schema"
 import { z } from "zod"
 import * as FileSystem from 'expo-file-system/legacy'
 import { compressImageForVisionAPI } from './image-compression'
+import { ANTHROPIC_PROXY_PATH, postAi } from '../ai/proxy'
+import type { SigningAccount } from '../signed-request'
 
 /**
  * Convert image URL to base64 for Claude Vision API
@@ -92,7 +94,7 @@ export async function imageUrlToBase64(
  * Extract event information from an uploaded flyer image using Claude Vision
  *
  * @param imageUrl - Public URL of the uploaded image (from Supabase storage)
- * @param apiKey - Anthropic API key
+ * @param account - Signed-in wallet; authenticates to the AI proxy
  * @returns Extracted event data or null if extraction fails
  */
 // Define the flyer extraction schema outside function for type inference
@@ -104,11 +106,11 @@ const flyerExtractionSchema = eventSchemaBase.extend({
 
 export async function extractEventFromFlyer(
   imageUrl: string,
-  apiKey: string
+  account: SigningAccount | null
 ): Promise<z.infer<typeof flyerExtractionSchema> | null> {
   try {
-    if (!apiKey) {
-      console.error("Anthropic API key is not configured")
+    if (!account) {
+      console.error("Not signed in: the AI proxy needs a wallet session")
       return null
     }
 
@@ -119,14 +121,8 @@ export async function extractEventFromFlyer(
       return null
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+    // Through the web proxy (POST /api/ai/anthropic): the app holds no API key.
+    const response = await postAi(ANTHROPIC_PROXY_PATH, account, {
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
         messages: [
@@ -192,8 +188,7 @@ Sei gründlich und extrahiere alles Sichtbare.`,
             ],
           },
         ],
-      }),
-    })
+      })
 
     if (!response.ok) {
       const errorBody = await response.text()
@@ -244,16 +239,16 @@ Sei gründlich und extrahiere alles Sichtbare.`,
  * Uses Claude Vision to classify the image
  *
  * @param imageUrl - Public URL of the uploaded image (from Supabase storage)
- * @param apiKey - Anthropic API key
+ * @param account - Signed-in wallet; authenticates to the AI proxy
  * @returns true if image appears to be an event flyer
  */
 export async function isEventFlyer(
   imageUrl: string,
-  apiKey: string
+  account: SigningAccount | null
 ): Promise<boolean> {
   try {
-    if (!apiKey) {
-      console.error("Anthropic API key is not configured")
+    if (!account) {
+      console.error("Not signed in: the AI proxy needs a wallet session")
       return false
     }
 
@@ -264,14 +259,8 @@ export async function isEventFlyer(
       return false
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
+    // Through the web proxy (POST /api/ai/anthropic): the app holds no API key.
+    const response = await postAi(ANTHROPIC_PROXY_PATH, account, {
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
         messages: [
@@ -310,8 +299,7 @@ Sei nachsichtig - auch informelle oder handgemachte Flyer sollten isFlyer: true 
             ],
           },
         ],
-      }),
-    })
+      })
 
     if (!response.ok) {
       const errorBody = await response.text()

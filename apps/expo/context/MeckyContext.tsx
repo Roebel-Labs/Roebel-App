@@ -177,7 +177,11 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const service = getAnthropicChatService(true);
+        // Through the web proxy: the account authenticates with its chat session.
+        const service = getAnthropicChatService(
+          true,
+          account ? { address: account.address, signMessage: (args) => account.signMessage(args) } : null,
+        );
         const systemPrompt =
           currentConversationKind === 'story'
             ? STORY_INTERVIEW_SYSTEM
@@ -281,7 +285,7 @@ export function MeckyProvider({ children }: { children: React.ReactNode }) {
     [
       isStreaming,
       isEnabled,
-      account?.address,
+      account,
       walletLower,
       currentConversationId,
       currentConversationKind,

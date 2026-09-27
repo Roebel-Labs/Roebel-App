@@ -30,6 +30,9 @@ const config: ExpoConfig = {
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',
   owner: 'max.brych',
+  // `extra` is PUBLIC: it ships in every build's and every OTA's manifest. Only values that are
+  // safe to publish belong here (public client ids, URLs, publishable keys). Secrets stay on the
+  // server (apps/web API routes); see docs/SECURITY_APP_SECRETS_2026-09-27.md.
   extra: {
     eas: {
       projectId: 'cb460582-e228-4a96-8235-92eb13006239'
@@ -38,7 +41,6 @@ const config: ExpoConfig = {
     SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
     THIRDWEB_CLIENT_ID: process.env.EXPO_PUBLIC_THIRDWEB_CLIENT_ID || '',
     EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    IRYS_UPLOAD_PRIVATE_KEY: process.env.IRYS_UPLOAD_PRIVATE_KEY || '',
     EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '',
     MINIAPP_API_BASE: process.env.EXPO_PUBLIC_MINIAPP_API_BASE || 'https://www.roebel.app',
     posthogApiKey: process.env.EXPO_PUBLIC_POSTHOG_KEY || '',

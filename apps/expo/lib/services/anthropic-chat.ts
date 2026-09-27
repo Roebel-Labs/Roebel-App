@@ -1,6 +1,10 @@
 /**
  * Anthropic Chat Service
- * Handles streaming communication with Claude, tool execution, and conversation management
+ * Handles streaming communication with Claude, tool execution, and conversation management.
+ *
+ * Since 2026-09-27 the app holds no Anthropic key: requests go to the web proxy
+ * (POST /api/ai/anthropic, lib/ai/proxy.ts) with the chat-session Bearer token, and the proxy
+ * streams Anthropic's SSE back unchanged, so the parser below is untouched.
  */
 
 import type {
@@ -19,31 +23,35 @@ import {
   NetworkError,
 } from "../utils/error-handling";
 import { executeToolByName } from "../tools/event-submission-tools";
+import { aiAuthHeaders, anthropicProxyUrl, invalidateAiSession, setCurrentAiAccount } from "../ai/proxy";
+import type { SigningAccount } from "../signed-request";
 
 export interface AnthropicChatServiceOptions {
-  apiKey: string;
+  /** Wallet that authenticates to the proxy (chat session). */
+  account: SigningAccount | null;
   model?: string;
   maxTokens?: number;
   temperature?: number;
 }
 
 export class AnthropicChatService {
-  private apiKey: string;
+  private account: SigningAccount | null;
   private model: string;
   private maxTokens: number;
   private temperature: number;
-  private baseUrl = "https://api.anthropic.com/v1/messages";
-  private anthropicVersion = "2023-06-01";
 
   constructor(options: AnthropicChatServiceOptions) {
-    if (!options.apiKey) {
-      throw new Error("Anthropic API key is required");
-    }
-
-    this.apiKey = options.apiKey;
+    this.account = options.account;
+    setCurrentAiAccount(options.account);
     this.model = options.model || "claude-sonnet-4-6";
     this.maxTokens = options.maxTokens || 4096;
     this.temperature = options.temperature || 1.0;
+  }
+
+  /** The signed-in wallet can change (account switch); the singleton follows it. */
+  setAccount(account: SigningAccount | null): void {
+    this.account = account;
+    setCurrentAiAccount(account);
   }
 
   /**
@@ -108,12 +116,12 @@ export class AnthropicChatService {
           tools: tools.length > 0 ? tools : undefined,
         };
 
+        const authHeaders = await aiAuthHeaders(this.account);
         await parseSSEStreamWithLibrary(
-          this.baseUrl,
+          anthropicProxyUrl(),
           {
             headers: {
-              "x-api-key": this.apiKey,
-              "anthropic-version": this.anthropicVersion,
+              ...authHeaders,
               "content-type": "application/json",
             },
             method: "POST",
@@ -142,6 +150,11 @@ export class AnthropicChatService {
             },
 
             onError: (error: Error) => {
+              // Session rejected (secret rotated / token revoked): drop it so the next
+              // message re-signs silently instead of failing again.
+              if ((error as any)?.xhrStatus === 401) {
+                void invalidateAiSession(this.account);
+              }
               if (callbacks.onError) {
                 callbacks.onError(error);
               }
@@ -243,11 +256,10 @@ export class AnthropicChatService {
     };
 
     try {
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch(anthropicProxyUrl(), {
         method: "POST",
         headers: {
-          "x-api-key": this.apiKey,
-          "anthropic-version": this.anthropicVersion,
+          ...(await aiAuthHeaders(this.account)),
           "content-type": "application/json",
         },
         body: JSON.stringify(requestBody),
@@ -288,25 +300,24 @@ let anthropicServiceInstance: AnthropicChatService | null = null;
  * Pass `consented: true` from a code path that has confirmed
  * `consent.preferences.ai_assistant === true`.
  */
-export function getAnthropicChatService(consented = false): AnthropicChatService {
+export function getAnthropicChatService(
+  consented = false,
+  account: SigningAccount | null = null,
+): AnthropicChatService {
   if (!consented) {
     throw new Error(
       'anthropic-chat: caller did not assert consent. The Mecky-KI category must be enabled in the consent context before calling this service.'
     );
   }
   if (!anthropicServiceInstance) {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-      throw new Error("EXPO_PUBLIC_ANTHROPIC_API_KEY is not configured");
-    }
-
     anthropicServiceInstance = new AnthropicChatService({
-      apiKey,
+      account,
       model: "claude-sonnet-4-6",
       maxTokens: 4096,
       temperature: 1.0,
     });
+  } else if (account) {
+    anthropicServiceInstance.setAccount(account);
   }
 
   return anthropicServiceInstance;

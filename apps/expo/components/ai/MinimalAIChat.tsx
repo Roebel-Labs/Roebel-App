@@ -32,6 +32,10 @@ import CheckIcon from '@/assets/icons/check.svg';
 import { useTheme } from '@/context/ThemeContext';
 import type { ColorTokens } from '@/constants/theme';
 import { useAccount } from '@/context/AccountContext';
+import { useActiveAccount } from 'thirdweb/react';
+import { createAnthropicMessage } from '@/lib/ai/proxy';
+import { buildImageBlocks } from '@/lib/ai/image-blocks';
+import type { SigningAccount } from '@/lib/signed-request';
 import { useUser } from '@/context/UserContext';
 import * as Crypto from 'expo-crypto';
 import PosterProposalCard, { type PosterStep } from '@/components/ai/PosterProposalCard';
@@ -208,37 +212,23 @@ const TOOLS = [
   },
 ];
 
-// Direct Anthropic API call with tools support
+// Anthropic call with tools support, through the web proxy (POST /api/ai/anthropic): the app
+// holds no API key; the account authenticates with its chat session.
 async function callAnthropicAPI(
-  apiKey: string,
+  account: SigningAccount | null,
   systemPrompt: string,
-  messages: Array<{ role: string; content: string }>,
+  messages: Array<{ role: string; content: any }>,
   tools: any[]
 ): Promise<any> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      // Haiku 4.5: the fastest current Claude model, still reliable for
-      // reading flyers (vision) and filling the submission tool.
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: systemPrompt,
-      tools: tools,
-      messages: messages,
-    }),
+  return createAnthropicMessage(account, {
+    // Haiku 4.5: the fastest current Claude model, still reliable for
+    // reading flyers (vision) and filling the submission tool.
+    model: 'claude-haiku-4-5',
+    max_tokens: 1024,
+    system: systemPrompt,
+    tools: tools,
+    messages: messages,
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'API call failed');
-  }
-
-  return response.json();
 }
 
 // Helper function to compress and convert image to base64 JPEG for API
@@ -649,6 +639,10 @@ const previewStyles = StyleSheet.create({
 });
 
 export function MinimalAIChat() {
+  const thirdwebAccount = useActiveAccount();
+  const signingAccount: SigningAccount | null = thirdwebAccount
+    ? { address: thirdwebAccount.address, signMessage: (args) => thirdwebAccount.signMessage(args) }
+    : null;
   const { colors } = useTheme();
   const { activeAccount } = useAccount();
   const { user } = useUser();
@@ -1110,18 +1104,14 @@ export function MinimalAIChat() {
     setMessages((prev) => [...prev, userMessage]);
 
     let uploadedImageUrl: string | null = null;
+    let uploadedUrls: string[] = [];
 
     try {
-      // Get API key from env
-      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error('Anthropic API key is not configured');
-      }
-
       // Upload all picked images in parallel. The first one is the event image
       // candidate (the flyer); every image goes to the model for reading.
       if (hasImage) {
         const uploaded = await Promise.all(imageUris.map((uri) => uploadEventImage(uri)));
+        uploadedUrls = uploaded;
         uploadedImageUrl = uploaded[0];
         setLastUploadedImageUrl(uploadedImageUrl);
 
@@ -1139,24 +1129,17 @@ export function MinimalAIChat() {
 
       const apiMessages = await Promise.all(
         filteredMessages.map(async (msg) => {
-          const uris = msg.localUris ?? msg.imageUrls ?? [];
-          if (uris.length > 0) {
-            const images = (await Promise.all(uris.map((u) => imageToBase64(u)))).filter(
-              (img): img is { base64: string; mediaType: string } => img !== null,
-            );
+          // Uploaded images go as public URLs (keeps the proxy request small); local
+          // base64 only when there is no URL.
+          const remote = msg.id === userMessageId ? uploadedUrls : msg.imageUrls;
+          if ((remote?.length ?? 0) > 0 || (msg.localUris?.length ?? 0) > 0) {
+            const images = await buildImageBlocks(remote, msg.localUris, imageToBase64);
             if (images.length > 0) {
               return {
                 role: msg.role,
                 content: [
                   { type: 'text' as const, text: msg.content || 'Ich habe ein Bild hochgeladen.' },
-                  ...images.map((img) => ({
-                    type: 'image' as const,
-                    source: {
-                      type: 'base64' as const,
-                      media_type: img.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                      data: img.base64,
-                    },
-                  })),
+                  ...images,
                 ],
               };
             }
@@ -1179,7 +1162,7 @@ export function MinimalAIChat() {
         organizerPhone: user?.phone_number ?? '',
         accountType: activeAccount?.account_type ?? 'personal',
       });
-      const response = await callAnthropicAPI(apiKey, systemPrompt, apiMessages, TOOLS);
+      const response = await callAnthropicAPI(signingAccount, systemPrompt, apiMessages, TOOLS);
 
       // Check if Claude wants to use a tool
       const toolUseBlock = response.content.find((block: any) => block.type === 'tool_use');
