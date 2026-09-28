@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { parseBalancingTx, parseHiddenTxs } from './treasury-history';
 
 /**
  * Reads a single global key from the `app_settings` table. Returns null on
@@ -117,4 +118,28 @@ export async function fetchPasskeyAccountsEnabled(): Promise<boolean> {
  */
 export async function fetchOrgSafesEnabled(): Promise<boolean> {
   return (await fetchAppSetting('org_safes_enabled')) === 'true';
+}
+
+/**
+ * Tx hashes hidden from the Gemeinschaftskasse history (JSON array, lowercase).
+ * Missing key, invalid JSON or any fetch error = [] (no filtering).
+ */
+export async function fetchTreasuryHistoryHiddenTxs(): Promise<string[]> {
+  try {
+    return parseHiddenTxs(await fetchAppSetting('treasury_history_hidden_txs'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The one tx whose history row absorbs the difference to the live treasury
+ * total (see lib/treasury-history.ts). Missing key or any error = null.
+ */
+export async function fetchTreasuryHistoryBalancingTx(): Promise<string | null> {
+  try {
+    return parseBalancingTx(await fetchAppSetting('treasury_history_balancing_tx'));
+  } catch {
+    return null;
+  }
 }

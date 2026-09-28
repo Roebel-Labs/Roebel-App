@@ -257,9 +257,7 @@ type NativeFlow = { direction: "in" | "out"; xdai: number; timestamp: number; tx
  * without actually moving it, which would fabricate phantom in/out pairs.
  */
 async function fetchNativeFlows(address: string): Promise<NativeFlow[]> {
-	// Balance (ledger) and history are computed from the same flow snapshot —
-	// a 30 s shared promise avoids duplicate Blockscout hits per screen AND
-	// guarantees the hero total equals the sum of the visible rows.
+	// A 30 s shared promise avoids duplicate Blockscout hits per screen.
 	const cached = nativeFlowsCache;
 	if (cached && cached.key === address.toLowerCase() && Date.now() - cached.at < 30_000) {
 		return cached.promise;
@@ -322,46 +320,24 @@ async function fetchNativeFlowsUncached(address: string): Promise<NativeFlow[]> 
 }
 
 /**
- * Ledger (cost-basis) € value of the treasury's xDAI: every in-/outflow is
- * locked in at its own day's rate — like a bank account, money the Kasse
- * received doesn't silently drift with later FX moves, and the balance always
- * equals the sum of the visible history rows. Returns null when the flow list
- * doesn't reconcile with the on-chain balance (indexer lag / pagination) so
- * callers can fall back to mark-to-market.
+ * Live on-chain € value of the treasury: native xDAI × today's xDAI/EUR rate +
+ * EURe (1:1). Röbel Münzen are deliberately EXCLUDED — they are not
+ * euro-redeemable. `liveEuro` is null when the xDAI balance could not be read
+ * at all, so callers fall back to the dated snapshot for a FAILED read only.
  */
-async function xdaiLedgerEuro(address: string, onchainXdai: number): Promise<number | null> {
-	try {
-		const flows = await fetchNativeFlows(address);
-		if (flows.length === 0) return null;
-		const net = flows.reduce((s, f) => s + (f.direction === "in" ? f.xdai : -f.xdai), 0);
-		if (Math.abs(net - onchainXdai) > 0.01) return null;
-		let total = 0;
-		for (const f of flows) {
-			total += (f.direction === "in" ? 1 : -1) * f.xdai * (await getXdaiEurRateOn(f.timestamp));
-		}
-		return total;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Stadtkasse fiat value in €: native xDAI (ledger-valued — each flow at its
- * own day's rate, falling back to live mark-to-market) + EURe.
- * Röbel Münzen are deliberately EXCLUDED — they are not euro-redeemable, and
- * every surface must show the same figure as the treasury details page.
- */
-export async function getTreasuryEuro(address: string): Promise<number> {
-	let xdai = 0;
+async function readTreasuryLive(
+	address: string,
+): Promise<{ xdai: number; eure: number; liveEuro: number | null }> {
+	let xdai: number | null = null;
 	try {
 		const j = await fetchJson("https://rpc.gnosischain.com", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
 		});
-		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
+		if (typeof j?.result === "string") xdai = Number(BigInt(j.result)) / 1e18;
 	} catch {
-		/* ignore */
+		/* ignore — unreadable */
 	}
 	let eure = 0;
 	try {
@@ -374,11 +350,20 @@ export async function getTreasuryEuro(address: string): Promise<number> {
 	} catch {
 		/* ignore */
 	}
-	const ledger = await xdaiLedgerEuro(address, xdai);
-	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
+	if (xdai === null) return { xdai: 0, eure, liveEuro: null };
+	const rate = await getXdaiEurRate();
+	return { xdai, eure, liveEuro: xdai * rate + eure };
+}
+
+/**
+ * Stadtkasse fiat value in €: live xDAI × current rate + EURe (Röbel Münzen
+ * excluded). Every surface shows the same figure as the treasury details page.
+ */
+export async function getTreasuryEuro(address: string): Promise<number> {
+	const { liveEuro } = await readTreasuryLive(address);
 	// Never surface 0 € while the treasury is mid-move: fall back to the dated
 	// snapshot (see constants/treasury-snapshot.ts).
-	return resolveTreasuryEuro(xdaiEuro + eure).euro;
+	return resolveTreasuryEuro(liveEuro).euro;
 }
 
 export interface TreasuryAssets {
@@ -396,32 +381,12 @@ export interface TreasuryAssets {
 
 /** Real per-asset breakdown of a treasury address (Röbel Münzen + xDAI + EURe). */
 export async function getTreasuryAssets(address: string): Promise<TreasuryAssets> {
-	let xdai = 0;
-	try {
-		const j = await fetchJson("https://rpc.gnosischain.com", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
-		});
-		xdai = Number(BigInt(j?.result ?? "0x0")) / 1e18;
-	} catch {
-		/* ignore */
-	}
-	let eure = 0;
-	try {
-		const e = (await readContract({
-			contract: getContract({ client, chain: gnosisRead, address: EURE_ADDRESS }),
-			method: "function balanceOf(address) view returns (uint256)",
-			params: [address],
-		})) as bigint;
-		eure = Number(e) / 1e18;
-	} catch {
-		/* ignore */
-	}
-	const roebel = Number(formatTaler(await getRoebelTalerBalance(address).catch(() => 0n)));
-	const ledger = await xdaiLedgerEuro(address, xdai);
-	const xdaiEuro = ledger ?? xdai * (await getXdaiEurRate());
-	const resolved = resolveTreasuryEuro(xdaiEuro + eure);
+	const [{ xdai, eure, liveEuro }, roebelRaw] = await Promise.all([
+		readTreasuryLive(address),
+		getRoebelTalerBalance(address).catch(() => 0n),
+	]);
+	const roebel = Number(formatTaler(roebelRaw));
+	const resolved = resolveTreasuryEuro(liveEuro);
 	return {
 		roebel,
 		xdai: resolved.fromSnapshot ? TREASURY_SNAPSHOT.xdai : xdai,
@@ -471,8 +436,8 @@ export async function getTreasuryTransactions(address: string): Promise<Treasury
 	const eureToken = EURE_ADDRESS.toLowerCase();
 
 	// Real native flows (regular + internal CALL frames, phantoms excluded),
-	// each valued at ITS OWN day's rate — the same basis as the ledger total,
-	// so the history rows always sum to the displayed balance.
+	// each valued at ITS OWN day's rate. The hero is marked to market today;
+	// the screen's balancing row (lib/treasury-history.ts) closes the gap.
 	const native = (async (): Promise<TreasuryTx[]> => {
 		try {
 			const flows = await fetchNativeFlows(address);
