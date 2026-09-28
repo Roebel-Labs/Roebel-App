@@ -118,6 +118,33 @@ A passkey user MAY add an email. It is used ONLY for recovery alerts ("Jemand st
   while the wallet signed with Base (before 2026-07-27), will differ, exactly as for a thirdweb session on a fresh
   install. Check the voting screen shows "signed up" after the restore.
 
+## Onboarding + recovery helpers (`feat/onboarding-passkey-helpers`, 2026-09-28)
+
+- **Production rollout switch.** `app_settings.passkey_accounts_enabled_production` (missing = off). Production opens
+  only with BOTH flags `'true'` AND a binary with runtimeVersion ≥ 3.8.0 (3.7.0 lacks `webcredentials:id.ortis.app`).
+  `passkey_accounts_enabled` stays the global kill switch. Boot (`passkeyChannelAllowed`, synchronous, flag-free):
+  production restores a passkey session only on ≥ 3.8.0, so a flag flip never signs anyone out. Not set yet.
+- **First launch.** Gate open + logged out: accepting the first-launch consent continues to `/welcome`, whose
+  logged-out variant shows "Unabhängiges Konto" first, then "Mit E-Mail, Google oder Apple anmelden" and "Erst mal
+  umsehen". A new passkey account lands in the app; the wizard is deferred once (`lib/onboarding-deferral.ts`) and
+  UserContext marks onboarding done. The terms re-prompt (`/welcome/consent`) still appears on a later cold start, as
+  for every account without `terms_accepted_at`.
+- **"Profil vervollständigen"** card on the profile (not gated): name, photo, role, terms, each into the same step UI
+  (`/welcome/name|role|consent?single=1`, photo → edit-profile). Apple sign-ins are never asked for a name.
+- **Recovery helper** (Settings → Passkey → Vertrauenspersonen → "E-Mail oder Google als Helfer hinzufügen"): a
+  thirdweb login (Google / Apple / E-Mail, no phone) on a separate wallet object outside the connection manager; its
+  Gnosis smart account is added with `SRM.addGuardianWithThreshold` in one sponsored passkey op (threshold 1 if it is
+  the only guardian, else the user's threshold). Only while the passkey session is the active wallet and the identity
+  is sponsorable (citizen). thirdweb keeps one connector/storage per client id, so the helper login is written to the
+  device's thirdweb storage and is logged out again right after its address is known (a cold start must never restore
+  the helper). Side effect: a dormant thirdweb session of ANOTHER account on that device is replaced and then gone
+  (the passkey session is untouched; "Schlüssel sichern" then needs its confirm path). Labels are local
+  (`passkey_recovery_helpers_v1`: kind + masked email); another device shows the helper as "Unbekannte Person".
+- **Recovery with the helper** ("Konto wiederherstellen" → "Mit E-Mail oder Google bestätigen"): the helper logs in,
+  must be a guardian, and sends `SRM.confirmRecovery(wallet, [newSigner], 1, false)` itself as a normal thirdweb
+  smart-account transaction (sponsorGas → thirdweb's paymaster; our passkey sponsor route is not involved). Then the
+  existing poll → executeRecovery → 3 days → finalize. Refused while a thirdweb session is the active wallet.
+
 ## Measured / verified facts
 
 - The P-256 precompile at `0x100` is live on Gnosis. Foundry's fork EVM lacks it, so fork gas figures use the FCL fallback (worst case): deploy + handover ≈ 917k, later `legacy.execute` via the Safe ≈ 343k.
