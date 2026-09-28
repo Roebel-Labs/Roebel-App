@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySignedRequest, failResponse, jsonOk, jsonFail } from "@/lib/signed-request/verify";
 import { roleInAccount, canManage } from "@/lib/tickets/authz";
 import { connectedAccountRow } from "@/lib/tickets/connect-status";
+import { orgOrderViews, type OrgOrderView } from "@/lib/tickets/org-orders";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,7 +35,7 @@ function clean(t: unknown, i: number): TicketTypeInput | string {
 
 // POST signed, two actions behind the same owner/admin check:
 //   ticket_types_upsert { event_id, types } → { types }  (write)
-//   ticket_types_list   { event_id }        → { types }  (read, includes inactive rows)
+//   ticket_types_list   { event_id }        → { types, charges_enabled, orders }  (read, includes inactive rows)
 export async function POST(request: NextRequest) {
   const v = await verifySignedRequest(await request.json().catch(() => null), { headers: request.headers, actions: ["ticket_types_upsert", "ticket_types_list"] });
   if (!v.ok) return failResponse(v);
@@ -49,9 +50,20 @@ export async function POST(request: NextRequest) {
   // The org editor reads through the service role: the anon policy only exposes is_active rows,
   // so a deactivated ticket type would silently disappear from the editor and be re-created on save.
   if (v.action === "ticket_types_list") {
-    const { data: all, error } = await admin.from("ticket_types").select("*").eq("event_id", eventId).order("sort_order");
+    // Everything the editor needs in ONE signed request (types, Stripe readiness, orders): on a
+    // passkey account every signed request is a fingerprint prompt.
+    const [{ data: all, error }, connected] = await Promise.all([
+      admin.from("ticket_types").select("*").eq("event_id", eventId).order("sort_order"),
+      connectedAccountRow(admin, event.account_id),
+    ]);
     if (error) return jsonFail(500, "DB_ERROR", error.message);
-    return jsonOk({ types: all ?? [] });
+    let orders: OrgOrderView[] = [];
+    try {
+      orders = await orgOrderViews(admin, eventId);
+    } catch (err) {
+      console.error("[tickets/types] order list failed", err);
+    }
+    return jsonOk({ types: all ?? [], charges_enabled: !!connected?.charges_enabled, orders });
   }
 
   const rawTypes = Array.isArray(v.payload.types) ? v.payload.types : null;

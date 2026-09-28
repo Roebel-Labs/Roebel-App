@@ -37,7 +37,11 @@ export async function fetchTicketTypes(eventId: string): Promise<TicketTypeRow[]
  * types too, or saving would silently re-create them.
  */
 export function fetchTicketTypesForOrg(account: SigningAccount, eventId: string) {
-  return postSigned<{ types: TicketTypeRow[] }>('/api/tickets/types', account, 'ticket_types_list', { event_id: eventId });
+  // One signed request returns everything the org editor needs (types incl. inactive, Stripe
+  // readiness, orders); on a passkey account each signed request is a fingerprint prompt.
+  return postSigned<{ types: TicketTypeRow[]; charges_enabled?: boolean; orders?: OrgOrderView[] }>(
+    '/api/tickets/types', account, 'ticket_types_list', { event_id: eventId },
+  );
 }
 export function upsertTicketTypes(account: SigningAccount, eventId: string, types: TicketTypeInput[]) {
   return postSigned<{ types: TicketTypeRow[] }>('/api/tickets/types', account, 'ticket_types_upsert', { event_id: eventId, types });

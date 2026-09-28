@@ -2,7 +2,7 @@
 // signed ticket_types_list action rather than a table read, because BOTH anon paths (the RLS
 // policy and fetchTicketTypes) hide is_active = false rows, and the org has to see the types it
 // deactivated. Below the editor, the orders for this event, with a refund action for paid ones.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,6 @@ import { useActiveAccount } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAccount } from '@/context/AccountContext';
 import { supabase } from '@/lib/supabase';
-import { connectStatus } from '@/lib/stripe-connect';
 import {
   upsertTicketTypes,
   fetchTicketTypesForOrg,
@@ -108,10 +107,20 @@ export default function EventTicketsScreen() {
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [refundingId, setRefundingId] = useState<string | null>(null);
 
+  // The wallet object can change identity between renders (thirdweb and passkey sessions); keying
+  // the load on it re-ran the load and re-signed in a loop. Key on the address, read the signer
+  // from a ref.
+  const signerRef = useRef(thirdwebAccount);
+  signerRef.current = thirdwebAccount;
+  const signerAddress = thirdwebAccount?.address ?? null;
+
+  // ONE signed request per load: types, Stripe readiness and orders come back together, so opening
+  // the editor costs a single fingerprint on a passkey account (was three: types, status, orders).
   const load = useCallback(async () => {
     if (!id || !activeAccount) {
       // Without an org context there is nothing to load; never leave the spinner running.
       setLoading(false);
+      setOrdersLoading(false);
       return;
     }
     setLoading(true);
@@ -130,46 +139,40 @@ export default function EventTicketsScreen() {
 
       const ok = (event as { account_id: string | null }).account_id === activeAccount.id;
       setAuthorized(ok);
-      if (!ok) return;
+      const signer = signerRef.current;
+      if (!ok || !signer) return;
 
-      const [typesResult, statusResult] = await Promise.all([
-        thirdwebAccount ? fetchTicketTypesForOrg(thirdwebAccount, id) : Promise.resolve(null),
-        thirdwebAccount ? connectStatus(thirdwebAccount, activeAccount.id) : Promise.resolve(null),
-      ]);
-
-      if (typesResult?.ok) setRows(typesResult.data.types.map(rowFromRecord));
-      else if (typesResult) Alert.alert('Fehler', typesResult.message);
-      if (statusResult?.ok) setChargesEnabled(statusResult.data.charges_enabled);
+      const result = await fetchTicketTypesForOrg(signer, id);
+      if (result.ok) {
+        setRows(result.data.types.map(rowFromRecord));
+        setChargesEnabled(!!result.data.charges_enabled);
+        setOrders(result.data.orders ?? []);
+      } else {
+        Alert.alert('Fehler', result.message);
+      }
     } finally {
       setLoading(false);
+      setOrdersLoading(false);
     }
-  }, [id, activeAccount?.id, thirdwebAccount]);
+  }, [id, activeAccount?.id, signerAddress]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Waits for `authorized`, so a visitor who is not owner/admin never signs a request the server
-  // would only answer with 403. Always clears the spinner — including on the early return, which
-  // otherwise leaves the Bestellungen section loading forever.
+  // After a refund: reload the order list only (one signed request).
   const loadOrders = useCallback(async () => {
-    if (!id || !thirdwebAccount || authorized !== true) {
-      if (authorized === false) setOrdersLoading(false);
-      return;
-    }
+    const signer = signerRef.current;
+    if (!id || !signer || authorized !== true) return;
     setOrdersLoading(true);
     try {
-      const res = await fetchOrgOrders(thirdwebAccount, id);
+      const res = await fetchOrgOrders(signer, id);
       if (res.ok) setOrders(res.data.orders);
       else console.warn('[tickets] order list failed', res.code, res.message);
     } finally {
       setOrdersLoading(false);
     }
-  }, [id, thirdwebAccount, authorized]);
-
-  useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
+  }, [id, authorized]);
 
   function updateRow(key: string, patch: Partial<EditableRow>) {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
