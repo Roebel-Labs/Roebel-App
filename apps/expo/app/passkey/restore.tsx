@@ -6,15 +6,19 @@
  *   finish (fingerprint) → this phone operates the recovered Safe.
  * All logic is in lib/passkey/recovery-flow.ts; the state is persisted, so leaving is safe.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { getAddress } from 'viem';
+import { useActiveWallet } from 'thirdweb/react';
+import { getAddress, type Address } from 'viem';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { BigButton, Card, Initials, Notice, ScreenHeader, friendlyError, passkeyStyles, usePasskeyGate } from '@/components/passkey/PasskeyUi';
 import PasskeyQrCard from '@/components/passkey/PasskeyQrCard';
+import HelperLogin from '@/components/passkey/HelperLogin';
+import { HELPER_IDLE, helperBusy, helperReducer, planHelperConfirm } from '@/lib/passkey/recovery-helper';
+import type { HelperLogin as HelperLoginChoice } from '@/lib/passkey/recovery-helper-runtime';
 import { buildRecoverLink } from '@/lib/passkey/deeplinks';
 import { profileName } from '@/lib/passkey/people';
 import {
@@ -142,6 +146,7 @@ export default function RestoreAccountScreen() {
               shareMessage={`${state.name} möchte das Konto wiederherstellen. Bitte nur bestätigen, wenn du sicher bist, dass es wirklich ${state.name} ist:`}
             />
             {state.message ? <Notice tone="warning" text={state.message} /> : null}
+            <HelperConfirm wallet={state.wallet} signer={state.signer} onConfirmed={() => tick().catch(() => undefined)} />
             <Pressable onPress={startOver} accessibilityRole="button" style={styles.textButton}>
               <Text style={[styles.textButtonLabel, { color: colors.textSecondary }]}>Abbrechen und neu beginnen</Text>
             </Pressable>
@@ -201,6 +206,81 @@ export default function RestoreAccountScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * "Mit E-Mail oder Google bestätigen": the recovery helper (a thirdweb account that is a guardian)
+ * confirms on this phone. It logs in outside the connection manager, sends
+ * SRM.confirmRecovery(wallet, [signer], 1, false) itself (gas: thirdweb sponsorship), and is logged
+ * out again right away, so it never becomes this phone's session. The poll then moves on.
+ */
+function HelperConfirm({ wallet, signer, onConfirmed }: { wallet: Address; signer: Address; onConfirmed: () => void }) {
+  const { colors } = useTheme();
+  const activeWallet = useActiveWallet();
+  const [open, setOpen] = useState(false);
+  const [h, dispatch] = useReducer(helperReducer, HELPER_IDLE);
+
+  // A thirdweb session in use on this phone would be replaced by the helper login.
+  const thirdwebActive = !!activeWallet && activeWallet.id === 'inApp';
+
+  const confirm = async (login: HelperLoginChoice) => {
+    if (helperBusy(h)) return;
+    dispatch({ type: 'start' });
+    const rt = await import('@/lib/passkey/recovery-helper-runtime');
+    let session: Awaited<ReturnType<typeof rt.signInHelper>>;
+    try {
+      session = await rt.signInHelper(login);
+    } catch (e) {
+      const msg = e instanceof Error && /Zeitüberschreitung/.test(e.message) ? e.message : undefined;
+      dispatch(msg ? { type: 'error', message: msg } : { type: 'cancelled' });
+      return;
+    }
+    dispatch({ type: 'signedIn' });
+    try {
+      const guardians = await rt.readGuardiansOf(wallet);
+      const plan = planHelperConfirm({ wallet, signer, guardians, helper: session.account.address as Address });
+      dispatch({ type: 'planned', plan });
+      if (plan.kind !== 'confirm') return;
+      await rt.sendHelperConfirm(session.account, plan.call);
+      dispatch({ type: 'sent' });
+      onConfirmed();
+    } catch (e) {
+      dispatch({ type: 'error', message: friendlyError(e) ?? undefined });
+    } finally {
+      await rt.endHelperSession(session);
+    }
+  };
+
+  if (h.step === 'confirmed') return <Notice tone="success" text={h.message ?? 'Bestätigt.'} />;
+
+  return (
+    <Card>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={styles.helperHead}
+      >
+        <Text style={[passkeyStyles.label, { color: colors.primary }]}>Mit E-Mail oder Google bestätigen</Text>
+        <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>
+          Hast du ein Google-, Apple- oder E-Mail-Konto als Helfer eingetragen? Dann melde dich hier damit an.
+        </Text>
+      </Pressable>
+      {open ? (
+        thirdwebActive ? (
+          <Notice tone="info" text="Auf diesem Handy ist gerade ein anderes Konto angemeldet. Melde es zuerst ab, dann versuche es erneut." />
+        ) : (
+          <>
+            <HelperLogin busy={helperBusy(h)} onLogin={confirm} />
+            {h.step === 'confirming' ? (
+              <Text style={[passkeyStyles.bodySmall, { color: colors.textSecondary }]}>Dein Helfer-Konto bestätigt …</Text>
+            ) : null}
+            {h.step === 'failed' && h.message ? <Notice tone="warning" text={h.message} /> : null}
+          </>
+        )
+      ) : null}
+    </Card>
   );
 }
 
@@ -331,5 +411,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, borderRadius: 14, paddingHorizontal: 14 },
   rowName: { flex: 1, fontFamily: fontFamily.semiBold, fontSize: 17 },
   textButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  helperHead: { gap: 4, minHeight: 48 },
   textButtonLabel: { fontFamily: fontFamily.medium, fontSize: 15, textDecorationLine: 'underline' },
 });
