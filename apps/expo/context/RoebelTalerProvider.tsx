@@ -12,6 +12,8 @@ import {
 } from '@/lib/roebel-taler';
 import { circlesHubAddress, roebeltalerGroupAddress } from '@/constants/gnosis';
 import { claimMuenzenAsOneBatch, claimsAsOneBatch, wholeMuenzen, type BatchAccount } from '@/lib/muenzen-claim';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { recordMuenzenClaim } from '@/lib/muenzen-daily-mint';
 
 const CLAIM_READS = {
   isGroupMember,
@@ -38,6 +40,8 @@ export interface SettlementJob {
   attempts?: number;
 }
 
+export type ClaimNowResult = { received: number; claimedAt: number; streak: number };
+
 interface RoebelTalerContextValue {
   talerBalance: number;
   balanceRaw: bigint;
@@ -57,8 +61,13 @@ interface RoebelTalerContextValue {
    * (one fingerprint), never through the background settlement queue. false for thirdweb.
    */
   passkeyClaim: boolean;
-  /** Passkey session only: the one-batch claim; resolves with the whole Münzen landed. */
-  claimNow: () => Promise<number>;
+  /**
+   * Passkey session only: the one-batch claim (one fingerprint). The profile pill and the
+   * Münzen page both call this. On success the cooldown + streak are persisted; resolves with
+   * the whole Münzen landed, the claim time and the new streak. Throws on cancel/failure
+   * (nothing persisted, never retried).
+   */
+  claimNow: () => Promise<ClaimNowResult>;
   onboard: () => Promise<void>;
   /** Resolves with the transaction hash (used by in-chat payment receipts). */
   send: (to: string, amount: bigint) => Promise<string>;
@@ -159,14 +168,16 @@ export function RoebelTalerProvider({ children }: { children: React.ReactNode })
   }, [gnosisAccount]);
 
   // Passkey session: one tap → one batch → one fingerprint, awaited in the foreground.
-  const claimNow = useCallback(async (): Promise<number> => {
+  const claimNow = useCallback(async (): Promise<ClaimNowResult> => {
     if (!gnosisAccount) throw new Error('Gnosis-Konto noch nicht bereit');
     if (!claimsAsOneBatch(gnosisAccount)) throw new Error('claimNow is for passkey sessions only');
     setMinting(true);
     try {
       const { mintedRaw } = await claimMuenzenAsOneBatch(gnosisAccount as unknown as BatchAccount, CLAIM_READS, CLAIM_ADDRS);
+      const claimedAt = Date.now();
+      const streak = await recordMuenzenClaim(AsyncStorage, gnosisAccount.address, claimedAt);
       await reconcile().catch(() => {});
-      return wholeMuenzen(mintedRaw);
+      return { received: wholeMuenzen(mintedRaw), claimedAt, streak };
     } finally {
       setMinting(false);
     }

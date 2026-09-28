@@ -6,6 +6,7 @@ import {
   dayStart,
   formatCooldownClock,
   isInCooldown,
+  recordMuenzenClaim,
   rtClaimKey,
   rtStreakKey,
 } from '../muenzen-daily-mint';
@@ -85,4 +86,34 @@ describe('formatCooldownClock', () => {
 
 it('exposes the threshold', () => {
   expect(MIN_MINTABLE).toBe(0.1);
+});
+
+describe('recordMuenzenClaim (passkey claim, shared by the profile pill and the Münzen page)', () => {
+  const addr = '0xABC';
+  const memStorage = (init: Record<string, string> = {}) => {
+    const m: Record<string, string> = { ...init };
+    return {
+      m,
+      getItem: async (k: string) => m[k] ?? null,
+      setItem: async (k: string, v: string) => {
+        m[k] = v;
+      },
+    };
+  };
+
+  it('first claim: cooldown start + streak 1', async () => {
+    const s = memStorage();
+    const ts = noon(2026, 9, 28);
+    expect(await recordMuenzenClaim(s, addr, ts)).toBe(1);
+    expect(s.m[rtClaimKey(addr)]).toBe(String(ts));
+    expect(JSON.parse(s.m[rtStreakKey(addr)])).toEqual({ count: 1, lastDay: dayStart(ts) });
+  });
+
+  it('claim the day after extends the stored streak', async () => {
+    const s = memStorage({
+      [rtClaimKey(addr)]: String(noon(2026, 9, 27)),
+      [rtStreakKey(addr)]: JSON.stringify({ count: 4, lastDay: dayStart(noon(2026, 9, 27)) }),
+    });
+    expect(await recordMuenzenClaim(s, addr, noon(2026, 9, 28))).toBe(5);
+  });
 });

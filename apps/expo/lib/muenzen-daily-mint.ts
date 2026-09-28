@@ -63,3 +63,31 @@ export function formatCooldownClock(ms: number): string {
   const sec = s % 60;
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
+
+type ClaimStorage = {
+  getItem: (k: string) => Promise<string | null>;
+  setItem: (k: string, v: string) => Promise<void>;
+};
+
+/**
+ * Persist a landed claim: the cooldown start and the next streak, under the keys the
+ * Münzen page and the profile button both read. Resolves with the new streak; storage
+ * errors never fail the (already landed) claim.
+ */
+export async function recordMuenzenClaim(storage: ClaimStorage, address: string, ts: number): Promise<number> {
+  let prevLastClaim: number | null = null;
+  let prevStreak = 0;
+  try {
+    const [lc, rawStreak] = await Promise.all([storage.getItem(rtClaimKey(address)), storage.getItem(rtStreakKey(address))]);
+    prevLastClaim = lc ? Number(lc) || null : null;
+    prevStreak = rawStreak ? Number(JSON.parse(rawStreak)?.count) || 0 : 0;
+  } catch {
+    // fall through with the defaults
+  }
+  const streak = computeNextStreak(prevStreak, prevLastClaim, ts);
+  await Promise.all([
+    storage.setItem(rtClaimKey(address), String(ts)),
+    storage.setItem(rtStreakKey(address), JSON.stringify({ count: streak, lastDay: dayStart(ts) })),
+  ]).catch(() => {});
+  return streak;
+}

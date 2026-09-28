@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoebelTaler } from '@/hooks/useRoebelTaler';
 import {
@@ -13,6 +14,11 @@ import {
 } from '@/lib/muenzen-daily-mint';
 
 export type DailyMintState = 'hidden' | 'idle' | 'claimable';
+/** Sync for thirdweb (optimistic, settled in the background); a promise under a passkey session. */
+export type DailyMintClaim = () => boolean | Promise<boolean>;
+
+const isPasskeyCancel = (e: unknown): boolean =>
+  (e as { name?: string } | null)?.name === 'PasskeyCancelledError';
 
 /**
  * Drives the profile's Münzen button. `claimable` when the hourly Circles
@@ -20,12 +26,16 @@ export type DailyMintState = 'hidden' | 'idle' | 'claimable';
  * Münzen page writes and hands the mint to the provider's settlement queue
  * (no full-screen overlay — the button animates instead).
  *
- * Passkey session (`passkey`): NO claim from here. A background settlement would pop two
- * fingerprint prompts (plus retries) long after the tap. `claim()` refuses and the profile opens
- * the Münzen page, whose one "Münzen abholen" button claims in the foreground as one batch.
+ * Passkey session (`passkey`): never a background or automatic claim (a settlement would pop
+ * fingerprint prompts, plus retries, long after the tap). `claim()` instead runs the provider's
+ * `claimNow` in the FOREGROUND from the tap: one batch = one fingerprint, the same function the
+ * Münzen page uses. It returns a promise the button awaits (pending while the passkey prompt is
+ * open): true once landed (cooldown + streak persisted), false on cancel/failure (back to
+ * claimable, nothing written, no retry).
  */
 export function useDailyMint(opts: { isCitizen: boolean }) {
-  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account, passkeyClaim } = useRoebelTaler();
+  const { mintable, minting, onboarded, talerBalance, dailyMint, enqueueSettlement, account, passkeyClaim, claimNow } =
+    useRoebelTaler();
   const address = account?.address ?? null;
 
   // Last claim per wallet, loaded from the same key the Münzen page writes.
@@ -76,9 +86,24 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
         ? 'idle'
         : 'hidden';
 
-  const claim = useCallback((): boolean => {
-    if (passkeyClaim) return false; // never a background claim under a passkey session
+  const claim = useCallback<DailyMintClaim>(() => {
     if (!address || !claimable) return false;
+    if (passkeyClaim) {
+      // Foreground, one batch, one fingerprint. Nothing optimistic: the cooldown moves only on success.
+      return claimNow().then(
+        ({ claimedAt }) => {
+          setClaimState({ address, lastClaim: claimedAt });
+          setNow(claimedAt);
+          return true;
+        },
+        (e: unknown) => {
+          if (!isPasskeyCancel(e)) {
+            Alert.alert('Münzen abholen', (e as Error | null)?.message || 'Das hat nicht geklappt. Bitte versuche es erneut.');
+          }
+          return false;
+        },
+      );
+    }
     const ts = Date.now();
     const prevLastClaim = lastClaim;
     const received = amount;
@@ -112,7 +137,7 @@ export function useDailyMint(opts: { isCitizen: boolean }) {
       },
     });
     return true;
-  }, [address, amount, claimable, dailyMint, enqueueSettlement, lastClaim, passkeyClaim]);
+  }, [address, amount, claimable, claimNow, dailyMint, enqueueSettlement, lastClaim, passkeyClaim]);
 
   return { state, amount, claim, cooldownEnd, passkey: passkeyClaim };
 }

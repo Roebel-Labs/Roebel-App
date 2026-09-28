@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -26,14 +26,16 @@ type Props = {
   state: MuenzenButtonState;
   /** Whole Münzen the claim lands (label "+N Münze(n)"). */
   amount: number;
-  /** Runs the claim; return false to abort the animation. */
-  onClaim: () => boolean;
+  /**
+   * Runs the claim; return false to abort the animation. May return a promise (passkey session:
+   * the one-batch claim awaits the fingerprint): the pill stays gold and pending until it
+   * settles, then plays the claim animation on true or returns to claimable on false.
+   */
+  onClaim: () => boolean | Promise<boolean>;
   /** Idle press → Münzen page. */
   onOpen: () => void;
   /** Set only while the hourly cooldown runs: the idle label alternates with a MM:SS clock. */
   cooldownEnd?: number | null;
-  /** Replaces the gold "+N Münzen" label (passkey session: "Münzen abholen" opens the Münzen page). */
-  claimLabel?: string;
 };
 
 const HEIGHT = 44;
@@ -57,7 +59,7 @@ const GOLD = {
  * pushes down on press; on release coins flip up out of it and it morphs into
  * the neutral "Münzen ›" pill that opens the Münzen page.
  */
-export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldownEnd = null, claimLabel }: Props) {
+export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldownEnd = null }: Props) {
   const { colors, isDark } = useTheme();
   const reducedMotion = useReducedMotion();
 
@@ -65,10 +67,19 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
   const [claiming, setClaiming] = useState(false);
   const [swapped, setSwapped] = useState(false);
   const [burstCount, setBurstCount] = useState(0);
+  // Awaiting an async claim (passkey prompt open): hold the gold pill, sunk, with a spinner.
+  const [pending, setPending] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      timers.current.forEach(clearTimeout);
+    };
+  }, []);
 
-  const visual: MuenzenButtonState = claiming ? (swapped ? 'idle' : 'claimable') : state;
+  const visual: MuenzenButtonState = pending ? 'claimable' : claiming ? (swapped ? 'idle' : 'claimable') : state;
   const isGold = visual === 'claimable';
 
   // Press mechanics: surface sinks, shadow hides.
@@ -92,16 +103,11 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
   }, [pressed]);
 
   const handlePressOut = useCallback(() => {
+    if (pending) return; // stays sunk while the claim is pending
     pressed.set(withSpring(0, { damping: 14, stiffness: 260 }));
-  }, [pressed]);
+  }, [pending, pressed]);
 
-  const handlePress = useCallback(() => {
-    if (claiming) return;
-    if (visual === 'idle') {
-      onOpen();
-      return;
-    }
-    if (!onClaim()) return;
+  const playClaimed = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     if (reducedMotion) return; // the prop flips to idle; skin swaps instantly
     setClaiming(true);
@@ -114,11 +120,34 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
         setSwapped(false);
       }, DONE_AT_MS),
     );
-  }, [amount, claiming, onClaim, onOpen, reducedMotion, visual]);
+  }, [amount, reducedMotion]);
+
+  const handlePress = useCallback(() => {
+    if (claiming || pending) return;
+    if (visual === 'idle') {
+      onOpen();
+      return;
+    }
+    const result = onClaim();
+    if (typeof result === 'boolean') {
+      if (result) playClaimed();
+      return;
+    }
+    setPending(true);
+    pressed.set(withTiming(1, { duration: 90 }));
+    result
+      .catch(() => false)
+      .then((ok) => {
+        if (!mounted.current) return;
+        setPending(false);
+        pressed.set(withSpring(0, { damping: 14, stiffness: 260 }));
+        if (ok) playClaimed();
+      });
+  }, [claiming, onClaim, onOpen, pending, playClaimed, pressed, visual]);
 
   const handleBurstDone = useCallback(() => setBurstCount(0), []);
 
-  const label = isGold ? (claimLabel ?? (amount === 1 ? '+1 Münze' : `+${amount} Münzen`)) : 'Münzen';
+  const label = isGold ? (amount === 1 ? '+1 Münze' : `+${amount} Münzen`) : 'Münzen';
   const neutralBorder = isDark ? (['#4A4D52', '#2D2E31'] as const) : (['#E9E9E9', '#CFCFCF'] as const);
   const neutralFill = isDark ? ([colors.surfaceSecondary, colors.surface] as const) : (['#FFFFFF', '#F4F4F5'] as const);
   const neutralShadow = isDark ? '0px 2px 6px rgba(0,0,0,0.35)' : '0px 2px 6px rgba(0,0,0,0.10)';
@@ -132,9 +161,10 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      disabled={claiming}
+      disabled={claiming || pending}
       accessibilityRole="button"
-      accessibilityLabel={isGold ? (claimLabel ?? `${label} abholen`) : 'Münzen anzeigen'}
+      accessibilityState={{ busy: pending, disabled: claiming || pending }}
+      accessibilityLabel={isGold ? `${label} abholen` : 'Münzen anzeigen'}
       style={styles.root}
     >
       {/* Static shadow layer: the surface sinks onto it while it fades. */}
@@ -164,7 +194,13 @@ export default function MuenzenButton({ state, amount, onClaim, onOpen, cooldown
 
           {isGold ? (
             <Animated.View key="claimable" entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)} style={styles.content}>
-              <Image source={COIN_TILTED} style={styles.coinTilted} resizeMode="contain" />
+              {pending ? (
+                <View style={styles.coinTilted}>
+                  <ActivityIndicator size="small" color={GOLD.text} testID="muenzen-pending" />
+                </View>
+              ) : (
+                <Image source={COIN_TILTED} style={styles.coinTilted} resizeMode="contain" />
+              )}
               <Text style={[styles.label, { color: GOLD.text }]}>{label}</Text>
             </Animated.View>
           ) : (
@@ -236,6 +272,8 @@ const styles = StyleSheet.create({
   coinTilted: {
     width: 26,
     height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   coinStack: {
     width: 28,

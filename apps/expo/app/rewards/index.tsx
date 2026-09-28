@@ -204,14 +204,11 @@ export default function RewardsIndexScreen() {
     if (!addr) return;
     setPasskeyClaimed(null);
     try {
-      const received = await claimNow();
-      const ts = Date.now();
-      const nextStreak = computeNextStreak(rtStreak, lastClaim, ts);
-      setLastClaim(ts);
-      setNowTs(ts);
-      setRtStreak(nextStreak);
-      AsyncStorage.setItem(rtClaimKey(addr), String(ts)).catch(() => {});
-      AsyncStorage.setItem(rtStreakKey(addr), JSON.stringify({ count: nextStreak, lastDay: dayStart(ts) })).catch(() => {});
+      // Same claim function as the profile pill; it persists cooldown + streak itself.
+      const { received, claimedAt, streak } = await claimNow();
+      setLastClaim(claimedAt);
+      setNowTs(claimedAt);
+      setRtStreak(streak);
       setPasskeyClaimed(received);
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -219,7 +216,7 @@ export default function RewardsIndexScreen() {
     } catch (e: any) {
       Alert.alert('Münzen abholen', e?.message ?? 'Das hat nicht geklappt. Bitte versuche es erneut.');
     }
-  }, [claimNow, talerAccount, rtStreak, lastClaim]);
+  }, [claimNow, talerAccount]);
 
   const onDailyMint = useCallback(() => {
     if (!talerAccount) {
