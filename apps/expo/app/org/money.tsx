@@ -78,18 +78,28 @@ export default function OrgMoneyScreen() {
         <ActivityIndicator color={colors.primary} />
       </View>
     );
+  } else if (typeof stripe.ConnectPayments !== 'function' || typeof stripe.ConnectPayouts !== 'function') {
+    body = note('Diese Übersicht wird von deiner App-Version nicht unterstützt.', true);
   } else {
-    const { ConnectComponentsProvider, ConnectNotificationBanner, ConnectPayments, ConnectPayouts } = stripe;
+    const { ConnectComponentsProvider, ConnectPayments, ConnectPayouts } = stripe;
+    // @stripe/stripe-react-native 0.78.0 declares ConnectNotificationBanner but does not export it
+    // from the package root, so it is undefined at runtime (rendering it crashed this screen,
+    // 2026-09-28). Render it only when a future version provides it.
+    const ConnectNotificationBanner = (stripe as { ConnectNotificationBanner?: unknown }).ConnectNotificationBanner as
+      | typeof import('@stripe/stripe-react-native')['ConnectNotificationBanner']
+      | undefined;
     const loadError = () => Alert.alert('Fehler', 'Die Übersicht konnte nicht geladen werden. Bitte versuche es erneut.');
     body = (
       <ConnectComponentsProvider connectInstance={instance}>
-        <View style={{ height: bannerHeight }}>
-          <ConnectNotificationBanner
-            style={{ flex: 1 }}
-            onContentHeightChange={setBannerHeight}
-            collectionOptions={{ fields: 'eventually_due', futureRequirements: 'include' }}
-          />
-        </View>
+        {typeof ConnectNotificationBanner === 'function' && (
+          <View style={{ height: bannerHeight }}>
+            <ConnectNotificationBanner
+              style={{ flex: 1 }}
+              onContentHeightChange={setBannerHeight}
+              collectionOptions={{ fields: 'eventually_due', futureRequirements: 'include' }}
+            />
+          </View>
+        )}
         <View style={[styles.tabs, { borderColor: colors.border }]}>
           {(['payments', 'payouts'] as const).map((t) => {
             const active = tab === t;
