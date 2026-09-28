@@ -14,6 +14,11 @@ import {
 	type TreasuryTx,
 } from "@/lib/roebel-taler";
 import { TREASURY_SNAPSHOT } from "@/constants/treasury-snapshot";
+import {
+	fetchTreasuryHistoryBalancingTx,
+	fetchTreasuryHistoryHiddenTxs,
+} from "@/lib/supabase-app-settings";
+import { curateTreasuryHistory, toCents } from "@/lib/treasury-history";
 import { attesterSafeGnosisAddress } from "@/constants/gnosis";
 import ChevronLeftIcon from "@/assets/icons/chevron-left.svg";
 import InfoIcon from "@/assets/icons/info.svg";
@@ -31,6 +36,10 @@ export default function TreasuryScreen() {
 	const router = useRouter();
 	const [assets, setAssets] = useState<TreasuryAssets | null>(null);
 	const [txs, setTxs] = useState<TreasuryTx[] | null>(null);
+	const [curation, setCuration] = useState<{ hidden: string[]; balancingTx: string | null }>({
+		hidden: [],
+		balancingTx: null,
+	});
 
 	// A dead RPC used to leave the hero on a skeleton forever (RN fetch has no
 	// timeout of its own), so both reads are raced against a deadline and fall
@@ -45,20 +54,39 @@ export default function TreasuryScreen() {
 
 		deadline(getTreasuryAssets(attesterSafeGnosisAddress), treasuryAssetsFallback())
 			.then((a) => { if (!cancelled) setAssets(a); });
-		deadline(getTreasuryTransactions(attesterSafeGnosisAddress), [] as TreasuryTx[])
-			.then((t) => { if (!cancelled) setTxs(t); });
+		// History curation settings load in parallel with Blockscout under the
+		// same deadline; a failed/slow read just means no curation.
+		Promise.all([
+			deadline(getTreasuryTransactions(attesterSafeGnosisAddress), [] as TreasuryTx[]),
+			deadline(fetchTreasuryHistoryHiddenTxs(), [] as string[]),
+			deadline(fetchTreasuryHistoryBalancingTx(), null as string | null),
+		]).then(([t, hidden, balancingTx]) => {
+			if (cancelled) return;
+			setCuration({ hidden, balancingTx });
+			setTxs(t);
+		});
 		return () => { cancelled = true; };
 	}, []);
 
 	const styles = makeStyles(colors, isDark);
 
-	// € fiat value of the treasury (xDAI live-converted + EURe) — euroTotal
-	// already excludes Röbel Münzen (not euro-redeemable).
-	const euroFiat = assets ? assets.euroTotal : 0;
+	// € fiat value of the treasury (live xDAI × today's rate + EURe) — euroTotal
+	// already excludes Röbel Münzen (not euro-redeemable). Whole cents, so the
+	// balanced history below sums to exactly this figure.
+	const euroFiat = assets ? toCents(assets.euroTotal) / 100 : 0;
 
-	// Treasury history mapped to the shared list (€ badge); drop 0-value admin txs.
-	const historyItems: TxHistoryItem[] = (txs ?? [])
-		.filter((t) => t.direction !== "admin" && t.amount > 0)
+	// Treasury history mapped to the shared list (€ badge); drop 0-value admin
+	// txs and hidden txs, and let the balancing row absorb the gap to the live
+	// total (only when the total IS live — never against the snapshot).
+	const baseRows = (txs ?? []).filter(
+		(t): t is TreasuryTx & { direction: "in" | "out" } => t.direction !== "admin" && t.amount > 0,
+	);
+	const liveTotal = assets && !assets.fromSnapshot ? assets.euroTotal : null;
+	const historyItems: TxHistoryItem[] = curateTreasuryHistory(baseRows, {
+		hidden: curation.hidden,
+		balancingTx: curation.balancingTx,
+		liveTotal,
+	})
 		.map((t, i): TxHistoryItem => {
 			const isIn = t.direction === "in";
 			return {
@@ -152,7 +180,7 @@ export default function TreasuryScreen() {
 						<Text style={[styles.section, { marginTop: 28 }]}>Verlauf</Text>
 						<TxHistoryList
 							items={historyItems}
-							loading={txs === null}
+							loading={txs === null || assets === null}
 							emptyText="Noch keine Transaktionen."
 							onPressTx={(item) =>
 								router.push({
