@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, ImageSourcePropType } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useWelcomeWizard, PreferredRole } from '@/context/WelcomeWizardContext';
+import { useUser } from '@/context/UserContext';
+import { isSingleStep } from '@/lib/profile-completion';
+import { updateUserOnboarding } from '@/lib/supabase-users';
 import { useTheme } from '@/context/ThemeContext';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
@@ -32,11 +35,31 @@ export default function WelcomeRoleScreen() {
   const router = useRouter();
   const { state, dispatch } = useWelcomeWizard();
   const { colors } = useTheme();
+  // Opened from the profile's "Profil vervollständigen" card: save this one step and go back.
+  const single = isSingleStep(useLocalSearchParams<{ single?: string }>().single);
+  const { user, refreshUser } = useUser();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const saveSingle = async () => {
+    if (!state.preferredRole || !user?.wallet_address || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateUserOnboarding(user.wallet_address, { preferredRole: state.preferredRole });
+      await refreshUser();
+      router.back();
+    } catch {
+      setSaveError('Deine Auswahl konnte nicht gespeichert werden. Bitte versuche es erneut.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <StoryProgress step={2} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />
+        {!single && <StoryProgress step={2} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />}
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Was trifft auf dich zu?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Wir zeigen dir passende Funktionen. Du kannst die Auswahl später ändern.
@@ -69,15 +92,20 @@ export default function WelcomeRoleScreen() {
         </View>
       </ScrollView>
 
+      {saveError && <Text style={[styles.error, { color: colors.error }]}>{saveError}</Text>}
       <WizardFooter
         onBack={() => router.back()}
-        onNext={() =>
-          state.preferredRole &&
-          router.push(
-            (state.preferredRole === 'buerger' ? '/welcome/citizen-data' : '/welcome/consent') as any,
-          )
-        }
-        nextDisabled={!state.preferredRole}
+        onNext={() => {
+          if (single) {
+            void saveSingle();
+            return;
+          }
+          if (state.preferredRole) {
+            router.push((state.preferredRole === 'buerger' ? '/welcome/citizen-data' : '/welcome/consent') as any);
+          }
+        }}
+        nextLabel={single ? 'Speichern' : 'Weiter'}
+        nextDisabled={!state.preferredRole || saving}
       />
     </SafeAreaView>
   );
@@ -86,6 +114,13 @@ export default function WelcomeRoleScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+  },
+  error: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 18,
+    paddingHorizontal: 24,
+    paddingBottom: 8,
   },
   scrollView: {
     flex: 1,

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
 import { updateUserOnboarding } from '@/lib/supabase-users';
+import { isSingleStep } from '@/lib/profile-completion';
 import { slugifyDisplayName, ensureUniqueUsernameSlug } from '@/lib/username-slug';
 import { setNotificationPromptPending, saveCitizenDraft } from '@/lib/onboarding-storage';
 import StoryProgress from '@/components/StoryProgress';
@@ -25,6 +26,8 @@ export default function WelcomeConsentScreen() {
   const { acceptAll, acceptEssential } = useConsent();
   const { state, dispatch } = useWelcomeWizard();
   const [submitting, setSubmitting] = useState(false);
+  // Opened from the profile's "Profil vervollständigen" card: return there afterwards.
+  const single = isSingleStep(useLocalSearchParams<{ single?: string }>().single);
   const { createRequest, stage } = useCreateCitizenRequest();
   const { hasCitizenNFT, activePendingRequest, refresh: refreshVerification } = useVerificationContext();
   const { showSnackbar } = useSnackbar();
@@ -118,7 +121,8 @@ export default function WelcomeConsentScreen() {
       await setNotificationPromptPending();
       dispatch({ type: 'RESET' });
       setSubmitting(false);
-      router.replace((roleAtSubmit === 'organisation' ? '/create-org' : '/') as any);
+      if (single && router.canGoBack()) router.back();
+      else router.replace((roleAtSubmit === 'organisation' ? '/create-org' : '/') as any);
     }
   };
 
@@ -165,10 +169,12 @@ export default function WelcomeConsentScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <StoryProgress
-          step={state.preferredRole === 'buerger' ? 4 : 3}
-          totalSteps={state.preferredRole === 'buerger' ? 4 : 3}
-        />
+        {!single && (
+          <StoryProgress
+            step={state.preferredRole === 'buerger' ? 4 : 3}
+            totalSteps={state.preferredRole === 'buerger' ? 4 : 3}
+          />
+        )}
         <Image
           source={require('../../assets/icons/Heart.png')}
           style={styles.illustration}

@@ -2,9 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 import { useWelcomeWizard } from '@/context/WelcomeWizardContext';
+import { isSingleStep } from '@/lib/profile-completion';
+import { updateUserOnboarding } from '@/lib/supabase-users';
+import { ensureUniqueUsernameSlug, slugifyDisplayName } from '@/lib/username-slug';
 import WizardFooter from '@/components/WizardFooter';
 import StoryProgress from '@/components/StoryProgress';
 
@@ -17,6 +21,11 @@ export default function WelcomeNameScreen() {
   const { colors } = useTheme();
   const { state, dispatch } = useWelcomeWizard();
   const [displayName, setDisplayName] = useState(state.displayName);
+  // Opened from the profile's "Profil vervollständigen" card: save this one step and go back.
+  const single = isSingleStep(useLocalSearchParams<{ single?: string }>().single);
+  const { user, refreshUser } = useUser();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const trimmed = displayName.replace(/\s+/g, ' ').trim();
   const nameValid = DISPLAY_NAME_REGEX.test(trimmed);
@@ -26,7 +35,32 @@ export default function WelcomeNameScreen() {
     dispatch({ type: 'SET_DISPLAY_NAME', payload: nextName });
   };
 
+  const saveSingle = async () => {
+    if (!nameValid || !user?.wallet_address || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      let username: string | undefined;
+      if (!user.username) {
+        // users.username_length CHECK requires 3-30 chars; an existing username is never replaced.
+        const slug = await ensureUniqueUsernameSlug(slugifyDisplayName(trimmed), user.wallet_address).catch(() => '');
+        if (slug.length >= 3) username = slug;
+      }
+      await updateUserOnboarding(user.wallet_address, { displayName: trimmed, username });
+      await refreshUser();
+      router.back();
+    } catch {
+      setSaveError('Dein Name konnte nicht gespeichert werden. Bitte versuche es erneut.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleNext = () => {
+    if (single) {
+      void saveSingle();
+      return;
+    }
     if (trimmed.length > 0 && !nameValid) return;
     commit(trimmed);
     router.push('/welcome/role' as any);
@@ -46,7 +80,7 @@ export default function WelcomeNameScreen() {
         enableOnAndroid
         showsVerticalScrollIndicator={false}
       >
-        <StoryProgress step={1} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />
+        {!single && <StoryProgress step={1} totalSteps={state.preferredRole === 'buerger' ? 4 : 3} />}
         <Text style={[styles.heading, { color: colors.textPrimary }]}>Wie heißt du?</Text>
         <Text style={[styles.subheading, { color: colors.textSecondary }]}>
           Dein Name erscheint auf deinem Profil. Du kannst ihn später jederzeit ändern.
@@ -78,16 +112,20 @@ export default function WelcomeNameScreen() {
           </Text>
         )}
 
-        <Pressable onPress={handleSkip} style={styles.skipButton} accessibilityRole="button">
-          <Text style={[styles.skipText, { color: colors.textSecondary }]}>Überspringen</Text>
-        </Pressable>
+        {saveError && <Text style={[styles.hint, { color: colors.error }]}>{saveError}</Text>}
+
+        {!single && (
+          <Pressable onPress={handleSkip} style={styles.skipButton} accessibilityRole="button">
+            <Text style={[styles.skipText, { color: colors.textSecondary }]}>Überspringen</Text>
+          </Pressable>
+        )}
       </KeyboardAwareScrollView>
 
       <WizardFooter
         onBack={() => router.back()}
         onNext={handleNext}
-        nextLabel="Weiter"
-        nextDisabled={showHint}
+        nextLabel={single ? 'Speichern' : 'Weiter'}
+        nextDisabled={single ? !nameValid || saving : showHint}
       />
     </SafeAreaView>
   );

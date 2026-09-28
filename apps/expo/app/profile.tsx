@@ -36,6 +36,7 @@ import ProfileMenu from '@/components/profile/ProfileMenu';
 import AccountSwitchSheet from '@/components/profile/AccountSwitchSheet';
 import { fetchProfileStoryCollections, type StoryCollection } from '@/lib/supabase-story-collections';
 import ChatAgentsBanner from '@/components/profile/ChatAgentsBanner';
+import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
 import QrCodeIcon from '@/assets/icons/qr-code.svg';
 import { fetchChatSuiteEnabled } from '@/lib/supabase-app-settings';
 
@@ -186,6 +187,7 @@ export default function ProfileScreen() {
                     onPress={() => router.push(profileHref as any)}
                     right={muenzenSlot}
                   />
+                  <ProfileCompletionCard user={user} />
                   {isAspiringCitizen && (
                     <View style={styles.bannerWrap}>
                       <CitizenVerificationBanner pending={!!activePendingRequest} />
