@@ -102,6 +102,13 @@ describe('passkeyChannelAllowed', () => {
     expect(passkeyChannelAllowed({ channel: null, dev: true })).toBe(true);
     expect(passkeyChannelAllowed()).toBe(true); // mocked expo-updates channel = preview
   });
+  it('on production restores a session only on a binary that supports passkeys (≥ 3.8.0), no flag needed', () => {
+    expect(passkeyChannelAllowed({ channel: 'production', dev: false, runtimeVersion: '3.7.0' })).toBe(false);
+    expect(passkeyChannelAllowed({ channel: 'production', dev: false, runtimeVersion: null })).toBe(false);
+    expect(passkeyChannelAllowed({ channel: 'production', dev: false, runtimeVersion: '3.8.0' })).toBe(true);
+    expect(passkeyChannelAllowed({ channel: 'production', dev: false, runtimeVersion: '3.10.1' })).toBe(true);
+    expect(passkeyChannelAllowed({ channel: 'production', dev: true, runtimeVersion: '3.7.9' })).toBe(false);
+  });
 });
 
 describe('session storage', () => {

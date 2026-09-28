@@ -113,6 +113,15 @@ export async function fetchPasskeyAccountsEnabled(): Promise<boolean> {
 }
 
 /**
+ * Production rollout switch for passkey accounts. Missing key = OFF, only an explicit 'true'
+ * opens the passkey surfaces on the production channel, and only together with
+ * `passkey_accounts_enabled` and a binary ≥ 3.8.0 (lib/passkey/gate.ts).
+ */
+export async function fetchPasskeyAccountsEnabledProduction(): Promise<boolean> {
+  return (await fetchAppSetting('passkey_accounts_enabled_production')) === 'true';
+}
+
+/**
  * Preview gate for NSP-14 org Safes. A NEW surface: missing key = OFF, only an
  * explicit 'true' enables it. Also fenced to non-production channels (lib/org-safe/gate.ts).
  */
