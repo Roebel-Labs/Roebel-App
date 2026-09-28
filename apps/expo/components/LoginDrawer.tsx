@@ -11,9 +11,11 @@ import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  /** The welcome screen shows "Unabhängiges Konto" itself; don't offer it twice. */
+  hidePasskey?: boolean;
 };
 
-export default function LoginDrawer({ visible, onClose }: Props) {
+export default function LoginDrawer({ visible, onClose, hidePasskey = false }: Props) {
   const { colors, isDark } = useTheme();
 
   return (
@@ -28,7 +30,7 @@ export default function LoginDrawer({ visible, onClose }: Props) {
         </Text>
 
         {/* Passkey "Unabhängiges Konto" — renders nothing unless the preview gate is open */}
-        <PasskeySignInOption onSignedIn={onClose} />
+        {!hidePasskey && <PasskeySignInOption onSignedIn={onClose} />}
 
         {/* Thirdweb Connect Embed */}
         <View style={styles.connectContainer}>

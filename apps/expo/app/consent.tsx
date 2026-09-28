@@ -8,7 +8,7 @@
  * we lead with EU residency, transparency and one-tap reversibility.
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Image,
   Linking,
@@ -24,6 +24,11 @@ import { useTheme } from '@/context/ThemeContext';
 import { useConsent } from '@/context/ConsentContext';
 import { useActiveAccount } from 'thirdweb/react';
 import { useUser } from '@/context/UserContext';
+import { useWalletBoot } from '@/context/WalletBootContext';
+import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+
+/** The gate check must never hold the first-launch screen: a slow answer counts as closed. */
+const GATE_WAIT_MS = 2_000;
 
 const AGB_URL = 'https://www.roebel.app/agb';
 const DATENSCHUTZ_URL = 'https://www.roebel.app/datenschutz';
@@ -34,6 +39,25 @@ export default function ConsentModalScreen() {
   const router = useRouter();
   const account = useActiveAccount();
   const { user } = useUser();
+
+  // First launch while the passkey gate is open: logged-out people continue to the welcome
+  // screen, where "Unabhängiges Konto" is the first choice. Gate closed (production today): as
+  // before, straight into the app.
+  const { autoConnectFinished } = useWalletBoot();
+  const passkeyWelcome = useRef<Promise<boolean> | null>(null);
+  useEffect(() => {
+    passkeyWelcome.current = isPasskeyPreviewAllowed().catch(() => false);
+  }, []);
+
+  const leave = async () => {
+    const gate = passkeyWelcome.current ?? Promise.resolve(false);
+    const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), GATE_WAIT_MS));
+    // Only a settled logged-out state: a session still restoring must not see the sign-up screen.
+    const toWelcome = autoConnectFinished && !account && (await Promise.race([gate, timeout]));
+    if (toWelcome) router.replace('/welcome' as any);
+    else if (router.canGoBack()) router.back();
+    else router.replace('/' as any);
+  };
 
   const handleAcceptAll = async () => {
     await acceptAll('first_launch');
@@ -46,14 +70,12 @@ export default function ConsentModalScreen() {
         if (user?.is_verified_citizen && account) await enrollNow(account);
       })
       .catch(() => {});
-    if (router.canGoBack()) router.back();
-    else router.replace('/' as any);
+    await leave();
   };
 
   const handleEssentialOnly = async () => {
     await acceptEssential('first_launch');
-    if (router.canGoBack()) router.back();
-    else router.replace('/' as any);
+    await leave();
   };
 
   const handleCustomize = () => {

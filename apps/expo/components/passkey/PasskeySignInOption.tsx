@@ -1,5 +1,6 @@
 /**
- * "Unabhängiges Konto" — the passkey sign-in / sign-up option on the Anmelden sheet.
+ * "Unabhängiges Konto" — the passkey sign-in / sign-up option on the Anmelden sheet and, for
+ * logged-out people, as the first choice on the first-launch welcome screen.
  *
  * Renders NOTHING unless the passkey preview gate is open (production returns before any network
  * read), so the Anmelden sheet on production looks exactly as before. The thirdweb options below
@@ -11,15 +12,28 @@ import { useSetActiveWallet } from 'thirdweb/react';
 import { useTheme } from '@/context/ThemeContext';
 import { fontFamily } from '@/constants/theme';
 import { isPasskeyPreviewAllowed } from '@/lib/passkey/gate';
+import type { PasskeySession } from '@/lib/passkey/session';
 import type { SignInResult } from '@/lib/passkey/signin';
 
 type Busy = 'signIn' | 'signUp' | null;
+export type PasskeySignInKind = Exclude<Busy, null>;
 
-export default function PasskeySignInOption({ onSignedIn }: { onSignedIn?: () => void }) {
+type Props = {
+  /** Called after the passkey session is active; `kind` tells a new account from a sign-in. */
+  onSignedIn?: (kind: PasskeySignInKind, session: PasskeySession) => void;
+  /** Called right BEFORE the session becomes active (e.g. to defer the welcome wizard). */
+  beforeActivate?: (kind: PasskeySignInKind, session: PasskeySession) => void;
+  /** Start with the two buttons visible (welcome screen). */
+  initiallyOpen?: boolean;
+  /** Called once the gate check finished (true = the option is shown). */
+  onAvailability?: (allowed: boolean) => void;
+};
+
+export default function PasskeySignInOption({ onSignedIn, beforeActivate, initiallyOpen = false, onAvailability }: Props) {
   const { colors } = useTheme();
   const setActiveWallet = useSetActiveWallet();
   const [allowed, setAllowed] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +42,9 @@ export default function PasskeySignInOption({ onSignedIn }: { onSignedIn?: () =>
     isPasskeyPreviewAllowed()
       .catch(() => false)
       .then((ok) => {
-        if (!cancelled) setAllowed(ok);
+        if (cancelled) return;
+        setAllowed(ok);
+        onAvailability?.(ok);
       });
     return () => {
       cancelled = true;
@@ -46,8 +62,9 @@ export default function PasskeySignInOption({ onSignedIn }: { onSignedIn?: () =>
         const deps = rt.createSignInDeps();
         const res: SignInResult = kind === 'signIn' ? await signInWithPasskey(deps) : await signUpWithPasskey('Röbel-Konto', deps);
         if (res.status === 'signedIn') {
+          beforeActivate?.(kind, res.session);
           await rt.activatePasskeySession(res.session, setActiveWallet);
-          onSignedIn?.();
+          onSignedIn?.(kind, res.session);
         } else if (res.status === 'error') {
           setError(res.message);
         }
@@ -57,7 +74,7 @@ export default function PasskeySignInOption({ onSignedIn }: { onSignedIn?: () =>
         setBusy(null);
       }
     },
-    [busy, setActiveWallet, onSignedIn],
+    [busy, setActiveWallet, onSignedIn, beforeActivate],
   );
 
   if (!allowed) return null;

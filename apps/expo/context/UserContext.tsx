@@ -9,7 +9,8 @@ import { useVerificationContext } from '@/context/VerificationContext';
 import { useConsent } from '@/context/ConsentContext';
 import { setSentryUser } from '@/lib/sentry-init';
 import { Events, track } from '@/lib/analytics';
-import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet } from '@/lib/supabase-users';
+import { upsertUser, updateUserProfile, updateUserTier, fetchUserByWallet, updateUserOnboarding } from '@/lib/supabase-users';
+import { consumeWelcomeDeferral } from '@/lib/onboarding-deferral';
 import { logActivity } from '@/lib/supabase-activity';
 import { loadCachedUser, saveCachedUser } from '@/lib/user-cache';
 import { useWalletBoot } from '@/context/WalletBootContext';
@@ -147,7 +148,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             onboarding_completed: !!userRecord.onboarding_completed_at,
           });
           if (!userRecord.onboarding_completed_at) {
-            setTimeout(() => router.push('/welcome' as any), 150);
+            if (consumeWelcomeDeferral(userRecord.wallet_address)) {
+              // A passkey account created on the first-launch welcome screen: land in the app,
+              // the skipped steps wait on the profile ("Profil vervollständigen").
+              void updateUserOnboarding(userRecord.wallet_address, { markCompleted: true })
+                .then((updated) => {
+                  if (updated) setUser(updated);
+                })
+                .catch((err) => console.error('Failed to mark deferred onboarding:', err));
+            } else {
+              setTimeout(() => router.push('/welcome' as any), 150);
+            }
           } else if (!userRecord.terms_accepted_at) {
             setTimeout(() => router.push('/welcome/consent' as any), 150);
           }

@@ -16,6 +16,7 @@ jest.mock('thirdweb/react', () => {
 });
 jest.mock('@/constants/thirdweb', () => ({ client: {}, chain: { id: 100 } }));
 jest.mock('@/constants/wallets', () => ({ wallets: [] }));
+
 jest.mock('@/components/BottomDrawer', () => ({ children }: { children: React.ReactNode }) => <>{children}</>);
 jest.mock('@/components/passkey/PasskeyEntryLinks', () => () => null);
 jest.mock('@/context/ThemeContext', () => ({
@@ -23,16 +24,17 @@ jest.mock('@/context/ThemeContext', () => ({
 }));
 
 import LoginDrawer from '@/components/LoginDrawer';
+import PasskeySignInOption from '@/components/passkey/PasskeySignInOption';
 
 function texts(r: TestRenderer.ReactTestRenderer): string[] {
   const { Text } = require('react-native');
   return r.root.findAllByType(Text).map((t) => [].concat(t.props.children).join(''));
 }
 
-async function render(): Promise<TestRenderer.ReactTestRenderer> {
+async function render(props: { hidePasskey?: boolean } = {}): Promise<TestRenderer.ReactTestRenderer> {
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => {
-    r = TestRenderer.create(<LoginDrawer visible onClose={() => undefined} />);
+    r = TestRenderer.create(<LoginDrawer visible onClose={() => undefined} {...props} />);
   });
   await act(async () => undefined);
   return r;
@@ -55,4 +57,44 @@ describe('LoginDrawer + passkey option', () => {
     expect(t).toContain('Mit Passkey · Fingerabdruck oder Gesicht, ohne E-Mail. Nur du hast den Schlüssel.');
     expect(passkey).toBeLessThan(t.indexOf('THIRDWEB_CONNECT_EMBED'));
   });
+});
+
+describe('LoginDrawer on the welcome screen', () => {
+  it('hidePasskey: the welcome screen shows the passkey option itself, the drawer does not repeat it', async () => {
+    mockGate.mockResolvedValue(true);
+    const t = texts(await render({ hidePasskey: true }));
+    expect(t).toContain('THIRDWEB_CONNECT_EMBED');
+    expect(t.some((s) => s.includes('Unabhängiges Konto'))).toBe(false);
+  });
+});
+
+describe('PasskeySignInOption on the first-launch welcome screen', () => {
+  async function renderOption(props: React.ComponentProps<typeof PasskeySignInOption>) {
+    let r!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      r = TestRenderer.create(<PasskeySignInOption {...props} />);
+    });
+    await act(async () => undefined);
+    return r;
+  }
+  it('gate closed: renders nothing (production today)', async () => {
+    mockGate.mockResolvedValue(false);
+    const onAvailability = jest.fn();
+    const r = await renderOption({ initiallyOpen: true, onAvailability });
+    expect(r.toJSON()).toBeNull();
+    expect(onAvailability).toHaveBeenCalledWith(false);
+  });
+
+  it('initiallyOpen shows both choices right away', async () => {
+    mockGate.mockResolvedValue(true);
+    const onAvailability = jest.fn();
+    const t = texts(await renderOption({ initiallyOpen: true, onAvailability }));
+    expect(t[0]).toBe('Unabhängiges Konto');
+    expect(t).toContain('Neues unabhängiges Konto erstellen');
+    expect(t).toContain('Mit Passkey anmelden');
+    expect(onAvailability).toHaveBeenCalledWith(true);
+  });
+  // The sign-up/sign-in run path lazy-loads the native passkey modules with import(), which this
+  // jest setup cannot execute (no --experimental-vm-modules); the deferral itself is covered by
+  // lib/__tests__/onboarding-deferral.test.ts.
 });
